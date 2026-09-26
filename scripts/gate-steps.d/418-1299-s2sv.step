@@ -75,3 +75,4 @@ STEP_DESC="Checking a timing record says which checkout wrote it, and absent rea
 STEP_SCRIPT="scripts/test-timing-record-carries-root.sh"
 STEP_ERROR="a timing record can again fail to say where it was written from, or an absent root reads as a value instead of as pre-field (1299-s2sv) — read which arm failed above; ARM 4b failing means the field is no longer inert for existing readers"
 STEP_OK="Timing records carry their checkout; absent reads as absent"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:timing-record-root:5/5"

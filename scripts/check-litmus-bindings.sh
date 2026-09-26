@@ -268,5 +268,72 @@ if [ -x "$RUNNER" ] && git -C "$ROOT" rev-parse --verify "$BASE_REF" >/dev/null 
         echo "advisory:bound-but-unrunnable-existing=$corpus_bad (not gating; find them with scripts/run-litmus-test.sh --parse-only)" >&2
     fi
 fi
-echo "ok:litmus-bindings:files=$files bound=$bound_n retired=$retired grandfathered=$grandfathered"
+# ORDER 1356-vv5m. THE OTHER DIRECTION: does every spec_id this registry NAMES
+# resolve to a spec that exists?
+#
+# Everything above answers "is every litmus FILE bound?" (660-ryhn) and answers
+# it well. Nothing asked the reverse, so a binding could name a spec that was not
+# in the tree and every gate passed. MEASURED on origin/linux-next 2026-09-22:
+#   spec_ids in openspec/litmus-bindings.yaml                  141
+#   with no openspec/specs/<id>/spec.md in that same tree        1
+#   -> expert-serve-grounded-pipeline, under which THREE litmus
+#      tests were bound
+# Found while closing 920-pxg6, whose remaining item read like filing and turned
+# out to be the thing keeping a spec_id honest.
+#
+# SECOND INSTRUMENT OF 1255-rvr7's FAMILY: a guard over a population must assert
+# the POPULATION, not only the shape of what it finds. The skills guard iterated
+# runtimes and skipped the absent; this registry named spec_ids and resolved
+# none. Neither is a weak check — both check the wrong thing, and the failure
+# mode is that they find LESS.
+#
+# RESOLVE TO spec.md, NOT TO THE DIRECTORY. A directory left behind by a deletion
+# would satisfy a `-d` test while containing nothing a reader could open, which
+# is the same "shape, not substance" mistake one level down.
+#
+# THE POPULATION OF THIS CHECK IS ITSELF ASSERTED, because shipping this row's
+# own defect inside its fix is the failure mode to avoid: zero spec_ids parsed
+# REFUSES rather than printing ok:0. Ask the one question of any new guard —
+# what does it print when it finds NOTHING?
+#
+# THE RATCHET IS KEPT, per 660-ryhn's own triage warning that binding every
+# historical stray at once turns one silent problem into an undiagnosed red
+# suite: a spec_id listed in unresolved-grandfathered.txt is a KNOWN declared
+# exception, counted separately and named in the verdict so the list is visible
+# and shrinkable rather than a silence.
+UNRESOLVED_GF="$TESTS_DIR/unresolved-grandfathered.txt"
+spec_ids="$(sed -n 's/^- spec_id:[[:space:]]*//p' "$BINDINGS" | tr -d '"'"'"'"' | sed 's/[[:space:]]*$//' | grep . || true)"
+spec_n=0 spec_unresolved=0 spec_gf=0
+unresolved_list=""
+while IFS= read -r sid; do
+    [ -n "$sid" ] || continue
+    spec_n=$((spec_n + 1))
+    [ -f "$ROOT/openspec/specs/$sid/spec.md" ] && continue
+    if [ -f "$UNRESOLVED_GF" ] && grep -qxF "$sid" "$UNRESOLVED_GF"; then
+        spec_gf=$((spec_gf + 1))
+        continue
+    fi
+    spec_unresolved=$((spec_unresolved + 1))
+    unresolved_list="$unresolved_list $sid"
+done <<EOF
+$spec_ids
+EOF
+
+if [ "$spec_n" -eq 0 ]; then
+    # THE POPULATION ASSERTION ON THIS CHECK ITSELF. A registry that parsed to
+    # zero spec_ids is a parse that stopped working, not a clean tree, and
+    # printing ok: here would reproduce the exact defect this block was added
+    # for — one level up, where nobody would look for it.
+    echo "violation:litmus-bindings-spec-population-empty: parsed ZERO spec_ids from $BINDINGS — a registry with no spec_ids is a broken read, not a clean tree" >&2
+    exit 1
+fi
+if [ "$spec_unresolved" -gt 0 ]; then
+    for sid in $unresolved_list; do
+        echo "violation:binding-names-absent-spec:$sid — openspec/specs/$sid/spec.md does not exist, so every litmus bound under it points at nothing" >&2
+    done
+    echo "  Add the spec, correct the spec_id, or declare it in $(basename "$UNRESOLVED_GF")." >&2
+    exit 1
+fi
+
+echo "ok:litmus-bindings:files=$files bound=$bound_n retired=$retired grandfathered=$grandfathered spec_ids=$spec_n resolved=$((spec_n - spec_gf)) spec-grandfathered=$spec_gf"
 exit 0

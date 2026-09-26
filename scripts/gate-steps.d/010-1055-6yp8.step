@@ -7,3 +7,4 @@ STEP_DESC="Checking skill canonicalization reads the index and its remedy is saf
 STEP_SCRIPT="scripts/test-skill-canonicalization-remedy.sh"
 STEP_ERROR="the skill-canonicalization check misreads a committed symlink or prints a destructive remedy (1055-6yp8) — see the verdict line above"
 STEP_OK="Skill canonicalization remedy check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:skill-canonicalization-remedy:13"

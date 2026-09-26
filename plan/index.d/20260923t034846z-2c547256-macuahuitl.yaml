@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-cloud-project-overflow-is-a-dead-end
+    field: next_action
+    value: 'LEFT (2026-09-23): implementation landed. Remaining: criterion 1 needs a human/UI confirmation; criterion 2 needs macOS and Windows host runs plus the parity matrix. Blocked by macos and windows tray hosts, not linux.'
+    ts: "2026-09-23T03:48:46Z"
+    host: macuahuitl

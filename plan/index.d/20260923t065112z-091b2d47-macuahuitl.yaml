@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-recurring-loops-gate-and-the-release-gate-are-different-tiers
+    field: next_action
+    value: |-
+      armed 2026-09-12 as a session cron on macuahuitl; a durable timer is the follow-up, and the row closes when the freshness guard there reads a fresh green from a non-cut run
+
+      [2026-09-23T06:51:12Z macuahuitl] LEFT (2026-09-23): b1f4ada5e install-release-tier-timer.sh on trunk. Needs the operator to arm the timer, then a green non-cut release-tier run on a Linux builder.
+    ts: "2026-09-23T06:51:12Z"
+    host: macuahuitl

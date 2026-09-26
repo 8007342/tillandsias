@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-yaml-compiled-editor
+    event:
+      type: progress
+      ts: "2026-09-24T22:08:26Z"
+      agent_id: forge-forge-tillandsias-gemini-20260924t220826z
+      host: forge-tillandsias
+      summary: |
+        Embedded Lua runtime inside tillandsias-plan (CLI subcommand `lua`) using vendored mlua (Lua 5.4) with shebang stripping and arg passing, eliminating heterogeneous Ruby dependency (1132-r4mt). Replaced archive-plan-packets.rb with scripts/archive-plan-packets.lua and routed archive-plan-packets.sh through tillandsias-plan lua. Decomposed plan/index.yaml by executing the Lua archiver, sweeping 169 completed packets into plan/archive/packets-2026-09.yaml (25,699 lines) and reducing plan/index.yaml from 95,671 lines to 68,841 lines (-26,830 lines). Verified tillandsias-plan check passed with 0 errors and all archiver tests passed (test-archiver-check-memo 6/6, test-archiver-could-not-run-is-self-naming 5/5, test-archiver-could-not-run-verdict 4/4, test-archiver-ruby-could-not-run 5/5).

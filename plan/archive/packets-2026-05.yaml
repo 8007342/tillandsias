@@ -3133,3 +3133,285 @@ plan_index:
           summary: |
             Filed and fixed in the same cycle: it was blocking every push of the overnight drain. Old-vs-new hash equality and the 5s timing are recorded in the exit criteria; the stray hung git/push processes it spawned were killed by PID after verification.
 
+    - packet_id: the-checkout-locks-liveness-probe-cannot-see-a-native-windows-pid-so-the-guard-is-inert-on-both-windows-hosts
+      order: 1137-da83
+      status: completed
+      kind: bug
+      priority: p1
+      desired_release: v0.5
+      release_target: convergence-velocity-milestone
+      pickup_role: windows
+      capability_tags:
+        - windows
+        - msys
+        - gate
+        - fail-loud
+        - multi-host
+        - orchestration
+      estimated_hours: 3
+      owned_files:
+        - scripts/cycle-checkout-lock.sh
+        - scripts/test-cycle-checkout-lock.sh
+        - openspec/litmus-tests/litmus-cycle-checkout-lock-shape.yaml
+      verifiable_closure: litmus:cycle-checkout-lock-shape
+      title: |
+        the 873-zcim checkout lock asks `kill -0` whether its holder is alive, which under MSYS cannot see a NATIVE Windows pid — so every Windows anchor was stamped DEAD, every recorded holder read stale, and both Windows hosts ran with no mutual exclusion at all while the guard was present and green
+      context: |
+        MEASURED on yolanda (windows, MINGW64_NT-10.0-26200) 2026-09-12, on
+        windows-next at ae69e23a4, following the skill's own section 1b recipe
+        exactly:
+        
+          $ TILLANDSIAS_CYCLE_HOLDER_PID=12388 scripts/cycle-checkout-lock.sh \
+                acquire --lane prompt --source "directed cycle"
+          warn:checkout-lock:acquired-unverified-anchor:prompt:12388
+            ANCHOR: explicit-DEAD — ...
+          $ scripts/cycle-checkout-lock.sh status
+          ok:checkout-lock:free
+        
+        12388 was a running `claude.exe`, confirmed by `tasklist /FI "PID eq
+        12388"` in the same shell. The lock was taken and was gone one command
+        later.
+        
+        CAUSE, by symbol: `cycle-checkout-lock.sh` classified the anchor with
+        `kill -0 "$HOLDER_PID"` and `dir_lock_live` tested the recorded holder
+        the same way. Under MSYS/Cygwin bash, `kill` speaks MSYS pids; the anchor
+        a claude harness exports (CLAUDE_PID) and everything `tasklist` reports
+        are NATIVE Windows pids from a different numbering space. `kill -0 12388`
+        answers "No such process" for a process that is plainly running.
+        
+        WHAT THIS COST. Not a warning — the LOCK. 873-zcim exists because a /loop
+        fire stacked onto a running driver cycle in one worktree on yoga
+        (2026-08-24), four hours after one process's worktree disposal destroyed
+        another's uncommitted work (872-c9nd). On both Windows hosts that guard
+        was inert: present, green in CI, and returning `free` to every sibling
+        lane. yolanda is also the merge host for esme's relay refs, so two
+        Windows lanes in one checkout was a live configuration, not a theoretical
+        one.
+        
+        WHY IT SURVIVED. Two reinforcing blinds, and both are the interesting
+        part:
+        
+          1. THE FIXTURE COULD NOT SEE IT. Arms 1-7 of
+             test-cycle-checkout-lock.sh anchor on `$$` or on 99999999 — an MSYS
+             pid and a nonexistent one. `kill -0` answers BOTH correctly under
+             MSYS. The one pid shape the probe was blind to appeared in no arm,
+             so the suite was honestly green on the host where the guard did
+             nothing.
+        
+          2. THE VERDICT ACTIVELY MISDIRECTED. The warn text's FIX line said
+             "put the variable on the command line, in YOUR shell" — which it
+             already was. An operator following that advice re-runs the same
+             command, gets the same verdict, and concludes the shell syntax is
+             subtly wrong. The message describes `invoking-shell-UNVERIFIED`, a
+             case that since 1098-q7bk is REFUSED and exits earlier, so the only
+             inputs that ever reach that text are the `-DEAD` ones it does not
+             describe.
+        
+        This is the 943-7dn5 / 1091-zh6d shape once more: a guard that reads host
+        state, whose state-reading primitive is wrong on one host, failing as a
+        confident wrong VERDICT rather than as "the probe does not work here".
+      deliverable: |
+        DONE, landed on windows-next.
+        
+          * `pid_is_live()` in cycle-checkout-lock.sh — ONE liveness primitive,
+            `kill -0` first and, on MINGW/MSYS/CYGWIN only, esme's `ps -W` WINPID
+            predicate, adopted as written. `kill -0` answering first makes it a
+            no-op off Windows BY CONSTRUCTION rather than by test. All four
+            liveness call sites converted: anchor validation, `dir_lock_live`,
+            `release`'s held-by-other test, and `mark-attested`'s.
+        
+            `tasklist` was written first and REJECTED on measurement, which is
+            why esme's preference for `ps -W` was right for a second reason they
+            did not claim: the table form's whitespace match also hits the
+            session-number column, so `pid 1` reads live on every host — and
+            pid 1 is exactly what `$PPID` resolves to under Git Bash. Keeping
+            `tasklist` out of the fix also leaves it available as the fixture's
+            INDEPENDENT liveness oracle (arm 8c-pre); a probe confirmed only by
+            its own mechanism is not confirmed.
+        
+          * `mark-attested` now accepts ANCHOR EQUALITY before walking ancestry.
+            Required, not incidental: `pid_is_self_or_ancestor` climbs MSYS pids
+            from `$$` and the lock records a native pid, so it can never reach
+            the target on Windows. Before the fix `kill -0` called that target
+            dead and the block fell through to marking; with a probe that answers
+            correctly, the same walk would have refused `held-by-other` about the
+            cycle's OWN lock — the fix would have regressed Windows rather than
+            repaired it. Equality is sufficient because `record` runs under the
+            cycle that acquired; the walk stays for callers below the harness.
+        
+          * the warn verdict renamed `acquired-unverified-anchor` ->
+            `acquired-dead-anchor` and its FIX text rewritten for the inputs that
+            actually reach it, ending with: if the pid IS running, the probe is
+            wrong on this host, not your command — check it with `pid-probe` and
+            report the line.
+        
+          * `pid-probe` subcommand, exposing the liveness primitive exactly as
+            `ppid-probe` exposes the ancestry one, and for the same stated
+            reason.
+        
+          * suite arms 8 and 9. Arm 8 takes a live process's MSYS pid, looks up
+            its native WINPID with `ps` (a translation, not a liveness claim —
+            nothing else links the two pid spaces), attests that the native pid
+            is really running through `tasklist`, which the fix does not use, and
+            then asserts, on one running process: `kill -0` sees
+            the MSYS pid (8a, which is why arms 1-7 are green here), `kill -0`
+            calls the native pid dead (8b, the cause), pid-probe sees it (8c), a
+            nonexistent pid is still dead (8d, no blanket-live regression),
+            pid 1 reads dead (8d2 — the `$PPID`-under-Git-Bash value, and the
+            case the rejected tasklist form got wrong), acquire is clean (8e),
+            and a sibling lane is REFUSED (8f, the symptom — which is esme's
+            point that an arm has to observe the LOCK, not the verdict string,
+            since `warn:` is a string the old arms accept). Arm 9 is the mutation control: it strips the MSYS branch
+            back out of a scratch copy and re-runs 8c and 8f against the mutant,
+            which reports `dead` and `free` — the inverted polarity arm 7 already
+            documents for this defect family.
+      regime: |
+        Arms 8-9 are MSYS-ONLY and skip loudly on linux and darwin: the defect is
+        the existence of a second pid space, so there is nothing to measure where
+        there is only one, and a silent pass would misreport that as coverage.
+        The `pid-probe` litmus step answers on every host. No fixture here
+        encodes an absolute timestamp; arm 8's pids are minted per run.
+      next_action: |
+        Closed on windows-next. Three follow-ups worth a row rather than folklore, none blocking. (0) THE WSL ASYMMETRY, esme's, and the one most worth having: under WSL the harness is a real Linux process, so `kill -0` should suffice on its own and a WSL-launched cycle on the SAME machine is predicted unaffected. That is a prediction, not a measurement — neither Windows host has run it — and esme asked for an arm rather than a prediction, correctly. It needs a WSL lane, which this cycle did not have. (1) `pid_is_self_or_ancestor` still cannot cross from MSYS pid space into native pid space, so its ancestry answer on Windows is "no" for any native target — today that is reachable only through the equality shortcut above, but a future caller that walks without it will get a confident wrong answer, which is this packet's own shape one layer down. (2) `flock` is absent on MSYS, so cross-arm A (prompt lane yields to a mid-cycle driver) is untestable on both Windows hosts and skips — the driver arm of the two-sided lock has never been measured there.
+      provenance: |
+        FOUND TWICE, INDEPENDENTLY, WITHIN ONE HOUR — by yolanda in the first
+        minutes of an orchestrator-directed drain cycle (following section 1b's
+        recipe and disbelieving the verdict) and by esme on esmeraldinha in the
+        first drain of the same standing assignment. Neither host had seen the
+        other's report when it measured. Two hosts reaching the same verdict from
+        different starting points is the strongest evidence in this row.
+        
+        esme's writeup is the fuller diagnosis and is the source of three things
+        this packet uses: the `ps -W` predicate adopted verbatim as the fix, the
+        PPID=1 finding that motivates arm 8d2, and the WSL asymmetry named in
+        next_action. It is at
+        plan/issues/checkout-lock-inert-on-windows-hosts-2026-09-12.md (esme,
+        windows-next @ 5a7b5fe45) and is evidence for this row, not a duplicate of
+        it; the coordinator directed that one row carry both. esme is the
+        verification host and had not yet reported when this landed.
+        
+        Pre-fix demonstration is the `explicit-DEAD`-on-a-live-harness-pid
+        transcript in context, above; esme's is the `harness-env-DEAD` transcript
+        in their writeup, the same defect reached through the other anchor.
+        
+        TWO RULES THIS ROW PAID FOR, both generalised from measurements on BOTH
+        Windows hosts rather than from one host's data points.
+        
+        1. EXACTLY ONE PATH-CONVERSION GUARD, NEVER TWO (esme's formulation).
+           Under Git Bash a bare `/NH` is rewritten to a Windows path before the
+           exe sees it — the error is literally
+           `Invalid argument/option - 'C:/Program Files/Git/NH'`. Three guards
+           each fix that ALONE: MSYS_NO_PATHCONV=1, MSYS2_ARG_CONV_EXCL='*', or
+           doubling the slash. They do NOT compose, and belt-and-braces is the one
+           configuration that cannot work:
+        
+             tasklist //NH ...                          -> rc=0, the CSV row
+             MSYS_NO_PATHCONV=1 tasklist //NH ...       -> rc=1, Invalid argument/option - '//NH'
+             MSYS2_ARG_CONV_EXCL='*' tasklist //NH ...  -> rc=1, same
+        
+           `//NH` is not an escape — it is an input the conversion layer collapses
+           to `/NH`. Suppress that layer by ANY means and the exe receives a
+           literal `//NH`. So: suppress the conversion and pass single-slash, or
+           keep the conversion and pass double-slash. Found by arm 8c-pre's own
+           third outcome on its first run, which reported "the oracle COULD NOT
+           ASK" rather than "the pid is dead" — the entire reason that outcome
+           exists.
+        
+        2. NEVER READ A LAND OR GATE VERDICT THROUGH A PIPE; `| tail` REPORTS
+           TAIL'S STATUS. That is the rule; the rest of this item is why it needed
+           to be one.
+        
+           `rc=$?` after a pipeline is the last command's status, and `head`/`tail`
+           are the two commands most likely to be there. THREE FALSE CLAIMS IN ONE
+           HOUR, two hosts, three different commands, every one made while both
+           hosts were actively reasoning about a liveness probe that answers
+           confidently about the wrong process:
+        
+             - esme: `tasklist ... | head -2; echo rc=$?` read head's 0. Caught
+               before reporting. Had it been reported it would have been a FALSE
+               CONFIRMATION of yolanda's identical wrong reading.
+             - yolanda: the same mistake on the same primitive, published to a peer
+               as a measured two-host difference in tasklist. There was no
+               difference; both hosts return rc=1.
+             - yolanda: `land-on-platform-branch.sh | tail -25` read the pipeline's
+               0, and two parties were told the land tool reports success over a
+               refused gate. It had exited 3 and named its gate log. That tool's
+               header exists BECAUSE someone once shipped exactly that bug, so it
+               was accused of the defect it was written to prevent, by a reading
+               that had the defect.
+        
+           Capture into a variable (`out="$(cmd 2>&1)"; rc=$?`), or
+           `set -o pipefail`, or SNAPSHOT THE ARRAY AS THE VERY NEXT COMMAND:
+           `ps=("${PIPESTATUS[@]}")`, then index it.
+        
+           PHRASE IT THAT WAY AND NOT AS "use ${PIPESTATUS[0]}" (esme's point,
+           and they are right). PIPESTATUS[0] is not WRONG — read as the first
+           command after the pipeline it is correct, and a reader who tests it in
+           isolation will find it works and conclude this warning was overblown.
+           It is FRAGILE: ANY intervening command resets it, and the intervening
+           command everyone writes is `a=$?`, which is exactly what you reach for
+           alongside it. So the mechanism is fine and the idiom it travels with
+           destroys it. Measured while writing this row's fixture:
+        
+             bash -c 'exit 3' | tail -1 >/dev/null
+             a=$?; b="${PIPESTATUS[0]}"   ->  a=0 b=0   (both wrong, even on ONE line)
+             ps=("${PIPESTATUS[@]}")      ->  ps=(3 0)  (correct)
+        
+           `;` separates two commands and the `a=$?` assignment RESETS the array
+           before the second reads it; a `$( )` or a `( )` around the pipeline
+           loses it the same way. Snapshot the whole array as the very next
+           command after the pipeline, then index it. THE REMEDY CARRIES THE TRAP,
+           which is why this row ships an executable fixture rather than advice.
+        
+           AND THE FIXTURE IS WIRED TWO WAYS, because I got this wrong once
+           already and told a peer so. `scripts/test-*.sh` is NOT globbed by
+           build.sh, but a fixture reaches the gate by EITHER of two routes: an
+           explicit `_run bash` line in build.sh (~100 such lines, including
+           test-cycle-lock-attested-release.sh) or a litmus binding (which is how
+           test-cycle-checkout-lock.sh runs — it appears in build.sh not at all).
+           I first said "only because a litmus binding names it", which is false.
+        
+           AND ROUTE 2 IS TWO FILES, NOT ONE — the correction esme and I each got
+           half of. `openspec/litmus-tests/litmus-<name>.yaml` DEFINES the test
+           (steps, commands, expected_behavior).
+           `openspec/litmus-bindings.yaml` REGISTERS it against a spec_id, and
+           `get_litmus_tests_for_spec` in run-litmus-test.sh reads THAT registry
+           to decide what `run-litmus-test.sh <spec>` executes. Write only the
+           definition and the file exists but no spec run picks it up; write only
+           the registry entry and it names a test nothing defines, which is
+           1068-cxmf's dangling-pin defect. The failure mode is opening one of
+           the two and believing you are done.
+        
+           Either route suffices; neither is automatic; a fixture with NEITHER is
+           a file, not a gate. This one has both routes, and route 2 in both its
+           halves.
+        
+           The trap is that head/tail are what you reach for to make output
+           READABLE: the habit that makes a measurement legible is the habit that
+           corrupts it.
+        
+           NOTHING STRUCTURAL CAUGHT ANY OF THE THREE — not a gate, not a test. One
+           was caught by re-reading one's own command, one by a peer flagging a
+           disagreement they declined to explain away, one by checking a claim
+           before filing a row on it. The operational half: flag a disagreement you
+           cannot explain instead of smoothing it, and check a claim against the
+           tool before filing against the tool. Agreement between two sources is
+           not evidence when both share a method.
+      events:
+        - type: claim
+          host: yolanda
+          agent: windows-yolanda-claude
+          note: |
+            Claimed at filing. This packet did not exist before this cycle — it was found, filed and closed within it — so no sibling host could have held it; check-claims-across-branches.sh has nothing to arbitrate on a brand-new order. Recording the claim anyway so the audit trail shows a claim preceding the completion rather than a row that appeared already done.
+        - type: completed
+          host: yolanda
+          agent: windows-yolanda-claude
+          evidence_refs:
+          - 'scripts/test-cycle-checkout-lock.sh -> ok:checkout-lock-fixture:all (arms 8a-8f green; both arm-9 mutation controls report ''pre-fix result: FAILS'')'
+          - scripts/test-cycle-lock-attested-release.sh -> ok:cycle-lock-attested-release-fixture:11, 11 passed 0 failed
+          - litmus:cycle-checkout-lock-shape -> PASS under scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size instant
+          - 'live on yolanda, post-fix: acquire -> ok:checkout-lock:acquired:prompt:12388; sibling status -> skip:overlap-lock-held:lane=prompt pid=12388. Pre-fix the same pair answered warn:...-DEAD and ok:checkout-lock:free.'
+          - plan/issues/checkout-lock-inert-on-windows-hosts-2026-09-12.md (esme, independent reproduction from the harness-env anchor)
+          note: |
+            scripts/test-cycle-checkout-lock.sh -> ok:checkout-lock-fixture:all with arms 8a-8f green and both arm-9 mutation controls reporting "pre-fix result: FAILS". scripts/test-cycle-lock-attested-release.sh -> 11 passed, 0 failed, including "mark-attested accepts a descendant of the holder" and "refuses a lock held by an unrelated live pid", which is the pair the anchor-equality change had to keep. Live verification on this host: acquire now answers ok:checkout-lock:acquired:prompt:12388 and a sibling `status` answers skip:overlap-lock-held, where both previously answered as if no lock existed. UNVERIFIED ELSEWHERE: esme is the named verification host and has not yet reported its `pid-probe` line.
+

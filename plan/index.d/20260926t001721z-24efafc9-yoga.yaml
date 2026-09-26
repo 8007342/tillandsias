@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lua-predicates-have-no-pure-shims-so-every-observation-goes-through-the-shell-verb-and-no-assertion-can-be-cached
+    field: status
+    value: in_progress
+    ts: "2026-09-26T00:17:21Z"
+    host: yoga
+
+events:
+  - packet_id: lua-predicates-have-no-pure-shims-so-every-observation-goes-through-the-shell-verb-and-no-assertion-can-be-cached
+    event:
+      type: progress
+      ts: "2026-09-26T00:17:21Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: check-claims-across-branches ok; work/1252-hsrz is lenovinha's 09-18 ref, already on trunk
+  - packet_id: lua-predicates-have-no-pure-shims-so-every-observation-goes-through-the-shell-verb-and-no-assertion-can-be-cached
+    event:
+      type: note
+      ts: "2026-09-26T00:17:21Z"
+      host: yoga
+      summary: |-
+        coordinator routed: land the shim slice of 355d0dcf2 with review fixes (a)-(d)

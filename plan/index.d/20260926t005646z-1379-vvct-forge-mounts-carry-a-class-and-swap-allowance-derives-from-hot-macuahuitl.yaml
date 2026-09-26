@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: every-forge-mount-carries-a-class-hot-quarantine-warm-ro-cold-and-the-swap-allowance-is-derived-from-hot-caps-only
+    order: 1379-vvct
+    status: ready
+    kind: refactor
+    priority: p3
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [forge, containers, tmpfs, mount-topology, spec]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-core/src/container_profile.rs
+      - crates/tillandsias-podman/src/container_spec.rs
+    observed_by: macuahuitl
+    title: |
+      every forge mount carries a class (HOT tmpfs with swap, QUARANTINE tmpfs, WARM-RO image layer or read-only bind, COLD named volume), and the swap allowance is computed from HOT caps only, so adding a cold volume or a read-only tool tree never changes the budget
+    verifiable_closure: |
+      cargo test -p tillandsias-core mount_class_swap_allowance_counts_hot_only
+      passes: a profile with HOT caps summing to S MB plus QUARANTINE, WARM-RO
+      and COLD mounts yields swap_allowance_mb == S + 1024, and appending a COLD
+      volume or a WARM-RO bind leaves it unchanged; a second test asserts every
+      mount in every forge profile has exactly one class.
+      Pre-fix result: FAILS: no MountClass type exists in container_profile.rs
+      (the test does not compile) and the tmpfs list is untyped strings.
+    context: |
+      Design: plan/issues/forge-memory-swap-architecture-design-2026-09-26.md
+      section 5 enumerates the mounts from build_forge_agent_run_args_with_vault:
+      HOT /home/forge/src (forge_hot_src_tmpfs), /tmp 256 MB, /run/user/1000
+      64 MB, /dev/shm; QUARANTINE .ssh and .config/gh (1 MB); WARM-RO
+      /opt/cheatsheets (8 MB tmpfs copy of /opt/cheatsheets-image today),
+      /opt/agents, .gitconfig and known_hosts :ro; COLD forge_tool_cache_volume,
+      forge_spec_index_volume, the mirror volume. The operator's "partition
+      cheatsheets, specs, tools by swap mount" is realised as: per-class tmpfs
+      caps bound each class's spill, read-only content is page cache and needs
+      no swap (rootless spelling: --mount type=image,...,rw=false or a :ro
+      bind; loop-mounting squashfs/erofs needs CAP_SYS_ADMIN), and the
+      container's memory.swap.max bounds the total. Depends on the budget
+      packet landing first. Any host.

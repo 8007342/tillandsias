@@ -140,6 +140,17 @@ cp scripts/check-litmus-bindings.sh "$g/scripts/"
 cp scripts/run-litmus-test.sh "$g/scripts/" 2>/dev/null || true
 cp -r scripts/lib "$g/scripts/lib" 2>/dev/null || true
 printf 'version: "1.0"\nspecs:\n- spec_id: ci-release\n  status: active\n  litmus_tests: []\n' > "$g/openspec/litmus-bindings.yaml"
+# ORDER 1356-vv5m. THE SCAFFOLD CREATES THE SPEC ITS BINDINGS NAME. Until the
+# bindings checker resolved spec_ids, nothing asked whether `ci-release` existed
+# in this fake tree, so it never did — and the checker's first live refusal was
+# against this scaffold rather than against the repository:
+#   violation:binding-names-absent-spec:ci-release
+# A TRUE POSITIVE. The spec exists on trunk and in the merged tree; what was
+# missing was here. A fake tree is written against what the checkers of the day
+# happen to resolve, so a guard that starts asserting a POPULATION finds every
+# incomplete fake first — those are its first customers, before any real defect.
+mkdir -p "$g/openspec/specs/ci-release"
+printf '# spec: ci-release\n' > "$g/openspec/specs/ci-release/spec.md"
 : > "$g/openspec/litmus-tests/unbound-grandfathered.txt"
 git -C "$g" init -q 2>/dev/null
 git -C "$g" add -A >/dev/null 2>&1

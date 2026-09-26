@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-preflight-writes-its-scratch-and-sidecar-output-inside-the-checkout-so-on-a-forge-whose-checkout-is-a-256mb-tmpfs-it-exhausts-the-filesystem-and-then-reports-refused-for-deciders-that-never-ran
+    event:
+      type: correction
+      ts: "2026-09-26T00:31:53Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t003152z
+      host: tlatoanis-macbook-air
+      summary: |
+        CORRECTION to the second-regime attestation in scripts/gate-steps.d/426-1349-53h6.step: STEP_SECOND_REGIME="macneo 2026-09-24 darwin ok:preflight-scratch-is-off-checkout:5/5" is probably a FALSE GREEN. Arm 5 read build-sidecar.sh through `. <(sed …)`. On bash 3.2.57 that sources nothing: 5 of 5 runs on tlatoanis-macbook-air, 2026-09-25, and every macOS ./build.sh --check on trunk refused 1/5 (arm5). One earlier single-line probe here DID define the variable, so the read races the pipe. A darwin green measured the race going its way, not the arm working. This is the "green on one regime" shape: an attestation that cannot fail on that regime is not a second regime. Fixed by 1373-sr9g (eval "$(sed …)"), landed at 21027af15. After that fix, 5/5 on darwin is a real measurement, and the step file's STEP_SECOND_REGIME should be re-recorded from a post-21027af15 run.

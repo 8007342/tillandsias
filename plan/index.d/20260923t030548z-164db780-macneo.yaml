@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-installed-macos-app-bundle-disappears-from-applications-between-runs-on-macneo-with-the-vm-state-left-intact-which-is-the-exact-state-the-reset-state-pre-flight-guard-exists-for-and-no-mechanism-is-known
+    event:
+      type: note
+      ts: "2026-09-23T03:05:48Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260923t030548z
+      host: macneo
+      summary: |
+        SECOND REMOVAL OBSERVED, AND IT IS THE THIRD OCCURRENCE ON THIS HOST. The watcher
+        was kept running for exactly this, at macuahuitl-fedora's direction; it has now
+        caught what a stopped instrument could not.
+
+          2026-09-21T05:17:20Z  PRESENT  inode 12826846
+          2026-09-22T05:03:05Z  ABSENT   (10h20m)      <- removal 1, cause unattributed
+          2026-09-22T15:23:23Z  PRESENT  inode 13949419  (the v56.9.22.1 smoke installed it)
+          2026-09-23T02:54:45Z  ABSENT                 <- removal 2, THIS record
+
+        THE SIGNATURE IS IDENTICAL ACROSS THREE OCCURRENCES and it is the part worth
+        having. scripts/install.sh:306-309 records the first, on 2026-09-20: "an
+        installed /Applications/Tillandsias.app GONE while 1.2 GiB of VM state survived,
+        cause unidentified and recorded as unknown." Measured again now:
+          /Applications/Tillandsias.app                 GONE
+          rootfs.img   inode 13949914, 250 GB           SURVIVED
+          nvram.bin    inode 12877026, dated Sep 20     SURVIVED
+        So the app bundle disappears and the VM state — which is vastly larger and lives
+        under $HOME rather than /Applications — does not. Whatever does this is
+        selective for the bundle.
+
+        THE NEW DATUM: THIS ONE HAPPENED DURING A GATE. The removal falls at 19:54:45
+        PDT; ./build.sh --check ran on this host for about thirty minutes ending 20:00:39
+        PDT, so the removal is INSIDE the gate window. That is a correlation on ONE
+        occurrence and I am not calling it a cause.
+
+        WHAT I RULED OUT, by reading rather than by assuming:
+          - NO SCRIPT IN THE TREE removes the real path. `grep -rlnE 'rm -rf "?/Applications'`
+            over scripts/, crates/ and images/ returns nothing, and every uninstall
+            fixture that names /Applications points at a fake root
+            (test-uninstall-sweeps-both-app-dirs.sh:85 removes "$FAKE_HOME/Applications",
+            which I read rather than trusting its comment that it never touches a real one).
+          - XPROTECT, for removal 1: the log window is silent, nothing names the bundle,
+            and the nearest XProtectRemediator run was two hours after. Recorded on this
+            row with its decoy.
+          - The unified log for removal 2's window (19:50-20:00 local) contains NO event
+            naming Tillandsias at all — not the removal, not an unlink, nothing.
+
+        SO THE CAUSE REMAINS UNATTRIBUTED after three occurrences, and the honest state
+        is that macneo loses its installed app bundle roughly daily while keeping every
+        byte of guest state. The gate correlation is the first lead anyone has had; the
+        cheap next step for whoever takes it is to stat the bundle immediately before and
+        after a ./build.sh --check on a Mac, which converts one correlation into a
+        repeatable test or eliminates the lead in one run.
+
+        macneo, 2026-09-23. The watcher stays running.

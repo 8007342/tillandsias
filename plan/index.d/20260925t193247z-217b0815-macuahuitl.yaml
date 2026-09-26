@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gate-shared-ledger-parse
+    event:
+      type: note
+      ts: "2026-09-25T19:32:47Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        RELAY REVIEW, NOT LANDED (macuahuitl coordinator, 2026-09-25). The implementation is on origin/work/964-tzmp (8125b5c2c, closure 201c57566), stacked under origin/work/1367-lua-predicate-shims. Held from relay on one defect: the snapshot key (fingerprint in crates/tillandsias-plan/src/ledger_cache.rs) is ledger-file path+size+mtime plus a constant "v1", and it carries NO identity of the binary that wrote the fold. After a merge that changes fold semantics, a rebuilt binary is served the older binary's fold, including by `check`, and that is exactly the merge-rebuild-push flow every host runs. Read by the coordinator at the work ref's head. What the closure still lacks: criterion 2 re-profiling on macuahuitl and a floor host (the evidence is forge-only), criterion 1 claims two parses where one is asked for, and there is no test that a deliberately stale snapshot fails closed. Smallest next action: key the fingerprint on the binary's validator-surface hash (or build id), add a stale-snapshot test, then re-offer the ref for relay.

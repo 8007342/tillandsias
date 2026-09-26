@@ -1,0 +1,71 @@
+packets:
+  - packet_id: one-lua-std-module-registers-json-yaml-hash-time-path-into-every-lua-environment-the-plan-binary-hosts-by-class-and-the-lua-cli-stops-handing-scripts-an-unsandboxed-vm
+    order: 1375-btuf
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, portability, plan-binary, rust, litmus]
+    estimated_hours: 5
+    depends_on: [lua-predicates-have-no-pure-shims-so-every-observation-goes-through-the-shell-verb-and-no-assertion-can-be-cached]
+    owned_files: [crates/tillandsias-plan/src/lua_std.rs, crates/tillandsias-plan/src/lua_runtime.rs, crates/tillandsias-plan/src/lua_predicate.rs, crates/tillandsias-plan/src/main.rs, crates/tillandsias-plan/tests/lua_std.rs]
+    observed_by: macuahuitl
+    title: |
+      one `lua_std` module registers json/yaml/hash/time/path into every Lua environment the plan binary hosts, by predicate class, and `tillandsias-plan lua` stops handing scripts an unsandboxed `Lua::new()` — so a litmus step, a gate script and a Cacheable predicate call the same primitives and there is exactly one place a portability shim is written
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test lua_std passes, asserting:
+      json.parse/json.encode round-trip `{"a":[1,2,{"b":null}]}` to the same
+      bytes `tillandsias-plan json get -c .` prints; json.query(doc,
+      '.a[] | select(. > 1)') returns {2}; yaml.parse of a block scalar
+      returns the string with its newlines; hash.sha256("abc") ==
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+      path.join("a", "..", "b") == "b"; in the Cacheable environment `json`,
+      `yaml`, `hash` and `path` are tables and `time` is nil; in the
+      Observing environment time.now_ms() is a number; and
+      `tillandsias-plan lua -e 'print(os.execute, json ~= nil)'` prints
+      `nil true`. Pre-fix result: FAILS — cargo reports no test target named
+      `lua_std`, and `tillandsias-plan lua -e 'print(os.execute)'` prints a
+      function address because run_lua_cli builds a raw `mlua::Lua::new()`.
+    context: |
+      MEASURED 2026-09-26 (design:
+      plan/issues/lua-runtime-host-dependency-replacement-design-2026-09-26.md).
+      The plan binary hosts THREE Lua environments that share no code:
+      lua_runtime.rs (LuaRuntime::new — nils os.execute/io.open/require,
+      exposes expert.log_info and expert.now_ms, loads
+      crates/tillandsias-plan/lua/*.lua for expert-serve), lua_predicate.rs
+      (build_environment — Cacheable allow-list per 1367-upz6, Observing
+      adds expert.now_ms and expert.shell{argv}; 1367-q9yc adds fs.read
+      rooted at the repo and expect.contains/matches/eq, memo
+      content-addressed on the bytes read), and run_lua_cli
+      (`tillandsias-plan lua <script|-e>` — mlua::Lua::new() with the FULL
+      stdlib: os.execute, io.popen, require all live). mlua 0.10.5, features
+      vendored+lua54+send+serialize; the `serialize` feature already bridges
+      serde_json::Value <-> Lua tables (lua.to_value in call_collect), so
+      json.parse/encode is a thin wrapper, not new machinery.
+      No environment exposes json, yaml, hash, time-format or path to a
+      script today, so every portability shim would have to be written per
+      environment — which is the defect this row removes.
+      CONTRACT. lua_std::register(&Lua, PredicateClass) -> LuaResult<()> is
+      the ONLY registrar; the three builders call it. Pure tables
+      (Cacheable and Observing): json.parse(s) / json.encode(v[, {pretty}])
+      / json.query(v, filter) (the 1375-rn9b engine), yaml.parse(s),
+      hash.sha256(s) (sha2 is already a dependency), path.join/basename/
+      dirname/normalize (lexical only, no filesystem). Observing-only:
+      time.now_ms(), time.iso_utc() (the fragment-filename clock,
+      `%Y%m%dt%H%M%Sz`), fs.read (already 1367-q9yc's), sh.run{argv}
+      (the existing expert.shell renamed alias; keep the old name). Cacheable
+      gets fs.read only because 1367-q9yc content-addresses the memo on what
+      it read; nothing else in Cacheable may observe the clock, env or disk
+      (1367-upz6's allow-list stays the rule; add to the allow-list, never
+      widen it by deny). The `lua` CLI builds the Observing environment; a
+      `--class cacheable` flag builds the other, so an author can prove a
+      predicate is pure before registering it.
+      lua_runtime.rs keeps expert.* for the .lua files that exist, gains the
+      same std tables. Rust-side functions (hash, time, query) are shared
+      with the CLI verbs in 1375-rn9b and 1375-8g5t — one implementation,
+      three front doors (CLI verb, Lua table, litmus step). 902-5bf9's
+      `steps:` form then has its API without a second design.
+      Builds natively on all three platforms today (vendored Lua compiles
+      under cc on macOS and MSVC; yolanda's native .exe answers build-id),
+      so nothing here adds a toolchain.

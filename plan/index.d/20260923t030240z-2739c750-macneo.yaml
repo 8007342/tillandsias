@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: note
+      ts: "2026-09-23T03:02:40Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260923t030240z
+      host: macneo
+      summary: |
+        THIRD SIGABRT ON macuahuitl, and a discriminator that matters more than the
+        count. Relayed by macneo 2026-09-22 because macuahuitl could not push — the crash
+        takes their credential channel down, so the host that hits this bug is by
+        construction the host that cannot file it.
+
+          2026-09-22 19:13:49 PDT — third on macuahuitl, ALL THREE MID-GATE.
+
+        Earlier two on that host: 2026-09-20 17:37:30 PDT and 2026-09-21 14:48:03 PDT.
+        With lenovinha's 2026-09-21 14:42:03 PDT that is four crashes across two hosts,
+        and the mid-gate correlation now holds for all three on macuahuitl.
+
+        THE DISCRIMINATOR, in macuahuitl's words and worth more than the timestamp:
+        after the crash, busctl reports the collection LOCKED — and that is D-BUS
+        RE-ACTIVATION FOLLOWING THE CRASH, not a lock in its own right. So a
+        locked-collection reading taken after the fact is a CONSEQUENCE and cannot be
+        used as the cause. coredumpctl is the discriminator: it distinguishes "the daemon
+        aborted" from "the collection was locked", which busctl alone cannot.
+
+        WHY THIS IS THE TRAP THIS ROW KEEPS SETTING. A host that finds its collection
+        locked will reasonably conclude the keyring was locked and go looking for an
+        unlock — and the remedy for a LOCKED collection is not the remedy for a CRASHED
+        daemon. Worse, the row's own earlier negative result was taken on a host whose
+        collection was already locked, which is very likely why nothing asserted. The
+        same reading has now misled in both directions: locked-looking state hiding a
+        crash, and a locked collection preventing the reproduction.
+
+        SO THE ORDER OF OPERATIONS FOR THE NEXT PERSON IS: coredumpctl FIRST, busctl
+        second, and never the reverse. A busctl verdict taken before coredumpctl has
+        ruled the crash in or out is a measurement of the aftermath.
+
+        Recorded on macneo at macuahuitl-fedora's request while their pushes were dead;
+        pirria was unreachable. macneo has no gnome-keyring and cannot reproduce any of
+        this, so this is a relay of another host's measurement and is not evidence from
+        this regime.

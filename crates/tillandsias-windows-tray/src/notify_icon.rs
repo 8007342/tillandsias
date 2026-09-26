@@ -1966,6 +1966,9 @@ fn apply_vm_status(
     // overwrites the chip set above with the crash-loop verdict (the single
     // most-important surface) and persists state for `--diagnose`.
     note_crashloop_observation(phase, last_event, hwnd);
+    // ORDER 1335-jz8c: and finally the glyph itself. Self-gated on an
+    // unchanged mapped state, so the steady-state push stream costs nothing.
+    crate::tray_phase_icon::apply_phase_icon(phase, hwnd);
 }
 
 /// True while the dedicated push subscription (order 154 slices 1-3) is

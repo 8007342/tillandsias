@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: populate-hot-paths-fails-silent-and-traces-success
+    event:
+      type: note
+      ts: "2026-09-26T00:24:31Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        SALVAGE POINTER (macuahuitl coordinator, 2026-09-26): code for this row already exists, unlanded, on origin/salvage/forge/20260916-920-cluster-committed (abb850205, BigPickle/OpenCode forge, 2026-09-16/17). A read-only audit against origin/linux-next (21027af15-era) found trunk still equals the salvage's pre-image for these files, so the hunks are unique and apply cleanly: pty_handler.rs child_env_with_home (XDG_RUNTIME_DIR travels with HOME, with 2 tests; 922-hm3n); images/default/cli/tellme INDEX.md-presence check plus serving_note fallback, and lib-common.sh populate_hot_paths fail-loud cp verification (920-tqhs); litmus-mcp-discoverability-shape step gating on opencode_lane_builder_mounts_only_per_lane_mcp_dir (920-c3af). Also unique there: scripts/test-dispatch-reap.sh alive() zombie-vs-alive (1141-vf9w) and check-capability-row.sh empty-not-unset TILLANDSIAS_HOST_KIND (1159-g96c). One manual conflict: scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh. DO NOT relay the salvage's 26 plan fragments: their claim/in_progress events are 9 days stale. Start from these hunks on work/<order> and re-verify, because the audit found no overclaim but ran no tests.

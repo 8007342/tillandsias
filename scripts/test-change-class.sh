@@ -244,6 +244,75 @@ else
     bad "ARM 9: the evidence line is missing:$miss — got: $w9"
 fi
 
+# ══ THE SELECTOR'S DECISION (765-xpct slice 2) ═════════════════════════════
+# build.sh owns the keep-unconditional DATA and calls change_class_may_skip with
+# it. These arms exercise the RULE. Every one of them has a twin: a case that
+# may skip and a case that may not, because "never skips" passes every
+# fail-closed arm in this file and is useless.
+KEEP='
+gate-stamp-verify            599-4wzr  a stale stamp vouched for a tree nobody built
+salvage-net-roundtrip        1315-4a7j a salvage-only push took the work lane
+'
+may() { ( cd "$W" && env TILLANDSIAS_FULL_GATE_MARKER="$MARKER" bash -c '
+    . scripts/change-class.sh
+    change_class_may_skip "$1" "$2" "${@:3}"' _ "$@" ) ; }
+
+scaffold selector
+mkdir -p "$W/plan/index.d"; echo "packets: []" > "$W/plan/index.d/x.yaml"
+
+if may groundtruth-pins "$KEEP" specs rust; then
+    ok "S1: a plan-only change may SKIP a guard declaring specs+rust — the classes do not intersect"
+else
+    bad "S1: a plan-only change could not skip a guard that reads neither plan nor docs"
+fi
+if may fragment-status-loss "$KEEP" plan-ledger rust; then
+    bad "S2: a plan-only change skipped a guard that DECLARES plan-ledger — the intersection test is inverted or absent"
+else
+    ok "S2: the same change may NOT skip a guard declaring plan-ledger — intersection blocks the skip"
+fi
+if may gate-stamp-verify "$KEEP" specs rust; then
+    bad "S3: a KEEP-UNCONDITIONAL guard was skippable — the list is not consulted, and the eight entries protect nothing"
+else
+    ok "S3: a keep-unconditional guard may never be skipped, even with no class intersection"
+fi
+if ( cd "$W" && env TILLANDSIAS_FULL_GATE_MARKER="$MARKER" TILLANDSIAS_CLASS_SELECTOR=off bash -c '
+    . scripts/change-class.sh; change_class_may_skip g "" specs' ); then
+    bad "S4: the selector answered skip while switched OFF"
+else
+    ok "S4: TILLANDSIAS_CLASS_SELECTOR=off refuses every skip — the whole feature has one switch"
+fi
+printf '%s\n' "$(( $(date -u +%s) - 90000 ))" > "$MARKER"
+if may groundtruth-pins "$KEEP" specs rust; then
+    bad "S5: a guard was skipped although the last FULL gate is 25h old — the freshness bound is not consulted here"
+else
+    ok "S5: with a stale last-FULL run nothing may be skipped, however unrelated the classes"
+fi
+rm -f "$MARKER"
+if may groundtruth-pins "$KEEP" specs rust; then
+    bad "S6: a guard was skipped with NO full gate ever recorded"
+else
+    ok "S6: with no full gate ever recorded nothing may be skipped — a first run is the whole one"
+fi
+
+# ══ PATH NARROWING (765-xpct slice 2) ══════════════════════════════════════
+# A declared input may be `path:<glob>` as well as a class. THE PAIR IS THE ARM:
+# a skip alone would pass against "narrowing is ignored", and a run alone would
+# pass against "path globs always match".
+scaffold narrow
+mkdir -p "$W/crates/other/src"; echo "fn main(){}" > "$W/crates/other/src/main.rs"
+if may pilot "" plan-ledger path:crates/tillandsias-plan/*; then
+    ok "N1: a change to ANOTHER crate may be skipped by a guard keyed to crates/tillandsias-plan — this is the whole saving, and declaring the class `rust` instead loses it"
+else
+    bad "N1: a guard keyed to the plan crate ran for a change to a different crate — the narrowing is not applied and a code-only cycle saves nothing"
+fi
+rm -rf "$W/crates/other"; mkdir -p "$W/crates/tillandsias-plan/src"
+echo "fn main(){}" > "$W/crates/tillandsias-plan/src/main.rs"
+if may pilot "" plan-ledger path:crates/tillandsias-plan/*; then
+    bad "N2: a change to the PLAN CRATE ITSELF was skipped — the glob matches nothing and the narrowing is silently total"
+else
+    ok "N2: a change to crates/tillandsias-plan makes the same guard RUN — the glob narrows without blinding"
+fi
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then

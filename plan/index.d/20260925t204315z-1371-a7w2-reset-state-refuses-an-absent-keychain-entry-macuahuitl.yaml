@@ -1,0 +1,47 @@
+packets:
+  - packet_id: linux-reset-state-reports-an-already-absent-keychain-entry-as-a-failure-because-it-matches-the-error-text-and-keyring-says-no-matching-entry-found-so-every-clean-host-install-refuses
+    order: 1371-a7w2
+    status: ready
+    kind: defect
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [release, installer, vault, keychain]
+    estimated_hours: 1
+    owned_files: [crates/tillandsias-headless/src/vault_bootstrap.rs]
+    observed_by: calmecacpilli
+    unscoreable: |
+      rust-unit-test-plus-real-host: the automated half is a cargo unit test in
+      tillandsias-headless (run by ./build.sh --check), not a litmus file; the
+      other half is a curl-install on a real Silverblue host with an empty keyring.
+    title: |
+      Linux --reset-state reports an already-absent keychain entry as a FAILURE, because clear_host_vault_credentials matches the error TEXT for "no entry"/"not found" and the keyring crate says "No matching entry found in secure storage", so every clean-host curl install of v56.9.23.1 refuses and never provisions
+    verifiable_closure: |
+      A unit test in crates/tillandsias-headless (vault_bootstrap.rs tests)
+      classifies a keychain delete result: Err(keyring::Error::NoEntry)
+      reads as already-absent (cleared), and any other keyring error reads
+      as failed. clear_host_vault_credentials uses that classifier, matching
+      the VARIANT, not the Display text. Pre-fix result: FAILS, because the
+      text match on "No matching entry found in secure storage" contains
+      neither "no entry" nor "not found" and lands in `failed`. Real-host
+      closure: on a Silverblue host with no vault-shamir-share-v1 or
+      vault-root-token-v1 in the keyring, the curl-install of the fixed
+      release prints "keychain:<attr> (already absent)" for both, and
+      --reset-state proceeds to reprovision (exit 0).
+    context: |
+      Reported by the operator 2026-09-25 from calmecacpilli (Fedora Silverblue,
+      fr locale) running `curl -fsSL .../releases/download/unstable/install.sh |
+      bash -s -- --channel unstable` against v56.9.23.1. Output: "FAILED:
+      keychain:vault-shamir-share-v1: No matching entry found in secure storage
+      keychain:vault-root-token-v1: No matching entry found in secure storage",
+      then "Error: --reset-state could not clear: ... the local state is NOT
+      reset". The podman reset had ALREADY RUN (podman system reset --force), so
+      the host is left wiped and unprovisioned. The comment in
+      clear_host_vault_credentials states the intent correctly ("A missing entry
+      is CLEARED, not failed"), and the implementation keys on
+      e.to_lowercase().contains("no entry") || contains("not found"). keyring's
+      Error::NoEntry Display is "No matching entry found in secure storage",
+      which contains "entry found", not "not found". The error is stringified by
+      with_keyring_timeout before the match, so the variant is lost. Introduced
+      by 54b2f7307 (1286-4437, 2026-09-20). Release-blocking: every Linux
+      clean-room smoke, and every first install, hits it.

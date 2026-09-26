@@ -304,7 +304,13 @@ against this tree. **But the bump branch still needs its own `./build.sh
 pre-push hook compares the gate STAMP against the tree bytes, and the bump
 changes VERSION plus every crate's `Cargo.toml` — so the push is refused with
 "the tree changed since ./build.sh --check last passed". Run
-`TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check` on the bump branch, then
+`TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check`
+on the bump branch. The selector must be OFF here: since 765-xpct a plain
+`--check` writes a SCOPED stamp (classes computed against linux-next), and
+the hook cannot honour a scoped stamp on a brand-new branch with no local
+base ("the gate stamp is scoped to 'other,rust' but refs/heads/release/…
+has no usable local base"). Measured on the v56.9.23.1 cut, one wasted gate.
+The same applies to the step-5 back-merge gate. Then
 `git add Cargo.lock` and `--amend` it into the bump commit if the check
 touched it (still VERSION + Cargo only, 702-eusw), then push.
 
@@ -442,7 +448,7 @@ before and after the back-merge.
 test "$(git symbolic-ref --short HEAD)" = "${release_source_branch:-linux-next}"
 git fetch origin
 git merge origin/main          # back-merge the VERSION bump; merge, never rebase
-TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check
+TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check
                                # the merge changed VERSION, so the gate stamp is
                                # stale and the pushes below would be refused
 

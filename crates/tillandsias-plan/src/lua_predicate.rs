@@ -1,7 +1,11 @@
-// @trace order:1252-hsrz, spec:ci-release
+// @trace order:1252-hsrz, order:1367-q9yc, spec:ci-release
 //
 // lua_predicate.rs — two predicate classes, and the cacheable one CANNOT REACH
 // THE SHELL because the symbol is not in its environment.
+//
+// Pure shims (order 1367-q9yc) expose repo-rooted `fs.read` and `expect.*`
+// assertions to both classes, enabling predicates to read repo files and
+// assert values without invoking a shell or impure host tools.
 //
 // ── WHY THIS EXISTS AND WHAT IT IS NOT ──────────────────────────────────────
 //
@@ -60,7 +64,7 @@
 use crate::lua_runtime::LuaError;
 use mlua::prelude::*;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Which capabilities a predicate is given, and therefore whether its result may
 /// be cached. The class is what the environment is built FROM, not a label
@@ -124,9 +128,186 @@ fn shell_result_to_lua(lua: &Lua, out: tillandsias_exec::Output) -> LuaResult<Lu
     Ok(t)
 }
 
+/// The Lua globals a CACHEABLE predicate may reach, besides the `expert` table
+/// (1367-upz6, 1367-q9yc). Deterministic, side-effect-free library only: no `os`, no `io`,
+/// no `print`, no `load`, no `collectgarbage`, and `math` without `random`.
+/// Pinned from inside Lua by tests/lua_predicate_classes.rs.
+pub const CACHEABLE_STDLIB_GLOBALS: &[&str] = &[
+    "_G",
+    "_VERSION",
+    "assert",
+    "error",
+    "expect",
+    "fs",
+    "getmetatable",
+    "ipairs",
+    "math",
+    "next",
+    "pairs",
+    "pcall",
+    "rawequal",
+    "rawget",
+    "rawlen",
+    "rawset",
+    "select",
+    "setmetatable",
+    "string",
+    "table",
+    "tonumber",
+    "tostring",
+    "type",
+    "utf8",
+    "xpcall",
+];
+
+/// Locate the repository root by checking environment variables, parent directories
+/// for plan/index.yaml or .git, and current executable directory.
+///
+/// FAILS CLOSED (review of 1367-q9yc): there is no "." fallback. A cwd of `/`
+/// would make every absolute path "inside the repository", so an unlocatable
+/// root is a named refusal at `fs.read` time, never a guess. `/` itself is
+/// never accepted as a root, whichever route proposed it.
+fn find_repo_root() -> Result<PathBuf, String> {
+    let root = locate_repo_root().ok_or_else(|| {
+        "fs.read: refused — no repository root found (set TILLANDSIAS_REPO_ROOT, or run \
+         inside a checkout containing plan/index.yaml or .git)"
+            .to_string()
+    })?;
+    validate_repo_root(root)
+}
+
+/// The fail-closed half of [`find_repo_root`], separate so it can be tested
+/// with `/` without changing the process cwd or environment.
+fn validate_repo_root(root: PathBuf) -> Result<PathBuf, String> {
+    let root = root.canonicalize().map_err(|e| {
+        format!(
+            "fs.read: refused — repository root {} unresolvable: {e}",
+            root.display()
+        )
+    })?;
+    if root.parent().is_none() {
+        return Err(format!(
+            "fs.read: refused — repository root resolved to the filesystem root {}",
+            root.display()
+        ));
+    }
+    Ok(root)
+}
+
+fn locate_repo_root() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("TILLANDSIAS_REPO_ROOT") {
+        let pb = PathBuf::from(p);
+        if pb.is_dir() {
+            return Some(pb);
+        }
+    }
+    if let Ok(p) = std::env::var("PROJECT_ROOT") {
+        let pb = PathBuf::from(p);
+        if pb.is_dir() {
+            return Some(pb);
+        }
+    }
+    if let Ok(mut dir) = std::env::current_dir() {
+        loop {
+            if dir.join("plan/index.yaml").is_file() || dir.join(".git").exists() {
+                return Some(dir);
+            }
+            if !dir.pop() {
+                break;
+            }
+        }
+    }
+    if let Ok(mut exe) = std::env::current_exe() {
+        exe.pop();
+        loop {
+            if exe.join("plan/index.yaml").is_file() || exe.join(".git").exists() {
+                return Some(exe);
+            }
+            if !exe.pop() {
+                break;
+            }
+        }
+    }
+    None
+}
+
+/// Lexicographically normalize a path, eliminating `.` and `..` segments.
+fn normalize_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for comp in path.components() {
+        match comp {
+            Component::Prefix(p) => out.push(Component::Prefix(p)),
+            Component::RootDir => out.push(Component::RootDir),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::Normal(c) => out.push(c),
+        }
+    }
+    out
+}
+
+fn format_lua_value(val: &LuaValue) -> String {
+    match val {
+        LuaValue::Nil => "nil".to_string(),
+        LuaValue::Boolean(b) => b.to_string(),
+        LuaValue::Integer(i) => i.to_string(),
+        LuaValue::Number(n) => n.to_string(),
+        LuaValue::String(s) => format!("{:?}", s.to_string_lossy()),
+        LuaValue::Table(t) => {
+            let mut parts = Vec::new();
+            for (k, v) in t.clone().pairs::<LuaValue, LuaValue>().flatten() {
+                parts.push(format!(
+                    "{}: {}",
+                    format_lua_value(&k),
+                    format_lua_value(&v)
+                ));
+            }
+            format!("{{{}}}", parts.join(", "))
+        }
+        other => format!("{other:?}"),
+    }
+}
+
+fn values_equal(a: &LuaValue, b: &LuaValue) -> bool {
+    if a == b {
+        return true;
+    }
+    match (a, b) {
+        (LuaValue::Table(ta), LuaValue::Table(tb)) => {
+            let mut count_a = 0;
+            for (k, va) in ta.clone().pairs::<LuaValue, LuaValue>().flatten() {
+                count_a += 1;
+                match tb.get::<LuaValue>(k) {
+                    Ok(vb) => {
+                        if !values_equal(&va, &vb) {
+                            return false;
+                        }
+                    }
+                    Err(_) => return false,
+                }
+            }
+            let count_b = tb.clone().pairs::<LuaValue, LuaValue>().flatten().count();
+            count_a == count_b
+        }
+        _ => false,
+    }
+}
+
+/// Every file a predicate read through `fs.read`, in read order (repo-rooted,
+/// normalised). The memo keys a Cacheable verdict on these files' CONTENT.
+pub type ReadLog = std::sync::Arc<std::sync::Mutex<Vec<PathBuf>>>;
+
 /// Build a Lua runtime whose `expert` table contains EXACTLY the verbs its class
 /// is entitled to.
 pub fn build_environment(class: PredicateClass) -> Result<Lua, LuaError> {
+    build_environment_logged(class, ReadLog::default())
+}
+
+/// As [`build_environment`], recording every `fs.read` path into `reads`.
+pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result<Lua, LuaError> {
     let lua = Lua::new();
 
     // Same stdlib removals as lua_runtime::new. Repeated rather than shared
@@ -151,6 +332,159 @@ pub fn build_environment(class: PredicateClass) -> Result<Lua, LuaError> {
         let _ = globals.set("loadfile", LuaValue::Nil);
         let _ = globals.set("dofile", LuaValue::Nil);
         let _ = globals.set("require", LuaValue::Nil);
+    }
+
+    // ORDER 1367-upz6. The removals above are a DENY-list, and a deny-list
+    // left os.time, os.clock, io.lines, os.remove and math.random reachable,
+    // so a cacheable predicate could read the clock or the disk and have that
+    // verdict replayed from cache. The cacheable class is therefore cut down
+    // to an ALLOW-list: every global not named below is removed, and math
+    // loses its non-deterministic half. The observing class keeps the wider
+    // set; it is never cached and already holds the shell verb.
+    if matches!(class, PredicateClass::Cacheable) {
+        let globals = lua.globals();
+        let mut drop: Vec<String> = Vec::new();
+        for pair in globals.clone().pairs::<LuaValue, LuaValue>() {
+            let (k, _) = pair.map_err(|e| LuaError::VmError(format!("globals: {e}")))?;
+            if let LuaValue::String(name) = k {
+                let name = name.to_string_lossy().to_string();
+                if !CACHEABLE_STDLIB_GLOBALS.contains(&name.as_str()) {
+                    drop.push(name);
+                }
+            }
+        }
+        for name in drop {
+            globals
+                .set(name.as_str(), LuaValue::Nil)
+                .map_err(|e| LuaError::VmError(format!("remove {name}: {e}")))?;
+        }
+        if let Ok(math) = globals.get::<LuaTable>("math") {
+            let _ = math.set("random", LuaValue::Nil);
+            let _ = math.set("randomseed", LuaValue::Nil);
+        }
+    }
+
+    // ORDER 1367-q9yc. Pure shims exposed to both Cacheable and Observing classes:
+    // (1) repo-rooted fs.read rejecting path traversals and absolute paths outside repo root;
+    // (2) expect.contains, expect.matches, expect.eq returning boolean true or raising
+    // an error with expected and actual values on mismatch.
+    {
+        let repo_root = find_repo_root();
+
+        let fs_table = lua
+            .create_table()
+            .map_err(|e| LuaError::VmError(format!("failed to create fs table: {e}")))?;
+
+        let f_read = {
+            let root = repo_root.clone();
+            let reads = reads.clone();
+            lua.create_function(move |lua, path_str: String| {
+                let root = root.clone().map_err(mlua::Error::RuntimeError)?;
+                if path_str.is_empty() {
+                    return Err(mlua::Error::RuntimeError(
+                        "fs.read: refused — empty path".to_string(),
+                    ));
+                }
+                let path = Path::new(&path_str);
+                let normalized = if path.is_absolute() {
+                    normalize_path(path)
+                } else {
+                    normalize_path(&root.join(path))
+                };
+                if !normalized.starts_with(&root) {
+                    return Err(mlua::Error::RuntimeError(format!(
+                        "fs.read: refused — path '{path_str}' is outside repository root"
+                    )));
+                }
+                if let Ok(canon) = normalized.canonicalize()
+                    && !canon.starts_with(&root)
+                {
+                    return Err(mlua::Error::RuntimeError(format!(
+                        "fs.read: refused — symlink '{path_str}' resolves outside repository root"
+                    )));
+                }
+                // Logged BEFORE the read, so a file that is absent now and
+                // appears later still invalidates the memo (its digest moves
+                // from "absent" to its bytes).
+                if let Ok(mut log) = reads.lock() {
+                    log.push(normalized.clone());
+                }
+                let bytes = std::fs::read(&normalized).map_err(|e| {
+                    mlua::Error::RuntimeError(format!("fs.read: failed to read '{path_str}': {e}"))
+                })?;
+                lua.create_string(&bytes)
+            })
+            .map_err(|e| LuaError::VmError(format!("fs.read: {e}")))?
+        };
+        fs_table
+            .set("read", f_read)
+            .map_err(|e| LuaError::VmError(format!("fs.read: {e}")))?;
+        lua.globals()
+            .set("fs", fs_table)
+            .map_err(|e| LuaError::VmError(format!("failed to set fs global: {e}")))?;
+
+        let expect_table = lua
+            .create_table()
+            .map_err(|e| LuaError::VmError(format!("failed to create expect table: {e}")))?;
+
+        let f_contains = lua
+            .create_function(|_, (haystack, needle): (String, String)| {
+                if haystack.contains(&needle) {
+                    Ok(true)
+                } else {
+                    Err(mlua::Error::RuntimeError(format!(
+                        "expectation failed: expected string to contain {:?}, got {:?}",
+                        needle, haystack
+                    )))
+                }
+            })
+            .map_err(|e| LuaError::VmError(format!("expect.contains: {e}")))?;
+        expect_table
+            .set("contains", f_contains)
+            .map_err(|e| LuaError::VmError(format!("expect.contains: {e}")))?;
+
+        let f_matches = lua
+            .create_function(|_, (haystack, pattern): (String, String)| {
+                let re = regex::Regex::new(&pattern).map_err(|e| {
+                    mlua::Error::RuntimeError(format!(
+                        "expect.matches: invalid regex pattern {:?}: {e}",
+                        pattern
+                    ))
+                })?;
+                if re.is_match(&haystack) {
+                    Ok(true)
+                } else {
+                    Err(mlua::Error::RuntimeError(format!(
+                        "expectation failed: expected string to match pattern {:?}, got {:?}",
+                        pattern, haystack
+                    )))
+                }
+            })
+            .map_err(|e| LuaError::VmError(format!("expect.matches: {e}")))?;
+        expect_table
+            .set("matches", f_matches)
+            .map_err(|e| LuaError::VmError(format!("expect.matches: {e}")))?;
+
+        let f_eq = lua
+            .create_function(|_, (actual, expected): (LuaValue, LuaValue)| {
+                if values_equal(&actual, &expected) {
+                    Ok(true)
+                } else {
+                    let act_str = format_lua_value(&actual);
+                    let exp_str = format_lua_value(&expected);
+                    Err(mlua::Error::RuntimeError(format!(
+                        "expectation failed: expected {exp_str}, got {act_str}"
+                    )))
+                }
+            })
+            .map_err(|e| LuaError::VmError(format!("expect.eq: {e}")))?;
+        expect_table
+            .set("eq", f_eq)
+            .map_err(|e| LuaError::VmError(format!("expect.eq: {e}")))?;
+
+        lua.globals()
+            .set("expect", expect_table)
+            .map_err(|e| LuaError::VmError(format!("failed to set expect global: {e}")))?;
     }
 
     let expert = lua
@@ -272,17 +606,37 @@ pub struct Predicate {
 /// Registry that owns each predicate's environment and the cache for the
 /// cacheable class.
 ///
-/// THE CACHE IS KEYED ON THE PREDICATE NAME AND ITS ARGUMENT, and it is
-/// populated ONLY for `Cacheable`. There is no flag to override that: an
-/// observing predicate has no cache entry to serve, so a stale verdict for one
-/// is not something a caller can opt into by mistake.
+/// THE CACHE IS CONTENT-ADDRESSED, and it is populated ONLY for `Cacheable`.
+/// An entry is found by (name, argument) and SERVED only while every file the
+/// predicate read through `fs.read` still has the digest it had when the
+/// verdict was computed (review of 1367-q9yc: keying on (name, arg) alone
+/// replayed a stale verdict after a file edit). A Cacheable predicate is thus a
+/// pure function of its argument AND the bytes it read, which is what the memo
+/// may assume. There is no flag to cache an observing predicate.
 #[derive(Default)]
 pub struct PredicateRegistry {
     predicates: BTreeMap<String, Predicate>,
-    cache: BTreeMap<(String, String), bool>,
+    cache: BTreeMap<(String, String), CacheEntry>,
     /// How many times a cached value was served, for tests that need to prove a
     /// second call did NOT re-execute.
     pub cache_hits: usize,
+}
+
+struct CacheEntry {
+    verdict: bool,
+    /// (path, digest-or-None-if-unreadable) for every `fs.read` of the run.
+    inputs: Vec<(PathBuf, Option<[u8; 32]>)>,
+}
+
+fn file_digest(path: &Path) -> Option<[u8; 32]> {
+    use sha2::{Digest, Sha256};
+    std::fs::read(path).ok().map(|b| Sha256::digest(&b).into())
+}
+
+impl CacheEntry {
+    fn still_valid(&self) -> bool {
+        self.inputs.iter().all(|(p, d)| file_digest(p) == *d)
+    }
 }
 
 impl PredicateRegistry {
@@ -358,12 +712,14 @@ impl PredicateRegistry {
 
         if class.is_cacheable()
             && let Some(hit) = self.cache.get(&key)
+            && hit.still_valid()
         {
             self.cache_hits += 1;
-            return Ok(*hit);
+            return Ok(hit.verdict);
         }
 
-        let lua = build_environment(class)?;
+        let reads = ReadLog::default();
+        let lua = build_environment_logged(class, reads.clone())?;
         lua.load(&source)
             .exec()
             .map_err(|e| LuaError::VmError(format!("predicate {name}: {e}")))?;
@@ -376,8 +732,37 @@ impl PredicateRegistry {
             .map_err(|e| LuaError::VmError(format!("predicate {name}: {e}")))?;
 
         if class.is_cacheable() {
-            self.cache.insert(key, verdict);
+            let mut paths = reads.lock().map(|l| l.clone()).unwrap_or_default();
+            paths.sort();
+            paths.dedup();
+            let inputs = paths
+                .into_iter()
+                .map(|p| {
+                    let d = file_digest(&p);
+                    (p, d)
+                })
+                .collect();
+            self.cache.insert(key, CacheEntry { verdict, inputs });
         }
         Ok(verdict)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Review of 1367-q9yc (b): the filesystem root is never a repository root,
+    /// so a cwd of `/` cannot turn every absolute path into an "inside" one.
+    #[test]
+    fn the_filesystem_root_is_refused_as_a_repository_root() {
+        let err = validate_repo_root(PathBuf::from("/")).unwrap_err();
+        assert!(
+            err.contains("refused") && err.contains("filesystem root"),
+            "{err}"
+        );
+        let missing = validate_repo_root(PathBuf::from("/definitely/not/a/dir/1367")).unwrap_err();
+        assert!(missing.contains("unresolvable"), "{missing}");
+        assert!(validate_repo_root(std::env::temp_dir()).is_ok());
     }
 }

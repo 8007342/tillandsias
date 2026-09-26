@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: wire-local-experts-mode-through-grounded-pipeline
+    field: verifiable_closure
+    value: |2-
+
+      THE LAST ITEM IS DELIVERED ON work/920-pxg6, PR #156 — the OpenSpec sync and
+      archive, which the 2026-09-20 ruling left as all that remained.
+
+      THE SYNC WAS LOAD-BEARING, NOT BOOKKEEPING, and that is worth recording because
+      the ruling's phrasing ("sync/archive only") reads like tidying:
+      openspec/litmus-bindings.yaml:1242 binds THREE litmus tests under spec_id
+      expert-serve-grounded-pipeline, and openspec/specs/expert-serve-grounded-pipeline/
+      DID NOT EXIST. The binding named a spec that was not in the live tree, so the
+      tidying step was the thing making three bound tests point at something real.
+
+        ADDED openspec/specs/expert-serve-grounded-pipeline/spec.md — the change's six
+        requirements (R1..R6) carried VERBATIM, verified by DIFFING the requirement
+        bodies against the change tree rather than by reading them, wrapped in the
+        house header the sibling specs use.
+
+        MODIFIED openspec/specs/forge-environment-discoverability/spec.md — the one
+        MODIFIED requirement, "local-experts agent is grounded-endpoint only",
+        appended at the END of the Requirements section. My first attempt anchored on
+        `## Implementation Notes` and landed it after `## Litmus Tests`, because that
+        spec's Requirements section ends earlier than I assumed; reverted with git
+        checkout and redone against the true boundary.
+
+        ARCHIVED to changes/archive/expert-serve-grounded-pipeline-completed-2026-09-22
+        via `git mv`, so all six files are R100 renames — identical content, history
+        following — and the diff carries NO D lines.
+
+      All 27 tasks in the change's tasks.md were already checked and none open, so this
+      closes the RECORD rather than the work.
+
+      CLAIMED AFTER THE WORK WAS DONE. The row was `ready` while I did it and I flipped
+      it to in_progress afterwards. Stated rather than hidden; the assignment was
+      explicit from the coordinator, but the ledger order is the reverse of the ideal
+      and a later reader should not have to infer that from timestamps.
+
+      Checkers: the eight relay deciders and cargo fmt --check green;
+      check-spec-index-resolution-agreement.sh reads
+      ok:spec-index-resolution-agreement:carriers=3-scenarios=4.
+    ts: "2026-09-22T10:46:39Z"
+    host: macos

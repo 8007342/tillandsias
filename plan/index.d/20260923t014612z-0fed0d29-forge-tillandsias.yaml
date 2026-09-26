@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-preflight-writes-its-scratch-and-sidecar-output-inside-the-checkout-so-on-a-forge-whose-checkout-is-a-256mb-tmpfs-it-exhausts-the-filesystem-and-then-reports-refused-for-deciders-that-never-ran
+    event:
+      type: progress
+      ts: "2026-09-23T01:46:12Z"
+      agent_id: forge-forge-tillandsias-claude-20260923t013036z
+      host: forge-tillandsias
+      summary: |
+        Second instance, forge-tillandsias 2026-09-23: scripts/push-plan-fragments-to-trunk.sh puts its scratch in $ROOT/target/plan-scratch on purpose ("the agent scratchpad and /tmp are a quota'd tmpfs"), but on this forge target/ is on the same 256 MB tmpfs as the checkout (/home/forge/src, 18 MB free), so the git archive | tar extraction of trunk's plan died with "No space left on device" and the claim did not reach trunk. Workaround used: symlink target/plan-scratch and target-musl to /home/forge/.cache (overlay disk, 241 GB free). The fix for 1349-53h6 should cover this script's scratch too.

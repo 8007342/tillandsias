@@ -22,3 +22,4 @@ STEP_OK="set-field prose guard check passed"
 # Exit 3 means no runnable tillandsias-plan resolved — nothing was examined.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="no runnable tillandsias-plan resolved, so set-field could not be exercised"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   --append with --replace is refused rather than silently picking one"

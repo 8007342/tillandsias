@@ -14,6 +14,13 @@
 // -resize 256x256 -define icon:auto-resize=256,128,96,64,48,32,16
 // tillandsias.ico`). The .ico carries 7 sizes (16,32,48,64,96,128,256) so
 // Windows picks the right one for taskbar / notification area / Alt-Tab.
+// ORDER 1335-jz8c: THIS SCRIPT IS NOW THE FALLBACK. build.rs renders the icon
+// from assets/icons/ionantha/bud.svg at build time and emits an equivalent
+// generated .rc in OUT_DIR; it compiles THIS file only when that render is
+// unavailable (no SVG, no OUT_DIR, resvg failure). The committed .ico above is
+// therefore a stale ImageMagick rasterization kept deliberately, so a cosmetic
+// asset can never turn a build red.
+//
 // Windows-tray w1: wire the ICON entry below by loading
 // LoadIconW(GetModuleHandle, MAKEINTRESOURCE(1)) in notify_icon.rs.
 //

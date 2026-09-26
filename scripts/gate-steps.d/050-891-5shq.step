@@ -7,3 +7,4 @@ STEP_DESC="Checking the env-forward is shared by every dispatch boundary (891-5s
 STEP_SCRIPT="scripts/test-env-forward-shared.sh"
 STEP_ERROR="a dispatch boundary rolls its own TILLANDSIAS_* forward, or the forward manufactures/unquotes values (891-5shq) — see the verdict line above"
 STEP_OK="Env-forward sharing check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:env-forward-shared:10"

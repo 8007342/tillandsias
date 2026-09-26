@@ -253,3 +253,72 @@ change_class_tier() {
     echo "change-class: FULL base=${mb:0:9} classes=$(printf '%s' "$classes" | tr '\n' ',')" >&2
     return 0
 }
+
+# change_class_may_skip <guard> <keep-list> <declared-classes...> -> 0 when the
+# guard may be skipped. THE DECISION LIVES HERE AND THE DATA LIVES IN build.sh,
+# deliberately: the row asks for the selector matrix to be in build.sh where a
+# reader of the gate can see it, and a decision nobody can call from a fixture
+# is a decision nobody can falsify. So build.sh owns the keep-unconditional
+# list and passes it in; this owns the rule and is testable.
+#
+# EVERY UNCERTAINTY ANSWERS "NO". An unreadable class set, a guard on the
+# keep list, a last-FULL run that is stale or was never recorded, the selector
+# switched off — each returns 1 and the guard runs. The only path to 0 is a
+# readable class set that does not intersect the guard's declared inputs, under
+# a full gate recent enough to still vouch for everything else.
+change_class_may_skip() {
+    local guard="$1" keep="$2"; shift 2
+    [ "${TILLANDSIAS_CLASS_SELECTOR:-on}" = "on" ] || return 1
+
+    local _l _first
+    while IFS= read -r _l; do
+        _first="${_l%%[[:space:]]*}"
+        [ -n "$_first" ] || continue
+        [ "$_first" = "$guard" ] && return 1
+    done <<< "$keep"
+
+    local classes
+    classes="$(change_class_set 2>/dev/null)" || return 1
+    [ -n "$classes" ] || return 1
+
+    local age; age="$(change_class_full_run_age_s)"
+    case "$age" in never) return 1 ;; esac
+    [ "$age" -le "$CHANGE_CLASS_FULL_MAX_AGE_S" ] || return 1
+
+    # A DECLARED INPUT IS EITHER A CLASS OR A PATH GLOB (`path:<glob>`), and the
+    # second is not a second taxonomy — it is a NARROWING of the first.
+    #
+    # WHY IT EXISTS, measured: the two pilot guards read the plan ledger and the
+    # PLAN CRATE. Declared in classes alone the nearest truth is `rust`, which
+    # covers every crate in the tree — so a change to tillandsias-podman, which
+    # cannot affect the plan fold, forced both guards to run and a code-only
+    # cycle saved NOTHING. Measured on yoga 2026-09-21 with `rust` declared:
+    # classes=rust -> fragment-status-loss RUNS, groundtruth-mutable-status-pins
+    # RUNS. The row's own text had said it correctly all along —
+    # "key: plan-ledger ∪ plan-core incl. crates/tillandsias-plan" — and I
+    # collapsed plan-core to `rust` when wiring it, which is the whole saving.
+    #
+    # gate_stamp_classify_path is NOT changed: its nine classes stay exactly as
+    # 765-dt8h defined them, and a path glob only ever makes a guard run MORE
+    # often than its class would, never less — an unmatched glob leaves the
+    # class test to decide and every uncertainty still answers "run it".
+    local c d
+    while IFS= read -r c; do
+        [ -n "$c" ] || continue
+        for d in "$@"; do
+            case "$d" in path:*) continue ;; esac
+            [ "$c" = "$d" ] && return 1
+        done
+    done <<< "$classes"
+
+    local p g
+    for d in "$@"; do
+        case "$d" in path:*) g="${d#path:}" ;; *) continue ;; esac
+        while IFS= read -r p; do
+            [ -n "$p" ] || continue
+            # shellcheck disable=SC2254 — the glob MUST expand; that is the match.
+            case "$p" in $g) return 1 ;; esac
+        done <<< "$(change_class_paths 2>/dev/null)"
+    done
+    return 0
+}

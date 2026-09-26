@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: measure-a-forge-cargo-builds-peak-rss-swap-and-pids-per-jobs-setting-and-a-tmpfs-spill-benchmark-zram-only-vs-zram-plus-disk-so-the-tier-budgets-are-numbers-not-formulas
+    order: 1378-7w2p
+    status: ready
+    kind: measurement
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: linux
+    capability_tags: [linux, forge, measurement, cargo, tmpfs, swap, cgroup]
+    estimated_hours: 4
+    owned_files:
+      - scripts/measure-forge-memory-budget.sh
+      - plan/issues/forge-memory-swap-architecture-design-2026-09-26.md
+    observed_by: macuahuitl
+    unscoreable: |
+      measurement row: it closes with recorded numbers (memory.peak,
+      memory.swap.current peak, pids.peak per CARGO_BUILD_JOBS; spill wall
+      times and memory.events per backing), not with a pass/fail fixture; the
+      numbers replace the provisional constants in the budget packet.
+    title: |
+      measure a forge cargo build's peak RSS, swap use and pids.peak per CARGO_BUILD_JOBS on a fat and a floor Linux host, and a tmpfs spill benchmark (zram-only vs zram + disk swapfile, against the cold volume as control), so the per-tier memory budgets are measured numbers rather than the 437 formula
+    context: |
+      Design: plan/issues/forge-memory-swap-architecture-design-2026-09-26.md
+      section 7 is the protocol. (1) Working-set peak: launch a forge with
+      --memory=12g --memory-swap=24g, run ./build.sh --check inside at
+      CARGO_BUILD_JOBS in {nproc, nproc/2, 4}; from the host poll the cgroup
+      (podman inspect --format '{{.State.CgroupPath}}') every second for
+      memory.current, memory.swap.current, pids.current; record memory.peak,
+      pids.peak, memory.events, and ulimit -u inside (EAGAIN on fork can be
+      RLIMIT_NPROC, not the pids cgroup: 1372-igkr). (2) Spill: under
+      memory.max = M write and shuffled-read W in {M/2, M, 2M} MiB into
+      /home/forge/src; record wall time, memory.events high, swap peak;
+      zram-only first, then after the disk swapfile packet; the same
+      write/read against the COLD tool-cache volume. Falsifiable claim:
+      tmpfs + swap beats the cold volume at 2M; if not, the HOT budget is
+      sized to stay resident and the allowance is only an OOM guard.
+      (3) Controls: memory.swap.max = 0 OOMs at about M; cargo build under
+      the 437 work ref's ~850 MB ceiling. Attach the regime (host, kernel,
+      swap devices, swappiness) to every number. Report the three peaks per
+      jobs setting as a measurement event on this row and on the budget
+      packet. Suggested host: lenovinha (fat) then a floor host; never
+      macuahuitl.

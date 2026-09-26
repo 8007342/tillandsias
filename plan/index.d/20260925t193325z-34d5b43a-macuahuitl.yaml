@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: there-is-no-non-interactive-way-to-bring-the-per-project-mirror-up-and-hold-it-so-agents-drive-a-tty-forge-shell-and-both-ways-they-do-it-leak-a-live-forge
+    event:
+      type: evidence
+      ts: "2026-09-25T19:33:25Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        RECURRENCE (third regime, bare-metal Fedora mutable), measured on macuahuitl 2026-09-25 ~19:20Z, v-installed tray at ~/.local/bin/tillandsias. This skill's section 1 says `tillandsias --bash <project>` "opens an interactive shell; exiting it leaves the stack running". Observed instead: after `echo exit | TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia tillandsias --bash $HOME/claudia/tillandsias` (rc=0), the tray printed "[tillandsias] no active lane containers; cleaning project + shared stack for tillandsias (lane-scoped: tillandsias-inference; keeping application-lifetime: tillandsias-vault, tillandsias-proxy, tillandsias-router, tillandsias-nix-cache)", and scripts/check-bare-metal-host-initialized.sh went back to todo:initialize-bare-metal-host:mirror. So tillandsias-git-<project> is lane-scoped and dies with the last lane. Workaround used here and on yoga: a detached lane holding stdin open (`sleep infinity | tillandsias --bash <path>` under setsid nohup), after which the checker reads ok (mirror=up). Either the doc sentence is wrong or the teardown's scoping of the mirror is. Pre-fix result for a doc-only fix would be: the step as written leaves the checker at todo:mirror. That is the exit criterion's teeth.

@@ -69,7 +69,14 @@ export TILLANDSIAS_PLAN_BIN="$_validator"
 PLAN="$_validator"
 export TILLANDSIAS_AGENT_ID="macos-fixture-osx-fixture-20200101t000000z"
 
-_tmpbase="$ROOT/target/plan-scratch"
+if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+    case "$CARGO_TARGET_DIR" in
+        /* | [A-Za-z]:[/\\]*) _tmpbase="${CARGO_TARGET_DIR%/}/plan-scratch" ;;
+        *) _tmpbase="$ROOT/${CARGO_TARGET_DIR%/}/plan-scratch" ;;
+    esac
+else
+    _tmpbase="${TMPDIR:-/tmp}/plan-scratch"
+fi
 mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/claims-fleet-visible.XXXXXX")"
 [ -n "${KEEP:-}" ] || trap 'rm -rf "$W"' EXIT INT TERM
@@ -93,11 +100,30 @@ cp "$HELPER" scripts/push-plan-fragments-to-trunk.sh
 # checker to attempt_plan_only_lane without adding it here is the regression
 # 1261-bn7v shipped: the lane skipped it with a note, the note said "absent",
 # and the arm caught a lane that had measured less than it claimed.
+# ORDER 1354-dw8x — agent-identity.sh JOINS THE LIST, and the comment above was
+# already right about why. push-plan-fragments-to-trunk.sh resolves
+# scripts/agent-identity.sh from $ROOT (1337-3tk6, deliberately), so a scratch
+# tree that models a host checkout must CONTAIN it. It did not, so node-name
+# resolved empty, the helper refused `refused:host-unresolved`, and five of this
+# fixture's arms reported an EMPTY verdict — a failure naming no cause.
+#
+# It is not a checker, which is how it escaped a list whose rule is "every
+# CHECKER the lane calls". The rule was right and its scope was one word too
+# narrow: what belongs here is every script the lane RESOLVES, checker or not.
+#
+# THE `|| true` IS WHY THIS WAS SILENT and is left deliberately, with a guard
+# after it instead: a missing source file is swallowed here, so the scratch ran
+# short and only the downstream arm noticed — by reporting nothing.
 for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh \
          check-fragment-status-loss.sh check-added-fragments-parse.sh check-fragment-ts-skew.sh \
          check-scorable-obligation-added.sh check-no-base64-script-injection.sh \
-         check-append-vs-origin-fold.sh; do
+         check-append-vs-origin-fold.sh agent-identity.sh; do
     cp "$ROOT/scripts/$f" "scripts/$f" 2>/dev/null || true
+    # ASSERT THE COPY LANDED. Without this the list is a wish: a renamed or
+    # deleted source disappears into `|| true` and the scratch silently models a
+    # checkout that does not exist. That is exactly how this bug reached a
+    # release-blocking litmus without any land noticing.
+    [ -f "scripts/$f" ] || { echo "FAIL: fixture scratch is missing scripts/$f (source: $ROOT/scripts/$f)"; exit 2; }
 done
 chmod +x scripts/*.sh scripts/hooks/*.sh 2>/dev/null || true
 cat > plan/index.yaml <<'EOF'

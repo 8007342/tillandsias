@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-preflight-roster-enumerates-guards-by-three-rules-and-never-asserts-its-population-so-a-guard-outside-all-three-is-invisible-rather-than-reported-missing
+    event:
+      type: note
+      ts: "2026-09-22T16:07:29Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260922t160729z
+      host: macneo
+      summary: |
+        WHY THIS ROW AND 1353-ryhq ARE TWO ROWS AND NOT ONE. Recorded here at
+        pirria-silverblue's suggestion, from a distinction that only became visible when
+        the two hosts' greens were put side by side on 2026-09-22.
+
+        TWO GREEN PREFLIGHTS, SAME VERDICT TOKEN, TWO DIFFERENT ABSENCES:
+          macneo   ok: about guards it never STARTED
+                   (the door reached them and they were cut off by the deadline or the
+                   runner could not launch them — 1353-ryhq, the summary's categories)
+          pirria   ok: about a guard it does not CONTAIN
+                   (test-gate-step-append-no-conflict arm 7, the guard that actually
+                   refuses a shared gate-step prefix, is outside the roster entirely, so
+                   the door passed on a tree the relay then refused — THIS row)
+
+        NEITHER ABSENCE IS VISIBLE IN THE TOKEN, and that is the whole point: a reader
+        of `ok:preflight` cannot tell "ran everything, all green" from "ran most of it"
+        from "ran a set that never included the decisive check". The first two are a
+        SUMMARY problem, fixed by naming the categories. The third is a ROSTER problem
+        and no summary can fix it — a door that reports honestly about its own
+        population still says nothing about a guard outside it.
+
+        SO THE SPLIT IS NOT ADMINISTRATIVE. 1353-ryhq makes the door tell the truth
+        about what it ran; this row makes the door's POPULATION assert itself. Fixing
+        either alone leaves a green that means less than it looks. pirria's measured
+        instance is the case that needs both: their --preflight was green on the
+        colliding tree, and the categories would not have caught it because the guard
+        was never in the set to be categorised.
+
+        THE THIRD INSTANCE IN ONE NIGHT of a decisive guard sitting outside the
+        mandatory step, which is the count that made this row exist.

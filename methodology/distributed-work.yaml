@@ -1620,6 +1620,50 @@ distributed_work:
       an event); scripts/reclaim-stranded-claims.sh (returns claims older than the
       TTL to `ready`).
 
+  packet_discipline:
+    authority: >
+      Operator direction 2026-09-23: "we have started a lot of plan work at the
+      same time and now they're all incomplete; we might need some packet
+      discipline, of not starting several at the same time." Measured the same
+      day over 2026-09-13..23 (1,839 fragments): median concurrent in_progress
+      per host was 1, but hosts climbed to 10, 8 and 6 late in the window;
+      filing outran closing six days running (net +159 packets; closes fell to
+      3, 3 and 6 on 09-17..19); 39% of filings happened while the filer held
+      another claim; 21 of 177 landed orders were never closed.
+    rules:
+      - >
+        WIP LIMIT. A host holds at most 3 in_progress packets outside its
+        current story. A story (the batch cycle_batch_triage selects) is
+        claimed as one unit and counts as one.
+      - >
+        FINISH THE STORY BEFORE THE NEXT. Every member of a claimed story
+        reaches a terminal status, or is released to ready with a next_action
+        saying what is LEFT, before the host claims a new story. The claim
+        states this; a cycle's exit does not.
+      - >
+        A FINDING MID-PACKET IS AN EVENT. Anything noticed while working a
+        packet is recorded as an event on the row it belongs to, unless it is
+        independently schedulable (the existing new-row test in the
+        meta-orchestration skill's Capture section). "It is a different
+        defect" is not the test; "a different host could claim it without
+        touching my files" is.
+      - >
+        CLOSE WHAT LANDED IN THE SAME PASS. The land that carries a packet's
+        code carries its status write: completed with evidence, implemented
+        with the remaining capability named, or ready with what is left. A
+        green land followed by an open row is the most common way work went
+        missing from the count.
+      - >
+        CLOSING OUTRANKS FILING WHEN CLOSING STALLS. When fleet-wide closes are
+        under 30% of filings for two consecutive days, the coordinator drains
+        closeable rows before routing new claims.
+    enforcement:
+      - "1367-2sbc: set-field refuses a claim over the WIP limit and a new story while the previous one is open"
+      - "1367-emjg: scripts/check-landed-but-open.sh lists landed orders whose rows are still open"
+    status: >
+      Rules 1 and 2 are guidance until 1367-2sbc lands; rule 4's sweep until
+      1367-emjg. The numbers above are one measurement, and the cap of 3 is a
+      starting value to revisit after a week, not a law.
   cycle_batch_triage:
     purpose: >
       Decide what ONE orchestration cycle takes, so that consecutive

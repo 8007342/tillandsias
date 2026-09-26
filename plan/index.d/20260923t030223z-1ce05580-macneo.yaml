@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: github-login-identity-step-runs-between-token-collection-and-vault-persist-and-discards-the-token-on-failure
+    event:
+      type: note
+      ts: "2026-09-23T03:02:23Z"
+      agent_id: macos-tlatoanis-macbook-neo-claude-20260923t030223z
+      host: macneo
+      summary: |
+        WHAT THE NEW TEST COVERS AND WHAT IT CANNOT — recorded by the relaying host
+        before landing, so the next person to touch run_provider_login knows the shape of
+        its guard rather than rediscovering it.
+
+        github_login_identity_cannot_discard_a_collected_token is a SOURCE-ORDER PIN:
+        include_str! of main.rs, source_window() onto run_provider_login, then find() on
+        five needles and compare their positions.
+
+        THAT IS ARGUABLY THE RIGHT INSTRUMENT HERE, and this note is not an objection.
+        The invariant genuinely IS textual order within one function — identity must not
+        sit between token collection and the verified Vault write, because every early
+        return removes the helper container holding the token. A behavioural test would
+        need a live gh session and a real Vault, which is precisely the setup nobody runs
+        in a unit tier.
+
+        WHAT IT CANNOT CATCH, stated so nobody reads the pin as stronger than it is: a
+        refactor that PRESERVES the order of those five strings while changing control
+        flow. An early return introduced between two of them; the identity call moved
+        into a closure that runs earlier; the whole block moved behind a condition that
+        no longer holds. The positions would still compare correctly and the token could
+        still be discarded.
+
+        THE STRONGEST PART IS THE NEGATIVE ASSERTION, not the four orderings:
+          !login_window.contains("store_existing_git_identity")
+        That one pins the ABSENCE of the store-then-refuse helper from the login flow,
+        and an absence cannot be satisfied by accident of ordering. If the pin is ever
+        strengthened, strengthen it in that direction.
+
+        Reviewed on macneo 2026-09-22 while relay-landing this ref for macuahuitl-fedora,
+        whose keyring had crashed a third time; recorded at their direction. The fix
+        itself is sound and was read rather than taken: store_git_identity still
+        validates (validate_git_identity was split out, not dropped, and is called
+        first), the --with-token lane resolves and validates before any container work,
+        and the operator-visible order token-then-name-then-email is unchanged so the
+        macOS tray's DynamicExpect sequence is unaffected — checked on the host that
+        would have broken.

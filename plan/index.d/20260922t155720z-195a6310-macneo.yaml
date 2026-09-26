@@ -1,0 +1,115 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    field: verifiable_closure
+    value: |-
+      ON A MAC, `./build.sh --preflight` on a clean checkout either reports
+      ran>0, or exits naming the missing capability ONCE rather than as 110
+      per-guard refusals. MEASURED PRE-FIX on macneo 2026-09-22, macOS 27.0
+      arm64, at work/1302-7j8p 4eec70dec:
+        refused:preflight:ran=0 skipped=3 failed=110 wall=27s
+        111 lines matching ^refused:preflight:
+        110 lines of `./build.sh: line 316: exec: setsid: not found`
+      Every one of those 110 names a guard that never started. Re-running the
+      same command after the fix is the whole test; the pre-fix numbers above
+      are the control.
+
+
+      [2026-09-22T09:58:10Z macneo] THE ONE SENTENCE, esme's, kept verbatim because it is the closure's test in
+      plain words: macOS fails loud about the wrong thing, Windows fails silent about
+      the right one, and NEITHER ANSWER IS THAT THE TREE IS CLEAN.
+
+      ITEM 1 DELIVERED 2026-09-22 on work/1353-ryhq (macneo). The scoring and summary,
+      not the deadline. Five categories — ran, declared-skip, skipped-by-deadline,
+      could-not-run, refused — of which only declared-skip is a guard saying
+      something; the middle two are the door failing to obtain an answer and are
+      summed as unanswered.
+        ok:preflight:      nothing unanswered, nothing refused
+        partial:preflight: guards did not examine this tree. EXIT 0, because nothing
+                           refused; NOT ok:, because nothing vouched.
+        refused:preflight: a guard ran and refused the tree
+        refused:preflight:accounting-mismatch — the categories did not add up to the
+                           roster, so no verdict the door prints can be trusted.
+      The sum is the load-bearing assertion: categories a reader cannot check are a
+      vocabulary and not an accounting.
+
+      INSTRUMENT: scripts/test-preflight-verdict-categories.sh, 7 arms, bound by gate
+      step 420-1353-ryhq.step, litmus
+      openspec/litmus-tests/litmus-preflight-runs-or-names-the-capability.yaml bound
+      in openspec/litmus-bindings.yaml.
+
+      POSITIVE CONTROL, run rather than argued: the same fixture against trunk's
+      build.sh gives violation:preflight-verdict-categories:5/6 — arms 1 through 5 all
+      fail pre-fix. Arm 6 (no fixed guard count) passes on BOTH, being a
+      no-regression arm rather than a defect arm, and is recorded as such so nobody
+      reads 5/6 as a weaker control than it is.
+
+      WHAT THIS HOST COULD NOT VERIFY, named rather than glossed: ARM 7 runs the real
+      door and is a NAMED SKIP on macneo, which has no setsid and therefore cannot
+      open the door at all (1352-vmbc). Six source arms hold everywhere; the arm that
+      would catch a counter incremented in the WRONG BRANCH has not run. A host with
+      setsid closes that gap with TILLANDSIAS_PREFLIGHT_LIVE=1, and until one does,
+      this delivery is verified by construction and by the sum check, not by a live
+      run. That is this row's own doctrine applied to its own fixture.
+
+      STILL OPEN AFTER ITEM 1: the Windows deadline calibration (item 2, and the
+      no-raise rule stands), 1352-vmbc's macOS capability probe, and 1349-53h6's
+      forge disk exhaustion. This closure covers the vocabulary only.
+
+      [2026-09-22T10:42:06Z macneo] ARM 7 HAS NOW RUN, and the gap this closure named is closed. macuahuitl-fedora,
+      2026-09-22, work/1353-ryhq merged onto trunk, on a host with setsid, output
+      verbatim:
+        ok:preflight-verdict-categories:7/7
+        arm7: the live door's categories add up to its own stated sum (114)
+      with arms 1 through 6 green beside it.
+
+      WHAT THAT ADDS, stated precisely so the two kinds of evidence are not blurred.
+      Arms 1-6 read build.sh's source and were green on macneo, which cannot open the
+      door at all. They establish the SHAPE. Arm 7 runs the real door over a 114-guard
+      roster and is the only arm that can catch a counter incremented in the WRONG
+      BRANCH — a source arm sees the increment exists, not that it is reached by the
+      right path. So the delivery is no longer verified by construction plus a sum
+      check; it has a live measurement under it, taken on the only regime that can
+      take one.
+
+      THE 114 IS RECORDED AS AN OBSERVATION, NOT AS AN EXPECTATION. No arm asserts it
+      and none may: two Macs counted 108 and 110 for the same defect minutes apart,
+      and macuahuitl's roster is 114. The arm asserts that the categories add up to
+      the door's OWN stated sum, which is true on every host and on every roster.
+
+      [2026-09-22T15:57:20Z macneo] LANDED AND MEASURED IN THE WILD, on the host that supplied the instance.
+      pirria-silverblue, 2026-09-22, same tree, two runs one release apart:
+
+        BEFORE  ok:preflight:ran=101 skipped=16 isolation=session wall=150s
+        AFTER   partial:preflight:ran=102 declared-skip=4 skipped-by-deadline=12
+                could-not-run=0 refused=0 sum=118 isolation=session wall=151s
+                partial:preflight: 12 guard(s) did not examine this tree — this run
+                does not vouch for them; the gate still runs them
+
+      THE BEFORE LINE IS THE ONE THEY HAD CITED as evidence that a gate step they had
+      just added was sound — and that step, test-credential-channel-survives-a-killed-
+      probe at 7s against a 5s door, was ITSELF among the sixteen. The ok: vouched for
+      a run that never executed the thing it was cited for.
+
+      THE AFTER LINE SAYS SO UNPROMPTED, in its second sentence, at the moment they
+      were about to call the branch ready. Nobody had to remember the lesson. That is
+      the difference this order was for, and it is the argument for fixing the summary
+      rather than the deadlines, now demonstrated rather than reasoned.
+
+      WALL CLOCK 150s -> 151s. The categories cost one second.
+    ts: "2026-09-22T15:57:20Z"
+    host: macneo
+
+events:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    event:
+      type: note
+      ts: "2026-09-22T15:57:20Z"
+      host: macneo
+      summary: |-
+        landed; pirria's before/after pair on the host that supplied the instance

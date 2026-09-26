@@ -65,7 +65,7 @@ EOF
 # exit status and captured text, so pipefail + SIGPIPE cannot invert a verdict.
 run() { # run <dir> <args...> -> sets OUT, RC
     local d="$1"; shift
-    OUT="$("$PLAN" --index "$d/plan/index.yaml" set-field "$@" 2>&1)"; RC=$?
+    OUT="$(env -u TILLANDSIAS_HOST_KIND "$PLAN" --index "$d/plan/index.yaml" set-field "$@" 2>&1)"; RC=$?
 }
 frags() { find "$1/plan/index.d" -name '*.yaml' 2>/dev/null | wc -l | tr -d ' '; }
 

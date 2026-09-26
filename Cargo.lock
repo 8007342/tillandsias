@@ -3266,7 +3266,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-core"
-version = "56.9.21"
+version = "56.9.25"
 dependencies = [
  "async-trait",
  "dirs",
@@ -3298,7 +3298,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-headless"
-version = "56.9.21"
+version = "56.9.25"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3457,9 +3457,11 @@ dependencies = [
  "mlua",
  "proptest",
  "redb",
+ "regex",
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2",
  "tillandsias-exec",
  "tillandsias-podman",
  "tokio",
@@ -3467,7 +3469,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-podman"
-version = "56.9.21"
+version = "56.9.25"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3530,7 +3532,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-scanner"
-version = "56.9.21"
+version = "56.9.25"
 dependencies = [
  "dirs",
  "notify",
@@ -3608,6 +3610,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "embed-resource",
+ "png 0.17.16",
  "resvg",
  "serde",
  "serde_json",

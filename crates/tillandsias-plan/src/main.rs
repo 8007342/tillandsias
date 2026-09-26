@@ -100,6 +100,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "loop-status-compact",
     "loop-status-fragments",
     "loop-status-verify",
+    "lua",
     "methodology",
     "methodology-ask",
     "metrics-log-path",
@@ -109,6 +110,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "validator-surface-hash",
     "parked-blocks",
     "pipeline",
+    "predicate",
     "query",
     "ready",
     "forgotten",
@@ -508,7 +510,15 @@ const USAGE: &str = concat!(
     "                                     exactly the ones folded, gated on: nothing dropped, nothing\n",
     "                                     lost, operator-owned sections byte-identical, fold idempotent\n",
     "           loop-status-fragments      ORDER 582-nqw5. Report the loop_status.d/ overlay: live\n",
-    "                                     fragments, malformed ones, and whether compaction is eligible\n"
+    "                                     fragments, malformed ones, and whether compaction is eligible\n",
+    "           lua <script.lua | -e code> [args...]\n",
+    "                                     Run a Lua script or snippet with the embedded, tillandsias-managed\n",
+    "                                     Lua 5.4 runtime (eliminates heterogeneous external script dependencies).\n",
+    "           predicate <script.lua> [arg] [--class cacheable|observing] [--name fn_name]\n",
+    "                                     Default class: cacheable (no shell, no clock); observing is opt-in.\n",
+    "                                     ORDER 1252-hsrz. Evaluate a Lua predicate with the capability-bounded\n",
+    "                                     predicate runtime (pure shims fs.read/expect.*, shell only in observing class).\n",
+    "                                     Enables forge agents to validate uncommitted specs without host recompilation.\n"
 );
 
 /// Read a cycle fragment for `loop-status-append`, refusing every input shape
@@ -3731,6 +3741,197 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
     }
 }
 
+/// Run a Lua script or snippet with the embedded, tillandsias-managed Lua 5.4 runtime.
+fn run_lua_cli(args: &[String]) {
+    if args.is_empty() {
+        eprintln!("usage: tillandsias-plan lua <script.lua | -e code> [args...]");
+        std::process::exit(2);
+    }
+
+    if std::env::var_os("TILLANDSIAS_PLAN_BIN").is_none()
+        && let Ok(exe) = std::env::current_exe()
+    {
+        unsafe {
+            std::env::set_var("TILLANDSIAS_PLAN_BIN", exe);
+        }
+    }
+
+    let lua = mlua::Lua::new();
+
+    if args[0] == "-e" {
+        if args.len() < 2 {
+            eprintln!("error: -e requires a code argument");
+            std::process::exit(2);
+        }
+        let code = &args[1];
+        let arg_table = match lua.create_table() {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("error: failed to create Lua arg table: {e}");
+                std::process::exit(1);
+            }
+        };
+        let _ = arg_table.set(-1, "tillandsias-plan");
+        let _ = arg_table.set(0, "-e");
+        for (i, a) in args[2..].iter().enumerate() {
+            let _ = arg_table.set((i + 1) as i64, a.as_str());
+        }
+        let _ = lua.globals().set("arg", arg_table);
+
+        if let Err(e) = lua.load(code).set_name("=(command line)").exec() {
+            eprintln!("lua error: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    let script_path = &args[0];
+    let script_source = match std::fs::read_to_string(script_path) {
+        Ok(s) => {
+            if s.starts_with("#!") {
+                if let Some(pos) = s.find('\n') {
+                    format!("--{}", &s[2..pos]) + &s[pos..]
+                } else {
+                    String::new()
+                }
+            } else {
+                s
+            }
+        }
+        Err(e) => {
+            eprintln!("error: read {script_path}: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let arg_table = match lua.create_table() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("error: failed to create Lua arg table: {e}");
+            std::process::exit(1);
+        }
+    };
+    let _ = arg_table.set(-1, "tillandsias-plan");
+    let _ = arg_table.set(0, script_path.as_str());
+    for (i, a) in args[1..].iter().enumerate() {
+        let _ = arg_table.set((i + 1) as i64, a.as_str());
+    }
+    let _ = lua.globals().set("arg", arg_table);
+
+    if let Err(e) = lua.load(&script_source).set_name(script_path).exec() {
+        eprintln!("lua error: {e}");
+        std::process::exit(1);
+    }
+}
+
+/// ORDER 1252-hsrz. The predicate CLI entrypoint: evaluate a Lua predicate against
+/// an uncommitted spec without recompiling the host binary.
+fn run_predicate_cli(args: &[String]) {
+    if args.is_empty() {
+        eprintln!(
+            "usage: tillandsias-plan predicate <script.lua> [arg] [--class cacheable|observing] [--name fn_name]"
+        );
+        std::process::exit(2);
+    }
+
+    let mut file_path: Option<PathBuf> = None;
+    let mut arg: Option<String> = None;
+    // Cacheable by DEFAULT (review of 1367-q9yc): the shell and the clock are an
+    // explicit opt-in (`--class observing`), never what a bare call gets.
+    let mut class = tillandsias_plan::lua_predicate::PredicateClass::Cacheable;
+    let mut func_name: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--file" if i + 1 < args.len() => {
+                file_path = Some(PathBuf::from(&args[i + 1]));
+                i += 2;
+            }
+            "--class" if i + 1 < args.len() => {
+                match args[i + 1].as_str() {
+                    "cacheable" => {
+                        class = tillandsias_plan::lua_predicate::PredicateClass::Cacheable
+                    }
+                    "observing" => {
+                        class = tillandsias_plan::lua_predicate::PredicateClass::Observing
+                    }
+                    other => {
+                        eprintln!(
+                            "error: unknown predicate class: {other} (expected cacheable or observing)"
+                        );
+                        std::process::exit(2);
+                    }
+                }
+                i += 2;
+            }
+            "--name" if i + 1 < args.len() => {
+                func_name = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--arg" if i + 1 < args.len() => {
+                arg = Some(args[i + 1].clone());
+                i += 2;
+            }
+            other if other.starts_with("--") => {
+                eprintln!("error: unrecognized option '{other}'");
+                std::process::exit(2);
+            }
+            other => {
+                if file_path.is_none() {
+                    file_path = Some(PathBuf::from(other));
+                } else if arg.is_none() {
+                    arg = Some(other.to_string());
+                } else {
+                    eprintln!("error: unexpected argument '{other}'");
+                    std::process::exit(2);
+                }
+                i += 1;
+            }
+        }
+    }
+
+    let Some(path) = file_path else {
+        eprintln!("error: missing predicate script file");
+        std::process::exit(2);
+    };
+
+    if !path.exists() {
+        eprintln!("error: predicate file '{}' does not exist", path.display());
+        std::process::exit(1);
+    }
+
+    let name = func_name.unwrap_or_else(|| {
+        path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("predicate")
+            .to_string()
+    });
+
+    let arg_str = arg.unwrap_or_default();
+
+    let mut reg = tillandsias_plan::lua_predicate::PredicateRegistry::new();
+    if let Err(e) = reg.register_file(&name, class, &path) {
+        eprintln!("error: failed to load predicate: {e}");
+        std::process::exit(1);
+    }
+
+    match reg.eval(&name, &arg_str) {
+        Ok(true) => {
+            println!("PASS");
+            std::process::exit(0);
+        }
+        Ok(false) => {
+            println!("FAIL");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("error: predicate failed: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() {
     let start_time = std::time::Instant::now();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -3787,6 +3988,16 @@ fn main() {
                 .to_string_lossy()
                 .as_ref(),
         );
+        return;
+    }
+
+    if args[0] == "lua" {
+        run_lua_cli(&args[1..]);
+        return;
+    }
+
+    if args[0] == "predicate" {
+        run_predicate_cli(&args[1..]);
         return;
     }
 

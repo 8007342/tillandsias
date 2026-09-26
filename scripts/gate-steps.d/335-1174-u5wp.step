@@ -27,3 +27,4 @@ STEP_OK="land stamp-adoption check passed"
 # examined, and the fixture says so by name rather than passing.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="the land tool is absent or its adoption block could not be extracted"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   the gate-failure branch is scoped to attempts that actually gated"

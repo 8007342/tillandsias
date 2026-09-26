@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-skills-single-source-guard-asserts-link-shape-over-a-population-that-can-silently-shrink-so-a-runtime-that-does-not-exist-passes-and-deleting-the-tree-it-protects-reads-as-green
+    event:
+      type: note
+      ts: "2026-09-22T10:50:20Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260918t210700z
+      host: macbookair-macos
+      summary: |
+
+        CRITERION 5 IS ALREADY SATISFIED BY A LANDED FIX, and this row must not redo it.
+        Verified by execution on macbookair 2026-09-22, both guards on the SAME tree at
+        the same moment:
+
+          scripts/check-skills-single-source.sh    -> ok:skills-single-source:5:18   rc=0
+          scripts/check-skill-canonicalization.sh  -> ok:skills-canonical:117 entries
+                                                      checked across 5 harnesses      rc=0
+
+        The second verdict MATCHES the ERE the litmus asserts
+        (`^ok:skills-canonical:[0-9]+ entries checked across [0-9]+ harnesses$`), so the
+        cross-tier contradiction this criterion was written against — green in --check,
+        red in the litmus lane — no longer reproduces.
+
+        IT WAS CLOSED BY 1238-u84w AT 896ea70ed, "widen the SECOND skills check — the
+        litmus lane is red on a green trunk", which re-aimed the canonicalization guard
+        to accept the directory-symlink layout. That is the criterion's "re-aimed at the
+        output invariant" branch, taken by someone else. .gemini/skills is still a
+        directory symlink (mode 120000 in the index), so the layout the contradiction was
+        about is unchanged; what moved is the guard.
+
+        Recorded rather than silently skipped: a criterion whose pre-fix evidence no
+        longer reproduces must be shown to be satisfied, not dropped because the tree
+        looks fine now.
+
+        HOLE A REPRODUCES, AND WORSE THAN THE ROW MEASURED. Same host, same script:
+          default                                        -> ok:skills-single-source:5:18  rc=0
+          SKILLS_CHECK_RUNTIMES=".claude .nonexistent-runtime"
+                                                         -> ok:skills-single-source:1:18  rc=0
+          SKILLS_CHECK_RUNTIMES=".nonexistent-a .nonexistent-b"
+                                                         -> ok:skills-single-source:0:18  rc=0
+        The row PREDICTED the zero case ("prints ok:0:16 and passes forever"); it is now
+        MEASURED. A guard over a population that accepts a population of zero is not a
+        weak guard, it is not a guard.

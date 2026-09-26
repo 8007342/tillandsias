@@ -1,0 +1,97 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-salvage-rescue-path-refuses-with-the-wrong-cause-and-its-fixture-captures-that-refusal-into-silence-so-a-real-failure-reports-as-an-empty-verdict-at-rc-zero-on-both-loci
+    packet_kind: defect
+    order: 1354-dw8x
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [fixtures, salvage, fail-loud, cross-platform, no-build]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-salvage-net.sh
+      - scripts/salvage-dirty-worktree.sh
+    unscoreable: ""
+    verifiable_closure: |
+      TWO DEFECTS, and both must be closed or the row stays open.
+
+      1. THE FIXTURE MUST NOT CAPTURE A REFUSAL INTO SILENCE.
+         scripts/test-salvage-net.sh's empty-argument arm must report the
+         CAUSE it was given, not an empty string. Demonstrated by mutation:
+         make the salvaged call refuse, and the arm must name the refusal
+         rather than printing an empty verdict.
+      2. THE RESCUE PATH MUST NOT REFUSE WITH THE WRONG CAUSE.
+         When TILLANDSIAS_SALVAGE_ROOT points at a tree that does not carry
+         scripts/agent-identity.sh, salvage-dirty-worktree.sh must say the
+         helper was NOT FOUND, not that it "returned nothing".
+
+      Both loci, because it is not a locus defect: the arm must pass on
+      MINGW64 and on Linux, and the fixture's own exit status must agree
+      with its verdict line.
+    title: |
+      the salvage rescue path refuses with the wrong cause, and its fixture captures that refusal into silence, so a real failure reports as an empty verdict at rc=0
+    context: |
+      FOUND while reproducing 1186-w3ph's arms INDIVIDUALLY, which is that
+      row's own instruction, and it is the reason this is not that row's.
+
+      WHAT IS OBSERVED. litmus:salvage-net-roundtrip step 1 fails with
+        expected=ok:salvage-net-fixture:all
+        output=FAIL: empty-argument verdict:
+      at rc=0. The verdict is the empty string.
+
+      THE CHAIN, read in the source rather than inferred.
+      scripts/test-salvage-net.sh:354 captures with
+        outd="$(TILLANDSIAS_SALVAGE_ROOT="$D/work" bash "$SALVAGE" 2>/dev/null | tail -1)"
+      and its case arm at :357 reports bad "empty-argument verdict: $outd".
+      Meanwhile salvage-dirty-worktree.sh resolves its helper relative to
+      ROOT, which the fixture has pointed at a SCRATCH repo carrying no
+      scripts/ directory, so the -x test fails, HOST resolves empty, and the
+      script refuses to STDERR with refused:host-unresolved and exits 2. The
+      fixture discards stderr, so the refusal is destroyed and the only
+      evidence left is an empty variable.
+
+      THE SCRIPT ALREADY KNOWS. Its own comment above that block says the
+      rescue path "refuses with 'agent-identity.sh node-name returned
+      nothing' when it was never FOUND — a refusal naming the wrong cause,
+      in the rescue path". The comment is accurate and the code still does
+      it; nothing was tracking the gap between them.
+
+      IT IS NOT A LOCUS DEFECT, and this is why it is filed separately.
+      Reproduced at the MINGW64_NT-10.0-26200 locus AND in the Linux builder
+      distro, the same arm, the same empty verdict, the same cause. A row
+      about MinGW-specific failures cannot carry it.
+
+      THE STALE ATTRIBUTION THIS CORRECTS. 1186-w3ph records this arm under
+      its CRLF mechanism, at step 9. It now fails at step 1 for a reason
+      that has nothing to do with CRLF. A git warning IS present in the
+      MinGW output — "LF will be replaced by CRLF the next time Git touches
+      it", core.autocrlf being true by Git-for-Windows default — which is
+      why it still reads as the CRLF mechanism at a glance. That warning is
+      NOISE IN THE CAPTURED OUTPUT AND NOT THE CAUSE. The arm fails
+      identically on Linux, where no such warning exists.
+
+      THE FAMILY. A refusal captured into silence and scored as something
+      else is the third night running for this fleet: a preflight that
+      skips 31 deciders and prints ok:, a guard whose fix lived in retired
+      code while its test stayed green, and now a fixture that turns
+      "refused, exit 2" into "empty string, rc 0". In each the instrument
+      had the answer and the reporting threw it away.
+    next_action: >
+      Fix the FIXTURE first and separately from the script, because the two
+      defects hide each other: while the fixture swallows stderr, any fix to
+      the script's wording is invisible to the arm, and while the script
+      refuses with the wrong cause, a reader of a fixed fixture is told
+      something untrue. Take 2>/dev/null out of that capture, or capture
+      stderr into a variable the failure message prints. Then correct the
+      rescue path to distinguish NOT FOUND from RETURNED NOTHING. Prove
+      each by mutation, and run the arm at BOTH loci — it is not a locus
+      defect and a one-locus pass would not show it.
+    provenance: |
+      esmeraldinha 2026-09-22, at the coordinator's instruction to file it
+      rather than carry it inside 1186-w3ph. Found by reproducing that
+      row's arms individually instead of trusting its grouping; the cause
+      was read in the source and confirmed by running the same arm in the
+      Linux builder distro as a control.

@@ -234,6 +234,8 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
 
 ```bash
 scripts/select-work-batch.sh <linux|macos|windows|any> [--budget N] [--seed S]
+# <role> is the PICKUP ROLE, not the host kind: a Silverblue host passes `linux`,
+# not `linux-immutable` (which the selector refuses as bad-role; pirria 2026-09-23).
 ```
 
 This decides **what THIS cycle takes**, which flat ranking does not. It emits one
@@ -599,7 +601,7 @@ skipped it on direct knowledge, which does not scale.
 After the flip is PUSHED, run the control:
 
 ```bash
-tillandsias-plan next <your-role> --limit 8 | grep -c '<order>'   # must print 0
+tillandsias-plan next <your-role> --limit 5 | grep -c '<order>'   # must print 0 (5 is the cap)
 ```
 
 If it prints 1 the claim did not take (unpushed, wrong field, refused by the

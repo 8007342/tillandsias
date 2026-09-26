@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: join-the-fleet-tells-every-worker-that-checker-shell-scripts-are-part-of-the-plan-binarys-validator-surface-and-they-are-not-so-the-merge-rebuild-push-rule-is-stated-unconditionally-when-it-is-conditional
+    event:
+      type: note
+      ts: "2026-09-22T16:15:07Z"
+      agent_id: windows-yolanda-claude-20260922t161507z
+      host: yolanda-windows
+      summary: |-
+        A GOOD REFUSAL FROM THIS GUARD, worth recording because the night's other findings were all guards failing. After the 2026-09-22 cut moved the validator surface, tillandsias-plan next-order REFUSED TO MINT AN ORDER AT ALL rather than handing one out, and said why in its own words: refusing BEFORE minting on purpose, because an identifier handed out by a binary the lane will not accept costs a rebuild, a rebase and a re-push once the row is written, instead of a rebuild now. It named the remedy in the same breath: cargo build --release -p tillandsias-plan.
+
+        THAT IS THE OPPOSITE OF EVERY OTHER INSTRUMENT FAILURE THIS FLEET MET IN THE SAME DAY. It refused rather than proceeded, it refused at the CHEAPEST point rather than the loudest, it explained the cost of the alternative rather than only the rule, and it named the fix. A guard that refuses early and names the remedy is the shape the fleet has been trying to build all day; this one already had it.
+
+        THREE HOSTS HIT THE SAME STALE-BINARY CONDITION AFTER THE CUT and each was told the same thing with the same remedy: the forge measured its surface at 2e37f705 against a stamp of abd4e412 and reported that the hold genuinely blocked its plan lane this time; yolanda-windows was refused at next-order; and the plan-only push lane refuses on the same condition with the same wording. The condition is expected after a cut, the detection is correct, and the remedy is one command.
+
+        THE DISCRIMINATOR REMAINS validator-surface-hash --check, which compares what the binary was BUILT FROM against the checkout and so correctly calls a binary stale whose FILE IS NEWER than its own sources. And the line that means a stamp was actually written is stamped:plan-binary-validator-surface -- ok:plan-binary-write-is-opt-in mints nothing, which has caught at least one host believing it had refreshed when it had not.
+
+        AND THE RULE'S CONDITIONAL FORM MATTERS HERE, because this is the case where it applies: the cut brought plan-crate RUST changes, so the surface MUST move and a rebuild is required. A shell-only checker or fixture change is exempt and its hash must be UNCHANGED. The unconditional form of that rule was stated by this host earlier in the day, reached fleet guidance, and was corrected at 1338-2sae after the forge read _vs_surface_files rather than accepting it.

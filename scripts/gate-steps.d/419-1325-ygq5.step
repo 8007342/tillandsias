@@ -65,3 +65,4 @@ STEP_DESC="Checking an added test is referenced by something that runs on its ow
 STEP_SCRIPT="scripts/test-added-test-is-referenced.sh"
 STEP_ERROR="the guard that names an unreferenced added test no longer refuses (1325-ygq5) — read which arm failed above; the ENFORCE=1, missing-manifest and grandfather arms are the load-bearing ones, and a failure in the clean-pass arm alone is the least of them"
 STEP_OK="An added test that nothing can fail because of is named at push time"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:added-test-guard-proven:10"

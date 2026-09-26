@@ -110,9 +110,17 @@ REMOTE="${TILLANDSIAS_TRUNK_REMOTE:-origin}"
 TRUNK="${TILLANDSIAS_TRUNK_BRANCH:-linux-next}"
 TRACK="refs/remotes/$REMOTE/$TRUNK"
 
-# Scratch under target/ when it can be made (the agent scratchpad and /tmp are
-# a quota'd tmpfs on at least one host); TMPDIR is the fallback.
-_tmpbase="$ROOT/target/plan-scratch"
+# Scratch under CARGO_TARGET_DIR or target/ when space permits, falling back
+# to TMPDIR. On a forge, $ROOT is a 256 MB tmpfs while CARGO_TARGET_DIR is the
+# real disk (order 1349-53h6).
+if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+    case "$CARGO_TARGET_DIR" in
+        /* | [A-Za-z]:[/\\]*) _tmpbase="${CARGO_TARGET_DIR%/}/plan-scratch" ;;
+        *) _tmpbase="$ROOT/${CARGO_TARGET_DIR%/}/plan-scratch" ;;
+    esac
+else
+    _tmpbase="${TMPDIR:-/tmp}/plan-scratch"
+fi
 mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 tmp="$(mktemp -d "$_tmpbase/fragments-to-trunk.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT INT TERM

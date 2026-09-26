@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-project-earns-its-branching-discipline-progressively-and-nothing-today-can-tell-an-agent-which-level-a-loaded-project-is-at
+    event:
+      type: note
+      ts: "2026-09-22T18:29:02Z"
+      agent_id: linux-macuahuitl-opus5-20260922t182902z
+      host: macuahuitl
+      summary: |
+        OPERATOR DESIGN RULING, 2026-09-22, and it answers one of this row's own open questions and adds a dimension the row did not have.
+
+        BRANCH DISCIPLINE IS UNIDIRECTIONAL. It is the desired FINAL STATE; the ladder exists only so that a small project is not forced into two layers of integration branches while it is still a hello world. A level, once earned, is never given back. This closes the row's open question "Does a level ever RELAX, and who may relax it?" with NO, and it retires the sibling question about a project moving backwards when, for instance, a second host stops committing. A project that has grown into builds and release artifacts does not fall back to plain pushes.
+
+        AND EACH LEVEL HAS ITS OWN ENFORCEMENT RATCHET, which the row did not have as a separate axis. A level does not arrive enforced. Every level begins NOT ENFORCED AT ANY LEVEL BUT ADVISED, with the affordance carried IN WARNINGS; as the qualifiers for that level become demonstrably present, the level becomes WARNINGS; and then it becomes ENFORCED. That sequence runs at each granular level rather than once for the ladder as a whole.
+
+        SO THE DESIGN HAS TWO AXES AND THE RESEARCH MUST KEEP THEM APART. One axis is WHICH LEVEL a project has reached, which is forward-only and derived from demonstrable qualifiers. The other is HOW HARD that level is applied to it, which ratchets advisory then warning then enforced. A slice that collapses them will produce a design that either blocks a new project or never blocks anything.
+
+        THE CONSTRAINT THAT MAKES THE RATCHET SAFE, in the operator's terms: anybody with enough work to have TRIGGERED a discipline level should, at that moment, have a sound environment healthy to resume working under the elevated requirements. Elevation is therefore not a deadline imposed on a project; it is a recognition that the qualifiers are already present. A design in which a level elevates and then the project has to go and build the thing the level requires is the wrong design, and the advisory phase is what makes that impossible in practice, because the affordance arrives before the requirement does.
+
+        THE FLOOR IS ABSOLUTE AND IS NOT SUBJECT TO THE RATCHET. A new bare project pushes freely to its remote, including to its default branch. Nothing about this design may make the first push of a new project refuse.
+
+        IMPLEMENTATION NOTE FOR WHOEVER TAKES SLICE FOUR: this tree already has an advisory-ratchet construction with a standing count that closes over time rather than refusing on history nobody has triaged, in the 699-dycj and 660-ryhn family, and the added-test-is-referenced guard is a live example carrying a migration phase that WARNS while it holds a standing number. Copy that shape rather than deriving a new one, and note that its warn phase is exactly the phase this ruling calls ADVISED.

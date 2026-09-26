@@ -1,0 +1,69 @@
+# @trace spec:git-mirror-service
+# @trace order:1356-u6xe
+#
+# Order 1356-u6xe: the substrate checker's mirror/router/inference todo: lines
+# print a command a worker COPIES AND RUNS during onboarding. That command
+# interpolated the bare project name -- `tillandsias --bash tillandsias` --
+# and the binary answers `Error: Project not found: tillandsias`, rc=1,
+# because `--bash` resolves a CHECKOUT PATH, not a name.
+#
+# MEASURED, lenovinha-silverblue 2026-09-22, during a cold /join-the-fleet:
+# it was the last todo standing between this host and a green verdict, and it
+# cost a cycle. skills/initialize-bare-metal-host §6.1 ALREADY records the
+# distinction -- it corrects an earlier misdiagnosis by naming exactly this,
+# "a bare name had been passed where a path was wanted". The prose learned;
+# the line a reader pastes from did not.
+#
+# THE PROPERTY IS ABOUT THE PRINTED STRING, NOT ABOUT A LANE COMING UP. This
+# litmus starts no container, runs no bring-up and needs no enclave: it forces
+# the mirror probe to miss with an unserved TILLANDSIAS_PROJECT and reads the
+# affordance the checker prints. That is deliberate -- a test that needed a
+# live substrate could not run on the hosts that most need this answer.
+#
+# FALSIFIABILITY IS RECORDED, NOT ASSUMED. With the pre-fix LANE_CMD line
+# restored in place, the fixture fails by name:
+#   fail:bare-metal-lane-command:argument-after---bash-is-not-a-path:<project>
+# A fixture never shown red against the bug it names has not been shown to
+# test for it.
+name: litmus:bare-metal-lane-command-is-runnable
+spec: git-mirror-service
+phase: pre-build
+description: >
+  Pin 1356-u6xe: the substrate checker's mirror todo: prints a command whose
+  argument after `--bash` is an absolute path to an existing directory, with
+  TILLANDSIAS_HOST_PROJECT_ROOT equal to that directory's parent -- an
+  affordance a reader can paste. Falsifiable against the pre-fix line, which
+  printed a bare project name the binary refuses.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-bare-metal-lane-command-is-runnable.sh
+  - workspace contains scripts/check-bare-metal-host-initialized.sh
+  - the fixture reads the checker's PRINTED VERDICT only; it starts nothing
+    and skips by name where there is no podman or the enclave is down
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-bare-metal-lane-command-is-runnable.sh && test -x scripts/test-bare-metal-lane-command-is-runnable.sh && echo 'ok: lane-command-fixture-parses'"
+    timeout_ms: 10000
+    expected_behavior: "ok: lane-command-fixture-parses"
+    assert_exit: 0
+    assert_output_contains: "ok: lane-command-fixture-parses"
+
+  - step: "the printed lane command names an existing checkout whose parent is the project root"
+    command: "bash scripts/test-bare-metal-lane-command-is-runnable.sh"
+    timeout_ms: 60000
+    expected_behavior: "ok:bare-metal-lane-command-is-runnable:root=<dir> path=<dir>/<project>, or a named skip on a host with no podman or a down enclave"
+    assert_exit: 0
+    assert_output_contains: "bare-metal-lane-command"
+
+  # SOURCE PIN, read on the file directly so a fixture that stopped looking
+  # cannot hide the regression. The defect was LANE_CMD ending in the bare
+  # ${PROJECT}; this asserts the line derives from the checkout instead.
+  - step: "SOURCE PIN: LANE_CMD derives its path from the checkout, not from a bare project name"
+    command: "l=$(grep -c 'LANE_CMD=.*--bash .\\{0,2\\}ROOT' scripts/check-bare-metal-host-initialized.sh || true) && b=$(grep -c 'LANE_CMD=.*--bash .\\{0,2\\}PROJECT' scripts/check-bare-metal-host-initialized.sh || true) && test \"$l\" -eq 1 && test \"$b\" -eq 0 && echo \"ok: lane-cmd-from-root=$l bare-project=$b\""
+    timeout_ms: 15000
+    expected_behavior: "ok: lane-cmd-from-root=1 bare-project=0"
+    assert_exit: 0
+    assert_output_contains: "bare-project=0"

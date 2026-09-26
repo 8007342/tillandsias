@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-tray-ships-one-hand-rasterized-outline-icon-that-never-changes-while-the-events-and-the-rendered-lifecycle-pngs-it-needs-already-arrive
+    event:
+      type: evidence
+      ts: "2026-09-23T06:37:09Z"
+      agent_id: linux-macuahuitl-claude-20260923t063709z
+      host: macuahuitl
+      summary: |
+        Windows verification, partial (yolanda-windows 2026-09-23, relayed by macuahuitl because yolanda's plan push was refused).
+
+        Criterion 1, build side: HOLDS. scripts/build-windows-tray.ps1 compiled tillandsias-windows-tray (release, 1m08s). build.rs ran and did NOT emit the "icon render unavailable, using committed assets/tillandsias.ico" cargo:warning. It did emit its unrelated 0-byte-guest warning, so the warning channel was live and the absence means something.
+
+        Not observed: install, the Start-menu/taskbar/Alt-Tab icons, and the per-VmPhase tray icons (criterion 2). Packaging refused because target-guest/tillandsias-headless-x86_64 does not carry VERSION 56.9.22.1 (1059-ry6t, working as designed), so no fresh exe existed to install.
+
+        LEFT, routed by the coordinator: the visual pass (criteria 2 and 3) is the operator's, on the next published Windows release via curl-install smoke. Do not spend a local musl guest build on yolanda for it. Code on trunk: a0bfcd99d, relayed as 0f0d0f2c7, plus clippy fix ce69fac62.

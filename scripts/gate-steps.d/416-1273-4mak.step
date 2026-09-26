@@ -49,3 +49,4 @@ STEP_DESC="Checking the smoke verifies a signature and never reads could-not-run
 STEP_SCRIPT="scripts/test-smoke-verifies-a-signature.sh"
 STEP_ERROR="the release acceptance smoke can again promote a release without verifying any signature, or a host without cosign can report a verified one (1273-4mak) — read which arm failed above; ARM 0 failing means §1s was removed from the runbook and no lane verifies anything"
 STEP_OK="The smoke verifies a signature; could-not-run is not a pass"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:smoke-verifies-a-signature:5/5"

@@ -92,6 +92,13 @@ specs:
   coverage_ratio: 0
   last_verified: '2026-09-20'
 YAML
+    # 1356-vv5m: the checker now refuses a spec_id with no
+    # openspec/specs/<id>/spec.md behind it. Without these two files every
+    # arm is refused for THAT reason, and the mutation arms (2, 4) read a
+    # refusal they did not cause as "the guard still holds".
+    mkdir -p "$d/openspec/specs/intended-spec" "$d/openspec/specs/wrong-spec"
+    printf '# intended-spec\n' > "$d/openspec/specs/intended-spec/spec.md"
+    printf '# wrong-spec\n' > "$d/openspec/specs/wrong-spec/spec.md"
     git -C "$d" init -q 2>/dev/null
     git -C "$d" config user.email fixture@local 2>/dev/null
     git -C "$d" config user.name fixture 2>/dev/null

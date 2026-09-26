@@ -1,0 +1,57 @@
+# @trace spec:git-mirror-service
+name: litmus:forge-seeds-from-salvage-ref
+spec: git-mirror-service
+phase: pre-build
+description: A forge seeded from a salvage/* ref CONTAINS that ref's content, asserted by a sentinel read out of the seeded tree rather than by the seed exiting 0
+severity: high
+size: instant
+inputs:
+  - images/default/lib-common.sh
+  - scripts/test-forge-seeds-from-salvage-ref.sh
+
+# Order 1350-8hmy. The salvage lane rescues work off a wedged checkout onto a
+# `salvage/<order>` ref, and a forge is then seeded from that ref so the rescued
+# work can be finished. Nothing asserted that the seeded forge actually carried
+# the rescued content.
+#
+# WHY AN EXIT STATUS CANNOT BE THE ASSERTION. checkout_forge_seed_branch() is
+# fail-soft by contract (B6): a seed branch that is missing, still inside the
+# mirror's 120s reconcile window, or that `git switch` refuses leaves the clone
+# on its own HEAD, prints a WARNING, and RETURNS 0. A hard `git clone -b <seed>`
+# is forbidden precisely so a launch is never DOA'd. Every failure mode this
+# test exists to catch is therefore invisible to `$?`, and a seeded forge that
+# silently holds trunk instead of the rescue looks exactly like a successful
+# one. So the assertion is a sentinel file placed on the salvage ref and read
+# back out of the seeded tree, with its content compared.
+#
+# Falsified on yoga 2026-09-22 by mutating the REAL function, not the fixture:
+#   `git switch` -> `true`  (seed silently ignored)  -> ARM 2 + ARM 3 RED, rc still 0
+#   the not-found WARNING silenced                    -> ARM 4 RED
+# Hermetic and offline (~0.1s): a bare repo stands in for the mirror and the
+# function is awk-extracted from lib-common.sh, the idiom
+# litmus-forge-clone-reachability-probe-shape.yaml uses on
+# probe_mirror_reachable.
+
+preconditions:
+  - images/default/lib-common.sh is present with checkout_forge_seed_branch
+
+critical_path:
+  - step: "a forge seeded from a salvage/* ref contains that ref's content, HEAD is the slashed ref itself, and B6 fail-soft survives"
+    # Five arms, and the first is the premise: a fresh clone must land on trunk
+    # WITHOUT the sentinel. Without that arm the content check would be green
+    # by construction however badly the seed behaved, because it would be
+    # reading the fixture's own scaffolding back to itself.
+    command: "bash scripts/test-forge-seeds-from-salvage-ref.sh"
+    timeout_ms: 120000
+    expected_behavior: "ok:forge-seeds-from-salvage-ref:5/5"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "forge salvage seed: the seeded tree carries the salvage ref's sentinel, HEAD is the slashed ref, a never-pushed seed stays fail-soft and loud"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "forge-seeds-from-salvage-ref"
+
+rollback:
+  on_failure: "restore checkout_forge_seed_branch in images/default/lib-common.sh from git history"

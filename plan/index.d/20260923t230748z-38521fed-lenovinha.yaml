@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: containers-conf-routes-every-build-through-an-enclave-proxy-that-may-not-exist
+    field: status
+    value: completed
+    ts: "2026-09-23T23:07:48Z"
+    host: lenovinha
+
+events:
+  - packet_id: containers-conf-routes-every-build-through-an-enclave-proxy-that-may-not-exist
+    event:
+      type: completed
+      ts: "2026-09-23T23:07:48Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 625815d3a (923-rmtw: init REMOVES the global [engine] env proxy block; on origin/linux-next) + scripts/check-containers-conf-proxy-env.sh -> ok:containers-conf-proxy-env-absent on lenovinha 2026-09-23 + podman run outside the enclave shows no proxy env + scripts/build-image.sh carries no proxy reference; image builds on this host succeeded today (git image, rc=0)
+  - packet_id: containers-conf-routes-every-build-through-an-enclave-proxy-that-may-not-exist
+    event:
+      type: note
+      ts: "2026-09-23T23:07:48Z"
+      host: lenovinha
+      summary: |-
+        audit-dispose: superseded by 923-rmtw, which removed the unconditional containers.conf proxy block this packet was filed about; image builds no longer depend on the enclave proxy

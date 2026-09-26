@@ -1,0 +1,87 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-hand-pushed-platform-branch-cannot-satisfy-pre-push-gate-while-trunk-is-active-because-the-required-merge-touches-stamp-scope-files-and-stales-the-fresh-green-and-the-adopt-a-valid-stamp-affordance-shipped-for-the-landing-queue-only
+    field: context
+    value: |-
+      THE COMPOSITION, and neither rule is wrong on its own.
+      methodology pull_merge_cadence.pre_push_gate requires merging
+      origin/linux-next into a platform branch before EVERY push. The gate stamp
+      requires that ./build.sh --check last passed on the tree being pushed. A
+      merge of an active trunk changes stamp-scope files, so satisfying the
+      first invalidates the second, and the gate that restores it takes long
+      enough for the first to be violated again.
+
+      THE HOOK ALREADY RECORDS THIS COMPOSITION FOR ITS SIBLING CASE, and that
+      comment is the best evidence the shape is real rather than one host's bad
+      night. scripts/hooks/pre-push-local-gate.sh:333-341, on the PLAN-ONLY
+      lane: "methodology pull_merge_cadence.pre_push_gate requires merging
+      origin/linux-next into a platform branch before EVERY push. That merge
+      brings other hosts' non-plan files into the diff against the PLATFORM
+      remote… So the two rules compose into 'plan-only only if trunk has not
+      moved', and the busier trunk is the less reachable the lane." (1056-5344,
+      esmeraldinha 2026-09-05.) This row is that note's sibling for the FULL
+      GATE path, where the cost is 34 minutes rather than a lane selection.
+
+      THE COST, measured rather than estimated: one full gate on this host is
+      2038 seconds. The delta that invalidated it was one README line and three
+      plan-fragment pushes, one of which was the pusher's own.
+
+      HOW IT WAS RESOLVED THIS TIME, which is the workaround and not the fix:
+      the coordinator relayed osx-next INTO trunk through the landing queue,
+      which gated once and ADOPTED the stamp, and then levelled osx-next by
+      fast-forwarding trunk onto it. That terminates because the second step
+      needs no gate — not because fast-forwards are exempt, which they are not,
+      but because after the relay the coordinator's checkout tree IS trunk's
+      tree, so their own fresh stamp covers the ref, and osx-next containing
+      trunk is true by construction because at that point it IS trunk. Recorded
+      precisely because "fast-forwards are exempt" is a false rule that would
+      otherwise travel under a true result.
+
+      WHAT THIS IS NOT. Not an argument to weaken the stamp, not an argument
+      against pre_push_gate, and not a request for --no-verify, which on a
+      platform branch is exactly what the stamp exists to prevent. The queue
+      solved this correctly for itself; the gap is that a host cannot reach the
+      same mechanism.
+
+
+      [2026-09-22T15:45:57Z macneo] THE AUTHOR HIT THIS DEFECT WHILE FILING IT, ONE HOUR LATER, AND THAT BELONGS AT
+      THE TOP. macuahuitl-fedora asked for it here because a composition defect
+      demonstrated by its own author cannot be argued down as one host's bad night.
+
+      2026-09-22, macneo. Having written this row, I needed to land the v56.9.22.1
+      macOS smoke report — ONE MARKDOWN FILE, plan/issues/, no code. plan/issues/*.md
+      is not a plan-lane path, so the plan-only lane correctly declined it
+      (skip:fragments-to-trunk:nothing-new), and the ordinary push from osx-next would
+      have demanded the full gate a SECOND time, for a file that cannot affect a
+      build. Same composition, same branch, same hour.
+
+      WHAT I DID INSTEAD IS WHAT THE ROW IS ASKING THE FLEET TO BE ABLE TO DO: the
+      sanctioned route — a work ref cut from trunk, one commit, a draft-free PR, and
+      the landing queue lands it (#166). No second 34-minute gate, no --no-verify, no
+      salvage ref for work that is clean and gated. That route exists and is correct,
+      and it is worth naming that IT IS ONLY AVAILABLE BECAUSE THE WORK WAS RE-BASABLE
+      ONTO TRUNK. It is not available for levelling a platform branch, which is the
+      case this row is about: osx-next cannot be re-cut from trunk, because being
+      ahead of trunk is the entire thing that needs fixing.
+
+      SO THE TWO CASES DIFFER IN EXACTLY ONE WAY. Ordinary work has an escape — move
+      it to a work ref and let the queue gate once. Platform levelling has none,
+      because the branch IS the thing that must be pushed. That is why the queue's
+      adoption affordance closes one and not the other, and it is the sharpest
+      statement of the gap this row has.
+    ts: "2026-09-22T15:45:57Z"
+    host: macneo
+
+events:
+  - packet_id: a-hand-pushed-platform-branch-cannot-satisfy-pre-push-gate-while-trunk-is-active-because-the-required-merge-touches-stamp-scope-files-and-stales-the-fresh-green-and-the-adopt-a-valid-stamp-affordance-shipped-for-the-landing-queue-only
+    event:
+      type: note
+      ts: "2026-09-22T15:45:57Z"
+      host: macneo
+      summary: |-
+        the author hit the defect while filing it; the work-ref escape exists for ordinary work and not for platform levelling

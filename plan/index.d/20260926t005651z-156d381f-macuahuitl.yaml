@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-src-tmpfs-topology
+    event:
+      type: note
+      ts: "2026-09-26T00:56:51Z"
+      agent_id: linux-macuahuitl-claude-20260926t005639z
+      host: macuahuitl
+      summary: |
+        FOLLOW-ON PACKETS FILED (macuahuitl, 2026-09-26) after the decision event above. 1375-xxzj (linux, p1): the launch builders emit a cgroup budget with a swap allowance instead of the equal --memory/--memory-swap ceiling; the 437 work ref's wiring is rebased onto it and its equal-values test inverted. 1378-7w2p (linux, p1): measure the forge's peak RSS, swap and pids.peak per jobs setting plus a tmpfs spill benchmark. 1376-8zdz (linux, p1): a Linux host with only zram is offered a Silverblue-safe disk swapfile. 1377-hcnv (macos, p2): guest swap image and zram in the VM. 1379-vvct (any, p3): mount classes. Windows swap keys ride 1339-r9xv; the host-side swap read on WSL2 rides 1337-7jr5; pids sizing rides 1372-igkr. This row's remaining criterion 2 ("emits equal --memory and --memory-swap limits") is superseded by the spec delta in openspec/changes/forge-swap-backed-memory-ceiling: equal values are now the refused shape. Design: plan/issues/forge-memory-swap-architecture-design-2026-09-26.md.

@@ -1,0 +1,101 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-project-earns-its-branching-discipline-progressively-and-nothing-today-can-tell-an-agent-which-level-a-loaded-project-is-at
+    order: 1363-xp2v
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    pickup_role: any
+    capability_tags: [research, design, methodology, forge, lua, multi-project]
+    estimated_hours: 12
+    owned_files:
+      - openspec/specs/
+      - skills/
+      - methodology/
+    unscoreable: unpinnable-until-the-guard-exists — this row's deliverable is the DESIGN plus the runtime that evaluates it, so a pin today would name a test nothing defines (885-92iu). The future fixture is scripts/test-branching-discipline-level.sh and the future litmus definition file is openspec/litmus-tests/litmus-branching-discipline-level.yaml, and whichever slice first produces a level evaluator writes them in the same commit as the thing they test (1136-n8sh). Until then the row is scored by the OUTPUTS named in next_action, each of which is a document or a decision a reader can open.
+    verifiable_closure: |
+      RESEARCH OUTPUT, not code. The row closes when four documents exist and a
+      reader who has never seen this conversation can act on them.
+
+      ONE. A written LADDER of branching discipline levels, each level naming
+      what is REQUIRED and what is merely PERMITTED, with the operator's three
+      rungs as the starting point and any further rungs argued rather than
+      assumed. The rungs as the operator stated them, 2026-09-22, verbatim in
+      substance: a NEW project may push straight to its default branch; once
+      there is some code and some rules, an integration branch and pull
+      requests are required; once MULTIPLE HOSTS commit, work branches and pull
+      requests into the integration branch are required.
+
+      TWO. A written definition of HOW A PROJECT'S LEVEL IS DETERMINED, stated
+      as observable facts about the loaded project rather than as a label
+      somebody sets by hand, plus the metadata that records the answer and
+      where it lives. The operator named two homes to consider, the project's
+      specs and the skills that determine work; the research decides whether
+      one, both or neither is right and says why.
+
+      THREE. A written statement of the AFFORDANCE an agent receives. Today
+      nothing tells an agent what branching discipline a project has, and the
+      case that matters is an agent landing with NO CONTEXT in a fresh forge.
+      The output names what that agent is shown, at what moment, and what a
+      refusal says when the agent tries something the level forbids.
+
+      FOUR. A written note on VERIFIABLE CONSTRAINTS and the evaluation
+      runtime. The operator's expectation is that the rules are checkable
+      rather than advisory, and that the embedded Lua runtime is the likely
+      evaluator because the level test is more complex than a shell predicate.
+      The output states what a level rule may inspect, what it may not, and
+      how a rule is tested without a live project.
+
+      PRE-FIX RESULT, the control this row rests on: FAILS. There is no ladder,
+      no level, no metadata, no affordance and no evaluator. Every branching
+      rule this fleet has reaches a HOST — platform branches, work refs, the
+      landing queue, the pre-push gate — and none of them reaches a project
+      that is not this one, nor an agent inside a forge.
+    next_action: |
+      FILED AT THE OPERATOR'S REQUEST on 2026-09-22 as a LONG SCOPE research
+      row, explicitly to be fine-tuned across future milestones and releases
+      rather than implemented in one pass. The operator's words for the scope:
+      this project is quite well wired and with guardrails, and new projects
+      will not have any of these, so they must be enabled progressively, with
+      verifiable constraints.
+
+      THE IMMEDIATE DEFAULT IS ALREADY DECIDED AND IS NOT THIS ROW'S WORK: a
+      forge launched for a cloud project starts on the REMOTE'S DEFAULT BRANCH,
+      ratified by the operator the same day. That is 1362-u8ww, which is a p1
+      defect with its own closure, and it must not be closed against this row
+      nor this row against it.
+
+      WHY THIS IS RESEARCH RATHER THAN A FEATURE. The hard part is not enforcing
+      a rule, it is KNOWING WHICH RULE APPLIES. A project with one commit and
+      one host must be allowed to push to its default branch, or the tooling is
+      useless at the moment a project is created; the same push must be refused
+      once the project has earned an integration branch. So the level cannot be
+      a constant and cannot be a flag somebody remembers to set, and the row's
+      real subject is the DETERMINATION.
+
+      SUGGESTED SLICES, each landable alone and each producing a document:
+      slice one writes the ladder and its rungs; slice two writes the level
+      determination and picks the metadata home; slice three writes the agent
+      affordance including the fresh-forge-no-context case; slice four writes
+      the constraint language and how a rule is tested. A fifth slice may
+      prototype the evaluator, and should not start before slice two exists.
+
+      OPEN QUESTIONS THE RESEARCH MUST ANSWER RATHER THAN ASSUME. Is the level
+      DERIVED from observable facts such as commit count, host count, presence
+      of specs or of a gate, or is it DECLARED and merely validated against
+      those facts? What happens when a project sits between rungs or moves
+      backwards, for instance when a second host stops committing? Does a level
+      ever RELAX, and who may relax it? What does an agent see when the project
+      it loaded has no level at all, which is the common case for every project
+      that is not this one? And where does a forge read the level from, given
+      that a forge clones a mirror and may hold no host context at all.
+
+      EVIDENCE THIS ROW STARTS FROM, all measured on 2026-09-22. The fleet's
+      own branch rules are host-shaped and none reaches a forge, which is how a
+      forge launched as a CLOUD project came up on another host's work branch
+      without saying so (1362-u8ww, pirria). A related pair points the other
+      way and must be kept apart on the ledger: 997-e4v2 and 591-x7ws remove
+      host DISK access, whereas the forge case is the local MIRROR leaking host
+      state into a session that believes it is remote.

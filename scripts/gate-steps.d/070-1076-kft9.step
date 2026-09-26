@@ -17,3 +17,4 @@ STEP_DESC="Checking the SIGPIPE verdict check measures rather than pattern-match
 STEP_SCRIPT="scripts/test-sigpipe-verdict-measured.sh"
 STEP_ERROR="the measuring check cannot detect a SIGPIPE-decided verdict, or its calibration case stopped being known-bad (1076-kft9) — see the verdict line above"
 STEP_OK="SIGPIPE verdict measurement check passed"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok: CONTROL: an evaled pipeline yields a 1-element PIPESTATUS, so the naive form measures nothing"

@@ -12,3 +12,4 @@ STEP_DESC="Checking a gate-step prefix taken by the integrate is reallocated at 
 STEP_SCRIPT="scripts/test-gate-step-prefix-allocation.sh"
 STEP_ERROR="land-time gate-step prefix allocation regressed — two lands choosing one prefix would collide in the gate again (1162-qbrx)"
 STEP_OK="gate-step prefix allocation holds"
+STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   ARM 9 (executed): a refusing allocator stops the land with refused:land:gate-step-prefix and exit 8 befo"

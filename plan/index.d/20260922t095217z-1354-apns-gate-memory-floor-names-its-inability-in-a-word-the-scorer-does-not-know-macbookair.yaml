@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-gate-memory-floor-names-its-own-inability-as-could-not-run-which-the-preflight-scores-as-a-refusal-so-the-mandatory-step-can-never-exit-zero-on-a-mac
+    order: 1354-apns
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [preflight, fail-loud, macos, verdict-grammar]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-gate-memory-floor.sh
+      - scripts/test-gate-memory-refusal.sh
+    unscoreable: ""
+    verifiable_closure: |
+      THE OUTPUT: on a host with no readable /proc/meminfo, `./build.sh
+      --preflight` counts check-gate-memory-floor as SKIPPED and — with no other
+      failure — EXITS 0. Today it exits 1 on every Mac, so the step the fleet
+      made mandatory before `gh pr ready` can never be satisfied there.
+
+      The informative `could-not-run:` line STAYS. A reader must still see which
+      instrument could not answer and why; what changes is that the decider also
+      ends on a line the scorer recognises.
+
+      NEGATIVE CONTROL, and it is the arm that matters: a host that CAN read
+      MemAvailable and is below the floor must still emit
+      `refused:gate:insufficient-memory` and be scored a FAILURE. A fix that
+      turned the real refusal into a skip would convert this guard into
+      decoration — the direction 1176-fn2p exists to prevent.
+    title: |
+      check-gate-memory-floor names its own inability as `could-not-run:`, a word the preflight scorer does not recognise, so a host with no /proc/meminfo is scored `failed` and `./build.sh --preflight` can never exit 0 on macOS
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-22, immediately after 1352-vmbc
+      made the preflight able to run there at all:
+
+        could-not-run:gate-memory:no-meminfo:/proc/meminfo (this host exposes no
+        readable MemAvailable; nothing is asserted about its memory)
+        refused:preflight:check-gate-memory-floor
+        refused:preflight:ran=94 skipped=16 failed=1 isolation=none-no-setsid
+
+      THE DECIDER IS RIGHT AND THE SCORER CANNOT HEAR IT. check-gate-memory-floor
+      says in as many words that nothing is asserted — that is 965-sxec's channel,
+      and its own comment calls answering "fine" a capacity claim from an
+      instrument that never read anything. The preflight runner ALREADY carries
+      the matching rule, at build.sh: `if grep -qE '^skip:'` with the comment "A
+      NAMED SKIP IS NOT A FAILURE, whatever it exits with (1273-4mak)", citing
+      1309-fhxb's shape. The rule is correct; its VOCABULARY is narrower than the
+      corpus, and this decider spells the same idea with a different word.
+
+      THE COST IS NOT COSMETIC. The coordinator made `./build.sh --preflight` a
+      mandatory step before every `gh pr ready`, fleet-wide, after three
+      fixture-green PRs were dropped from one relay by sub-second deciders their
+      authors never ran. With this one decider scored `failed`, the step exits 1
+      on every Mac regardless of the tree, so a macOS author either cannot comply
+      or learns to read a refusal as noise — and a step people learn to ignore is
+      worse than no step.
+
+      THREE INSTRUMENTS IN ONE DAY, which is why the wide row exists beside this
+      one: three macOS fixtures spelling could-not-run as `unsupported:`
+      (1330-i4hu, fixed), this decider spelling it `could-not-run:`, and
+      lenovinha's decider needing target/debug reporting `could-not-run` and
+      scored failed=1 after a build-cache sweep. The two spellings are a CORPUS
+      FACT, not a per-decider bug — see the wide row.
+    deliverable: |
+      Each `could-not-run:` exit in check-gate-memory-floor.sh additionally ends
+      on a `skip:gate-memory:<reason>` line. Keep the could-not-run line and keep
+      the exit status: the preflight matches `^skip:` ANYWHERE in the output, and
+      the litmus runner consults only the LAST non-empty line, so a terminal
+      `skip:` satisfies both readers without changing either.
+
+      scripts/test-gate-memory-refusal.sh moves with it — it asserts the
+      could-not-run token today and must assert BOTH, plus the negative control
+      that a real below-floor refusal is still `refused:` and still scored a
+      failure.
+
+      DO NOT touch the preflight runner's scoring here. Teaching it
+      `could-not-run:` as a token is the WIDE row, it changes scoring for every
+      decider in the fleet, and it does not belong inside a one-decider fix.
+    next_action: >
+      Read scripts/check-gate-memory-floor.sh:47-66 — three could-not-run exits,
+      all exit 3 — and build.sh's `grep -qE '^skip:'` arm with its 1273-4mak
+      comment, which is the rule this change is spelling itself into. Reproduce
+      with `./build.sh --preflight` on a host with no /proc/meminfo; the
+      `failed=1` line is the pre-fix evidence.
+    provenance: |
+      Filed and claimed by macbookair-macos (macos) 2026-09-22 at
+      macuahuitl-fedora's direction, after being found while closing 1352-vmbc
+      and deliberately NOT folded into it. The verdict lines, the decider's three
+      exits and the runner's grep arm were read or run on this host.

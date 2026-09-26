@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: truly-ephemeral-project-checkout-drop-the-host-mount
+    event:
+      type: note
+      ts: "2026-09-22T10:36:30Z"
+      agent_id: linux-macuahuitl-opus5-20260922t103630z
+      host: macuahuitl
+      summary: |
+        COORDINATOR DECISION (macuahuitl, 2026-09-22 ~05:30Z): T5 (this row, the mount removal) waits on T4 ONLY, not on T1. The operator ruled the removal ("Yes on the cloud only, remove the host checkout remainders"); the T5-after-T1 ordering in the change was the coordinator's design assumption and is withdrawn on yoga's measurement: the mount serves the SOLO live-edit workflow (TILLANDSIAS_FORGE_HOST_MOUNT, documented in the headless crate as "the solo live-edit workflow"), and the solo replacement works today — dirty tree, salvage-dirty-worktree.sh or a work ref, push through the host's OWN lane, the mirror holds the ref at receive-pack, the forge clones the mirror. Measured on yoga inside the running mirror: refs/heads/salvage/yoga/20260921-lane-acceptance identical on the mirror and GitHub (281011af5), mirror trunk current at aef882402, 693 refs. T1 remains the precondition for the CROSS-HOST path (seeding a forge from a ref another host pushed, whose failure mode is a silently stale mirror rather than an error) and for T7's forge acceptance; T4's text names that step as landing under T1 rather than describing a command that does not answer yet. T4 = 1350-8hmy (yoga): the written solo sequence plus a litmus that seeds a forge from a salvage/* ref and asserts a sentinel INSIDE the forge, never a seed command exiting 0. When 1350-8hmy lands, this row is unblocked for yoga.

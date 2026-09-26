@@ -44,7 +44,10 @@
 #   blocked:not-ready-after:<seconds>s
 #   blocked:image-missing:build-inference   linux lane: no tillandsias-inference
 #                                           image — run ./build-inference.sh
-#   blocked:container-start-failed       linux lane: podman refused the container
+#   blocked:container-start-failed:<cause> log=<path>
+#                                        linux lane: podman refused the container;
+#                                        <cause> is podman's last error line from
+#                                        THIS attempt (1248-j6vd)
 #   skip:unsupported-host                no lane was reasoned about for this host
 #   skip:no-local-inference              operator kill switch (620-ca7g)
 #
@@ -364,11 +367,22 @@ started="no"
 if ! api_up; then
     if [ "$LANE" = "linux-container" ]; then
         mkdir -p "$STATE_DIR" 2>/dev/null || true
+        # ORDER 1248-j6vd criterion 2. Mark the log BEFORE the attempt, so the
+        # refusal can quote what podman said during THIS start and not an older
+        # failure. The bare `blocked:container-start-failed` sent a host into a
+        # full manual diagnosis whose answer (a stale CDI spec) was one line in
+        # serve.log all along.
+        _log_mark="$(wc -c <"$LOG" 2>/dev/null | tr -d ' ')"
         ensure_container
         case "$?" in
             0) ;;
             2) echo "blocked:image-missing:build-inference"; exit 1 ;;
-            *) echo "blocked:container-start-failed"; exit 1 ;;
+            *)
+                _cause="$(tail -c +"$(( ${_log_mark:-0} + 1 ))" "$LOG" 2>/dev/null \
+                    | grep -iE 'error|denied|no such|not found|failed' | tail -n 1 \
+                    | tr -d '\r' | tr '\t' ' ' | cut -c1-240)"
+                echo "blocked:container-start-failed:${_cause:-no-error-line-in-log} log=$LOG"
+                exit 1 ;;
         esac
         started="yes"
         # First-ever start may exceed the budget while the image's entrypoint

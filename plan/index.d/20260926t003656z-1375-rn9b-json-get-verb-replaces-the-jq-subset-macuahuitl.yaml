@@ -1,0 +1,70 @@
+packets:
+  - packet_id: tillandsias-plan-json-get-answers-the-jq-subset-that-87-percent-of-the-corpus-uses-byte-identical-so-a-gate-reads-json-with-the-binary-every-host-already-has
+    order: 1375-rn9b
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [portability, plan-binary, rust, jq, litmus, fail-loud]
+    estimated_hours: 4
+    depends_on: []
+    owned_files: [crates/tillandsias-plan/src/json_query.rs, crates/tillandsias-plan/src/main.rs, crates/tillandsias-plan/capabilities.txt, scripts/test-json-query-jq-parity.sh, scripts/portability/jq-subset-corpus.txt]
+    observed_by: macuahuitl
+    title: |
+      `tillandsias-plan json get` — a serde_json-backed query verb that answers the jq subset 87% of the corpus's 277 bare jq call sites use (path extraction and iterate-select), byte-identical to jq on that subset, so a gate script reads JSON on every host with the binary it already has instead of a tool that is absent on macOS and Windows and dynamically linked everywhere else
+    verifiable_closure: |
+      bash scripts/test-json-query-jq-parity.sh runs every filter in
+      scripts/portability/jq-subset-corpus.txt (the bucket-A/B filters
+      harvested from scripts/ and openspec/litmus-tests, at least 60 distinct
+      filters covering `.a.b`, `.a[0]`, `.[]`, `.a[]?`, `.[] | select(.k=="v") | .z`,
+      `select(.k!="v")`, `// empty`, `// "default"`, `keys`, `length`,
+      `has("k")`, `-r`, `-c`, `-e`, `--arg`) through host jq and through
+      `tillandsias-plan json get`, and diffs stdout BYTES and exit status per
+      filter; verdict `ok:json-get-parity:<n>/<n>` on stdout, one
+      `mismatch:<filter>` line per divergence. The fixture is named by a
+      build.sh --check step in the same commit (1325-ygq5 refuses an orphan
+      test). Pre-fix result: FAILS — `tillandsias-plan capabilities` lists no
+      `json` token and the fixture refuses with `blocked:json-get-absent`.
+    context: |
+      MEASURED 2026-09-26 on origin/linux-next cda7f75c4 (design:
+      plan/issues/lua-runtime-host-dependency-replacement-design-2026-09-26.md).
+      277 bare jq invocations in 68 files (scripts/, build.sh, litmus
+      command: fields, methodology). By filter: A path extraction 174 (63%),
+      B iterate+select 68 (24%), C construction 12, D advanced 21 (join x7,
+      string interpolation x3, group_by x2, @tsv x2, strftime/now x2, test,
+      sub, sort_by, paths, `..` x1 each), E validator-only 7. A+B = 87%.
+      Bucket D lives mostly in litmus assertions, not gate scripts.
+      Every host that runs a gate has target/release/tillandsias-plan
+      (Linux, macOS native, Windows native .exe — 1267-uafx measured the
+      .exe answering build-id on yolanda), so the binary is the one JSON
+      reader present everywhere; jq is not (1186-w3ph: jq reads
+      /proc/self/fd/0, absent on MSYS; jq.exe writes CRLF, 26 scripts pipe
+      `jq -r` into shell values, run-litmus-test.sh strips CR for that
+      reason alone). tool-materialize.sh's fast_tool copies jq out of the
+      builder toolbox because jq is DYNAMICALLY linked (libjq, libonig); that
+      works only where a toolbox exists — never on macOS or Git Bash.
+      DESIGN (not jaq): a minimal path language, one Rust function
+      `json_query::eval(&Value, &Filter, &Opts) -> Result<Vec<Value>, QueryError>`,
+      hand-parsed, no new crate. jaq (MIT, jaq-core/std/json, ~10 transitive
+      crates) is the fallback ONLY if the residue after 1375-2x4e is more
+      than 15 non-litmus sites needing bucket D; bucket C/D otherwise moves
+      to Lua tables (1375-btuf), where join/group_by/@tsv are one-liners.
+      OUTPUT CONTRACT: default compact JSON, one result per line; `-r` prints
+      strings raw; `-e` exits 1 when the last result is null/false and 4 when
+      empty (jq's codes); `--arg k v` binds `$k`; input from a file argument
+      or `-`; LF line endings on every platform (CRLF class closed at the
+      source); missing path yields empty (jq: null) ONLY under `// empty`,
+      otherwise `null` exactly as jq. KEY ORDER: serde_json sorts keys by
+      default and jq preserves them — enable the workspace `preserve_order`
+      feature on serde_json (float_roundtrip is already on) and note in the
+      commit that every crate's Map becomes IndexMap; the parity fixture
+      pins this. `tillandsias-plan yaml get <file> <filter>` reuses the same
+      engine over serde_yaml -> serde_json::Value (yaml-get keeps its
+      dotted-path, space-joined-sequence contract; do not change it).
+      The engine is a library function first so 1375-btuf can expose it to
+      Lua as json.query(doc, filter) and 902-5bf9's step form inherits it.
+      Prior art: 746-htj9 (yaml-json | jq — moved the runner's dependency
+      from yq to jq), 914-ahsy (held in relay review: `"$JQ"` quoting breaks
+      on the toolbox arm; this verb makes the dispatch question moot for
+      bucket A/B callers), 799-tb7q (resolve_tool).

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: investigated
+      ts: "2026-09-25T23:02:48Z"
+      host: yoga
+      summary: |
+        CRITERION 4: arms 4 and 5 SHOWN to be two triggers of ONE cause (fixed scratch inside the
+        worktree), and the one fix is shown closing EACH explicitly rather than one silently.
+        Probe: setsid archive-plan-packets.sh --check tagged with an env marker, SIGKILL all marked
+        pids (4) at t=20s so the EXIT trap cannot run, then git status of arm 5's own paths.
+          PRE-FIX (premise asserted: archiver byte-identical to origin/linux-next): arm 5 paths
+            DIRTY — "?? plan_tmp/archive/...", "?? plan_tmp/issues/..." (a full plan/ copy left in the tree)
+          POST-FIX (work/1132-r4mt): arm 5 paths EMPTY; the run's private dir
+            target/archiver-check/.archiver-check.* leaked, which is gitignored and pruned from the
+            answerability copy, so it dirties nothing and is never copied.
+        Arm 4 = the scratch shared under CONCURRENCY (reproduced 3/3, fixed 6/6).
+        Arm 5 = the scratch left behind by a KILL that bypasses the trap (the 1141-vf9w stray SIGKILL).
+        Neither causes the other; both disappear because scratch no longer lives at a worktree path.
+        Housekeeping cost left: a SIGKILLed run leaks one dir under target/archiver-check (not reaped).

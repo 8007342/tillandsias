@@ -527,6 +527,7 @@ fixture() {
         TILLANDSIAS_WORKSTATION=fixturehost \
         TILLANDSIAS_CAPABILITY_COMMITTED_MATRIX="$_fx_committed" \
         TILLANDSIAS_CAPABILITY_ROW_NOW="${_FX_NOW:-1800000000}" \
+        TILLANDSIAS_HOST_KIND="" \
             env "$@" bash "$_fx_self" check
     }
     _expect() {

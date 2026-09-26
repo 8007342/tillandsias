@@ -179,6 +179,75 @@ source "$SCRIPT_DIR/scripts/common.sh"
 # no-op fallback are both `|| true`-guarded.
 . "$SCRIPT_DIR/scripts/timing-log.sh" 2>/dev/null || true
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+# ── ORDER 765-xpct: THE CHANGE-CLASS GATE SELECTOR ───────────────────────────
+#
+# Runs a guard only when the change could have affected what it checks. The
+# operator approved BOTH LIGHT AND SCOPED on 2026-09-20, recorded verbatim on
+# 765-xpct (yoga at 302118c56, macuahuitl independently) — scope reduction is
+# the symmetric twin of bar_raise_governance and the loop must not self-enact
+# it. That approval is ONE of six criteria; the rest are the fail-closed paths
+# in scripts/change-class.sh and its 20/20 fixture.
+#
+# BEST-EFFORT SOURCE, AND THE FALLBACK RUNS EVERYTHING. If the library is
+# missing or unreadable the stub below answers FULL to every question, so a tree
+# without it gates exactly as it did before this order. That is the only safe
+# direction: the cost of guessing wrong here is a check that did not run.
+. "$SCRIPT_DIR/scripts/change-class.sh" 2>/dev/null || true
+command -v change_class_tier >/dev/null 2>&1 || {
+    change_class_tier() { echo FULL; }
+    change_class_set()  { return 1; }
+    change_class_record_full_run() { :; }
+}
+
+# THE KEEP-UNCONDITIONAL SET IS DATA, ONE ENTRY PER LINE, EACH NAMING THE
+# INCIDENT IT WOULD HAVE CAUGHT. Removing an entry is then a reviewable diff
+# with a citation to argue against, not an edit to a regex nobody reads.
+# A guard named here runs on every gate whatever the change class, forever,
+# until someone deletes its line and says why in the same commit.
+_CLASS_KEEP_UNCONDITIONAL='
+gate-stamp-verify            599-4wzr  a stale stamp vouched for a tree nobody built
+release-preflight            599-4wzr  the release gate is the only tier that runs pre-build litmus
+version-bump-isolation       dd8fd63f  a version bump rode in with unrelated code
+plan-schema-divergence       440       the status vocabulary and the schema disagreed silently
+added-fragments-parse        668-2xeh  an unreadable fragment reached trunk through the plan lane
+script-exec-bits             668-2xeh  a checker shipped non-executable and was never invoked
+guard-activation-audit       440       a guard shipped ORPHANED, invoked by nothing, and passed
+salvage-net-roundtrip        1315-4a7j a salvage-only push was classified as the work lane and the
+                                       874-w2gc deletion refusal became a warning, refusal text intact
+'
+
+_CLASS_SKIPPED=0        # how many guards this run did NOT run. A run that
+                        # skipped anything is NOT a FULL run and must never
+                        # record one — otherwise a chain of scoped runs keeps
+                        # renewing its own licence to be scoped, forever.
+_CLASS_SET_MEMO=""      # computed once per run; empty until first asked
+_class_set_once() {
+    [ -n "$_CLASS_SET_MEMO" ] && return 0
+    _CLASS_SET_MEMO="$(change_class_set 2>/dev/null)" || _CLASS_SET_MEMO="(unavailable)"
+    [ -n "$_CLASS_SET_MEMO" ] || _CLASS_SET_MEMO="(unavailable)"
+    return 0
+}
+
+# _class_may_skip <guard> <declared-classes...> — build.sh owns the DATA, the
+# library owns the RULE (change_class_may_skip), so the rule is reachable from
+# scripts/test-change-class.sh and the matrix stays where a reader of the gate
+# will find it.
+_class_may_skip() {
+    local guard="$1"; shift
+    _class_set_once
+    change_class_may_skip "$guard" "$_CLASS_KEEP_UNCONDITIONAL" "$@"
+}
+
+# _class_skip_line <guard> <declared-classes...> — the POSITIVE statement of what
+# did not run and why. Never a silent omission: a green that does not say what it
+# skipped is read as full coverage, which is the failure this row exists to stop.
+_class_skip_line() {
+    local guard="$1"; shift
+    _CLASS_SKIPPED=$((_CLASS_SKIPPED + 1))
+    local base; base="$(git -C "$SCRIPT_DIR" merge-base HEAD "origin/${TILLANDSIAS_TRUNK_BRANCH:-linux-next}" 2>/dev/null | cut -c1-9)"
+    _info "skip:class-selector:$guard — declared-inputs=$(printf '%s,' "$@" | sed 's/,$//') changed-classes=$(printf '%s' "$_CLASS_SET_MEMO" | tr '\n' ',' | sed 's/,$//') base=${base:-unknown} last-full=$(change_class_full_run_age_s)s-ago"
+}
+
 # 765-uti9 quick win (velocity audit F2/F10): anchor for the build-preamble
 # record — everything between here and the --check timer (git hooks, podman
 # registries, dev-proxy ensure, sidecar staging) was invisible to timing:,
@@ -311,9 +380,39 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile
     # here, that floor alone took the run from 148s to 196s — the deadline
     # machinery costing more than the guards it bounds. `sleep 0.1` is not POSIX,
     # so it is probed once and falls back to whole seconds where it is refused.
+    # ORDER 1352-vmbc. PROBE FOR setsid, the way the `sleep 0.1` line above
+    # probes for a non-POSIX feature, and for the same reason: this function
+    # must not assume a util-linux tool exists.
+    #
+    # MEASURED on macOS 2026-09-22, before this probe: `setsid` is absent, the
+    # exec below died in every guard, and `./build.sh --preflight` reported
+    # `refused:preflight:ran=0 skipped=3 failed=108`. Not "some deciders red" —
+    # NONE launched, and 108 identical launch failures are indistinguishable
+    # from 108 real refusals to anyone reading the summary.
+    #
+    # THE TREE ALREADY KNEW: scripts/test-dispatch-reap.sh:99 probes
+    # `command -v setsid` and emits a named skip under 1141-vf9w ("NOT the same
+    # as passing"). One caller asked and one did not.
+    #
+    # WITHOUT setsid THE GUARD STILL RUNS, deliberately degraded rather than
+    # skipped: the deadline, the poll and the 124 convention are unchanged, and
+    # only the process-GROUP signalling is lost. The kill lines below already
+    # fall back from `-$_pid` to `$_pid`, so a guard that leaves background
+    # children can outlive its deadline on such a host — which is exactly what
+    # setsid buys and why the summary SAYS the isolation was absent instead of
+    # letting a degraded run read as an isolated one.
+    if [ -z "${_PF_SETSID_PROBED:-}" ]; then
+        _PF_SETSID_PROBED=1
+        if command -v setsid >/dev/null 2>&1; then _PF_SETSID=setsid; else _PF_SETSID=""; fi
+    fi
+
     if sleep 0.1 2>/dev/null; then _tick=0.1; _per_s=10; else _tick=1; _per_s=1; fi
     _max=$(( _d * _per_s ))
-    ( cd "$SCRIPT_DIR" && exec setsid bash "$_p" ) >"$_out" 2>&1 </dev/null &
+    if [ -n "$_PF_SETSID" ]; then
+        ( cd "$SCRIPT_DIR" && exec setsid bash "$_p" ) >"$_out" 2>&1 </dev/null &
+    else
+        ( cd "$SCRIPT_DIR" && exec bash "$_p" ) >"$_out" 2>&1 </dev/null &
+    fi
     _pid=$!
     while kill -0 "$_pid" 2>/dev/null; do
         if [ "$_d" -gt 0 ] && [ "$_ticks" -ge "$_max" ]; then break; fi
@@ -638,18 +737,42 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     _pf_tmp="$(mktemp "${TMPDIR:-/tmp}/preflight.XXXXXX")" || _pf_tmp=""
     [ -n "$_pf_tmp" ] && trap 'rm -f "$_pf_tmp"' EXIT
     _pf_wall0=$SECONDS
-    _pf_ran=0; _pf_skipped=0; _pf_failed=0
+    # ORDER 1353-ryhq — FIVE CATEGORIES, NOT TWO. `skipped` conflated a guard
+    # that DECLARED its own skip with a guard the runner never got an answer
+    # from, and the summary then vouched for both with `ok:`. Measured on
+    # yolanda-windows 2026-09-22: ok:preflight:ran=68 skipped=31 wall=241s,
+    # exit 0 — and TWENTY of those 31 were guards cut off by the 5s deadline,
+    # each missing it by one or two seconds. A Windows author reading `ok:` and
+    # a zero exit reasonably concluded the guards had passed. About a third of
+    # the door had not run.
+    #
+    #   _pf_ran         executed and gave a verdict
+    #   _pf_declskip    RAN and declined, naming its own reason (skip:not-darwin,
+    #                   or a precondition this door states) — the guard's own
+    #                   considered statement, and not a gap (965-sxec)
+    #   _pf_deadline_n  started and was CUT OFF — not run; the gate runs it later
+    #   _pf_cantrun     the runner could not start it at all (no setsid, no disk,
+    #                   file absent). Nothing was learned about the tree.
+    #   _pf_failed      RAN and refused the tree
+    #
+    # The distinction that matters to a reader is the middle three: only
+    # _pf_declskip is a guard saying something. The other two are the door
+    # failing to obtain an answer, and a summary that hides them behind `ok:`
+    # is this row own defect.
+    _pf_ran=0; _pf_declskip=0; _pf_deadline_n=0; _pf_cantrun=0; _pf_failed=0
+    _pf_total=0
 
     while IFS= read -r _pf_path; do
         [ -n "$_pf_path" ] || continue
         _pf_base="${_pf_path##*/}"
+        _pf_total=$((_pf_total + 1))
 
         _pf_pre="$(_preflight_preconditions | awk -F'|' -v s="$_pf_base" '$1 == s { print $2 "|" $3; exit }')"
         if [ -n "$_pf_pre" ]; then
             _pf_kind="${_pf_pre%%|*}"; _pf_why="${_pf_pre#*|}"
             if [ "$_pf_kind" != "policy-binary" ]; then
                 echo "skip:preflight:${_pf_base%.sh}:$_pf_kind — $_pf_why"
-                _pf_skipped=$((_pf_skipped + 1))
+                _pf_declskip=$((_pf_declskip + 1))
                 continue
             fi
             _pf_bin=""
@@ -659,13 +782,13 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
             fi
             if [ -z "$_pf_bin" ]; then
                 echo "skip:preflight:${_pf_base%.sh}:$_pf_kind — $_pf_why"
-                _pf_skipped=$((_pf_skipped + 1))
+                _pf_declskip=$((_pf_declskip + 1))
                 continue
             fi
         fi
         if [ ! -f "$SCRIPT_DIR/$_pf_path" ]; then
-            echo "skip:preflight:${_pf_base%.sh}:absent"
-            _pf_skipped=$((_pf_skipped + 1))
+            echo "could-not-run:preflight:${_pf_base%.sh}:absent — the file is not in this checkout, so nothing was learned about the tree"
+            _pf_cantrun=$((_pf_cantrun + 1))
             continue
         fi
 
@@ -702,10 +825,53 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                 # prints `skip:not-darwin …` and exits non-zero, and this door
                 # called it `refused` — 1309-fhxb's shape inside the fix for 1305.
                 grep -E '^skip:' "$_pf_tmp" | head -2
-                _pf_skipped=$((_pf_skipped + 1))
+                _pf_declskip=$((_pf_declskip + 1))
+            elif grep -qE '^could-not-run:' "$_pf_tmp"; then
+                # SECOND, DELIBERATELY — the `^skip:` arm above wins a tie.
+                # MEASURED 2026-09-22: after 1354-apns, check-gate-memory-floor
+                # prints BOTH `could-not-run:gate-memory:no-meminfo:...` and
+                # `skip:gate-memory:no-meminfo`, and it RAN. A guard that ran
+                # and named its own reason is a DECLARED SKIP (965-sxec), not a
+                # gap; scoring it could-not-run would put it in `unanswered`
+                # and make the door report partial: for a guard that gave its
+                # considered statement. With the arms in the other order this
+                # change quietly demoted a properly-named skip, which is arm 4's
+                # own principle broken by the fix for arm 5.
+                # THIS ARM IS FOR A GUARD THAT SAYS ONLY `could-not-run:`.
+                # THE GUARD RAN AND SAID IT COULD NOT ASK. Distinct from the
+                # launch failure below, which is the RUNNER failing to start it,
+                # and distinct from a refusal: nothing was learned about the
+                # tree either way, so it belongs in could-not-run rather than in
+                # refused. FOUND BY RUNNING THIS DOOR ON macOS, 2026-09-22:
+                # check-gate-memory-floor prints
+                # `could-not-run:gate-memory:no-meminfo` and exits 3 on a host
+                # with no /proc/meminfo, and this runner booked it as a REFUSAL
+                # — the exact conflation this order exists to remove, in the
+                # order's own runner, one branch below the one it fixed.
+                grep -E '^could-not-run:' "$_pf_tmp" | head -2
+                _pf_cantrun=$((_pf_cantrun + 1))
             elif [ "$_pf_rc" -eq 124 ]; then
                 echo "skip:preflight:${_pf_base%.sh}:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_deadline}s front-door deadline; the gate still runs it"
-                _pf_skipped=$((_pf_skipped + 1))
+                _pf_deadline_n=$((_pf_deadline_n + 1))
+            elif [ "$_pf_rc" -eq 127 ] || grep -qE '(^|: )(exec: )?[A-Za-z0-9_.-]+: (not found|command not found)$' "$_pf_tmp"; then
+                # THE RUNNER COULD NOT START IT. A missing interpreter or helper
+                # is not the guard refusing the tree, and booking it as a refusal
+                # is what made macOS print 110 `refused:` lines naming 110 guards
+                # when the thing that failed was one absent binary (macneo,
+                # 2026-09-22: exec: setsid: not found, ran=0, failed=110).
+                # The guard is not at fault and the tree was never examined.
+                _pf_cantrun=$((_pf_cantrun + 1))
+                sed 's/^/  /' "$_pf_tmp" >&2
+                echo "could-not-run:preflight:${_pf_base%.sh}:rc=$_pf_rc — the runner could not start it; nothing was learned about the tree" >&2
+            elif grep -qE 'No space left on device' "$_pf_tmp"; then
+                # ORDER 1349-53h6 — RUNNER RESOURCE EXHAUSTION IS NOT TREE REFUSAL.
+                # When a guard fails because the checkout or /tmp filesystem ran out
+                # of space, the runner failed to execute the guard; the tree was never
+                # examined. Booking this as refused: conflated "the subject is wrong"
+                # with "the runner ran out of disk".
+                _pf_cantrun=$((_pf_cantrun + 1))
+                sed 's/^/  /' "$_pf_tmp" >&2
+                echo "could-not-run:preflight:${_pf_base%.sh}:no-space — runner resource exhaustion (No space left on device); nothing was learned about the tree" >&2
             else
                 _pf_failed=$((_pf_failed + 1))
                 cat "$_pf_tmp" >&2
@@ -716,11 +882,61 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
 $(_preflight_roster | sort -u)
 PFEOF
 
-    if [ "$_pf_failed" -gt 0 ]; then
-        echo "refused:preflight:ran=$_pf_ran skipped=$_pf_skipped failed=$_pf_failed wall=$(( SECONDS - _pf_wall0 ))s" >&2
+    # ORDER 1352-vmbc. NAME THE ISOLATION MODE IN THE VERDICT. A run without
+    # setsid keeps every deadline and every convention but loses process-GROUP
+    # signalling, so a guard that leaves background children can outlive its
+    # deadline. That is a real difference in what the run PROVED, and a reader
+    # must see it without opening build.sh.
+    #
+    # MERGE NOTE (1353-ryhq x 1352-vmbc, 2026-09-22): both orders rewrote these
+    # summary lines in the same week and the conflict was real rather than
+    # textual. The resolution keeps BOTH facts because they answer different
+    # questions about the same run: `isolation=` says what the runner could
+    # GUARANTEE about a guard it started, and the categories below say whether a
+    # guard was started and answered at all. Dropping either one restores a
+    # summary that reads as coverage it does not have. isolation= is carried on
+    # EVERY verdict line, including the two this order added, for 1352-vmbc's
+    # own reason: pinning it only to the refusal would let a green run hide a
+    # degraded one.
+    _pf_iso="isolation=session"
+    command -v setsid >/dev/null 2>&1 || _pf_iso="isolation=none-no-setsid"
+
+    # ORDER 1353-ryhq — THE VERDICT STATES ITS CATEGORIES AND THEIR SUM, AND
+    # NEVER A FIXED COUNT. The guard set differs by checkout: two Macs measured
+    # the same defect as failed=108 and failed=110 within minutes of each other
+    # on 2026-09-22. So the accounting arm asserts that the categories add up to
+    # the roster, which is true on every host, rather than any number, which is
+    # true on none of them for long.
+    _pf_wall=$(( SECONDS - _pf_wall0 ))
+    _pf_counts="ran=$_pf_ran declared-skip=$_pf_declskip skipped-by-deadline=$_pf_deadline_n could-not-run=$_pf_cantrun refused=$_pf_failed"
+    _pf_sum=$(( _pf_ran + _pf_declskip + _pf_deadline_n + _pf_cantrun + _pf_failed ))
+    if [ "$_pf_sum" -ne "$_pf_total" ]; then
+        # A CATEGORY SET THAT DOES NOT ADD UP CANNOT BE READ AT ALL, and a
+        # miscount here would hide exactly what this row exists to surface.
+        echo "refused:preflight:accounting-mismatch: $_pf_counts sum=$_pf_sum roster=$_pf_total $_pf_iso — the door cannot account for every guard it enumerated, so no verdict it prints can be trusted" >&2
         exit 1
     fi
-    echo "ok:preflight:ran=$_pf_ran skipped=$_pf_skipped wall=$(( SECONDS - _pf_wall0 ))s"
+
+    # NOT VOUCHED FOR: a guard cut off by the deadline and a guard the runner
+    # could not start are both guards that did not examine this tree. A
+    # DECLARED skip is not in this number — that one ran and said so.
+    _pf_unanswered=$(( _pf_deadline_n + _pf_cantrun ))
+
+    if [ "$_pf_failed" -gt 0 ]; then
+        echo "refused:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s" >&2
+        exit 1
+    fi
+    if [ "$_pf_unanswered" -gt 0 ]; then
+        # DELIBERATELY NOT `ok:`. The old line said ok: here and exited 0, and a
+        # reader who saw both concluded the guards had passed — on Windows that
+        # was 68 of 99 with twenty cut off one or two seconds past the budget.
+        # The exit stays 0 because nothing REFUSED; the token changes because
+        # nothing vouched either.
+        echo "partial:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s"
+        echo "partial:preflight: ${_pf_unanswered} guard(s) did not examine this tree — this run does not vouch for them; the gate still runs them" >&2
+        exit 0
+    fi
+    echo "ok:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s"
     exit 0
 fi
 
@@ -1520,9 +1736,31 @@ _write_gate_stamp() {
         _info "No tracked file was written during the gate"
     fi
 
+    # ORDER 765-xpct — A RUN THAT SKIPPED GUARDS MUST NOT STAMP `--scope full`.
+    # That stamp is what every later reader consults to ask "was this tree fully
+    # gated", including the release gate's freshness check. Writing `full` after
+    # the selector skipped anything would make a scoped run indistinguishable
+    # from a whole one — which is precisely the silence this row exists to
+    # prevent, one level up from the litmus tier that --check never runs.
+    #
+    # The scope written is the class set the run actually covered, in
+    # gate-stamp's own vocabulary (765-dt8h), so `gate-stamp.sh scope` reads it
+    # back and enforce_stamp_scope compares it against what is being pushed.
+    # AND THE FULL-RUN MARKER IS ONLY TOUCHED WHEN NOTHING WAS SKIPPED: a chain
+    # of scoped runs must never renew its own licence to keep being scoped.
     _step "Writing the gate stamp..."
-    if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write --scope full --dispatch "$_stamp_dispatch" >/dev/null 2>&1; then
-        _info "Gate stamp recorded (pre-push will accept this tree)"
+    _stamp_scope=full
+    if [ "${_CLASS_SKIPPED:-0}" -gt 0 ]; then
+        _stamp_scope="$(printf '%s' "$_CLASS_SET_MEMO" | tr '\n' ',' | sed 's/,$//')"
+        _warn "class selector skipped ${_CLASS_SKIPPED} guard(s); stamping scope=$_stamp_scope, NOT full"
+    fi
+    if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write --scope "$_stamp_scope" --dispatch "$_stamp_dispatch" >/dev/null 2>&1; then
+        if [ "${_CLASS_SKIPPED:-0}" -eq 0 ]; then
+            change_class_record_full_run
+            _info "Gate stamp recorded, scope=full (pre-push will accept this tree)"
+        else
+            _info "Gate stamp recorded, scope=$_stamp_scope — this run was NOT full and the last-full marker is unchanged"
+        fi
     else
         _warn "Could not record gate stamp — pre-push may ask you to re-run the gate"
         # Never leave a live token behind: an unconsumed token is a standing
@@ -2486,6 +2724,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "must-ship-next release advisory fixture passed"
 
+    # ORDER 1369-sjbc. The release jobs upload a staged copy to `unstable` whose
+    # installers default to unstable; the versioned copy keeps stable. Hermetic,
+    # a few seconds; wired in local-ci.sh as well.
+    _step "Checking the unstable-channel installer default (1369-sjbc)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-unstable-installer-defaults-to-unstable.sh" 2>&1; then
+        _error "an installer fetched from the unstable release can again install stable"
+        exit 1
+    fi
+    _info "unstable-channel installer default fixture passed"
+
     # ORDER 970-7fqk. The stale-stamp refusal names paths whose CONTENT moved,
     # on the same axis the staleness decision uses, and keeps the mtime list as
     # the live-writer hint 864-q7dm built it to be. Hermetic: every arm stamps
@@ -2753,6 +3001,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Instrument freshness fixture passed"
+
+    # Order 1267-uafx. The same lane's REMEDY line: a fresher candidate is
+    # named only if it RUNS, so the WSL gate's Linux ELF is never recommended
+    # to a Windows host whose .exe it sits beside.
+    _step "Checking the stale-binary remedy names only a runnable binary (1267-uafx)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh" 2>&1; then
+        _error "the plan-only lane's remedy named a binary that cannot run on this host"
+        exit 1
+    fi
+    _info "Runnable-remedy fixture passed"
 
     # Order 628-r2vk. The NEW-surface railguard: a user-visible tray surface
     # (menu id, notification, status chip, tooltip) cannot land without a
@@ -3227,12 +3485,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Plan-binary probe usage check passed"
 
+    # PILOT 1 of the class selector (765-xpct). Declared inputs: the plan ledger
+    # and the plan crate, because this guard reads plan/index.d and the fold that
+    # tillandsias-plan performs — measured at 2,381ms of the warm --check by the
+    # velocity audit, and a pure function of those two path families.
     _step "Checking for fragment status transitions the fold discards..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
+    if _class_may_skip fragment-status-loss plan-ledger path:crates/tillandsias-plan/*; then
+        _class_skip_line fragment-status-loss plan-ledger path:crates/tillandsias-plan/*
+    elif ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
         _error "a fragment declares a status the fold does not apply — write a status: LWW entry instead (plan/index.d/README.md)"
         exit 1
+    else
+        _info "Fragment status-loss check passed"
     fi
-    _info "Fragment status-loss check passed"
 
     # Order 831-ezea. The sibling of the check above, on the other axis: that
     # one asks whether a fragment's CLOSURE reached the fold; this one asks
@@ -3621,12 +3886,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # packet whose LIVE status is non-terminal — such a pin reds the 4-verifier
     # ratification harness on the next legitimate ledger update (it fired 3x:
     # 394d twice, 394e). Terminal pins and frozen-fixture pins are exempt.
+    # PILOT 2 of the class selector (765-xpct). Declared inputs: the spec/litmus
+    # corpus, the plan ledger, and the plan crate — it compares groundtruth pins
+    # against LIVE packet status, so it reads all three and nothing else.
+    # Measured at 1,083ms of the warm --check by the velocity audit.
     _step "Checking groundtruth cases for mutable-status pins (680-zphp)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-groundtruth-mutable-status-pins.sh" 2>&1; then
+    if _class_may_skip groundtruth-mutable-status-pins specs plan-ledger path:crates/tillandsias-plan/*; then
+        _class_skip_line groundtruth-mutable-status-pins specs plan-ledger path:crates/tillandsias-plan/*
+    elif ! _run bash "$SCRIPT_DIR/scripts/check-groundtruth-mutable-status-pins.sh" 2>&1; then
         _error "an expert-groundtruth case pins status on a live non-terminal packet — it will red the harness on the next ledger update (680-zphp)"
         exit 1
+    else
+        _info "Groundtruth status-pin guard passed"
     fi
-    _info "Groundtruth status-pin guard passed"
 
     # Order 440 / 599-4wzr: the status vocabulary in plan/index.yaml
     # (default_status_values) and plan/schema.yaml (statuses) must not diverge —
