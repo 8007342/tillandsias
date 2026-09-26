@@ -136,6 +136,44 @@ printf '#!/usr/bin/env bash\n. <(printf X=1) # procsub-source: ok (fixture)\n' >
 expect "procsub-exemption-passes" "ok:bash-dialect-clean" 0
 rm "$TMP/procsub.sh"
 
+# 1399-wtpq: a multi-line value in `awk -v` is EMPTY on BSD awk ("newline in
+# string"). The two real call sites of 2026-09-26, verbatim in shape; both
+# were masked (the 88tp block ran under `2>/dev/null || true`, the tsfu join
+# had no rc check), which is why each read as a clean run on darwin.
+cat > "$TMP/awkv.sh" <<'EOF'
+#!/usr/bin/env bash
+_pt_digests="$(tr '\n' '\0' <<<"$_pt_files" | xargs -0 sha256sum 2>/dev/null || true)"
+{ printf '%s' "$_PER_TEST_LOG" | awk -F'\t' \
+    -v digests="$_pt_digests" \
+    'BEGIN { n = split(digests, dl, "\n") } { print }'; } 2>/dev/null || true
+EOF
+expect "awkv-88tp-digests-refused" "blocked:bash4-unguarded:1" 1
+cat > "$TMP/awkv.sh" <<'EOF'
+#!/usr/bin/env bash
+floor_text="$(grep -vE '^#' "$FLOOR")"
+joined="$(awk -v ft="$floor_text" '
+    BEGIN { n = split(ft, L, "\n") } NF == 2 { print }' <<<"$counts")"
+EOF
+expect "awkv-tsfu-floor-refused" "blocked:bash4-unguarded:1" 1
+# The remedy passes; so does a scalar -v the program never splits on "\n";
+# so does the exemption marker on the -v line.
+cat > "$TMP/awkv.sh" <<'EOF'
+#!/usr/bin/env bash
+joined="$(FT="$floor_text" awk 'BEGIN { n = split(ENVIRON["FT"], L, "\n") }' <<<"$counts")"
+EOF
+expect "awkv-environ-remedy-passes" "ok:bash-dialect-clean" 0
+cat > "$TMP/awkv.sh" <<'EOF'
+#!/usr/bin/env bash
+ps -W | awk -v p="$pid" '$4 == p { found = 1 } END { exit !found }'
+EOF
+expect "awkv-scalar-not-flagged" "ok:bash-dialect-clean" 0
+cat > "$TMP/awkv.sh" <<'EOF'
+#!/usr/bin/env bash
+awk -v t="$tags" 'BEGIN { n = split(t, T, "\n") }' # awk-v-multiline: ok (fixture)
+EOF
+expect "awkv-exemption-passes" "ok:bash-dialect-clean" 0
+rm "$TMP/awkv.sh"
+
 # 1374-4u6i: the count is FILES. One file tripping two rules is one; two
 # offending files are two.
 printf '#!/usr/bin/env bash\nmap%s -t arr < "$1"\n' 'file' > "$TMP/two-a.sh"
