@@ -442,8 +442,18 @@ fn strip_verbatim(p: PathBuf) -> PathBuf {
 
 /// The path the CONTAINMENT test compares against the (canonical) root: the
 /// nearest existing ancestor of `normalized`, canonicalised, with the not-yet-
-/// existing tail re-appended. Falls back to `normalized` when no ancestor can
-/// be canonicalised.
+/// existing tail re-appended. `None` when it cannot be resolved; every caller
+/// REFUSES on `None`, so there is no lexical fallback (order 1412-n5cp: the
+/// old fallback admitted an unresolvable path, which is fail-open).
+///
+/// ORDER 1412-n5cp. The probe uses `symlink_metadata`, which does NOT follow
+/// links. With `exists()` (which follows), a DANGLING in-root link
+/// (root/x -> /outside/newfile, target absent) read as absent, became a tail
+/// NAME re-appended to the canonical root, and passed containment. Measured
+/// end to end, today's verbs were safe only by incident (fs.write's
+/// temp-and-rename replaces the link; fs.mkdir hits EEXIST), not because the
+/// sandbox refused. Now the link is the probe point, its target cannot be
+/// canonicalised, and the path is refused.
 ///
 /// ORDER 1411-b5fk. The root is canonicalised, but a request was compared only
 /// after LEXICAL normalisation, so any symlinked prefix of the root failed
@@ -451,27 +461,24 @@ fn strip_verbatim(p: PathBuf) -> PathBuf {
 /// under a temp dir (`/var/folders/…`) was refused as "outside the repository
 /// root" and `lua_std::the_archiver_sweeps_in_the_default_sandbox` failed on
 /// every Mac, 3/3. Linux `/tmp` is not a symlink, so Linux was green.
-fn containment_path(normalized: &Path) -> PathBuf {
+fn containment_path(normalized: &Path) -> Option<PathBuf> {
     let mut probe = normalized.to_path_buf();
     let mut tail: Vec<std::ffi::OsString> = Vec::new();
-    while !probe.exists() {
-        match probe.file_name() {
-            Some(name) => {
-                tail.push(name.to_os_string());
-                probe.pop();
-            }
-            None => return normalized.to_path_buf(),
+    // symlink_metadata: a dangling link EXISTS here, so it becomes the probe
+    // point instead of a tail name.
+    while std::fs::symlink_metadata(&probe).is_err() {
+        let name = probe.file_name()?.to_os_string();
+        tail.push(name);
+        if !probe.pop() {
+            return None;
         }
     }
-    match probe.canonicalize().map(strip_verbatim) {
-        Ok(mut resolved) => {
-            for name in tail.iter().rev() {
-                resolved.push(name);
-            }
-            resolved
-        }
-        Err(_) => normalized.to_path_buf(),
+    // A dangling link, or anything else that will not resolve, is refused.
+    let mut resolved = probe.canonicalize().map(strip_verbatim).ok()?;
+    for name in tail.iter().rev() {
+        resolved.push(name);
     }
+    Some(resolved)
 }
 
 /// Resolve a path for an fs WRITE verb (order 1380-u7sq): the same rooting as
@@ -488,7 +495,11 @@ fn resolve_write_path(root: &Path, path_str: &str, verb: &str) -> Result<PathBuf
     } else {
         normalize_path(&root.join(path))
     };
-    let contained = containment_path(&normalized);
+    let Some(contained) = containment_path(&normalized) else {
+        return Err(format!(
+            "{verb}: refused — '{path_str}' cannot be resolved (a dangling or unresolvable symlink); the sandbox cannot prove it stays inside the repository root"
+        ));
+    };
     if !contained.starts_with(root) || contained == root {
         return Err(format!(
             "{verb}: refused — path '{path_str}' is outside the repository root (or is the root itself)"
@@ -912,7 +923,9 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                 };
                 // 1411-b5fk: compare after resolving a symlinked prefix of the
                 // root (macOS /var -> /private/var), exactly as the write verbs do.
-                if !containment_path(&normalized).starts_with(&root) {
+                // 1412-n5cp: an unresolvable path is refused, never compared
+                // lexically.
+                if !containment_path(&normalized).is_some_and(|c| c.starts_with(&root)) {
                     return Err(mlua::Error::RuntimeError(format!(
                         "fs.read: refused — path '{path_str}' is outside repository root"
                     )));
@@ -1372,8 +1385,34 @@ mod tests {
             "a symlink resolving outside the root must be refused: {got:?}"
         );
         assert!(
-            !containment_path(&req).starts_with(&root),
+            !containment_path(&req).is_some_and(|c| c.starts_with(&root)),
             "containment must see through the escaping symlink"
         );
+    }
+
+    /// ORDER 1412-n5cp. A DANGLING in-root link to an outside path is refused
+    /// by the SANDBOX for every write verb, and named as unresolvable. Pre-fix,
+    /// every one of these was admitted (safe only by how the verbs wrote).
+    #[cfg(unix)]
+    #[test]
+    fn a_dangling_in_root_symlink_is_refused_by_every_write_verb() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root_dir = dir.path().join("root");
+        let outside = dir.path().join("outside");
+        std::fs::create_dir(&root_dir).expect("mkdir root");
+        std::fs::create_dir(&outside).expect("mkdir outside");
+        std::os::unix::fs::symlink(outside.join("newfile"), root_dir.join("x"))
+            .expect("dangling symlink");
+        let root = root_dir.canonicalize().expect("canonical root");
+        for verb in ["fs.write", "fs.mkdir", "fs.list", "fs.exists"] {
+            for req in [root.join("x"), root.join("x").join("sub")] {
+                let got = resolve_write_path(&root, req.to_str().unwrap(), verb);
+                let err = got.expect_err(&format!("{verb} admitted {}", req.display()));
+                assert!(err.contains("cannot be resolved"), "{verb}: {err}");
+            }
+        }
+        assert!(containment_path(&root.join("x")).is_none());
+        // A plain absent path (no link) is still resolvable and inside.
+        assert!(resolve_write_path(&root, root.join("new").to_str().unwrap(), "fs.write").is_ok());
     }
 }
