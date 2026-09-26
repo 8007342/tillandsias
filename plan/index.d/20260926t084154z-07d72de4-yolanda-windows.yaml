@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: archive-plan-packets-lua-shells-out-through-io-popen-strings-and-os-execute-so-it-is-the-last-caller-that-needs-the-unsandboxed-lua-cli
+    field: status
+    value: completed
+    ts: "2026-09-26T08:41:54Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: archive-plan-packets-lua-shells-out-through-io-popen-strings-and-os-execute-so-it-is-the-last-caller-that-needs-the-unsandboxed-lua-cli
+    event:
+      type: completed
+      ts: "2026-09-26T08:41:54Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: 324d7a955
+  - packet_id: archive-plan-packets-lua-shells-out-through-io-popen-strings-and-os-execute-so-it-is-the-last-caller-that-needs-the-unsandboxed-lua-cli
+    event:
+      type: note
+      ts: "2026-09-26T08:41:54Z"
+      host: yolanda-windows
+      summary: |-
+        LANDED on origin/linux-next at 324d7a955 (my 412d742b9 plus three relay-fixes: pairs-based emptiness, because 1384-bp6t withdrew next(); PLAN_BIN absolutized, because Linux resolves a relative program path against the child's cwd; and the self-naming could-not-run:archiver:index-tree-unreadable exit). Verified by content on trunk: the .lua uses proc.run and fs.write/mkdir/list/exists, with no io.popen, os.getenv, io.open or next(); os.execute appears only in a header comment. Both call sites pass --plan-bin, and register_fs_write_verbs is Observing-only. The closure's grep gives ZERO `lua --unsandboxed` callers in *.sh, build.sh or litmus YAML, pinned by lua_std's no_caller_of_the_unsandboxed_opt_in_remains. Ledger prose still quotes the flag, which is why the pin covers code paths only. Linux verdicts from the macuahuitl land gate: answerability 346/346, concurrent 2/2, ruby-absence 5/5, lua_std 12/12, lua_proc 8/8. NATIVE WINDOWS (yolanda): the sandboxed sweep test is green, and archive-plan-packets.sh --check ran both Lua sweep passes with orphans, ready-set and idempotency held. The answerability stage did not complete there (a dangling Nix symlink, filed as 1392-6tbs, then a memory reap), so answerability rests on the Linux verdict above. Still owed: a native re-check of the absolutized PLAN_BIN on the next native --check. Also fixed here: the Windows \?\ verbatim-root bug that refused every absolute fs path, fs.read included.

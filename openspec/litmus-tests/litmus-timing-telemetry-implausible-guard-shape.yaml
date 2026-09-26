@@ -84,7 +84,7 @@ critical_path:
   - step: "SCHEMA: --emit-timing carries reproduced=yes|no, and writes no key when absent or invalid"
     command: "bash scripts/test-timing-record-carries-reproduced.sh 2>&1 | tail -1"
     timeout_ms: 20000
-    expected_behavior: "ok:timing-record-reproduced:7/7"
+    expected_behavior: "ok:timing-record-reproduced:10/10"
 
   # Order 1242-4x53, slice 3. A failed rust-tests check re-runs exactly its
   # FAILED tests once, same env and seat, and records reproduced=yes|no. Arm 1
