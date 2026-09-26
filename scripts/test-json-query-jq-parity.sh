@@ -13,6 +13,7 @@
 #   ok:json-get-parity:<n>/<n>        every case matched (stdout bytes + rc)
 #   mismatch:<n>:<filter>             one line per divergent case, then rc=1
 #   blocked:json-get-absent           the binary has no `json` verb (pre-fix)
+#   skip:json-get-parity:no-plan-binary  no runnable binary; exit 3 (STEP_SKIP_EXIT), never 0
 #
 #   --regenerate   rewrite the golden from host jq (needs jq)
 set -uo pipefail
@@ -23,7 +24,7 @@ GOLDEN="$ROOT/scripts/portability/jq-subset-golden.txt"
 
 # shellcheck source=scripts/plan-binary-probe.sh
 . "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
-PLAN="$(resolve_plan_binary 2>/dev/null)" || { echo "skip:json-get-parity:no-plan-binary"; exit 0; }
+PLAN="$(resolve_plan_binary 2>/dev/null)" || { echo "skip:json-get-parity:no-plan-binary"; exit 3; }
 
 # Run one case under a tool; print its stdout followed by a final "rc=<n>".
 # `set -f` so a filter's `*`-free text and flags are never globbed.
