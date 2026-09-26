@@ -63,7 +63,8 @@ else skp "systemd-analyze absent (not a systemd host): units unverified here"; f
 long="$(printf 'a%.0s' $(seq 1 65))"
 for id in "../x" "a b" "$long" ""; do
     o="$(TILLANDSIAS_SWAP_CONF=/dev/null SWAP_DIR="$W/swapdir" "$H" start "$id")"; rc=$?
-    if [ "$rc" = 2 ] && [ "${o%%:*}" = refused ] && printf '%s' "$o" | grep -q '^refused:instance:' && [ ! -e "$W/swapdir" ]; then
+    case "$o" in refused:instance:*) prefix_ok=1 ;; *) prefix_ok=0 ;; esac
+    if [ "$rc" = 2 ] && [ "$prefix_ok" = 1 ] && [ ! -e "$W/swapdir" ]; then
         ok "start refuses instance '${id:0:12}' with refused:instance and creates nothing"
     else bad "instance '${id:0:12}': rc=$rc out=$o"; fi
 done
