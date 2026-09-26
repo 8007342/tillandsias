@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: project-info-expert-down-for-thirteen-hours-unfiled
+    field: status
+    value: completed
+    ts: "2026-09-26T17:39:51Z"
+    host: macos
+
+events:
+  - packet_id: project-info-expert-down-for-thirteen-hours-unfiled
+    event:
+      type: completed
+      ts: "2026-09-26T17:39:51Z"
+      host: macos
+      summary: |-
+        status 'completed' with evidence_refs: audit 2026-09-26 on tlatoanis-macbook-air (macOS): the outage no longer reproduces. .cache/metrics/forge-expert-health.jsonl holds 36 project-info records, 36 state=up, 0 down (latest 2026-09-26T17:39:01Z, stage=full); scripts/check-mcp-expert-health.sh -> ok:experts-healthy rc=0; live tool calls from this session succeed at the tool-call stage that failed in August (find_files returned ./scripts/check-mcp-expert-health.sh; grep_code answered)
+  - packet_id: project-info-expert-down-for-thirteen-hours-unfiled
+    event:
+      type: note
+      ts: "2026-09-26T17:39:51Z"
+      host: macos
+      summary: |-
+        audit-disposed as no longer reproducing: the August 12/12 tool-call-stage failure on macOS is absent over 36 probes and in live calls. A separate defect found during the audit (a long-running project-info server keeps serving pre-fix code while health reads up) is filed on its own row
