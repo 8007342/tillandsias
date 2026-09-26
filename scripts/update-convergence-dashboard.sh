@@ -6,6 +6,17 @@
 
 set -euo pipefail
 
+# 1191-vrjf: this renderer WRITES DATA FILES, so its numbers must not follow the
+# caller's locale. Under LC_NUMERIC=fr_FR.UTF-8 bash's `printf '%.1f'` refused
+# the dot-decimal percent outright ("printf: 89.8989898989899: nombre non
+# valable", measured on yoga) and, worse, rendered an integer as "89,0" into a
+# dashboard read as data. Pinned HERE, at the renderer's boundary, rather than
+# asked of callers: a fix that depends on the caller's environment is the same
+# defect in a new place. LC_ALL (not LC_NUMERIC alone) because a caller's
+# LC_ALL overrides LC_NUMERIC; nothing here sorts or matches classes, so C
+# changes numbers and nothing else.
+export LC_ALL=C
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE="${SOURCE:-$REPO_ROOT/target/convergence/centicolon-signature.jsonl}"
 DOC_DIR="$REPO_ROOT/docs/convergence"

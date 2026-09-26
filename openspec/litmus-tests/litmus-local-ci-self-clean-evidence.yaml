@@ -49,6 +49,18 @@ critical_path:
     failure_pattern: "^fail:generated-evidence-dirt$"
     timeout_ms: 10000
 
+  - step: "the dashboard's bytes do not depend on the caller's numeric locale"
+    # Order 1191-vrjf. Step 4 exits 0 on a C-locale host whatever the renderer
+    # does with numbers, so it never saw this: under LC_NUMERIC=fr_FR the
+    # renderer REFUSED a fractional percent ("printf: … nombre non valable",
+    # rc=1, yoga) and rendered an integer one as "90,0" with rc 0. The fixture
+    # asserts byte identity across C and a comma-decimal locale, for both
+    # cases, after proving its own premise; a host with no such locale prints a
+    # named skip in the verdict's skipped= count.
+    command: "bash scripts/test-convergence-dashboard-locale.sh"
+    success_pattern: "^ok:convergence-dashboard-locale:[0-9]+ arms \\(skipped=[0-9]+\\)$"
+    timeout_ms: 60000
+
 gating_points:
   - success: "ok:self-clean-evidence"
   - failure: "fail:generated-evidence-dirt"
