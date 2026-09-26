@@ -563,3 +563,86 @@ fn pure_shims_available_in_observing_class_too() {
         .expect("eval");
     assert!(verdict);
 }
+
+// ---------------------------------------------------------------------------
+// 1395-ue3i. fs.list(dir): sorted names, rooted, and part of the memo's input set.
+
+fn scratch_dir(tag: &str) -> (std::path::PathBuf, String) {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let rel = format!("target/fs-list-{tag}-{}", std::process::id());
+    let dir = root.join(&rel);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("mkdir");
+    (dir, rel)
+}
+
+/// PRE-FIX RESULT: FAILS — fs.list did not exist, and the memo keyed only on
+/// the bytes fs.read returned, so a verdict computed over a directory's
+/// membership would have been replayed after a file was added.
+#[test]
+fn a_cacheable_verdict_over_a_listing_is_re_evaluated_when_a_file_is_added() {
+    let (dir, rel) = scratch_dir("memo");
+    std::fs::write(dir.join("one.txt"), "x").expect("seed");
+    let mut reg = PredicateRegistry::new();
+    reg.register(
+        "one_entry",
+        PredicateClass::Cacheable,
+        "function one_entry(d) return #fs.list(d) == 1 end",
+    )
+    .expect("register");
+    assert!(reg.eval("one_entry", &rel).expect("eval 1"));
+    assert!(reg.eval("one_entry", &rel).expect("eval 2"));
+    assert_eq!(
+        reg.cache_hits, 1,
+        "an unchanged listing must be served from cache"
+    );
+    std::fs::write(dir.join("two.txt"), "y").expect("add");
+    let after = reg.eval("one_entry", &rel).expect("eval 3");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        !after,
+        "a stale verdict was served after a file was ADDED to the listed dir"
+    );
+    assert_eq!(
+        reg.cache_hits, 1,
+        "the changed listing must NOT be a cache hit"
+    );
+}
+
+#[test]
+fn fs_list_returns_names_in_byte_order_without_following_symlinks() {
+    let (dir, rel) = scratch_dir("order");
+    for n in ["b", "a", "C", "é"] {
+        std::fs::write(dir.join(n), "").expect("seed");
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("/etc", dir.join("zz-link")).expect("symlink");
+    let lua =
+        tillandsias_plan::lua_predicate::build_environment(PredicateClass::Cacheable).expect("env");
+    let got: String = lua
+        .load(format!(r#"return table.concat(fs.list("{rel}"), ",")"#))
+        .eval()
+        .expect("fs.list");
+    let _ = std::fs::remove_dir_all(&dir);
+    #[cfg(unix)]
+    assert_eq!(
+        got, "C,a,b,zz-link,é",
+        "a symlink is listed by NAME, never followed"
+    );
+    #[cfg(not(unix))]
+    assert_eq!(got, "C,a,b,é");
+}
+
+#[test]
+fn fs_list_refuses_outside_the_root_by_name() {
+    let lua =
+        tillandsias_plan::lua_predicate::build_environment(PredicateClass::Observing).expect("env");
+    for bad in ["../", "/etc"] {
+        let err = lua
+            .load(format!(r#"return fs.list("{bad}")"#))
+            .eval::<mlua::Value>()
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("fs.list: refused"), "{bad}: {err}");
+    }
+}
