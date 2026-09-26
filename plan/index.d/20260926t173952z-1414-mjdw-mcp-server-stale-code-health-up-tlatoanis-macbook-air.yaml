@@ -1,0 +1,36 @@
+packets:
+  - packet_id: a-long-running-project-info-mcp-server-keeps-serving-the-code-it-started-with-so-a-landed-fix-is-not-in-effect-and-the-health-probe-still-reads-up
+    order: 1414-mjdw
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [mcp, experts, observability]
+    estimated_hours: 2
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the deliverable is a staleness signal (a served script
+      digest compared with the checkout's); the pin lands with it.
+    title: |
+      the project-info MCP server is a long-running bash process that keeps the functions it parsed at startup, so a fix that lands in project-info.sh (1388-pfys grep_code alternation) is NOT in effect until the session restarts, and check-mcp-expert-health.sh still reports ok:experts-healthy while it returns wrong answers
+    verifiable_closure: |
+      bash scripts/check-mcp-expert-health.sh reports the project-info server as stale (not up) when the running
+      process's script differs from the checkout's project-info.sh; pre-fix result: FAILS (ok:experts-healthy while
+      serving pre-fix code).
+    context: |
+      MEASURED 2026-09-26 on tlatoanis-macbook-air during the 827-rjc9 audit. This session's project-info
+      server is pid 98394, started 2026-09-25 10:27 local, before 1388-pfys landed. The checkout's
+      project-info.sh carries the 1388 fix (last touched by de0473a79; grep -E used 6 times). The same query,
+      grep_code pattern="health_log|HEALTH_LOG" in scripts/check-mcp-expert-health.sh:
+        the running (stale) server  -> "No matches found"
+        the current script, driven over stdio JSON-RPC -> 4 matching lines (e.g. :222 HEALTH_LOG=…)
+        real grep -E                -> 10
+      Meanwhile check-mcp-expert-health.sh -> ok:experts-healthy, and the health log shows project-info up.
+      A wrong answer served as "No matches found" is the worst shape: an agent reads it as a verified absence.
+      The Start Of Day gate already says not to trust expert answers until source_commit == HEAD; project-info
+      exposes no source_commit, so that rule cannot be applied to it.
+    exit_criteria:
+      - 'project-info reports what it is serving (e.g. a digest of project-info.sh captured at startup) and the health probe compares it with the checkout; a mismatch reads stale, not up; pre-fix result: FAILS'
+      - a stale server is either restarted by the session's MCP lifecycle or reported so the reader can distrust its answers

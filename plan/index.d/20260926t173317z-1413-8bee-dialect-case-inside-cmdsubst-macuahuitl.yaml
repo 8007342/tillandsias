@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-bash-dialect-has-no-rule-for-an-unparenthesised-case-pattern-inside-a-command-substitution-which-bash-3-2-cannot-parse-so-a-linux-green-script-does-not-even-parse-on-every-mac
+    order: 1413-8bee
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [portability, bash, macos, guard, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-bash-dialect.sh
+      - scripts/test-check-bash-dialect.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixing commit adds a scenario to
+      scripts/test-check-bash-dialect.sh in the same commit (1136-n8sh). Closure:
+      an ADDED line carrying `$( … case "$x" in pat) … ;; esac … )` with an
+      unparenthesised pattern is refused by check-bash-dialect.sh, naming the
+      POSIX leading-paren form `(pat)` or a function as the remedy; the same line
+      with `(pat)` patterns is admitted. PRE-FIX RESULT: FAILS — 84f37ff24 carried
+      exactly that line through check-bash-dialect rc=0 and landed.
+    title: |
+      check-bash-dialect has no rule for an unparenthesised case pattern inside `$( )`, which bash 3.2 (every Mac) reads as the substitution's closing paren — 84f37ff24 passed the dialect check, landed green on Linux, and did not even PARSE on a Mac ("_p: unbound variable"); third bash-3.2-only class today after `. <(` and multi-line `awk -v` (1399-wtpq)
+    context: |
+      MEASURED by macbookair 2026-09-26 on /bin/bash 3.2.57, isolated:
+      `x=$(case "$p" in /*) echo a ;; *) echo b ;; esac)` gives "syntax error
+      near unexpected token `newline'"; the leading-paren POSIX form
+      `case "$p" in (/*) … ;; (*) … ;; esac` parses and answers correctly. bash 5
+      accepts both, so every Linux gate and author is blind to it. The instance
+      was the coordinator's own relay-fix for 1375-2x4e (hardware-fingerprint.sh),
+      corrected at b17f6a8a3 by moving the case into a function. A multi-line
+      `$(` with the case on its own lines may parse differently; the rule should
+      be measured on bash 3.2 for both shapes before it refuses either.
+    deliverable: |
+      A check-bash-dialect rule, scoped to added lines like its siblings, with a
+      scenario pair (refused / admitted) and a darwin run of the scenario.
+    provenance: |
+      Filed by the macuahuitl coordinator 2026-09-26 from macbookair's isolation.
