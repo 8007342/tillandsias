@@ -138,6 +138,7 @@ PATH="$stubdir:$PATH" "$FP" --json "$FIX/yoga-linux.json" >/dev/null \
     || fail "with jq shadowed, --json failed"
 calls="$(wc -l < "$JQ_STUB_LOG" | tr -d ' ')"
 [ "$calls" = 1 ] || fail "hardware-fingerprint.sh still called jq with jq shadowed: $(tail -n +2 "$JQ_STUB_LOG" | head -3 | tr '\n' ';')"
+echo "ok: jq-shadowed: fingerprint $without_jq identical with jq replaced by an exit-127 stub, jq calls=0 (control reached the stub)"
 rm -rf "$stubdir"
 
 echo "ok: the hardware fingerprint refuses an untrue twin claim, refuses to hash nothing, and is stable per document (805-r98w)"
