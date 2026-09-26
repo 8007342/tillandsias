@@ -1212,7 +1212,29 @@ pub async fn exec_over_stream_expect_dynamic<S>(
     stream: S,
     argv: &[&str],
     expects: Vec<DynamicExpect>,
+    on_event: impl FnMut(&str),
+) -> Result<ExecOutput, String>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    exec_over_stream_expect_dynamic_with_output(stream, argv, expects, on_event, |_| {}).await
+}
+
+/// [`exec_over_stream_expect_dynamic`] plus `on_output`, which receives every
+/// guest output chunk RAW and as it arrives (order 1383-dkxi).
+///
+/// `on_event` stays escaped and rate-limited on purpose: it is a log, and a log
+/// must not be forgeable by the guest it diagnoses. `on_output` is for the one
+/// case where the guest's terminal output IS the product: an interactive login
+/// whose device code and QR code the user has to see and scan. A QR code sent
+/// through the escaped, 200-byte, once-a-second preview is unreadable, which is
+/// how the macOS `--github-login` came to hide the code the user needed.
+pub async fn exec_over_stream_expect_dynamic_with_output<S>(
+    stream: S,
+    argv: &[&str],
+    expects: Vec<DynamicExpect>,
     mut on_event: impl FnMut(&str),
+    mut on_output: impl FnMut(&[u8]),
 ) -> Result<ExecOutput, String>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -1351,6 +1373,8 @@ where
                 // talking" is the single most useful early signal and waiting a
                 // second to say it defeats the point.
                 if !bytes.is_empty() {
+                    // 1383-dkxi: the raw sink sees every chunk, unthrottled.
+                    on_output(&bytes);
                     let now = std::time::Instant::now();
                     let due = last_preview
                         .map(|t: std::time::Instant| now.duration_since(t) >= EXEC_PREVIEW_MIN_GAP)
@@ -2493,6 +2517,89 @@ mod tests {
         assert!(
             seen.iter().any(|e| e.contains("matched: github token")),
             "a needle delivered one byte per frame must still be found: {seen:?}"
+        );
+    }
+
+    /// ORDER 1383-dkxi. The raw sink receives the guest's bytes EXACTLY: a QR
+    /// code is Unicode half-blocks and newlines, and the escaped log preview
+    /// turns it into `\xe2\x96\x80…`, unscannable. The log itself stays escaped.
+    #[tokio::test]
+    async fn raw_output_sink_receives_guest_bytes_unescaped_while_the_log_stays_escaped() {
+        let qr: Vec<u8> = "▀▄█\n\x1b[0m  code: ABCD-1234\n".as_bytes().to_vec();
+        let sent = qr.clone();
+        let (client, guest) = tokio::io::duplex(8192);
+        let mut guest = frame_stream(guest);
+        tokio::spawn(async move {
+            let _ = read_envelope(&mut guest).await.unwrap();
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![],
+                        build_version: None,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap(); // PtyOpen
+            for (seq, body) in [
+                ControlMessage::PtyData {
+                    session_id: 1,
+                    direction: PtyDirection::ToHost,
+                    bytes: sent,
+                },
+                ControlMessage::PtyClose {
+                    session_id: 1,
+                    exit: PtyExit {
+                        code: 0,
+                        signal: None,
+                    },
+                },
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                write_envelope(
+                    &mut guest,
+                    &ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: 2 + seq as u64,
+                        body,
+                    },
+                )
+                .await
+                .unwrap();
+            }
+        });
+
+        let raw = std::sync::Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+        let raw_sink = raw.clone();
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let ev_sink = events.clone();
+        let out = exec_over_stream_expect_dynamic_with_output(
+            client,
+            &["/bin/login"],
+            vec![],
+            move |ev| ev_sink.lock().unwrap().push(ev.to_string()),
+            move |bytes| raw_sink.lock().unwrap().extend_from_slice(bytes),
+        )
+        .await
+        .expect("a guest that prints and exits must succeed");
+
+        assert_eq!(out.exit.code, 0);
+        assert_eq!(
+            *raw.lock().unwrap(),
+            qr,
+            "the raw sink must see the guest's bytes exactly, unescaped"
+        );
+        let log = events.lock().unwrap().join("\n");
+        assert!(
+            !log.contains('▀') && log.contains("\\x1b"),
+            "the log preview must stay escaped (not forgeable by the guest): {log}"
         );
     }
 
