@@ -345,7 +345,10 @@ if [ "$1" == "--check" ]; then
     # One sweep of the per-run copy with the selected worker (order 560).
     _ap_sweep() {
         if [ "$_ap_backend" = "lua" ]; then
-            "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua"                 --index "$SCRATCH"/plan_tmp/index.yaml                 --archive "$SCRATCH"/plan_tmp/archive
+            # shellcheck disable=SC2086  # unquoted on purpose, see the probe
+            "$PLAN_BIN" lua $_lua_unsandboxed "$DIR/archive-plan-packets.lua" \
+                --index "$SCRATCH"/plan_tmp/index.yaml \
+                --archive "$SCRATCH"/plan_tmp/archive
         else
             _ruby "$SCRATCH"/archive-plan-packets-check.rb
         fi
@@ -410,6 +413,12 @@ if [ "$1" == "--check" ]; then
     # The .rb resolves the same binary; hand it the probed answer rather than
     # letting it re-derive one.
     export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
+    # 1375-btuf sandboxes `tillandsias-plan lua` by default; this worker needs
+    # os.execute/io.popen/os.getenv, so it passes the named opt-in WHEN the
+    # binary knows it. Feature-detected, not assumed: a pre-btuf binary rejects
+    # the flag and already runs the raw VM. Left UNQUOTED at each call so an
+    # empty value expands to no argument.
+    if "$PLAN_BIN" lua --unsandboxed -e '' >/dev/null 2>&1; then _lua_unsandboxed=--unsandboxed; else _lua_unsandboxed=; fi
     "$PLAN_BIN" --index "$SCRATCH"/plan_tmp/index.yaml ready > "$SCRATCH"/plan_tmp_ready_before.txt
     _ap_phase ready-before
 
@@ -551,9 +560,16 @@ if ! PLAN_BIN="$(resolve_plan_binary)"; then
     exit 3
 fi
 export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
+# 1375-btuf sandboxes `tillandsias-plan lua` by default; this worker needs
+# os.execute/io.popen/os.getenv, so it passes the named opt-in WHEN the
+# binary knows it. Feature-detected, not assumed: a pre-btuf binary rejects
+# the flag and already runs the raw VM. Left UNQUOTED at each call so an
+# empty value expands to no argument.
+if "$PLAN_BIN" lua --unsandboxed -e '' >/dev/null 2>&1; then _lua_unsandboxed=--unsandboxed; else _lua_unsandboxed=; fi
 
 if [ "$_ap_backend" = "lua" ]; then
-    "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua" "$@"
+    # shellcheck disable=SC2086  # unquoted on purpose, see the probe
+    "$PLAN_BIN" lua $_lua_unsandboxed "$DIR/archive-plan-packets.lua" "$@"
 else
     _ruby scripts/archive-plan-packets.rb
 fi
