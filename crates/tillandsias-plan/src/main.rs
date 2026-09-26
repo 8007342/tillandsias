@@ -513,7 +513,9 @@ const USAGE: &str = concat!(
     "                                     lost, operator-owned sections byte-identical, fold idempotent\n",
     "           loop-status-fragments      ORDER 582-nqw5. Report the loop_status.d/ overlay: live\n",
     "                                     fragments, malformed ones, and whether compaction is eligible\n",
-    "           lua <script.lua | -e code> [args...]\n",
+    "           lua [--class cacheable|observing | --unsandboxed] <script.lua | -e code> [args...]\n",
+    "                                     1375-btuf: SANDBOXED by default (observing env + json/yaml/hash/path/time);\n",
+    "                                     --unsandboxed is the named raw-VM opt-in (archive-plan-packets.sh only).\n",
     "                                     Run a Lua script or snippet with the embedded, tillandsias-managed\n",
     "                                     Lua 5.4 runtime (eliminates heterogeneous external script dependencies).\n",
     "           predicate <script.lua> [arg] [--class cacheable|observing] [--name fn_name]\n",
@@ -3950,7 +3952,54 @@ fn run_lua_cli(args: &[String]) {
         }
     }
 
-    let lua = mlua::Lua::new();
+    // 1375-btuf. SANDBOXED BY DEFAULT: the predicate bridge's Observing
+    // environment plus lua_std (json/yaml/hash/path/time, fs.read rooted at
+    // the repo, sh.run{argv}), with os.execute/io.popen/os.getenv gone.
+    // `--class cacheable` builds the pure environment, so an author can prove
+    // a predicate is pure before registering it. `--unsandboxed` is the NAMED
+    // opt-in to a raw mlua::Lua::new(); its only callers live in
+    // scripts/archive-plan-packets.sh (coordinator ruling 2026-09-26, pinned
+    // by tests/lua_std.rs) until that archiver is ported onto the std API.
+    let mut args: &[String] = args;
+    let mut unsandboxed = false;
+    let mut class = tillandsias_plan::lua_predicate::PredicateClass::Observing;
+    loop {
+        match args.first().map(String::as_str) {
+            Some("--unsandboxed") => {
+                unsandboxed = true;
+                args = &args[1..];
+            }
+            Some("--class") => {
+                class = match args.get(1).map(String::as_str) {
+                    Some("cacheable") => tillandsias_plan::lua_predicate::PredicateClass::Cacheable,
+                    Some("observing") => tillandsias_plan::lua_predicate::PredicateClass::Observing,
+                    other => {
+                        eprintln!("error: --class expects cacheable|observing, got {other:?}");
+                        std::process::exit(2);
+                    }
+                };
+                args = &args[2..];
+            }
+            _ => break,
+        }
+    }
+    if args.is_empty() {
+        eprintln!(
+            "usage: tillandsias-plan lua [--class cacheable|observing | --unsandboxed] <script.lua | -e code> [args...]"
+        );
+        std::process::exit(2);
+    }
+    let lua = if unsandboxed {
+        mlua::Lua::new()
+    } else {
+        match tillandsias_plan::lua_predicate::build_environment(class) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("error: failed to build the Lua environment: {e}");
+                std::process::exit(1);
+            }
+        }
+    };
 
     if args[0] == "-e" {
         if args.len() < 2 {

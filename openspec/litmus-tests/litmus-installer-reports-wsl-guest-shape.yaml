@@ -14,10 +14,13 @@
 # `processors` copied as a NUMBER when it is a POLICY, and test threads that
 # CARGO_BUILD_JOBS does not bound (24 of 25 cargo test invocations unpinned).
 #
-# THE FIX REPORTS AND OFFERS; IT NEVER WRITES THE USER'S FILE. `.wslconfig`
-# belongs to the user and may carry settings for unrelated work, so writing it
-# silently would be a worse defect than the one being fixed. Arm 5 is the arm
-# that enforces that, and it is the arm most worth reading.
+# THE FIX REPORTS AND OFFERS; IT NEVER WRITES THE USER'S FILE WITHOUT A YES.
+# `.wslconfig` belongs to the user and may carry settings for unrelated work,
+# so writing it silently would be a worse defect than the one being fixed.
+# 2026-09-26 the row gained the swap keys, which ARE written -- absent keys
+# only, after an explicit [y/N] (default no) or TILLANDSIAS_WSLCONFIG=apply.
+# Arm 5 now enforces "every write sits inside the consent branch", and
+# scripts/test-installer-merges-wslconfig-swap-keys.sh RUNS the merge.
 #
 # ARM 0 IS WRITTEN FIRST AND ON PURPOSE. Every other arm reads the installer
 # source; if that read fails they see nothing and would report the SUBJECT as
@@ -30,16 +33,19 @@ description: >
   Pin 1339-r9xv: the Windows installer derives and REPORTS the guest shape the
   user's `.wslconfig` will produce, NAMES a known-bad vCPU-to-memory ratio with
   its measured numbers, warns that `autoMemoryReclaim` under `[wsl2]` is inert,
-  and NEVER writes `.wslconfig` itself. Falsifiable against the pre-fix
-  installer (5 arms red) and against a sabotage that writes the file (arm 5).
+  and writes `.wslconfig` only inside the consent branch (absent swap keys,
+  never overwriting a present value). Falsifiable against the pre-fix
+  installer (5 arms red), against an unconsented write (arm 5), and by the
+  merge fixture's sabotages (overwrite, unescaped path, missing comment).
 severity: high
 size: instant
 
 preconditions:
   - workspace contains scripts/test-installer-reports-wsl-guest-shape.sh
   - workspace contains scripts/install-windows.ps1
-  - the fixture reads SOURCE only and needs no Windows host, so it runs
-    everywhere; it asserts nothing about a live WSL guest
+  - the shape fixture reads SOURCE only and runs everywhere; the merge fixture
+    RUNS the real function through PowerShell and names its run a skip where
+    no PowerShell exists. Neither asserts anything about a live WSL guest
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
@@ -49,7 +55,7 @@ critical_path:
     assert_exit: 0
     assert_output_contains: "ok: wsl-guest-shape-fixture-parses"
 
-  - step: "all seven arms pass against the real installer: it reads .wslconfig, derives the effective shape, names the ratio with its numbers, warns about [experimental], never writes the file, and refuses to advise when it cannot read the host"
+  - step: "all seven arms pass against the real installer: it reads .wslconfig, derives the effective shape, names the ratio with its numbers, warns about [experimental], writes the file only inside the consent branch, and refuses to advise when it cannot read the host"
     command: "bash scripts/test-installer-reports-wsl-guest-shape.sh"
     timeout_ms: 60000
     expected_behavior: "ok:installer-reports-wsl-guest-shape:7/7 arms"
@@ -57,14 +63,23 @@ critical_path:
     assert_output_contains: "ok:installer-reports-wsl-guest-shape:7/7 arms"
 
   # SOURCE PIN, asserted on the file directly so a fixture that stopped
-  # looking cannot hide it. The write-path count is the one that matters:
-  # zero is the requirement, and an earlier version of this arm could not
-  # catch its own sabotage because it demanded the write verb and the path be
-  # ADJACENT. `|| true` on every count is load-bearing -- grep -c exits 1 on a
+  # looking cannot hide it. The write-path count OUTSIDE the consent branch
+  # is the one that matters: zero is the requirement (the branch opens at
+  # `if ($doWsl) {` and closes at its `} else {`, which awk drops before
+  # counting). An earlier version of this arm could not catch its own
+  # sabotage because it demanded the write verb and the path be ADJACENT.
+  # `|| true` on every count is load-bearing -- grep -c exits 1 on a
   # legitimate zero and would fail this step on a CORRECT tree.
-  - step: "SOURCE PIN: the installer references .wslconfig and contains zero write paths targeting it"
-    command: "sed 's/#.*//' scripts/install-windows.ps1 > /tmp/wgs.$$ && m=$(grep -c 'wslconfig' /tmp/wgs.$$ || true) && w=$(grep -cE '(Set-Content|Out-File|Add-Content|New-Item|Move-Item|Copy-Item|Remove-Item).*\\$WslCfgPath' /tmp/wgs.$$ || true) && rm -f /tmp/wgs.$$ && test \"$m\" -gt 0 && test \"$w\" -eq 0 && echo \"ok: wslconfig-mentions=$m writes=$w\""
+  - step: "SOURCE PIN: the installer references .wslconfig and contains zero write paths targeting it outside the consent branch"
+    command: "sed 's/#.*//' scripts/install-windows.ps1 | awk '/doWsl\\) \\{/{s=1} s&&/\\} else \\{/{s=0;next} !s' > /tmp/wgs.$$ && m=$(grep -c 'wslconfig' /tmp/wgs.$$ || true) && w=$(grep -cE '(Set-Content|Out-File|Add-Content|New-Item|Move-Item|Copy-Item|Remove-Item|WriteAllLines|WriteAllText).*\\$WslCfgPath' /tmp/wgs.$$ || true) && rm -f /tmp/wgs.$$ && test \"$m\" -gt 0 && test \"$w\" -eq 0 && echo \"ok: wslconfig-mentions=$m unconsented-writes=$w\""
     timeout_ms: 15000
-    expected_behavior: "ok: wslconfig-mentions=<n>0 writes=0"
+    expected_behavior: "ok: wslconfig-mentions=<n>0 unconsented-writes=0"
     assert_exit: 0
-    assert_output_contains: "writes=0"
+    assert_output_contains: "unconsented-writes=0"
+
+  - step: "the swap-key merge adds exactly the absent keys, never overwrites a present one, and is idempotent (run through PowerShell where present)"
+    command: "bash scripts/test-installer-merges-wslconfig-swap-keys.sh"
+    timeout_ms: 60000
+    expected_behavior: "ok:wslconfig-merge-fixture:ran=<n> skipped=<m>"
+    assert_exit: 0
+    assert_output_contains: "ok:wslconfig-merge-fixture:"

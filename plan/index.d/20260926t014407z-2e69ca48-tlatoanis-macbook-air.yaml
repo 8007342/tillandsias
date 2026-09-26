@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-virtualization-framework-guest-boots-with-no-swap-so-the-vm-gets-a-dedicated-sparse-time-machine-excluded-swap-image-plus-guest-zram-and-the-balloon-is-never-inflated-under-a-running-forge
+    event:
+      type: progress
+      ts: "2026-09-26T01:44:07Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t014407z
+      host: tlatoanis-macbook-air
+      summary: |
+        Code slice on work/1377-hcnv (8a8fed562), not landed. Host: VzBootConfig.swap_disk; storage_attachment_plan gives root, swap (virtio serial tillandsias-swap), cidata; ensure_sparse_swap_image makes an 8 GiB set_len hole and leaves a right-sized image alone; /usr/bin/tmutil addexclusion, best-effort; the image is wiped with the VM. Guest: the cloud-init provision script (the path this VM actually runs, NOT images/vm/Recipefile or bootstrap/ as the row's owned_files say) installs zram-generator (zram0 2 GiB, priority 100) and tillandsias-swap.service (mkswap once, then swapon -p 10 on /dev/disk/by-id/virtio-tillandsias-swap). Non-fatal, so it can't trip the provision ERR trap.
+        Closure test vz_config_attaches_swap_image_after_root_disk passes; cargo test -p tillandsias-vm-layer 122 passed (default features), 177 passed / 4 ignored (--all-features), macOS arm64; clippy 0.
+        Balloon: nothing in the tree sets targetVirtualMachineMemorySize, so the never-inflate-under-a-forge criterion holds by absence today (no guard added).
+        OPEN: the LIVE arm (guest /proc/swaps shows vdb >= 8 GiB at prio 10 and zram0 at prio 100; tmutil isexcluded; du well under 1 GiB) needs a tray built from this ref plus a VM re-provision on this host. That wipe is destructive and is not covered by the release-smoke approval, so it waits on its own operator OK.

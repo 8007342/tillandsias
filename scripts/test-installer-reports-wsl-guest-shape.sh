@@ -95,12 +95,28 @@ fi
 # forbid exactly that. An arm that cannot catch its own named sabotage is
 # not an arm. Allow any run of non-newline characters between the verb and
 # the path, and count every match rather than asking whether one exists.
-_w=$(grep -cE '(Set-Content|Out-File|Add-Content|New-Item|Move-Item|Copy-Item|Remove-Item).*\$WslCfgPath' "$CODE" 2>/dev/null || true)
+#
+# 2026-09-26 (the swap keys, same row): the spec now REQUIRES one write -- the
+# absent swap keys, after an explicit yes. So the property is no longer "zero
+# writes" but "every write sits inside the consent branch", and it is asserted
+# by the same cardinality: the writes in the whole file must equal the writes
+# inside `if ($doWsl) { ... } else {`, and that branch must be reached only
+# from a [y/N] prompt (default NO) or TILLANDSIAS_WSLCONFIG=apply.
+# WriteAllLines joins the verb list: it is how the consented write is spelled,
+# and the old list would not have seen it at all.
+_wverbs='(Set-Content|Out-File|Add-Content|New-Item|Move-Item|Copy-Item|Remove-Item|WriteAllLines|WriteAllText).*\$WslCfgPath'
+_w=$(grep -cE "$_wverbs" "$CODE" 2>/dev/null || true)
 _w=$((_w + $(grep -cE '\$WslCfgPath.*(-Value|>>|>)' "$CODE" 2>/dev/null || true)))
-if [ "$_w" -eq 0 ]; then
-    _ok "ARM 5: the installer never writes .wslconfig -- it reports and offers only"
+_consent="$(awk '/^    if \(\$doWsl\) \{$/{on=1} on{print} on&&/^    \} else \{$/{exit}' "$CODE")"
+_wc=$(grep -cE "$_wverbs" <<<"$_consent" || true)
+_wc=$((_wc + $(grep -cE '\$WslCfgPath.*(-Value|>>|>)' <<<"$_consent" || true)))
+_gate=0
+grep -qF "[y/N]" "$CODE" && _gate=$((_gate + 1))
+grep -qF "\$env:TILLANDSIAS_WSLCONFIG -eq 'apply'" "$CODE" && _gate=$((_gate + 1))
+if [ "$_w" -gt 0 ] && [ "$_w" -eq "$_wc" ] && [ "$_gate" -eq 2 ]; then
+    _ok "ARM 5: all $_w write(s) of .wslconfig sit inside the consent branch ([y/N], default no, or TILLANDSIAS_WSLCONFIG=apply)"
 else
-    _bad "ARM 5: found $_w write path(s) targeting the user's .wslconfig -- it must never write that file"
+    _bad "ARM 5: $_w write(s) of .wslconfig, $_wc inside the consent branch, consent gate signals $_gate/2 -- every write must be consented"
 fi
 
 # --- ARM 6: could-not-measure is distinguished from a verdict --------------

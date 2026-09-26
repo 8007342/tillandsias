@@ -342,3 +342,43 @@ else
     say "  (open a new shell first to get 'tillandsias' on PATH)"
 fi
 echo ""
+
+# ── PENDING ACTIONS (order 1380-zmpi, design section 9.4) ───────────────────
+# Operator, 2026-09-26: "Linux hosts should just print that sudo command." The
+# one-time step is `sudo tillandsias-install-swap-service` (1376-8zdz): it
+# installs the root-owned swap template unit, so every later tray launch can
+# start and stop its own swap without sudo. The tray never runs sudo itself.
+#
+# THE COMMAND IS PRINTED ONLY WHEN IT EXISTS HERE. Until 1376-8zdz ships the
+# helper, printing it would hand the user a sudo line that fails with "command
+# not found", which is worse than no line. Once the unit is installed there is
+# nothing to do. "PENDING: none" is printed rather than omitted, because
+# silence and "nothing pending" produce the same bytes.
+# TILLANDSIAS_SWAP_UNIT is a test seam only (the fixture points it at a scratch path).
+# The two marker lines are what scripts/test-installers-print-pending-banner.sh
+# cuts on to RUN this block; keep them.
+# BEGIN-PENDING-BANNER
+pending_banner() {
+    _rule="================================================================"
+    printf '\n%s\n  PENDING ACTIONS\n%s\n' "$_rule" "$_rule"
+    if [ "$#" -eq 0 ]; then
+        printf '  PENDING: none\n'
+    else
+        for _p in "$@"; do printf '  >> %s\n' "$_p"; done
+    fi
+    printf '%s\n\n' "$_rule"
+}
+_swap_unit="${TILLANDSIAS_SWAP_UNIT:-/etc/systemd/system/tillandsias-swap@.service}"
+_swap_helper=""
+if [ -x "$INSTALL_DIR/tillandsias-install-swap-service" ]; then
+    _swap_helper="$INSTALL_DIR/tillandsias-install-swap-service"
+elif command -v tillandsias-install-swap-service >/dev/null 2>&1; then
+    _swap_helper="tillandsias-install-swap-service"
+fi
+if [ ! -e "$_swap_unit" ] && [ -n "$_swap_helper" ]; then
+    pending_banner "ONE-TIME, as root, so each tray launch can create and delete its own swap:" \
+        "  sudo $_swap_helper"
+else
+    pending_banner
+fi
+# END-PENDING-BANNER

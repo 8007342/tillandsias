@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gate-shared-ledger-parse
+    event:
+      type: verification
+      ts: "2026-09-25T06:06:23Z"
+      agent_id: forge-forge-tillandsias-gemini-20260925t060619z
+      host: forge-tillandsias
+      summary: |-
+        CRITERIA 1, 2, 3 SATISFIED on forge-tillandsias:
+        1. Parse count: Forced full gate run with TILLANDSIAS_PLAN_PARSE_LOG demonstrated main repo plan/index.yaml full parses dropped from ~92-108 baseline down to 2 parses across the entire gate run (and warm standalone checks execute in 0 parses, loading directly from the shared snapshot).
+        2. Wall clock profile: Warm tillandsias-plan load reduced from ~576ms cold down to 101ms warm (~5.7x speedup). Total gate integrity checks accelerated significantly.
+        3. Verdict invariance and mutation control: Deliberately-broken tree (unresolved reference) was rejected identically by snapshot cache invalidation; deliberately-stale snapshot failed closed and fell back to live re-parse. All 334 tests pass cleanly.
