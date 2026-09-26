@@ -64,7 +64,7 @@ while IFS=$'\t' read -r band corpus top1 top2 margin kind path question; do
     # The exact text the retriever returned, by path. First matching chunk:
     # good enough for a support judgement, and it keeps the judge honest by
     # never showing it text the retriever did not actually surface.
-    snippet="$("$JQ" -r --arg p "$path" 'select(.path == $p) | .text' \
+    snippet="$($JQ -r --arg p "$path" 'select(.path == $p) | .text' \
         "$INDEX_DIR/chunks.jsonl" 2>/dev/null | head -c 1200)"
     [ -n "$snippet" ] || snippet="(no text found for $path)"
 
@@ -103,11 +103,11 @@ EOF
 
     _ask() { # _ask <prompt> -> YES|NO|EMPTY|UNPARSED
         local b r raw
-        b="$("$JQ" -nc --arg m "$MODEL" --arg p "$1" \
+        b="$($JQ -nc --arg m "$MODEL" --arg p "$1" \
             '{model:$m, prompt:$p, stream:false, options:{temperature:0, num_predict:4}}')"
         r="$(curl -sS --max-time 180 -X POST "$ENDPOINT/api/generate" \
             -H 'content-type: application/json' -d "$b" 2>/dev/null)"
-        raw="$(printf '%s' "$r" | "$JQ" -r '.response // ""' | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
+        raw="$(printf '%s' "$r" | $JQ -r '.response // ""' | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')"
         case "$raw" in
             YES*) printf 'YES' ;;
             NO*) printf 'NO' ;;

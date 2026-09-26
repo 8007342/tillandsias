@@ -109,9 +109,9 @@ assert_true "dashboard_contract enumerates signature fields" \
 
 # --- Group 3: alert level classification -------------------------------------
 printf '\n  [group] alert level classification\n'
-RECORD_COUNT=$("$JQ" '.record_count // 0' "$JSON_PATH")
-LATEST_PCT=$("$JQ" -r '.latest.percent_closed // 0' "$JSON_PATH")
-LATEST_ALERT=$("$JQ" -r '.alert_level' "$JSON_PATH")
+RECORD_COUNT=$($JQ '.record_count // 0' "$JSON_PATH")
+LATEST_PCT=$($JQ -r '.latest.percent_closed // 0' "$JSON_PATH")
+LATEST_ALERT=$($JQ -r '.alert_level' "$JSON_PATH")
 if [ "$RECORD_COUNT" -gt 0 ]; then
     EXPECTED_ALERT=$(awk -v p="$LATEST_PCT" 'BEGIN {
         if (p < 90) print "red";
@@ -133,13 +133,13 @@ if [ "$RECORD_COUNT" -gt 0 ]; then
         "\"$JQ\" -e '.trend_metrics.coverage_avg_7d_percent | type == \"number\"' '$JSON_PATH' >/dev/null"
 
     # Compare against an independent computation from the history array
-    EXPECTED_PASS=$("$JQ" '.history[-7:] | (map(select(.ci_result == "PASS")) | length) / length * 100' "$JSON_PATH")
-    ACTUAL_PASS=$("$JQ" '.trend_metrics.pass_rate_7d_percent' "$JSON_PATH")
+    EXPECTED_PASS=$($JQ '.history[-7:] | (map(select(.ci_result == "PASS")) | length) / length * 100' "$JSON_PATH")
+    ACTUAL_PASS=$($JQ '.trend_metrics.pass_rate_7d_percent' "$JSON_PATH")
     assert_equal "pass_rate_7d_percent matches recomputation" \
         "$ACTUAL_PASS" "$EXPECTED_PASS"
 
-    EXPECTED_AVG=$("$JQ" '.history[-7:] | map(.percent_closed) | add / length' "$JSON_PATH")
-    ACTUAL_AVG=$("$JQ" '.trend_metrics.coverage_avg_7d_percent' "$JSON_PATH")
+    EXPECTED_AVG=$($JQ '.history[-7:] | map(.percent_closed) | add / length' "$JSON_PATH")
+    ACTUAL_AVG=$($JQ '.trend_metrics.coverage_avg_7d_percent' "$JSON_PATH")
     assert_equal "coverage_avg_7d_percent matches recomputation" \
         "$ACTUAL_AVG" "$EXPECTED_AVG"
 fi

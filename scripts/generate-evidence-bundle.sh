@@ -225,7 +225,7 @@ TRACES_COVERAGE_FILE="$BUNDLE_STAGING/traces-coverage.json"
 TRACE_OUTPUT=$("$SCRIPT_DIR/validate-traces.sh" 2>&1 || true)
 TRACE_ERRORS=$(printf '%s\n' "$TRACE_OUTPUT" | grep -c "^ERROR:" || true)
 TRACE_WARNINGS=$(printf '%s\n' "$TRACE_OUTPUT" | grep -c "^WARN:" || true)
-TRACE_DETAILS=$(echo "$TRACE_OUTPUT" | "$JQ" -Rs '.')
+TRACE_DETAILS=$(echo "$TRACE_OUTPUT" | $JQ -Rs '.')
 
 cat > "$TRACES_COVERAGE_FILE" <<EOF
 {
@@ -271,7 +271,7 @@ for litmus_file in "${LITMUS_SOURCE_FILES[@]}"; do
     LITMUS_PASSED=$((LITMUS_PASSED + $(litmus_count_passed "$litmus_file")))
     LITMUS_FAILED=$((LITMUS_FAILED + $(litmus_count_failed "$litmus_file")))
 done
-LITMUS_SUMMARY=$(echo "$LITMUS_OUTPUT" | tail -20 | "$JQ" -Rs '.')
+LITMUS_SUMMARY=$(echo "$LITMUS_OUTPUT" | tail -20 | $JQ -Rs '.')
 
 cat > "$LITMUS_RESULTS_FILE" <<EOF
 {
@@ -363,7 +363,7 @@ if [[ -f "$DASHBOARD_FILE" ]]; then
     if grep -q '"evidence_bundle_path"' "$DASHBOARD_FILE"; then
         # Create a temporary jq filter to update the field
         TEMP_DASHBOARD=$(mktemp)
-        "$JQ" --arg path "$OUTPUT_DIR/$BUNDLE_NAME" \
+        $JQ --arg path "$OUTPUT_DIR/$BUNDLE_NAME" \
            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
            '.evidence_bundle_path = $path | .evidence_bundle_generated = $ts' \
            "$DASHBOARD_FILE" > "$TEMP_DASHBOARD"

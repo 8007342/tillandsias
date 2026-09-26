@@ -271,7 +271,7 @@ execute_query_jq() {
         local count=0
         for log_file in "${log_files[@]}"; do
             if [[ -f "$log_file" ]]; then
-                count=$(( count + $("$JQ" -c "$jq_filter" "$log_file" 2>/dev/null | wc -l || echo 0) ))
+                count=$(( count + $($JQ -c "$jq_filter" "$log_file" 2>/dev/null | wc -l || echo 0) ))
             fi
         done
         echo "{\"count\": $count}"
@@ -290,13 +290,13 @@ execute_query_jq() {
         if [[ "$select_filter" == "." ]]; then
             cat "$temp_entries" > "$filtered_entries"
         else
-            "$JQ" -c "$select_filter" "$temp_entries" > "$filtered_entries" 2>/dev/null || touch "$filtered_entries"
+            $JQ -c "$select_filter" "$temp_entries" > "$filtered_entries" 2>/dev/null || touch "$filtered_entries"
         fi
 
         # Apply the stats operation using jq
         if [[ $query_str =~ stats\ count\(\)\ by\ ([a-zA-Z_]+) ]]; then
             local group_field="${BASH_REMATCH[1]}"
-            "$JQ" -s "group_by(.\"$group_field\") | map({group: .[0].\"$group_field\", count: length})" "$filtered_entries"
+            $JQ -s "group_by(.\"$group_field\") | map({group: .[0].\"$group_field\", count: length})" "$filtered_entries"
         else
             # For other stats, just echo the filtered entries
             cat "$filtered_entries"
@@ -306,7 +306,7 @@ execute_query_jq() {
     else
         # For other operations, just apply the filter
         for log_file in "${log_files[@]}"; do
-            [[ -f "$log_file" ]] && "$JQ" -c "$jq_filter" "$log_file" 2>/dev/null || true
+            [[ -f "$log_file" ]] && $JQ -c "$jq_filter" "$log_file" 2>/dev/null || true
         done
     fi
 }

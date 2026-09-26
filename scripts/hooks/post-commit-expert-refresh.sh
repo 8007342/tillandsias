@@ -190,8 +190,8 @@ if echo "$CHANGED" | grep -qE '^crates/tillandsias-plan/(lua/|src/pipeline\.rs|s
         if [ -x "$_sentinel_bin" ]; then
             # Decompose only — no inference needed, just verifies Lua loads
             _sentinel_out="$("$_sentinel_bin" --index "$REPO_ROOT/plan/index.yaml" decompose "what is the current direction" 2>/dev/null || true)"
-            if printf '%s' "$_sentinel_out" | "$JQ" -e 'type == "array" and length > 0' >/dev/null 2>&1; then
-                _count=$(printf '%s' "$_sentinel_out" | "$JQ" 'length')
+            if printf '%s' "$_sentinel_out" | $JQ -e 'type == "array" and length > 0' >/dev/null 2>&1; then
+                _count=$(printf '%s' "$_sentinel_out" | $JQ 'length')
                 echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) sentinel: ok:decompose:$_count-variants" >> "$HOOK_LOG"
             else
                 echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) sentinel: FAIL:decompose: $_sentinel_out" >> "$HOOK_LOG"
