@@ -22,7 +22,22 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/plan-binary-probe.sh
 . "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
-PLAN="$(resolve_plan_binary 2>/dev/null)" || { echo "skip:json-get-help:no-plan-binary"; exit 3; }
+# Resolve inside the checkout, not the caller's cwd, and absolutise the answer
+# (1401-x76w; the b17f6a8a3 shape). An explicit TILLANDSIAS_PLAN_BIN is the
+# caller's choice and is kept as given.
+_abs_plan() {
+    local p
+    p="$(resolve_plan_binary 2>/dev/null)" || return 1
+    case "$p" in
+        (/*) printf '%s' "$p" ;;
+        (*) printf '%s/%s' "$PWD" "${p#./}" ;;
+    esac
+}
+if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    PLAN="$(resolve_plan_binary 2>/dev/null)"
+else
+    PLAN="$(cd "$ROOT" && _abs_plan)"
+fi || { echo "skip:json-get-help:no-plan-binary"; exit 3; }
 
 help="$("$PLAN" json get --help 2>/dev/null)"
 help_rc=$?
