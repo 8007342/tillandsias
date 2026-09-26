@@ -134,11 +134,11 @@ frontier_raw() { inject bash "$1" linux 2>/dev/null; }
 frontier_vals() { printf '%s\n' "$1" | awk -F'\t' '/^frontier\t/{
     print $2; n=$6; sub(/^neglect=/,"",n); print n; p=$7; sub(/^p=/,"",p); print p }'; }
 raw="$(frontier_raw scripts/select-work-batch.sh)"
-if printf '%s\n' "$raw" | grep -q '^refused:no-plan-binary'; then
+if grep -q '^refused:no-plan-binary' <<<"$raw"; then
     # A precondition, not a verdict: no runnable plan binary means no frontier
     # to measure. Named skip, so the arm is visibly not scored.
     skipped=$((skipped+2))
-    echo "  skip: select-work-batch arms — $(printf '%s\n' "$raw" | grep -m1 '^refused:no-plan-binary')"
+    echo "  skip: select-work-batch arms — $(grep -m1 '^refused:no-plan-binary' <<<"$raw")"
 else
     v="$(frontier_vals "$raw")"
     if bad_v="$(every_dot select $v)"; then ok "select-work-batch frontier fields all dot-decimal ($(printf '%s\n' $v | wc -l | tr -d ' ') values) under $COMMA"
