@@ -4226,10 +4226,18 @@ plan_index:
     /// events) as the Value-domain fold — the strongest possible guarantee that
     /// compaction did not change state while preserving format.
     fn assert_fold_equivalent(index: &Path, base_raw: &str) {
+        let candidate = compact_text(index).expect("compacts").candidate;
+        assert_candidate_fold_equivalent(index, base_raw, &candidate);
+    }
+
+    /// The same assertion over a candidate the caller already rendered. The
+    /// live-ledger test used to render it twice, and on a 5.9 MB base with
+    /// ~2200 fragments each render is ~100 s (1406-9ctt: that one test was
+    /// 201 of the lib suite's 203 s).
+    fn assert_candidate_fold_equivalent(index: &Path, base_raw: &str, candidate: &str) {
         let base_doc: Value = serde_yaml::from_str(base_raw).expect("base parses");
         let merged = fold(&base_doc, &load_all(index));
-        let candidate = compact_text(index).expect("compacts").candidate;
-        let cand_doc: Value = serde_yaml::from_str(&candidate).expect("candidate parses");
+        let cand_doc: Value = serde_yaml::from_str(candidate).expect("candidate parses");
         let mut cp = Vec::new();
         crate::collect_packets(&cand_doc, &mut cp);
         let mut mp = Vec::new();
@@ -4457,7 +4465,7 @@ plan_index:
             );
         }
         assert_items_preserved(&raw, &c.candidate);
-        assert_fold_equivalent(&index, &raw);
+        assert_candidate_fold_equivalent(&index, &raw, &c.candidate);
         let _ = std::fs::remove_dir_all(&d);
     }
 

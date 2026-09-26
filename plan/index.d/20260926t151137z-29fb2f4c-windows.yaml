@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diff-scoped-deciders-read-git-diff-against-a-base-which-omits-untracked-files-so-a-brand-new-script-is-invisible-until-it-is-staged
+    event:
+      type: completed
+      ts: "2026-09-26T15:11:37Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: windows
+      summary: |
+        Landed in relay commit fac4aeee6 (relay: land work/1391-8ikx) on origin/linux-next. Verified by content: trunk decider enumerates git ls-files --others; fixture ok:sigpipe-verdict-pipelines-fixture:13. On the land40 union the fixed decider read ok:sigpipe-verdict-added:6 checked.
