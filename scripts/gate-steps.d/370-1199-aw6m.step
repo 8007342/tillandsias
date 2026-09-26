@@ -24,4 +24,4 @@ STEP_OK="selector host-scoped criteria annotation check passed"
 # the ledger is the fixture's own, so a batch with no host-scoped row cannot occur.
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="no runnable tillandsias-plan resolved, so the selector could not be driven"
-STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:host-scoped-criteria:5"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:host-scoped-criteria:6"
