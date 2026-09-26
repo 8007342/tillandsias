@@ -929,82 +929,20 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
     Ok(())
 }
 
-/// Write a GitHub token bundle (access token, optional refresh token, expiry timestamps) to Vault.
-pub fn write_github_token_bundle_to_vault(
-    token: &str,
-    refresh_token: Option<&str>,
-    expires_at: Option<u64>,
-    refresh_token_expires_at: Option<u64>,
-    client_id: Option<&str>,
-    debug: bool,
-) -> Result<(), String> {
-    if !container_running(VAULT_CONTAINER_NAME) {
-        if debug {
-            eprintln!(
-                "[tillandsias-vault] {VAULT_CONTAINER_NAME} not running; bringing Vault up on demand before token write"
-            );
-        }
-        ensure_vault_running(debug)
-            .map_err(|e| format!("could not bring Vault up to store the GitHub token: {e}"))?;
-    }
-    let _stability = vault_stability_lease(debug)?;
-    let rt = tokio_runtime()?;
-    let base_url = vault_api_base_url();
-    let root_token = read_and_handover_root_token(debug)?;
-    let client = vault_client(&base_url, &root_token, debug)?;
+/// Where the GitHub App credential lives in Vault (order 1383-5hpk).
+///
+/// TWO PATHS, deliberately. `secret/github/token` holds only what a git
+/// operation needs (the access token and its expiry) and is what the
+/// git-mirror policy reads. The REFRESH token mints new access tokens for
+/// months and must not be readable by the git-mirror service, which only ever
+/// needs the short-lived one. Vault KV v2 policies are path-scoped, not
+/// field-scoped, so the refresh token gets its own path, which no git-mirror
+/// grant covers (images/vault/policies/git-mirror.hcl names
+/// secret/data/github/token exactly).
+pub const GITHUB_TOKEN_PATH: &str = "secret/github/token";
+pub const GITHUB_REFRESH_PATH: &str = "secret/github/refresh";
 
-    let mut map = serde_json::Map::new();
-    map.insert(
-        "token".to_string(),
-        serde_json::Value::String(token.to_string()),
-    );
-    if let Some(rt_val) = refresh_token {
-        map.insert(
-            "refresh_token".to_string(),
-            serde_json::Value::String(rt_val.to_string()),
-        );
-    }
-    if let Some(exp) = expires_at {
-        map.insert(
-            "expires_at".to_string(),
-            serde_json::Value::Number(exp.into()),
-        );
-    }
-    if let Some(rexp) = refresh_token_expires_at {
-        map.insert(
-            "refresh_token_expires_at".to_string(),
-            serde_json::Value::Number(rexp.into()),
-        );
-    }
-    if let Some(cid) = client_id {
-        map.insert(
-            "client_id".to_string(),
-            serde_json::Value::String(cid.to_string()),
-        );
-    }
-
-    if debug {
-        eprintln!(
-            "[tillandsias-vault] writing GitHub token bundle to secret/github/token (has_refresh_token: {})",
-            refresh_token.is_some()
-        );
-    }
-    rt.block_on(client.write_secret("secret/github/token", serde_json::Value::Object(map)))
-        .map_err(|e| format!("vault write_secret failed: {e}"))?;
-    let read_back = rt
-        .block_on(client.read_secret("secret/github/token"))
-        .map_err(|e| format!("vault read_secret verification failed: {e}"))?;
-    if read_back["token"].as_str() != Some(token) {
-        return Err("vault read-back did not match written token".into());
-    }
-    println!(
-        "[tillandsias] GitHub token stored in Vault at secret/github/token (policy: git-mirror-policy)"
-    );
-    Ok(())
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct GitHubTokenBundle {
     pub token: String,
     pub refresh_token: Option<String>,
@@ -1013,47 +951,184 @@ pub struct GitHubTokenBundle {
     pub client_id: Option<String>,
 }
 
-pub fn read_github_token_bundle_from_vault(
-    debug: bool,
-) -> Result<Option<GitHubTokenBundle>, String> {
-    if !container_running(VAULT_CONTAINER_NAME) {
-        return Ok(None);
+/// The token-path record: what the git-mirror service may read.
+fn github_token_record(b: &GitHubTokenBundle) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    map.insert("token".into(), b.token.clone().into());
+    if let Some(exp) = b.expires_at {
+        map.insert("expires_at".into(), exp.into());
     }
-    let _stability = vault_stability_lease(debug)?;
-    let rt = tokio_runtime()?;
-    let base_url = vault_api_base_url();
-    let root_token = match read_and_handover_root_token(debug) {
-        Ok(t) => t,
-        Err(_) => return Ok(None),
-    };
-    let client = vault_client(&base_url, &root_token, debug)?;
-    let secret = match rt.block_on(client.read_secret("secret/github/token")) {
-        Ok(s) => s,
-        Err(_) => return Ok(None),
-    };
-    let token = match secret["token"].as_str() {
-        Some(t) if !t.is_empty() => t.to_string(),
-        _ => return Ok(None),
-    };
-    let refresh_token = secret["refresh_token"].as_str().map(|s| s.to_string());
-    let expires_at = secret["expires_at"].as_u64();
-    let refresh_token_expires_at = secret["refresh_token_expires_at"].as_u64();
-    let client_id = secret["client_id"].as_str().map(|s| s.to_string());
-    Ok(Some(GitHubTokenBundle {
-        token,
-        refresh_token,
-        expires_at,
-        refresh_token_expires_at,
-        client_id,
-    }))
+    if let Some(cid) = &b.client_id {
+        map.insert("client_id".into(), cid.clone().into());
+    }
+    serde_json::Value::Object(map)
 }
 
-#[derive(Clone, Debug)]
+/// The refresh-path record: never readable by git-mirror.
+fn github_refresh_record(b: &GitHubTokenBundle) -> Option<serde_json::Value> {
+    let rt = b.refresh_token.as_ref()?;
+    let mut map = serde_json::Map::new();
+    map.insert("refresh_token".into(), rt.clone().into());
+    if let Some(rexp) = b.refresh_token_expires_at {
+        map.insert("refresh_token_expires_at".into(), rexp.into());
+    }
+    if let Some(cid) = &b.client_id {
+        map.insert("client_id".into(), cid.clone().into());
+    }
+    Some(serde_json::Value::Object(map))
+}
+
+/// Vault as the rotation sees it. A trait so the ordering and failure rules of
+/// [`rotate_github_token`] are testable without a Vault.
+pub trait GitHubTokenStore {
+    fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String>;
+    fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String>;
+}
+
+/// Write a bundle: the REFRESH record first, then the token record.
+///
+/// The order is the failure rule. GitHub refresh tokens are single-use, so
+/// after a successful refresh the old one is already dead and the new one
+/// exists only in this process. Writing it first means the scarce credential
+/// is persisted before anything else can go wrong. If that write fails,
+/// NOTHING in Vault has changed and the old bundle is intact. If the token
+/// write fails afterwards, the new refresh token is already safe and the old
+/// access token stays valid until its own expiry.
+pub fn store_github_token_bundle(
+    store: &dyn GitHubTokenStore,
+    bundle: &GitHubTokenBundle,
+) -> Result<(), String> {
+    if let Some(refresh) = github_refresh_record(bundle) {
+        store
+            .write_record(GITHUB_REFRESH_PATH, refresh)
+            .map_err(|e| format!("could not store the rotated refresh token: {e}"))?;
+    }
+    store
+        .write_record(GITHUB_TOKEN_PATH, github_token_record(bundle))
+        .map_err(|e| format!("could not store the rotated access token: {e}"))
+}
+
+/// The live store: Vault through the root token, the same client the rest of
+/// this module uses.
+pub struct VaultGitHubTokenStore {
+    pub debug: bool,
+}
+
+impl GitHubTokenStore for VaultGitHubTokenStore {
+    fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String> {
+        let debug = self.debug;
+        if !container_running(VAULT_CONTAINER_NAME) {
+            return Ok(None);
+        }
+        let _stability = vault_stability_lease(debug)?;
+        let rt = tokio_runtime()?;
+        let base_url = vault_api_base_url();
+        let root_token = match read_and_handover_root_token(debug) {
+            Ok(t) => t,
+            Err(_) => return Ok(None),
+        };
+        let client = vault_client(&base_url, &root_token, debug)?;
+        let secret = match rt.block_on(client.read_secret(GITHUB_TOKEN_PATH)) {
+            Ok(s) => s,
+            Err(_) => return Ok(None),
+        };
+        let token = match secret["token"].as_str() {
+            Some(t) if !t.is_empty() => t.to_string(),
+            _ => return Ok(None),
+        };
+        // An absent refresh record is a legitimate state (a token-only login);
+        // a read error is not the same thing and is reported as one.
+        let refresh = rt.block_on(client.read_secret(GITHUB_REFRESH_PATH)).ok();
+        let refresh_token = refresh
+            .as_ref()
+            .and_then(|r| r["refresh_token"].as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        Ok(Some(GitHubTokenBundle {
+            token,
+            refresh_token,
+            expires_at: secret["expires_at"].as_u64(),
+            refresh_token_expires_at: refresh
+                .as_ref()
+                .and_then(|r| r["refresh_token_expires_at"].as_u64()),
+            client_id: secret["client_id"].as_str().map(|s| s.to_string()),
+        }))
+    }
+
+    fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+        let debug = self.debug;
+        if !container_running(VAULT_CONTAINER_NAME) {
+            ensure_vault_running(debug)
+                .map_err(|e| format!("could not bring Vault up to store {path}: {e}"))?;
+        }
+        let _stability = vault_stability_lease(debug)?;
+        let rt = tokio_runtime()?;
+        let base_url = vault_api_base_url();
+        let root_token = read_and_handover_root_token(debug)?;
+        let client = vault_client(&base_url, &root_token, debug)?;
+        rt.block_on(client.write_secret(path, value.clone()))
+            .map_err(|e| format!("vault write of {path} failed: {e}"))?;
+        // Read back and compare, without echoing either side into the error.
+        let read_back = rt
+            .block_on(client.read_secret(path))
+            .map_err(|e| format!("vault read-back of {path} failed: {e}"))?;
+        if read_back != value {
+            return Err(format!(
+                "vault read-back of {path} did not match what was written"
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct GitHubRefreshResponse {
     pub access_token: String,
     pub refresh_token: String,
     pub expires_in: u64,
     pub refresh_token_expires_in: u64,
+}
+
+/// Parse GitHub's refresh response WITHOUT ever putting the body in an error.
+///
+/// Order 1383-5hpk: the first version formatted the whole body into
+/// "missing refresh_token in refresh response: {body}". When GitHub returns a
+/// new access token but no refresh token, that body CONTAINS the fresh access
+/// token, and the error was printed. Errors here name the missing field, and
+/// GitHub's `error` code only after checking it is a plain identifier, never
+/// `error_description` or any other body text.
+pub fn parse_github_refresh_response(
+    body: &serde_json::Value,
+) -> Result<GitHubRefreshResponse, String> {
+    if let Some(err) = body.get("error").and_then(|e| e.as_str()) {
+        let code = if !err.is_empty()
+            && err.len() <= 64
+            && err.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
+        {
+            err
+        } else {
+            "unrecognised-error-code"
+        };
+        return Err(format!("GitHub refused the token refresh ({code})"));
+    }
+    let access_token = body["access_token"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or("GitHub's refresh response has no access_token")?
+        .to_string();
+    let refresh_token = body["refresh_token"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or("GitHub's refresh response has no refresh_token")?
+        .to_string();
+    Ok(GitHubRefreshResponse {
+        access_token,
+        refresh_token,
+        expires_in: body["expires_in"].as_u64().unwrap_or(28800),
+        refresh_token_expires_in: body["refresh_token_expires_in"]
+            .as_u64()
+            .unwrap_or(15_811_200),
+    })
 }
 
 pub fn perform_github_token_refresh(
@@ -1067,11 +1142,11 @@ pub fn perform_github_token_refresh(
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| format!("failed to build HTTP client for token refresh: {e}"))?;
-
         if debug {
-            eprintln!("[tillandsias] POST https://github.com/login/oauth/access_token (grant_type=refresh_token)");
+            eprintln!(
+                "[tillandsias] POST https://github.com/login/oauth/access_token (grant_type=refresh_token)"
+            );
         }
-
         let res = client
             .post("https://github.com/login/oauth/access_token")
             .header(reqwest::header::ACCEPT, "application/json")
@@ -1083,106 +1158,102 @@ pub fn perform_github_token_refresh(
             .send()
             .await
             .map_err(|e| format!("token refresh HTTP request failed: {e}"))?;
-
         if !res.status().is_success() {
-            return Err(format!("token refresh request failed with HTTP {}", res.status()));
+            return Err(format!(
+                "token refresh request failed with HTTP {}",
+                res.status()
+            ));
         }
-
+        // A parse failure names the failure, never the bytes it failed on.
         let body: serde_json::Value = res
             .json()
             .await
-            .map_err(|e| format!("failed to parse token refresh response JSON: {e}"))?;
-
-        if let Some(err) = body.get("error").and_then(|e| e.as_str()) {
-            let desc = body.get("error_description").and_then(|d| d.as_str()).unwrap_or(err);
-            return Err(format!("GitHub token refresh refused: {desc} ({err})"));
-        }
-
-        let access_token = body["access_token"]
-            .as_str()
-            .ok_or_else(|| format!("missing access_token in refresh response: {body}"))?
-            .to_string();
-        let new_refresh_token = body["refresh_token"]
-            .as_str()
-            .ok_or_else(|| format!("missing refresh_token in refresh response: {body}"))?
-            .to_string();
-        let expires_in = body["expires_in"].as_u64().unwrap_or(28800);
-        let refresh_token_expires_in = body["refresh_token_expires_in"].as_u64().unwrap_or(15811200);
-
-        Ok(GitHubRefreshResponse {
-            access_token,
-            refresh_token: new_refresh_token,
-            expires_in,
-            refresh_token_expires_in,
-        })
+            .map_err(|_| "GitHub's refresh response is not valid JSON".to_string())?;
+        parse_github_refresh_response(&body)
     })
 }
 
-pub fn refresh_github_token_in_vault(debug: bool) -> Result<bool, String> {
-    let bundle = match read_github_token_bundle_from_vault(debug)? {
-        Some(b) => b,
-        None => return Ok(false),
+/// What a rotation did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RotationOutcome {
+    Rotated,
+    /// There is a stored token but no refresh token: nothing can be rotated.
+    /// Callers must treat this as a NON-ZERO verdict (order 1383-5hpk): a
+    /// "refresh" that could not refresh anything did not succeed.
+    NoRefreshToken,
+    /// There is no GitHub credential in Vault at all.
+    NoToken,
+}
+
+/// Rotate the GitHub App token: read, refresh, then STORE, and only then
+/// return the new pair to anyone.
+///
+/// The new pair is written to Vault before this function hands it out, so
+/// nothing can use a token that Vault does not hold. The caller holds the
+/// exclusive rotation lock (see [`refresh_github_token_in_vault`]); two
+/// unserialised rotations would both spend the same single-use refresh token,
+/// and the loser's write could replace the winner's live pair with a dead one.
+pub fn rotate_github_token(
+    store: &dyn GitHubTokenStore,
+    refresh: &dyn Fn(&str, &str) -> Result<GitHubRefreshResponse, String>,
+    now: u64,
+) -> Result<(RotationOutcome, Option<GitHubTokenBundle>), String> {
+    let Some(bundle) = store.read_bundle()? else {
+        return Ok((RotationOutcome::NoToken, None));
     };
-    let refresh_token = match bundle.refresh_token {
-        Some(rt) if !rt.is_empty() => rt,
-        _ => return Ok(false),
+    let Some(old_refresh) = bundle.refresh_token.as_deref().filter(|s| !s.is_empty()) else {
+        return Ok((RotationOutcome::NoRefreshToken, None));
     };
     let client_id = bundle
         .client_id
-        .as_deref()
-        .unwrap_or(crate::GITHUB_APP_CLIENT_ID);
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_secs();
-
-    let refresh_resp = perform_github_token_refresh(client_id, &refresh_token, debug)?;
-
-    let new_expires_at = now + refresh_resp.expires_in;
-    let new_rt_expires_at = now + refresh_resp.refresh_token_expires_in;
-
-    write_github_token_bundle_to_vault(
-        &refresh_resp.access_token,
-        Some(&refresh_resp.refresh_token),
-        Some(new_expires_at),
-        Some(new_rt_expires_at),
-        Some(client_id),
-        debug,
-    )?;
-
-    Ok(true)
+        .clone()
+        .unwrap_or_else(|| crate::GITHUB_APP_CLIENT_ID.to_string());
+    let resp = refresh(&client_id, old_refresh)?;
+    let rotated = GitHubTokenBundle {
+        token: resp.access_token,
+        refresh_token: Some(resp.refresh_token),
+        expires_at: Some(now + resp.expires_in),
+        refresh_token_expires_at: Some(now + resp.refresh_token_expires_in),
+        client_id: Some(client_id),
+    };
+    store_github_token_bundle(store, &rotated)?;
+    Ok((RotationOutcome::Rotated, Some(rotated)))
 }
 
-#[allow(dead_code)]
-pub fn refresh_github_token_if_needed(debug: bool) -> Result<bool, String> {
-    let bundle = match read_github_token_bundle_from_vault(debug)? {
-        Some(b) => b,
-        None => return Ok(false),
-    };
-    let _refresh_token = match bundle.refresh_token {
-        Some(rt) if !rt.is_empty() => rt,
-        _ => return Ok(false),
-    };
-    let expires_at = match bundle.expires_at {
-        Some(exp) => exp,
-        None => return Ok(false),
-    };
+/// The lock every rotation takes: an exclusive advisory flock under the
+/// runtime dir (resource_lock), so a second tillandsias process that decides
+/// to refresh at the same moment waits and then sees the first one's result.
+pub const GITHUB_ROTATION_LOCK: &str = "github-token-rotation";
+
+/// [`rotate_github_token`] under the exclusive rotation lock. The lock is
+/// taken BEFORE the bundle is read, so a process that waited sees the winner's
+/// new refresh token rather than spending the dead one.
+pub fn rotate_github_token_locked(
+    lock_timeout: std::time::Duration,
+    store: &dyn GitHubTokenStore,
+    refresh: &dyn Fn(&str, &str) -> Result<GitHubRefreshResponse, String>,
+    now: u64,
+    debug: bool,
+) -> Result<(RotationOutcome, Option<GitHubTokenBundle>), String> {
+    let _lock = crate::resource_lock::acquire(GITHUB_ROTATION_LOCK, lock_timeout, debug)
+        .map_err(|e| format!("another GitHub token rotation holds the lock: {e}"))?;
+    rotate_github_token(store, refresh, now)
+}
+
+pub fn refresh_github_token_in_vault(debug: bool) -> Result<RotationOutcome, String> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
         .as_secs();
-
-    if now + 1800 < expires_at {
-        return Ok(false);
-    }
-
-    if debug {
-        eprintln!(
-            "[tillandsias] GitHub token near expiry or expired (expires_at={expires_at}, now={now}); refreshing..."
-        );
-    }
-
-    refresh_github_token_in_vault(debug)
+    let store = VaultGitHubTokenStore { debug };
+    let (outcome, _) = rotate_github_token_locked(
+        std::time::Duration::from_secs(60),
+        &store,
+        &|client_id, refresh_token| perform_github_token_refresh(client_id, refresh_token, debug),
+        now,
+        debug,
+    )?;
+    Ok(outcome)
 }
 
 /// In-container address of the Vault TLS listener. The Vault server listens on
@@ -5030,6 +5101,229 @@ pub async fn ensure_mirror_identity_provisioned(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- 1383-5hpk: GitHub App token rotation ------------------------------
+
+    /// A fake Vault: records every write in order, can fail a chosen path.
+    struct FakeStore {
+        records: std::cell::RefCell<std::collections::BTreeMap<String, serde_json::Value>>,
+        writes: std::cell::RefCell<Vec<String>>,
+        fail_path: Option<&'static str>,
+    }
+
+    impl FakeStore {
+        fn with_bundle(b: &GitHubTokenBundle, fail_path: Option<&'static str>) -> Self {
+            let mut m = std::collections::BTreeMap::new();
+            m.insert(GITHUB_TOKEN_PATH.to_string(), github_token_record(b));
+            if let Some(r) = github_refresh_record(b) {
+                m.insert(GITHUB_REFRESH_PATH.to_string(), r);
+            }
+            Self {
+                records: std::cell::RefCell::new(m),
+                writes: std::cell::RefCell::new(Vec::new()),
+                fail_path,
+            }
+        }
+        fn snapshot(&self) -> std::collections::BTreeMap<String, serde_json::Value> {
+            self.records.borrow().clone()
+        }
+    }
+
+    impl GitHubTokenStore for FakeStore {
+        fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String> {
+            let m = self.records.borrow();
+            let Some(t) = m.get(GITHUB_TOKEN_PATH) else {
+                return Ok(None);
+            };
+            let r = m.get(GITHUB_REFRESH_PATH);
+            Ok(Some(GitHubTokenBundle {
+                token: t["token"].as_str().unwrap_or_default().to_string(),
+                refresh_token: r
+                    .and_then(|r| r["refresh_token"].as_str())
+                    .map(String::from),
+                expires_at: t["expires_at"].as_u64(),
+                refresh_token_expires_at: r.and_then(|r| r["refresh_token_expires_at"].as_u64()),
+                client_id: t["client_id"].as_str().map(String::from),
+            }))
+        }
+        fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+            self.writes.borrow_mut().push(path.to_string());
+            if self.fail_path == Some(path) {
+                return Err("simulated vault write failure".into());
+            }
+            self.records.borrow_mut().insert(path.to_string(), value);
+            Ok(())
+        }
+    }
+
+    fn old_bundle() -> GitHubTokenBundle {
+        GitHubTokenBundle {
+            token: "ghu_OLDACCESS".into(),
+            refresh_token: Some("ghr_OLDREFRESH".into()),
+            expires_at: Some(100),
+            refresh_token_expires_at: Some(1_000_000),
+            client_id: Some("Iv23liddVkg9ME6OB1K1".into()),
+        }
+    }
+
+    fn good_refresh(_: &str, old: &str) -> Result<GitHubRefreshResponse, String> {
+        assert_eq!(
+            old, "ghr_OLDREFRESH",
+            "the rotation must spend the stored refresh token"
+        );
+        Ok(GitHubRefreshResponse {
+            access_token: "ghu_NEWACCESS".into(),
+            refresh_token: "ghr_NEWREFRESH".into(),
+            expires_in: 28800,
+            refresh_token_expires_in: 15_811_200,
+        })
+    }
+
+    /// Criterion 4: the new pair is in Vault BEFORE rotation hands it out, the
+    /// refresh record (single-use) first, then the token record.
+    #[test]
+    fn rotation_stores_the_refresh_record_first_then_the_token() {
+        let store = FakeStore::with_bundle(&old_bundle(), None);
+        let (outcome, rotated) = rotate_github_token(&store, &good_refresh, 1000).unwrap();
+        assert_eq!(outcome, RotationOutcome::Rotated);
+        assert_eq!(
+            *store.writes.borrow(),
+            vec![
+                GITHUB_REFRESH_PATH.to_string(),
+                GITHUB_TOKEN_PATH.to_string()
+            ]
+        );
+        let stored = store.read_bundle().unwrap().unwrap();
+        assert_eq!(
+            Some(stored),
+            rotated,
+            "what rotation returns is exactly what Vault holds"
+        );
+        assert_eq!(
+            store.snapshot()[GITHUB_TOKEN_PATH]["expires_at"],
+            1000 + 28800
+        );
+    }
+
+    /// Criterion 4: a failed write of the refresh record leaves the OLD bundle
+    /// intact and never attempts the token write.
+    #[test]
+    fn a_failed_refresh_write_keeps_the_old_bundle_intact() {
+        let store = FakeStore::with_bundle(&old_bundle(), Some(GITHUB_REFRESH_PATH));
+        let before = store.snapshot();
+        let err = rotate_github_token(&store, &good_refresh, 1000).unwrap_err();
+        assert!(err.contains("refresh token"), "{err}");
+        assert_eq!(
+            store.snapshot(),
+            before,
+            "no record may change on a failed rotation"
+        );
+        assert_eq!(
+            *store.writes.borrow(),
+            vec![GITHUB_REFRESH_PATH.to_string()]
+        );
+        assert!(
+            !err.contains("ghr_") && !err.contains("ghu_"),
+            "no token in the error: {err}"
+        );
+    }
+
+    /// Criterion 4: the rotation runs under an exclusive lock. While another
+    /// holder has it, a rotation refuses and never calls GitHub.
+    #[cfg(unix)]
+    #[test]
+    fn rotation_refuses_while_another_holds_the_rotation_lock() {
+        let _held = crate::resource_lock::acquire(
+            GITHUB_ROTATION_LOCK,
+            std::time::Duration::from_secs(5),
+            false,
+        )
+        .expect("test must be able to take the lock");
+        let store = FakeStore::with_bundle(&old_bundle(), None);
+        let called = std::cell::Cell::new(false);
+        let refresh = |c: &str, r: &str| {
+            called.set(true);
+            good_refresh(c, r)
+        };
+        let err = rotate_github_token_locked(
+            std::time::Duration::from_millis(300),
+            &store,
+            &refresh,
+            1000,
+            false,
+        )
+        .unwrap_err();
+        assert!(err.contains("lock"), "{err}");
+        assert!(!called.get(), "GitHub must not be called without the lock");
+        assert!(store.writes.borrow().is_empty());
+    }
+
+    /// A missing refresh token is its own outcome (the CLI maps it to a
+    /// non-zero exit), and GitHub is never called.
+    #[test]
+    fn no_refresh_token_is_reported_and_github_is_not_called() {
+        let mut b = old_bundle();
+        b.refresh_token = None;
+        let store = FakeStore::with_bundle(&b, None);
+        let refresh = |_: &str, _: &str| -> Result<GitHubRefreshResponse, String> {
+            panic!("must not refresh without a refresh token")
+        };
+        let (outcome, _) = rotate_github_token(&store, &refresh, 1000).unwrap();
+        assert_eq!(outcome, RotationOutcome::NoRefreshToken);
+        assert!(store.writes.borrow().is_empty());
+    }
+
+    /// Criterion 2: a response with a fresh access token but no refresh token
+    /// produces an error with NO substring of the body. The old code formatted
+    /// the whole body, fresh token included, into the printed error.
+    #[test]
+    fn a_refresh_response_error_never_contains_the_body() {
+        let body = serde_json::json!({
+            "access_token": "ghu_FAKEFRESHTOKEN0123456789",
+            "expires_in": 28800,
+            "token_type": "bearer"
+        });
+        let err = parse_github_refresh_response(&body).unwrap_err();
+        assert!(!err.contains("ghu_"), "error leaks the token: {err}");
+        assert!(
+            !err.contains("bearer") && !err.contains("28800"),
+            "error quotes the body: {err}"
+        );
+        assert!(
+            err.contains("refresh_token"),
+            "error names the missing field: {err}"
+        );
+
+        let refused = serde_json::json!({
+            "error": "bad_refresh_token",
+            "error_description": "The refresh token passed is incorrect or expired. ghu_SNEAKY"
+        });
+        let err = parse_github_refresh_response(&refused).unwrap_err();
+        assert!(err.contains("bad_refresh_token"));
+        assert!(!err.contains("ghu_") && !err.contains("incorrect"), "{err}");
+
+        let hostile = serde_json::json!({ "error": "ghu_TOKEN_IN_THE_CODE_FIELD" });
+        let err = parse_github_refresh_response(&hostile).unwrap_err();
+        assert!(
+            !err.contains("ghu_"),
+            "an error code that is not an identifier is not echoed: {err}"
+        );
+    }
+
+    /// Criterion 7, the other half: the token record the git-mirror service can
+    /// read never carries the refresh token.
+    #[test]
+    fn the_token_record_never_carries_the_refresh_token() {
+        let rec = github_token_record(&old_bundle());
+        assert!(rec.get("refresh_token").is_none());
+        assert!(!rec.to_string().contains("ghr_"));
+        assert!(
+            github_refresh_record(&old_bundle())
+                .unwrap()
+                .to_string()
+                .contains("ghr_")
+        );
+    }
 
     /// 1371-a7w2: an already-absent keychain entry is CLEARED, not failed.
     /// The old text match missed keyring's "No matching entry found in secure
