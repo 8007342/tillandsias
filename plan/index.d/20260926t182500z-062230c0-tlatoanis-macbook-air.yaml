@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-merge-rule-assumes-the-gate-is-fast-relative-to-trunk-landing-cadence-so-a-twenty-minute-host-can-be-refused-indefinitely-through-no-fault-of-its-own
+    event:
+      type: progress
+      ts: "2026-09-26T18:25:00Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t182500z
+      host: tlatoanis-macbook-air
+      summary: |-
+        LIVE PROOF: osx-next push 2026-09-26 after green merged Mac ./build.sh --check (gate_rc=0, 1795s) printed ok:pre-push:platform-subset-of:9826a54b20af5d5479434ee567481a909055b333 and was ADMITTED; remote osx-next b38f71052..1d0e3c5ae (ls-remote confirms 1d0e3c5ae). Trunk had advanced meanwhile: merge-base --is-ancestor origin/linux-next 1d0e3c5ae = false, so the admit came from the subset arm, not the containment arm.
