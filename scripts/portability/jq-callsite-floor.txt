@@ -29,12 +29,9 @@
 6 scripts/bench-semantic-budget.sh
 1 scripts/build-image.sh
 1 scripts/check-bare-metal-host-initialized.sh
-1 scripts/check-base-ledger-status-loss.sh
 1 scripts/check-claim-confirmed.sh
 1 scripts/check-forge-service-health.sh
-1 scripts/check-fragment-status-loss.sh
 2 scripts/check-local-expert-health.sh
-1 scripts/check-long-running-view.sh
 18 scripts/check-mcp-expert-health.sh
 2 scripts/check-must-ship-rows.sh
 2 scripts/check-nix-deps-stability.sh
@@ -45,11 +42,9 @@
 2 scripts/dev-inference-ensure.sh
 4 scripts/generate-dashboard.sh
 3 scripts/generate-evidence-bundle.sh
-16 scripts/hardware-fingerprint.sh
 2 scripts/hooks/post-commit-expert-refresh.sh
 3 scripts/host-capability-probe.sh
 2 scripts/install-macos.sh
-2 scripts/land-queue.sh
 14 scripts/local-ci.sh
 1 scripts/loop-success-probe.sh
 1 scripts/manage-cache.sh

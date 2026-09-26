@@ -34,7 +34,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 _fail() { echo "$*" >&2; exit 2; }
 
-command -v jq >/dev/null 2>&1 || _fail "hardware-fingerprint: jq is required"
+# ORDER 1375-2x4e. Every read goes through `tillandsias-plan json get`, the jq
+# subset on the binary every gate host already has. jq is absent on macOS and
+# Windows hosts, and this script runs on every host's first cycle, so a jq-less
+# host used to publish no fingerprint at all.
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$SCRIPT_DIR/plan-binary-probe.sh" 2>/dev/null || true
+PLAN="$(resolve_plan_binary 2>/dev/null)" || _fail "hardware-fingerprint: no runnable tillandsias-plan (it reads the document with json get)"
+_q() { "$PLAN" json get "$@"; }
 
 # Capability document -> the fields that identify the MACHINE MODEL.
 #
@@ -43,45 +50,46 @@ command -v jq >/dev/null 2>&1 || _fail "hardware-fingerprint: jq is required"
 # and an exact byte count would make a host differ from itself across a BIOS
 # update. Cores are exact — a core-count difference IS a different part.
 _capture() {
-    local doc="$1"
-    jq -r '
-      def dev($c): (.devices[]? | select(.device_class == $c)) // empty;
-      def first_name($c): [dev($c) | .name] | (.[0] // "none");
-      def first_node($c): [dev($c) | .device_node] | (.[0] // "none");
-      {
-        cpu_model:      (first_name("cpu")),
-        cpu_physical:   ([dev("cpu") | .cpu_cores.physical] | (.[0] // 0)),
-        cpu_logical:    ([dev("cpu") | .cpu_cores.logical]  | (.[0] // 0)),
-        # gpu_model IS A WEAK DISCRIMINATOR — trust it less than it looks.
-        # AMD ships the Radeon 840M and the 860M under ONE PCI name,
-        # "Krackan [Radeon 840M / 860M Graphics]", so two genuinely different
-        # parts produce an identical string here and this field alone would
-        # call them the same machine. It is in the fingerprint because it
-        # separates machines whose GPUs differ by more than a bin; it is not
-        # in it because a match means anything on its own. When two hosts
-        # agree on gpu_model, the CPU fields are what actually decided.
-        #
-        # WORSE ACROSS PLATFORMS: the field is not merely weak, it is
-        # INCOMMENSURABLE. Two Linux hosts here both report "Krackan [...]",
-        # the same machine probed inside WSL2 reports "WSL2 paravirtual GPU
-        # (/dev/dxg)" — the PATH, not the silicon — and probed natively on
-        # Windows reports "none" on a machine that has a Radeon. Comparing this
-        # field between a Linux and a Windows document compares two different
-        # kinds of fact, and a mismatch there is not evidence of different
-        # hardware.
-        gpu_model:      (first_name("gpu")),
-        npu_vendor:     ([dev("npu") | .vendor] | (.[0] // "none")),
-        npu_node:       (first_node("npu")),
-        ram_class_gb:   ((([.devices[]? | .memory_mib // empty] | add) // 0)),
-      }
-    ' "$doc"
+    # One compact JSON object, keys in the published order. Each field is one
+    # `json get -c` call, so its value comes back as an already-escaped JSON
+    # literal and the object is assembled here without re-encoding anything.
+    # (The jq program this replaced defined dev()/first_name() helpers; the
+    # subset has no `def`, so each field spells its select out.)
+    # ram_class_gb is not captured here: _fields_json sets it from the host
+    # line, exactly as the jq version overwrote its devices-sum placeholder.
+    local doc="$1" cpu_model cpu_physical cpu_logical gpu_model npu_vendor npu_node
+    cpu_model="$(_q -c '[.devices[]? | select(.device_class == "cpu") | .name] | .[0] // "none"' "$doc")"
+    cpu_physical="$(_q -c '[.devices[]? | select(.device_class == "cpu") | .cpu_cores.physical] | .[0] // 0' "$doc")"
+    cpu_logical="$(_q -c '[.devices[]? | select(.device_class == "cpu") | .cpu_cores.logical] | .[0] // 0' "$doc")"
+    # gpu_model IS A WEAK DISCRIMINATOR — trust it less than it looks.
+    # AMD ships the Radeon 840M and the 860M under ONE PCI name,
+    # "Krackan [Radeon 840M / 860M Graphics]", so two genuinely different
+    # parts produce an identical string here and this field alone would
+    # call them the same machine. It is in the fingerprint because it
+    # separates machines whose GPUs differ by more than a bin; it is not
+    # in it because a match means anything on its own. When two hosts
+    # agree on gpu_model, the CPU fields are what actually decided.
+    #
+    # WORSE ACROSS PLATFORMS: the field is not merely weak, it is
+    # INCOMMENSURABLE. Two Linux hosts here both report "Krackan [...]",
+    # the same machine probed inside WSL2 reports "WSL2 paravirtual GPU
+    # (/dev/dxg)" — the PATH, not the silicon — and probed natively on
+    # Windows reports "none" on a machine that has a Radeon. Comparing this
+    # field between a Linux and a Windows document compares two different
+    # kinds of fact, and a mismatch there is not evidence of different
+    # hardware.
+    gpu_model="$(_q -c '[.devices[]? | select(.device_class == "gpu") | .name] | .[0] // "none"' "$doc")"
+    npu_vendor="$(_q -c '[.devices[]? | select(.device_class == "npu") | .vendor] | .[0] // "none"' "$doc")"
+    npu_node="$(_q -c '[.devices[]? | select(.device_class == "npu") | .device_node] | .[0] // "none"' "$doc")"
+    printf '{"cpu_model":%s,"cpu_physical":%s,"cpu_logical":%s,"gpu_model":%s,"npu_vendor":%s,"npu_node":%s}\n' \
+        "$cpu_model" "$cpu_physical" "$cpu_logical" "$gpu_model" "$npu_vendor" "$npu_node"
 }
 
 # RAM class comes from the accel line rather than the device list (the probe
 # records host RAM outside devices[]), rounded DOWN to a 4 GB class.
 _ram_class_gb() {
     local doc="$1" gb
-    gb="$(jq -r '.host.ram_gb // empty' "$doc")"
+    gb="$(_q -r '.host.ram_gb // empty' "$doc")"
     if [[ -z "$gb" || "$gb" == "null" ]]; then
         # DOCUMENT-ONLY, deliberately. Not every probe version records host RAM,
         # and the tempting fallback — read /proc/meminfo — is wrong twice over:
@@ -110,7 +118,22 @@ _fields_json() {
     local base ram
     base="$(_capture "$doc")"
     ram="$(_ram_class_gb "$doc")"
-    echo "$base" | jq --arg ram "$ram" '.ram_class_gb = $ram'
+    # Append ram_class_gb as the last key, where `.ram_class_gb = $ram` left it.
+    # $ram is digits, a dash, or "unknown": no JSON escaping is needed.
+    printf '%s,"ram_class_gb":"%s"}\n' "${base%\}}" "$ram"
+}
+
+# The field object with keys SORTED and pretty-printed: what `jq -S .` gave the
+# NOT-TWINS diff. Keys are listed in sorted order here rather than sorted at run
+# time; FINGERPRINT_SCHEMA pins the field set, so the list moves with it.
+_fields_sorted() {
+    local fields k v out="{"
+    fields="$(_fields_json "$1")"
+    for k in cpu_logical cpu_model cpu_physical gpu_model npu_node npu_vendor ram_class_gb; do
+        v="$(_q -c ".$k" <<<"$fields")"
+        out="$out\"$k\":$v,"
+    done
+    _q . <<<"${out%,}}"
 }
 
 # The hash is taken over a canonical string WE build, field by field in a fixed
@@ -128,13 +151,13 @@ _canonical_string() {
     local doc="$1" fields
     fields="$(_fields_json "$doc")"
     local cpu_model cpu_physical cpu_logical gpu_model npu_vendor npu_node ram
-    cpu_model="$(jq -r '.cpu_model' <<<"$fields")"
-    cpu_physical="$(jq -r '.cpu_physical' <<<"$fields")"
-    cpu_logical="$(jq -r '.cpu_logical' <<<"$fields")"
-    gpu_model="$(jq -r '.gpu_model' <<<"$fields")"
-    npu_vendor="$(jq -r '.npu_vendor' <<<"$fields")"
-    npu_node="$(jq -r '.npu_node' <<<"$fields")"
-    ram="$(jq -r '.ram_class_gb' <<<"$fields")"
+    cpu_model="$(_q -r '.cpu_model' <<<"$fields")"
+    cpu_physical="$(_q -r '.cpu_physical' <<<"$fields")"
+    cpu_logical="$(_q -r '.cpu_logical' <<<"$fields")"
+    gpu_model="$(_q -r '.gpu_model' <<<"$fields")"
+    npu_vendor="$(_q -r '.npu_vendor' <<<"$fields")"
+    npu_node="$(_q -r '.npu_node' <<<"$fields")"
+    ram="$(_q -r '.ram_class_gb' <<<"$fields")"
 
     # A DOCUMENT THAT TAUGHT US NOTHING MUST NOT FINGERPRINT.
     # Without this, two unreadable files both produce an empty field set, hash
@@ -172,7 +195,7 @@ _resolve_doc() {
     tmp="$(mktemp)"
     # The tray prints the one-line accel summary first, then the JSON document.
     "$bin" --capabilities 2>/dev/null | tail -n +2 > "$tmp" || _fail "hardware-fingerprint: --capabilities failed"
-    jq -e . "$tmp" >/dev/null 2>&1 || _fail "hardware-fingerprint: --capabilities did not produce a JSON document"
+    _q -e . "$tmp" >/dev/null 2>&1 || _fail "hardware-fingerprint: --capabilities did not produce a JSON document"
     printf '%s' "$tmp"
 }
 
@@ -184,7 +207,7 @@ compare)
     # hash as an empty field set, and two missing files then compared as twins.
     for _d in "$a" "$b"; do
         [[ -r "$_d" ]] || _fail "hardware-fingerprint: cannot read $_d — refusing to compare, an absent document is not evidence of anything"
-        jq -e . "$_d" >/dev/null 2>&1 || _fail "hardware-fingerprint: $_d is not a readable JSON capability document — refusing to compare"
+        _q -e . "$_d" >/dev/null 2>&1 || _fail "hardware-fingerprint: $_d is not a readable JSON capability document — refusing to compare"
     done
     # ORDER 805-r98w — REFUSE A CROSS-VANTAGE COMPARISON RATHER THAN REPORT A
     # MISMATCH. yolanda's finding, 2026-09-02: the substrate does not merely
@@ -196,8 +219,8 @@ compare)
     # prevent, arriving through the tool itself.
     #
     # This is not a mismatch to report, it is a comparison that cannot be made.
-    _ka="$(jq -r '.host.host_kind // "unknown"' "$a" 2>/dev/null)"
-    _kb="$(jq -r '.host.host_kind // "unknown"' "$b" 2>/dev/null)"
+    _ka="$(_q -r '.host.host_kind // "unknown"' "$a" 2>/dev/null)"
+    _kb="$(_q -r '.host.host_kind // "unknown"' "$b" 2>/dev/null)"
     if [[ "$_ka" != "$_kb" ]]; then
         echo "refused:cross-vantage-comparison"
         echo "  $a is host_kind=$_ka; $b is host_kind=$_kb." >&2
@@ -218,7 +241,7 @@ compare)
     echo "NOT TWINS: $a fingerprints $fa, $b fingerprints $fb"
     echo ""
     echo "The hosts differ in these identifying fields:"
-    diff <(_fields_json "$a" | jq -S .) <(_fields_json "$b" | jq -S .) | sed 's/^/  /' || true
+    diff <(_fields_sorted "$a") <(_fields_sorted "$b") | sed 's/^/  /' || true
     echo ""
     echo "A comparison between these two hosts does NOT isolate the OS or the"
     echo "container substrate: any delta bundles the hardware difference above."
@@ -233,7 +256,8 @@ compare)
     # the one this refusal exists to prevent, one layer out.
     fp="$(_fingerprint_of "$doc")" || exit 2
     [[ -n "$fp" ]] || _fail "hardware-fingerprint: refusing to report an empty fingerprint"
-    _fields_json "$doc" | jq --arg fp "$fp" '{fingerprint: $fp} + .'
+    fields="$(_fields_json "$doc")"
+    _q . <<<"{\"fingerprint\":\"$fp\",${fields#\{}"
     ;;
 *)
     doc="$(_resolve_doc "${1:-}")"
