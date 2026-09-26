@@ -1643,6 +1643,7 @@ run_litmus_test_file() {
         local exit_code=0
 
         step_index=$((step_index + 1))
+        _LT_CUR_STEP=$step_index  # 1242-4x53: the step a failed test died on
         local timeout_sec=$(( step_timeout_ms / 1000 ))
 
         # Progress reporting: show step start and timeout value
@@ -2079,9 +2080,10 @@ run_tests_for_spec() {
         # test-by-test. Capture is two clock reads; emission is batched at
         # suite end. Best-effort: a stubbed clock yields t0=0 and the record
         # is dropped downstream, never poisoned.
-        local _pt_t0 _pt_dur _pt_rc _lt_verdict
+        local _pt_t0 _pt_dur _pt_rc _lt_verdict _lt_status _lt_failed_step
         _pt_t0="$(timing_now_ms 2>/dev/null || echo 0)"
         LITMUS_LAST_TEST_TIMED_OUT=0
+        _LT_CUR_STEP=0
         # ORDER 1309-fhxb: 2 = SKIPPED (asked no question), 3 = ADVISORY (held,
         # with a note). Both are non-failures and neither is a plain PASS.
         # `set -e` IS IN FORCE (:44). A BARE call whose function returns non-zero
@@ -2092,6 +2094,10 @@ run_tests_for_spec() {
         # that read as success downstream. Measured here 2026-09-20, and the only
         # symptom was output that stopped rather than output that complained.
         if run_litmus_test_file "$test_file" "$spec_id"; then _lt_verdict=0; else _lt_verdict=$?; fi
+        # 1242-4x53: the per-test record carries HOW the test went and, for a
+        # failure, WHICH step. ADVISORY (3) counts as pass here as it does in
+        # the summary; a verdict SKIP (2) is recorded as skip, never as pass.
+        case "$_lt_verdict" in 0|3) _lt_status=pass ;; 2) _lt_status=skip ;; *) _lt_status=fail ;; esac
         case "$_lt_verdict" in
             0)  _pt_rc=0
                 log_test_result "$spec_id" "$test_name" "PASS" "" ;;
@@ -2118,7 +2124,9 @@ run_tests_for_spec() {
         if [[ "$_pt_t0" =~ ^[0-9]+$ && "$_pt_t0" -gt 0 ]]; then
             _pt_dur=$(( $(timing_now_ms 2>/dev/null || echo 0) - _pt_t0 ))
             [[ "$_pt_dur" -ge 0 && "$_pt_dur" -lt 86400000 ]] || _pt_dur=0
-            _PER_TEST_LOG="${_PER_TEST_LOG}${_pt_dur}	${test_name}	${_pt_rc}
+            _lt_failed_step=""
+            [[ "$_lt_status" == fail ]] && _lt_failed_step="$_LT_CUR_STEP"
+            _PER_TEST_LOG="${_PER_TEST_LOG}${_pt_dur}	${test_name}	${_pt_rc}	${_lt_status}	${_lt_failed_step}
 "
         fi
         if [[ "$_pt_rc" -ne 0 ]] && should_fail_fast_for_spec "$spec_id"; then
@@ -2239,7 +2247,7 @@ print_summary() {
             printf '%s' "$_PER_TEST_LOG" | awk -F'\t' \
                 -v phase="${FILTER_PHASE:-unknown}" \
                 -v host="${TILLANDSIAS_HOST_ID:-$(hostname 2>/dev/null || echo unknown)}" \
-                'NF >= 3 { name = $2; sub(/^litmus:/, "", name); printf "litmus:%s\t%s\t%s\t%s\t%s\n", name, phase, $1, $3, host }' \
+                'NF >= 3 { name = $2; sub(/^litmus:/, "", name); printf "litmus:%s\t%s\t%s\t%s\t%s\t%s\t%s\n", name, phase, $1, $3, host, $4, $5 }' \
                 | bash "$PROJECT_ROOT/scripts/cycle-metrics.sh" --emit-timing-batch
         } 2>/dev/null || true
         # `|| true`: under `set -eo pipefail`, head's early close SIGPIPEs
