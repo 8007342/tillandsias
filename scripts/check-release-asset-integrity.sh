@@ -124,9 +124,56 @@ for a in $names; do
     violations+=("$a")
 done
 
+# ── BYTES, not names (1407-6jr8). Everything above asks whether an asset HAS
+# an integrity path, never whether the path still describes the bytes: a
+# 0-byte tarball with its bundle kept passed (macbookair, 2026-09-26). Two
+# checks, both only over a staged dir (--tag mode downloads the manifests,
+# not the assets, so it has no bytes to compare and says so):
+#   1. every manifest entry that is present must match its sha256 — always on;
+#   2. `cosign verify-blob` for each `<asset>.cosign.bundle` — opt-in, because
+#      it needs real keyless bundles and the signer's identity:
+#        RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP=<regexp>
+#        RELEASE_VERIFY_COSIGN_ISSUER=<issuer>  (default: GitHub Actions OIDC)
+#      Unset, or cosign absent, is a NAMED skip on stderr, never a silent pass.
+mismatched=()
+if [ -z "$TAG" ]; then
+    if command -v sha256sum >/dev/null 2>&1; then _sha() { sha256sum "$1" | awk '{print $1}'; }
+    else _sha() { shasum -a 256 "$1" | awk '{print $1}'; }
+    fi
+    for m in $(printf '%s\n' "$names" | grep '^SHA256SUMS' | grep -v '\.cosign\.bundle$'); do
+        while read -r want n; do
+            n="${n#\*}"
+            [ -n "$n" ] && [ -f "$DIR/$n" ] || continue
+            [ "$(_sha "$DIR/$n")" = "$want" ] || mismatched+=("$n (per $m)")
+        done < "$DIR/$m"
+    done
+    if [ -n "${RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP:-}" ] && command -v cosign >/dev/null 2>&1; then
+        issuer="${RELEASE_VERIFY_COSIGN_ISSUER:-https://token.actions.githubusercontent.com}"
+        for b in $(printf '%s\n' "$names" | grep '\.cosign\.bundle$'); do
+            a="${b%.cosign.bundle}"
+            [ -f "$DIR/$a" ] || continue
+            cosign verify-blob --bundle "$DIR/$b" \
+                --certificate-identity-regexp "$RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP" \
+                --certificate-oidc-issuer "$issuer" "$DIR/$a" >/dev/null 2>&1 \
+                || mismatched+=("$a (cosign verify-blob against $b)")
+        done
+    elif [ -z "${RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP:-}" ]; then
+        echo "  skip:cosign-verify-blob:no RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP (bundles checked for presence only)" >&2
+    else
+        echo "  skip:cosign-verify-blob:cosign not on PATH (bundles checked for presence only)" >&2
+    fi
+else
+    echo "  skip:byte-checks:--tag mode has the manifests, not the assets" >&2
+fi
+for v in ${mismatched[@]+"${mismatched[@]}"}; do
+    violations+=("$v")
+    echo "  $v: the bytes do not match what was signed or manifested" >&2
+done
+
 if [ "${#violations[@]}" -gt 0 ]; then
     echo "violation:release-asset-integrity:${#violations[@]}"
     for v in ${violations[@]+"${violations[@]}"}; do
+        case "$v" in *" (per "*|*" (cosign "*) continue ;; esac
         echo "  $v has no integrity path: no ${v}.cosign.bundle, and no signed SHA256SUMS names it" >&2
     done
     echo "  A downloader cannot verify these. Sign them in the release workflow" >&2

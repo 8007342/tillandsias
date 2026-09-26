@@ -107,9 +107,41 @@ printf 'brand new\n' > setup-extras.ps1
 cd "$ROOT"
 run "6 newly added asset is caught" 1 "setup-extras.ps1 has no integrity path" "$d"
 
+# ── 7. BYTES (1407-6jr8): an asset truncated AFTER it was manifested keeps
+# its bundle and its manifest line, so every name-level rule above still
+# holds. Premise first: the same tree passes before the truncation, so the
+# refusal below is caused by the bytes and nothing else.
+d="$work/truncated"; mk "$d"; cd "$d"
+printf 'tarball bytes\n' > tillandsias-tray-1.0-macos-arm64.tar.gz
+printf 'dmg bytes\n'     > Tillandsias.dmg
+"${PORTABLE_SHA256[@]}" tillandsias-tray-1.0-macos-arm64.tar.gz Tillandsias.dmg > SHA256SUMS-macos
+sig tillandsias-tray-1.0-macos-arm64.tar.gz; sig Tillandsias.dmg
+cd "$ROOT"
+run "7a premise: the untouched tree passes" 0 "ok:release-asset-integrity:3 of 3 checked" "$d"
+: > "$d/tillandsias-tray-1.0-macos-arm64.tar.gz"
+run "7b a 0-byte asset with its bundle kept is refused" 1 "tillandsias-tray-1.0-macos-arm64.tar.gz (per SHA256SUMS-macos): the bytes do not match" "$d"
+
+# ── 8. cosign verify-blob, opt-in: a stub cosign that rejects every bundle
+# must turn into a refusal naming the asset; unset, the skip is NAMED.
+stub="$work/stub-bin"; mk "$stub"
+printf '#!/bin/sh\nexit 1\n' > "$stub/cosign"; chmod +x "$stub/cosign"
+d="$work/cosign"; mk "$d"; cd "$d"
+printf 'a\n' > install.sh; sig install.sh
+cd "$ROOT"
+rc=0; out="$(PATH="$stub:$PATH" RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP='.*' "$CHECK" "$d" 2>&1)" || rc=$?
+case "$rc:$out" in
+    1:*"install.sh (cosign verify-blob against install.sh.cosign.bundle)"*) echo "PASS  8a a bundle cosign rejects is refused" ;;
+    *) echo "FAIL  8a: rc=$rc [$out]"; failures+=("8a") ;;
+esac
+rc=0; out="$(env -u RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP "$CHECK" "$d" 2>&1)" || rc=$?
+case "$rc:$out" in
+    0:*"skip:cosign-verify-blob:no RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP"*"ok:release-asset-integrity:1 of 1 checked"*) echo "PASS  8b unset is a named skip, not a silent pass" ;;
+    *) echo "FAIL  8b: rc=$rc [$out]"; failures+=("8b") ;;
+esac
+
 if [ "${#failures[@]}" -gt 0 ]; then
     echo "FAIL: ${#failures[@]} scenario(s): ${failures[*]}"
     exit 1
 fi
-echo "ok:release-asset-integrity-fixture:6"
+echo "ok:release-asset-integrity-fixture:10"
 exit 0
