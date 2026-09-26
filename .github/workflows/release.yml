@@ -17,6 +17,19 @@ concurrency:
   group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
+# Order 1407-6jr8: scripts/check-release-asset-integrity.sh runs
+# `cosign verify-blob` for every bundle when this is set, so each upload is
+# gated on the SIGNATURE matching the bytes, not only on a bundle existing.
+# Measured before wiring (yoga 2026-09-26, the published v56.9.25.2 set,
+# 15 bundles, all with SAN .../workflows/release.yml@refs/tags/v56.9.25.2):
+# cosign v3.0.5 (what the pinned cosign-installer v4.1.1 installs) passes
+# 15/15 with this regexp; ci.yml and a foreign-owner regexp fail 15/15 on
+# SAN mismatch; a tampered asset fails on its signature. The refs/heads
+# alternative (a workflow_dispatch run) is an ASSUMPTION until a dispatched
+# release exists to measure.
+env:
+  RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP: '^https://github\.com/8007342/tillandsias/\.github/workflows/release\.yml@refs/(tags|heads)/'
+
 jobs:
   release:
     name: Build, sign, and publish Linux musl release
