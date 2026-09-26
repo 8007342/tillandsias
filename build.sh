@@ -4168,6 +4168,24 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus bindings reconciliation passed"
 
+    # Order 1397-eppt. CentiColon counts obligations from each spec's `## Status`
+    # while tooling reads the litmus registry; 21 pairs disagreed (7 specs
+    # counted active that the registry had retired, 3 with no status at all),
+    # corrupting the denominator. A spec and its registry entry must now agree;
+    # a pair that could not be decided from evidence is NAMED on every run.
+    _step "Checking every spec and its registry entry agree on status (1397-eppt)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-spec-registry-status.sh" 2>&1; then
+        _error "a spec's ## Status disagrees with openspec/litmus-bindings.yaml (1397-eppt) — reconcile the pair with a recorded reason"
+        exit 1
+    fi
+    _info "Spec/registry status agreement passed"
+    # ...and the guard itself can fail: hermetic arms for a flipped word, a
+    # missing section, an annotated line, and a named undecided pair.
+    if ! _run bash "$SCRIPT_DIR/scripts/test-spec-registry-status.sh" 2>&1; then
+        _error "the spec/registry status guard no longer refuses what it must (1397-eppt)"
+        exit 1
+    fi
+
     # Order 875-v7hv. The runner parses step fields with bash regexes, which
     # capture the RAW bytes of a double-quoted YAML scalar, so a `\"` arrives
     # as backslash-quote and must be unescaped by hand. That unescaping was
