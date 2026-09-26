@@ -1,0 +1,14 @@
+# Gate step 1375-8g5t — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS: `tillandsias-plan hash sha256` equals the NIST vector and
+# the host's own sha256 tool, and `time now --ms` is real milliseconds (a
+# one-second clock, BSD date's +%s%3N, cannot pass arm 3).
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the hash sha256 / time now verbs are portable and millisecond-true (1375-8g5t)"
+STEP_SCRIPT="scripts/test-plan-hash-time-verbs.sh"
+STEP_ERROR="hash sha256 or time now diverges, or the verbs are absent (1375-8g5t)"
+STEP_OK="hash sha256 matches the vector and the host tool; time now --ms advances in milliseconds"
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="no runnable tillandsias-plan resolved"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin PASS: plan-hash-time-verbs 6/6 (sha256sum and shasum)"
