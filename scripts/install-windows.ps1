@@ -304,6 +304,80 @@ if ($NoLaunchReason -and -not $NoLaunch) {
 # file is the user's and may carry settings for work that has nothing to do
 # with us; writing it behind their back would be a worse defect than the one
 # being fixed. Same consent discipline the destructive reset already follows.
+# The ONE write below (the swap keys, 2026-09-26) is behind an explicit yes.
+#
+# SWAP KEYS (1339-r9xv, design plan/issues/forge-memory-swap-architecture-
+# design-2026-09-26.md section 4.2). WSL's default swap is 25% of the guest's
+# memory: 2 GB at memory=8GB, below a single forge's spill allowance, so a
+# forge that should spill to swap is reaped instead. Target: [wsl2] swap=8GB
+# and a swapFile under %LocalAppData%\tillandsias (a path we own; %Temp% is
+# purged by cleanup tools); [experimental] sparseVhd=true and
+# autoMemoryReclaim=gradual. ONLY ABSENT KEYS ARE ADDED, each under a
+# "# tillandsias:" comment. A present memory, swap, swapFile or processors is
+# never overwritten; a present key with another value is reported, not changed.
+#
+# Get-WslConfigMerge is PURE (lines in, lines out, no I/O) so the fixture
+# scripts/test-installer-merges-wslconfig-swap-keys.sh runs the real function
+# through PowerShell rather than reading its source. The two marker lines
+# around it are what that fixture cuts on; keep them.
+# BEGIN-WSLCONFIG-MERGE
+function Get-WslConfigMerge {
+    param([string[]]$Lines, [string]$SwapFile)
+    if ($null -eq $Lines) { $Lines = @() }
+    # .wslconfig does not expand environment variables and wants doubled
+    # backslashes in a Windows path.
+    $want = [ordered]@{
+        'wsl2'         = [ordered]@{ 'swap' = '8GB'; 'swapFile' = ($SwapFile -replace '\\', '\\') }
+        'experimental' = [ordered]@{ 'sparseVhd' = 'true'; 'autoMemoryReclaim' = 'gradual' }
+    }
+    # Pass 1: where each section ends, and which keys each section holds.
+    $section = ''
+    $present = @{}
+    $lastLine = @{}
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        $t = $Lines[$i].Trim()
+        if ($t -match '^\[([^\]]+)\]$') { $section = $Matches[1].Trim().ToLowerInvariant(); $lastLine[$section] = $i; continue }
+        if ($t -eq '' -or $t.StartsWith('#') -or $t.StartsWith(';')) { continue }
+        if ($t -match '^([^=\s]+)\s*=\s*(.*)$') {
+            $present["$section/$($Matches[1].ToLowerInvariant())"] = $Matches[2].Trim()
+            $lastLine[$section] = $i
+        }
+    }
+    $added = @()
+    $differs = @()
+    $insertAfter = @{}   # line index -> lines to insert after it
+    $appendAtEnd = @()
+    foreach ($sec in $want.Keys) {
+        $block = @()
+        foreach ($k in $want[$sec].Keys) {
+            $v = $want[$sec][$k]
+            $pk = "$sec/$($k.ToLowerInvariant())"
+            if ($present.ContainsKey($pk)) {
+                if ($present[$pk] -ne $v) { $differs += "[$sec] $k=$($present[$pk]) (tillandsias would use $v; left unchanged)" }
+                continue
+            }
+            $block += "# tillandsias: added by the Tillandsias installer (order 1339-r9xv)"
+            $block += "$k=$v"
+            $added += "[$sec] $k=$v"
+        }
+        if ($block.Count -eq 0) { continue }
+        if ($lastLine.ContainsKey($sec)) {
+            $insertAfter[$lastLine[$sec]] = @($insertAfter[$lastLine[$sec]]) + $block | Where-Object { $null -ne $_ }
+        } else {
+            if ($Lines.Count -gt 0 -or $appendAtEnd.Count -gt 0) { $appendAtEnd += '' }
+            $appendAtEnd += "[$sec]"
+            $appendAtEnd += $block
+        }
+    }
+    $out = New-Object System.Collections.Generic.List[string]
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        $out.Add($Lines[$i])
+        if ($insertAfter.ContainsKey($i)) { foreach ($l in $insertAfter[$i]) { $out.Add($l) } }
+    }
+    foreach ($l in $appendAtEnd) { $out.Add($l) }
+    return [pscustomobject]@{ Added = $added; Differs = $differs; Lines = $out.ToArray() }
+}
+# END-WSLCONFIG-MERGE
 $WslCfgPath = Join-Path $env:USERPROFILE '.wslconfig'
 $HostLogicalCpus = 0
 $HostMemGiB = 0
@@ -345,10 +419,19 @@ if ($HostLogicalCpus -le 0) {
     # failure to know whether it applies to them.
     $MbPerCpu = 0
     if ($EffCpus -gt 0) { $MbPerCpu = [int](($EffMemGiB * 1024) / $EffCpus) }
-    $RatioBad = ($EffCpus -ge 8 -and $MbPerCpu -gt 0 -and $MbPerCpu -lt 700)
+    # PROVISIONAL THRESHOLD, bracketed by two measurements on one host rather
+    # than derived: ~320 MB/vCPU killed four consecutive builds, and 512 MB/vCPU
+    # (memory=8GB, processors=16, autoMemoryReclaim=gradual) completed a
+    # 6704-second gate with no reap (yolanda-windows, 2026-09-21). The first
+    # shipped value, 700, flagged that known-good 512 as dangerous. The
+    # boundary between 320 and 512 is not measured.
+    $RatioBad = ($EffCpus -ge 8 -and $MbPerCpu -gt 0 -and $MbPerCpu -lt 450)
     $ReclaimOff = ($CfgReclaim -eq '')
+    # Never recommend the configuration already in force (v56.9.22.1 did: a
+    # warning whose advice is a no-op teaches the reader to ignore the next one).
+    $AlreadyRecommended = ($CfgMemory -ieq '8GB' -and $CfgProcessors -eq "$HostLogicalCpus" -and -not $ReclaimOff)
 
-    if ($RatioBad -or $ReclaimOff) {
+    if (($RatioBad -or $ReclaimOff) -and -not $AlreadyRecommended) {
         Write-Host ""
         SayWn "  Your WSL2 guest is shaped in a way that has killed builds on a host like this."
         if ($RatioBad) {
@@ -372,6 +455,49 @@ if ($HostLogicalCpus -le 0) {
         SayWn "  This installer does not modify that file -- it is yours and may hold other settings."
         Write-Host ""
     }
+}
+
+# -- WSL2 swap keys: add the ABSENT ones, with consent (order 1339-r9xv) ------
+# Consent: interactive -> ask [y/N]. TILLANDSIAS_WSLCONFIG=apply answers yes
+# without a prompt; =skip, or any non-interactive run without =apply, adds
+# nothing and says so. The default is NO because the file is the user's.
+$SwapFileTarget = Join-Path $env:LOCALAPPDATA 'tillandsias\wsl-swap.vhdx'
+$WslCfgLines = @()
+if (Test-Path $WslCfgPath) { $WslCfgLines = @(Get-Content $WslCfgPath -ErrorAction SilentlyContinue) }
+$WslMerge = Get-WslConfigMerge -Lines $WslCfgLines -SwapFile $SwapFileTarget
+foreach ($d in $WslMerge.Differs) { Say "  wsl-swap: present and kept: $d" }
+if ($WslMerge.Added.Count -eq 0) {
+    Say "  wsl-swap: .wslconfig already has swap, swapFile, sparseVhd and autoMemoryReclaim; nothing to add."
+} else {
+    Write-Host ""
+    SayWn "  WSL's default swap is 25% of the guest's memory (2 GB at memory=8GB), below what one"
+    SayWn "  Tillandsias forge spills. These keys are ABSENT from $WslCfgPath"
+    foreach ($a in $WslMerge.Added) { Say "    + $a" }
+    Say "  Nothing already in the file is changed. A backup is written beside it first."
+    Say "  They take effect after 'wsl --shutdown', which STOPS every running WSL distro."
+    $doWsl = $false
+    if ($env:TILLANDSIAS_WSLCONFIG -eq 'apply') {
+        $doWsl = $true
+    } elseif ($env:TILLANDSIAS_WSLCONFIG -ne 'skip' -and [Environment]::UserInteractive) {
+        $resp = Read-Host "  Add these keys and run 'wsl --shutdown' now? [y/N]"
+        if ($resp -match '^[yY]') { $doWsl = $true }
+    }
+    if ($doWsl) {
+        try {
+            New-Item -ItemType Directory -Force -Path (Split-Path $SwapFileTarget -Parent) | Out-Null
+            if (Test-Path $WslCfgPath) { Copy-Item -LiteralPath $WslCfgPath -Destination "$WslCfgPath.tillandsias-bak" -Force }
+            # UTF-8 without a BOM: WSL's parser does not skip one.
+            [System.IO.File]::WriteAllLines($WslCfgPath, [string[]]$WslMerge.Lines, (New-Object System.Text.UTF8Encoding($false)))
+            SayOk "  wsl-swap: added $($WslMerge.Added.Count) key(s) to $WslCfgPath (backup: .wslconfig.tillandsias-bak)."
+            & wsl.exe --shutdown 2>$null
+            Say "  wsl-swap: ran 'wsl --shutdown'; WSL needs ~8 seconds before the new settings apply."
+        } catch {
+            SayWn "  wsl-swap: could not update ${WslCfgPath}: $($_.Exception.Message). Nothing else was changed."
+        }
+    } else {
+        Say "  wsl-swap: not applied. To apply later: set TILLANDSIAS_WSLCONFIG=apply and re-run, or add the keys above yourself."
+    }
+    Write-Host ""
 }
 
 # -- Hyper-V Administrators membership (order 312) ---------------------------
