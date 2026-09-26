@@ -156,9 +156,14 @@ Interactive GitHub Login MUST use GitHub App OAuth Device Authorization Grant (R
 #### Scenario: Mobile authorization polling and persistence
 - **WHEN** the QR code is displayed
 - **THEN** an in-container polling loop MUST poll GitHub until the device authorization is completed or expired
-- **AND** once approved, the container MUST authenticate the containerized `gh` session via `gh auth login --with-token`
-- **AND** the full credential bundle (access token, refresh token, expiry timestamps, client ID) MUST be written to Vault at `secret/github/token`
+- **AND** the poll MUST run for the device code's full `expires_in`, not under a shorter generic budget
+- **AND** the device code MUST NOT appear on any spawned process's argv (the poll script and curl's form body travel on stdin)
+- **AND** once approved, the container MUST write Vault BEFORE anything uses the token: the refresh token and its expiry to `secret/github/refresh` first, then the access token, its expiry and the client ID to `secret/github/token`
+- **AND** only then MUST the container authenticate the containerized `gh` session via `gh auth login --with-token`
+- **AND** the git-mirror policy MUST NOT be able to read `secret/github/refresh` (the refresh token mints access tokens for months; git-mirror only needs the short-lived one)
 - **AND** no token bytes SHALL enter the host process memory or host environment
+- **AND** no error message SHALL contain any part of a GitHub response body
+- **AND** test behaviour MUST be selected only by an environment switch, never by the content of a reply, and the switch MUST NOT reach an interactive `gh auth login` or any Vault write
 
 ### Requirement: Token Rotation and Expiration Management
 <!-- req-id: 9c34ea81 -->
@@ -171,8 +176,14 @@ GitHub App user-to-server access tokens expire after 8 hours. The system MUST pe
 - **WHEN** an access token nears expiration (within 30 minutes) or has expired
 - **AND** a valid refresh token exists in Vault
 - **THEN** the system MUST exchange the refresh token at `https://github.com/login/oauth/access_token` for a new access token and rotated refresh token
-- **AND** the new access token and rotated refresh token MUST be updated in Vault `secret/github/token`
+- **AND** the rotation MUST hold an exclusive lock from reading the stored refresh token until the new pair is written (refresh tokens are single-use)
+- **AND** the rotated refresh token MUST be written to `secret/github/refresh` BEFORE the new access token is written to `secret/github/token`, and a failed write MUST leave the previous records intact
 - **AND** an accountability audit event MUST be recorded under `spec:secret-rotation`
+
+#### Scenario: Explicit refresh is an operator action
+- **WHEN** `tillandsias --refresh-github-token` runs without a desktop session
+- **THEN** it MUST refuse with a non-zero exit and record the audit event
+- **AND** when Vault holds no refresh token (or no token), the command MUST exit non-zero rather than report success
 
 ## Litmus Tests
 

@@ -1,0 +1,18 @@
+# @trace order:1376-8zdz — one ephemeral swapfile per forge launch (design §9.1).
+# Started and stopped by the tray (polkit rule 50-tillandsias-swap.rules);
+# never enabled, so nothing re-activates a leftover file at boot.
+[Unit]
+Description=Tillandsias per-launch swapfile %i
+DefaultDependencies=no
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/etc/tillandsias/swap.conf
+ExecStartPre=@HELPER@ reap
+ExecStart=@HELPER@ start %i
+ExecStop=@HELPER@ stop %i
+TimeoutStopSec=5min
+ProtectHome=yes
+NoNewPrivileges=yes

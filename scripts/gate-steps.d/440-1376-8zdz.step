@@ -1,0 +1,13 @@
+# Gate step 1376-8zdz — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS: the per-launch forge swap's root side — the installer is
+# idempotent, the units verify, the helper refuses any instance outside
+# [A-Za-z0-9-]{1,64}, the polkit rule grants only start/stop of that template,
+# gc stops exactly the instances whose tray lease is gone, and the size table.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the per-launch forge swap service: units, helper refusals, polkit rule, gc, sizing (1376-8zdz)"
+STEP_SCRIPT="scripts/test-forge-swap-service.sh"
+STEP_ERROR="per-launch forge swap service root side broken — see the FAIL arm (1376-8zdz)"
+STEP_OK="Per-launch forge swap service root side holds"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:forge-swap-service:26 arms (skipped=2)"

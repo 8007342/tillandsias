@@ -1,0 +1,21 @@
+// @trace order:1376-8zdz — design §9.1/§9.5.
+// Lets the tray start and stop ONLY its own per-launch swap instances, without
+// a password: manage-units, a unit matching the template with an opaque id,
+// verbs start/stop, for group "tillandsias" or the installing user.
+polkit.addRule(function (action, subject) {
+    if (action.id != "org.freedesktop.systemd1.manage-units") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var unit = action.lookup("unit");
+    var verb = action.lookup("verb");
+    if (!unit || !/^tillandsias-swap@[A-Za-z0-9-]{1,64}\.service$/.test(unit)) {
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (verb != "start" && verb != "stop") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (subject.isInGroup("tillandsias") || subject.user == "@INSTALL_USER@") {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

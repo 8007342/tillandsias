@@ -261,4 +261,97 @@ mod tests {
         assert!(!hcl.contains("openai/api-key"));
         assert!(!hcl.contains("secret/metadata/"));
     }
+
+    /// Every `path "..."` grant in a policy, comments stripped.
+    fn granted_paths(hcl: &str) -> Vec<String> {
+        hcl.lines()
+            .map(|l| l.split('#').next().unwrap_or(""))
+            .filter_map(|l| {
+                let l = l.trim();
+                let rest = l.strip_prefix("path \"")?;
+                Some(rest.split('"').next()?.to_string())
+            })
+            .collect()
+    }
+
+    /// Vault path-glob semantics: a trailing `*` is a prefix match, and `+`
+    /// matches exactly one segment.
+    fn grant_matches(pattern: &str, path: &str) -> bool {
+        if let Some(prefix) = pattern.strip_suffix('*') {
+            return path.starts_with(prefix)
+                || (prefix.contains('+') && grant_matches(&format!("{prefix}+"), path));
+        }
+        let (p, q): (Vec<&str>, Vec<&str>) =
+            (pattern.split('/').collect(), path.split('/').collect());
+        p.len() == q.len() && p.iter().zip(&q).all(|(a, b)| *a == "+" || a == b)
+    }
+
+    /// Order 1383-5hpk criterion 7: the GitHub App REFRESH token mints new
+    /// access tokens for months, and the git-mirror service only ever needs the
+    /// short-lived access token. KV v2 policies are path-scoped, so the refresh
+    /// token lives on its own path and no git-mirror grant may match it,
+    /// including by glob.
+    #[test]
+    fn git_mirror_policy_cannot_read_the_github_refresh_token() {
+        let grants = granted_paths(Policy::GitMirror.hcl());
+        assert!(
+            grants.iter().any(|g| g == "secret/data/github/token"),
+            "precondition: git-mirror still reads the access token; grants: {grants:?}"
+        );
+        for target in [
+            "secret/data/github/refresh",
+            "secret/metadata/github/refresh",
+        ] {
+            let hits: Vec<&String> = grants.iter().filter(|g| grant_matches(g, target)).collect();
+            assert!(
+                hits.is_empty(),
+                "git-mirror grants {hits:?}, which match {target}"
+            );
+        }
+    }
+
+    /// The glob check above must be able to fail: a wildcard grant over the
+    /// github tree matches the refresh path.
+    #[test]
+    fn the_refresh_path_glob_check_catches_a_wildcard_grant() {
+        assert!(grant_matches(
+            "secret/data/github/*",
+            "secret/data/github/refresh"
+        ));
+        assert!(grant_matches(
+            "secret/data/+/refresh",
+            "secret/data/github/refresh"
+        ));
+        assert!(grant_matches("secret/*", "secret/data/github/refresh"));
+        assert!(!grant_matches(
+            "secret/data/github/token",
+            "secret/data/github/refresh"
+        ));
+        let sabotaged = "path \"secret/data/github/*\" {
+  capabilities = [\"read\"]
+}
+";
+        let grants = granted_paths(sabotaged);
+        assert!(
+            grants
+                .iter()
+                .any(|g| grant_matches(g, "secret/data/github/refresh"))
+        );
+    }
+
+    /// The login container writes the refresh token and cannot read it back.
+    #[test]
+    fn github_login_policy_writes_but_does_not_read_the_refresh_token() {
+        let hcl = Policy::GithubLogin.hcl();
+        let block = hcl
+            .split("path \"secret/data/github/refresh\"")
+            .nth(1)
+            .and_then(|b| b.split('}').next())
+            .expect("github-login must grant the refresh path");
+        assert!(block.contains("\"create\"") && block.contains("\"update\""));
+        assert!(
+            !block.contains("\"read\""),
+            "login must not read the refresh token back: {block}"
+        );
+    }
 }

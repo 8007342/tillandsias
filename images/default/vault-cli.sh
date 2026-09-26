@@ -212,11 +212,22 @@ cmd_write_json() {
         exit 4
     fi
     path="$1"
+    # Order 1383-5hpk. The body is captured ONCE, then normalised by a single
+    # jq reading a here-document, not by an `if ! printf | jq` verdict
+    # pipeline. That shape read a malformed body as "has no data", wrapped it,
+    # failed again, and wrote an EMPTY body over the secret. Now a body that
+    # is not a JSON object is refused before anything is written, and the
+    # refusal never echoes the body (it carries a token).
     json_body="$(cat)"
-    if ! printf '%s' "$json_body" | jq -e 'has("data")' >/dev/null 2>&1; then
-        json_body="$(printf '%s' "$json_body" | jq '{data: .}')"
+    normalised="$(jq -c 'if type == "object" then (if has("data") then . else {data: .} end) else error("not an object") end' 2>/dev/null <<EOF
+$json_body
+EOF
+)" || normalised=""
+    if [ -z "$normalised" ]; then
+        echo "vault-cli: write-json: the body on stdin is not a JSON object; nothing was written" >&2
+        exit 4
     fi
-    write_json "$path" "$json_body"
+    write_json "$path" "$normalised"
 }
 
 cmd_health() {

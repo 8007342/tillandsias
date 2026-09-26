@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# tillandsias-swap — root-owned helper behind tillandsias-swap@.service.
+# @trace order:1376-8zdz, spec:forge-hot-cold-split (design §9.1, §9.6, §9.7)
+#
+# One swapfile PER FORGE LAUNCH, deleted when the launch ends (operator ruling
+# 2026-09-26: "a new swapfile every launch ... thrown away and deleted on
+# shutdown"). Installed to /usr/local/libexec/tillandsias-swap by
+# scripts/install-forge-swap-service.sh; systemd runs it as root.
+#
+#   start <id>   create /var/swap/tillandsias-<id>, label it, swapon -p 10
+#   stop <id>    swapoff + rm
+#   reap         rm every tillandsias-* file that /proc/swaps does not list
+#   gc           stop every active instance whose tray lease is no longer held
+#
+# THE INSTANCE STRING IS OPAQUE. It must match [A-Za-z0-9-]{1,64}; size,
+# directory and priority come from the root-owned config, never from <id>, so
+# a caller authorised by the polkit rule cannot inject a path or a size.
+set -uo pipefail
+
+CONF="${TILLANDSIAS_SWAP_CONF:-/etc/tillandsias/swap.conf}"
+# shellcheck disable=SC1090
+[ -r "$CONF" ] && . "$CONF"
+SWAP_DIR="${SWAP_DIR:-/var/swap}"
+SWAP_PRIORITY="${SWAP_PRIORITY:-10}"
+SWAP_TIERS_GB="${SWAP_TIERS_GB:-8:16:24}"
+SWAP_RESERVE_GB="${SWAP_RESERVE_GB:-20}"
+SWAP_SIZE_GB="${SWAP_SIZE_GB:-}"
+# Seams for the hermetic test (set only by the test, never by the unit).
+SYSTEMCTL="${TILLANDSIAS_SWAP_SYSTEMCTL:-systemctl}"
+PROC_SWAPS="${TILLANDSIAS_SWAP_PROC_SWAPS:-/proc/swaps}"
+LEASE_GLOB="${TILLANDSIAS_SWAP_LEASE_GLOB:-/run/user/*/tillandsias}"
+
+valid_id() {
+    [[ "${1:-}" =~ ^[A-Za-z0-9-]{1,64}$ ]] && return 0
+    echo "refused:instance:${1:-<empty>} — must match [A-Za-z0-9-]{1,64}"
+    return 2
+}
+
+# §9.6 size policy (decimal GB, as install-windows.ps1 counts): 24 if free >=
+# 200, 16 if free >= 100, else 8; a tier is taken only if free - size >= the
+# reserve, otherwise the next tier down; below the smallest, refuse.
+size_for_free_gb() {
+    local free="$1" t1 t2 t3 cand
+    IFS=: read -r t1 t2 t3 <<<"$SWAP_TIERS_GB"
+    if [ -n "$SWAP_SIZE_GB" ]; then echo "$SWAP_SIZE_GB"; return 0; fi
+    if [ "$free" -ge 200 ]; then cand="$t3 $t2 $t1"
+    elif [ "$free" -ge 100 ]; then cand="$t2 $t1"
+    else cand="$t1"; fi
+    for s in $cand; do
+        [ $(( free - s )) -ge "$SWAP_RESERVE_GB" ] && { echo "$s"; return 0; }
+    done
+    echo "refused:size:free=${free}GB reserve=${SWAP_RESERVE_GB}GB smallest=${t1}GB" >&2
+    return 3
+}
+
+free_gb() { df -B1 --output=avail "$1" 2>/dev/null | awk 'NR == 2 { print int($1 / 1000000000) }'; }
+active() { awk -v f="$1" '$1 == f { found = 1 } END { exit !found }' "$PROC_SWAPS"; }
+
+cmd_start() {
+    valid_id "$1" || return 2
+    local f="$SWAP_DIR/tillandsias-$1" size fs
+    mkdir -p "$SWAP_DIR" && chmod 700 "$SWAP_DIR"
+    if active "$f"; then echo "ok:swap-start:$1:already-active"; return 0; fi
+    rm -f "$f"
+    size="$(size_for_free_gb "$(free_gb "$SWAP_DIR")")" || return 3
+    fs="$(stat -f -c %T "$SWAP_DIR" 2>/dev/null)"
+    if [ "$fs" = btrfs ] && btrfs filesystem mkswapfile --help >/dev/null 2>&1; then
+        # sets NODATACOW and allocates fully (verified, design §9.1)
+        btrfs filesystem mkswapfile --size "${size}G" "$f" >/dev/null || { rm -f "$f"; echo "refused:mkswapfile:$f"; return 4; }
+    else
+        fallocate -l "${size}G" "$f" && chmod 600 "$f" && mkswap "$f" >/dev/null \
+            || { rm -f "$f"; echo "refused:mkswap:$f"; return 4; }
+    fi
+    # §9.7: /var/swap defaults to var_t, which lacks the swapon permission;
+    # swapfile_t is stock policy. Only where SELinux is enabled.
+    if command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled; then
+        chcon -t swapfile_t "$f" || { rm -f "$f"; echo "refused:chcon:$f"; return 4; }
+    fi
+    swapon -p "$SWAP_PRIORITY" "$f" || { rm -f "$f"; echo "refused:swapon:$f"; return 4; }
+    echo "ok:swap-start:$1:${size}G:pri=$SWAP_PRIORITY"
+}
+
+cmd_stop() {
+    valid_id "$1" || return 2
+    local f="$SWAP_DIR/tillandsias-$1"
+    if active "$f"; then swapoff "$f" || { echo "refused:swapoff:$f"; return 4; }; fi
+    rm -f "$f"
+    echo "ok:swap-stop:$1"
+}
+
+cmd_reap() {
+    local f n=0
+    for f in "$SWAP_DIR"/tillandsias-*; do
+        [ -e "$f" ] || continue
+        active "$f" && continue
+        rm -f "$f" && n=$((n + 1))
+    done
+    echo "ok:swap-reap:removed=$n"
+}
+
+# The tray holds flock on /run/user/<uid>/tillandsias/swap-<id>.lease for the
+# life of its launch. If the lock can be taken, the tray is gone (kill -9,
+# crash): stop the instance. A user-manager BindsTo= cannot reach a system
+# unit, which is why the lease exists (design §9.1).
+cmd_gc() {
+    local unit id lease held n=0
+    while read -r unit _; do
+        id="${unit#tillandsias-swap@}"; id="${id%.service}"
+        valid_id "$id" >/dev/null || continue
+        held=0
+        for lease in $LEASE_GLOB/swap-"$id".lease; do
+            [ -e "$lease" ] || continue
+            flock -n "$lease" true 2>/dev/null || held=1
+        done
+        if [ "$held" = 0 ]; then "$SYSTEMCTL" stop "$unit" && n=$((n + 1)); fi
+    done < <("$SYSTEMCTL" list-units 'tillandsias-swap@*' --state=active --no-legend --plain 2>/dev/null)
+    echo "ok:swap-gc:stopped=$n"
+}
+
+case "${1:-}" in
+    start) cmd_start "${2:-}" ;;
+    stop) cmd_stop "${2:-}" ;;
+    reap) cmd_reap ;;
+    gc) cmd_gc ;;
+    size-for-free-gb) size_for_free_gb "${2:-0}" ;;  # test seam: pure policy
+    *) echo "usage: tillandsias-swap start|stop <id> | reap | gc"; exit 64 ;;
+esac
