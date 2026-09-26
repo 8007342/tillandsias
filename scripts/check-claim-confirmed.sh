@@ -2,6 +2,9 @@
 # check-claim-confirmed.sh — after claiming an order, did THIS host win it?
 # @trace order:1370-tjme
 # @trace order:1140-d6ni (claims are by order, through the plan lane)
+# @trace order:914-ahsy (JQ CALLER TO MIGRATE: one `jq` per matching fragment
+#   inside the loop below; the jq retirement design should count it. With no
+#   jq it refuses as could-not-run:no-jq, never a claim verdict.)
 #
 # THE DEFECT THIS REPLACES. join-the-fleet §3 and advance-work-from-plan
 # confirmed a claim with `tillandsias-plan next <role> | grep -c <order>` → 0.
