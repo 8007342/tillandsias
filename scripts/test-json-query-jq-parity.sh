@@ -60,7 +60,7 @@ if [ "${1:-}" = "--regenerate" ]; then
     exit 0
 fi
 
-if ! "$PLAN" capabilities 2>/dev/null | grep -qx 'json'; then
+if ! "$PLAN" capabilities 2>/dev/null | grep -qx 'json'; then # sigpipe-ok: capabilities output is bounded and non-streaming
     echo "blocked:json-get-absent"
     exit 1
 fi
