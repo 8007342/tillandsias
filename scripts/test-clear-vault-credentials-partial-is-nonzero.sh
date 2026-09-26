@@ -94,26 +94,26 @@ run() { # run <case> <locked> <podman-mode>  -> sets out rc vd calls
 
 # ── 1. rm refused, podman unshare resolves ────────────────────────────────
 run a1 1 resolve
-if [ "$rc" -eq 0 ] && [ ! -e "$vd" ] && printf '%s' "$out" | grep -q '^ok:clear-vault-credentials:' \
-   && printf '%s' "$out" | grep -q 'via podman unshare'; then
+if [ "$rc" -eq 0 ] && [ ! -e "$vd" ] && grep -q '^ok:clear-vault-credentials:' <<<"$out" \
+   && grep -q 'via podman unshare' <<<"$out"; then
     ok "a subuid-like vault-data is removed through podman unshare, rc 0, ok: line"
 else bad "arm 1: rc=$rc present=$([ -e "$vd" ] && echo y || echo n) last=$(printf '%s' "$out" | tail -1)"; fi
 
 # ── 2. rm refused, podman unshare refuses ─────────────────────────────────
 run a2 1 refuse
-if [ "$rc" -ne 0 ] && [ -e "$vd" ] && printf '%s' "$out" | grep -q '^warn:clear-vault-credentials:partial'; then
+if [ "$rc" -ne 0 ] && [ -e "$vd" ] && grep -q '^warn:clear-vault-credentials:partial' <<<"$out"; then
     ok "both removals refused: warn:...:partial and rc=$rc (non-zero)"
 else bad "arm 2: rc=$rc last=$(printf '%s' "$out" | tail -1) — a partial clear must not exit 0"; fi
 
 # ── 3. rm refused, no podman on PATH ──────────────────────────────────────
 run a3 1 absent
-if [ "$rc" -ne 0 ] && [ -e "$vd" ] && printf '%s' "$out" | grep -q '^warn:clear-vault-credentials:partial'; then
+if [ "$rc" -ne 0 ] && [ -e "$vd" ] && grep -q '^warn:clear-vault-credentials:partial' <<<"$out"; then
     ok "no podman to retry with: warn:...:partial and rc=$rc (non-zero)"
 else bad "arm 3: rc=$rc last=$(printf '%s' "$out" | tail -1)"; fi
 
 # ── 4. NEGATIVE CONTROL: removable vault-data, podman never consulted ─────
 run a4 0 refuse
-if [ "$rc" -eq 0 ] && [ ! -e "$vd" ] && [ -z "$calls" ] && printf '%s' "$out" | grep -q '^ok:clear-vault-credentials:'; then
+if [ "$rc" -eq 0 ] && [ ! -e "$vd" ] && [ -z "$calls" ] && grep -q '^ok:clear-vault-credentials:' <<<"$out"; then
     ok "a removable vault-data clears with rc 0 and never calls podman"
 else bad "arm 4: rc=$rc present=$([ -e "$vd" ] && echo y || echo n) podman-calls='$calls'"; fi
 
