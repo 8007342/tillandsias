@@ -4179,6 +4179,12 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Spec/registry status agreement passed"
+    # ...and the guard itself can fail: hermetic arms for a flipped word, a
+    # missing section, an annotated line, and a named undecided pair.
+    if ! _run bash "$SCRIPT_DIR/scripts/test-spec-registry-status.sh" 2>&1; then
+        _error "the spec/registry status guard no longer refuses what it must (1397-eppt)"
+        exit 1
+    fi
 
     # Order 875-v7hv. The runner parses step fields with bash regexes, which
     # capture the RAW bytes of a double-quoted YAML scalar, so a `\"` arrives

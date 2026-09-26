@@ -19,14 +19,16 @@
 # OUTPUT: ok:spec-registry-status:<checked> undecided=<n> (each named above)  exit 0
 #         refused:spec-registry-status:<n> + one `mismatch:` line per pair    exit 1
 set -uo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+# TILLANDSIAS_SPEC_ROOT is a TEST SEAM (scripts/test-spec-registry-status.sh
+# points it at a fake openspec tree); production never sets it.
+cd "${TILLANDSIAS_SPEC_ROOT:-$(dirname "${BASH_SOURCE[0]}")/..}" || { echo "could-not-run:spec-registry-status:no-root"; exit 3; }
 R=openspec/litmus-bindings.yaml
 [ -f "$R" ] || { echo "could-not-run:spec-registry-status:no-registry"; exit 3; }
 # UNDECIDED PAIRS, named with the reason they could not be decided from the
 # evidence (1397-eppt: "don't guess; name any you can't decide"). Each is
 # PRINTED on every run and counted apart, so an open pair cannot hide in a
 # green verdict. Remove an entry when its pair is decided.
-UNDECIDED="tray-host-control-socket"
+UNDECIDED="${TILLANDSIAS_SPEC_UNDECIDED-tray-host-control-socket}"
 undecided_reason() {
     case "$1" in
         tray-host-control-socket) echo "registry tombstone says superseded by orders 123-128 (host-guest-transport; 125 and 128 still pending); successor specs host-guest-transport and vsock-transport exist and control-wire traces vsock-transport 19x vs this spec 8x, but whether the Unix-socket tray control plane this spec describes still exists beside vsock is a design question" ;;
