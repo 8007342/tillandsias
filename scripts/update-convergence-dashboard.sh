@@ -253,9 +253,15 @@ else
 fi
 
 # @trace gap:OBS-008 — dashboard refresh auto-detection
-generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-generated_date_display="$(date -u +%Y-%m-%d)"
-generated_time_display="$(date -u +%H:%M)"
+# ONE clock read, and every displayed date/time derived from it (1191-vrjf).
+# Three separate `date` calls could disagree across a minute boundary, and the
+# stamp made two renders of the same data differ — macbookair's darwin run of
+# the locale guard failed on exactly that, 1.1 s apart. CONVERGENCE_DASHBOARD_NOW
+# is the seam a test pins; it must be the same UTC ISO-8601 form date prints.
+generated_at="${CONVERGENCE_DASHBOARD_NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+generated_date_display="${generated_at%%T*}"
+generated_time_display="${generated_at#*T}"
+generated_time_display="${generated_time_display:0:5}"
 record_count="${#rows[@]}"
 
 # Compute trend metrics from history rows for alert thresholds.

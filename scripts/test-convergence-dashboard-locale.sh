@@ -10,8 +10,10 @@
 # 2026-09-26 on trunk 6f8d134dd.
 #
 # Premises first, so a green is about the property: (a) the C-locale render
-# succeeds and shows 89.9; (b) two C renders are byte-identical, so a timestamp
-# in the output cannot make the comparison meaningless. A host with no
+# succeeds and shows the expected value; (b) two C renders are byte-identical.
+# Every render pins the clock seam (CONVERGENCE_DASHBOARD_NOW): without it the
+# renderer's wall-clock stamp made (b) hold only when both renders fell in the
+# same second — green on a fast host, red 1 in 3 on macbookair. A host with no
 # comma-decimal locale installed prints a NAMED skip for those arms, never a pass.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -22,9 +24,21 @@ record() { printf '%s\n' '{"timestamp":"2026-09-26T11:21:12Z","version":"0.0.0.0
 fail=0; pass=0; skip=0
 render() {   # <dir> <env assignments...>
     local d="$1"; shift; mkdir -p "$d"
-    env "$@" SOURCE="$work/sig.jsonl" MD_OUT="$d/md" JSON_OUT="$d/json" SUMMARY_OUT="$d/summary" \
+    env "$@" CONVERGENCE_DASHBOARD_NOW="${NOW_PIN:-2026-09-26T12:34:56Z}" SOURCE="$work/sig.jsonl" MD_OUT="$d/md" JSON_OUT="$d/json" SUMMARY_OUT="$d/summary" \
         METRICS_SAMPLE="$work/no-such-metrics.json" TERMINAL_PREVIEW=0 \
         bash "$R" > "$d/out" 2>&1
+}
+# The first differing line, whatever it is: an earlier version grepped only for
+# a comma-decimal number, so a difference of any other kind (macbookair's: a
+# wall-clock stamp) was reported with an EMPTY sample that pointed at nothing.
+first_diff() {
+    local k
+    for k in md json summary; do
+        if ! cmp -s "$1/$k" "$2/$k"; then
+            printf '%s: %s' "$k" "$(diff "$1/$k" "$2/$k" | grep -E '^[<>]' | head -2 | tr '\n' ' ')"
+            return
+        fi
+    done
 }
 same() { cmp -s "$1/md" "$2/md" && cmp -s "$1/json" "$2/json" && cmp -s "$1/summary" "$2/summary"; }
 ok()  { pass=$((pass + 1)); echo "ok   $1"; }
@@ -62,7 +76,7 @@ $c
             d="$work_run/$(printf '%s' "$mode" | tr '=.@' '___')"
             render "$d" -u LC_ALL $mode; rc=$?
             if [ "$rc" != 0 ]; then bad "[$pct_in] under $mode the renderer exits $rc: $(tail -1 "$d/out")"
-            elif ! same "$work_run/c1" "$d"; then bad "[$pct_in] under $mode the output differs from C (e.g. $(grep -oE '(89|90),[0-9]' "$d/md" | head -1))"
+            elif ! same "$work_run/c1" "$d"; then bad "[$pct_in] under $mode the output differs from C — first difference: $(first_diff "$work_run/c1" "$d")"
             else ok "[$pct_in] under $mode the output is byte-identical to C"; fi
         done
     fi
