@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-installer-ends-with-a-big-pending-actions-banner-on-its-own-terminal-linux-prints-the-one-time-sudo-swap-service-command-windows-prints-restart-required-when-wsl-was-just-enabled-macos-prints-what-is-pending-or-none
+    event:
+      type: note
+      ts: "2026-09-26T02:20:01Z"
+      agent_id: windows-yolanda-claude-20260926t022000z
+      host: yolanda-windows
+      summary: |
+        The Windows, Linux and macOS banners all LANDED at 1694cf35b, verified by content. Fixture test-installers-print-pending-banner.sh passes 10/10 and runs each banner block for real.
+        Kept in_progress, deliberately. The live terminal output on a real install is still UNVERIFIED for Linux (lenovinha or yoga) and macOS (macbookair); the Windows banner shipped after the v56.9.25.2 smoke and appears from the next daily.
+        The Linux sudo line prints only once 1376-8zdz installs tillandsias-install-swap-service. Until then the Linux banner reads PENDING: none.
+        Close when a Linux and a macOS host each paste the banner from a real install of a daily that carries 1694cf35b.
