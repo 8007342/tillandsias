@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: no-accelerator-in-the-fleet-is-schedulable-by-any-engine
+    field: status
+    value: completed
+    ts: "2026-09-26T17:03:25Z"
+    host: yoga
+
+events:
+  - packet_id: no-accelerator-in-the-fleet-is-schedulable-by-any-engine
+    event:
+      type: completed
+      ts: "2026-09-26T17:03:25Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 32dc4278c (feat(917-zkge): Vulkan userspace + iGPU policy) + capability-matrix at 824f30a74: gpu/container/ollama schedulable on yoga, lenovinha, macuahuitl, pirria (premise 'not one schedulable accelerator across seven hosts' no longer holds); MEASURED yoga 2026-09-26T17:02Z in tillandsias-dev-inference: qwen2.5:0.5b size_vram 572228893 == size 572228893, engine library=Vulkan 'AMD Radeon 840M Graphics (RADV KRACKAN1)'
+  - packet_id: no-accelerator-in-the-fleet-is-schedulable-by-any-engine
+    event:
+      type: note
+      ts: "2026-09-26T17:03:25Z"
+      host: yoga
+      summary: |-
+        deliverable met: at least one accelerator (four) schedulable through a container-lane engine; NPU (engine-missing on yoga/macuahuitl/yolanda) and WSL2 passthrough remain out of this row's scope
