@@ -223,6 +223,11 @@ if [ -z "$SCAN_FILES" ]; then
 fi
 
 for f in $SCAN_FILES; do
+  # 1374-4u6i: count FILES, as the summary line says. Each rule below used to
+  # increment the counter itself, so one mapfile line (PAT_BUILTIN and PAT_BASH4
+  # both match it) was reported as two files and the fixture arm expecting :1
+  # was red from d2ceb4e4d (2026-09-05) on, unnoticed because no gate ran it.
+  _file_bad=0
   [ -f "$f" ] || continue
   base="${f##*/}"
   [ "$base" = "$SELF_NAME" ] && continue
@@ -236,7 +241,7 @@ for f in $SCAN_FILES; do
     else
       echo "[check-bash-dialect] UNGUARDED bash-4-ism in '$f' (first hits):" >&2
       printf '%s\n' "$hits" | head -3 >&2
-      unguarded=$((unguarded + 1))
+      _file_bad=1
     fi
   elif in_allowlist "$base"; then
     echo "[check-bash-dialect] note: '$base' is allowlisted but carries no bash-4-ism any more — shrink the allowlist (761-g36m burndown)" >&2
@@ -277,7 +282,7 @@ for f in $SCAN_FILES; do
   if [ -n "$gnudate_bad" ]; then
     echo "[check-bash-dialect] UNEXEMPTED GNU-date-ism in '$f' (BSD date succeeds with garbage output — exit-code guards cannot catch it):" >&2
     printf '%s' "$gnudate_bad" | head -3 >&2
-    unguarded=$((unguarded + 1))
+    _file_bad=1
   fi
 
   # GNU-du-isms. Judged per line like the date rule, and for the same reason:
@@ -305,7 +310,7 @@ for f in $SCAN_FILES; do
   if [ -n "$gnudu_bad" ]; then
     echo "[check-bash-dialect] UNEXEMPTED GNU-du-ism in '$f' (BSD du REFUSES -b, so the substitution is empty and a '|| n=0' fallback silently becomes the answer):" >&2
     printf '%s' "$gnudu_bad" | head -3 >&2
-    unguarded=$((unguarded + 1))
+    _file_bad=1
   fi
 
   # GNU-sed perl classes. Judged per line like the date and du rules. No
@@ -328,7 +333,7 @@ for f in $SCAN_FILES; do
   if [ -n "$gnused_bad" ]; then
     echo "[check-bash-dialect] UNEXEMPTED GNU-sed class in '$f' (BSD sed does not implement \\S \\s \\w \\b \\d and does NOT error — the substitution silently leaves the input unchanged, so the consumer gets the whole line; see 803-bqte):" >&2
     printf '%s' "$gnused_bad" | head -3 >&2
-    unguarded=$((unguarded + 1))
+    _file_bad=1
   fi
 
   # bash-4 builtins / builtin options. No `set -u` precondition: these are
@@ -349,7 +354,7 @@ for f in $SCAN_FILES; do
   if [ -n "$bash4_bad" ]; then
     echo "[check-bash-dialect] UNEXEMPTED bash-4 builtin in '$f' (mapfile/readarray/read -N do not exist in bash 3.2; darwin errors and then reports a violation against a healthy tree; see 1055-6yp8):" >&2
     printf '%s' "$bash4_bad" | head -3 >&2
-    unguarded=$((unguarded + 1))
+    _file_bad=1
   fi
 
   # Sourcing a process substitution: silently empty on bash 3.2. No `set -u`
@@ -370,7 +375,7 @@ for f in $SCAN_FILES; do
   if [ -n "$procsub_bad" ]; then
     echo "[check-bash-dialect] SOURCED process substitution in '$f' (bash 3.2 — the only bash macOS ships — sources NOTHING from '. <(cmd)' and returns 0, so the consumer reads an empty variable; redded every macOS gate via 1349-53h6 arm5, see 1373-sr9g). Use eval \"\$(cmd)\":" >&2
     printf '%s' "$procsub_bad" | head -3 >&2
-    unguarded=$((unguarded + 1))
+    _file_bad=1
   fi
 
   # Empty-array expansion under `set -u`. Only meaningful when the file
@@ -398,8 +403,9 @@ for f in $SCAN_FILES; do
   if [ -n "$emptyarr_bad" ]; then
     echo "[check-bash-dialect] EMPTY-ARRAY expansion under set -u in '$f' (bash 3.2 — the only bash macOS ships — dies with 'unbound variable' on an EMPTY array here, while bash 4.4+ expands to nothing, so this is invisible on linux/windows and fatal on darwin; broke 747-knbp 2026-08-30). Use \${arr[@]+\"\${arr[@]}\"}:" >&2
     printf '%s' "$emptyarr_bad" | head -3 >&2
-    unguarded=$((unguarded + 1))
+    _file_bad=1
   fi
+  if [ "$_file_bad" -eq 1 ]; then unguarded=$((unguarded + 1)); fi
 done
 
 if [ "$unguarded" -gt 0 ]; then

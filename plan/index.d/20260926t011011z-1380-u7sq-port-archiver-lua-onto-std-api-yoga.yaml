@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: archive-plan-packets-lua-shells-out-through-io-popen-strings-and-os-execute-so-it-is-the-last-caller-that-needs-the-unsandboxed-lua-cli
+    order: 1380-u7sq
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, portability, plan-binary, archiver]
+    estimated_hours: 4
+    depends_on: [one-lua-std-module-registers-json-yaml-hash-time-path-into-every-lua-environment-the-plan-binary-hosts-by-class-and-the-lua-cli-stops-handing-scripts-an-unsandboxed-vm]
+    owned_files: [scripts/archive-plan-packets.lua, scripts/archive-plan-packets.sh, crates/tillandsias-plan/src/lua_std.rs, crates/tillandsias-plan/tests/lua_std.rs]
+    observed_by: yoga
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the closing check TIGHTENS an existing
+      test, tests/lua_std.rs every_unsandboxed_caller_lives_in_the_archiver_script,
+      from one file to zero; the tightened assertion lands in the same commit
+      as the port (1136-n8sh).
+    title: |
+      scripts/archive-plan-packets.lua shells out through io.popen shell STRINGS, os.execute("mkdir -p") and os.getenv, so it is the last caller that needs ; port it onto the std API and retire the flag
+    verifiable_closure: |
+      git grep -l -F 'lua --unsandboxed' -- '*.sh' '*.yaml' '*.yml' build.sh
+      prints NOTHING, and the lua_std pin asserts the empty list. The archiver
+      runs in the default sandboxed environment: scripts/archive-plan-packets.sh
+      --check rc=0 with the same answerability and ready-set verdict the
+      unsandboxed run gave on the same tree, and the real sweep archives the
+      same packet set. Pre-fix result: FAILS — the grep lists
+      scripts/archive-plan-packets.sh, and running the .lua without the flag
+      fails at :24 "attempt to call a nil value (field 'execute')" (measured
+      by yoga 2026-09-26 on work/1375-btuf).
+    context: |
+      Follow-up to 1375-btuf, option B of the coordinator ruling
+      (macuahuitl, 2026-09-26): 1375-btuf sandboxed the lua CLI by default and
+      left the archiver on a NAMED opt-in, pinned by file, because the port
+      needs verbs the design does not yet specify.
+      What the .lua does today: os.execute(string.format("mkdir -p %q", dir))
+      :24; os.getenv("TILLANDSIAS_PLAN_BIN") :27 with a HARDCODED
+      target/release/tillandsias-plan fallback :29 (the 721-nyev shape: a
+      redirected CARGO_TARGET_DIR makes it wrong; fold that in here); io.popen
+      of a shell STRING running the plan binary's query :33 (becomes
+      sh.run{argv}, which deletes quoting as a class, 1252-fg9e); io.stderr,
+      os.exit. It also WRITES plan files (index and archive), so the port needs
+      Observing-only write verbs (fs.mkdir, fs.write) that the design must
+      specify first: rooted like fs.read, and never in Cacheable.
+      yolanda's 560 adds a second call site in the same script (the --check
+      sweep); the port covers both.
+    events:
+      - type: filed
+        ts: "2026-09-26T01:10:11Z"
+        host: yoga
+        summary: |
+          Filed by yoga at the coordinator's direction (ruling on 1375-btuf,
+          2026-09-26, option B as a follow-up). Pre-fix measured on
+          work/1375-btuf (70bdc5a23): the .lua without --unsandboxed -> ':24:
+          attempt to call a nil value (field execute)', rc=1.

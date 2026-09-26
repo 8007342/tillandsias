@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-preflight-roster-enumerates-guards-by-three-rules-and-never-asserts-its-population-so-a-guard-outside-all-three-is-invisible-rather-than-reported-missing
+    event:
+      type: finding
+      ts: "2026-09-26T01:09:15Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        MEASURED on macuahuitl 2026-09-26 ~01:15Z, same tree (the local linux-next relay merge of work/1370-tjme 7dd71f6a6 + work/1374-4u6i + the lua-arch-design salvage): `./build.sh --preflight --full` printed `ok:preflight:ran=118 declared-skip=4 skipped-by-deadline=0 could-not-run=0 refused=0`, while the land gate's `./build.sh --check` refused `violation:sigpipe-verdict-added:2` (two `printf '%s' "$out" | grep -qF` verdicts in scripts/test-claim-confirmation-names-the-earliest-claimant.sh), and `bash scripts/check-sigpipe-verdict-pipelines-added.sh` run directly in the checkout also refused. So the front door PASSED a tree its gate refuses on a decider the door claims to run. The author's host (yoga) reported `partial:preflight:... refused=0` for the same ref too. HYPOTHESIS, not verified: the decider prints `ok:sigpipe-verdict-added:base-unavailable` and exits 0 when its base ref (origin/linux-next) does not resolve, and the preflight's isolated run may not resolve it, so a skip scores as ok. The preflight log keeps only summary lines, so which decider said what cannot be recovered from it. A base-unavailable skip should be `skip:`/`could-not-run:`, never `ok:`. Fixed in the relay by swapping to here-strings (7/7 still).
