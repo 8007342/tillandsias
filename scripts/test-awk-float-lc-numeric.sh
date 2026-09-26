@@ -12,8 +12,12 @@
 # locale around each producer and asserts ^[0-9]+\.[0-9]+$ on its fields.
 #
 # INJECTION. BSD/one-true awk (macOS) honours LC_NUMERIC on output always. GNU
-# awk honours it only in POSIX mode, so POSIXLY_CORRECT=1 is exported with the
-# locale to reproduce the macOS behaviour on a Linux lane. The locale is chosen
+# awk honours it only with --use-lc-numeric (or in POSIX mode), so on a GNU awk
+# host an `awk` shim that adds the flag is put first on PATH to reproduce the
+# macOS behaviour on a Linux lane. NEVER export POSIXLY_CORRECT to reach gawk:
+# bash reads it too, and bash 3.2 in POSIX mode rejects `done < <(...)` as a
+# syntax error (freshness-inventory.sh:182), so on darwin every arm went red
+# from the HARNESS while the fix itself was correct (macbookair, 2026-09-26). The locale is chosen
 # by MEASUREMENT (it must actually make awk print 1,00), never by name: a glibc
 # host without fr_CH/de_DE generated usually still ships en_DK, which is comma.
 #
@@ -34,11 +38,21 @@ ok()  { echo "  ok: $1"; pass=$((pass+1)); }
 bad() { echo "  FAIL: $1"; fail=$((fail+1)); }
 DOT='^[0-9]+\.[0-9]+$'
 
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/awklc.XXXXXX")"
+SHIM_PATH="$PATH"
+if awk --version 2>/dev/null | head -1 | grep -q 'GNU Awk'; then
+    mkdir -p "$TMP/awkshim"
+    real_awk="$(command -v awk)"
+    printf '#!/bin/sh\nexec "%s" --use-lc-numeric "$@"\n' "$real_awk" >"$TMP/awkshim/awk"
+    chmod +x "$TMP/awkshim/awk"
+    SHIM_PATH="$TMP/awkshim:$PATH"
+fi
+
 # ── find a comma locale by measurement ─────────────────────────────────────────
 COMMA=""
 for l in fr_CH.UTF-8 de_DE.UTF-8 fr_FR.UTF-8 en_DK.UTF-8 en_DK.utf8 de_DE.utf8 \
          $(locale -a 2>/dev/null | grep -iE '^(de|fr|es|it|nl|pt|da|sv|en_DK)' || true); do
-    if [ "$(LC_ALL="$l" POSIXLY_CORRECT=1 awk 'BEGIN{printf "%.2f", 1}' 2>/dev/null)" = "1,00" ]; then
+    if [ "$(PATH="$SHIM_PATH" LC_ALL="$l" awk 'BEGIN{printf "%.2f", 1}' 2>/dev/null)" = "1,00" ]; then
         COMMA="$l"; break
     fi
 done
@@ -48,9 +62,8 @@ if [ -z "$COMMA" ]; then
     exit 0
 fi
 echo "# injected comma locale: $COMMA (awk prints 1,00 under it)"
-inject() { LC_ALL="$COMMA" POSIXLY_CORRECT=1 "$@"; }
+inject() { PATH="$SHIM_PATH" LC_ALL="$COMMA" "$@"; }
 
-TMP="$(mktemp -d "${TMPDIR:-/tmp}/awklc.XXXXXX")"
 MUTANTS=()
 cleanup() { rm -rf "$TMP"; for m in ${MUTANTS[@]+"${MUTANTS[@]}"}; do rm -f "$m"; done; }
 trap cleanup EXIT
@@ -105,7 +118,7 @@ EOF
 chmod +x "$TMP/bin/curl" "$TMP/plan-stub"
 mkdir -p "$TMP/idx"
 printf '{"band":"answer","corpus":"spec","q":"what is x"}\n' >"$TMP/q.jsonl"
-bands_margin() { PATH="$TMP/bin:$PATH" TILLANDSIAS_PLAN_BIN="$TMP/plan-stub" inject bash "$1" \
+bands_margin() { SHIM_PATH="$TMP/bin:$SHIM_PATH" TILLANDSIAS_PLAN_BIN="$TMP/plan-stub" inject bash "$1" \
     --model m --index-dir "$TMP/idx" --questions "$TMP/q.jsonl" 2>/dev/null | awk -F'\t' 'NR==2{print $5}'; }
 v="$(bands_margin scripts/refusal-calibration/measure-bands.sh)"
 if bad_v="$(every_dot bands $v)"; then ok "measure-bands margin=$v under $COMMA"
@@ -117,14 +130,22 @@ else ok "mutation arm: unpinned measure-bands emits '$v' (red as it must be)"; f
 # ── 3. select-work-batch.sh: frontier score, neglect=, p= ───────────────────────
 # Runs against the real folded ledger (read-only). A refusal is a FAIL, not a
 # skip: without frontier lines there is nothing to assert.
-frontier_vals() { inject bash "$1" linux 2>/dev/null | awk -F'\t' '/^frontier\t/{
+frontier_raw() { inject bash "$1" linux 2>/dev/null; }
+frontier_vals() { printf '%s\n' "$1" | awk -F'\t' '/^frontier\t/{
     print $2; n=$6; sub(/^neglect=/,"",n); print n; p=$7; sub(/^p=/,"",p); print p }'; }
-v="$(frontier_vals scripts/select-work-batch.sh)"
-if bad_v="$(every_dot select $v)"; then ok "select-work-batch frontier fields all dot-decimal ($(printf '%s\n' $v | wc -l | tr -d ' ') values) under $COMMA"
-else bad "select-work-batch emitted '${bad_v}' under $COMMA (want dot decimal)"; fi
-v="$(frontier_vals "$(mpath scripts/select-work-batch.sh)")"
-if every_dot select $v >/dev/null; then bad "mutation arm vacuous: unpinned select-work-batch still all-dot"
-else ok "mutation arm: unpinned select-work-batch emits '$(printf '%s\n' $v | head -1)' (red as it must be)"; fi
+raw="$(frontier_raw scripts/select-work-batch.sh)"
+if printf '%s\n' "$raw" | grep -q '^refused:no-plan-binary'; then
+    # A precondition, not a verdict: no runnable plan binary means no frontier
+    # to measure. Named skip, so the arm is visibly not scored.
+    echo "  skip: select-work-batch arms — $(printf '%s\n' "$raw" | grep -m1 '^refused:no-plan-binary')"
+else
+    v="$(frontier_vals "$raw")"
+    if bad_v="$(every_dot select $v)"; then ok "select-work-batch frontier fields all dot-decimal ($(printf '%s\n' $v | wc -l | tr -d ' ') values) under $COMMA"
+    else bad "select-work-batch emitted '${bad_v}' under $COMMA (want dot decimal)"; fi
+    v="$(frontier_vals "$(frontier_raw "$(mpath scripts/select-work-batch.sh)")")"
+    if every_dot select $v >/dev/null; then bad "mutation arm vacuous: unpinned select-work-batch still all-dot"
+    else ok "mutation arm: unpinned select-work-batch emits '$(printf '%s\n' $v | head -1)' (red as it must be)"; fi
+fi
 
 # ── 4. pre-commit-openspec.sh: static — every %.Nf awk carries the pin ──────────
 unpinned="$(grep -nE 'awk .*%\.[0-9]f' scripts/hooks/pre-commit-openspec.sh | grep -v 'LC_ALL=C awk' || true)"
