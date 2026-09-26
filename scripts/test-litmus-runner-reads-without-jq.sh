@@ -69,6 +69,10 @@ run without-tools "$scratch/stubs"
 # YAML reader, dropped by the awk tier), t-runtime (never selected).
 ctl="$scratch/ctl"
 mkdir -p "$ctl/tests"
+# The synthetic tests' names are BUILT, not written literally: they are this
+# fixture's own data, not claims that a real litmus exists, and a literal
+# `litmus:<name>` token here is read as a pin by check-litmus-pin-claims.sh.
+LP=litmus
 for t in plain quoted runtime; do
     case "$t" in
         plain)   meta='phase: pre-build
@@ -79,7 +83,7 @@ size: instant  # a comment is valid YAML'"'"'s business, not part of the value' 
 size: instant' ;;
     esac
     cat > "$ctl/tests/litmus-fx6pnd-$t.yaml" <<EOF
-name: litmus:fx6pnd-$t
+name: ${LP}:fx6pnd-$t
 spec: fx6pnd
 $meta
 description: 1375-6pnd selection fixture ($t)
@@ -90,14 +94,14 @@ critical_path:
     timeout_ms: 5000
 EOF
 done
-cat > "$ctl/bindings.yaml" <<'EOF'
+cat > "$ctl/bindings.yaml" <<EOF
 specs:
 - spec_id: fx6pnd
   status: active
   litmus_tests:
-  - litmus:fx6pnd-plain
-  - litmus:fx6pnd-quoted
-  - litmus:fx6pnd-runtime
+  - ${LP}:fx6pnd-plain
+  - ${LP}:fx6pnd-quoted
+  - ${LP}:fx6pnd-runtime
 EOF
 ctl_run() {   # <label> [PATH prefix]
     local p="${2:+$2:}$PATH"
@@ -110,7 +114,7 @@ ctl_run() {   # <label> [PATH prefix]
 ctl_run ctl-with-tools
 ctl_run ctl-without-tools "$scratch/stubs"
 unset TILLANDSIAS_LITMUS_RUNTIME_DIR
-want="$(printf 'litmus:fx6pnd-plain...\nlitmus:fx6pnd-quoted...\n')"
+want="$(printf '%s:fx6pnd-plain...\n%s:fx6pnd-quoted...\n' "$LP" "$LP")"
 got_with="$(grep '^litmus:' "$scratch/ctl-with-tools.sel")"
 got_without="$(grep '^litmus:' "$scratch/ctl-without-tools.sel")"
 if [ "$got_with" != "$want" ]; then
