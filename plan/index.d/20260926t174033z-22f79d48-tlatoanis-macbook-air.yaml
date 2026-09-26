@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-long-running-project-info-mcp-server-keeps-serving-the-code-it-started-with-so-a-landed-fix-is-not-in-effect-and-the-health-probe-still-reads-up
+    event:
+      type: note
+      ts: "2026-09-26T17:40:33Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t174033z
+      host: tlatoanis-macbook-air
+      summary: |
+        PREFERRED SHAPE (coordinator steer, 2026-09-26): reuse 823-u3k9's mechanism, do not add a second one. forge-plan's tool answers already carry a `server_build: <server>=<id> source=<path>` line, and scripts/check-mcp-live-build.sh `attest` / `check` compares the attested build with the on-disk one, reading stale:live-server-build:… (skills/meta-orchestration, "the third question"). Likely-smallest fix: have project-info emit the same server_build line, with <id> = a digest of project-info.sh taken as parsed at startup, and extend check-mcp-live-build.sh to cover project-info. Check that path first; only design something else if it cannot express a bash server's startup-parsed script. The health probe's up/down stays a liveness signal; staleness belongs to check-mcp-live-build.
