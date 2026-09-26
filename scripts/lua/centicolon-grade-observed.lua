@@ -20,6 +20,10 @@
 -- `skip` earns nothing. Everything below the rung keeps its reason, so R is
 -- printed with its residue, never as a bare number.
 
+-- Every LIST field is built with json.array() so an empty list encodes as []
+-- and never as {} (1398-3qiz). The fallback keeps an older binary working.
+local A = json.array or function(t) return t or {} end
+
 local function split(s, sep)
     local out = {}
     for item in (s or ""):gmatch("[^" .. sep .. "]+") do out[#out + 1] = item end
@@ -59,7 +63,7 @@ local function observe(arg)
     end
 
     local hist = { declared = 0, traced = 0, positively_tested = 0 }
-    local reasons, obs = {}, {}
+    local reasons, obs = {}, A()
     for _, o in ipairs(st.obligations or {}) do
         local state, reason, by_host, regime = o.state, o.reason, nil, nil
         if #(o.candidates or {}) > 0 then
@@ -98,7 +102,7 @@ local function observe(arg)
         histogram = hist,
         residue_reasons = reasons,
         obligations = obs,
-        static_refused = st.refused or {},
+        static_refused = st.refused or A(),
     }
 end
 

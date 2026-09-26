@@ -89,6 +89,15 @@ The door MUST open.
 
 #### Scenario: Locked at night
 - WHEN night falls THEN it locks
+
+### Requirement 3: The door chimes
+<!-- req-id: aaaa0003 -->
+
+#### Scenario: Chimes on open
+
+### Requirement 4: The door has no id yet
+
+#### Scenario: Not counted
 EOF
 cat >"$H/openspec/specs/beta/spec.md" <<'EOF'
 # beta
@@ -117,15 +126,17 @@ if [ "$RC" -ne 0 ]; then
     bad "H1 predicate rc=$RC: $(head -3 <<<"$ERR")"
 else
     got="$(jq -r '.obligations[].id' <<<"$JSON" | tr -d '\r' | sort)"
-    want="$(printf '%s\n' "cc:aaaa0001:$(sha8 'Opened by a key')" "cc:aaaa0001:$(sha8 'Opened by a code')" "cc:aaaa0002:$(sha8 'Locked at night')" | sort)"
-    if [ "$got" = "$want" ]; then ok "H1 active spec: 3 obligations, ids match sha256(title)[:8] computed independently (fenced scenario ignored)"
+    want="$(printf '%s\n' "cc:aaaa0001:$(sha8 'Opened by a key')" "cc:aaaa0001:$(sha8 'Opened by a code')" "cc:aaaa0002:$(sha8 'Locked at night')" "cc:aaaa0003:$(sha8 'Chimes on open')" | sort)"
+    if [ "$got" = "$want" ]; then ok "H1 active spec: 4 obligations (one under a numbered, req-id'd heading), ids match sha256(title)[:8] computed independently (fenced scenario ignored)"
     else bad "H1 obligation ids: got [$(tr '\n' ' ' <<<"$got")] want [$(tr '\n' ' ' <<<"$want")]"; fi
-    if [ "$(jq -r '.requirements' <<<"$JSON")" = 2 ]; then ok "H1 requirements=2"; else bad "H1 requirements=$(jq -r '.requirements' <<<"$JSON")"; fi
+    if [ "$(jq -r '.requirements' <<<"$JSON")" = 3 ]; then ok "H1 requirements=3"; else bad "H1 requirements=$(jq -r '.requirements' <<<"$JSON")"; fi
+    if [ "$(jq -r '.unkeyed|join(",")' <<<"$JSON" | tr -d '\r')" = "alpha:The door has no id yet" ]; then ok "H1 numbered heading with no req-id -> unkeyed, not counted"
+    else bad "H1 unkeyed: $(jq -c '.unkeyed' <<<"$JSON")"; fi
     if [ "$(jq -r '.excluded.obsolete // 0' <<<"$JSON")" = 1 ] && ! grep -q 'bbbb0001' <<<"$JSON"; then ok "H1 obsolete spec: zero obligations, excluded.obsolete=1"
     else bad "H1 obsolete spec not excluded: $(jq -c '.excluded' <<<"$JSON")"; fi
     if [ "$(jq -r '.unregistered|join(",")' <<<"$JSON")" = gamma ] && ! grep -q 'cccc0001' <<<"$JSON"; then ok "H1 unregistered spec dir named, not counted"
     else bad "H1 unregistered: $(jq -c '.unregistered' <<<"$JSON")"; fi
-    if grep -q '^ok:centicolon-extract:obligations=3 ' <<<"$ERR"; then ok "H1 verdict line ok:…obligations=3"
+    if grep -q '^ok:centicolon-extract:obligations=4 ' <<<"$ERR"; then ok "H1 verdict line ok:…obligations=4"
     else bad "H1 verdict: $(grep -E '^(ok|refused|blocked):' <<<"$ERR")"; fi
 fi
 

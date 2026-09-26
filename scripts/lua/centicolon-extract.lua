@@ -32,9 +32,14 @@
 -- WHAT IS REFUSED, BY NAME: a `### Requirement:` heading whose next line is not
 -- a req-id (the shape check-requirement-ids.sh guards, 976-suab), and two
 -- obligations under one requirement with the same identity (duplicate title).
--- The pre-976-suab numbered dialect (`### Requirement 1: …`) carries no req-id
--- at all; it is not counted and not refused, but listed as `unkeyed` so the
--- gap is visible in every run.
+-- The numbered dialect (`### Requirement 1: …`) counts like the plain one when
+-- its next line is a req-id (1396-35we gave all 29 such headings forward ids);
+-- a numbered heading WITHOUT one is not counted and not refused, but listed as
+-- `unkeyed` so the gap stays visible in every run.
+
+-- Every LIST field is built with json.array() so an empty list encodes as []
+-- and never as {} (1398-3qiz). The fallback keeps an older binary working.
+local A = json.array or function(t) return t or {} end
 
 local COUNTED = { active = true, draft = true }
 
@@ -94,7 +99,7 @@ local function count_musts(body)
 end
 
 local function traces_of(body)
-    local seen, out = {}, {}
+    local seen, out = {}, A()
     for _, l in ipairs(body) do
         for t in l:gmatch("@trace%s+spec:([%w%-_%.]+)") do
             if not seen[t] then seen[t] = true; out[#out + 1] = t end
@@ -108,7 +113,7 @@ end
 local function parse_spec(spec, text)
     local lines = lines_of(text)
     local digest = hash.sha256(text)
-    local obligations, invariants, unkeyed, refusals = {}, {}, {}, {}
+    local obligations, invariants, unkeyed, refusals = A(), A(), A(), A()
     local req = nil      -- current requirement: {id, title, body, scenarios, ids}
     local in_fence = false
 
@@ -139,11 +144,11 @@ local function parse_spec(spec, text)
         if not in_fence then
             local rt = line:match("^### Requirement:%s*(.-)%s*$")
             local numbered = line:match("^### Requirement%s+%d+[%.:]%s*(.-)%s*$")
-            if rt then
+            local id = (rt or numbered) and (lines[i + 1] or ""):match("^<!%-%- req%-id: (%x+) %-%->$")
+            if rt or (numbered and id) then
                 close_req()
-                local id = (lines[i + 1] or ""):match("^<!%-%- req%-id: (%x+) %-%->$")
                 if id then
-                    req = { id = id, title = norm(rt), body = {}, scenarios = {}, ids = {} }
+                    req = { id = id, title = norm(rt or numbered), body = {}, scenarios = {}, ids = {} }
                 else
                     refusals[#refusals + 1] = "requirement-without-req-id:" .. spec .. ":" .. norm(rt)
                 end
@@ -179,7 +184,7 @@ local function parse_spec(spec, text)
 end
 
 local function split_arg(arg)
-    local out, seen = {}, {}
+    local out, seen = A(), {}
     for item in (arg or ""):gmatch("[^,%s]+") do
         if not seen[item] then seen[item] = true; out[#out + 1] = item end
     end
@@ -202,7 +207,7 @@ local function extract(arg)
 
     local dirs = split_arg(arg)
     local population = (#dirs > 0) and "argument" or "registry-only"
-    local specs, unregistered, missing = {}, {}, {}
+    local specs, unregistered, missing = {}, A(), A()
     if #dirs > 0 then
         local present = {}
         for _, d in ipairs(dirs) do
@@ -217,8 +222,8 @@ local function extract(arg)
     end
     table.sort(specs); table.sort(missing)
 
-    local obligations, invariants, unkeyed, refusals = {}, {}, {}, {}
-    local excluded, per_spec, mismatch = {}, {}, {}
+    local obligations, invariants, unkeyed, refusals = A(), A(), A(), A()
+    local excluded, per_spec, mismatch = {}, {}, A()
     local requirements = 0
     for _, spec in ipairs(specs) do
         local ok, text = pcall(fs.read, "openspec/specs/" .. spec .. "/spec.md")

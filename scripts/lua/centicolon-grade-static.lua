@@ -37,6 +37,10 @@
 -- a non-empty litmus corpus is also refused, never ok:0 — but the JSON is still
 -- emitted, so an advisory consumer can print R while the refusal stands.
 
+-- Every LIST field is built with json.array() so an empty list encodes as []
+-- and never as {} (1398-3qiz). The fallback keeps an older binary working.
+local A = json.array or function(t) return t or {} end
+
 local ASSERT_KEYS = {
     assert_exit = true, assert_output_contains = true, assert_output_matches = true,
     assert_output_nonempty = true, success_pattern = true,
@@ -124,7 +128,7 @@ local function grade(arg)
     end
 
     local refs = {}           -- req-id -> list of step references
-    local unresolved, parse_errors = {}, {}
+    local unresolved, parse_errors = {}, A()
     local resolved_keys, key_count = 0, 0
     for _, path in ipairs(files) do
         local okr, text = pcall(fs.read, path)
@@ -173,10 +177,10 @@ local function grade(arg)
     end
     table.sort(unresolved); table.sort(parse_errors)
 
-    local out_obs = {}
+    local out_obs = A()
     for _, o in ipairs(ext.obligations or {}) do
         local cands = refs[o.req_id] or {}
-        local row = { id = o.id, req_id = o.req_id, spec = o.spec, spec_digest = o.spec_digest, candidates = {} }
+        local row = { id = o.id, req_id = o.req_id, spec = o.spec, spec_digest = o.spec_digest, candidates = A() }
         if #cands == 0 then
             row.state = "declared"; row.reason = "no-binding"
         else
@@ -198,7 +202,7 @@ local function grade(arg)
     end
     table.sort(out_obs, function(a, b) return a.id < b.id end)
 
-    local refused = {}
+    local refused = A()
     for _, u in ipairs(unresolved) do
         refused[#refused + 1] = "violation:centicolon-requirement-unresolved:" .. u
     end
