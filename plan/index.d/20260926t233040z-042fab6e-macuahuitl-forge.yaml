@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-lua-predicate-bridge-whose-cacheable-class-cannot-reach-the-shell-so-purity-is-enforced-by-symbol-absence-rather-than-documented-and-a-forge-agent-can-validate-uncommitted-specs-without-recompiling
+    event:
+      type: note
+      ts: "2026-09-26T23:30:40Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t233040z
+      host: macuahuitl-forge
+      summary: |
+        CRITERION 3 TRANSCRIPT (macuahuitl-forge, inside a forge, 2026-09-26T23:30:23Z, trunk dd97589a4). What was done: a forge agent wrote a NEW spec that was never committed (git status '??', ls-files refuses it) and a NEW Cacheable Lua predicate about it, then evaluated it with the plan binary via `tillandsias-plan predicate --class cacheable`. The binary's sha256 and mtime are identical before and after, and no cargo, rustc or build step appears anywhere in the transcript. DISCLOSED: the binary was built from trunk at 23:29:24Z, BEFORE the transcript began and before the spec or predicate existed, to satisfy the plan-lane staleness check on the claim push (the transcript's first sha256 line pins that artifact). The verdict tracks the uncommitted file: PASS, then FAIL after removing SHALL, then PASS once restored. A cacheable predicate calling expert.shell fails with "attempt to call a nil value (field 'shell')"; the identical predicate under --class observing PASSes. The spec was removed afterwards and never committed. The predicate files lived in the session scratchpad, outside the checkout. Verbatim transcript:
+        $ echo "host_kind=$TILLANDSIAS_HOST_KIND head=$(git rev-parse --short HEAD) branch=$(git branch --show-current)"
+        host_kind=forge head=dd97589a4 branch=linux-next
+        [rc=0]
+        $ echo "$PB"; date -u +%FT%TZ
+        /home/forge/.cache/tillandsias-project/cargo/target/release/tillandsias-plan
+        2026-09-26T23:30:23Z
+        [rc=0]
+        $ "$PB" hash sha256 "$PB"; stat -c "mtime=%y" "$(readlink -f "$PB")"
+        8f48452ef430718d083085eab5636d8f8bb7ff084c8e157ab4f5dc7ac8287656
+        mtime=2026-09-26 23:29:24.028533820 +0000
+        [rc=0]
+        $ mkdir -p openspec/specs/hsrz-forge-transcript-probe && printf "%s\n" "# spec: hsrz-forge-transcript-probe" "" "## Requirements" "" "### Requirement: a forge-authored predicate evaluates without a rebuild" "" "The plan binary SHALL evaluate a Lua predicate written after it was built." "" "#### Scenario: uncommitted spec" "- **WHEN** a forge agent writes this spec and a predicate about it" "- **THEN** the predicate executes with no recompilation" > "$SPEC"
+        [rc=0]
+        $ git status --short --untracked-files=all -- openspec/specs/hsrz-forge-transcript-probe
+        ?? openspec/specs/hsrz-forge-transcript-probe/spec.md
+        [rc=0]
+        $ git ls-files --error-unmatch "$SPEC"
+        error: pathspec 'openspec/specs/hsrz-forge-transcript-probe/spec.md' did not match any file(s) known to git
+        Did you forget to 'git add'?
+        [rc=1]
+        $ printf "%s\n" "-- cacheable: declares a SHALL requirement AND a scenario" "function spec_is_testable(path)" "  local t = fs.read(path)" "  return string.find(t, \"SHALL\") ~= nil and string.find(t, \"#### Scenario:\") ~= nil" "end" > "$S/spec_is_testable.lua"; cat "$S/spec_is_testable.lua"
+        -- cacheable: declares a SHALL requirement AND a scenario
+        function spec_is_testable(path)
+          local t = fs.read(path)
+          return string.find(t, "SHALL") ~= nil and string.find(t, "#### Scenario:") ~= nil
+        end
+        [rc=0]
+        $ "$PB" predicate "$S/spec_is_testable.lua" "$SPEC" --class cacheable
+        PASS
+        [rc=0]
+        $ sed -i "s/ SHALL / should /" "$SPEC"; "$PB" predicate "$S/spec_is_testable.lua" "$SPEC" --class cacheable
+        FAIL
+        [rc=1]
+        $ sed -i "s/ should / SHALL /" "$SPEC"; "$PB" predicate "$S/spec_is_testable.lua" "$SPEC" --class cacheable
+        PASS
+        [rc=0]
+        $ printf "%s\n" "function spec_is_testable(path)" "  local r = expert.shell{\"cat\", path}" "  return r.ok" "end" > "$S/shell_in_cacheable.lua"; "$PB" predicate "$S/shell_in_cacheable.lua" "$SPEC" --class cacheable --name spec_is_testable; "$PB" predicate "$S/shell_in_cacheable.lua" "$SPEC" --class observing --name spec_is_testable
+        error: predicate failed: lua vm error: predicate spec_is_testable: runtime error: [string "crates/tillandsias-plan/src/lua_predicate.rs:..."]:2: attempt to call a nil value (field 'shell')
+        stack traceback:
+        	[C]: in field 'shell'
+        	[string "crates/tillandsias-plan/src/lua_predicate.rs:..."]:2: in function 'spec_is_testable'
+        PASS
+        [rc=0]
+        $ "$PB" hash sha256 "$PB"; stat -c "mtime=%y" "$(readlink -f "$PB")"
+        8f48452ef430718d083085eab5636d8f8bb7ff084c8e157ab4f5dc7ac8287656
+        mtime=2026-09-26 23:29:24.028533820 +0000
+        [rc=0]
+        $ rm -rf openspec/specs/hsrz-forge-transcript-probe; git status --short --untracked-files=all -- openspec/specs/hsrz-forge-transcript-probe | wc -l
+        0
+        [rc=0]
