@@ -253,10 +253,17 @@ fn trim_transcript(
 const EXEC_DEADLOCK_REPORT_ENV: &str = "TILLANDSIAS_VSOCK_EXEC_DEADLOCK_REPORT";
 
 fn deadlock_report_enabled() -> bool {
-    !matches!(
-        std::env::var(EXEC_DEADLOCK_REPORT_ENV).ok().as_deref(),
-        Some("0")
-    )
+    deadlock_report_enabled_from(std::env::var(EXEC_DEADLOCK_REPORT_ENV).ok().as_deref())
+}
+
+/// The parse, separated from the env read (order 1415-nvzz) so tests pin it
+/// WITHOUT mutating process env. The test used to set_var("0") in-process, and
+/// a sibling test on another thread read that "0" for its first blocked
+/// heartbeat: the report was skipped once, the exec failed on the second, and
+/// the ==1 assertion in a_blocked_guest_is_reported_immediately_not_waited_out
+/// counted 2 (land46, 2026-09-26).
+fn deadlock_report_enabled_from(value: Option<&str>) -> bool {
+    !matches!(value, Some("0"))
 }
 
 /// The message a guest-reported deadlock produces (order 723-g4bk).
@@ -2787,16 +2794,37 @@ mod tests {
     /// condition off without editing code.
     #[test]
     fn the_deadlock_report_can_be_disabled() {
-        // Read through the same helper the loop uses, rather than asserting on
-        // env plumbing that the loop might not share.
-        assert!(deadlock_report_enabled() || std::env::var(EXEC_DEADLOCK_REPORT_ENV).is_ok());
-        unsafe { std::env::set_var(EXEC_DEADLOCK_REPORT_ENV, "0") };
-        assert!(!deadlock_report_enabled(), "0 must disable the report");
-        unsafe { std::env::remove_var(EXEC_DEADLOCK_REPORT_ENV) };
+        // Through the same parse the loop's deadlock_report_enabled() uses, fed
+        // directly: no process env is touched (order 1415-nvzz).
         assert!(
-            deadlock_report_enabled(),
+            !deadlock_report_enabled_from(Some("0")),
+            "0 must disable the report"
+        );
+        assert!(
+            deadlock_report_enabled_from(None),
             "absent env must leave it enabled"
         );
+        assert!(
+            deadlock_report_enabled_from(Some("1")),
+            "only 0 disables it"
+        );
+    }
+
+    /// ORDER 1415-nvzz. The race cannot be reproduced on demand, so the
+    /// evidence is static: no code in this file may mutate the deadlock-report
+    /// env var, because every loop test in this process reads it. The needles
+    /// are assembled at runtime so this test does not match itself.
+    #[test]
+    fn no_test_mutates_the_deadlock_report_env() {
+        let src = include_str!("vsock_exec.rs");
+        for verb in ["set_var", "remove_var"] {
+            let needle = format!("{verb}({}", "EXEC_DEADLOCK_REPORT_ENV");
+            assert!(
+                !src.contains(&needle),
+                "{needle} found: a test mutating this env races every sibling \
+                 test that runs the exec loop"
+            );
+        }
     }
 
     /// NEGATIVE CONTROL (bar-raise 634-39ik) for the test above. A build that
