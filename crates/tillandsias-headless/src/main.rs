@@ -71,10 +71,14 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+// 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
+// macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 mod cloud_projects;
 mod container_deps;
 mod control_dispatch;
+#[cfg(target_os = "linux")]
+mod forge_swap;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 mod local_projects;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
@@ -13976,6 +13980,13 @@ async fn run_agent_container_attached(
             }
         }
     }
+
+    // 1376-8zdz. Held until this function returns, i.e. until the attached
+    // container has exited on every path below; dropping it stops the swap.
+    // Never blocks the launch: an uninstalled or refused service prints one
+    // `swap:` line and the forge runs as before.
+    #[cfg(target_os = "linux")]
+    let _swap = forge_swap::acquire(container_name, debug);
 
     let Some(config) = delegated else {
         return client
