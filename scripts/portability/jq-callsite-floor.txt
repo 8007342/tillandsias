@@ -83,8 +83,9 @@
 1 scripts/test-json-query-jq-parity.sh
 1 scripts/test-memo-hit-observability.sh
 1 scripts/test-opencode-vault-auth-content.sh
+2 scripts/test-project-info-grep-code-recall.sh
 2 scripts/test-ssh-lane-sidecar.sh
-3 scripts/test-timing-record-carries-reproduced.sh
+4 scripts/test-timing-record-carries-reproduced.sh
 6 scripts/test-timing-record-carries-root.sh
 1 scripts/test-tool-dispatch-lib.sh
 6 scripts/tillandsias-host-push-cert.sh
