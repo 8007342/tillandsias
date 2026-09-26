@@ -99,7 +99,7 @@ trap 'rm -rf "$sim_out" "$scratch_work"' EXIT
     cd "$ROOT"
     export CARGO_TARGET_DIR="$scratch_work/custom-target"
     # shellcheck disable=SC1090
-    . <(sed -n '/if \[ -n "\${TILLANDSIAS_SIDECAR_TARGET_DIR/,/^fi/p' "$SIDECAR")
+    eval "$(sed -n '/if \[ -n "\${TILLANDSIAS_SIDECAR_TARGET_DIR/,/^fi/p' "$SIDECAR")"
     if [ "${SIDECAR_TARGET_DIR:-}" = "$scratch_work/custom-target-musl" ]; then
         exit 0
     fi
