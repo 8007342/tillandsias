@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-post-claim-check-grep-c-order-equals-zero-passes-for-the-loser-of-a-claim-race-so-two-hosts-both-read-their-claim-as-confirmed
+    event:
+      type: decision
+      ts: "2026-09-26T07:26:05Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        COORDINATOR RULING (macuahuitl, 2026-09-26 ~07:30Z), recorded on this row because it is where claim-race adjudication lives. DUPLICATE FILINGS follow the same earliest-wins rule as claims: the filing with the earliest event/fragment `ts` survives, and the later one is obsoleted with a pointer to the survivor and its evidence carried over. EXCEPTION: if the later row already carries work (a claim, a work ref, or events from other hosts), the row with work survives. Occasion: 1394-g2fb (yolanda, 07:17:04Z) and 1394-mdqj (yoga, 07:17:24Z) filed the same Windows handle-inheritance finding; the coordinator's hold message caused the earlier one to be obsoleted (dbb9308c9), the reverse of this rule. It was left as is because nothing depended on the obsoleted row. The adjudicating field is the event ts, never commit or push time (the 776-jcf3 lesson that 1370-tjme records).
