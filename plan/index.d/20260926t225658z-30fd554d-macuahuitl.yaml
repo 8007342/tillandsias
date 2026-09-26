@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-reconcile-fetch-takes-tags-non-forced-so-a-moved-stable-tag-prints-would-clobber-existing-tag-after-every-refused-push-and-the-real-refusal-reason-is-not-shown
+    event:
+      type: finding
+      ts: "2026-09-26T22:56:58Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        MORE DATA, after the credential was re-seeded (macuahuitl-forge, 2026-09-26 22:43:12Z): the forge's FIRST claim push (linux-next only, no tags) was declined with, in this order: "remote: ! [rejected] stable -> stable (would clobber existing tag)", then "[pre-receive] Push rejected: configured upstream did not durably accept the ref transaction", then "! [remote rejected] linux-next -> linux-next (pre-receive hook declined)". After a rebase the retry relayed cleanly, so the primary cause THAT time was an ordinary moved trunk (non-fast-forward), not the credential. THE TAG LINE APPEARS ON EVERY REFUSAL, PRINTED BEFORE the "Push rejected" line, so in output order it reads as the cause of whatever the real cause was: unauthenticated one time, a moved trunk the next. That makes the fix more than cosmetic: (1) force tags in the post-refusal reconcile fetch (relay-refs.sh ~:320), and (2) print the PRIMARY refusal reason before any reconcile output, so the first line an agent reads is the true one.
