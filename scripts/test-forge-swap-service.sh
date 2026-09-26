@@ -35,11 +35,18 @@ if [ "$out1" = "ok:install-swap:prefix=$P:user=tester:helper=$H" ] && [ -x "$H" 
    && ! grep -q '@HELPER@\|@INSTALL_USER@' "$P/etc/systemd/system/"* "$P/etc/polkit-1/rules.d/"*; then
     ok "install writes every file, placeholders substituted"
 else bad "install: $out1"; fi
-snap1="$(cd "$P" && find . -type f -exec sha256sum {} + | sort)"
+# cksum, not sha256sum: macOS has no sha256sum, and an empty snapshot on both
+# sides would compare EQUAL — a vacuous pass. The premise asserts it listed the
+# six installed files before any comparison means anything.
+snap() { (cd "$P" && find . -type f -exec cksum {} + | sort); }
+snap1="$(snap)"
 out2="$(bash scripts/install-forge-swap-service.sh --prefix "$P" --user tester)"
-snap2="$(cd "$P" && find . -type f -exec sha256sum {} + | sort)"
-[ "$out1" = "$out2" ] && [ "$snap1" = "$snap2" ] && ok "a second install is byte-identical with the same verdict" \
-    || bad "install is not idempotent"
+snap2="$(snap)"
+if [ "$(printf '%s\n' "$snap1" | grep -c .)" != 6 ]; then
+    bad "premise: the install snapshot does not list the 6 installed files ($(printf '%s\n' "$snap1" | grep -c .))"
+elif [ "$out1" = "$out2" ] && [ "$snap1" = "$snap2" ]; then
+    ok "a second install is byte-identical with the same verdict"
+else bad "install is not idempotent"; fi
 out_bad="$(bash scripts/install-forge-swap-service.sh --prefix "$P" --user 'x; rm -rf /')"
 case "$out_bad" in refused:install-swap:user:*) ok "a hostile --user is refused" ;; *) bad "hostile user accepted: $out_bad" ;; esac
 
