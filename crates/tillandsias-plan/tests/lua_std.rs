@@ -279,3 +279,58 @@ fn table_is_empty_exists_and_next_names_it_in_both_classes() {
         assert_eq!(eval_str(class, "return tostring(no_such_global)"), "nil");
     }
 }
+
+/// 1398-3qiz. PRE-FIX RESULT: FAILS — json.array did not exist, and
+/// `tillandsias-plan lua --class cacheable -e 'return json.encode({a={}, b={1}})'`
+/// printed {"a":{},"b":[1]}: an empty list and an empty object were the same bytes.
+#[test]
+fn an_empty_table_marked_with_json_array_encodes_as_an_array() {
+    assert_eq!(
+        eval_str(
+            PredicateClass::Cacheable,
+            "return json.encode({a = json.array(), b = json.array{1, 2}, c = {}})"
+        ),
+        r#"{"a":[],"b":[1,2],"c":{}}"#
+    );
+    // json.parse keeps arrays marked, so [] round-trips; an unmarked {} stays {}
+    assert_eq!(
+        eval_str(
+            PredicateClass::Cacheable,
+            r#"return json.encode(json.parse('{"x":[],"y":{}}'))"#
+        ),
+        r#"{"x":[],"y":{}}"#
+    );
+    assert_eq!(
+        eval_str(
+            PredicateClass::Observing,
+            "return json.encode(json.array())"
+        ),
+        "[]"
+    );
+}
+
+/// The rule is deterministic across PROCESSES, not only within one: three
+/// separate runs of the real binary print the same bytes.
+#[test]
+fn the_empty_array_rule_prints_the_same_bytes_in_three_processes() {
+    let run = || {
+        let out = std::process::Command::new(plan_bin())
+            .args([
+                "lua",
+                "--class",
+                "cacheable",
+                "-e",
+                "return json.encode({missing = json.array(), refused = json.array{'b', 'a'}, meta = {}})",
+            ])
+            .output()
+            .expect("run lua cli");
+        assert!(out.status.success(), "{:?}", out);
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let (a, b, c) = (run(), run(), run());
+    assert_eq!(
+        a,
+        "{\"meta\":{},\"missing\":[],\"refused\":[\"b\",\"a\"]}\n"
+    );
+    assert_eq!((a.as_str(), b.as_str()), (c.as_str(), c.as_str()));
+}
