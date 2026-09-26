@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-post-claim-check-grep-c-order-equals-zero-passes-for-the-loser-of-a-claim-race-so-two-hosts-both-read-their-claim-as-confirmed
+    field: status
+    value: completed
+    ts: "2026-09-26T01:30:13Z"
+    host: yoga
+
+events:
+  - packet_id: the-post-claim-check-grep-c-order-equals-zero-passes-for-the-loser-of-a-claim-race-so-two-hosts-both-read-their-claim-as-confirmed
+    event:
+      type: completed
+      ts: "2026-09-26T01:30:13Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: landed on origin/linux-next at bb9e99441 (work/1370-tjme 7dd71f6a6 + coordinator here-string fix)
+  - packet_id: the-post-claim-check-grep-c-order-equals-zero-passes-for-the-loser-of-a-claim-race-so-two-hosts-both-read-their-claim-as-confirmed
+    event:
+      type: note
+      ts: "2026-09-26T01:30:13Z"
+      host: yoga
+      summary: |-
+        claim-confirmation step names the earliest claimant; skills name it; gate step 430 with darwin record
