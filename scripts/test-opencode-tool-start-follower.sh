@@ -56,7 +56,7 @@ fi
 # ARM 6: wiring. The prompted branch starts the follower BEFORE its exec,
 # and the image installs and marks it executable.
 branch="$(awk '/TILLANDSIAS_OPENCODE_PROMPT:-}" \]; then/{f=1} f{print} f&&/exec \/usr\/local\/bin\/harness-supervisor/{exit}' "$ENTRY")"
-if printf '%s' "$branch" | grep -q 'opencode-tool-start-follower &' ; then
+if grep -q 'opencode-tool-start-follower &' <<<"$branch" ; then
     ok "the prompted branch starts the follower before exec"
 else
     bad "the prompted branch does not start the follower before exec"
