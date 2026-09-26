@@ -753,7 +753,7 @@ while IFS= read -r line; do
             echo '{"jsonrpc":"2.0","id":'"$id_json"',"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"project-info","version":"1.0.0"}}}'
             ;;
         "tools/list")
-            echo '{"jsonrpc":"2.0","id":'"$id_json"',"result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files (glob supports path patterns)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}},{"name":"find_files","description":"Find files by glob pattern (recursive, path-aware)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern e.g. **/*.sh, plan/index.yaml"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"grep_code","description":"Search for a pattern across source files with path-aware glob","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"include":{"type":"string","description":"File glob pattern (default: *)"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"git_status","description":"Show working tree status as structured JSON data","inputSchema":{"type":"object","properties":{}}},{"name":"read_file","description":"Read a file with offset and limit support","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"offset":{"type":"number","description":"Line number to start from (1-indexed, default: 0 for beginning)"},"limit":{"type":"number","description":"Number of lines to read (default: all)"}},"required":["path"]}},{"name":"plan_query","description":"Query plan/index.yaml for matching work packets by status, role, or capability tags","inputSchema":{"type":"object","properties":{"status":{"type":"string","description":"Filter by status (ready, pending, in_progress, blocked, completed, etc.)"},"pickup_role":{"type":"string","description":"Filter by pickup_role substring"},"capability_tags":{"type":"array","items":{"type":"string"},"description":"Filter by capability tags (all must match)"},"limit":{"type":"number","description":"Max results (default: 20)"}}}},{"name":"project_answer","description":"Query project knowledge, architecture, or status with cited response envelope","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"Question about project structure, build, status, or plan"}},"required":["question"]}},{"name":"project_list","description":"Discover available projects in ~/src/ (git repos)","inputSchema":{"type":"object","properties":{}}},{"name":"sibling_projects","description":"Discover sibling projects in parent directory","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_info","description":"Get detailed info about a project at a path","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_type","description":"Detect project type from marker files","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_metadata","description":"Get structured metadata about a project","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."},"name":{"type":"string"}},"required":[]}}]}}'
+            echo '{"jsonrpc":"2.0","id":'"$id_json"',"result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files (glob supports path patterns)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}},{"name":"find_files","description":"Find files by glob pattern (recursive, path-aware)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern e.g. **/*.sh, plan/index.yaml"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"grep_code","description":"Search for an EXTENDED regex (grep -E: a|b alternation works) across every file under path (.git excluded) with path-aware glob. Results cap at 50 lines and say so; an invalid pattern or an include matching no file is reported as such, never as No matches found","inputSchema":{"type":"object","properties":{"pattern":{"type":"string","description":"Extended regex (grep -E)"},"include":{"type":"string","description":"File glob pattern (default: *)"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"git_status","description":"Show working tree status as structured JSON data","inputSchema":{"type":"object","properties":{}}},{"name":"read_file","description":"Read a file with offset and limit support","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"offset":{"type":"number","description":"Line number to start from (1-indexed, default: 0 for beginning)"},"limit":{"type":"number","description":"Number of lines to read (default: all)"}},"required":["path"]}},{"name":"plan_query","description":"Query plan/index.yaml for matching work packets by status, role, or capability tags","inputSchema":{"type":"object","properties":{"status":{"type":"string","description":"Filter by status (ready, pending, in_progress, blocked, completed, etc.)"},"pickup_role":{"type":"string","description":"Filter by pickup_role substring"},"capability_tags":{"type":"array","items":{"type":"string"},"description":"Filter by capability tags (all must match)"},"limit":{"type":"number","description":"Max results (default: 20)"}}}},{"name":"project_answer","description":"Query project knowledge, architecture, or status with cited response envelope","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"Question about project structure, build, status, or plan"}},"required":["question"]}},{"name":"project_list","description":"Discover available projects in ~/src/ (git repos)","inputSchema":{"type":"object","properties":{}}},{"name":"sibling_projects","description":"Discover sibling projects in parent directory","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_info","description":"Get detailed info about a project at a path","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_type","description":"Detect project type from marker files","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_metadata","description":"Get structured metadata about a project","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."},"name":{"type":"string"}},"required":[]}}]}}'
             ;;
         "tools/call")
             tool=$(echo "$line" | jq -r '.params.name // empty')
@@ -763,6 +763,9 @@ while IFS= read -r line; do
             mcp_tg_inflight "$tool"
             error_code=""
             error_msg=""
+            # 1388-pfys: reset per call. A tool that leaves result unset on a
+            # zero-hit path otherwise answers with the PREVIOUS call's output.
+            result=""
             _mcp_t0=$(mcp_now_ms)
             case "$tool" in
                 "project_structure")
@@ -902,6 +905,22 @@ ${preview}"
                     fi
                     ;;
                 "grep_code")
+                    # 1388-pfys: this was search_code's unfixed twin, and it answered
+                    # a confident "No matches found" for strings that exist
+                    # (measured from inside a forge, 2026-09-26: analyze-bands in
+                    # plan/ -> none, truth plan/index.yaml:29561; six such queries).
+                    # Four causes, each now named rather than absorbed:
+                    #   1. `find | head -200` searched an ARBITRARY 200 files
+                    #      (readdir order) — plan/ alone holds thousands. Search
+                    #      them all; cap the RESULTS and say so (search_code's fix).
+                    #   2. `grep -In` read the pattern as a BASIC regex, so every
+                    #      a|b alternation was a literal "|" and matched nothing.
+                    #      The pattern is an EXTENDED regex (grep -E).
+                    #   3. An invalid pattern, a missing path, or an include glob
+                    #      matching no file all printed "No matches found". Each
+                    #      is now its own answer.
+                    #   4. `result` was not reset per call, so a zero-hit query
+                    #      could return the PREVIOUS call's hits (see tools/call).
                     pattern=$(echo "$args" | jq -r '.pattern')
                     include=$(echo "$args" | jq -r '.include // "*"')
                     path=$(echo "$args" | jq -r '.path // "."')
@@ -910,17 +929,34 @@ ${preview}"
                     else
                         glob_for_find="$include"
                     fi
-                    # || true prevents set -e from killing script on SIGPIPE
-                    if [[ "$glob_for_find" == *"/"* ]]; then
-                        files=$(find "$path" -type f -path "*/$glob_for_find" 2>/dev/null | head -200 || true)
+                    _gc_rc=0
+                    printf '' | grep -E -e "$pattern" >/dev/null 2>&1 || _gc_rc=$?
+                    if [ "$_gc_rc" -ge 2 ]; then
+                        result="grep_code: invalid extended regex: $pattern"
+                    elif [ ! -d "$path" ]; then
+                        result="grep_code: path is not a directory: $path"
                     else
-                        files=$(find "$path" -type f -name "$glob_for_find" 2>/dev/null | head -200 || true)
-                    fi
-                    if [ -n "$files" ]; then
-                        result=$(echo "$files" | xargs grep -In "$pattern" 2>/dev/null | head -50 || true)
-                    fi
-                    if [ -z "${result:-}" ]; then
-                        result="No matches found"
+                        # || true prevents set -e killing the script on SIGPIPE.
+                        if [[ "$glob_for_find" == *"/"* ]]; then
+                            files=$(find "$path" -path '*/.git' -prune -o -type f -path "*/$glob_for_find" -print 2>/dev/null || true)
+                        else
+                            files=$(find "$path" -path '*/.git' -prune -o -type f -name "$glob_for_find" -print 2>/dev/null || true)
+                        fi
+                        file_count=$(printf '%s' "$files" | grep -c . || true)
+                        if [ "${file_count:-0}" -eq 0 ]; then
+                            result="grep_code: no file matches include '$include' under $path (nothing was searched)"
+                        else
+                            all_hits=$(printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 grep -InE -e "$pattern" -- 2>/dev/null || true)
+                            hit_count=$(printf '%s' "$all_hits" | grep -c . || true)
+                            result=$(head -50 <<<"$all_hits")
+                            if [ "${hit_count:-0}" -gt 50 ]; then
+                                result="${result}
+[truncated: showing 50 of ${hit_count} matches in ${file_count} files searched — narrow the include, path or pattern to see the rest]"
+                            fi
+                            if [ -z "${result:-}" ]; then
+                                result="No matches found (${file_count} files searched under $path, include '$include', extended regex)"
+                            fi
+                        fi
                     fi
                     ;;
                 "git_status")
