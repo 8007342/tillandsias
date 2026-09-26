@@ -157,8 +157,9 @@ polkit.addRule(function(action, subject) {
 ```
 
 Rules the helper enforces: instance string `[A-Za-z0-9-]{1,64}` only; size
-from `/etc/tillandsias/swap.conf` and free space (8 GiB; 16 above 100 GiB
-free; 24 above 200 GiB; never leave `/var` under 32 GiB), never from `%i`;
+from `/etc/tillandsias/swap.conf` and free space (one rule on all platforms:
+24 GB at >= 200 GB free, 16 at >= 100, else 8; a tier only if 20 GB stays
+free; below 28 GB free refuse), never from `%i`;
 a Linux swapfile is fully allocated while alive (verified: `mkswapfile` and
 `fallocate` allocate the whole size); `ExecStartPre` reaps
 `/var/swap/tillandsias-*` absent from `/proc/swaps`.
@@ -196,10 +197,11 @@ sparseVhd=true
 ```
 
 Only add keys that are absent; never overwrite a user's `memory`, `swap`,
-`swapFile` or `processors`. Per-launch on WSL2 means per VM boot: WSL
-creates the VHDX at start when absent; the tray deletes it after
-`wsl --shutdown` when only its own distro was running. Size 8/16/24 GB by
-free disk (see the design doc). Inside the guest `free -m` shows the VM's swap
+`swapFile` or `processors`. Per-launch on WSL2 is per VM boot and WSL does it
+itself (measured on yolanda 2026-09-26): the VHDX is created fresh and sparse
+at every boot (37.7 MB for `swap=8GB`) and deleted by `wsl --shutdown`; the
+tray only shuts WSL down on exit when `wsl --list --running` shows just its
+own distro. Unmeasured: deletion on a `vmIdleTimeout` shutdown. Inside the guest `free -m` shows the VM's swap
 (= `swap=`), not the Windows state that reaps the VM (1337-7jr5).
 Inspect: `wsl -e sh -c 'cat /proc/swaps; cat /sys/fs/cgroup/cgroup.controllers'`.
 

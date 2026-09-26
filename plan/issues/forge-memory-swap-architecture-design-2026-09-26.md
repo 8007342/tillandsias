@@ -375,20 +375,22 @@ local files; `/var` is persistent and shared across deployments; `/usr` is
 read-only (ostree and rpm-ostree docs). Everything above lives in `/etc`,
 `/var/swap` and `/var/usrlocal`, so it survives upgrades without layering.
 
-### 9.2 WSL2: per VM boot, not per forge launch
+### 9.2 WSL2: per VM boot, and WSL does the deleting itself (measured)
 
-WSL creates the swap VHD at VM start when the configured `swapFile` is
-absent (default `%UserProfile%\AppData\Local\Temp\swap.vhdx`; microsoft/WSL
-discussion 10885). The swap belongs to the utility VM, so "per launch" is
-per VM boot: the tray points `swapFile` at
-`%LocalAppData%\tillandsias\wsl-swap.vhdx`; on exit, when `wsl --list
---running` shows only its own distro, it runs `wsl --shutdown` and deletes
-the VHDX; the next start recreates it. Per-forge is refused on this
-platform (it would restart the user's other distros). Measurement for
-yolanda (event on 1339-r9xv): is the VHDX recreated or reused across
-`--shutdown`; can it be deleted afterwards; is `swap=` honoured with
-`sparseVhd=true` and does the file start small and grow on spill; does the
-tray ever find another running distro.
+Measured on yolanda-windows 2026-09-26 with its operator's approval (event
+on 1339-r9xv, fragment 20260926t013316z-18d37c4c on work/1339-r9xv): with
+`[wsl2] swap=8GB`, `swapFile=%LocalAppData%\tillandsias\wsl-swap.vhdx`
+and `[experimental] sparseVhd=true` written by the installer's
+`Get-WslConfigMerge` (the user's 41 original lines byte-identical, backup
+at `.wslconfig.tillandsias-bak`): after `wsl --shutdown` the VHDX does not
+exist; a boot gives `SwapTotal 8388608 kB` and a fresh 37,748,736-byte
+sparse VHDX; the next `wsl --shutdown` removes it again; the next boot
+creates a fresh one. So WSL already implements "a new swapfile every
+launch, deleted on shutdown" at VM-boot granularity: the tray needs NO
+delete logic, only a WSL shutdown on exit (when `wsl --list --running`
+shows only its own distro). Still unmeasured: whether a `vmIdleTimeout`
+shutdown also deletes the file. Per-forge granularity is refused on this
+platform (it would restart the user's other distros).
 
 ### 9.3 macOS: created at VM start, deleted after VM stop
 
@@ -432,27 +434,32 @@ group membership; trade-off: the username is baked into a root-owned file,
 so a renamed account needs the one-time step again — acceptable, and the
 group path covers every other user of the host.
 
-### 9.6 Size policy (all platforms)
+### 9.6 Size policy (one rule, all platforms)
 
-Computed at launch from free space where the swap lives (`statvfs` on
-`/var/swap`, the WSL swap directory, the macOS provision dir):
+The rule yolanda implemented in `install-windows.ps1` (`Get-WslSwapSizeGB`,
+`SwapReserveGB = 20`) is adopted for Linux and macOS as well, computed at
+launch from the free space where the swap lives (`statvfs` on `/var/swap`,
+the WSL swap directory, the macOS provision dir; decimal GB as the Windows
+code counts them):
 
 ```
-free_after = free − size
-size = 24 GiB if free > 200 GiB, else 16 GiB if free > 100 GiB, else 8 GiB
-while free_after < 32 GiB: step down (24 → 16 → 8); below 8 GiB: refuse the
-launch with the free-space figure (the forge-fit floor the WSL and vz code
-already pin at 32 GiB — MIN_GUEST_ROOT_AVAIL_GIB).
+tiers: 24 GB if free ≥ 200 GB, else 16 GB if free ≥ 100 GB, else 8 GB
+a tier is taken only if (free − size) ≥ 20 GB; otherwise the next tier down
+below the 8 GB floor (free < 28 GB): refuse the launch, printing the free-space figure
 ```
+
+yolanda (85.5 GB free) gets 8 GB. The 32 GiB `MIN_GUEST_ROOT_AVAIL_GIB`
+floor in the WSL and vz code is a different quantity (the guest root
+filesystem's forge-fit headroom) and is not changed by this rule.
 
 Linux swapfiles cannot have holes, so the per-launch file consumes its full
 size while alive (*verified*: `mkswapfile` and `fallocate` both allocate
-fully) and is returned at stop. The macOS image is sparse and the WSL VHDX
-is dynamic: they consume disk only as spilled (unverified on those hosts;
-the yolanda measurement covers the VHDX). On Linux the helper computes the
-size from `/etc/tillandsias/swap.conf` (`SWAP_TIERS=8:16:24
-SWAP_FREE_FLOOR_GIB=32` or an override `SWAP_SIZE_GIB=`) and the measured
-free space; nothing about size crosses the D-Bus call.
+fully) and is returned at stop. The WSL VHDX is sparse (*measured*: 37.7 MB
+at creation for `swap=8GB`); the macOS image is created sparse with
+`File::set_len` (unverified on APFS until 1377-hcnv lands). On Linux the
+helper computes the size from `/etc/tillandsias/swap.conf`
+(`SWAP_TIERS_GB=8:16:24 SWAP_RESERVE_GB=20`, or an override `SWAP_SIZE_GB=`)
+and the measured free space; nothing about size crosses the D-Bus call.
 
 ### 9.7 SELinux
 
@@ -538,4 +545,5 @@ idempotent.
   https://ostreedev.github.io/ostree/var/ ; `/usr/local → /var/usrlocal`:
   https://ostreedev.github.io/ostree/adapting-existing/
 - WSL recreates `swap.vhdx` when absent; default under `%Temp%`:
-  https://github.com/microsoft/WSL/discussions/10885
+  https://github.com/microsoft/WSL/discussions/10885 (and the yolanda
+  measurement above: created at every VM boot, deleted by `wsl --shutdown`)
