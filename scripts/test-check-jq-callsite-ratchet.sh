@@ -66,7 +66,7 @@ mk_tree() {
 t2="$(mk_tree arm2)"
 printf '#!/bin/bash\nx=$(jq -r .a f.json)\n' > "$t2/scripts/new.sh"
 out2="$(bash "$GUARD" --root "$t2" 2>&1)"; rc2=$?
-if [ "$rc2" -eq 1 ] && printf '%s\n' "$out2" | grep -qx 'blocked:jq-callsite-added:scripts/new.sh:.a'; then
+if [ "$rc2" -eq 1 ] && grep -qx 'blocked:jq-callsite-added:scripts/new.sh:.a' <<<"$out2"; then
     ok "ARM 2: blocked:jq-callsite-added:scripts/new.sh:.a, rc 1"
 else
     bad "ARM 2: rc=$rc2: $out2"
@@ -76,7 +76,7 @@ fi
 t3="$(mk_tree arm3)"
 printf '#!/bin/bash\njq -c '"'"'group_by(.k)'"'"' f.json\n' > "$t3/scripts/new.sh"
 out3="$(bash "$GUARD" --root "$t3" 2>&1)"; rc3=$?
-if [ "$rc3" -eq 0 ] && printf '%s\n' "$out3" | grep -q '^warn:jq-callsite-added-unsupported:scripts/new.sh:'; then
+if [ "$rc3" -eq 0 ] && grep -q '^warn:jq-callsite-added-unsupported:scripts/new.sh:' <<<"$out3"; then
     ok "ARM 3: warn:jq-callsite-added-unsupported, rc 0"
 else
     bad "ARM 3: rc=$rc3: $out3"
