@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tray-launched-forge-seeded-from-main-not-the-checkout-branch
+    event:
+      type: progress
+      ts: "2026-09-26T04:58:24Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t045824z
+      host: tlatoanis-macbook-air
+      summary: |
+        MACOS INSTANCE, v56.9.25.2 smoke, tlatoanis-macbook-air, 2026-09-26 (report plan/issues/smoke-e2e-findings-v56.9.25.2-2026-09-26-macos-macbookair.md). `tillandsias-tray --opencode /home/forge/src/tillandsias` printed "[forge-launch] SEED main from /home/forge/src/tillandsias" and "seed-staleness: branch=main local=unknown last-fetched-origin=unknown behind=unknown fetch-age-h=unknown verdict=unknown". The host ~/src/tillandsias is on main at 341ab0010 (2026-08-25), so the smoke's forge lane exercised month-old code, not trunk, and every field of the staleness verdict was unknown. So on macOS the seed is main because the HOST checkout is on main (the tray's src share), and the staleness probe cannot see it. Two gaps: the smoke runbook names no seed checkout for macOS, and seed-staleness answers unknown instead of measuring.
