@@ -66,7 +66,7 @@ critical_path:
     expected_behavior: "ok: enclave-service-health-parses"
 
   - step: "reporter is bash-3.2 clean (macOS system bash is the floor)"
-    command: "TILLANDSIAS_DIALECT_SCAN_FILES=scripts/check-enclave-service-health.sh bash scripts/check-bash-dialect.sh"
+    command: "TILLANDSIAS_DIALECT_SCAN_DIR=scripts/check-enclave-service-health.sh bash scripts/check-bash-dialect.sh"
     timeout_ms: 10000
     expected_behavior: "ok:bash-dialect-clean"
 

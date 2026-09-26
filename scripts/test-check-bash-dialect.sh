@@ -174,6 +174,36 @@ EOF
 expect "awkv-exemption-passes" "ok:bash-dialect-clean" 0
 rm "$TMP/awkv.sh"
 
+# 1413-8bee: an unparenthesised case arm inside $( ) does not parse on bash
+# 3.2 (measured, both shapes). The keyword is spliced in with %s so this file,
+# which the live scan also reads, never spells the shape it refuses.
+C=case
+printf '#!/usr/bin/env bash\nx=$(%s "$1" in /*) echo a ;; *) echo r ;; esac)\n' "$C" > "$TMP/cics.sh"
+expect "case-in-cs-single-line-refused" "blocked:bash4-unguarded:1" 1
+printf '#!/usr/bin/env bash\nx=$(%s "$1" in (/*) echo a ;; (*) echo r ;; esac)\n' "$C" > "$TMP/cics.sh"
+expect "case-in-cs-single-line-parenthesised-passes" "ok:bash-dialect-clean" 0
+printf '#!/usr/bin/env bash\nx=$(\n  %s "$1" in\n    /*) echo a ;;\n    *) echo r ;;\n  esac\n)\n' "$C" > "$TMP/cics.sh"
+expect "case-in-cs-multi-line-refused" "blocked:bash4-unguarded:1" 1
+printf '#!/usr/bin/env bash\nx=$(\n  %s "$1" in\n    (/*) echo a ;;\n    (*) echo r ;;\n  esac\n)\n' "$C" > "$TMP/cics.sh"
+expect "case-in-cs-multi-line-parenthesised-passes" "ok:bash-dialect-clean" 0
+# The 84f37ff24 shape: quoted, with a NESTED $( ) before the case. bash -n
+# passes it; at runtime the value is the rest of the line as text.
+printf '#!/usr/bin/env bash\nP="$(cd / && _p="$(pwd)" && %s "$_p" in /*) printf a ;; *) printf r ;; esac)"\n' "$C" > "$TMP/cics.sh"
+expect "case-in-cs-quoted-nested-refused" "blocked:bash4-unguarded:1" 1
+printf '#!/usr/bin/env bash\nx=$(%s "$1" in /*) echo a ;; esac) # case-in-cs: ok (fixture)\n' "$C" > "$TMP/cics.sh"
+expect "case-in-cs-exemption-passes" "ok:bash-dialect-clean" 0
+# A case in a plain ( ) subshell, or in a function called through $(f), parses.
+printf '#!/usr/bin/env bash\n( %s "$1" in /*) echo a ;; esac )\nf() { %s "$1" in /*) echo a ;; esac; }\nx=$(f "$1")\n' "$C" "$C" > "$TMP/cics.sh"
+expect "case-outside-cs-passes" "ok:bash-dialect-clean" 0
+# TILLANDSIAS_DIALECT_SCAN_FILES scopes like SCAN_DIR (the enclave-service-health
+# litmus used that name, which was never read: a "one-file" check scanned the
+# whole tree). Ignored, this falls back to the clean live tree and reads ok.
+printf '#!/usr/bin/env bash\nx=$(%s "$1" in /*) echo a ;; esac)\n' "$C" > "$TMP/cics.sh"
+got="$(TILLANDSIAS_DIALECT_SCAN_FILES="$TMP/cics.sh" bash "$CHECKER" 2>/dev/null)"
+[ "$got" = "blocked:bash4-unguarded:1" ] \
+  || { echo "FAIL: scan-files-alias-scopes — got '$got'" >&2; fails=$((fails + 1)); }
+rm "$TMP/cics.sh"
+
 # 1374-4u6i: the count is FILES. One file tripping two rules is one; two
 # offending files are two.
 printf '#!/usr/bin/env bash\nmap%s -t arr < "$1"\n' 'file' > "$TMP/two-a.sh"
@@ -185,5 +215,5 @@ if [ "$fails" -gt 0 ]; then
   echo "FAIL: check-bash-dialect fixture: $fails scenario(s) diverged" >&2
   exit 1
 fi
-echo "PASS: check-bash-dialect fixture 25/25 scenarios green"
+echo "PASS: check-bash-dialect fixture 33/33 scenarios green"
 exit 0
