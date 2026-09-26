@@ -112,4 +112,33 @@ grep -q "refused:cross-vantage-comparison" <<<"$out" \
 grep -q "NOT TWINS" <<<"$out" \
     && fail "a cross-vantage pair was given a hardware verdict as well as a refusal: $out"
 
+# 1375-2x4e — NO jq: the fingerprint reads through `tillandsias-plan json get`,
+# so a host without jq (macOS, Windows) publishes the same fingerprint. A jq
+# stub that LOGS its calls and exits 127 goes first on PATH. A control call
+# proves the stub is the jq this PATH resolves (otherwise the arm proves
+# nothing: blocked:stub-not-reached); then the fingerprint must match the
+# jq-enabled one exactly and the log must show the control call alone.
+stubdir="$(mktemp -d)"
+cat > "$stubdir/jq" <<'STUB'
+#!/bin/sh
+echo "jq $*" >> "${JQ_STUB_LOG:?}"
+exit 127
+STUB
+chmod +x "$stubdir/jq"
+export JQ_STUB_LOG="$stubdir/calls.log"
+: > "$JQ_STUB_LOG"
+PATH="$stubdir:$PATH" jq --control >/dev/null 2>&1 || true
+[ "$(wc -l < "$JQ_STUB_LOG" | tr -d ' ')" = 1 ] || { echo "blocked:stub-not-reached"; exit 1; }
+with_jq="$("$FP" "$FIX/yoga-linux.json")"
+without_jq="$(PATH="$stubdir:$PATH" "$FP" "$FIX/yoga-linux.json")" \
+    || fail "with jq shadowed by an exit-127 stub, the fingerprint failed"
+[ "$with_jq" = "$without_jq" ] \
+    || fail "with jq shadowed, the fingerprint changed: $with_jq vs $without_jq"
+PATH="$stubdir:$PATH" "$FP" --json "$FIX/yoga-linux.json" >/dev/null \
+    || fail "with jq shadowed, --json failed"
+calls="$(wc -l < "$JQ_STUB_LOG" | tr -d ' ')"
+[ "$calls" = 1 ] || fail "hardware-fingerprint.sh still called jq with jq shadowed: $(tail -n +2 "$JQ_STUB_LOG" | head -3 | tr '\n' ';')"
+echo "ok: jq-shadowed: fingerprint $without_jq identical with jq replaced by an exit-127 stub, jq calls=0 (control reached the stub)"
+rm -rf "$stubdir"
+
 echo "ok: the hardware fingerprint refuses an untrue twin claim, refuses to hash nothing, and is stable per document (805-r98w)"
