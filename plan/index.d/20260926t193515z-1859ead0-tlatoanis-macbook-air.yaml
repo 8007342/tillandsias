@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-long-running-project-info-mcp-server-keeps-serving-the-code-it-started-with-so-a-landed-fix-is-not-in-effect-and-the-health-probe-still-reads-up
+    field: status
+    value: completed
+    ts: "2026-09-26T19:35:15Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: a-long-running-project-info-mcp-server-keeps-serving-the-code-it-started-with-so-a-landed-fix-is-not-in-effect-and-the-health-probe-still-reads-up
+    event:
+      type: completed
+      ts: "2026-09-26T19:35:15Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: b216ec113 (landed on origin/linux-next under 0bb8e39da, land48); check-mcp-live-build.sh fixture 15/15 incl. two-server arms (mutation: overwrite-stamp -> 2 FAIL); live darwin: pre-fix pid 98394 -> stale:live-server-build-unreported:project-info rc=1
+  - packet_id: a-long-running-project-info-mcp-server-keeps-serving-the-code-it-started-with-so-a-landed-fix-is-not-in-effect-and-the-health-probe-still-reads-up
+    event:
+      type: note
+      ts: "2026-09-26T19:35:15Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Landed; stale verdict via check-mcp-live-build.sh per the recorded scope correction. Fixture wired as litmus by 1416-pn5e.
