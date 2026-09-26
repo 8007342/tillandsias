@@ -128,6 +128,299 @@ fn shell_result_to_lua(lua: &Lua, out: tillandsias_exec::Output) -> LuaResult<Lu
     Ok(t)
 }
 
+/// Fields `proc.run{...}` accepts (design section 4.1). Anything else is a
+/// programmer error and RAISES: `timeout` misspelt for `timeout_ms` must not
+/// silently become "no deadline" (order 1384-aixy).
+pub const PROC_RUN_FIELDS: &[&str] = &["argv", "cwd", "env", "stdin", "timeout_ms", "group"];
+
+/// The default deadline, 300 s, per the design. `timeout_ms = 0` means NO
+/// deadline and has to be written out.
+pub const PROC_RUN_DEFAULT_TIMEOUT_MS: u64 = 300_000;
+
+/// Shells that turn one string argument into a command line. Handing them a
+/// string reintroduces quoting, globbing and pipes, which is what argv-only
+/// execution exists to delete (1252-fg9e).
+const SHELL_PROGRAMS: &[&str] = &[
+    "sh",
+    "bash",
+    "dash",
+    "zsh",
+    "ksh",
+    "fish",
+    "cmd",
+    "cmd.exe",
+    "powershell",
+    "powershell.exe",
+    "pwsh",
+    "pwsh.exe",
+];
+
+/// The environment a child starts from: NOTHING is inherited except this set,
+/// plus the call's own `env` additions (design section 5.3). One constant, so
+/// "which variables leak into a check" has one answer.
+pub const PROC_RUN_BASE_ENV_PASSTHROUGH: &[&str] = &[
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    // A Windows child without these cannot start many programs at all.
+    "SystemRoot",
+    "SYSTEMROOT",
+    "SystemDrive",
+    "WINDIR",
+    "COMSPEC",
+    "PATHEXT",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+];
+
+/// Fixed values every child gets, so a verdict cannot depend on the caller's
+/// locale, timezone or a git credential prompt.
+pub const PROC_RUN_BASE_ENV_FIXED: &[(&str, &str)] = &[
+    ("LC_ALL", "C"),
+    ("LANG", "C"),
+    ("TZ", "UTC"),
+    ("GIT_TERMINAL_PROMPT", "0"),
+];
+
+fn is_shell_string_call(argv: &[String]) -> bool {
+    let Some(prog) = argv.first() else {
+        return false;
+    };
+    let base = Path::new(prog)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(prog)
+        .to_ascii_lowercase();
+    if !SHELL_PROGRAMS.contains(&base.as_str()) {
+        return false;
+    }
+    argv.iter().skip(1).any(|a| {
+        let a = a.to_ascii_lowercase();
+        a == "-c" || a == "/c" || a == "/k" || a == "-command" || a == "-encodedcommand"
+    })
+}
+
+/// `proc.run{argv=..., cwd, env, stdin, timeout_ms, group}` (order 1384-aixy,
+/// design section 4.1): one process, run to completion, returned as a VALUE.
+/// A non-zero exit, a signal and a timeout are all DATA; only programmer
+/// errors raise. This first slice is synchronous: `proc.spawn`, line
+/// callbacks, `proc.chain`, `proc.select` and `proc.all` come in later slices.
+fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
+    let err = |m: String| mlua::Error::RuntimeError(format!("proc.run: {m}"));
+
+    for pair in spec.clone().pairs::<LuaValue, LuaValue>() {
+        let (k, _) = pair?;
+        match k {
+            LuaValue::String(s) => {
+                let key = s.to_str()?.to_string();
+                if !PROC_RUN_FIELDS.contains(&key.as_str()) {
+                    return Err(err(format!(
+                        "unknown field '{key}' (fields: {})",
+                        PROC_RUN_FIELDS.join(", ")
+                    )));
+                }
+            }
+            _ => {
+                return Err(err(
+                    "positional values are not accepted; pass argv = {\"prog\", \"arg\", ...}"
+                        .to_string(),
+                ));
+            }
+        }
+    }
+
+    let argv_t: LuaTable = match spec.get::<LuaValue>("argv")? {
+        LuaValue::Table(t) => t,
+        LuaValue::Nil => return Err(err("argv is required".into())),
+        _ => {
+            return Err(err(
+                "argv must be a table of strings, never a command string".into(),
+            ));
+        }
+    };
+    let mut argv: Vec<String> = Vec::new();
+    for v in argv_t.clone().sequence_values::<LuaValue>() {
+        match v? {
+            LuaValue::String(s) => argv.push(s.to_str()?.to_string()),
+            other => {
+                return Err(err(format!(
+                    "argv[{}] is a {}, not a string",
+                    argv.len() + 1,
+                    other.type_name()
+                )));
+            }
+        }
+    }
+    if argv.is_empty() {
+        return Err(err("argv is empty".into()));
+    }
+    if argv_t.pairs::<LuaValue, LuaValue>().count() != argv.len() {
+        return Err(err(
+            "argv must be a sequence with no holes and no named keys".into(),
+        ));
+    }
+    if is_shell_string_call(&argv) {
+        return Err(err(format!(
+            "refused '{} {}': a shell given a command STRING reintroduces quoting, globbing \
+             and pipes. Pass the program's own argv instead. A script that genuinely needs \
+             one must declare allow_shell_strings (not available in this first slice).",
+            argv[0], argv[1]
+        )));
+    }
+
+    let mut cmd = tillandsias_exec::Command::new(argv.clone()).env_clear();
+    for key in PROC_RUN_BASE_ENV_PASSTHROUGH {
+        if let Some(v) = std::env::var_os(key) {
+            cmd = cmd.env(key, v);
+        }
+    }
+    for (k, v) in std::env::vars_os() {
+        if k.to_string_lossy().starts_with("TILLANDSIAS_") {
+            cmd = cmd.env(k, v);
+        }
+    }
+    for (k, v) in PROC_RUN_BASE_ENV_FIXED {
+        cmd = cmd.env(k, v);
+    }
+
+    match spec.get::<LuaValue>("cwd")? {
+        LuaValue::Nil => {
+            if let Ok(root) = find_repo_root() {
+                cmd = cmd.current_dir(root);
+            }
+        }
+        LuaValue::String(s) => {
+            let p = PathBuf::from(s.to_str()?.to_string());
+            if !p.is_absolute() {
+                return Err(err(format!(
+                    "cwd '{}' is relative; pass an absolute path",
+                    p.display()
+                )));
+            }
+            cmd = cmd.current_dir(p);
+        }
+        other => {
+            return Err(err(format!(
+                "cwd must be a string, not a {}",
+                other.type_name()
+            )));
+        }
+    }
+
+    match spec.get::<LuaValue>("env")? {
+        LuaValue::Nil => {}
+        LuaValue::Table(t) => {
+            for pair in t.pairs::<String, String>() {
+                let (k, v) = pair.map_err(|_| err("env must map strings to strings".into()))?;
+                cmd = cmd.env(k, v);
+            }
+        }
+        other => {
+            return Err(err(format!(
+                "env must be a table, not a {}",
+                other.type_name()
+            )));
+        }
+    }
+
+    match spec.get::<LuaValue>("stdin")? {
+        LuaValue::Nil => {}
+        LuaValue::String(s) => cmd = cmd.stdin_bytes(s.as_bytes().to_vec()),
+        other => {
+            return Err(err(format!(
+                "stdin must be a string, not a {}",
+                other.type_name()
+            )));
+        }
+    }
+
+    let timeout_ms: u64 = match spec.get::<LuaValue>("timeout_ms")? {
+        LuaValue::Nil => PROC_RUN_DEFAULT_TIMEOUT_MS,
+        LuaValue::Integer(i) if i >= 0 => i as u64,
+        other => {
+            return Err(err(format!(
+                "timeout_ms must be a non-negative integer (0 = no deadline), not {other:?}"
+            )));
+        }
+    };
+    if timeout_ms > 0 {
+        cmd = cmd.timeout(std::time::Duration::from_millis(timeout_ms));
+    }
+
+    let group = match spec.get::<LuaValue>("group")? {
+        LuaValue::Nil => true,
+        LuaValue::Boolean(b) => b,
+        other => {
+            return Err(err(format!(
+                "group must be a boolean, not a {}",
+                other.type_name()
+            )));
+        }
+    };
+    cmd = cmd.group(group);
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| err(format!("runtime: {e}")))?;
+    let t0 = std::time::Instant::now();
+    let result = rt.block_on(cmd.run());
+    let wall_ms = t0.elapsed().as_millis() as u64;
+    // NOT an implicit drop. Tokio reads a child's pipes on blocking threads
+    // (Windows), and dropping the runtime WAITS for them. After an UNGROUPED
+    // deadline the killed child's surviving descendants still hold those
+    // pipes, so the drop blocked until they exited: measured on native
+    // Windows, proc.run reported wall_ms=544 and returned to Lua 30.2 s later.
+    // shutdown_background returns now and lets those threads end on their own.
+    rt.shutdown_background();
+
+    let t = lua.create_table()?;
+    let echo = lua.create_table()?;
+    for (i, a) in argv.iter().enumerate() {
+        echo.set(i + 1, a.as_str())?;
+    }
+    t.set("argv", echo)?;
+    t.set("wall_ms", wall_ms)?;
+    match result {
+        Ok(out) => {
+            t.set("run_id", out.run.as_str().to_string())?;
+            t.set("stdout", lua.create_string(&out.stdout)?)?;
+            t.set("stderr", lua.create_string(&out.stderr)?)?;
+            match out.completion {
+                tillandsias_exec::Completion::Exited(code) => {
+                    t.set("status", "exited")?;
+                    t.set("code", code)?;
+                    t.set("ok", code == 0)?;
+                }
+                tillandsias_exec::Completion::Signaled(sig) => {
+                    t.set("status", "signaled")?;
+                    t.set("signal", sig)?;
+                    t.set("ok", false)?;
+                }
+                tillandsias_exec::Completion::TimedOut { .. } => {
+                    t.set("status", "timed_out")?;
+                    t.set("ok", false)?;
+                }
+            }
+        }
+        Err(tillandsias_exec::ExecError::Spawn { source, .. }) => {
+            // Operational, not a programmer error: a missing program is data.
+            t.set("status", "spawn_failed")?;
+            t.set("ok", false)?;
+            t.set("stdout", "")?;
+            t.set(
+                "stderr",
+                lua.create_string(format!("spawn failed: {source}"))?,
+            )?;
+        }
+        Err(e) => return Err(err(e.to_string())),
+    }
+    Ok(t)
+}
+
 /// The Lua globals a CACHEABLE predicate may reach, besides the `expert` table
 /// (1367-upz6, 1367-q9yc). Deterministic, side-effect-free library only: no `os`, no `io`,
 /// no `print`, no `load`, no `collectgarbage`, and `math` without `random`.
@@ -606,6 +899,24 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
             lua.globals()
                 .set("sh", sh)
                 .map_err(|e| LuaError::VmError(format!("sh: {e}")))?;
+        }
+
+        // proc.run{argv=...}: OBSERVING ONLY (order 1384-aixy, design 4.1). The
+        // Cacheable class filters its globals to CACHEABLE_STDLIB_GLOBALS, so it
+        // can never see `proc` (a process is an observation).
+        {
+            let run = lua
+                .create_function(proc_run)
+                .map_err(|e| LuaError::VmError(format!("proc.run: {e}")))?;
+            let proc_t = lua
+                .create_table()
+                .map_err(|e| LuaError::VmError(format!("proc: {e}")))?;
+            proc_t
+                .set("run", run)
+                .map_err(|e| LuaError::VmError(format!("proc.run: {e}")))?;
+            lua.globals()
+                .set("proc", proc_t)
+                .map_err(|e| LuaError::VmError(format!("proc: {e}")))?;
         }
     }
 

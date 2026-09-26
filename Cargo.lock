@@ -3297,9 +3297,12 @@ dependencies = [
 name = "tillandsias-exec"
 version = "0.1.0"
 dependencies = [
+ "libc",
+ "tempfile",
  "thiserror",
  "tokio",
  "uuid",
+ "windows 0.58.0",
 ]
 
 [[package]]
@@ -3469,6 +3472,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
+ "tempfile",
  "tillandsias-exec",
  "tillandsias-podman",
  "tokio",
