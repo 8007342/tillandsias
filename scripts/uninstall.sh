@@ -17,6 +17,21 @@ set -euo pipefail
 # already remove, and it is a documented no-op without --wipe.
 _uname_s="${TILLANDSIAS_UNINSTALL_FAKE_UNAME:-$(uname -s)}"
 
+# 1401-p3k7: a faked uname means a fixture is running, and a fixture that fakes
+# HOME still reaches the two things HOME does not redirect: the absolute
+# /Applications sweep and the tray stop. Measured on a Mac 2026-09-26: a
+# pre-build litmus run deleted /Applications/Tillandsias.app. So refuse, before
+# anything runs, unless BOTH seams point somewhere else. A real uninstall never
+# sets the fake uname and is unaffected.
+if [[ -n "${TILLANDSIAS_UNINSTALL_FAKE_UNAME:-}" ]] \
+    && { [[ -z "${TILLANDSIAS_UNINSTALL_APPS_DIR:-}" ]] || [[ -z "${TILLANDSIAS_UNINSTALL_TRAY_PROC:-}" ]]; }; then
+    echo "refused:uninstall:fake-uname-without-sandbox-seams (1401-p3k7)" >&2
+    echo "  set TILLANDSIAS_UNINSTALL_APPS_DIR to a scratch dir and" >&2
+    echo "  TILLANDSIAS_UNINSTALL_TRAY_PROC to a nonce name, or this run would" >&2
+    echo "  delete the real /Applications/Tillandsias.app and stop the real tray." >&2
+    exit 3
+fi
+
 IS_MACOS=false
 if [[ "$_uname_s" == "Darwin" ]]; then
     IS_MACOS=true
@@ -293,11 +308,15 @@ update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 # THE TWO-STAGE STOP IS DELIBERATELY KEPT, not collapsed: a tray was observed
 # alive 12m after a "complete" uninstall, and the sweeps fixture pins the
 # stop's existence for that reason. Only the matcher narrowed.
+#
+# 1401-p3k7: the process name is a seam (default the real one) so a fixture
+# reaches this branch with a nonce name instead of stopping a live tray.
 if [[ "$IS_MACOS" == true ]]; then
-    if pgrep -x tillandsias-tray >/dev/null 2>&1; then
-        pkill -TERM -x tillandsias-tray 2>/dev/null || true
+    _tray="${TILLANDSIAS_UNINSTALL_TRAY_PROC:-tillandsias-tray}"
+    if pgrep -x "$_tray" >/dev/null 2>&1; then
+        pkill -TERM -x "$_tray" 2>/dev/null || true
         sleep 1
-        pkill -KILL -x tillandsias-tray 2>/dev/null || true
+        pkill -KILL -x "$_tray" 2>/dev/null || true
     fi
 fi
 
@@ -314,7 +333,11 @@ fi
 # back (there is no rollback path) and nothing removes it on success, so it
 # outlives the install it was taken from. Uninstalling must not leave a
 # 30 MB copy of a removed application behind.
-for _app_dir in "/Applications" "$HOME/Applications"; do
+#
+# 1401-p3k7: the system dir is a seam (default /Applications). Every fixture
+# that ran this script faked HOME but not this ABSOLUTE path, so each Mac gate
+# and pre-build litmus run deleted the operator's installed app.
+for _app_dir in "${TILLANDSIAS_UNINSTALL_APPS_DIR:-/Applications}" "$HOME/Applications"; do
     rm -rf "$_app_dir/Tillandsias.app" "$_app_dir/Tillandsias.app.bak"
 done
 rm -f "$HOME/Library/LaunchAgents/com.tillandsias.tray.plist"
