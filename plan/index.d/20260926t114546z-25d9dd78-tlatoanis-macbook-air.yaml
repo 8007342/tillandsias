@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-one-shot-opencode-lane-ran-three-hours-silent-on-a-cold-host-without-reaching-the-credential-guard-and-the-guest-kept-no-record-of-it
+    event:
+      type: progress
+      ts: "2026-09-26T11:45:46Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t114546z
+      host: tlatoanis-macbook-air
+      summary: |
+        MEASURED 2026-09-26 on host opencode 1.18.30 (the forge ships 1.18.3), same 20s shell-tool shape:
+        - `opencode run --format json`: tool_use is emitted only on COMPLETION (status "completed" at +24s); there is no "running"/start event. JSON alone does not fix the silence.
+        - `--print-logs --log-level INFO|DEBUG`: 9 startup lines at +0s, then nothing on stderr for the rest of the run.
+        - opencode's own log file ~/.local/share/opencode/log/opencode.log records `evaluated permission=bash pattern="sleep 20"` at 11:38:31.265Z, i.e. at tool START, ~20s before stdout/JSON show the call. The line carries the command text.
+        DESIGN for criterion 1: in the forge's one-shot branch (images/default/entrypoint-forge-opencode.sh), follow opencode's log for `evaluated permission=` lines while `opencode run` executes, and echo each as `[forge] tool start: <pattern>` on the lane's stdout, which already streams to the host live (see the earlier progress event). A long build then announces itself when it starts, not hours later.
+        NEXT: confirm the forge's opencode 1.18.3 writes the same line at the same XDG path, then implement on work/1385-h6uz.
