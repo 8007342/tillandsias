@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-dashboard-renderer-formats-percentages-through-bash-printf-under-the-callers-LC_NUMERIC-so-a-comma-decimal-locale-refuses-the-value-outright-and-accepts-the-ones-it-can-parse-with-a-comma-in-them
+    field: status
+    value: completed
+    ts: "2026-09-26T20:36:52Z"
+    host: yoga
+
+events:
+  - packet_id: the-dashboard-renderer-formats-percentages-through-bash-printf-under-the-callers-LC_NUMERIC-so-a-comma-decimal-locale-refuses-the-value-outright-and-accepts-the-ones-it-can-parse-with-a-comma-in-them
+    event:
+      type: completed
+      ts: "2026-09-26T20:36:52Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3f130129f (relay: land work/1191-vrjf: bbd4d77b9 LC_ALL=C at the renderer + two-locale byte-identity guard; 90620e2e3 clock seam CONVERGENCE_DASHBOARD_NOW + first-diff sample). ok:convergence-dashboard-locale:6 arms (skipped=0) in THREE regimes: yoga fr_FR x5 with controls (pre-fix 4 FAIL incl. the quiet 90,0; seam pinned 1s off -> premise refuses; renderer minus LC_ALL=C -> 4 FAIL showing 90.0% vs 90,0%); darwin bash 3.2 fr_FR x5 plus macbookair's forced-boundary control (reported by macuahuitl); Linux x3 skipped=0 (reported by macuahuitl). ci-release litmus local-ci-self-clean-evidence PASS on yoga
+  - packet_id: the-dashboard-renderer-formats-percentages-through-bash-printf-under-the-callers-LC_NUMERIC-so-a-comma-decimal-locale-refuses-the-value-outright-and-accepts-the-ones-it-can-parse-with-a-comma-in-them
+    event:
+      type: note
+      ts: "2026-09-26T20:36:52Z"
+      host: yoga
+      summary: |-
+        landed on origin/linux-next, verified ancestor; sibling sweep recorded (1 unpinned human-read site named: bench-hot-path-placement.sh:90)
