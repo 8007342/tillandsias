@@ -412,6 +412,12 @@ record_attest() {
         return "$rc"
     fi
     marker="$(grep -E '^MO-FULL: ' "$out" | tail -1 || true)"
+    # 1110-4v4h follow-up: pass self's note: lines through. record kept only the
+    # marker, so the containing-head note — the one line saying WHY a moved
+    # remote still counts — never reached finalize's log. Measured on the live
+    # proof (yoga 2026-09-26T21:14Z): COMPLETE with origin at 4c18cb340, and
+    # no note anywhere.
+    grep -E '^note:mo-full:' "$out" >&2 || true
     rm -f "$out"
     if [ -z "$marker" ]; then
         echo "MO-FULL: FAIL record: self-attestation produced no marker line"
@@ -672,6 +678,23 @@ fixture() {
         # 11. record appends the verified marker to the ledger and prints it.
         run_record_case "record-verified-boundary" "$work/good-stamp" 0 ""
 
+        # 11b. 1110-4v4h: record with the remote MOVED past HEAD must still
+        #      attest AND surface the containing-head note to its caller —
+        #      record used to keep only the marker, so the note was lost.
+        if [ -n "${moved_on:-}" ]; then
+            self_cases=$((self_cases + 1))
+            local rmrc=0
+            rm -f "$ledger_path"
+            MO_FULL_BOUNDARY_STAMP="$work/good-stamp" MO_FULL_RECORD_STAMP="$work/record-stamp-scratch" \
+            MO_FULL_REMOTE_PROBE="printf '${moved_on}'" \
+                "$0" record "$ledger_path" 2 >"$work/record-moved-out" 2>&1 || rmrc=$?
+            if [ "$rmrc" -ne 0 ] || ! grep -Fq "MO-FULL: COMPLETE $live_head $live_branch $live_head" "$ledger_path" 2>/dev/null; then
+                failures+=("record-remote-moved-past-head: expected a COMPLETE ledger line, exit=$rmrc: $(tail -1 "$work/record-moved-out")")
+            elif ! grep -Fq "note:mo-full:contained:${live_branch}@${moved_on}" "$work/record-moved-out"; then
+                failures+=("record-remote-moved-past-head: attested, but the containing-head note did not reach record's caller")
+            fi
+        fi
+
         # 12. NEGATIVE CONTROL: record with no boundary must fail AND leave the
         #     ledger untouched — a failed verification records nothing.
         run_record_case "record-no-boundary" "$work/absent-stamp" 1 "no verified startup boundary"
@@ -688,7 +711,7 @@ fixture() {
         echo "PASS: mo-full-attest fixture 9/9 check scenarios green (no-marker, no-marker-but-refused, no-marker-prose-only, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha); self/record boundary scenarios SKIPPED — not attestable from branch '${live_branch:-none}'"
         return 0
     fi
-    echo "PASS: mo-full-attest fixture $((9 + self_cases + 3))/$((9 + self_cases + 3)) scenarios green (no-marker, no-marker-but-refused, no-marker-prose-only, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha, self-no-boundary, self-stale-boundary, self-verified-boundary, self-no-ledger-record, $( [ "$self_cases" -ge 5 ] && echo 'self-remote-moved-past-head, self-remote-behind-head, ')record-verified-boundary, record-no-boundary)"
+    echo "PASS: mo-full-attest fixture $((9 + self_cases + 3))/$((9 + self_cases + 3)) scenarios green (no-marker, no-marker-but-refused, no-marker-prose-only, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha, self-no-boundary, self-stale-boundary, self-verified-boundary, self-no-ledger-record, $( [ "$self_cases" -ge 5 ] && echo 'self-remote-moved-past-head, self-remote-behind-head, ')record-verified-boundary, $( [ "$self_cases" -ge 6 ] && echo 'record-remote-moved-past-head, ')record-no-boundary)"
     return 0
 }
 
