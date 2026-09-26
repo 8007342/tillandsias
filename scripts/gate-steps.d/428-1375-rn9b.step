@@ -10,3 +10,6 @@ STEP_DESC="Checking json get matches jq on the bucket A/B corpus (1375-rn9b)"
 STEP_SCRIPT="scripts/test-json-query-jq-parity.sh"
 STEP_ERROR="json get diverges from jq on a corpus filter, or the verb is absent (1375-rn9b)"
 STEP_OK="json get is byte-identical to jq on the jq-subset corpus"
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="no runnable tillandsias-plan binary resolved, so the verb could not be exercised"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:json-get-parity:79/79"
