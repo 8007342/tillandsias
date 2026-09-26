@@ -45,6 +45,8 @@ pub mod fragments;
 pub mod gitref;
 /// ORDER 394d — the committed ground-truth query set and its grader.
 pub mod groundtruth;
+/// ORDER 1375-rn9b — the jq-subset query engine behind `json get` / `yaml get`.
+pub mod json_query;
 /// ORDER 582-nqw5 — the same fragment overlay applied to `plan/loop_status.md`.
 /// Prose, not keyed records, so the CRDT is chosen per section rather than
 /// assumed from the index overlay: the dated host-scoped `## Cycle` entries are
