@@ -3938,6 +3938,23 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
 }
 
 /// Run a Lua script or snippet with the embedded, tillandsias-managed Lua 5.4 runtime.
+/// 1384-bp6t. The chunk's RETURN VALUES are printed, one per line: the
+/// Cacheable class has no `print` (1367-upz6 keeps it out of the pure
+/// allow-list), so a pure script's only output channel is what it returns.
+/// A script that returns nothing (the archiver) prints nothing, as before.
+fn print_lua_returns(vals: mlua::MultiValue) {
+    for v in vals {
+        match v {
+            mlua::Value::Nil => println!("nil"),
+            mlua::Value::Boolean(b) => println!("{b}"),
+            mlua::Value::Integer(i) => println!("{i}"),
+            mlua::Value::Number(n) => println!("{n}"),
+            mlua::Value::String(s) => println!("{}", s.to_string_lossy()),
+            other => println!("{}", other.type_name()),
+        }
+    }
+}
+
 fn run_lua_cli(args: &[String]) {
     if args.is_empty() {
         eprintln!("usage: tillandsias-plan lua <script.lua | -e code> [args...]");
@@ -4021,7 +4038,12 @@ fn run_lua_cli(args: &[String]) {
         }
         let _ = lua.globals().set("arg", arg_table);
 
-        if let Err(e) = lua.load(code).set_name("=(command line)").exec() {
+        if let Err(e) = lua
+            .load(code)
+            .set_name("=(command line)")
+            .eval::<mlua::MultiValue>()
+            .map(print_lua_returns)
+        {
             eprintln!("lua error: {e}");
             std::process::exit(1);
         }
@@ -4061,7 +4083,12 @@ fn run_lua_cli(args: &[String]) {
     }
     let _ = lua.globals().set("arg", arg_table);
 
-    if let Err(e) = lua.load(&script_source).set_name(script_path).exec() {
+    if let Err(e) = lua
+        .load(&script_source)
+        .set_name(script_path)
+        .eval::<mlua::MultiValue>()
+        .map(print_lua_returns)
+    {
         eprintln!("lua error: {e}");
         std::process::exit(1);
     }
