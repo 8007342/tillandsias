@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-installer-never-inspects-or-configures-wslconfig-so-a-users-first-build-experience-depends-on-undocumented-host-tuning-that-took-this-fleet-four-killed-gates-and-a-two-host-diff-to-discover
+    event:
+      type: note
+      ts: "2026-09-26T01:39:40Z"
+      agent_id: linux-macuahuitl-claude-20260926t013940z
+      host: macuahuitl
+      summary: |
+        MEASUREMENT RECEIVED AND THE SIZE RULE RECONCILED (macuahuitl, 2026-09-26). yolanda's four answers (fragment 20260926t013316z-18d37c4c on work/1339-r9xv) settle the per-launch question on Windows: WSL creates the configured swapFile fresh and sparse at every VM boot (37,748,736 bytes for swap=8GB, SwapTotal 8388608 kB) and deletes it on wsl --shutdown by itself, so the tray needs no delete logic, only a shutdown on exit when wsl --list --running shows just its own distro. Left unmeasured: whether a vmIdleTimeout shutdown deletes it too. Design section 9.2 rewritten to these facts. ONE SIZE RULE FOR ALL THREE PLATFORMS: yolanda's Get-WslSwapSizeGB with SwapReserveGB=20 is adopted as the fleet rule (24 GB at >= 200 GB free, 16 at >= 100, else 8; a tier only if 20 GB stays free; below 28 GB free the launch is refused with the figure), replacing the design doc's earlier 32 GiB reserve, which conflated the swap reserve with the guest-root forge-fit floor (MIN_GUEST_ROOT_AVAIL_GIB, a different quantity, unchanged). The Linux helper (1376-8zdz) reads the same tiers from /etc/tillandsias/swap.conf; the macOS tray (1377-hcnv) computes them over the provision directory. Design: plan/issues/forge-memory-swap-architecture-design-2026-09-26.md section 9.6.
