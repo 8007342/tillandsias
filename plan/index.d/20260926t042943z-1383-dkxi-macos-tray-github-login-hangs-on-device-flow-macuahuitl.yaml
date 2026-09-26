@@ -1,0 +1,29 @@
+packets:
+  - packet_id: the-macos-tray-github-login-waits-for-a-token-paste-prompt-the-device-flow-never-prints-so-login-hangs-and-the-qr-is-never-shown
+    order: 1383-dkxi
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, tray, github, login]
+    estimated_hours: 3
+    owned_files: [crates/tillandsias-macos-tray/src/diagnose.rs, crates/tillandsias-macos-tray/tests/github_login_expect_order.rs]
+    observed_by: macuahuitl
+    unscoreable: |
+      real-host-tray: the closure is a tray menu login observed on a Mac whose
+      guest runs a headless binary with the device flow; the automated half is
+      the rewritten expect-order test, which runs in the macOS gate.
+    title: |
+      the macOS tray's GitHub login (diagnose.rs github_login_main) waits for "authentication token", which the new device flow (1381-za6b) never prints, and sends the guest's output only to a transcript, so on a guest running the new headless the login hangs and the user never sees the QR code
+    verifiable_closure: |
+      tests/github_login_expect_order.rs drives the CURRENT guest flow (device
+      code + QR text), not the retired paste-prompt script, and fails on the
+      pre-fix diagnose.rs (which waits for "authentication token"). On a Mac
+      whose guest runs a headless containing 3a2b01d9e (plus 1383-5hpk), the
+      tray login shows the QR and code to the user and completes (operator-run),
+      with no token paste step.
+    context: |
+      From the 1381-za6b review. tests/github_login_expect_order.rs still passes
+      today only because it matches the old paste-prompt script, which remains
+      in source but no longer runs. That's a fixture pinning the retired path.
