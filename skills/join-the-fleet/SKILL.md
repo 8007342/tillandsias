@@ -154,8 +154,13 @@ there.
   two a worker runs (relayed by lenovinha, 2026-09-20) and this paragraph is
   the answer.
 - **Claims are by order, through the plan lane**: `tillandsias-plan set-field
-  <order> status in_progress --host <host> --reason …`, pushed, then
-  `tillandsias-plan next <role> | grep -c <order>` → 0. A hand-off by message
+  <order> status in_progress --host <host> --reason …`, pushed, then, after
+  `git pull`, `scripts/check-claim-confirmed.sh <order> --host <host>` →
+  `ok:claim-confirmed`. On `refused:claim-lost:…:earlier=<host>@<ts>` you LOST
+  a race: yield and take the next item. The earliest claim-event `ts` wins,
+  never push or commit order, because a claim can sit unpushed for minutes
+  (1370-tjme). The old `next <role> | grep -c <order>` → 0 cannot tell the
+  winner from the loser: any claim hides the row. A hand-off by message
   separates nobody; the claim on trunk does (1140-d6ni).
 - **Before calling a packet unclaimed**, fold the sibling branches:
   `scripts/check-claims-across-branches.sh --batch <order>…` (1034-whsp).
