@@ -4144,7 +4144,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # stopped being true.
     _step "Checking skills have exactly one source of truth (631-wpkd)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-skills-single-source.sh" 2>&1; then
-        _error "a skill has drifted out of canonical skills/ — declare it in skills/HARNESS-SCOPED.txt or link it (631-wpkd)"
+        # Order 1256-f7td. The remedy follows the VIOLATION printed above, and it
+        # never offers HARNESS-SCOPED.txt for a link-shape problem: a skill that
+        # is reachable is not harness-scoped, and "declare it" is the one-commit
+        # exit that silences this check permanently under push pressure.
+        _error "skills are not single-source (631-wpkd): read the violation line above. missing-from-runtime / link-leaves-canonical / a real directory where a link belongs => LINK the runtime tree to canonical skills/ (one directory symlink or per-skill links). skills/HARNESS-SCOPED.txt is ONLY for a skill that genuinely exists for one runtime alone, never a fix for a link-shape mismatch."
         exit 1
     fi
     _info "Skills single-source check passed"
