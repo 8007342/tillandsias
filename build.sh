@@ -4144,7 +4144,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # stopped being true.
     _step "Checking skills have exactly one source of truth (631-wpkd)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-skills-single-source.sh" 2>&1; then
-        _error "a skill has drifted out of canonical skills/ — declare it in skills/HARNESS-SCOPED.txt or link it (631-wpkd)"
+        # Order 1256-f7td. The remedy follows the VIOLATION printed above, and it
+        # never offers HARNESS-SCOPED.txt for a link-shape problem: a skill that
+        # is reachable is not harness-scoped, and "declare it" is the one-commit
+        # exit that silences this check permanently under push pressure.
+        _error "skills are not single-source (631-wpkd): read the violation line above. missing-from-runtime / link-leaves-canonical / a real directory where a link belongs => LINK the runtime tree to canonical skills/ (one directory symlink or per-skill links). skills/HARNESS-SCOPED.txt is ONLY for a skill that genuinely exists for one runtime alone, never a fix for a link-shape mismatch."
         exit 1
     fi
     _info "Skills single-source check passed"
@@ -4167,6 +4171,24 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Litmus bindings reconciliation passed"
+
+    # Order 1397-eppt. CentiColon counts obligations from each spec's `## Status`
+    # while tooling reads the litmus registry; 21 pairs disagreed (7 specs
+    # counted active that the registry had retired, 3 with no status at all),
+    # corrupting the denominator. A spec and its registry entry must now agree;
+    # a pair that could not be decided from evidence is NAMED on every run.
+    _step "Checking every spec and its registry entry agree on status (1397-eppt)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-spec-registry-status.sh" 2>&1; then
+        _error "a spec's ## Status disagrees with openspec/litmus-bindings.yaml (1397-eppt) — reconcile the pair with a recorded reason"
+        exit 1
+    fi
+    _info "Spec/registry status agreement passed"
+    # ...and the guard itself can fail: hermetic arms for a flipped word, a
+    # missing section, an annotated line, and a named undecided pair.
+    if ! _run bash "$SCRIPT_DIR/scripts/test-spec-registry-status.sh" 2>&1; then
+        _error "the spec/registry status guard no longer refuses what it must (1397-eppt)"
+        exit 1
+    fi
 
     # Order 875-v7hv. The runner parses step fields with bash regexes, which
     # capture the RAW bytes of a double-quoted YAML scalar, so a `\"` arrives

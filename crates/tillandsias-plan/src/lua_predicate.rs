@@ -537,6 +537,16 @@ fn register_fs_write_verbs(lua: &Lua) -> Result<(), LuaError> {
         })
         .map_err(|e| LuaError::VmError(format!("fs.write: {e}")))?;
 
+    // UNSTABLE BY DESIGN, OBSERVING ONLY, NEVER MEMOIZED (operator ruling
+    // 2026-09-26, recorded on 1395-ue3i): "clearly mark it as unstable and use
+    // it for orchestration but not for hard tests … a test should not say
+    // folder.forEachFile(verifySomething) but folder.file1.verifySomething()".
+    // A Cacheable predicate never gets it (this whole function is Observing
+    // only), and it does not touch the memo's read log, so no cached verdict
+    // can depend on a directory's membership; hard tests name their files and
+    // fs.read each one. Symlinks are EXCLUDED (never followed), and so are
+    // subdirectories. No mtime: git does not preserve it (1395-xjty).
+    //
     // Sorted names (not paths) of the regular files in a directory, so the
     // result is identical on every platform. An ABSENT directory is an empty
     // list plus `false`, so "no fragments yet" and "unreadable" stay distinct:
@@ -893,6 +903,7 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
         fs_table
             .set("read", f_read)
             .map_err(|e| LuaError::VmError(format!("fs.read: {e}")))?;
+
         lua.globals()
             .set("fs", fs_table)
             .map_err(|e| LuaError::VmError(format!("failed to set fs global: {e}")))?;
