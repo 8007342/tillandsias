@@ -1,0 +1,54 @@
+packets:
+  - packet_id: sha256sum-versus-shasum-and-date-percent-n-are-the-two-portability-forks-after-jq-so-hash-sha256-and-time-now-verbs-on-the-plan-binary-answer-both-and-back-luas-hash-and-time-tables
+    order: 1375-8g5t
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [portability, plan-binary, rust, macos, windows]
+    estimated_hours: 2
+    depends_on: []
+    owned_files: [crates/tillandsias-plan/src/host_verbs.rs, crates/tillandsias-plan/src/main.rs, crates/tillandsias-plan/capabilities.txt, scripts/test-plan-hash-time-verbs.sh]
+    observed_by: macuahuitl
+    title: |
+      sha256sum (143 sites, 46 files) versus shasum (62 sites, 27 files) and `date +%s%3N` (30 sites, one-second resolution on BSD date — 1279-a7b6) are the two portability forks after jq; `tillandsias-plan hash sha256 <file|->` and `tillandsias-plan time now --ms|--iso` answer both from the binary every host already has, and the same Rust functions back Lua's hash.* and time.* tables
+    verifiable_closure: |
+      bash scripts/test-plan-hash-time-verbs.sh asserts: `printf abc |
+      tillandsias-plan hash sha256 -` prints
+      ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad; the
+      file form matches whichever of `sha256sum` / `shasum -a 256` the host
+      has, byte for byte on the hex; `time now --ms` prints 13 digits and two
+      calls 10 ms apart differ by a positive amount (a one-second clock
+      cannot pass this arm, which is 1279-a7b6's defect restated as a
+      criterion); `time now --iso` matches ^[0-9]{8}t[0-9]{6}z$ — the
+      fragment-filename clock. Wired as a build.sh --check step in the same
+      commit (1325-ygq5). Pre-fix result: FAILS — `tillandsias-plan
+      capabilities` lists neither `hash` nor `time`.
+    context: |
+      MEASURED 2026-09-26 (design:
+      plan/issues/lua-runtime-host-dependency-replacement-design-2026-09-26.md).
+      Inventory by `git grep -c` over scripts build.sh launch.sh: sha256sum
+      143/46, shasum 62/27 (the macOS spelling; 699-usxc fragments record
+      `shasum -a 256` as the fallback on PATH-narrowed regimes), `date
+      +%s%3N|%N` 30/18, `date -d` 20/15 (GNU) vs `date -j` 17/11 (BSD),
+      `stat -c` 19/15 vs `stat -f` 15/11. No scripts/lib/*.sh defines a
+      portable sha256/now_ms/realpath wrapper today (only enclave-proxy,
+      no-tool-path, tool-dispatch, tool-materialize exist there), so every
+      script forks on `command -v` inline. The plan binary already links
+      sha2 0.10 and chrono 0.4; this is two dispatch arms and one module.
+      SCOPE: sha256 (hex, lowercase, no trailing `  -`), `time now --ms`
+      (epoch milliseconds), `time now --iso` (UTC `%Y%m%dt%H%M%Sz`), `time
+      now --rfc3339`. Not in scope: `date -d` parsing (a `time parse` verb is
+      a later slice once a caller needs it), stat, realpath (2 sites),
+      readlink -f (14 sites, BSD lacks -f before 12.3 — a `path resolve`
+      verb belongs with 1375-btuf's path table if a caller asks).
+      Migration of callers is NOT this row: this row provides the verb and
+      its fixture; scripts move on touch, and the 1375-tsfu ratchet pattern
+      (a per-tool floor file) is how sha256sum/shasum sites become
+      countable when the fleet wants that number — file that ratchet as its
+      own row only once a second caller exists (check for the capability
+      before designing its replacement).
+      Lua: 1375-btuf's hash.sha256 and time.* call these same functions.
+      Go is not needed for any of this: Rust already ships the binary
+      natively on all three platforms.

@@ -1,0 +1,59 @@
+packets:
+  - packet_id: the-litmus-runners-own-metadata-reads-pipe-yaml-json-into-jq-so-the-yq-fix-moved-the-dependency-to-jq-route-them-through-the-plan-binary-and-select-the-same-tests-on-a-host-with-neither
+    order: 1375-6pnd
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, portability, windows, macos, jq, yq]
+    estimated_hours: 3
+    depends_on: [tillandsias-plan-json-get-answers-the-jq-subset-that-87-percent-of-the-corpus-uses-byte-identical-so-a-gate-reads-json-with-the-binary-every-host-already-has]
+    owned_files: [scripts/run-litmus-test.sh, scripts/test-litmus-runner-reads-without-jq.sh]
+    observed_by: macuahuitl
+    title: |
+      the litmus runner's own metadata reads go `tillandsias-plan yaml-json | jq -r`, so the 746-htj9 fix that removed yq from the runner's path put jq there instead; route `_yaml_jq`, `yaml_get` and `get_litmus_tests_for_spec` through `tillandsias-plan yaml get` so the runner selects the SAME test set on a host with neither yq nor jq, and the carriage-return strip that exists only because jq.exe writes CRLF goes with it
+    verifiable_closure: |
+      bash scripts/test-litmus-runner-reads-without-jq.sh runs
+      `scripts/run-litmus-test.sh git-mirror-service --phase pre-build --size instant --compact`
+      twice on the same tree — once with the host PATH, once with a leading
+      PATH directory whose `jq` and `yq` are stubs that exit 127 — and
+      asserts both runs print the same `executed` count and the same
+      ordered test names, and that the stubs were reached (each stub appends
+      to a call log; a run whose log is empty is `blocked:stub-not-reached`,
+      never a pass). The fixture is named by a build.sh --check step in the
+      same commit (1325-ygq5). Pre-fix result: FAILS on a host without yq —
+      `_yaml_jq` returns non-zero when jq is absent, `yaml_get` falls to the
+      grep tier whose `^\.phase:` pattern cannot match a dotted path, and
+      `get_litmus_tests_for_spec` falls to the awk tier; the selection
+      differs. The implementer records the pre-fix fixture output as this
+      row's first event; if the pre-fix run PASSES the stubs did not reach the
+      runner and the fixture is repaired before any runner edit (a result is
+      not evidence unless the producer ran).
+    context: |
+      MEASURED 2026-09-26 (design:
+      plan/issues/lua-runtime-host-dependency-replacement-design-2026-09-26.md).
+      run-litmus-test.sh resolves LITMUS_PLAN_BIN via resolve_plan_binary and
+      defines `_yaml_jq <file> <filter>` as
+      `"$LITMUS_PLAN_BIN" yaml-json "$1" | jq -r "$2"`, with a
+      `${out//$'\r'/}` strip added for yolanda (jq.exe CRLF, measured
+      2026-09-04: test names gained a CR, the file was not found, the test
+      was SKIPPED, and the run printed PASS 100% having executed almost
+      nothing). yaml_get tries _yaml_jq, then yq, then a grep tier; every
+      runner-side read of phase/host_kind/size/inputs and the bindings query
+      `.specs[] | select(.spec_id=="X") | .litmus_tests[]?` goes through it.
+      So the set of tests a host RUNS depends on whether jq is on its PATH.
+      1297-2htc: a Windows host cannot provision yq from the toolbox and
+      every verdict carries warn:litmus-degraded-no-yq; that warning stays
+      (it is about step commands, 799-tb7q's territory), but after this row
+      the runner's OWN reads are no longer part of the degradation.
+      The filters the runner uses are all bucket A/B — dotted paths and one
+      iterate-select — inside 1375-rn9b's subset, so the migration is a
+      one-for-one swap of `_yaml_jq` to `"$LITMUS_PLAN_BIN" yaml get`; the
+      yq tier and the grep tier stay as the fresh-clone fallback (a tree
+      that has never built the binary must still run).
+      The stub directory technique is the same as 1130-i6xj's fixtures use;
+      on Windows the stubs must be `jq.exe`-shadowing (Git Bash resolves
+      .exe), and the fixture says which spelling it shadowed.
+      Related: 1330-bb87 (--list is broken independently; do not use --list
+      as the observable here), 1236-bmjh.
