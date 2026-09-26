@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    event:
+      type: decision
+      ts: "2026-09-26T05:44:48Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t054448z
+      host: tlatoanis-macbook-air
+      summary: |
+        DECISION (coordinator macuahuitl-fedora, 2026-09-26, cross-session message to tlatoanis-macbook-air): on the litmus path, PER-TEST RECORDS FIRST and no re-run yet. Reason: this row exists because a retry launders non-determinism into a green, so the instrument has to come before any retry.
+        Shape: run-litmus-test.sh emits one record per test (test id, step, status, wall_ms, and WHICH ARM failed) into the same timing and check-logs stream the gate already writes, so criterion 2's per-host split has litmus data to split.
+        A test-level re-run may come LATER, only as a VISIBLE verdict (e.g. passed-on-rerun:<test>), counted separately and never folded into pass, and only after a week of these records shows which tests actually flake.
+        Next slice on this row: the per-test litmus record.
