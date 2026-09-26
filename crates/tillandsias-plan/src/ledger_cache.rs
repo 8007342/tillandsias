@@ -133,8 +133,25 @@ fn cache_path(index: &Path) -> Option<PathBuf> {
                 .join(format!("{key}.redb")),
         );
     }
-    let root = abs.parent()?.parent()?;
-    Some(root.join(".cache").join("plan").join(format!("{key}.redb")))
+    // NEVER inside the checkout. `.cache/` is gitignored in this repository,
+    // but every fixture that builds a scratch repo has no such ignore, and its
+    // `git add -A` committed the snapshot — which took a fragment-free push off
+    // the plan-only lane (test-pre-push-plan-lane-fails-closed-without-binary,
+    // arm 3). The key is already the absolute index path, so a per-user cache
+    // directory separates checkouts without living in any of them.
+    let base = std::env::var_os("XDG_CACHE_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .filter(|v| !v.is_empty())
+                .map(|h| PathBuf::from(h).join(".cache"))
+        })?;
+    Some(
+        base.join("tillandsias")
+            .join("plan-cache")
+            .join(format!("{key}.redb")),
+    )
 }
 
 fn snapshot_path(index: &Path) -> Option<PathBuf> {
