@@ -635,6 +635,7 @@ mod tests {
                     domain: None,
                 },
                 root: repo_root(),
+                synth_budget_override_ms: None,
             },
             index_dir: Some(entry_dir.clone()),
         };
