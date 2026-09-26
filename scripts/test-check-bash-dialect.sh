@@ -136,9 +136,16 @@ printf '#!/usr/bin/env bash\n. <(printf X=1) # procsub-source: ok (fixture)\n' >
 expect "procsub-exemption-passes" "ok:bash-dialect-clean" 0
 rm "$TMP/procsub.sh"
 
+# 1374-4u6i: the count is FILES. One file tripping two rules is one; two
+# offending files are two.
+printf '#!/usr/bin/env bash\nmap%s -t arr < "$1"\n' 'file' > "$TMP/two-a.sh"
+printf '#!/usr/bin/env bash\nx="$1"\nprintf %%s "${x,,}"\n' > "$TMP/two-b.sh"
+expect "two-files-count-two" "blocked:bash4-unguarded:2" 1
+rm "$TMP/two-a.sh" "$TMP/two-b.sh"
+
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: check-bash-dialect fixture: $fails scenario(s) diverged" >&2
   exit 1
 fi
-echo "PASS: check-bash-dialect fixture 24/24 scenarios green"
+echo "PASS: check-bash-dialect fixture 25/25 scenarios green"
 exit 0

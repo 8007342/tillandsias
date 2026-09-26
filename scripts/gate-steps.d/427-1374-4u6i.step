@@ -1,0 +1,13 @@
+# Gate step 1374-4u6i — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS: check-bash-dialect.sh's own fixture. The CHECKER has run in
+# ./build.sh --check for weeks; its FIXTURE ran nowhere, so an arm that went
+# red on d2ceb4e4d (2026-09-05, a second rule counting mapfile) stayed red
+# until 2026-09-25 while the checker was reported as an active guard.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the bash-dialect checker's own fixture (1374-4u6i)"
+STEP_SCRIPT="scripts/test-check-bash-dialect.sh"
+STEP_ERROR="check-bash-dialect.sh no longer does what its fixture pins (1374-4u6i)"
+STEP_OK="bash-dialect checker fixture green"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-25 darwin PASS:check-bash-dialect-fixture:25/25"
