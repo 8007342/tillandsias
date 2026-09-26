@@ -84,19 +84,19 @@ keys="$("$JQ" -r 'keys_unsorted | .[0:6] | join(",")' < "$TMP/a1.jsonl" 2>/dev/n
 # ARMS 8-10 — per-test litmus records through --emit-timing-batch (coordinator
 # decision 2026-09-26: records before any re-run). Columns 6 and 7 are
 # status and failed_step; outside the domain they write no key.
-printf 'litmus:a\tp\t120\t1\th\tfail\t3\nlitmus:b\tp\t80\t0\th\tpass\t\nlitmus:c\tp\t5\t0\th\tbogus\t2x\n' \
+printf 'litmus:Ta\tp\t120\t1\th\tfail\t3\nlitmus:Tb\tp\t80\t0\th\tpass\t\nlitmus:Tc\tp\t5\t0\th\tbogus\t2x\n' \
     | TILLANDSIAS_TIMING_LOG="$TMP/b.jsonl" bash "$ROOT/scripts/cycle-metrics.sh" --emit-timing-batch
 got="$("$JQ" -rc '[.step, (.status // "ABSENT"), (.failed_step // "ABSENT")] | join(",")' < "$TMP/b.jsonl" 2>/dev/null | tr '\n' ' ')"
 case "$got" in
-    *"litmus:a,fail,3 "*) ok "a failed test records status=fail and the step it died on" ;;
+    *"litmus:Ta,fail,3 "*) ok "a failed test records status=fail and the step it died on" ;;
     *) bad "failed-test record wrong: $got" ;;
 esac
 case "$got" in
-    *"litmus:b,pass,ABSENT "*) ok "a passing test records status=pass and no failed_step" ;;
+    *"litmus:Tb,pass,ABSENT "*) ok "a passing test records status=pass and no failed_step" ;;
     *) bad "passing-test record wrong: $got" ;;
 esac
 case "$got" in
-    *"litmus:c,ABSENT,ABSENT "*) ok "out-of-domain status and step write no keys" ;;
+    *"litmus:Tc,ABSENT,ABSENT "*) ok "out-of-domain status and step write no keys" ;;
     *) bad "invalid columns leaked: $got" ;;
 esac
 
