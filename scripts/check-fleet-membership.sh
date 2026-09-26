@@ -102,7 +102,19 @@ esac
 
 # ---- 2. hooks ----------------------------------------------------------------
 gitdir="${JOIN_FLEET_GIT_DIR:-$(git rev-parse --git-dir 2>/dev/null || echo .git)}"
-hook="$gitdir/hooks/pre-push"
+# ORDER 1255-s4im: inspect the hook git will RUN. With core.hooksPath set,
+# git runs hooks from there and ignores .git/hooks, so reading .git/hooks was
+# wrong both ways: a hook left in .git/hooks under a redirected, empty hooks
+# path read ok while no hook ran (functionally --no-verify, the row's own
+# disclosure), and the forge's shared hooks path read as a missing hook.
+# `--git-path hooks` resolves core.hooksPath exactly as install-hooks.sh does.
+# JOIN_FLEET_GIT_DIR stays the test seam for a git dir that is not a checkout.
+if [ -n "${JOIN_FLEET_GIT_DIR:-}" ]; then
+    hooks_dir="$gitdir/hooks"
+else
+    hooks_dir="$(git rev-parse --path-format=absolute --git-path hooks 2>/dev/null || echo "$gitdir/hooks")"
+fi
+hook="$hooks_dir/pre-push"
 hv=""
 [ -f "$hook" ] && hv="$(grep -o -m1 -E 'tillandsias-pre-push-v[0-9]+' "$hook" 2>/dev/null || true)"
 if [ -n "$hv" ]; then
