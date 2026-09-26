@@ -1,0 +1,42 @@
+# @trace spec:forge-environment-discoverability, order:1416-pn5e, order:1414-mjdw, order:823-u3k9
+name: litmus:mcp-live-build-check-fixture
+spec: forge-environment-discoverability
+phase: pre-build
+size: instant
+severity: high
+description: >
+  Runs scripts/check-mcp-live-build.sh's hermetic fixture, which until 1416-pn5e
+  nothing ran: no litmus, gate step or script referenced it, so its arms only
+  executed when someone typed the command. The fixture pins the 823-u3k9 join
+  (an attested live-server build versus the file on disk) and the 1414-mjdw
+  extension: a current forge-plan must not vouch for a stale project-info
+  (one attestation line per server, bare check reports the worst), and the
+  real project-info.sh must compute and report its own startup build.
+  MEASURED 2026-09-26: a project-info server started before 1388-pfys
+  answered grep_code with "No matches found" while every health signal read
+  green.
+
+preconditions:
+  - workspace contains scripts/check-mcp-live-build.sh
+  - workspace contains images/default/lib-mcp-build-id.sh
+  - workspace contains images/default/config-overlay/mcp/project-info.sh
+  - workspace contains images/default/config-overlay/mcp/forge-plan.sh
+
+critical_path:
+  - step: "every arm of the live-build fixture passes, including the two-server and real-project-info arms (1414-mjdw)"
+    command: "bash scripts/check-mcp-live-build.sh fixture 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:mcp-live-build-check-fixture:15"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+  expected_log: "a stale long-lived MCP server reads stale, never ok, and one server's current claim never masks another's"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "mcp-live-build-check-fixture"
+
+failure_modes:
+  - "attest reverts to overwriting the whole stamp, so the last server attested erases every other claim"
+  - "project-info.sh stops computing MCP_SERVER_BUILD_ID at startup or drops server_build from project_info"
+  - "bare check reports the first or last attested server instead of the worst"

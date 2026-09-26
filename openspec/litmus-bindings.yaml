@@ -399,6 +399,7 @@ specs:
   - litmus:forge-environment-discoverability-install-shape
   - litmus:mcp-discoverability-shape
   - litmus:mcp-server-request-fault-isolation
+  - litmus:mcp-live-build-check-fixture
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
   - litmus:forge-experts-stale-source-honesty
