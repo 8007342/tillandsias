@@ -3779,6 +3779,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "SIGPIPE verdict-pipeline enforcement passed"
 
+    # Order 1401-x76w. RUN every added scripts/test-*.sh in the regime an
+    # ordinary checkout has: CARGO_TARGET_DIR and TILLANDSIAS_PLAN_BIN unset and
+    # every PATH entry holding a plan binary stripped, from a cwd outside the
+    # checkout. A fixture that passes only where the plan binary is found some
+    # other way (the builder toolbox's absolute CARGO_TARGET_DIR, an installed
+    # ~/.local/bin copy) is refused by name. Three relay bounces on 2026-09-26
+    # (1380-u7sq, 1395-88tp, 1375-2x4e), the last red on every Mac --check.
+    # Diff-scoped: it runs fixtures, so its cost is the added fixtures twice.
+    _step "Checking added fixtures pass without a masking plan-binary regime (1401-x76w)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/preflight-fixtures-default-target.sh" 2>&1; then
+        _error "an added fixture passes only where CARGO_TARGET_DIR or an installed plan binary finds tillandsias-plan (1401-x76w)"
+        exit 1
+    fi
+    _info "Default-target fixture regime passed"
+
     # Order 686-7qcm criterion 3. Refuse a NEWLY ADDED fragment that records a
     # closure rung (completed/verified/done) with no evidence-bearing event —
     # the gate-time backstop to set-field's write-time --evidence requirement,
