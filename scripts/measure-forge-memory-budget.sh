@@ -34,7 +34,7 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-jobs=4; mem=8g; swap=16g; guard=1200; image="localhost/tillandsias-forge:latest"
+jobs=4; mem=8g; swap=16g; guard=1200; image=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --jobs) jobs="$2"; shift 2 ;;
@@ -46,11 +46,17 @@ while [ $# -gt 0 ]; do
     esac
 done
 command -v podman >/dev/null 2>&1 || { echo "could-not-run:no-podman"; exit 3; }
+# NO DEFAULT IMAGE: a mutable tag would not say which image produced a number
+# (and check-container-bases refuses one). Name a versioned tag or a digest;
+# the regime line records the resolved image ID either way.
+[ -n "$image" ] || { echo "could-not-run:usage: --image <versioned tag or digest> is required"; exit 3; }
+image_id="$(podman image inspect --format '{{.Id}}' "$image" 2>/dev/null)" \
+    || { echo "could-not-run:no-such-image:$image"; exit 3; }
 
 mib() { echo $(( ${1:-0} / 1048576 )); }
 avail_mib() { awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo; }
 
-echo "regime:host=$(hostname -s):kernel=$(uname -r):nproc=$(nproc):mem_total_mib=$(awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo):swap=$(swapon --noheadings --show=NAME,TYPE,SIZE 2>/dev/null | tr -s ' ' ',' | paste -sd';'):swappiness=$(cat /proc/sys/vm/swappiness):image=$image"
+echo "regime:host=$(hostname -s):kernel=$(uname -r):nproc=$(nproc):mem_total_mib=$(awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo):swap=$(swapon --noheadings --show=NAME,TYPE,SIZE 2>/dev/null | tr -s ' ' ',' | paste -sd';'):swappiness=$(cat /proc/sys/vm/swappiness):image=$image:image_id=${image_id:0:12}"
 
 WORK="$(mktemp -d "$ROOT/target/forge-memory.XXXXXX")" || { echo "could-not-run:no-workdir"; exit 3; }
 name="forge-mem-$$"
