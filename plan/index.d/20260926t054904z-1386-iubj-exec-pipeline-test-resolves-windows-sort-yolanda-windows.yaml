@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-tillandsias-exec-test-that-names-sort-and-head-by-bare-name-resolves-windows-sort-exe-on-a-native-windows-host-and-fails-as-if-the-pipeline-were-broken
+    order: 1386-iubj
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tests, windows, path-resolution, exec]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-exec/tests/verbs.rs
+    title: |
+      tillandsias-exec's pipeline_feeds_each_stage names `sort` and `head` by bare name, so on a native Windows host `sort` resolves to C:\Windows\System32\sort.exe and the test fails with "beta\r\n" != "alpha\n" as if the Pipeline were broken
+    context: |
+      MEASURED on yolanda-windows 2026-09-26 while landing 1384-aixy (cargo
+      test -p tillandsias-exec, native, on trunk's verbs.rs, not touched by
+      that slice):
+        pipeline_feeds_each_stage panicked at tests/verbs.rs:69
+        left:  "beta\r\n"
+        right: "alpha\n"
+      The Pipeline is fine. `Command::new(["sort"])` resolves through PATH,
+      and on native Windows the system sort.exe comes before Git's
+      usr/bin/sort. Windows sort.exe does not sort that input the way GNU sort
+      does, and it answers with CRLF. The test then reports a composition bug
+      that does not exist.
+      THE CLASS: a bare program name is resolved by whoever is first on PATH,
+      and a test that means "GNU sort" is really asking for "whatever sort
+      this host has". It is the same PATH-resolution family as the
+      stale-binary and target/release-fallback rows (721-nyev): the name picks
+      the program and nothing checks which one it picked.
+      WHY IT MATTERS BEYOND ONE TEST: the scripting runtime (1384-aixy) makes
+      bare-name argv the norm for every future check, and every Windows host
+      will meet this on its first sort, find or head.
+    exit_criteria:
+      - 'pipeline_feeds_each_stage passes on native Windows AND Linux (pre-fix: fails natively on Windows with "beta\r\n" != "alpha\n")'
+      - 'the fix does not depend on PATH order: either the stages use programs with no Windows namesake, or the test resolves the program it means and SKIPS BY NAME when it is absent'
+      - 'the test states what it asserts about the PIPELINE (stage N stdout feeds stage N+1 stdin; every stage status kept), so a program-resolution failure can never again read as a Pipeline failure'
+    verifiable_closure: |
+      cargo test -p tillandsias-exec --test verbs pipeline_feeds_each_stage,
+      green natively on Windows and on Linux. Pre-fix: FAILS natively on
+      Windows (yolanda-windows, 2026-09-26).
+    events:
+      - type: filed
+        ts: "2026-09-26T05:49:04Z"
+        agent_id: windows-yolanda-claude-20260926t054904z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request after it surfaced while landing
+          1384-aixy's first slice on native Windows. Pre-existing on trunk;
+          not caused by that slice.
