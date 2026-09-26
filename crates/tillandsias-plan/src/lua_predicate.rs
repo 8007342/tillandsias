@@ -421,6 +421,178 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
     Ok(t)
 }
 
+/// On Windows `canonicalize` returns a VERBATIM path (`\\?\C:\...`), and a
+/// plain absolute path like `C:\...` never `starts_with` it, so every absolute
+/// path under the root was refused as "outside the repository root" (measured
+/// on native Windows while porting the archiver, order 1380-u7sq). Strip the
+/// prefix for drive-letter paths only; UNC and device paths are left as they
+/// are. A no-op everywhere else.
+fn strip_verbatim(p: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        if let Some(s) = p.to_str()
+            && let Some(rest) = s.strip_prefix(r"\\?\")
+            && rest.as_bytes().get(1) == Some(&b':')
+        {
+            return PathBuf::from(rest);
+        }
+    }
+    p
+}
+
+/// Resolve a path for an fs WRITE verb (order 1380-u7sq): the same rooting as
+/// `fs.read`, including the symlink check, applied to the nearest EXISTING
+/// ancestor because the path itself may not exist yet. Refusals name the verb
+/// and the path, never the data.
+fn resolve_write_path(root: &Path, path_str: &str, verb: &str) -> Result<PathBuf, String> {
+    if path_str.is_empty() {
+        return Err(format!("{verb}: refused — empty path"));
+    }
+    let path = Path::new(path_str);
+    let normalized = if path.is_absolute() {
+        normalize_path(path)
+    } else {
+        normalize_path(&root.join(path))
+    };
+    if !normalized.starts_with(root) || normalized == root {
+        return Err(format!(
+            "{verb}: refused — path '{path_str}' is outside the repository root (or is the root itself)"
+        ));
+    }
+    let mut probe = normalized.clone();
+    while !probe.exists() {
+        if !probe.pop() {
+            break;
+        }
+    }
+    if let Ok(canon) = probe.canonicalize().map(strip_verbatim)
+        && !canon.starts_with(root)
+    {
+        return Err(format!(
+            "{verb}: refused — '{path_str}' resolves through a symlink outside the repository root"
+        ));
+    }
+    Ok(normalized)
+}
+
+/// fs.mkdir / fs.write / fs.list / fs.exists: OBSERVING ONLY (order 1380-u7sq).
+/// Rooted exactly like fs.read, so a script can touch the checkout (or the
+/// root TILLANDSIAS_REPO_ROOT names, which is how the archiver's --check points
+/// the whole script at its per-run scratch copy) and nothing else. A Cacheable
+/// predicate is pure by construction and never gets a write verb.
+fn register_fs_write_verbs(lua: &Lua) -> Result<(), LuaError> {
+    let fs_table: LuaTable = lua
+        .globals()
+        .get("fs")
+        .map_err(|e| LuaError::VmError(format!("fs table missing: {e}")))?;
+    let rooted = |verb: &'static str| {
+        move || -> Result<PathBuf, mlua::Error> {
+            find_repo_root().map_err(|e| mlua::Error::RuntimeError(e.replace("fs.read", verb)))
+        }
+    };
+
+    let root_mkdir = rooted("fs.mkdir");
+    let mkdir = lua
+        .create_function(move |_, path_str: String| {
+            let root = root_mkdir()?;
+            let p = resolve_write_path(&root, &path_str, "fs.mkdir")
+                .map_err(mlua::Error::RuntimeError)?;
+            std::fs::create_dir_all(&p).map_err(|e| {
+                mlua::Error::RuntimeError(format!("fs.mkdir: failed to create '{path_str}': {e}"))
+            })?;
+            Ok(true)
+        })
+        .map_err(|e| LuaError::VmError(format!("fs.mkdir: {e}")))?;
+
+    // Atomic: the bytes go to a temporary sibling and are renamed over the
+    // target, so a reader never sees half a ledger and a failed write leaves
+    // the old file intact.
+    let root_write = rooted("fs.write");
+    let write = lua
+        .create_function(move |_, (path_str, data): (String, LuaString)| {
+            let root = root_write()?;
+            let p = resolve_write_path(&root, &path_str, "fs.write")
+                .map_err(mlua::Error::RuntimeError)?;
+            let parent = p.parent().ok_or_else(|| {
+                mlua::Error::RuntimeError(format!("fs.write: '{path_str}' has no parent"))
+            })?;
+            if !parent.is_dir() {
+                return Err(mlua::Error::RuntimeError(format!(
+                    "fs.write: the directory for '{path_str}' does not exist; fs.mkdir it first"
+                )));
+            }
+            let tmp = parent.join(format!(
+                ".{}.fs-write.{}",
+                p.file_name().and_then(|n| n.to_str()).unwrap_or("out"),
+                std::process::id()
+            ));
+            std::fs::write(&tmp, data.as_bytes()).map_err(|e| {
+                mlua::Error::RuntimeError(format!("fs.write: failed to write '{path_str}': {e}"))
+            })?;
+            std::fs::rename(&tmp, &p).map_err(|e| {
+                let _ = std::fs::remove_file(&tmp);
+                mlua::Error::RuntimeError(format!("fs.write: failed to replace '{path_str}': {e}"))
+            })?;
+            Ok(true)
+        })
+        .map_err(|e| LuaError::VmError(format!("fs.write: {e}")))?;
+
+    // Sorted names (not paths) of the regular files in a directory, so the
+    // result is identical on every platform. An ABSENT directory is an empty
+    // list plus `false`, so "no fragments yet" and "unreadable" stay distinct:
+    // any other failure raises.
+    let root_list = rooted("fs.list");
+    let list = lua
+        .create_function(move |lua, path_str: String| {
+            let root = root_list()?;
+            let p = resolve_write_path(&root, &path_str, "fs.list")
+                .map_err(mlua::Error::RuntimeError)?;
+            let t = lua.create_table()?;
+            if !p.exists() {
+                return Ok((t, false));
+            }
+            let mut names: Vec<String> = Vec::new();
+            for entry in std::fs::read_dir(&p).map_err(|e| {
+                mlua::Error::RuntimeError(format!("fs.list: failed to list '{path_str}': {e}"))
+            })? {
+                let entry = entry.map_err(|e| {
+                    mlua::Error::RuntimeError(format!("fs.list: failed to list '{path_str}': {e}"))
+                })?;
+                if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+                    names.push(entry.file_name().to_string_lossy().into_owned());
+                }
+            }
+            names.sort();
+            for (i, n) in names.into_iter().enumerate() {
+                t.set(i + 1, n)?;
+            }
+            Ok((t, true))
+        })
+        .map_err(|e| LuaError::VmError(format!("fs.list: {e}")))?;
+
+    let root_exists = rooted("fs.exists");
+    let exists = lua
+        .create_function(move |_, path_str: String| {
+            let root = root_exists()?;
+            let p = resolve_write_path(&root, &path_str, "fs.exists")
+                .map_err(mlua::Error::RuntimeError)?;
+            Ok(p.exists())
+        })
+        .map_err(|e| LuaError::VmError(format!("fs.exists: {e}")))?;
+
+    for (name, f) in [
+        ("mkdir", mkdir),
+        ("write", write),
+        ("list", list),
+        ("exists", exists),
+    ] {
+        fs_table
+            .set(name, f)
+            .map_err(|e| LuaError::VmError(format!("fs.{name}: {e}")))?;
+    }
+    Ok(())
+}
+
 /// The Lua globals a CACHEABLE predicate may reach, besides the `expert` table
 /// (1367-upz6, 1367-q9yc). Deterministic, side-effect-free library only: no `os`, no `io`,
 /// no `print`, no `load`, no `collectgarbage`, and `math` without `random`.
@@ -476,7 +648,7 @@ fn find_repo_root() -> Result<PathBuf, String> {
 /// The fail-closed half of [`find_repo_root`], separate so it can be tested
 /// with `/` without changing the process cwd or environment.
 fn validate_repo_root(root: PathBuf) -> Result<PathBuf, String> {
-    let root = root.canonicalize().map_err(|e| {
+    let root = root.canonicalize().map(strip_verbatim).map_err(|e| {
         format!(
             "fs.read: refused — repository root {} unresolvable: {e}",
             root.display()
@@ -693,7 +865,7 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                         "fs.read: refused — path '{path_str}' is outside repository root"
                     )));
                 }
-                if let Ok(canon) = normalized.canonicalize()
+                if let Ok(canon) = normalized.canonicalize().map(strip_verbatim)
                     && !canon.starts_with(&root)
                 {
                     return Err(mlua::Error::RuntimeError(format!(
@@ -918,6 +1090,9 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                 .set("proc", proc_t)
                 .map_err(|e| LuaError::VmError(format!("proc: {e}")))?;
         }
+
+        // fs write verbs: OBSERVING ONLY (order 1380-u7sq).
+        register_fs_write_verbs(&lua)?;
     }
 
     lua.globals()
