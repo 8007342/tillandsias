@@ -27,7 +27,7 @@ fails=0
 
 fail() { echo "FAIL:$1" >&2; fails=$((fails + 1)); }
 
-# The uninstaller's macOS block reads two roots: a literal /Applications and
+# The uninstaller's macOS block reads two roots: a seamed /Applications and
 # $HOME/Applications. Extract just that block and exercise it against fakes —
 # running the whole uninstaller would touch the real machine.
 BLOCK="$(sed -n '/── macOS desktop cleanup/,/^rm -f "\$HOME\/Library\/LaunchAgents/p' "$UNINSTALL")"
@@ -54,7 +54,8 @@ printf '%s' "$BLOCK" | grep -q 'Tillandsias.app.bak' || fail "block-does-not-rem
 # made this fail with "block-does-not-stop-the-running-tray" about a block that
 # still stops the tray. The failure message named a property that still held,
 # which is how a correct change gets "fixed" back into a defect.
-printf '%s' "$BLOCK" | grep -qE 'pkill -TERM( -[a-zA-Z])? tillandsias-tray' || fail "block-does-not-stop-the-running-tray"
+printf '%s' "$BLOCK" | grep -qE 'pkill -TERM( -[a-zA-Z])? (tillandsias-tray|"[$]_tray")' || fail "block-does-not-stop-the-running-tray"
+printf '%s' "$BLOCK" | grep -qF 'TILLANDSIAS_UNINSTALL_TRAY_PROC:-tillandsias-tray}' || fail "tray-seam-default-is-not-the-tray"
 
 # Behavioural: stub BOTH dirs with an app and its .bak, run the block with
 # /Applications and $HOME redirected into the sandbox, assert both are empty.
@@ -68,9 +69,12 @@ for d in "$FAKE_SYS" "$FAKE_HOME/Applications"; do
 done
 echo stub > "$FAKE_HOME/Library/LaunchAgents/com.tillandsias.tray.plist"
 
-# Rewrite the literal system path onto the sandbox, then run with a fake HOME.
-printf '%s\n' "$BLOCK" | sed "s#\"/Applications\"#\"$FAKE_SYS\"#g" > "$TMP/block.sh"
-grep -q "$FAKE_SYS" "$TMP/block.sh" || fail "sandbox-redirect-did-not-apply"
+# 1401-p3k7: the system dir is a seam now; point it at the sandbox. The block
+# must default to /Applications, and the run must never see the default: a
+# sed rewrite that silently stopped matching would have run the real sweep.
+printf '%s' "$BLOCK" | grep -qF 'TILLANDSIAS_UNINSTALL_APPS_DIR:-/Applications}' || fail "apps-seam-default-is-not-system-applications"
+printf '%s\n' "$BLOCK" > "$TMP/block.sh"
+export TILLANDSIAS_UNINSTALL_APPS_DIR="$FAKE_SYS" TILLANDSIAS_UNINSTALL_TRAY_PROC="nonce-tray-1401"
 HOME="$FAKE_HOME" bash "$TMP/block.sh" >/dev/null 2>&1 || fail "block-exited-nonzero"
 
 [ -e "$FAKE_SYS/Tillandsias.app" ]              && fail "system-app-survived"

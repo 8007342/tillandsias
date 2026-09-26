@@ -34,6 +34,8 @@ if ! kill -0 "$decoy_pid" 2>/dev/null; then
     bad "SETUP: the decoy did not start; nothing below measures anything"
 else
     # ARM 1 — the teeth.
+    TILLANDSIAS_UNINSTALL_APPS_DIR="$W/Applications" \
+    TILLANDSIAS_UNINSTALL_TRAY_PROC="nonce-tray-1401" \
     TILLANDSIAS_UNINSTALL_FAKE_UNAME="Linux" \
     TILLANDSIAS_UNINSTALL_INSTALL_DIR="$W/bin" \
     HOME="$W" bash "$U" --yes >/dev/null 2>&1 || true
@@ -49,7 +51,7 @@ fi
 # ARM 2 — POSITIVE CONTROL on the guard's own condition. Arm 1 passing because
 # the uninstaller crashed early would look identical, so assert the Darwin arm
 # is reachable and takes the branch.
-out_mac="$(TILLANDSIAS_UNINSTALL_FAKE_UNAME="Darwin" TILLANDSIAS_UNINSTALL_INSTALL_DIR="$W/bin2" HOME="$W" bash -x "$U" --yes 2>&1 | grep -c 'IS_MACOS.*=.*true' || true)"
+out_mac="$(TILLANDSIAS_UNINSTALL_APPS_DIR="$W/Applications" TILLANDSIAS_UNINSTALL_TRAY_PROC="nonce-tray-1401" TILLANDSIAS_UNINSTALL_FAKE_UNAME="Darwin" TILLANDSIAS_UNINSTALL_INSTALL_DIR="$W/bin2" HOME="$W" bash -x "$U" --yes 2>&1 | grep -c 'IS_MACOS.*=.*true' || true)"
 if [ "${out_mac:-0}" -gt 0 ]; then
     ok "ARM 2 (positive control): the Darwin arm is REACHED and sets IS_MACOS=true — arm 1 is a guard holding, not an uninstaller dying early"
 else
@@ -70,11 +72,33 @@ fi
 # arm would have to run the real matcher and would kill a developer's live
 # tray. A future move to a pidfile or launchctl WILL need this arm revisited —
 # that is honest, and better than an assertion that silently accepts anything.
-if /usr/bin/grep -qE 'pkill -TERM( -[a-zA-Z])? tillandsias-tray' "$U" \
-   && /usr/bin/grep -qE 'pkill -KILL( -[a-zA-Z])? tillandsias-tray' "$U"; then
+# 1401-p3k7: the stop targets a seam whose DEFAULT is the tray's name, so accept
+# either spelling, and require the default when the seam is used.
+_tgt='(tillandsias-tray|"[$]_tray")'
+if /usr/bin/grep -qE "pkill -TERM( -[a-zA-Z])? $_tgt" "$U" \
+   && /usr/bin/grep -qE "pkill -KILL( -[a-zA-Z])? $_tgt" "$U" \
+   && { ! /usr/bin/grep -qF '"$_tray"' "$U" || /usr/bin/grep -qF 'TILLANDSIAS_UNINSTALL_TRAY_PROC:-tillandsias-tray}' "$U"; }; then
     ok "ARM 3: the two-stage stop still EXISTS for the Darwin path — guarded, not deleted"
 else
     bad "ARM 3: the tray stop was removed rather than guarded — that trades this defect for the one 978/848 recorded"
+fi
+
+# ARM 4 (1401-p3k7) — a faked uname WITHOUT the sandbox seams is REFUSED before
+# anything runs. Every fixture faked HOME, but the /Applications sweep is
+# absolute and the tray stop is by name, so on a Mac each gate run deleted the
+# installed app. This arm runs under a stub PATH that only RECORDS rm, pkill and
+# pgrep, so even an uninstaller that lost the refusal touches nothing real and
+# the record is the evidence. PRE-FIX RESULT: FAILS, the record naming
+# /Applications/Tillandsias.app and the tray stop.
+S4="$W/stub4"; L4="$W/calls4.log"; mkdir -p "$S4" "$W/h4"; : > "$L4"
+for c in rm pkill pgrep podman launchctl sleep; do
+    printf '#!/bin/sh\necho "%s $*" >> "%s"\nexit 0\n' "$c" "$L4" > "$S4/$c"; chmod +x "$S4/$c"
+done
+out4="$(PATH="$S4:$PATH" TILLANDSIAS_UNINSTALL_FAKE_UNAME="Darwin" TILLANDSIAS_UNINSTALL_INSTALL_DIR="$W/bin4" HOME="$W/h4" bash "$U" --yes 2>&1)"; rc4=$?
+if [ "$rc4" -eq 3 ] && [[ "$out4" == *"refused:uninstall:fake-uname-without-sandbox-seams"* ]] && [ ! -s "$L4" ]; then
+    ok "ARM 4: a faked uname without the APPS_DIR/TRAY_PROC seams is refused (rc=3) before any rm or pkill"
+else
+    bad "ARM 4: a faked-Darwin uninstall without the seams was NOT refused (rc=$rc4); it would have run: $(tr '\n' ';' < "$L4")"
 fi
 
 total=$((pass+fail))
