@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: five-litmus-timeouts-were-elevated-to-unblock-a-release-and-must-come-back-down-one-at-a-time-as-the-fold-fix-lands
+    event:
+      type: progress
+      ts: "2026-09-26T12:25:42Z"
+      host: yoga
+      summary: |
+        FIRST ELEVATION BROUGHT DOWN, evidence (work/1236-bmjh 6973a456c, merged with trunk):
+        litmus:cycle-metrics-answer-rate-shape restored from 300000 to 10000 ms and its ELEVATED
+        banner removed. The command measured 633/651/717 ms idle on yoga (it was 29,908 ms on a
+        quiet host when elevated; the fold fix 964-tzmp is the difference). Inside a full
+        `./build.sh --ci-full` on an UNTOUCHED checkout, all 16 steps of the litmus were [OK],
+        including STEP 1 at 10s.
+        STATED PLAINLY: the ci-full as a WHOLE was RED (rc=1) on 8 other litmus tests in unrelated
+        specs: binary-signing release-artifact-integrity; forge-environment-discoverability
+        expert-groundtruth-harness, forge-experts-discoverability-shape and
+        methodology-path-query-citability; git-mirror-service mirror-sync-state-readable;
+        methodology-accountability no-unprotected-plan-ledger-readers; spec-traceability
+        plan-engine-invariants-shape; tillandsias-vault vault-cli-verifies-tls. This branch changes
+        one YAML file (this litmus's timeout and comment), so it cannot cause them; they are a
+        first release-tier sample from yoga, not evidence about this change. Whether "the step
+        green inside a red run" meets the closure's "green inside a full ci-full" is the
+        coordinator's call. An EARLIER ci-full attempt was VOID: I switched branches in the same
+        checkout while it ran, and stopped it.
+  - packet_id: a-rejected-credential-delivery-drops-the-root-token-with-the-share-so-a-bad-share-costs-the-guest-a-good-token
+    event:
+      type: note
+      ts: "2026-09-26T12:25:42Z"
+      host: yoga
+      summary: |
+        FOLDED IN from the 1200-ih38 re-review (non-blocking, for whoever takes this row):
+        (1) the 701-se6x doc header ("The HOST-DELIVERED share must be persisted too…") sits above
+        const VALID_TEST_SHARE_B64, not above host_delivered_share_is_persisted_not_only_the_token:
+        move it back onto its test;
+        (2) read_unseal_secret_bytes drops its buffer WITHOUT zeroizing on its not-32-bytes and
+        failed-status paths. Older code, but 1200-ih38 gave it a new caller at delivery time.

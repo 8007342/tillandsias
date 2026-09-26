@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: five-litmus-timeouts-were-elevated-to-unblock-a-release-and-must-come-back-down-one-at-a-time-as-the-fold-fix-lands
+    event:
+      type: progress
+      ts: "2026-09-26T13:38:47Z"
+      host: yoga
+      summary: |
+        ELEVATION 1 OF 5 RESTORED: litmus:cycle-metrics-answer-rate-shape is back at 10000 ms, and
+        its ELEVATED banner is removed. Evidence: landed on origin/linux-next at c985947af
+        (work/1236-bmjh 6973a456c), plus yoga's full `./build.sh --ci-full` on an untouched
+        checkout, where all 16 steps of this litmus were [OK] (STEP 1 at 10s). The coordinator
+        ruled this meets the closure: the load regime is what the clause exists for, and the 8
+        unrelated reds in that run (triaged on 1242-4x53) do not change the contention the step
+        ran under. The ROW STAYS OPEN for elevations 2-5, one at a time as written.
