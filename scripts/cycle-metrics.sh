@@ -409,6 +409,7 @@ if [ "${1:-}" = "--emit-timing" ]; then
     shift
     et_host="-"; et_step="-"; et_phase="-"
     et_duration_ms=0; et_exit=0
+    et_reproduced=""
     for tok in "$@"; do
         case "$tok" in
             host=*)         et_host="${tok#host=}" ;;
@@ -416,6 +417,7 @@ if [ "${1:-}" = "--emit-timing" ]; then
             phase=*)        et_phase="${tok#phase=}" ;;
             duration_ms=*)  et_duration_ms="${tok#duration_ms=}" ;;
             exit=*)         et_exit="${tok#exit=}" ;;
+            reproduced=*)   et_reproduced="${tok#reproduced=}" ;;
         esac
     done
     # Numeric fields must be integers or the rolling arithmetic downstream breaks;
@@ -433,6 +435,18 @@ if [ "${1:-}" = "--emit-timing" ]; then
     et_host="${et_host//[\"\\]/}"; et_step="${et_step//[\"\\]/}"; et_phase="${et_phase//[\"\\]/}"
     et_host="${et_host//[[:cntrl:]]/_}"; et_step="${et_step//[[:cntrl:]]/_}"; et_phase="${et_phase//[[:cntrl:]]/_}"
     [ -n "$et_step" ] || et_step="-"
+    # ORDER 1242-4x53. DID THIS FAILURE REPRODUCE when the step was re-run once
+    # in the same regime? Two reds in one release tier passed on re-run in both
+    # regimes, and a timing log carrying only an exit code cannot tell a
+    # regression from non-determinism, so the fleet's 25-29% gate failure rate
+    # is one number when it should be two. Only yes|no is written; anything
+    # else, including absence, writes NO key: absent means "not re-run" (or a
+    # pre-field record), never "did not reproduce". Appended after the root
+    # fields, like them, so field order and every current reader are untouched.
+    case "$et_reproduced" in
+        yes|no) et_repro_field=",\"reproduced\":\"$et_reproduced\"" ;;
+        *)      et_repro_field="" ;;
+    esac
     {
         et_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
         # ORDER 1299-s2sv. WHERE THIS RECORD WAS WRITTEN FROM, so the question
@@ -441,9 +455,9 @@ if [ "${1:-}" = "--emit-timing" ]; then
         # 1268-m2ir cost. Appended as a pre-rendered fragment so the existing
         # field order is untouched and every current reader stays inert.
         et_root_fields="$(metrics_root_fields "$TIMING_LOG" 2>/dev/null || true)"
-        printf '{"ts":"%s","host":"%s","step":"%s","phase":"%s","duration_ms":%s,"exit":%s%s}\n' \
+        printf '{"ts":"%s","host":"%s","step":"%s","phase":"%s","duration_ms":%s,"exit":%s%s%s}\n' \
             "$et_ts" "$et_host" "$et_step" "$et_phase" \
-            "$et_duration_ms" "$et_exit" "$et_root_fields" \
+            "$et_duration_ms" "$et_exit" "$et_root_fields" "$et_repro_field" \
             >>"$TIMING_LOG"
     } 2>/dev/null || true
     exit 0
