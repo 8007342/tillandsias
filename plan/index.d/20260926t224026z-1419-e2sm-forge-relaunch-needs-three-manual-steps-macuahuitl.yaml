@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-claude-forge-relaunched-from-the-cli-needs-three-manual-operator-steps-accept-bypass-permissions-log-in-again-and-name-the-remote-control-session-before-it-can-join-the-fleet
+    order: 1419-e2sm
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [forge, claude, remote-control, login, operator-ux]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    unscoreable: |
+      needs-design-first: which of the three steps can be automated safely is a
+      design question (the bypass-permissions acceptance is a consent the
+      operator may WANT to keep manual). The closure names, per step, either
+      "automated, with evidence" or "kept manual, with the reason", and a relaunch
+      measured end to end reports its remaining manual step count.
+    title: |
+      A Claude forge relaunched with `tillandsias --claude <repo>` (the operator's request, 2026-09-26) needed three manual operator steps before it could join the fleet — accept the bypass-permissions prompt, log in to Claude again, and run `/remote-control <name>` by hand — so every forge refresh costs the operator an interactive session, and the fleet name is typed rather than derived
+    context: |
+      MEASURED 2026-09-26 ~22:40Z on macuahuitl, operator's words: "I had to
+      accept the bypass permission prompt, then manually login, then manually set
+      /remote-control macuahuitl-forge, but other than that, looks like a
+      successful forge launch." The launch itself (fresh image b09adefe522a,
+      container up, experts current) worked.
+      Per step:
+        (1) bypass-permissions prompt: a consent gate; possibly correct to keep
+            manual, but it should be a deliberate decision, stated.
+        (2) Claude login: the credential did not survive the container
+            replacement. Vault already carries a ClaudeLogin / ClaudeForge policy
+            (seen in the --init vault bootstrap output), so a relaunch may be
+            able to reuse a vault-held credential rather than a fresh login.
+        (3) remote-control name: derivable. join-the-fleet's own checker computed
+            a session name (forge-tillandsias-tillandsias-forge) that DIFFERS from
+            the name the operator typed (macuahuitl-forge) — two conventions for
+            one thing (fleet-session-naming says <host>-<project>-forge).
+    deliverable: |
+      Per step: automate or keep manual with a recorded reason; the naming
+      conventions reconciled so the checker and the relaunch agree.
+    provenance: |
+      Filed by the macuahuitl coordinator 2026-09-26 from the operator's report.
