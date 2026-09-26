@@ -321,13 +321,32 @@ if ($NoLaunchReason -and -not $NoLaunch) {
 # through PowerShell rather than reading its source. The two marker lines
 # around it are what that fixture cuts on; keep them.
 # BEGIN-WSLCONFIG-MERGE
+# SWAP SIZE SCALES WITH FREE DISK (operator, 2026-09-26: "start at 8GB, but if
+# the host has generous amounts of diskspace ... 16 or 24gb. Disk is the
+# cheapest resource."). PROVISIONAL thresholds, pending the design agent's on
+# 1339-r9xv: 24 GB at >= 200 GB free, 16 GB at >= 100 GB free, else 8 GB; a
+# tier is taken only if it still leaves SwapReserveGB free. 8 GB is the floor
+# and is never refused, but a host that cannot keep the reserve is warned.
+# WSL creates the file sparse at VM boot and deletes it at `wsl --shutdown`
+# (measured on yolanda-windows 2026-09-26), so the size is a ceiling on disk
+# use under pressure, not an allocation.
+$SwapReserveGB = 20
+function Get-WslSwapSizeGB {
+    param([double]$FreeGB)
+    foreach ($tier in @(@{ Size = 24; Min = 200 }, @{ Size = 16; Min = 100 })) {
+        if ($FreeGB -ge $tier.Min -and ($FreeGB - $tier.Size) -ge $SwapReserveGB) {
+            return [pscustomobject]@{ SizeGB = $tier.Size; Warn = $false }
+        }
+    }
+    return [pscustomobject]@{ SizeGB = 8; Warn = (($FreeGB - 8) -lt $SwapReserveGB) }
+}
 function Get-WslConfigMerge {
-    param([string[]]$Lines, [string]$SwapFile)
+    param([string[]]$Lines, [string]$SwapFile, [int]$SwapSizeGB = 8)
     if ($null -eq $Lines) { $Lines = @() }
     # .wslconfig does not expand environment variables and wants doubled
     # backslashes in a Windows path.
     $want = [ordered]@{
-        'wsl2'         = [ordered]@{ 'swap' = '8GB'; 'swapFile' = ($SwapFile -replace '\\', '\\') }
+        'wsl2'         = [ordered]@{ 'swap' = "${SwapSizeGB}GB"; 'swapFile' = ($SwapFile -replace '\\', '\\') }
         'experimental' = [ordered]@{ 'sparseVhd' = 'true'; 'autoMemoryReclaim' = 'gradual' }
     }
     # Pass 1: where each section ends, and which keys each section holds.
@@ -462,16 +481,28 @@ if ($HostLogicalCpus -le 0) {
 # without a prompt; =skip, or any non-interactive run without =apply, adds
 # nothing and says so. The default is NO because the file is the user's.
 $SwapFileTarget = Join-Path $env:LOCALAPPDATA 'tillandsias\wsl-swap.vhdx'
+$SwapFreeGB = -1
+try { $SwapFreeGB = [math]::Round((Get-Item $env:LOCALAPPDATA -ErrorAction Stop).PSDrive.Free / 1GB, 1) } catch {}
+if ($SwapFreeGB -lt 0) {
+    # Could not measure the volume: take the floor rather than guess upward.
+    $SwapSize = [pscustomobject]@{ SizeGB = 8; Warn = $false }
+    Say "  wsl-swap: could not read free space for $SwapFileTarget; sizing swap at the 8 GB floor."
+} else {
+    $SwapSize = Get-WslSwapSizeGB -FreeGB $SwapFreeGB
+    Say "  wsl-swap: $SwapFreeGB GB free on the swap volume -> swap=$($SwapSize.SizeGB)GB (8 GB floor; 16 at 100+ GB free, 24 at 200+)."
+    if ($SwapSize.Warn) { SayWn "  wsl-swap: under $SwapReserveGB GB would remain free if the 8 GB swap filled; free some disk space." }
+}
 $WslCfgLines = @()
 if (Test-Path $WslCfgPath) { $WslCfgLines = @(Get-Content $WslCfgPath -ErrorAction SilentlyContinue) }
-$WslMerge = Get-WslConfigMerge -Lines $WslCfgLines -SwapFile $SwapFileTarget
+$WslMerge = Get-WslConfigMerge -Lines $WslCfgLines -SwapFile $SwapFileTarget -SwapSizeGB $SwapSize.SizeGB
 foreach ($d in $WslMerge.Differs) { Say "  wsl-swap: present and kept: $d" }
 if ($WslMerge.Added.Count -eq 0) {
     Say "  wsl-swap: .wslconfig already has swap, swapFile, sparseVhd and autoMemoryReclaim; nothing to add."
 } else {
     Write-Host ""
     SayWn "  WSL's default swap is 25% of the guest's memory (2 GB at memory=8GB), below what one"
-    SayWn "  Tillandsias forge spills. These keys are ABSENT from $WslCfgPath"
+    SayWn "  Tillandsias forge spills. WSL creates the swap file fresh at each VM boot and deletes"
+    SayWn "  it at shutdown. These keys are ABSENT from $WslCfgPath"
     foreach ($a in $WslMerge.Added) { Say "    + $a" }
     Say "  Nothing already in the file is changed. A backup is written beside it first."
     Say "  They take effect after 'wsl --shutdown', which STOPS every running WSL distro."

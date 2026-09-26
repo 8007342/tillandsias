@@ -134,6 +134,28 @@ ran=$((ran + 1))
 grep -qxF 'swapFile=C:\\Users\\u\\AppData\\Local\\tillandsias\\wsl-swap.vhdx' "$TMP/empty.merged" \
     || fail "6 swapFile is not written with doubled backslashes: $(grep '^swapFile=' "$TMP/empty.merged")"
 
+# ARM 7: swap size scales with free disk, with a floor and a reserve. Edges
+# are chosen on both sides of each threshold, and 110 GB free is the reserve
+# case: 16 GB would still leave 94, so it is taken.
+cat > "$TMP/size.ps1" <<'PS'
+param([string]$Merge)
+. $Merge
+foreach ($f in @(10, 27, 30, 99.9, 100, 110, 199, 200, 230, 500)) {
+    $r = Get-WslSwapSizeGB -FreeGB $f
+    "size:${f}:$($r.SizeGB):$($r.Warn)"
+}
+$m = Get-WslConfigMerge -Lines @() -SwapFile 'C:\x\s.vhdx' -SwapSizeGB 24
+"line:" + (($m.Lines | Where-Object { $_ -like 'swap=*' }) -join ',')
+PS
+"$PWSH" -NoProfile -ExecutionPolicy Bypass -File "$(winpath "$TMP/size.ps1")" -Merge "$(winpath "$TMP/merge.ps1")" 2>&1 \
+    | tr -d '\r' > "$TMP/size.out"
+ran=$((ran + 1))
+want_sizes='size:10:8:True size:27:8:True size:30:8:False size:99.9:8:False size:100:16:False size:110:16:False size:199:16:False size:200:24:False size:230:24:False size:500:24:False '
+got_sizes="$(grep '^size:' "$TMP/size.out" | tr '\n' ' ')"
+[ "$got_sizes" = "$want_sizes" ] || fail "7 swap sizing — got '$got_sizes' want '$want_sizes'"
+ran=$((ran + 1))
+grep -qx 'line:swap=24GB' "$TMP/size.out" || fail "7 the chosen size did not reach the swap= line: $(grep '^line:' "$TMP/size.out")"
+
 if [ "$fails" -ne 0 ]; then
     echo "refused:wslconfig-merge-fixture:failed=$fails ran=$ran skipped=$skipped"
     exit 1
