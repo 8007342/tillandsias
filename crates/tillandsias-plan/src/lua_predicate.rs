@@ -537,6 +537,16 @@ fn register_fs_write_verbs(lua: &Lua) -> Result<(), LuaError> {
         })
         .map_err(|e| LuaError::VmError(format!("fs.write: {e}")))?;
 
+    // UNSTABLE BY DESIGN, OBSERVING ONLY, NEVER MEMOIZED (operator ruling
+    // 2026-09-26, recorded on 1395-ue3i): "clearly mark it as unstable and use
+    // it for orchestration but not for hard tests … a test should not say
+    // folder.forEachFile(verifySomething) but folder.file1.verifySomething()".
+    // A Cacheable predicate never gets it (this whole function is Observing
+    // only), and it does not touch the memo's read log, so no cached verdict
+    // can depend on a directory's membership; hard tests name their files and
+    // fs.read each one. Symlinks are EXCLUDED (never followed), and so are
+    // subdirectories. No mtime: git does not preserve it (1395-xjty).
+    //
     // Sorted names (not paths) of the regular files in a directory, so the
     // result is identical on every platform. An ABSENT directory is an empty
     // list plus `false`, so "no fragments yet" and "unreadable" stay distinct:
@@ -894,61 +904,6 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
             .set("read", f_read)
             .map_err(|e| LuaError::VmError(format!("fs.read: {e}")))?;
 
-        // 1395-ue3i (operator: "deterministic alphabetical listing", from Rust).
-        // fs.list(dir): the entry NAMES of one directory, sorted by UTF-8 byte
-        // order, never following a symlink (an entry that is a symlink is
-        // listed by its name and never resolved). Rooted exactly like fs.read,
-        // with a named refusal outside the root. Both classes: the directory
-        // is logged like a read, so in the CACHEABLE class the memo keys on
-        // the listing's digest and adding or removing a file invalidates a
-        // cached verdict exactly as editing one does.
-        let f_list = {
-            let root = repo_root.clone();
-            let reads = reads.clone();
-            lua.create_function(move |lua, path_str: String| {
-                let root = root.clone().map_err(mlua::Error::RuntimeError)?;
-                if path_str.is_empty() {
-                    return Err(mlua::Error::RuntimeError(
-                        "fs.list: refused — empty path".to_string(),
-                    ));
-                }
-                let path = Path::new(&path_str);
-                let normalized = if path.is_absolute() {
-                    normalize_path(path)
-                } else {
-                    normalize_path(&root.join(path))
-                };
-                if !normalized.starts_with(&root) {
-                    return Err(mlua::Error::RuntimeError(format!(
-                        "fs.list: refused — path '{path_str}' is outside repository root"
-                    )));
-                }
-                if let Ok(canon) = normalized.canonicalize().map(strip_verbatim)
-                    && !canon.starts_with(&root)
-                {
-                    return Err(mlua::Error::RuntimeError(format!(
-                        "fs.list: refused — symlink '{path_str}' resolves outside repository root"
-                    )));
-                }
-                // Logged BEFORE listing: a directory that is absent now and
-                // appears later still invalidates the memo.
-                if let Ok(mut log) = reads.lock() {
-                    log.push(normalized.clone());
-                }
-                let names = sorted_entry_names(&normalized).map_err(|e| {
-                    mlua::Error::RuntimeError(format!("fs.list: failed to list '{path_str}': {e}"))
-                })?;
-                let t = lua.create_table()?;
-                for (i, n) in names.iter().enumerate() {
-                    t.set(i + 1, n.as_str())?;
-                }
-                Ok(t)
-            })
-            .map_err(|e| LuaError::VmError(format!("fs.list: {e}")))?
-        };
-        fs_table
-            .set("list", f_list)
-            .map_err(|e| LuaError::VmError(format!("fs.list: {e}")))?;
         lua.globals()
             .set("fs", fs_table)
             .map_err(|e| LuaError::VmError(format!("failed to set fs global: {e}")))?;
@@ -1197,39 +1152,12 @@ pub struct PredicateRegistry {
 
 struct CacheEntry {
     verdict: bool,
-    /// (path, digest-or-None-if-unreadable) for every `fs.read` and `fs.list`
-    /// of the run.
+    /// (path, digest-or-None-if-unreadable) for every `fs.read` of the run.
     inputs: Vec<(PathBuf, Option<[u8; 32]>)>,
 }
 
-/// Entry names of `dir`, sorted by UTF-8 byte order (String's Ord), never
-/// following a symlink: read_dir yields entries, and only their names are
-/// taken. A non-UTF-8 name is rendered lossily, still in a total order.
-pub(crate) fn sorted_entry_names(dir: &Path) -> std::io::Result<Vec<String>> {
-    let mut names: Vec<String> = std::fs::read_dir(dir)?
-        .filter_map(|e| e.ok())
-        .map(|e| e.file_name().to_string_lossy().into_owned())
-        .collect();
-    names.sort();
-    Ok(names)
-}
-
-/// The memo's digest of one input. A DIRECTORY (read by fs.list) digests its
-/// sorted listing, so adding or removing a file moves it (1395-ue3i); a file
-/// (fs.read) digests its bytes. The kind is taken at digest time, so an input
-/// that changes kind also invalidates.
 fn file_digest(path: &Path) -> Option<[u8; 32]> {
     use sha2::{Digest, Sha256};
-    if path.is_dir() {
-        let names = sorted_entry_names(path).ok()?;
-        let mut h = Sha256::new();
-        h.update(b"dir\0");
-        for n in &names {
-            h.update(n.as_bytes());
-            h.update(b"\0");
-        }
-        return Some(h.finalize().into());
-    }
     std::fs::read(path).ok().map(|b| Sha256::digest(&b).into())
 }
 

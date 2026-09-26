@@ -576,41 +576,31 @@ fn scratch_dir(tag: &str) -> (std::path::PathBuf, String) {
     (dir, rel)
 }
 
-/// PRE-FIX RESULT: FAILS — fs.list did not exist, and the memo keyed only on
-/// the bytes fs.read returned, so a verdict computed over a directory's
-/// membership would have been replayed after a file was added.
+/// Operator ruling (2026-09-26, on 1395-ue3i): fs.list is for orchestration,
+/// not hard tests, so it exists in the OBSERVING class and is ABSENT from the
+/// Cacheable one; no memoized verdict can depend on a directory's membership.
 #[test]
-fn a_cacheable_verdict_over_a_listing_is_re_evaluated_when_a_file_is_added() {
-    let (dir, rel) = scratch_dir("memo");
-    std::fs::write(dir.join("one.txt"), "x").expect("seed");
-    let mut reg = PredicateRegistry::new();
-    reg.register(
-        "one_entry",
-        PredicateClass::Cacheable,
-        "function one_entry(d) return #fs.list(d) == 1 end",
-    )
-    .expect("register");
-    assert!(reg.eval("one_entry", &rel).expect("eval 1"));
-    assert!(reg.eval("one_entry", &rel).expect("eval 2"));
+fn fs_list_is_observing_only_and_absent_from_the_cacheable_class() {
+    let obs = tillandsias_plan::lua_predicate::build_environment(PredicateClass::Observing)
+        .expect("observing env");
+    let ty: String = obs.load("return type(fs.list)").eval().expect("observing");
+    assert_eq!(ty, "function");
+    let cac = tillandsias_plan::lua_predicate::build_environment(PredicateClass::Cacheable)
+        .expect("cacheable env");
+    let ty: String = cac.load("return type(fs.list)").eval().expect("cacheable");
+    assert_eq!(ty, "nil", "fs.list must not reach a memoized verdict");
+    let read: String = cac
+        .load("return type(fs.read)")
+        .eval()
+        .expect("cacheable read");
     assert_eq!(
-        reg.cache_hits, 1,
-        "an unchanged listing must be served from cache"
-    );
-    std::fs::write(dir.join("two.txt"), "y").expect("add");
-    let after = reg.eval("one_entry", &rel).expect("eval 3");
-    let _ = std::fs::remove_dir_all(&dir);
-    assert!(
-        !after,
-        "a stale verdict was served after a file was ADDED to the listed dir"
-    );
-    assert_eq!(
-        reg.cache_hits, 1,
-        "the changed listing must NOT be a cache hit"
+        read, "function",
+        "Cacheable keeps fs.read (named files, content-addressed)"
     );
 }
 
 #[test]
-fn fs_list_returns_names_in_byte_order_without_following_symlinks() {
+fn fs_list_returns_regular_file_names_in_byte_order_and_never_a_symlink() {
     let (dir, rel) = scratch_dir("order");
     for n in ["b", "a", "C", "é"] {
         std::fs::write(dir.join(n), "").expect("seed");
@@ -618,18 +608,14 @@ fn fs_list_returns_names_in_byte_order_without_following_symlinks() {
     #[cfg(unix)]
     std::os::unix::fs::symlink("/etc", dir.join("zz-link")).expect("symlink");
     let lua =
-        tillandsias_plan::lua_predicate::build_environment(PredicateClass::Cacheable).expect("env");
+        tillandsias_plan::lua_predicate::build_environment(PredicateClass::Observing).expect("env");
     let got: String = lua
         .load(format!(r#"return table.concat(fs.list("{rel}"), ",")"#))
         .eval()
         .expect("fs.list");
     let _ = std::fs::remove_dir_all(&dir);
-    #[cfg(unix)]
-    assert_eq!(
-        got, "C,a,b,zz-link,é",
-        "a symlink is listed by NAME, never followed"
-    );
-    #[cfg(not(unix))]
+    // Regular files only, in UTF-8 byte order; the symlink is EXCLUDED (so
+    // it is never followed), which is fs.list's contract since 1380-u7sq.
     assert_eq!(got, "C,a,b,é");
 }
 

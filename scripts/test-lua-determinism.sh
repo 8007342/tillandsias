@@ -55,10 +55,11 @@ else
     esac
 fi
 
-# ── 1b: fs.list is one byte stream too (1395-ue3i) ─────────────────────
-l1="$(lua_c -e 'return table.concat(fs.list("scripts/fixtures"), ",")')"
-l2="$(lua_c -e 'return table.concat(fs.list("scripts/fixtures"), ",")')"
-l3="$(lua_c -e 'return table.concat(fs.list("scripts/fixtures"), ",")')"
+# ── 1b: fs.list (OBSERVING only; unstable, never memoized) is still one
+#       byte stream for a given tree (1395-xjty, operator ruling on 1395-ue3i)
+l1="$(lua_o -e 'return table.concat(fs.list("scripts/fixtures"), ",")')"
+l2="$(lua_o -e 'return table.concat(fs.list("scripts/fixtures"), ",")')"
+l3="$(lua_o -e 'return table.concat(fs.list("scripts/fixtures"), ",")')"
 case "$l1" in
     *determinism.lua*)
         if [ "$l1" = "$l2" ] && [ "$l2" = "$l3" ]; then ok "fs.list prints the same bytes in three processes"; else bad "fs.list differs across processes: $l1 | $l2 | $l3"; fi ;;
