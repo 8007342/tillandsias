@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-plan-only-lanes-append-vs-origin-fold-check-rebuilds-every-long-form-field-in-the-whole-ledger-on-every-push-so-the-cheap-lane-costs-two-minutes-on-a-floor-host-and-grows-with-the-corpus-rather-than-with-the-push
+    field: status
+    value: in_progress
+    ts: "2026-09-26T13:15:24Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: the-plan-only-lanes-append-vs-origin-fold-check-rebuilds-every-long-form-field-in-the-whole-ledger-on-every-push-so-the-cheap-lane-costs-two-minutes-on-a-floor-host-and-grows-with-the-corpus-rather-than-with-the-push
+    event:
+      type: note
+      ts: "2026-09-26T13:15:24Z"
+      host: yolanda-windows
+      summary: |-
+        claimed 2026-09-26 at the coordinator's suggestion: derive the append-vs-origin pairs from the push's own outgoing fragments (a pair the push does not name folds identically, since LWW is per field and only status: blocks set values), keep the whole-corpus mode for standalone runs, and bound the check with a named could-not-run
