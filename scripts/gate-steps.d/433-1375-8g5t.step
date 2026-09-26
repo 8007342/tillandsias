@@ -11,3 +11,4 @@ STEP_ERROR="hash sha256 or time now diverges, or the verbs are absent (1375-8g5t
 STEP_OK="hash sha256 matches the vector and the host tool; time now --ms advances in milliseconds"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="no runnable tillandsias-plan resolved"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin PASS: plan-hash-time-verbs 6/6 (sha256sum and shasum)"
