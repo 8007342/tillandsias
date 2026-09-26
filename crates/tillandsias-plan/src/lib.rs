@@ -59,6 +59,7 @@ pub mod loop_status;
 /// hot-reloadable, type-checked middle layer between Rust and Shell.
 pub mod lua_predicate;
 pub mod lua_runtime;
+pub mod lua_std;
 pub mod methodology;
 
 /// Order 977-56fd — the seven-state obligation lattice, the product order over

@@ -521,8 +521,24 @@ if ! PLAN_BIN="$(resolve_plan_binary)"; then
 fi
 export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
 
+# @trace order:1375-btuf — the named raw-VM opt-in. This .lua shells out
+# (io.popen, os.execute, os.getenv), which the sandboxed `lua` default removes.
+# FEATURE-DETECTED, once, and reused by every call in this file: a plan binary
+# that predates 1375-btuf reads `--unsandboxed` as a SCRIPT PATH ("read
+# --unsandboxed: No such file or directory", rc=1) — and without the flag that
+# old binary already IS the raw VM. So the flag is passed only to a binary that
+# accepts it, and an old binary on a host that cannot rebuild still sweeps.
+# Unquoted at the call site ON PURPOSE: empty must expand to no argument.
+# MIGRATE: 1380-u7sq ports the .lua onto sh.run{argv} + fs verbs and retires the
+# flag; tests/lua_std.rs pins every caller to this file.
+if "$PLAN_BIN" lua --unsandboxed -e '' >/dev/null 2>&1; then
+    _lua_unsandboxed=--unsandboxed
+else
+    _lua_unsandboxed=
+fi
+
 if [ -f "$DIR/archive-plan-packets.lua" ]; then
-    "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua" "$@"
+    "$PLAN_BIN" lua $_lua_unsandboxed "$DIR/archive-plan-packets.lua" "$@"
 else
     _ruby scripts/archive-plan-packets.rb
 fi
