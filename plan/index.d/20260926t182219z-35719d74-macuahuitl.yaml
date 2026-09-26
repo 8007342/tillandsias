@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    event:
+      type: finding
+      ts: "2026-09-26T18:22:19Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        A --check-TIER flake that REFUSED A LAND (macuahuitl, land46, 2026-09-26 ~18:30Z): test-baseline new-red=1, tillandsias_vm_layer::vsock_exec::tests::a_blocked_guest_is_reported_immediately_not_waited_out, panicked at vsock_exec.rs:2750 — `assert_eq!(seen still-waiting count, 1)` got 2 ("it must act on the FIRST blocked heartbeat, not accumulate reports"). The land's diff touched nothing in tillandsias-vm-layer (0 files); vsock_exec.rs is unchanged since 18ae18ae5 (09-25); every earlier land tonight passed it. Isolated re-run on the same tree: 10/10 PASS. The failing run was the first full gate after a cargo clean (maximum parallel load).
+        TWO READINGS, NOT DECIDED HERE: (1) the test over-asserts an exact heartbeat COUNT that depends on scheduling; or (2) under load the exec genuinely processes a second heartbeat before acting on the first, i.e. the property the test names is violated in the field. Distinguishing them is a question for the owner of vsock_exec's blocked-guest ladder, by reading the loop, not by re-running. The land was relaunched after this record was written; the retry is RECORDED, not laundered.
