@@ -2,7 +2,9 @@
 
 ## Status
 
-status: draft
+active
+
+Reconciled 2026-09-26 (1397-eppt): "draft" was the template value written in 1ff316869, the same post-implementation audit that set the registry active; implemented and bound to litmus:cache-recovery-fresh-start.
 promoted-from: direct
 annotation-count: 2
 

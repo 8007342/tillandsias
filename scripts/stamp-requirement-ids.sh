@@ -70,7 +70,8 @@ files_touched=0
 
 for f in $SPEC_GLOB; do
     [ -e "$f" ] || continue
-    grep -q '^### Requirement:' "$f" || continue
+    # Both dialects (order 1396-35we); see the case below.
+    grep -qE '^### Requirement( [0-9]+)?:' "$f" || continue
 
     tmp="$(mktemp)"
     changed=0
@@ -94,8 +95,11 @@ for f in $SPEC_GLOB; do
                     ;;
             esac
         fi
+        # The colon form and the numbered form `### Requirement <n>:` are
+        # both requirements (order 1396-35we); check-requirement-ids.sh matches
+        # the same two.
         case "$line" in
-            '### Requirement:'*) prev_was_heading=1 ;;
+            '### Requirement:'* | '### Requirement '[0-9]*':'*) prev_was_heading=1 ;;
         esac
         printf '%s\n' "$line" >> "$tmp"
     done < "$f"
