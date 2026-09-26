@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: forge-launch-builders-replace-the-437-no-swap-ceiling-with-a-cgroup-memory-budget-so-a-full-tmpfs-spills-to-swap-and-a-cargo-build-fits
+    event:
+      type: note
+      ts: "2026-09-26T03:55:11Z"
+      host: yoga
+      summary: |
+        CORRECTION — my "rootless crun writes --memory-swap to swap.max LITERALLY" (events of
+        2026-09-26T03:16:59Z on 1378-7w2p and 03:38:41Z here) is WRONG as a statement about the
+        container. I read the HOST-SIDE path podman inspect reports (the libpod-<id>.scope); the
+        container runs in a nested leaf below it. Re-measured on yoga, podman 5.8.7, crun 1.28,
+        cgroup v2 / systemd (same versions as lenovinha), same flags, both levels:
+          flags                           inside (leaf)   host-side scope
+          --memory=1g                     1073741824      2147483648
+          --memory=1g --memory-swap=1g    0               1073741824
+          --memory=1g --memory-swap=2g    1073741824      2147483648
+          --memory=1g --memory-swap=0     0               0
+        The leaf matches lenovinha and Docker (swap = memory-swap - memory; bare --memory -> swap
+        equal to memory); the scope holds the memory+swap TOTAL. The effective ceiling is the
+        minimum along the path, so DOCKER SEMANTICS HOLD. The 437 "equal ceiling" DOES give zero
+        swap. Outcome (c) of the coordinator question: my reading came from a different cgroup
+        level. STILL VALID: the spill no-swap control (it wrote swap.max=0 on the scope, and the
+        minimum along the path made it binding; it OOM-killed as required) and every peak (read at
+        the scope, which contains the leaf).
+  - packet_id: measure-a-forge-cargo-builds-peak-rss-swap-and-pids-per-jobs-setting-and-a-tmpfs-spill-benchmark-zram-only-vs-zram-plus-disk-so-the-tier-budgets-are-numbers-not-formulas
+    event:
+      type: note
+      ts: "2026-09-26T03:55:11Z"
+      host: yoga
+      summary: |
+        CORRECTION — my "rootless crun writes --memory-swap to swap.max LITERALLY" (events of
+        2026-09-26T03:16:59Z on 1378-7w2p and 03:38:41Z here) is WRONG as a statement about the
+        container. I read the HOST-SIDE path podman inspect reports (the libpod-<id>.scope); the
+        container runs in a nested leaf below it. Re-measured on yoga, podman 5.8.7, crun 1.28,
+        cgroup v2 / systemd (same versions as lenovinha), same flags, both levels:
+          flags                           inside (leaf)   host-side scope
+          --memory=1g                     1073741824      2147483648
+          --memory=1g --memory-swap=1g    0               1073741824
+          --memory=1g --memory-swap=2g    1073741824      2147483648
+          --memory=1g --memory-swap=0     0               0
+        The leaf matches lenovinha and Docker (swap = memory-swap - memory; bare --memory -> swap
+        equal to memory); the scope holds the memory+swap TOTAL. The effective ceiling is the
+        minimum along the path, so DOCKER SEMANTICS HOLD. The 437 "equal ceiling" DOES give zero
+        swap. Outcome (c) of the coordinator question: my reading came from a different cgroup
+        level. STILL VALID: the spill no-swap control (it wrote swap.max=0 on the scope, and the
+        minimum along the path made it binding; it OOM-killed as required) and every peak (read at
+        the scope, which contains the leaf).
