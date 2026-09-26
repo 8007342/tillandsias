@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: progress
+      ts: "2026-09-25T20:54:00Z"
+      agent_id: linux-lenovinha-claude-20260925t205400z
+      host: lenovinha
+      summary: |
+        LINUX HALF OF CRITERION 1: PROVEN on lenovinha (linux-immutable), installed Tillandsias v56.9.23.1, 2026-09-25.
+        Launch: tillandsias --cloud 8007342/tillandsias --bash --debug, driven through a pty. stderr printed "cloud: ephemeral project resolved: name=tillandsias, remote=https://github.com/8007342/tillandsias.git (host disk untouched)" and "Ephemeral cloud project: tillandsias". The forge banner read "Code cloned from git mirror". The 2026-09-11 Permission denied on /home/forge/src did NOT recur.
+        Push: inside the forge, an empty commit 84974b08de7b5edfe0a0197f51f375fbe9177aa6 was pushed through the mirror (git://git-<id>/tillandsias) to refs/heads/salvage/lenovinha/20260925-776-jcf3-push-proof, with output "* [new branch] HEAD -> salvage/lenovinha/20260925-776-jcf3-push-proof", PUSHRC=0.
+        Host verification against GitHub: git ls-remote origin refs/heads/salvage/lenovinha/20260925-776-jcf3-push-proof answered 84974b08de7b5edfe0a0197f51f375fbe9177aa6, byte-identical to the in-forge SHA. The ref was then deleted host-side with TILLANDSIAS_SALVAGE_DELETE_OK=1, and ls-remote now answers 0 lines.
+        Residual 2a, observed: the launcher warned SEED UNRESOLVED / CLOUD MODE (no TILLANDSIAS_FORGE_SEED_BRANCH), yet the forge prompt showed the branch linux-next, not main. So the mirror HEAD on this host was linux-next, and the fallback warning overstated the effect here.
+        Why a salvage ref and not proof/*: a first attempt pushing refs/heads/proof/776-jcf3-lenovinha-20260925t193207z (commit 0e36d86b3) was REFUSED by the forge's own pre-push gate. rustc "unexpectedly panicked" on every crate (hashbrown, serde build script, typenum, memchr, ...). Earlier in the same forge, brew printed "fork: Resource temporarily unavailable". The forge cgroup reports pids.max=4096. So a gated push from inside a --cloud forge cannot succeed on this host today. That is a separate finding, to be filed as its own row. This proof measures mirror transport, which the salvage exemption isolates.
+        Loss-on-shutdown data point: exiting the --bash shell tore down tillandsias-git-tillandsias along with the lane. It matches macuahuitl's report of 2026-09-25, and it bears on criterion 2's runbook bound.
+        Windows half and criteria 2-4 remain open.

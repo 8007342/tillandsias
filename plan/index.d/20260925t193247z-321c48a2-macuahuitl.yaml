@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: jq-loop-callers-need-restructuring-not-dispatch-conversion
+    event:
+      type: note
+      ts: "2026-09-25T19:32:47Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        RELAY REVIEW, NOT LANDED (macuahuitl coordinator, 2026-09-25). The conversion is on origin/work/914-ahsy (fb959a842, closure 8da37066c). Defect: it adds quoted "$JQ" call sites (196 in the merged tree against 81 on trunk). When fast_tool (scripts/lib/tool-materialize.sh) falls back to resolve_tool (scripts/lib/tool-dispatch.sh), the value can be a multi-word toolbox-run prefix, and quoting it fails the call on exactly the host that has no jq. loop-success-probe.sh uses it unquoted. Closure gaps: jq still runs per loop iteration in some callers (for example bench-accel-lane.sh), and there is no evidence for criterion 2 (jq-masked timing), 3 (byte-identical output) or 4 (the calibration scripts find the library). Next action: fix the quoting, add a jq-absent arm, then re-offer.

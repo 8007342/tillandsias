@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: note
+      ts: "2026-09-25T19:32:14Z"
+      host: yoga
+      summary: |-
+        yoga RELEASES its 776-jcf3 claim (20260925t192513z-0fe4ba2e-yoga.yaml, 19:25:13Z).
+        lenovinha claimed first at 19:24:33Z (20260925t192433z-34245708-lenovinha.yaml,
+        on origin/linux-next via 15dc2964e) and continues under the timestamp rule. The
+        status stays in_progress; the owner is lenovinha. No work was started on yoga.

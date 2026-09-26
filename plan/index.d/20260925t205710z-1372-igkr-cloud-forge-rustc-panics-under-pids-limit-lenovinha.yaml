@@ -1,0 +1,40 @@
+packets:
+  - packet_id: a-cloud-forge-on-a-16-core-host-panics-rustc-on-every-crate-during-its-own-pre-push-gate-so-no-gated-push-can-leave-the-forge
+    order: 1372-igkr
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, containers, cargo]
+    estimated_hours: 3
+    owned_files: [crates/tillandsias-core/src/container_profile.rs]
+    observed_by: lenovinha
+    unscoreable: |
+      unpinnable-until-measured: the deliverable is a named mechanism (pids
+      ceiling vs another resource) plus the fixture that reproduces it; the
+      pin lands with the fix.
+    title: |
+      a --cloud forge on a 16-core host panics rustc on every crate during its own pre-push gate (pids.max=4096, brew "fork: Resource temporarily unavailable" earlier in the same forge), so no gated push can leave the forge
+    verifiable_closure: |
+      On a host with at least 16 cores, tillandsias --cloud 8007342/tillandsias --bash,
+      then inside the forge a commit and push to a work/<order> ref, runs the
+      forge pre-push gate to a verdict with zero "the compiler unexpectedly
+      panicked" lines. The row names which ceiling was hit, with the cgroup's
+      pids.current peak or the rustc panic message as evidence.
+      Pre-fix result: every crate panics (hashbrown, serde build script,
+      typenum, memchr, cfg-if, itoa, ryu, zmij, cpufeatures), and the push is refused.
+    context: |
+      Measured 2026-09-25 on lenovinha (16 cores, linux-immutable, Tillandsias
+      v56.9.23.1) while proving 776-jcf3 criterion 1. The forge cgroup read
+      pids.max=4096 (container_profile.rs pids_limit, aligned by 959-fpc5). The
+      forge's startup brew install of direnv printed
+      "brew.sh: fork: retry: Resource temporarily unavailable" while the agy
+      install ran concurrently. A later git push of refs/heads/proof/776-jcf3-lenovinha-20260925t193207z
+      ran the forge pre-push cargo gate, and rustc panicked on every crate. The
+      push is refused, so a forge's work cannot leave it by any gated ref;
+      only the ungated salvage/* path worked (84974b08d). Unverified whether
+      pids is THE ceiling: cargo -j16 times rustc threads can pass 4096 with
+      the startup installers alive, but memory or tmpfs limits are not ruled out.
+      The smallest diagnostic: in a fresh forge, cat /sys/fs/cgroup/pids.peak
+      after the gate, and rerun the gate with CARGO_BUILD_JOBS=4.
