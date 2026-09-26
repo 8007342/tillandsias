@@ -70,7 +70,7 @@ write_status 20260925t192433z 2026-09-25T19:24:33Z hosta in_progress
 
 # ── arm 2: the loser is refused and told who won ───────────────────────────
 out="$(check hostb)"; rc=$?
-if [ "$rc" = 1 ] && printf '%s' "$out" | grep -qF 'refused:claim-lost:9999-zzzz:hostb@2026-09-25T19:25:13Z:earlier=hosta@2026-09-25T19:24:33Z'; then
+if [ "$rc" = 1 ] && grep -qF 'refused:claim-lost:9999-zzzz:hostb@2026-09-25T19:25:13Z:earlier=hosta@2026-09-25T19:24:33Z' <<<"$out"; then
     ok "the later claimant exits 1 and names the earlier claim"
 else bad "later claimant: rc=$rc out=$out"; fi
 
@@ -87,7 +87,7 @@ write_status 20260925t120000z 2026-09-25T12:00:00Z hostb in_progress
 out="$(check hostb)"; rc=$?
 [ "$rc" = 0 ] && ok "a claim after a release to ready is confirmed" || bad "after release: rc=$rc out=$out"
 out="$(check hosta)"; rc=$?
-[ "$rc" = 1 ] && printf '%s' "$out" | grep -qF 'refused:no-live-claim:9999-zzzz:hosta:held-by=hostb' \
+[ "$rc" = 1 ] && grep -qF 'refused:no-live-claim:9999-zzzz:hosta:held-by=hostb' <<<"$out" \
     && ok "the released host holds no live claim" || bad "released host: rc=$rc out=$out"
 
 # ── arm 5: a host that never claimed is refused, not confirmed ─────────────
