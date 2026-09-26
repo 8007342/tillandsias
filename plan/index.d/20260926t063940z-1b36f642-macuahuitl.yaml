@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-preflight-roster-enumerates-guards-by-three-rules-and-never-asserts-its-population-so-a-guard-outside-all-three-is-invisible-rather-than-reported-missing
+    event:
+      type: correction
+      ts: "2026-09-26T06:39:40Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        CORRECTION to the coordinator's "THIRD INSTANCE, forge regime" finding on this row (fragment pushed at 78fe4bc46): its mechanism is WRONG. It blamed a lagging mirror base. macuahuitl-forge showed otherwise: run unpinned against the mirror's origin/linux-next, the decider DOES report violation:1 on 1254-fdsu, so the mirror base was not hiding anything. Its earlier rc=0 was a process error on the author's side: (a) for 1254-fdsu the flagged line arrived in a later commit on which the deciders were not re-run; (b) for 1388-pfys the decider ran BEFORE `git add`, and it diffs the working tree against the base with `git diff --name-only $base`, which OMITS UNTRACKED files, so a brand-new fixture was invisible to it. So this third instance is NOT a door/gate disagreement and does not support the base hypothesis. The real defect, filed as 1391-8ikx: diff-scoped deciders silently pass untracked new files. The first two instances (the SIGPIPE and bash-dialect refusals on committed relay merges) still stand, and their mechanism is still open.
