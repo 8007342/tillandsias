@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-uninstall-preserves-vm-image-runs-the-real-uninstaller-which-deletes-the-installed-macos-app-and-kills-the-live-tray-on-every-mac-that-runs-the-pre-build-tier
+    field: status
+    value: completed
+    ts: "2026-09-26T11:59:46Z"
+    host: macos
+
+events:
+  - packet_id: litmus-uninstall-preserves-vm-image-runs-the-real-uninstaller-which-deletes-the-installed-macos-app-and-kills-the-live-tray-on-every-mac-that-runs-the-pre-build-tier
+    event:
+      type: completed
+      ts: "2026-09-26T11:59:46Z"
+      host: macos
+      summary: |-
+        status 'completed' with evidence_refs: d0308d70d (relay: land work/1401-p3k7, on origin/linux-next; carries 1e725daf6) + darwin in-situ control on 0581874c5 with the REAL /Applications/Tillandsias.app and a LIVE tray present: BEFORE app inode=33782004 mtime=2026-09-25T18:19:51 bin inode=33782015 tray-pid 78698 / AFTER identical; test-uninstall-tray-stop-is-macos-only 4/4, test-uninstall-preserves-vm 7/7, test-uninstall-sweeps-both-app-dirs ok, matcher skip:live-tray-present (tray not killed), litmus app-lifecycle PASS 3 FAIL 0 with litmus:uninstall-preserves-vm-image EXECUTED (step 3, the breach shape)
+  - packet_id: litmus-uninstall-preserves-vm-image-runs-the-real-uninstaller-which-deletes-the-installed-macos-app-and-kills-the-live-tray-on-every-mac-that-runs-the-pre-build-tier
+    event:
+      type: note
+      ts: "2026-09-26T11:59:46Z"
+      host: macos
+      summary: |-
+        closed after landing: uninstall.sh's Applications dir and tray name are seams every test sets; a faked Darwin without both is refused rc=3; the step that deleted the app on 2026-09-26 09:44:38Z now leaves the real app and tray untouched on darwin

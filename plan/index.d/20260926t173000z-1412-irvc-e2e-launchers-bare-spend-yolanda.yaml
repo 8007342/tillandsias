@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-bare-e2e-launcher-invocation-starts-a-real-forge-agent-session-without-asking
+    order: 1412-irvc
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [linux, orchestration, agent-spend, fail-closed, litmus]
+    estimated_hours: 3
+    owned_files: [scripts/litmus-codex-e2e-launch.sh, scripts/litmus-opencode-e2e-launch.sh, scripts/install-cycle-timer.sh]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the stub-recording fixture (the 1404-4x3r
+      pattern) in the same commit (1136-n8sh).
+    title: |
+      scripts/litmus-codex-e2e-launch.sh and litmus-opencode-e2e-launch.sh start a real forge agent session (spend) when run with no arguments; install-cycle-timer.sh installs RECURRING spend when run bare
+    verifiable_closure: |
+      A bare invocation of either e2e launcher (no --print-mode, no explicit launch flag)
+      REFUSES by name, exits non-zero, and starts nothing: a fixture with a stub tillandsias on
+      PATH that only records calls sees an empty record. Every legitimate caller below passes
+      the explicit flag and its litmus still passes. install-cycle-timer.sh gets the same
+      treatment (an explicit --install, or a named reason on this row for not doing it).
+      Pre-fix result: FAILS, by reading the scripts: litmus-codex-e2e-launch.sh:64 runs
+      "tillandsias . --codex --prompt" and litmus-opencode-e2e-launch.sh runs
+      "tillandsias . --opencode --prompt" with no argument check before them.
+    context: |
+      Split out of 1404-4x3r (drain-queue bare invocation) at the coordinator's request. The
+      sibling sweep is already done; here it is, so the fixer does not redo it.
+
+      BARE CALLERS THAT MUST PASS THE NEW FLAG (all in openspec/litmus-tests/):
+        litmus-codex-e2e-launch-parity.yaml:43  bare codex launcher (a stub tillandsias on PATH)
+        litmus-codex-e2e-launch-parity.yaml:55  bare codex
+        litmus-codex-e2e-launch-parity.yaml:61  bare codex
+        litmus-codex-e2e-launch-parity.yaml:68  bare codex AND bare opencode
+        litmus-codex-e2e-launch-parity.yaml:78  bare codex
+        litmus-opencode-prompt-e2e-shape.yaml:83  bare opencode (the real e2e lane)
+      Callers that already pass --print-mode (no spend, no change needed): parity :32, :43
+      (opencode half), :48, :73; litmus-forge-e2e-rate-limit-shape.yaml :46, :51.
+      The skills name them as the lane: skills/meta-orchestration/SKILL.md:176 and
+      skills/build-install-and-smoke-test-e2e/SKILL.md:500-501. Update their invocation text.
+
+      NOT CALLERS, despite being named: scripts/mo-full-attest.sh:38 and
+      scripts/forge-liveness-probe.sh mention the launchers only in comments, and
+      methodology/distributed-work.yaml:1894 and methodology/mo-full-attestation.yaml:69 are
+      prose. Grep hit, not an invocation.
+
+      install-cycle-timer.sh: a bare run renders and enables the systemd user timer (default
+      --interval 1h), which is standing hourly agent spend. It fails closed off Linux
+      (fail:install:no-systemctl). Its only non-comment reference is check-cycle-scheduler.sh's
+      remedy text (due:not-installed), which would need the new flag.
+
+      NO ROW FOR scripts/tillandsias-cycle-driver.sh, deliberately: it runs bare because it IS
+      the ExecStart of packaging/systemd/user/tillandsias-cycle.service.in, and the timer is
+      the operator's standing instruction. Do not re-litigate it here.
+
+      Also checked and fine: ./repeat refuses without --prompt (repeat:104), and
+      claim-ledger-node.sh refuses with no subcommand (exit 64, :258).
+    events:
+      - type: filed
+        ts: "2026-09-26T17:30:00Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request, from the 1404-4x3r sibling sweep.

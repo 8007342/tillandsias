@@ -109,6 +109,82 @@ rc=$?
 [ "$rc" -eq 0 ] && [ "$out" = "ok:no-linux-next-ref" ]
 check "S6-no-linux-next-ref-out-of-scope" "$?"
 
+# ── 1259-kn83: the subset exception (coordinator ruling 2026-09-26) ─────────
+# A slow host's platform branch that carries NO code trunk lacks is admitted
+# without re-merging trunk, naming the trunk commit whose tree it matches
+# outside plan/. Its own topology, so S1-S6's repo state is untouched.
+git init -q --bare "$WORK/o2.git"
+git -C "$WORK" clone -q "$WORK/o2.git" c2 2>/dev/null
+R2="$WORK/c2"
+git -C "$R2" config user.email fixture@example.invalid
+git -C "$R2" config user.name Fixture
+git -C "$R2" checkout -q -b linux-next
+mkdir -p "$R2/src" "$R2/plan/index.d"
+echo v1 > "$R2/src/code.rs"
+git -C "$R2" add -A && git -C "$R2" commit -qm "trunk base"
+git -C "$R2" push -q origin linux-next
+# The platform branch MERGED trunk at X (a real merge commit, as osx-next does).
+git -C "$R2" checkout -q -b osx-next
+echo osx-only-plan > "$R2/plan/index.d/early.yaml"
+git -C "$R2" add -A && git -C "$R2" commit -qm "platform plan fragment"
+git -C "$R2" checkout -q linux-next
+echo v2 > "$R2/src/code.rs"
+git -C "$R2" add -A && git -C "$R2" commit -qm "trunk code X"
+git -C "$R2" push -q origin linux-next
+X_SHA="$(git -C "$R2" rev-parse HEAD)"
+git -C "$R2" checkout -q osx-next
+git -C "$R2" merge -q --no-edit linux-next
+# Then only plan fragments on the platform side (claims, events)...
+echo claim > "$R2/plan/index.d/claim.yaml"
+git -C "$R2" add -A && git -C "$R2" commit -qm "claim fragment"
+SUBSET_TIP="$(git -C "$R2" rev-parse HEAD)"
+# ...while trunk lands CODE during the slow gate (today's measured case).
+git -C "$R2" checkout -q linux-next
+echo v3 > "$R2/src/code.rs"
+git -C "$R2" add -A && git -C "$R2" commit -qm "trunk code lands mid-gate"
+git -C "$R2" push -q origin linux-next
+git -C "$R2" fetch -q origin
+git -C "$R2" checkout -q osx-next
+
+run_guard2() { # <guard> <sha>
+    printf '%s %s %s %s\n' refs/heads/osx-next "$2" refs/heads/osx-next "$ZERO" \
+        | ( cd "$R2" && bash "$1" origin "$WORK/o2.git" 2>/dev/null )
+}
+
+# S7 (a): missing trunk commits + plan fragments only -> ADMITTED, naming X.
+out="$(run_guard2 "$GUARD" "$SUBSET_TIP")"; rc=$?
+[ "$rc" -eq 0 ] && [ "$out" = "ok:pre-push:platform-subset-of:$X_SHA" ]
+check "S7-plan-only-platform-behind-trunk-admitted-naming-the-trunk-sha" "$?"
+
+# S8 (b) NEGATIVE CONTROL: the same branch plus ONE code change trunk lacks.
+echo osx-code > "$R2/src/osx-only.rs"
+git -C "$R2" add -A && git -C "$R2" commit -qm "platform code trunk lacks"
+CODE_TIP="$(git -C "$R2" rev-parse HEAD)"
+out="$(run_guard2 "$GUARD" "$CODE_TIP")"; rc=$?
+[ "$rc" -ne 0 ] && [ "$out" = "blocked:linux-next-not-merged:osx-next" ]
+check "S8-one-code-file-trunk-lacks-still-refused" "$?"
+
+# S9 (c) the measured 2026-09-26 shape: the gate took 1799s and trunk landed
+# code during it. Pre-1259 this was refused; the branch carried nothing new.
+# Same tip as S7, asserted as the scenario it reproduces.
+out="$(run_guard2 "$GUARD" "$SUBSET_TIP")"; rc=$?
+[ "$rc" -eq 0 ]
+check "S9-measured-slow-gate-overtaken-by-a-code-landing-is-admitted" "$?"
+
+# MUTATION CONTROL for the scope: without the plan/ exclusion the plan
+# fragments make every tree differ, so S7 must turn red.
+MUT2="$WORK/mutant-no-plan-exclude.sh"
+sed "s#-- . ':(exclude)plan/'#-- .#" "$GUARD" > "$MUT2"
+if cmp -s "$GUARD" "$MUT2"; then
+    echo "FAIL  scope-mutation-applied: sed changed nothing — the control proves nothing"
+    fail=1
+else
+    echo "PASS  scope-mutation-applied"
+fi
+out="$(run_guard2 "$MUT2" "$SUBSET_TIP")"; rc=$?
+[ "$rc" -ne 0 ]
+check "scope-mutation-without-plan-exclude-refuses-S7" "$?"
+
 # ── MUTATION CONTROL: a neutered guard must fail exactly S1's assertion ──────
 # Replace the ancestry test with `true` — the mutant of a guard that checks
 # nothing. cmp-verify the mutation actually changed bytes (a sed that matched
@@ -148,7 +224,7 @@ else
 fi
 
 if [ "$fail" -eq 0 ]; then
-    echo "ok:pre-push-linux-next-merged-fixture:12"
+    echo "ok:pre-push-linux-next-merged-fixture:17"
     exit 0
 fi
 echo "FAIL: pre-push-linux-next-merged fixture had failures"

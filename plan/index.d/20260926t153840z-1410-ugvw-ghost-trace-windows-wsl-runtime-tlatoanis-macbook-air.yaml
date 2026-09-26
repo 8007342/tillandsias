@@ -1,0 +1,28 @@
+packets:
+  - packet_id: spec-windows-wsl-runtime-is-cited-71-times-in-32-files-and-has-never-existed-so-every-one-of-those-traces-points-at-nothing
+    order: 1410-ugvw
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [traceability, openspec, cheatsheets, windows]
+    estimated_hours: 1
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-decided: whether each citation means spec:wsl-runtime or a spec
+      that should exist is a per-site decision; the pin is the commit hook's ghost-trace
+      check going quiet for this name.
+    title: |
+      `@trace spec:windows-wsl-runtime` appears 71 times in 32 files (the commit hook flags it as a ghost, e.g. images/default/entrypoint-forge-opencode.sh:61), and no spec by that name has ever existed under openspec/specs; the live spec is spec:wsl-runtime
+    context: |
+      MEASURED 2026-09-26: `git grep -c 'spec:windows-wsl-runtime' -- ':!plan/'` = 71 occurrences in 32 files,
+      mostly cheatsheets/runtime/*wsl*/*windows* and images/default/entrypoint-forge-opencode.sh:61.
+      git log shows no openspec/specs/windows-wsl-runtime/ ever added or deleted, so this is not a
+      stale reference to a removed spec: it never resolved. The nearest live spec is
+      openspec/specs/wsl-runtime (active, v1.0). NOT bulk-renamed by the observer: mapping all 71
+      to wsl-runtime is an inference about each author's intent; some may mean windows-native-tray
+      or wsl-daemon-orchestration instead.
+    exit_criteria:
+      - 'every spec:windows-wsl-runtime citation is repointed to the spec it actually traces (usually wsl-runtime), or a windows-wsl-runtime spec is created on purpose; pre-fix result: FAILS (71 unresolved citations; the commit hook prints a ghost-trace warning)'
+      - the commit hook's ghost-trace check is quiet for this name afterwards

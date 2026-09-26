@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-plan-only-lanes-append-vs-origin-fold-check-rebuilds-every-long-form-field-in-the-whole-ledger-on-every-push-so-the-cheap-lane-costs-two-minutes-on-a-floor-host-and-grows-with-the-corpus-rather-than-with-the-push
+    event:
+      type: finding
+      ts: "2026-09-26T12:39:46Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        SECOND REGIME, Windows (yolanda, 2026-09-26, relayed by the macuahuitl coordinator). Same cost shape as pirria's: FRAG_DIR defaults to all of plan/index.d and the hook does not narrow it, so 162 (packet, field) pairs x 2 folds; a warm field-get is 254 ms locally and 384 ms on the extracted origin tree (7.5 s cold), about 2 min per plan-lane push on that host.
+        NEW AND WORSE ON THIS REGIME, cause NOT found: every plan-lane push HUNG inside check-append-vs-origin-fold.sh (a bounded attempt timed out at 420 s; earlier timed-out attempts left orphaned pre-push hooks at 04:15, 04:30 and 04:45). A traced run under `timeout 240` stopped at the `done <<EOF / $pairs / EOF` that feeds the pair loop with "cannot create temp file for here-document: No space left on device", while C: had 79.9 GB free, /tmp 2.7 GB with no stale sh-thd files, and a here-doc from yolanda's own shell worked. So ENOSPC here is not literal disk exhaustion. Two consequences, whatever the cause: (1) the check HANGS rather than refusing, so the lane gives no verdict and leaves orphans; (2) a closure fragment (1256-f7td) had to travel as salvage/yolanda/20260926-close-1256-f7td and be relayed by hand. Scoping the pairs to the outgoing fragments shrinks the here-doc and the cost on every host; the hang-instead-of-refusal is a separate fail-loud defect to keep in view (a bounded check with a named could-not-run verdict).

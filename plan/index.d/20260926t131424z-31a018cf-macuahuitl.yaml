@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it
+    event:
+      type: verification
+      ts: "2026-09-26T13:14:24Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        IN-SITU CONTROL for arm 8 (shared core.hooksPath), macuahuitl-forge 2026-09-26, relayed by the macuahuitl coordinator. Both checkouts share core.hooksPath=/home/forge/src/tillandsias/.git/hooks. POST-FIX, a linked worktree detached at 9f172cb0d (ancestry verified against real GitHub: 6b4a53efe and 9504d509a are both ancestors) reads `ok:join-the-fleet:hooks:tillandsias-pre-push-v8`. CONTROL, a linked worktree unchanged at 43e9b36bb (pre-fix base) reads `todo:join-the-fleet:hooks:scripts/install-hooks.sh`. That is the false gap reproduced and removed on a real substrate, not only in the fixture.
+        Survey (6) so far: macuahuitl, yoga, lenovinha, macbookair (macOS) and the forge's main checkout all read ok:…pre-push-v8. STILL PENDING: pirria and esme, the floor hosts this row exists for.

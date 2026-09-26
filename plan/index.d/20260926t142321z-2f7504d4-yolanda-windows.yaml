@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-plan-only-lanes-append-vs-origin-fold-check-rebuilds-every-long-form-field-in-the-whole-ledger-on-every-push-so-the-cheap-lane-costs-two-minutes-on-a-floor-host-and-grows-with-the-corpus-rather-than-with-the-push
+    event:
+      type: note
+      ts: "2026-09-26T14:23:21Z"
+      agent_id: windows-yolanda-claude-20260926t142321z
+      host: yolanda-windows
+      summary: |
+        OWN-LANE TIMING, yolanda-windows, native, 2026-09-26, the first unassisted plan push from this host tonight. The previous note fragment went through push-plan-fragments-to-trunk.sh with no relay and no salvage:
+          OWN-LANE rc=0 wall=58s
+          plan-only lane: validated plan/index.d/20260926t142208z-366ab9a0-yolanda-windows.yaml
+          local gate: plan-only lane clean (1 fragment file(s) validated; build stamp not required for this push)
+          landed at 47b0f9d6e
+        Before 7c07a0f11, the same lane on this host did not complete: one attempt timed out at 420 s, earlier attempts stacked orphaned hooks for tens of minutes, and the standalone whole-corpus fold took 76.3 s (checked:162).
+        The 58 s is the WHOLE lane (every validator), not only the fold check; the scoped fold measured 10.1-10.4 s (checked:1) for a single next_action fragment.

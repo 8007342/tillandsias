@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: three-release-tier-reds-from-yoga-lands-two-stale-dependency-pins-and-an-unexplained-fixture-ledger-read
+    order: 1405-3mrp
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, release-tier, plan-binary]
+    estimated_hours: 1
+    owned_files: [openspec/litmus-tests/litmus-expert-groundtruth-harness.yaml, openspec/litmus-tests/litmus-methodology-path-query-citability.yaml, scripts/check-plan-ledger-readers.sh]
+    observed_by: yoga
+    unscoreable: |
+      the closing check is the three named litmus tests themselves going green in
+      scripts/run-litmus-test.sh for their specs (forge-environment-discoverability,
+      methodology-accountability), in the same commit.
+    title: |
+      three release-tier reds are yoga's own: two litmus pin tillandsias-plan's dependency set without regex and sha2 (added by 1367-q9yc's shims and its content-addressed memo), and check-plan-ledger-readers flags tests/lua_std.rs reading the scratch FIXTURE ledger it built
+    verifiable_closure: |
+      litmus:expert-groundtruth-harness, litmus:methodology-path-query-citability and
+      litmus:no-unprotected-plan-ledger-readers pass in their specs' runs. The two pins name the
+      actual set (chrono redb regex serde serde_json serde_yaml sha2 tokio) with the reason for
+      each addition; the reader scan allowlists tests/lua_std.rs as base-only-reason (it reads a
+      fixture ledger it wrote into a temp dir, never the real plan/index.yaml). Pre-fix result:
+      FAILS in a full ci-full on yoga (6973a456c) and again in isolated reruns.
+    events:
+      - type: filed
+        ts: "2026-09-26T13:07:41Z"
+        host: yoga
+        summary: Filed by yoga from its own 1242-4x53 release-tier triage; yoga owns all three causes.
+events:
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    event:
+      type: investigated
+      ts: "2026-09-26T13:07:41Z"
+      host: yoga
+      summary: |
+        RELEASE-TIER SAMPLE FROM YOGA, triaged by cause. Source: a full `./build.sh --ci-full` on an
+        untouched checkout (work/1236-bmjh 6973a456c, merged with trunk), rc=1 on 8 litmus; each
+        spec then RE-RUN in isolation with scripts/run-litmus-test.sh.
+        A. FLAKED, green on isolated rerun (the load regime only):
+           forge-experts-discoverability-shape: STEP 10/13 "Codex expert registration fixture …"
+             [TIMEOUT] 30s (cpu.pressure 0%: CPU starvation excluded, cause unclassified).
+           mirror-sync-state-readable: [FAIL] rc=1 in the full run; its arms passed in isolation.
+        B. REPRODUCIBLE, MINE (filed as 1405-3mrp, fixing now):
+           expert-groundtruth-harness: STEP 33/33 "NO NEW DEPENDENCY …" [FAIL] rc=1,
+             "the dependency set changed: chrono redb regex serde serde_json serde_yaml sha2 tokio";
+           methodology-path-query-citability: STEP 15/21 "NO NEW CRATE, NO NEW DEPENDENCY …" [FAIL],
+             same message. Both pin tillandsias-plan's deps without regex (1367-q9yc shims,
+             expect.matches) and sha2 (its content-addressed memo).
+           no-unprotected-plan-ledger-readers: STEP 1/8 [FAIL] rc=1; the scanner names
+             crates/tillandsias-plan/tests/lua_std.rs:244 (my 1375-btuf test reading a FIXTURE
+             ledger it built in a temp dir).
+        C. REPRODUCIBLE, STALE PIN, behaviour correct (owners' call):
+           release-artifact-integrity: STEP 6/6 [FAIL] "expected the integrity gate in both release
+             jobs": the test wants exactly 2 occurrences of check-release-asset-integrity.sh in
+             release.yml, and there are now 4 (both build jobs AND both publish jobs; the unstable
+             channel work, 1369-sjbc era, added gating). Suggest asserting >= 2, or per job.
+           vault-cli-verifies-tls: STEP 4/4 [FAIL] "the CA gate is applied centrally": the regex
+             lists the old subcommand set; images/git/vault-cli.sh:335 now gates
+             read|write|write-stdin|write-json|renew-self|lookup-self|revoke-self|health (write-json
+             added by the GitHub App login work, 1381-za6b/1383-5hpk). The gate is intact; the pin
+             is stale.
+        D. REPRODUCIBLE, BUDGET BREACH (not load, not one change):
+           plan-engine-invariants-shape: STEP 1/4 "engine unit + integration tests pass on the live
+             ledger" [TIMEOUT] 180s, in the full run AND in isolation. Measured directly:
+             `cargo test -q -p tillandsias-plan` rc=0 in 217 s wall, the lib unit binary alone
+             finished in 203.07 s (it was 183.6 s earlier today). The suite passes; it has
+             outgrown the 180 s budget, and naming the tests that grew needs per-test timing.
+        DISCLOSURE: while triaging B I ran every scripts/*.sh the reader litmus mentioned; one was
+        drain-queue.sh, which launched an agent on packet 278 (claim released; filed 1404-4x3r).

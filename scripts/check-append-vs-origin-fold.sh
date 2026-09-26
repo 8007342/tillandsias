@@ -24,6 +24,19 @@
 #   ok:append-vs-origin:checked:<n>
 #   refused:append-drops-lines-vs-origin:<packet>:<field>
 #   skip:append-vs-origin:<reason>
+#   could-not-run:append-vs-origin:deadline:<n>s:checked=<k>   (exit 3)
+#
+# ORDER 1310-7apk. SCOPE: `check-append-vs-origin-fold.sh [fragment...]`. Given
+# fragment paths (the push's own, as the plan-only lane passes them), only the
+# pairs THOSE fragments write are folded; with no arguments, the whole of
+# $FRAG_DIR, as before, for a standalone run. Narrowing is sound because a
+# fragment sets values only for the pairs its `status:` block names, and the
+# fold is last-writer-wins PER FIELD, so a pair the push does not write folds
+# identically before and after it: it cannot be the pair that drops a line.
+# Measured cost of the whole-corpus scope: 116 s on pirria (checked:100) and
+# about 2 min on yolanda-windows (162 pairs x 2 folds), for a one-line push.
+# BOUND: past TILLANDSIAS_APPEND_FOLD_DEADLINE seconds (default 300) the check
+# stops and answers could-not-run with exit 3 rather than hanging a push.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 0
@@ -72,13 +85,23 @@ _is_long_form() {
 # `status:` block, reset per FILE — the 864-hv2n lesson: awk state is global,
 # and a fragment ending inside its block otherwise carries pid into the next
 # file and misattributes it.
+# 1310-7apk: the push's fragments when given, else the whole corpus.
+_pair_sources=()
+if [ "$#" -gt 0 ]; then
+    for _f in "$@"; do
+        case "$_f" in *.yaml) [ -f "$_f" ] && _pair_sources+=("$_f") ;; esac
+    done
+    [ "${#_pair_sources[@]}" -gt 0 ] || { echo "ok:append-vs-origin:checked:0"; exit 0; }
+else
+    _pair_sources=("$FRAG_DIR"/*.yaml)
+fi
 pairs="$(awk '
     FNR == 1 { in_s = 0; pid = ""; fld = "" }
     /^status:[[:space:]]*$/   { in_s = 1; pid = ""; fld = ""; next }
     /^[a-z_]+:[[:space:]]*$/  { in_s = 0; pid = ""; fld = "" }
     in_s && /^  - packet_id:/ { pid = $3; fld = ""; next }
     in_s && /^    field:/     { fld = $2; if (pid != "") print pid "\t" fld }
-' "$FRAG_DIR"/*.yaml 2>/dev/null | sort -u)"
+' "${_pair_sources[@]}" 2>/dev/null | sort -u)"
 
 [ -n "$pairs" ] || { echo "ok:append-vs-origin:checked:0"; exit 0; }
 
@@ -88,8 +111,16 @@ git archive "$TRUNK_REF" plan/ 2>/dev/null | tar -x -C "$TMP" 2>/dev/null || {
     echo "skip:append-vs-origin:cannot-extract-origin"; exit 0; }
 
 checked=0; refused=0
+_deadline="${TILLANDSIAS_APPEND_FOLD_DEADLINE:-300}"
+SECONDS=0
 while IFS=$'\t' read -r pid field; do
     [ -n "$pid" ] && [ -n "$field" ] || continue
+    if [ "$SECONDS" -ge "$_deadline" ]; then
+        echo "could-not-run:append-vs-origin:deadline:${_deadline}s:checked=${checked}"
+        echo "  why: the fold comparison outlived its deadline, so this push was not judged; that is not a pass and not a drop" >&2
+        echo "  fix: retry the push; if it recurs, look for stacked pre-push hooks on this host (ps) or raise TILLANDSIAS_APPEND_FOLD_DEADLINE" >&2
+        exit 3
+    fi
     _is_long_form "$field" || continue
 
     # Origin's fold. Exit 3 means UNSET on origin — nothing to drop, which is

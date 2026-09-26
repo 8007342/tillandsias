@@ -510,8 +510,21 @@ case "$cmd" in
         [ "${1:-}" = "--" ] && shift
         [ "$#" -gt 0 ] || { echo "usage: $0 run -- <command...>" >&2; exit 2; }
         rung="$(resolve_rung)"
+        # NIX_FEATURES as nix.conf text, appended to any NIX_CONFIG the caller set.
+        RUN_NIX_CONFIG="${NIX_CONFIG:+$NIX_CONFIG
+}experimental-features = nix-command flakes"
         case "$rung" in
-            daemon|chroot) exec "$@" ;;
+            daemon)        exec "$@" ;;
+            # 799-nx4r: `run` used to exec the command verbatim, so on the
+            # chroot rung nix addressed exactly the daemon the rung exists to
+            # avoid ("cannot connect to socket … Connection refused"), and on
+            # the toolbox rung it addressed the container's root-owned /nix
+            # ("creating directory /nix/store/.links: Permission denied",
+            # measured on yoga 2026-09-26). The rung's store now travels in
+            # nix's own environment (NIX_REMOTE takes the same URL --store
+            # does) so ANY command — a script that calls nix three levels
+            # down, not just a bare `nix` — gets the flags `nix-args` prints.
+            chroot)        exec env NIX_REMOTE="$CHROOT_STORE" NIX_CONFIG="$RUN_NIX_CONFIG" "$@" ;;
             # NOT `exec _toolbox …`: _toolbox is a shell FUNCTION and exec can
             # only exec a BINARY, so that form died with
             # `exec: _toolbox: not found` and the toolbox rung of `run` had
@@ -521,7 +534,8 @@ case "$cmd" in
             # registry traffic whenever the enclave is down) is inlined here so
             # the behaviour is preserved rather than dropped.
             toolbox)       exec env http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= \
-                                toolbox run -c "$TOOLBOX_NAME" "$@" ;;
+                                toolbox run -c "$TOOLBOX_NAME" \
+                                env NIX_REMOTE="$CHROOT_STORE" NIX_CONFIG="$RUN_NIX_CONFIG" "$@" ;;
             *)             echo "blocked:nix-toolbox:${rung#blocked:}" >&2; exit 1 ;;
         esac
         ;;
