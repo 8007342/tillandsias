@@ -26,7 +26,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DELEGATE_SCRIPT="$REPO_ROOT/scripts/claude-delegate.sh"
 
 json_escape() {
-    "$JQ" -Rs . <<<"${1:-}"
+    $JQ -Rs . <<<"${1:-}"
 }
 
 rpc_send() {
@@ -92,8 +92,8 @@ call_delegate() {
 }
 
 while IFS= read -r line; do
-    method="$("$JQ" -r '.method // empty' <<<"$line")"
-    id="$("$JQ" -r '.id // empty' <<<"$line")"
+    method="$($JQ -r '.method // empty' <<<"$line")"
+    id="$($JQ -r '.id // empty' <<<"$line")"
 
     case "$method" in
         initialize)
@@ -103,11 +103,11 @@ while IFS= read -r line; do
             tools_list "$id"
             ;;
         tools/call)
-            tool="$("$JQ" -r '.params.name // empty' <<<"$line")"
-            args="$("$JQ" -c '.params.arguments // {}' <<<"$line")"
-            task="$("$JQ" -r '.task // empty' <<<"$args")"
-            model="$("$JQ" -r '.model // empty' <<<"$args")"
-            effort="$("$JQ" -r '.effort // empty' <<<"$args")"
+            tool="$($JQ -r '.params.name // empty' <<<"$line")"
+            args="$($JQ -c '.params.arguments // {}' <<<"$line")"
+            task="$($JQ -r '.task // empty' <<<"$args")"
+            model="$($JQ -r '.model // empty' <<<"$args")"
+            effort="$($JQ -r '.effort // empty' <<<"$args")"
 
             if [[ -z "$task" ]]; then
                 rpc_error "$id" -32602 "tools/call requires task"

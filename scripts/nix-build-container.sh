@@ -46,7 +46,7 @@ _ALL_TSV=$(mktemp)
 _FETCH_DIR=$(mktemp -d)
 trap 'rm -f "$_ALL_TSV"; rm -rf "$_FETCH_DIR"' EXIT
 
-"$JQ" -r '
+$JQ -r '
     .nodes as $N |
     ($N.root.inputs | keys) as $root_keys |
 

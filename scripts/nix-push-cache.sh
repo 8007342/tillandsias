@@ -83,14 +83,14 @@ deps_out_path() {
     local out="$1" json depsdrv djson outpath
     json="$(cd "$REPO_ROOT" && _nix derivation show ".#${out}" 2>/dev/null)" || return 1
     [ -n "$json" ] || return 1
-    depsdrv="$(printf '%s' "$json" | "$JQ" -r '
+    depsdrv="$(printf '%s' "$json" | $JQ -r '
         (if has("derivations") then .derivations else . end)
         | to_entries[0].value
         | ((.inputs.drvs // {}) + (.inputDrvs // {}))
         | keys[] | select(test("-deps-"))' 2>/dev/null | head -n 1)"
     [ -n "$depsdrv" ] || return 1
     djson="$(cd "$REPO_ROOT" && _nix derivation show "$(_logical "$depsdrv")" 2>/dev/null)" || return 1
-    outpath="$(printf '%s' "$djson" | "$JQ" -r '
+    outpath="$(printf '%s' "$djson" | $JQ -r '
         (if has("derivations") then .derivations else . end)
         | to_entries[0].value | .outputs.out.path' 2>/dev/null)"
     [ -n "$outpath" ] && [ "$outpath" != "null" ] || return 1

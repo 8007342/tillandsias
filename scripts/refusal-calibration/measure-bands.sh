@@ -54,9 +54,9 @@ printf 'band\tcorpus\ttop1\ttop2\tmargin\ttop1_kind\ttop1_path\tquestion\n'
 n=0
 while IFS= read -r line; do
     [ -n "$line" ] || continue
-    band="$(printf '%s' "$line" | "$JQ" -r '.band')"
-    corpus="$(printf '%s' "$line" | "$JQ" -r '.corpus')"
-    q="$(printf '%s' "$line" | "$JQ" -r '.q')"
+    band="$(printf '%s' "$line" | $JQ -r '.band')"
+    corpus="$(printf '%s' "$line" | $JQ -r '.corpus')"
+    q="$(printf '%s' "$line" | $JQ -r '.q')"
 
     # Embed. A failure here must NOT silently become a zero score — an
     # unembeddable question that scores 0.0 would land in the refuse band and
@@ -66,7 +66,7 @@ while IFS= read -r line; do
     # with, or query and passage land in different halves of an asymmetric
     # space and every score is meaningless. Empty by default, reproducing every
     # historical measurement exactly.
-    body="$("$JQ" -nc --arg m "$MODEL" --arg i "${TILLANDSIAS_EMBED_QUERY_PREFIX:-}$q" '{model:$m,input:$i}')"
+    body="$($JQ -nc --arg m "$MODEL" --arg i "${TILLANDSIAS_EMBED_QUERY_PREFIX:-}$q" '{model:$m,input:$i}')"
     resp="$(curl -sS --fail-with-body -X POST "$ENDPOINT/v1/embeddings" \
         -H 'content-type: application/json' -d "$body" 2>&1)"
     rc=$?
@@ -74,7 +74,7 @@ while IFS= read -r line; do
         printf 'EMBED-FAIL\t%s\t\t\t\t\t\t%s\n' "$corpus" "$q" >&2
         continue
     fi
-    printf '%s' "$resp" | "$JQ" -c '.data[0].embedding' >"$TMP/qv.json" 2>/dev/null
+    printf '%s' "$resp" | $JQ -c '.data[0].embedding' >"$TMP/qv.json" 2>/dev/null
     if [ ! -s "$TMP/qv.json" ] || [ "$(cat "$TMP/qv.json")" = null ]; then
         printf 'EMBED-EMPTY\t%s\t\t\t\t\t\t%s\n' "$corpus" "$q" >&2
         continue
@@ -84,10 +84,10 @@ while IFS= read -r line; do
     # pretty-printed JSON silently reads brace lines as data (752-pst5), which
     # is what the first draft of this harness did.
     out="$("$PLAN" spec-retrieve --index-dir "$INDEX_DIR" --query-vec "$TMP/qv.json" --k 2 2>/dev/null)"
-    t1="$(printf '%s' "$out" | "$JQ" -r '.[0].score // empty')"
-    t2="$(printf '%s' "$out" | "$JQ" -r '.[1].score // empty')"
-    k1="$(printf '%s' "$out" | "$JQ" -r '.[0].kind // "?"')"
-    p1="$(printf '%s' "$out" | "$JQ" -r '.[0].path // "?"')"
+    t1="$(printf '%s' "$out" | $JQ -r '.[0].score // empty')"
+    t2="$(printf '%s' "$out" | $JQ -r '.[1].score // empty')"
+    k1="$(printf '%s' "$out" | $JQ -r '.[0].kind // "?"')"
+    p1="$(printf '%s' "$out" | $JQ -r '.[0].path // "?"')"
     [ -n "$t1" ] || { printf 'RETRIEVE-FAIL\t%s\t\t\t\t\t\t%s\n' "$corpus" "$q" >&2; continue; }
     [ -n "$t2" ] || t2="$t1"
     margin="$(awk -v a="$t1" -v b="$t2" 'BEGIN{printf "%.4f", a-b}')"

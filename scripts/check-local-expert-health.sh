@@ -38,7 +38,7 @@ fi
 
 # Check if the model is available. Herestring, not a pipeline: an
 # `if ! <pipeline>` verdict can invert under pipefail + SIGPIPE (795-imz3).
-_available_models="$(curl -sf --max-time 5 "${ENDPOINT}/api/tags" 2>/dev/null | "$JQ" -r '.models[].name // empty' 2>/dev/null | tr -d '' || echo "")"
+_available_models="$(curl -sf --max-time 5 "${ENDPOINT}/api/tags" 2>/dev/null | $JQ -r '.models[].name // empty' 2>/dev/null | tr -d '' || echo "")"
 _model_present_rc=0
 grep -qF "$MODEL" <<<"$_available_models" || _model_present_rc=$?
 if [[ "$_model_present_rc" -ne 0 ]]; then
@@ -49,7 +49,7 @@ fi
 # Quick inference test
 _test_response="$(curl -sf --max-time 10 "${ENDPOINT}/api/generate" \
     -d "{\"model\":\"${MODEL}\",\"prompt\":\"Say OK\",\"stream\":false}" 2>/dev/null \
-    | "$JQ" -r '.response // empty' 2>/dev/null || echo "")"
+    | $JQ -r '.response // empty' 2>/dev/null || echo "")"
 
 if [[ -z "$_test_response" ]]; then
     echo "degraded:local-experts-inference-failed:${MODEL}"

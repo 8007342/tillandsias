@@ -79,7 +79,7 @@ for out in "${OUTPUTS[@]}"; do
     # defaults to `cargo-package` here since the deps calls set none), so
     # `-deps-` selects it. `vendor-cargo-deps.drv` — the vendored registry —
     # deliberately does NOT match: no trailing dash.
-    deps="$(printf '%s' "$top_json" | "$JQ" -r '
+    deps="$(printf '%s' "$top_json" | $JQ -r '
         (if has("derivations") then .derivations else . end)
         | to_entries[0].value
         | ((.inputs.drvs // {}) + (.inputDrvs // {}))

@@ -1,0 +1,11 @@
+# Gate step 914-ahsy — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS: a script that resolves JQ through fast_tool must call it as
+# unquoted $JQ, because the no-host-jq fallback is a multi-word toolbox prefix
+# that "$JQ" would hand to exec as one command name.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking fast_tool JQ callers survive a multi-word toolbox prefix (914-ahsy)"
+STEP_SCRIPT="scripts/test-jq-multiword-prefix.sh"
+STEP_ERROR="a fast_tool JQ caller double-quotes \$JQ, which breaks on the jq-less host (914-ahsy)"
+STEP_OK="fast_tool JQ callers use the unquoted multi-word-safe idiom"

@@ -118,7 +118,7 @@ command -v curl >/dev/null 2>&1 || {
     echo "bench: ERROR missing dependency: curl" >&2
     exit 2
 }
-[ -n "$JQ" ] && { command -v "$JQ" >/dev/null 2>&1 || [ -x "$JQ" ]; } || {
+[ -n $JQ ] && { command -v $JQ >/dev/null 2>&1 || [ -x $JQ ]; } || {
     echo "bench: ERROR missing dependency: jq" >&2
     exit 2
 }
@@ -192,8 +192,8 @@ unique_prompt() {
 derive_engine() {
     local model="$1" ps size vram pct
     ps=$(curl -fsS -m 10 "$EP/api/ps" 2>/dev/null) || { echo "unknown 0"; return; }
-    size=$(echo "$ps" | "$JQ" -r --arg m "$model" '.models[]? | select(.name==$m or (.name|startswith($m))) | .size' | head -1)
-    vram=$(echo "$ps" | "$JQ" -r --arg m "$model" '.models[]? | select(.name==$m or (.name|startswith($m))) | .size_vram' | head -1)
+    size=$(echo "$ps" | $JQ -r --arg m "$model" '.models[]? | select(.name==$m or (.name|startswith($m))) | .size' | head -1)
+    vram=$(echo "$ps" | $JQ -r --arg m "$model" '.models[]? | select(.name==$m or (.name|startswith($m))) | .size_vram' | head -1)
     case "${size:-}" in ''|null|*[!0-9]*) echo "unknown 0"; return ;; esac
     case "${vram:-}" in ''|null|*[!0-9]*) vram=0 ;; esac
     pct=$(awk -v v="$vram" -v s="$size" 'BEGIN{ if (s>0) printf "%d", (v*100)/s; else print 0 }')
@@ -207,19 +207,19 @@ bench_prefill() {
     local model="$1" i resp v ptok="0" vals="" kept=0
     for i in $(seq 1 $((BENCH_PREFILL_REPS + 1))); do
         resp=$(curl -fsS -m 900 "$EP/api/generate" \
-            -d "$("$JQ" -nc --arg m "$model" --arg p "$(unique_prompt "pf$i-$model")" \
+            -d "$($JQ -nc --arg m "$model" --arg p "$(unique_prompt "pf$i-$model")" \
                   '{model:$m, prompt:$p, stream:false, options:{num_predict:1}}')" 2>/dev/null)
         [ -n "$resp" ] || continue
         # Discard the cold dispatch: the first prefill after a model load pays
         # pipeline compilation on an accelerated lane and reads at roughly CPU
         # speed (793-zumy measured 86.00 then 189.03 then a 0.8 tok/s band).
         [ "$i" -eq 1 ] && continue
-        v=$(printf '%s' "$resp" | "$JQ" -r '
+        v=$(printf '%s' "$resp" | $JQ -r '
             if ((.prompt_eval_duration // 0) > 0)
             then ((.prompt_eval_count // 0) / ((.prompt_eval_duration) / 1000000000))
             else empty end')
         [ -n "$v" ] || continue
-        ptok=$(printf '%s' "$resp" | "$JQ" -r '.prompt_eval_count // 0')
+        ptok=$(printf '%s' "$resp" | $JQ -r '.prompt_eval_count // 0')
         vals="$vals$v
 "
         kept=$((kept + 1))
@@ -242,7 +242,7 @@ bench_model() {
     # unique too — a warm-up that seeds the cache with the prompt we are about
     # to measure IS the 858-ihcb defect.
     curl -fsS -m 900 "$EP/api/generate" \
-        -d "$("$JQ" -nc --arg m "$model" --arg p "$(unique_prompt "warm-$model")" \
+        -d "$($JQ -nc --arg m "$model" --arg p "$(unique_prompt "warm-$model")" \
               '{model:$m, prompt:$p, stream:false, options:{num_predict:16}}')" \
         >/dev/null 2>&1
 
@@ -262,7 +262,7 @@ bench_model() {
     # is why the four decode figures this harness produced on esmeraldinha agreed
     # with the controlled 793-zumy run to 3% while prefill was 15x out.
     resp=$(curl -fsS -m 900 "$EP/api/generate" \
-        -d "$("$JQ" -nc --arg m "$model" --arg p "$(unique_prompt "gen-$model")" --argjson n "$NUM_PREDICT" \
+        -d "$($JQ -nc --arg m "$model" --arg p "$(unique_prompt "gen-$model")" --argjson n "$NUM_PREDICT" \
               '{model:$m, prompt:$p, stream:false, options:{num_predict:$n}}')" 2>/dev/null)
 
     if [ -z "$resp" ]; then
@@ -270,7 +270,7 @@ bench_model() {
         return
     fi
 
-    echo "$resp" | "$JQ" -r \
+    echo "$resp" | $JQ -r \
         --arg m "$model" --arg t "$tier" --arg e "$engine" \
         --arg c "$CLAIMED" --arg p "$pct" \
         --arg pf "$pf_tok_s" --arg pft "$pf_ptok" --arg pfn "$pf_n" --arg pfr "$pf_range" '
@@ -298,7 +298,7 @@ bench_embed() {
                 | head -c "$EMBED_CHUNK_CHARS")
     fi
 
-    payload=$("$JQ" -nc --arg m "$EMBED_MODEL" --arg c "$chunk" '{model:$m, input:$c}')
+    payload=$($JQ -nc --arg m "$EMBED_MODEL" --arg c "$chunk" '{model:$m, input:$c}')
 
     # Warm-up (loads the embedding model).
     printf '%s' "$payload" | curl -fsS -m 300 "$EP/api/embed" -d @- >/dev/null 2>&1
