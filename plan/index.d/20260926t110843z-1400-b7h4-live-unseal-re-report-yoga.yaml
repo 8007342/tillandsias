@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-delivered-share-accepted-unverified-is-never-re-reported-once-the-live-unseal-proves-it-right-or-wrong
+    order: 1400-b7h4
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [vault, control-wire, rust, fail-loud]
+    estimated_hours: 4
+    depends_on: [the-guest-adopts-a-delivered-shamir-share-without-ever-asking-the-vault-whether-it-opens-so-the-new-accept-reject-discriminator-can-never-answer-rejected-for-the-case-that-produced-it]
+    owned_files: [crates/tillandsias-headless/src/vault_bootstrap.rs, crates/tillandsias-control-wire/src/lib.rs]
+    observed_by: yoga
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable includes its own tests (a delivered
+      share accepted unverified is followed by a report naming the live unseal's result),
+      landing in the same commit as the reporting path (1136-n8sh).
+    title: |
+      a delivered Shamir share that 1200-ih38 accepts UNVERIFIED (no readable own secret at delivery time) is never re-reported once the live unseal proves it right or wrong, so the host's `Accepted` stays unconfirmed forever
+    verifiable_closure: |
+      The host learns the LIVE verdict for a share it delivered: when the unseal that
+      ensure_vault_running performs with a delivered share fails ("cipher: message
+      authentication failed"), the host receives a report naming authentication as the
+      cause, and when it succeeds the host's record moves from accepted-unverified to
+      verified. NEGATIVE CONTROL: a guest whose vault never started sends no verdict: it
+      does not manufacture a failure out of an unseal that never ran (888-miiy). Pre-fix
+      result: FAILS: after 1200-ih38 the only verdict is the delivery-time one, and the
+      unseal runs after the reply is sent, spawned by vsock_server, so its outcome
+      reaches nobody.
+    context: |
+      Split from 1200-ih38 at the coordinator's request (macuahuitl, 2026-09-26).
+      1200-ih38 made delivery validate everything checkable WITHOUT a live vault: a
+      well-formed 32-byte key, and a match with the guest's own unseal secret when that is
+      readable. When no own secret is readable (first boot, or podman unavailable), the
+      share is accepted UNVERIFIED by design; the next_action there said to leave the
+      live-unseal verdict to a later channel and never to block delivery on vault
+      startup. This row is that channel. The criterion names the output the host needs,
+      not a mechanism: a new control-wire message, a field on an existing status reply,
+      or the host polling are all acceptable.
+    events:
+      - type: filed
+        ts: "2026-09-26T11:08:43Z"
+        host: yoga
+        summary: Filed by yoga at the coordinator's request, as 1200-ih38's deferred half.
