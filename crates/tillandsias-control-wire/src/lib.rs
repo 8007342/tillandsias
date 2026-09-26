@@ -85,6 +85,7 @@ use serde::{Deserialize, Serialize};
 /// @trace order:997-e4v2
 pub const WIRE_VERSION: u16 = 4;
 
+pub mod auth_flow;
 pub mod guest_transport;
 pub mod secure_wire_mode;
 pub mod transport;
