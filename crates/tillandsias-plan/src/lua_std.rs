@@ -149,6 +149,25 @@ fn json_table(lua: &Lua) -> LuaResult<LuaTable> {
             out.map_err(|e| rt(format!("json.encode: {e}")))
         })?,
     )?;
+    // 1398-3qiz. THE EMPTY-TABLE RULE. Lua cannot tell an empty array from
+    // an empty object, so json.encode renders an UNMARKED empty table as {}.
+    // json.array(t?) marks a table (a new empty one when called with no
+    // argument) with mlua's array metatable, so it encodes as [] even when
+    // empty; json.parse already returns its arrays marked, so [] round-trips.
+    // A non-empty sequence encodes as an array either way. Pure: in both
+    // classes. Measured pre-fix: json.encode({a={}, b={1}}) -> {"a":{},"b":[1]},
+    // which left the CentiColon extractor's empty "missing" list ambiguous.
+    t.set(
+        "array",
+        lua.create_function(|lua, t: Option<LuaTable>| {
+            let t = match t {
+                Some(t) => t,
+                None => lua.create_table()?,
+            };
+            t.set_metatable(Some(lua.array_metatable()));
+            Ok(t)
+        })?,
+    )?;
     // json.query(v, filter [, args]) — the 1375-rn9b engine
     // (json_query::parse + json_query::eval; surface agreed with lenovinha
     // 2026-09-26). Returns a Lua SEQUENCE of every result; `args` binds `$name`.
