@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: lua-std-json-encode-renders-an-empty-array-as-an-empty-object-so-a-consumer-cannot-tell-no-items-from-no-fields
+    order: 1398-3qiz
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [lua, lua-std, json, determinism]
+    estimated_hours: 2
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixing commit adds a lua_std test that an
+      explicitly-marked empty array (e.g. json.array{} or a metatable marker) encodes as
+      []. FAILS pre-fix: `tillandsias-plan lua --class cacheable -e 'return
+      json.encode({a={}, b={1}})'` prints {"a":{},"b":[1]}.
+    title: |
+      lua_std json.encode renders every empty Lua table as {}, so a list field that happens to be empty (the CentiColon extractor's "missing", "unregistered", "refused") serialises as an object, and a jq consumer doing `.missing|length` or `.[]` gets a different type depending on whether the list had items
+    context: |
+      MEASURED by macuahuitl-forge 2026-09-26 on a tillandsias-plan built from
+      linux-next c52e15094: json.encode({a={}, b={1}}) -> {"a":{},"b":[1]}.
+      Lua cannot distinguish an empty array from an empty map without a marker;
+      the encoder needs one (a json.array constructor or metatable flag), and
+      json.decode should round-trip it. Owner: yoga (lua_std).
+    deliverable: |
+      A documented way to mark a table as an array so an empty one encodes as
+      [], round-tripped by decode, with the determinism guarantees (1384-bp6t)
+      unchanged.
+    provenance: |
+      Filed by macuahuitl-forge 2026-09-26 at the macuahuitl coordinator's request
+      (1395-n7qd survey gap c).
