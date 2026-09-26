@@ -1084,6 +1084,26 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
+    # 1254-fdsu: measurement producers emit a DOT decimal under a comma locale.
+    # Daily tier, not --check: no darwin run is recorded yet (1302-7j8p), and
+    # the injected-locale arms are exactly what a Linux-only measurement cannot
+    # vouch for on macOS awk. Promote to a gate step once a Mac records one.
+    # ============================================================================
+    log_section "awk Float Formatting Under a Comma Locale (1254-fdsu)"
+    if [[ -f "scripts/test-awk-float-lc-numeric.sh" ]]; then
+        if bash scripts/test-awk-float-lc-numeric.sh > /tmp/awk-float-lc-numeric.log 2>&1; then
+            log_pass "Measurement producers emit dot decimals under a comma locale"
+            archive_check_log "awk-float-lc-numeric" "pass" /tmp/awk-float-lc-numeric.log
+        else
+            log_fail_tracked "awk-float-lc-numeric" "A measurement producer emits a comma decimal (see /tmp/awk-float-lc-numeric.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/awk-float-lc-numeric.log >&2
+            archive_check_log "awk-float-lc-numeric" "fail" /tmp/awk-float-lc-numeric.log
+        fi
+    else
+        log_fail_missing_guard "awk-float-lc-numeric" "scripts/test-awk-float-lc-numeric.sh"
+    fi
+
+    # ============================================================================
     # 1132-r4mt: concurrent archiver --check runs must not break each other.
     # ONE pair here, not in --check: a pair is two full archiver checks (386s
     # measured on yoga, serialised by the answerability lock). The post-fix
