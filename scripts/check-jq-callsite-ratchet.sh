@@ -37,6 +37,12 @@
 #   blocked:jq-ratchet-empty-population               nothing to count (rc 1)
 #   could-not-run:jq-ratchet:no-plan-binary           a new site needs classifying, no binary (rc 3)
 #
+# MIGRATION IDIOMS (1375-2x4e) — the subset does NOT grow @tsv, join or
+# sort_by. A row of N values is emitted with `,` on alternating lines and paired
+# by POSIX `paste - -` (N=2), which gives the same <a>TAB<b> rows @tsv gave;
+# ordering is `| sort -n` after the pair. Object construction is assembled from
+# `json get -c` literals (already escaped) and pretty-printed through `json get .`.
+#
 #   --ratchet   rewrite the floor down to today's counts (never up)
 #   --root DIR  scan DIR instead of the repository (fixtures)
 set -uo pipefail

@@ -80,11 +80,6 @@ done
 if [ -f "$_td_dir/lib/tool-dispatch.sh" ]; then
     . "$_td_dir/lib/tool-dispatch.sh" 2>/dev/null || true
 fi
-if command -v resolve_tool >/dev/null 2>&1; then
-    JQ="$(resolve_tool jq || printf 'jq')"
-else
-    JQ="jq"   # lib unavailable: preserve the previous behaviour exactly
-fi
 
 ROOT="${BASE_STATUS_LOSS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$ROOT" || exit 0
@@ -137,9 +132,12 @@ fi
 # in the base, which a later fragment may have superseded. One batched call
 # (783-xyk5) rather than a `status` invocation per packet.
 status_map=""
-if plan_binary_has "$PLAN" query && command -v jq >/dev/null 2>&1; then
+# ORDER 1375-2x4e: the fold is read with json get, so the FAST path no longer
+# exists only on hosts that have jq. `paste - -` pairs the two values the filter
+# emits per packet into the same pid<TAB>status rows `@tsv` gave.
+if plan_binary_has "$PLAN" query && plan_binary_has "$PLAN" json; then
     status_map="$("$PLAN" query --json --limit 0 2>/dev/null \
-        | "$JQ" -r '.[] | select((.packet_id // "") != "") | [.packet_id, (.status // "")] | @tsv' 2>/dev/null)"
+        | "$PLAN" json get -r '.[] | select((.packet_id // "") != "") | .packet_id, (.status // "")' 2>/dev/null | paste - -)"
 fi
 if [ -z "$status_map" ]; then
     echo "  note: batched fold unavailable ($PLAN query --json); falling back to per-packet status lookups" >&2
