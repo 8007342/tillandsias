@@ -48,6 +48,7 @@ usage() {
 Usage: vault-cli read [-field=<key>] <path>
        vault-cli write <path> <field>=<value> [<field>=<value> ...]
        vault-cli write-stdin <path> <field>
+       vault-cli write-json <path>
        vault-cli health
 
 Examples:
@@ -205,19 +206,33 @@ cmd_write_stdin() {
     write_json "$path" "$json_body"
 }
 
+cmd_write_json() {
+    if [ $# -ne 1 ]; then
+        usage
+        exit 4
+    fi
+    path="$1"
+    json_body="$(cat)"
+    if ! printf '%s' "$json_body" | jq -e 'has("data")' >/dev/null 2>&1; then
+        json_body="$(printf '%s' "$json_body" | jq '{data: .}')"
+    fi
+    write_json "$path" "$json_body"
+}
+
 cmd_health() {
     curl --cacert "$VAULT_CACERT" -fsS "$VAULT_ADDR/v1/sys/health?sealedcode=200&uninitcode=200&standbyok=true" \
         || { echo "vault-cli: health probe failed" >&2; exit 2; }
 }
 
 case "${1:-}" in
-    read|write|write-stdin|health) require_cacert ;;
+    read|write|write-stdin|write-json|health) require_cacert ;;
 esac
 
 case "${1:-}" in
     read) shift; cmd_read "$@" ;;
     write) shift; cmd_write "$@" ;;
     write-stdin) shift; cmd_write_stdin "$@" ;;
+    write-json) shift; cmd_write_json "$@" ;;
     health) cmd_health ;;
     -h|--help|help|"") usage; exit 0 ;;
     *) echo "vault-cli: unknown subcommand: $1" >&2; usage; exit 4 ;;
