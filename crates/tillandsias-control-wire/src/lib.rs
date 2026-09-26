@@ -86,9 +86,12 @@ use serde::{Deserialize, Serialize};
 pub const WIRE_VERSION: u16 = 4;
 
 pub mod auth_flow;
+pub mod flow_event;
 pub mod guest_transport;
 pub mod secure_wire_mode;
 pub mod transport;
+
+pub use flow_event::{FLOW_STATE_PUSH_CAPACITY, FlowEventChannel};
 
 /// Maximum permitted single-message length on the wire, and the ONLY frame
 /// size ceiling the control wire has. Build the framing with
@@ -668,6 +671,26 @@ pub enum ControlMessage {
     ///
     /// @trace spec:vsock-transport
     SetVsockForwardTarget { cid: u32, port: u32 },
+    /// In-VM headless → host: emitted when a flow or dependency state transition occurs.
+    ///
+    /// Carries an observable state transition from a login FSM (sibling i),
+    /// dependency graph node (sibling ii), or push transaction, converting
+    /// previously inferred or silent state changes into first-class observable
+    /// events.
+    ///
+    /// New trailing variant: additive per the `WIRE_VERSION` doc (does not bump
+    /// the version). Older in-VM headless binaries reject it with
+    /// `Error::UnknownVariant`.
+    ///
+    /// @trace plan/issues/research-flow-state-event-channel-2026-07-23.md
+    FlowStatePush {
+        seq: u64,
+        source: FlowSource,
+        from_state: String,
+        to_state: String,
+        reason: Option<String>,
+        ts_unix: u64,
+    },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -725,6 +748,23 @@ pub enum VmPhase {
     Failed,
 }
 
+/// Source category and identifier for a flow or dependency state transition.
+///
+/// Distinguishes auth/login FSM transitions (sibling i) from unified dependency
+/// graph node transitions (sibling ii) and git push transactions.
+///
+/// @trace plan/issues/research-flow-state-event-channel-2026-07-23.md
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum FlowSource {
+    /// Authentication / login flow for a provider (e.g. "github", "codex").
+    Login { provider: String },
+    /// Unified dependency graph resource/service node (e.g. "vault", "ca_bundle").
+    DependencyNode { node: String },
+    /// Git push transaction for a repository and ref.
+    PushTransaction { repo: String, ref_name: String },
+}
+
 /// Topics the host can subscribe to via `Subscribe`. The headless emits a push
 /// frame on the corresponding topic whenever the tracked state changes.
 ///
@@ -734,6 +774,7 @@ pub enum SubscriptionTopic {
     VmStatus,
     LoginState,
     CloudProjects,
+    FlowState,
 }
 
 /// A single VM-visible project entry.
@@ -998,6 +1039,7 @@ impl ControlMessage {
             ControlMessage::PtyStdinEof { .. } => "PtyStdinEof",
             ControlMessage::PtyOpenData { .. } => "PtyOpenData",
             ControlMessage::SetVsockForwardTarget { .. } => "SetVsockForwardTarget",
+            ControlMessage::FlowStatePush { .. } => "FlowStatePush",
         }
     }
 }
@@ -2692,6 +2734,19 @@ mod tests {
                 },
                 "SetVsockForwardTarget",
             ),
+            (
+                ControlMessage::FlowStatePush {
+                    seq: 1,
+                    source: FlowSource::Login {
+                        provider: "github".into(),
+                    },
+                    from_state: "auth.github.token-collected".into(),
+                    to_state: "auth.github.blocked".into(),
+                    reason: Some("persist(ca_bundle)".into()),
+                    ts_unix: 1721779200,
+                },
+                "FlowStatePush",
+            ),
         ]
     }
 
@@ -2775,6 +2830,7 @@ mod tests {
             ControlMessage::PtyStdinEof { .. } => 30,
             ControlMessage::PtyOpenData { .. } => 31,
             ControlMessage::SetVsockForwardTarget { .. } => 32,
+            ControlMessage::FlowStatePush { .. } => 33,
         }
     }
 
@@ -2809,7 +2865,7 @@ mod tests {
         /// The number of `ControlMessage` variants. An independent literal for
         /// the same reason the discriminants are: anything computed from the
         /// enum agrees with the enum by construction.
-        const DECLARED_VARIANTS: usize = 33;
+        const DECLARED_VARIANTS: usize = 34;
 
         let samples = one_sample_per_variant();
         assert_eq!(
@@ -2924,6 +2980,7 @@ mod tests {
                     SubscriptionTopic::VmStatus,
                     SubscriptionTopic::LoginState,
                     SubscriptionTopic::CloudProjects,
+                    SubscriptionTopic::FlowState,
                 ],
             },
         });
@@ -3011,6 +3068,24 @@ mod tests {
                         default_branch: "main".into(),
                     },
                 ],
+            },
+        });
+    }
+
+    #[test]
+    fn flow_state_push_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 207,
+            body: ControlMessage::FlowStatePush {
+                seq: 101,
+                source: FlowSource::Login {
+                    provider: "github".into(),
+                },
+                from_state: "auth.github.token-collected".into(),
+                to_state: "auth.github.blocked".into(),
+                reason: Some("persist(ca_bundle)".into()),
+                ts_unix: 1721779200,
             },
         });
     }
