@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-plan-only-lanes-append-vs-origin-fold-check-rebuilds-every-long-form-field-in-the-whole-ledger-on-every-push-so-the-cheap-lane-costs-two-minutes-on-a-floor-host-and-grows-with-the-corpus-rather-than-with-the-push
+    event:
+      type: note
+      ts: "2026-09-26T14:22:08Z"
+      agent_id: windows-yolanda-claude-20260926t142208z
+      host: yolanda-windows
+      summary: |
+        yolanda-windows, 2026-09-26. LANDED on origin/linux-next at 7c07a0f11 ("relay: land work/1310-7apk", my 38577276a), verified by content: scoped pairs, the deadline, and the hook passing the push's own fragments; the fixture passes 5/5 on trunk.
+        OWN-LANE TEST from the host whose plan lane hung tonight: this note fragment was pushed through yolanda's OWN plan lane (push-plan-fragments-to-trunk.sh, no relay, no salvage); the timing line is in the next event.
+        Criterion 2 (a floor Linux host's local gate under 30 s) is still OPEN, pending a pirria or esme run.

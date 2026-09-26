@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-gate-arm-runs-an-added-fixture-with-cargo-target-dir-unset-so-a-cd-before-resolve-plan-binary-path-passes-every-forge-and-author-and-reds-only-at-relay
+    event:
+      type: finding
+      ts: "2026-09-26T17:05:09Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        THIRD INSTANCE, and the first that reached every host's GATE (2026-09-26): after 1411-b5fk cleared the first Mac red, every Mac ./build.sh --check went red at "Checking the hardware fingerprint refuses an untrue twin claim (805-r98w)". scripts/test-hardware-fingerprint.sh's cwd-independence arm runs hardware-fingerprint.sh from `/`; 1375-2x4e made that script resolve the plan binary via resolve_plan_binary, whose fallback is the cwd-relative ./target/release path. Linux gates run inside the builder toolbox, whose CARGO_TARGET_DIR masks it; a Mac gate sets none. Reported by macbookair; its earlier darwin record for 1375-2x4e had been run WITH TILLANDSIAS_PLAN_BIN set, the exact variable that hides the class (corrected by macbookair).
+        Relay-fixed at 541e2445a (resolve inside the checkout, absolutize; an explicit override keeps its meaning). The DISCRIMINATING REGIME for this row's decider, measured: removing CARGO_TARGET_DIR and TILLANDSIAS_PLAN_BIN is NOT enough on a host with an installed copy on PATH (~/.local/bin/tillandsias-plan resolves via `command -v` and masks it); the decider must also strip that PATH entry. With all three removed, pre-fix reproduced on Linux (rc=2 from `/`). Sweep: 13 fixtures that run a resolving script from another cwd, each run in both regimes; none was red only in the Mac regime, so hardware-fingerprint was the only live instance today.
+        RESOLVER-LEVEL REMEDY, deliberately NOT done tonight: making resolve_plan_binary return checkout-anchored absolute paths would fix every caller at once, but its printed spelling is an interface (plan-binary-probe.sh notes a checker that reds on a constructed spelling), so it needs a consumer sweep first.

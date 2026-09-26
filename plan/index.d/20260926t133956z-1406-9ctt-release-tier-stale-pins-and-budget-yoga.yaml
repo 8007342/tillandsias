@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-last-three-release-tier-reds-two-litmus-pin-a-count-or-a-verb-list-instead-of-a-property-and-the-plan-suite-outgrew-its-budget
+    order: 1406-9ctt
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, release-tier, ci, vault]
+    estimated_hours: 4
+    owned_files: [openspec/litmus-tests/litmus-release-artifact-integrity.yaml, openspec/litmus-tests/litmus-vault-cli-verifies-tls.yaml, openspec/litmus-tests/litmus-plan-engine-invariants-shape.yaml]
+    observed_by: yoga
+    unscoreable: |
+      the closing checks are the three named litmus themselves, green in their specs' runs, in
+      the same commit(s); plus the measurements recorded on this row for (c).
+    title: |
+      the last three release-tier reds on yoga's 2026-09-26 sample: release-artifact-integrity pins a COUNT (2) where it must pin a property (every job that uploads runs check-release-asset-integrity.sh), vault-cli-verifies-tls pins a VERB LIST that misses write-json, and plan-engine-invariants-shape's suite outgrew its 180 s budget
+    verifiable_closure: |
+      (a) litmus:release-artifact-integrity asserts, PER JOB of release.yml, that every job that
+      uploads (actions/upload-artifact, gh release upload/create) also runs
+      check-release-asset-integrity.sh; (b) litmus:vault-cli-verifies-tls sees write-json and
+      has an arm proving vault-cli.sh's gate covers every verb its dispatcher accepts, so a new
+      verb cannot slip past a pinned list; (c) litmus:plan-engine-invariants-shape green WITHOUT
+      raising its budget, or a recorded decision naming the slow tests and their times. Pre-fix
+      result: FAILS: all three RED in yoga's full ci-full (6973a456c) and in isolated reruns
+      (1242-4x53 finding).
+    context: |
+      Split and ruled by the coordinator (macuahuitl, 2026-09-26), from the 1242-4x53 triage.
+      FINDING WHILE FILING, (a): the per-job property is RED on trunk for a real reason. Jobs in
+      .github/workflows/release.yml: `release` (Linux) uploads and runs the check twice;
+      `windows-release` uploads and runs it twice; `macos-release` UPLOADS (lines 558 "gh release
+      upload v${VERSION}", 574 "gh release upload unstable") and runs it ZERO times. The old count
+      pin read 4 occurrences against its 2 and hid the gap entirely.
+    events:
+      - type: filed
+        ts: "2026-09-26T13:39:56Z"
+        host: yoga
+        summary: Filed by yoga at the coordinator's request as one story for the three remaining release-tier reds.

@@ -45,7 +45,10 @@ critical_path:
     expected_behavior: "ok: fails closed"
 
   - step: "the CA gate is applied centrally so a new subcommand cannot bypass it"
-    command: "grep -Eq 'read\\|write\\|write-stdin\\|renew-self\\|lookup-self\\|revoke-self\\|health\\) require_cacert' images/git/vault-cli.sh && echo 'ok: centrally gated'"
+    # 1406-9ctt: a PROPERTY, not a pinned verb list. The list went red when the gate
+    # correctly grew (write-json); now every dispatched verb must be in the gate,
+    # in BOTH vault-cli copies (the default image's was never checked before).
+    command: "bash scripts/check-vault-cli-gate-coverage.sh images/git/vault-cli.sh && bash scripts/check-vault-cli-gate-coverage.sh images/default/vault-cli.sh && echo 'ok: centrally gated'"
     timeout_ms: 5000
     expected_behavior: "ok: centrally gated"
 

@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-release-asset-integrity-verifies-that-a-bundle-file-exists-never-that-it-matches-its-asset-so-an-asset-truncated-after-signing-passes-and-publishes
+    field: next_action
+    value: |-
+      2026-09-26 yoga, work/1407-6jr8 @ 03ffd06b2. CLOSES ON: the always-on manifest re-hash (0-byte / changed asset named in a SHA256SUMS* is refused, with a re-stage remedy distinct from the signing remedy); the cosign arm is OPT-IN (RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP) and NOT wired into release.yml.
+      COVERAGE GAP, stated so "the 0-byte case is caught" is not read as "every asset is byte-checked": an asset SIGNED but named in NO manifest gets no byte check without cosign. In v56.9.25.2 that is exactly ONE asset, install-macos.sh (install-windows.ps1 IS in SHA256SUMS-windows). Measured: install-macos.sh + 1 byte -> refused with the cosign arm, rc=0 without it.
+      COSIGN EVIDENCE for wiring release.yml later (yoga, cosign v2.4.1, the published v56.9.25.2 set, 15 bundles): every bundle's Fulcio SAN is URI:https://github.com/8007342/tillandsias/.github/workflows/release.yml@refs/tags/v56.9.25.2. verify-blob --certificate-oidc-issuer https://token.actions.githubusercontent.com with regexp ^https://github\.com/8007342/tillandsias/\.github/workflows/release\.yml@refs/(tags|heads)/ -> 15/15 PASS; with ...workflows/ci\.yml@ -> 0/15 (SAN mismatch); with ^https://github\.com/someone-else/ -> 0/15; tampered tillandsias-tray.exe -> rc=1 invalid signature. The checker over the real set: ok 17 of 17 (right regexp), rc=1 (wrong). Bundles are sigstore v0.3: cosign v2 needs --new-bundle-format (0/15 plain), which the checker retries on that message only. NOT yet tested: a workflow_dispatch run's SAN (@refs/heads/...), which the (tags|heads) alternative assumes.
+
+      [2026-09-26T14:11:10Z yoga] 2026-09-26 yoga, RUNNER COSIGN GATE: the pinned sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 (v4.1.1) defaults cosign-release to v3.0.5 (its action.yml at that sha, line 13). cosign v3.0.5 (checksum-verified against sigstore/cosign's cosign_checksums.txt) over the same 15 v56.9.25.2 bundles, PLAIN verify-blob (no flag): release.yml regexp 15/15; ci.yml 0/15, foreign owner 0/15 (SAN mismatch); tampered .exe rc=1. Checker with v3.0.5: ok 17 of 17 / wrong rc=1 / install-macos.sh+1 byte refused. The gate passed, so release.yml is WIRED at 367d1e756 (workflow-level env; the value is byte-identical to the measured regexp). With the cosign arm on in CI, install-macos.sh IS byte-checked on the runner; the gap remains only where the checker runs without the env.
+    ts: "2026-09-26T14:11:10Z"
+    host: yoga
+
+events:
+  - packet_id: check-release-asset-integrity-verifies-that-a-bundle-file-exists-never-that-it-matches-its-asset-so-an-asset-truncated-after-signing-passes-and-publishes
+    event:
+      type: progress
+      ts: "2026-09-26T14:11:10Z"
+      host: yoga
+      summary: |-
+        status '2026-09-26 yoga, work/1407-6jr8 @ 03ffd06b2. CLOSES ON: the always-on manifest re-hash (0-byte / changed asset named in a SHA256SUMS* is refused, with a re-stage remedy distinct from the signing remedy); the cosign arm is OPT-IN (RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP) and NOT wired into release.yml.
+        COVERAGE GAP, stated so "the 0-byte case is caught" is not read as "every asset is byte-checked": an asset SIGNED but named in NO manifest gets no byte check without cosign. In v56.9.25.2 that is exactly ONE asset, install-macos.sh (install-windows.ps1 IS in SHA256SUMS-windows). Measured: install-macos.sh + 1 byte -> refused with the cosign arm, rc=0 without it.
+        COSIGN EVIDENCE for wiring release.yml later (yoga, cosign v2.4.1, the published v56.9.25.2 set, 15 bundles): every bundle's Fulcio SAN is URI:https://github.com/8007342/tillandsias/.github/workflows/release.yml@refs/tags/v56.9.25.2. verify-blob --certificate-oidc-issuer https://token.actions.githubusercontent.com with regexp ^https://github\.com/8007342/tillandsias/\.github/workflows/release\.yml@refs/(tags|heads)/ -> 15/15 PASS; with ...workflows/ci\.yml@ -> 0/15 (SAN mismatch); with ^https://github\.com/someone-else/ -> 0/15; tampered tillandsias-tray.exe -> rc=1 invalid signature. The checker over the real set: ok 17 of 17 (right regexp), rc=1 (wrong). Bundles are sigstore v0.3: cosign v2 needs --new-bundle-format (0/15 plain), which the checker retries on that message only. NOT yet tested: a workflow_dispatch run's SAN (@refs/heads/...), which the (tags|heads) alternative assumes.
+        
+        [2026-09-26T14:11:10Z yoga] 2026-09-26 yoga, RUNNER COSIGN GATE: the pinned sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 (v4.1.1) defaults cosign-release to v3.0.5 (its action.yml at that sha, line 13). cosign v3.0.5 (checksum-verified against sigstore/cosign's cosign_checksums.txt) over the same 15 v56.9.25.2 bundles, PLAIN verify-blob (no flag): release.yml regexp 15/15; ci.yml 0/15, foreign owner 0/15 (SAN mismatch); tampered .exe rc=1. Checker with v3.0.5: ok 17 of 17 / wrong rc=1 / install-macos.sh+1 byte refused. The gate passed, so release.yml is WIRED at 367d1e756 (workflow-level env; the value is byte-identical to the measured regexp). With the cosign arm on in CI, install-macos.sh IS byte-checked on the runner; the gap remains only where the checker runs without the env.' (not terminal) with evidence_refs: 367d1e756
+  - packet_id: check-release-asset-integrity-verifies-that-a-bundle-file-exists-never-that-it-matches-its-asset-so-an-asset-truncated-after-signing-passes-and-publishes
+    event:
+      type: note
+      ts: "2026-09-26T14:11:10Z"
+      host: yoga
+      summary: |-
+        runner cosign version gate measured; release.yml wired

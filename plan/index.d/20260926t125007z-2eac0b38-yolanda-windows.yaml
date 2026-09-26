@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it
+    event:
+      type: note
+      ts: "2026-09-26T12:50:07Z"
+      agent_id: windows-yolanda-claude-20260926t125007z
+      host: yolanda-windows
+      summary: |
+        yolanda-windows, 2026-09-26, work/1255-s4im. Criteria scored against trunk:
+        (1) DETECTION exists: scripts/check-fleet-membership.sh prints todo:join-the-fleet:hooks:scripts/install-hooks.sh for a checkout with no pre-push hook (fixture arm 3).
+        (2) It runs where a toolchain-less host reaches: it is every worker's slot command (join-the-fleet section 3), bash-only, not inside build.sh.
+        (3) install-hooks.sh is bash-only, and the checker's todo names it.
+        (4) NEGATIVE CONTROL, which was BROKEN, and this ref fixes it. The checker read .git/hooks/pre-push unconditionally, but git runs hooks from core.hooksPath when it is set. That was wrong in both directions: a hook left in .git/hooks under a core.hooksPath pointing at an empty dir read ok while no hook ran (the row's own -c core.hooksPath=.githooks disclosure), and the forge's shared core.hooksPath read as a missing hook. It now resolves `git rev-parse --git-path hooks`, as install-hooks.sh does. Fixture arms 7 (masked: todo) and 8 (forge: ok) both FAILED pre-fix; the fixture is 8/8 now.
+        (5) The freeze alias-tree policy (.claude/, .gemini/ and friends under _freeze_path_is_exempt) is the freeze OWNER's decision per the row's unscoreable. Not implemented here; the predicate is unchanged.
+        (6) The fleet survey needs every host: each host's join report already carries its hooks line; the coordinator is asked to collect them.

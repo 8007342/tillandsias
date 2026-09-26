@@ -440,6 +440,40 @@ fn strip_verbatim(p: PathBuf) -> PathBuf {
     p
 }
 
+/// The path the CONTAINMENT test compares against the (canonical) root: the
+/// nearest existing ancestor of `normalized`, canonicalised, with the not-yet-
+/// existing tail re-appended. Falls back to `normalized` when no ancestor can
+/// be canonicalised.
+///
+/// ORDER 1411-b5fk. The root is canonicalised, but a request was compared only
+/// after LEXICAL normalisation, so any symlinked prefix of the root failed
+/// `starts_with`. On macOS `/var` is a symlink to `/private/var`, so every path
+/// under a temp dir (`/var/folders/…`) was refused as "outside the repository
+/// root" and `lua_std::the_archiver_sweeps_in_the_default_sandbox` failed on
+/// every Mac, 3/3. Linux `/tmp` is not a symlink, so Linux was green.
+fn containment_path(normalized: &Path) -> PathBuf {
+    let mut probe = normalized.to_path_buf();
+    let mut tail: Vec<std::ffi::OsString> = Vec::new();
+    while !probe.exists() {
+        match probe.file_name() {
+            Some(name) => {
+                tail.push(name.to_os_string());
+                probe.pop();
+            }
+            None => return normalized.to_path_buf(),
+        }
+    }
+    match probe.canonicalize().map(strip_verbatim) {
+        Ok(mut resolved) => {
+            for name in tail.iter().rev() {
+                resolved.push(name);
+            }
+            resolved
+        }
+        Err(_) => normalized.to_path_buf(),
+    }
+}
+
 /// Resolve a path for an fs WRITE verb (order 1380-u7sq): the same rooting as
 /// `fs.read`, including the symlink check, applied to the nearest EXISTING
 /// ancestor because the path itself may not exist yet. Refusals name the verb
@@ -454,7 +488,8 @@ fn resolve_write_path(root: &Path, path_str: &str, verb: &str) -> Result<PathBuf
     } else {
         normalize_path(&root.join(path))
     };
-    if !normalized.starts_with(root) || normalized == root {
+    let contained = containment_path(&normalized);
+    if !contained.starts_with(root) || contained == root {
         return Err(format!(
             "{verb}: refused — path '{path_str}' is outside the repository root (or is the root itself)"
         ));
@@ -875,7 +910,9 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                 } else {
                     normalize_path(&root.join(path))
                 };
-                if !normalized.starts_with(&root) {
+                // 1411-b5fk: compare after resolving a symlinked prefix of the
+                // root (macOS /var -> /private/var), exactly as the write verbs do.
+                if !containment_path(&normalized).starts_with(&root) {
                     return Err(mlua::Error::RuntimeError(format!(
                         "fs.read: refused — path '{path_str}' is outside repository root"
                     )));
@@ -1292,5 +1329,51 @@ mod tests {
         let missing = validate_repo_root(PathBuf::from("/definitely/not/a/dir/1367")).unwrap_err();
         assert!(missing.contains("unresolvable"), "{missing}");
         assert!(validate_repo_root(std::env::temp_dir()).is_ok());
+    }
+
+    /// ORDER 1411-b5fk. The macOS shape on any Unix: the root is canonical, the
+    /// request arrives through a SYMLINKED ALIAS of it (as `/var/folders/…`
+    /// reaches `/private/var/folders/…`). Pre-fix this was refused as "outside
+    /// the repository root" and the archiver test failed on every Mac.
+    #[cfg(unix)]
+    #[test]
+    fn a_write_through_a_symlinked_alias_of_the_root_is_inside() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let real = dir.path().join("real");
+        std::fs::create_dir(&real).expect("mkdir real");
+        let alias = dir.path().join("alias");
+        std::os::unix::fs::symlink(&real, &alias).expect("symlink alias");
+        let root = real.canonicalize().expect("canonical root");
+        // A path that does not exist yet, spelled through the alias.
+        let req = alias.join("plan").join("archive");
+        let got = resolve_write_path(&root, req.to_str().unwrap(), "fs.mkdir");
+        assert!(
+            got.is_ok(),
+            "a symlinked alias of the root is inside it: {got:?}"
+        );
+    }
+
+    /// The escape check keeps its teeth: a symlink INSIDE the root that points
+    /// OUTSIDE it is still refused, both for a new path under it and for reads.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_escaping_the_root_is_still_refused() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root_dir = dir.path().join("root");
+        let outside = dir.path().join("outside");
+        std::fs::create_dir(&root_dir).expect("mkdir root");
+        std::fs::create_dir(&outside).expect("mkdir outside");
+        std::os::unix::fs::symlink(&outside, root_dir.join("escape")).expect("symlink escape");
+        let root = root_dir.canonicalize().expect("canonical root");
+        let req = root.join("escape").join("new-file");
+        let got = resolve_write_path(&root, req.to_str().unwrap(), "fs.write");
+        assert!(
+            got.is_err(),
+            "a symlink resolving outside the root must be refused: {got:?}"
+        );
+        assert!(
+            !containment_path(&req).starts_with(&root),
+            "containment must see through the escaping symlink"
+        );
     }
 }
