@@ -1,0 +1,11 @@
+# Gate step 1254-fdsu — measurement producers emit a DOT decimal under a comma
+# locale. The fixture injects one chosen by measurement (a GNU-awk-only PATH
+# shim adds --use-lc-numeric; BSD awk honours LC_NUMERIC natively) and has a
+# mutation arm per producer that strips the LC_ALL=C pins and must go red.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking measurement producers emit dot decimals under a comma locale (1254-fdsu)"
+STEP_SCRIPT="scripts/test-awk-float-lc-numeric.sh"
+STEP_ERROR="a measurement producer emits a comma decimal under a comma locale, or a mutation arm went vacuous (1254-fdsu) — see the verdict line above"
+STEP_OK="Measurement producers emit dot decimals under a comma locale"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:awk-float-lc-numeric:7"

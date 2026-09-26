@@ -76,7 +76,7 @@ while IFS= read -r line; do
     p1="$(printf '%s' "$out" | jq -r '.[0].path // "?"')"
     [ -n "$t1" ] || { printf 'RETRIEVE-FAIL\t%s\t\t\t\t\t\t%s\n' "$corpus" "$q" >&2; continue; }
     [ -n "$t2" ] || t2="$t1"
-    margin="$(awk -v a="$t1" -v b="$t2" 'BEGIN{printf "%.4f", a-b}')"
+    margin="$(LC_ALL=C awk -v a="$t1" -v b="$t2" 'BEGIN{printf "%.4f", a-b}')"
 
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$band" "$corpus" "$t1" "$t2" "$margin" "$k1" "$p1" "$q"
