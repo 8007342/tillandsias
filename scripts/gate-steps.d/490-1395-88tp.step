@@ -1,0 +1,11 @@
+# Gate step 1395-88tp — the CentiColon grader earns positively_tested only from
+# an enforced, reachable, tiered litmus step naming the req-id AND a green
+# results record for that file's exact bytes (and its spec's), with four
+# mutation arms.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the CentiColon grader: enforced x reachable x tier x green record for the bytes (1395-88tp)"
+STEP_SCRIPT="scripts/test-centicolon-grade.sh"
+STEP_ERROR="the CentiColon grader credited an obligation it must not, or refused nothing it must (1395-88tp) — see the verdict line above"
+STEP_OK="CentiColon grader holds"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:centicolon-grade:11"

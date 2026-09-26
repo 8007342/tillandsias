@@ -2126,7 +2126,10 @@ run_tests_for_spec() {
             [[ "$_pt_dur" -ge 0 && "$_pt_dur" -lt 86400000 ]] || _pt_dur=0
             _lt_failed_step=""
             [[ "$_lt_status" == fail ]] && _lt_failed_step="$_LT_CUR_STEP"
-            _PER_TEST_LOG="${_PER_TEST_LOG}${_pt_dur}	${test_name}	${_pt_rc}	${_lt_status}	${_lt_failed_step}
+            # 1395-88tp: fields 6/7 are the litmus FILE and the spec it ran
+            # under, digested once for the whole suite at emission so the
+            # record names the bytes it ran against.
+            _PER_TEST_LOG="${_PER_TEST_LOG}${_pt_dur}	${test_name}	${_pt_rc}	${_lt_status}	${_lt_failed_step}	${test_file}	${spec_id}
 "
         fi
         if [[ "$_pt_rc" -ne 0 ]] && should_fail_fast_for_spec "$spec_id"; then
@@ -2244,11 +2247,38 @@ print_summary() {
     # lives in the timing records; 734-sjb3 noise discipline).
     if [[ -n "$_PER_TEST_LOG" ]]; then
         {
-            printf '%s' "$_PER_TEST_LOG" | awk -F'\t' \
+            # 1395-88tp: column 8 is the sha256 of the litmus file's bytes, so the
+            # CentiColon grader credits a green record only to the bytes that
+            # ran (a record dies when the file changes). ONE hashing spawn for
+            # the whole suite; a host with neither tool writes no digest, and
+            # absence never reads as a verdict.
+            _pt_files="$(awk -F'\t' -v root="$PROJECT_ROOT" 'NF >= 6 && $6 != "" {print $6; if ($7 != "") print root "/openspec/specs/" $7 "/spec.md"}' <<<"$_PER_TEST_LOG" | sort -u)"
+            _pt_digests=""
+            if [[ -n "$_pt_files" ]]; then
+                if command -v sha256sum >/dev/null 2>&1; then
+                    _pt_digests="$(tr '\n' '\0' <<<"$_pt_files" | xargs -0 sha256sum 2>/dev/null || true)"
+                elif command -v shasum >/dev/null 2>&1; then
+                    _pt_digests="$(tr '\n' '\0' <<<"$_pt_files" | xargs -0 shasum -a 256 2>/dev/null || true)"
+                fi
+            fi
+            # The digest list is MULTI-LINE, so it travels through ENVIRON: BSD
+            # awk rejects a newline inside a -v value ("newline in string"),
+            # and on macOS that silently emptied every per-test record
+            # (macbookair, 2026-09-26: 324 tests executed, 0 records written).
+            _pt_rows="$(printf '%s' "$_PER_TEST_LOG" | PT_DIGESTS="$_pt_digests" awk -F'\t' \
                 -v phase="${FILTER_PHASE:-unknown}" \
                 -v host="${TILLANDSIAS_HOST_ID:-$(hostname 2>/dev/null || echo unknown)}" \
-                'NF >= 3 { name = $2; sub(/^litmus:/, "", name); printf "litmus:%s\t%s\t%s\t%s\t%s\t%s\t%s\n", name, phase, $1, $3, host, $4, $5 }' \
-                | bash "$PROJECT_ROOT/scripts/cycle-metrics.sh" --emit-timing-batch
+                -v root="$PROJECT_ROOT" \
+                -v regime="$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/^mingw.*/msys/; s/^msys.*/msys/; s/^cygwin.*/msys/')" \
+                'BEGIN { digests = ENVIRON["PT_DIGESTS"]; n = split(digests, dl, "\n"); for (i = 1; i <= n; i++) { h = dl[i]; f = dl[i]; sub(/[ \t].*$/, "", h); sub(/^[0-9a-f]+[ \t]+\*?/, "", f); if (h ~ /^[0-9a-f]+$/) dg[f] = h } }
+                 NF >= 3 { name = $2; sub(/^litmus:/, "", name); sp = root "/openspec/specs/" $7 "/spec.md"; printf "litmus:%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", name, phase, $1, $3, host, $4, $5, (($6 in dg) ? dg[$6] : ""), regime, $7, ((sp in dg) ? dg[sp] : "") }')"
+            # Rows went in and none came out: the producer failed. Say so —
+            # the enclosing `2>/dev/null || true` is what hid the BSD case.
+            if [[ -z "$_pt_rows" ]]; then
+                echo "could-not-run:litmus-per-test-records:producer-emitted-nothing ($(grep -c . <<<"$_PER_TEST_LOG") rows in)"
+            else
+                printf '%s\n' "$_pt_rows" | bash "$PROJECT_ROOT/scripts/cycle-metrics.sh" --emit-timing-batch
+            fi
         } 2>/dev/null || true
         # `|| true`: under `set -eo pipefail`, head's early close SIGPIPEs
         # sort/awk (rc 141) once the sweep is big enough to overflow ten

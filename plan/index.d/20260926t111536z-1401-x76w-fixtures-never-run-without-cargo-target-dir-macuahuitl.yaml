@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: no-gate-arm-runs-an-added-fixture-with-cargo-target-dir-unset-so-a-cd-before-resolve-plan-binary-path-passes-every-forge-and-author-and-reds-only-at-relay
+    order: 1401-x76w
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, fixtures, plan-binary, regime, no-build]
+    estimated_hours: 3
+    owned_files:
+      - scripts/preflight-fixtures-default-target.sh
+      - scripts/test-preflight-fixtures-default-target.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/test-preflight-fixtures-default-target.sh, written in the same commit as what it tests (1136-n8sh).
+      A decider (preflight or gate arm) runs every ADDED scripts/test-*.sh with
+      CARGO_TARGET_DIR and TILLANDSIAS_PLAN_BIN unset, the plan binary at the
+      checkout's ./target/release, from a cwd outside the checkout, and names a
+      failing fixture as `refused:fixture-default-target:<script>`. PRE-FIX
+      RESULT: FAILS — pointed at work/1395-88tp's tree before 43e9b36bb (the
+      bounced state, a relative plan-binary path resolved after a cd into
+      TILLANDSIAS_REPO_ROOT), the decider must refuse; today nothing refuses.
+    title: |
+      No gate arm runs an added fixture with CARGO_TARGET_DIR unset, so a script that resolves the plan binary AFTER a cd (a relative ./target/release path) passes in every forge (absolute CARGO_TARGET_DIR) and on the author's host, and reds only at relay or on an ordinary checkout — 1380-u7sq and 1395-88tp were the same shape one day apart
+    context: |
+      SURVEY, macuahuitl-forge 2026-09-26: "It's invisible from inside this
+      forge: CARGO_TARGET_DIR is absolute here, so every run I did passed, and
+      macbookair's did too for the same reason. It only shows on a normal
+      checkout, which neither of us ever exercises ... the jq class is caught
+      by a gate and the cd class isn't." Converse regime of 1203-46gj (a fixture
+      that assumes the dir is RELATIVE). The coordinator found both instances
+      by hand at relay (archive-plan-packets.sh in 1380-u7sq; the centicolon
+      wrapper, ratchet and two fixtures in 1395-88tp).
+    deliverable: |
+      The decider, its hermetic fixture (a positive control that cds before
+      resolving and must be refused, a negative that absolutizes first), and a
+      named skip on hosts where it cannot run.
+    provenance: |
+      Filed by the macuahuitl coordinator 2026-09-26 from macuahuitl-forge's
+      survey after the 1395-88tp bounce.

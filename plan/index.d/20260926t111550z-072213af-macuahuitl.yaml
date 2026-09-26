@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-guest-adopts-a-delivered-shamir-share-without-ever-asking-the-vault-whether-it-opens-so-the-new-accept-reject-discriminator-can-never-answer-rejected-for-the-case-that-produced-it
+    event:
+      type: review
+      ts: "2026-09-26T11:15:50Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        COORDINATOR HOLD on work/1200-ih38 @ 756e30a90 (yoga): not relayed. An independent review (opus) found a data-loss path. launch_vault_container wipes vault-data when `vault_data_volume_exists() && !has_shamir_share_in_keyring()`. Inside the guest, that predicate sees only the FALLBACK share file, which 701-se6x made set_in_vm_credentials write precisely so that a guest that lost its file keeps its vault. The new mismatch rejection SKIPS that write, so a guest with a missing share file and a podman secret differing from the host's copy WIPES an intact vault-data on the next launch (both the 07-17 and the 08-17 incident shapes). Before the change, any well-formed share kept the vault.
+        REQUIRED before relay: a mismatch rejection leaves has_shamir_share_in_keyring TRUE, either (a) by writing the own secret to the fallback file when it is missing or invalid, or (b) by having the predicate accept a readable 32-byte podman secret in the guest. Plus a test that FAILS on 756e30a90: share file missing + mismatched share delivered → predicate true, no wipe.
+        ALSO RAISED (yoga's call, in-row or follow-up): the mismatch is judged against a stand-in (the podman secret), not the vault; in the documented dummy-key state that manufactures a rejection (888-miiy). Reject only when the vault is observed unsealed now, else report unverified. Minor in-row: drop the base64 error text from the Malformed reason (it leaks a byte and an offset into tracing::warn!); zeroize the decoded share and own; restore 701-se6x's doc comment next to its test.
+        PRE-EXISTING, follow-up rows requested from yoga: recover_rejected_unseal_secret_once uses only the FIRST candidate, which since 803-49re is the guest's own just-rejected secret, so automatic recovery is dead (it should try each candidate and skip the rejected bytes); and the root token is dropped on rejection.
