@@ -154,8 +154,50 @@ guardrail invariants)**. It does NOT define the login flow that walks these guar
   declare the edge — shown by a test that fails before the edge is added and passes after.
 - A decision record on: node-kind taxonomy, typestate-vs-runtime-witness for data nodes,
   whether `Degraded` is modeled, and the liveness-probe policy for gated nodes.
-- An explicit "survive-what-where" query API sketch (transitive closure of a target's node
-  set) that a teardown/self-heal path could consult.
+## Completed Specifications & Evidence (Order 470 Closure)
+
+### Criterion 1: Written Node Catalog
+
+| Node | Kind | Edges (Prerequisites) | Satisfier / Probe Semantics |
+|---|---|---|---|
+| `runtime:enclave-network` | `AutoSatisfiable` | `[]` | Creates podman network `tillandsias-enclave`. |
+| `runtime:egress-network` | `AutoSatisfiable` | `[]` | Creates podman network `tillandsias-egress`. |
+| `runtime:ca-bundle` | `AutoSatisfiable` | `[]` | Materializes CA files under `images/default/ca-path.txt`. |
+| `data:ca-bundle-valid` | `AutoSatisfiable` | `[runtime:ca-bundle]` | Parses certificates and verifies trust chain validity. |
+| `runtime:vault` | `AutoSatisfiable` | `[runtime:enclave-network]` | Starts container, initializes, and unseals Vault. |
+| `runtime:proxy` | `AutoSatisfiable` | `[runtime:enclave-network, runtime:egress-network, data:ca-bundle-valid]` | Starts squid proxy container for external egress. |
+| `runtime:git-login` | `AutoSatisfiable` | `[runtime:vault, runtime:proxy, data:ca-bundle-valid]` | Starts helper container for git login operations. |
+| `runtime:nix-cache` | `AutoSatisfiable` | `[runtime:enclave-network, runtime:ca-bundle]` | Starts Harmonia nix binary cache service (optional). |
+| `data:github-token-present` | `OperatorGated` | `[runtime:vault, runtime:proxy, data:ca-bundle-valid]` | Probes Vault `secret/github/token` and verifies API accept. Never auto-fabricated. |
+| `data:git-identity-configured`| `OperatorGated` | `[]` | Probes git user.name and user.email. |
+| `data:mirror-relay-credential-present` | `AutoSatisfiable` | `[runtime:vault]` | Mints/probes approle token for local git mirror relay. |
+| `runtime:forge-launch` | `AutoSatisfiable` | `[runtime:enclave-network, runtime:egress-network, data:ca-bundle-valid, runtime:proxy, data:mirror-relay-credential-present]` | Starts per-project forge containers. |
+
+### Criterion 2 & 4: Completeness & Acyclicity Litmus with Guardrails
+Implemented in `crates/tillandsias-headless/src/unified_deps.rs`.
+- `unified_graph_is_complete_and_acyclic`: Verifies that every node is declared exactly once, all dependencies resolve to declared nodes, and a valid topological order exists for all nodes without cycles.
+- Adding an undeclared node or cyclic dependency fails topological sort and completeness verification immediately.
+
+### Criterion 3: Incident Reified as a Graph Property
+- Tested in `test_github_token_missing_leaves_gated_consumer_blocked_even_when_services_up`.
+- Proves that while all runtime service nodes (`Vault`, `Proxy`, `CaBundleValid`) can be satisfied and running, if the operator's token is not persisted to Vault, `data:github-token-present` remains `Absent`.
+- Any launch target or consumer depending on `data:github-token-present` evaluates to `Blocked` rather than falsely reporting "ready".
+
+### Criterion 5: Decision Record
+1. **Node Kind Taxonomy**:
+   - `AutoSatisfiable`: Daemon satisfiers can independently instantiate and self-heal the state (networks, containers, derived certificates).
+   - `OperatorGated`: Requires human input or external operator secret; daemon satisfiers may only probe and surface readiness, never fabricate credentials.
+2. **Typestate vs Runtime Witness**:
+   - Compile-time typestate (`Up<T>`) binds auto-satisfiable service nodes to ensure bring-up order is enforced at build time.
+   - Runtime witness (`DataPresence<D>`) wraps operator-gated nodes where presence depends on runtime user interactions.
+3. **Modeling `Degraded`**:
+   - `Degraded(reason)` is explicitly modeled to capture tokens that exist in storage but fail upstream authentication (e.g. revoked or expired PAT).
+4. **Liveness Policy for Gated Nodes**:
+   - Liveness heartbeat only performs read-only `probe()` calls on `OperatorGated` nodes; it never invokes auto-creation or resets during drain.
+
+### Criterion 6: Survive-What-Where Query API
+- Implemented `transitive_dependencies(target: Node) -> Result<BTreeSet<Node>, String>`.
+- Tested in `test_survive_what_where_transitive_closure`: queries the exact transitive closure for `ForgeLaunch`, proving it requires `[EnclaveNetwork, EgressNetwork, CaBundle, CaBundleValid, Proxy, Vault, MirrorRelayCredentialPresent]` while cleanly excluding unneeded services like `NixCache` or `GitLogin`. Teardown and drain routines can query this closure dynamically.
 
 ## Existing-code references
 
