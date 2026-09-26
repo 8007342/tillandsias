@@ -241,7 +241,7 @@ report_ready_but_claimed() {   # <index-path> <fragments-dir>
     # One fold pass, then a set membership test per hit — a git/grep pass per
     # packet is the shape ARM 3 already avoided.
     "$PLAN" --index "$idx" select-rows --status ready --limit 2000 2>/dev/null | \
-        awk -v c="$claimed" 'BEGIN{n=split(c,cs,"\n"); for(i=1;i<=n;i++) have[cs[i]]=1} $4 in have {print $3}'
+        CLAIMED="$claimed" awk 'BEGIN{n=split(ENVIRON["CLAIMED"],cs,"\n"); for(i=1;i<=n;i++) have[cs[i]]=1} $4 in have {print $3}'
 }
 
 # ------------------------------------------------------------ ARM 2 REPORTER --
