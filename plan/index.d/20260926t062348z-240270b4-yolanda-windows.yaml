@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-github-app-device-login-keeps-a-test-branch-a-token-leak-and-an-unguarded-rotation-in-the-real-credential-path
+    field: status
+    value: completed
+    ts: "2026-09-26T06:23:48Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: the-github-app-device-login-keeps-a-test-branch-a-token-leak-and-an-unguarded-rotation-in-the-real-credential-path
+    event:
+      type: completed
+      ts: "2026-09-26T06:23:48Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: cf6f84785
+  - packet_id: the-github-app-device-login-keeps-a-test-branch-a-token-leak-and-an-unguarded-rotation-in-the-real-credential-path
+    event:
+      type: note
+      ts: "2026-09-26T06:23:48Z"
+      host: yolanda-windows
+      summary: |-
+        LANDED on origin/linux-next in two relays, verified by content on trunk: the main fix eaeb41f4f at 41d5b916b, and the quiet-JSON follow-up ce9c4d492 at cf6f84785. All seven criteria are met: (1) No content-keyed mock; the env-only litmus switch returns before the poll. (2) Body-free errors, tested with a fake ghu_ token. (3) The poll budget is expires_in+60, not the 300 s container budget. (4) Refresh record first, then token, then the pair is used; under the github-token-rotation lock; a failed first write leaves the old bundle intact. (5) --refresh-github-token refuses without a desktop session (exit 3) and writes the spec:secret-rotation audit event github_token_refresh; no refresh token exits 2. (6) The device code is on no argv (bash -s on stdin, curl --data @-). (7) The refresh token is at secret/github/refresh; no git-mirror grant matches it, by glob either. Plus: vault-cli write-json captures the body first and refuses a malformed one, and the device login prints no JSON to the user. Linux verification: the macuahuitl land gate (headless tests including the unix rotation-lock test, clippy -D warnings, full --check green). LIVE evidence at 1d3e406c3: the operator's device login (QR, phone, 2FA, code, authorize, projects listed) and the in-forge mirror write proof. Still owed: the Windows validation on a guest carrying both commits.

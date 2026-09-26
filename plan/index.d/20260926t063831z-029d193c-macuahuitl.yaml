@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-preflight-roster-enumerates-guards-by-three-rules-and-never-asserts-its-population-so-a-guard-outside-all-three-is-invisible-rather-than-reported-missing
+    event:
+      type: finding
+      ts: "2026-09-26T06:38:31Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        THIRD INSTANCE, forge regime, 2026-09-26 ~06:28Z: macuahuitl-forge reported `check-sigpipe-verdict-pipelines-added` rc=0 for work/1254-fdsu (8a5d1e09e) and work/1388-pfys (90bce2011). The coordinator's land gate on macuahuitl refused the merge of those same refs with `violation:sigpipe-verdict-added:11` (1 in scripts/test-awk-float-lc-numeric.sh, 10 in scripts/test-project-info-grep-code-recall.sh, all `printf … | grep -q` verdicts), and the decider run directly in the host checkout also refused. Mechanism (strong hypothesis, consistent with the base-unavailable/base-differs hypothesis above): the decider is diff-scoped against TILLANDSIAS_SIGPIPE_BASE (default origin/linux-next), and inside a forge `origin` is the enclave git MIRROR, which lags GitHub. So the forge's base can be a different commit from the gate's, and the "added" set differs. A diff-scoped decider must name its base in its verdict line, and a front door or forge must pin the base to the gate's, or it cannot give the gate's answer.

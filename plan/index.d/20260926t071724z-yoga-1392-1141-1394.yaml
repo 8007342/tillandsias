@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: lua-sh-run-drops-its-per-call-tokio-runtime-which-waits-for-blocking-pipe-threads-so-a-deadline-returns-long-after-it-reports
+    event:
+      type: progress
+      ts: "2026-09-26T07:17:23Z"
+      host: yoga
+      summary: |
+        CLOSURE EVIDENCE, measured by yolanda on NATIVE Windows (tillandsias-plan.exe built from
+        each tree), sh.run ungrouped with a pipe-holding grandchild, timeout_ms=500, stdout
+        redirected to a FILE:
+          PRE-FIX  (origin/linux-next fd8039a9c):  timed_out 507 wall_ms=30554; timed_out 505 wall_ms=30344
+          POST-FIX (work/1392-bcby 50afbc94c):     timed_out 548 wall_ms=745;   timed_out 519 wall_ms=723
+        Pre-fix returns about 30 s after after_ms; post-fix returns within about 0.2 s. The row
+        closes when 50afbc94c lands. CAVEAT from the same run: measured through a PIPE, both
+        trees read about 30.4 s, because the child inherits the CLI's own stdout handle. That is
+        filed separately as 1394-mdqj, and is why the closure is measured with file redirection.
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: investigated
+      ts: "2026-09-26T07:17:23Z"
+      host: yoga
+      summary: |
+        POSITIVE DEMONSTRATION (the promotion evidence this row asks for), yoga 2026-09-26.
+        A real ./build.sh --check had its host-side process group SIGKILLed after its
+        conmon-parented container-side build.sh was running; the container side survived.
+        TRUNK DETECTOR, asked as a second gate asks (--host-side, own token): six of six answered
+        could-not-run:competing-gate:unreadable-processes:3 and never accused. Instrumented: the
+        3 were systemd --user and two bash zombies, all this user's, whose environ passes -r
+        (0400, ours) but refuses the open; that landed in the SECOND opaque increment, which
+        counted unconditionally (the first already filtered to live, wrapper-shaped processes).
+        So "runs clean across hosts" was satisfiable without the detector ever accusing.
+        FIX (work/1141-vf9w 82cd50f48): both increments go through _opaque_candidate (exists,
+        not Z/X, wrapper-shaped cmdline). LIVE, fixed detector, one run: a LIVE gate is not
+        accused (ok:no-competing-gate); after the kill the stray is named, pid + dispatch token,
+        3/3; after reaping by token (7 pids, 0 left) ok:no-competing-gate.
+        test-no-competing-gate.sh 15/15 (arm 11 structural: both increments share the rule,
+        since a fake tree cannot build "passes -r, fails open" without root; arm 12 a
+        wrapper-shaped zombie does not suspend). Against trunk: 13/15, arm 12 rc=3.
+packets:
+  - packet_id: on-windows-a-child-spawned-by-the-plan-binary-inherits-the-cli-stdout-handle-so-a-leaked-grandchild-holds-the-caller-pipe-open
+    order: 1394-mdqj
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, process-control, plan-binary, lua]
+    estimated_hours: 3
+    owned_files: [crates/tillandsias-exec]
+    observed_by: yolanda
+    unscoreable: |
+      windows-only-reproduction: the defect is Windows handle inheritance; its pre-fix FAIL can
+      only be recorded on a Windows host, and the closure names that host run.
+    title: |
+      on Windows a child spawned by the plan binary (sh.run / proc.run) inherits the CLI's own inheritable stdout handle, so a leaked grandchild holds the CALLER's pipe open and every  waits for the grandchild, even after the runtime-drop fix
+    verifiable_closure: |
+      On native Windows, 
+      returns within 1 s of after_ms, as the file-redirected form already does (1392-bcby).
+      Pre-fix result: FAILS: measured by yolanda 2026-09-26 through a pipe, about 30.4 s on BOTH
+      the pre- and post-1392-bcby trees (post run1 30558, run2 30421), while file redirection
+      read 745/723 ms post-fix.
+    context: |
+      Found by yolanda while measuring 1392-bcby. Candidate fixes she named: restrict handle
+      inheritance to the child's three stdio handles (PROC_THREAD_ATTRIBUTE_HANDLE_LIST), or run
+      the child in a job object so the deadline reaps the grandchild. Linux is unaffected in the
+      measured cases (yoga: grouped and setsid-escaped both return at the deadline).
+    events:
+      - type: filed
+        ts: "2026-09-26T07:17:23Z"
+        host: yoga
+        summary: Filed by yoga from yolanda's 1392-bcby measurement (her words and numbers).

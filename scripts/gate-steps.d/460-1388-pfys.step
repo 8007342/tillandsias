@@ -1,0 +1,10 @@
+# Gate step 1388-pfys — project-info grep_code must never answer "No matches
+# found" for a string that exists: every file searched, extended regex, errors
+# and empty file sets named, no stale result across calls.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking project-info grep_code recall: no false negatives, no stale results (1388-pfys)"
+STEP_SCRIPT="scripts/test-project-info-grep-code-recall.sh"
+STEP_ERROR="grep_code answered a false negative or a stale result (1388-pfys) — see the verdict line above"
+STEP_OK="grep_code recall holds"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:grep-code-recall:13"

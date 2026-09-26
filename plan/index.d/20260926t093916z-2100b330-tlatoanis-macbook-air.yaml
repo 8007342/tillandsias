@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-macos-one-shot-opencode-lane-ran-three-hours-silent-on-a-cold-host-without-reaching-the-credential-guard-and-the-guest-kept-no-record-of-it
+    field: status
+    value: in_progress
+    ts: "2026-09-26T09:39:16Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-macos-one-shot-opencode-lane-ran-three-hours-silent-on-a-cold-host-without-reaching-the-credential-guard-and-the-guest-kept-no-record-of-it
+    event:
+      type: note
+      ts: "2026-09-26T09:39:16Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        claimed by the filer after the smoke; criterion 1 first: the one-shot lane's output must reach the host

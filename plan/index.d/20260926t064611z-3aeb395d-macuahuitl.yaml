@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-forge-mount-carries-a-class-hot-quarantine-warm-ro-cold-and-the-swap-allowance-is-derived-from-hot-caps-only
+    event:
+      type: finding
+      ts: "2026-09-26T06:46:11Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        LIVE REMEDY, measured on macuahuitl 2026-09-26 ~06:50Z, on the running operator forge (tillandsias-tillandsias-forge-claude, launched by v56.9.26.1 before 1375-xxzj landed, so its cgroup was memory.max=max, memory.swap.max=max, pids.max=4096). /home/forge/src tmpfs was 256M at 100% (1.7M free; mountinfo `rw,nosuid,nodev,relatime … size=262144k,mode=777,uid=524288`). The operator enabled a 24 GiB host swapfile (btrfs subvolume /var/swap, `btrfs filesystem mkswapfile`, `chcon -t swapfile_t`, `swapon --priority 10`, beneath zram at 100). This also VERIFIES that swapon on a chcon'd swapfile_t file works under SELinux enforcing from an unconfined root shell (the design's unit-context arm is still separate). Then the tmpfs was grown LIVE with no restart and no sudo: `podman unshare nsenter -t <pid> -U -m mount -o remount,nosuid,nodev,relatime,size=4G /home/forge/src`, rc=0, giving size=4194304k and df 4.0G/255M/3.8G (7%). REQUIRED: -U (the forge runs in its own private user namespace; `-m` alone gave "cannot remount … write-protected", EPERM) and restating the locked flags nosuid,nodev,relatime. Design implication for the mount-class work: HOT tmpfs size can be raised on a live forge from the host, so a tray could grow it on pressure; and the .git object store (174M here) must be counted in the src budget, or moved to the overlay.

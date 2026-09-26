@@ -776,7 +776,7 @@ maxorder="$(printf '%s\n' "$rows" | awk -F'\t' '{gsub(/[^0-9].*$/,"",$3); if ($3
 # drift apart and re-introduce the aliasing this fix removes.
 _score_epics() {
     { printf '%s\n' "$depcounts"; printf '==ROWS==\n'; printf '%s\n' "$1"; } \
-    | awk -F'\t' -v maxo="$maxorder" '
+    | LC_ALL=C awk -F'\t' -v maxo="$maxorder" '
       $0 == "==ROWS==" { in_rows = 1; next }
       !in_rows {
           if ($1 != "") dep[$1] = $2 + 0;
@@ -812,7 +812,7 @@ _score_epics() {
               printf "%.3f\t%s\t%d\t%d\t%.1f\n", score, e, cnt[e], blocking, neglect;
           }
       }' \
-    | sort -t"$(printf '\t')" -k1,1nr -k2,2
+    | LC_ALL=C sort -t"$(printf '\t')" -k1,1nr -k2,2
 }
 
 scored="$(_score_epics "$rows")"
@@ -956,7 +956,7 @@ fi
 # exploration bounded below.
 EPS="0.15"
 probs="$(printf '%s\n' "$scored" | head -n "$k" \
-    | awk -F'\t' -v eps="$EPS" -v k="$k" '
+    | LC_ALL=C awk -F'\t' -v eps="$EPS" -v k="$k" '
         { s[NR] = ($1 + 0) * ($1 + 0); name[NR] = $2; total += s[NR]; }
         END {
             for (i = 1; i <= NR; i++) {
@@ -970,7 +970,7 @@ if [ "$ROUTE" != "seed" ]; then
     pick="$routed_pick"
 else
     pick="$(printf '%s\n' "$probs" \
-        | awk -F'\t' -v seed="$seed_num" '
+        | LC_ALL=C awk -F'\t' -v seed="$seed_num" '
             { p[NR] = $1 + 0; total += p[NR]; }
             END {
                 if (total <= 0) { print 1; exit }
@@ -989,7 +989,7 @@ chosen_score="$(printf '%s\n' "$scored" | sed -n "${pick}p" | cut -f1)"
 [ -n "$chosen" ] || { echo "refused:no-eligible-work:could not choose an epic"; exit 1; }
 
 batch="$(printf '%s\n' "$rows" \
-    | awk -F'\t' -v e="$chosen" -v maxo="$maxorder" '
+    | LC_ALL=C awk -F'\t' -v e="$chosen" -v maxo="$maxorder" '
         $2==e {
             urgency = 3 - $1;
             onum = $3; gsub(/[^0-9].*$/, "", onum); onum = onum + 0;
@@ -997,7 +997,7 @@ batch="$(printf '%s\n' "$rows" \
             score = (2.0 * urgency) + neglect;
             printf "%.3f\t%s\n", score, $0;
         }' \
-    | sort -t"$(printf '\t')" -k1,1nr -k4,4 \
+    | LC_ALL=C sort -t"$(printf '\t')" -k1,1nr -k4,4 \
     | cut -f2- \
     | head -n "$BUDGET")"
 
@@ -1210,6 +1210,6 @@ printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s urgency_unscored=%s
 # The frontier is printed so a cycle can justify its choice, and so a human can
 # see what it did NOT pick. An unexplained selection is unauditable.
 printf '%s\n' "$scored" | head -n "$k" | while IFS=$'\t' read -r sc e c b n; do
-    p="$(printf '%s\n' "$probs" | awk -F'\t' -v e="$e" '$2==e {printf "%.3f", $1}')"
+    p="$(printf '%s\n' "$probs" | LC_ALL=C awk -F'\t' -v e="$e" '$2==e {printf "%.3f", $1}')"
     printf 'frontier\t%s\t%s\tpackets=%s\tblocking=%s\tneglect=%s\tp=%s\n' "$sc" "$e" "$c" "$b" "$n" "${p:-?}"
 done

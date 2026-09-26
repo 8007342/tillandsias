@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    event:
+      type: note
+      ts: "2026-09-26T06:34:04Z"
+      agent_id: windows-yolanda-claude-20260926t063403z
+      host: yolanda-windows
+      summary: |
+        PROGRESS, not closure. Slice 1 (synchronous proc.run) LANDED on origin/linux-next at 96203966f, with the relay's rustfmt fix. The fmt miss was mine: a sed lint fix made after cargo fmt.
+        Verified by content on trunk: fn proc_run in lua_predicate.rs, Command::group in tillandsias-exec, and tests/lua_proc.rs present.
+        Covers row arms 1, 2, 3, 5, 6 and 7, plus programmer-error raises and the base environment. Arm 3 is green NATIVELY on Windows in both directions (grouped kills the grandchild; the ungrouped control does not).
+        STILL OPEN on this row: arm 4 (proc.spawn with on_line callbacks), proc.chain/select/all, mlua async and the coroutine host, the per-script run trace, the allow_shell_strings declaration, and 1384-ddua's macOS regime for arm 3.

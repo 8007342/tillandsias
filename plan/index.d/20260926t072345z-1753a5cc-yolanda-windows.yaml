@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-native-windows-a-piped-tillandsias-plan-lua-with-a-deadline-waits-for-a-leaked-grandchild-because-the-spawned-child-inherits-the-clis-own-stdout-handle
+    field: status
+    value: obsoleted
+    ts: "2026-09-26T07:23:45Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: on-native-windows-a-piped-tillandsias-plan-lua-with-a-deadline-waits-for-a-leaked-grandchild-because-the-spawned-child-inherits-the-clis-own-stdout-handle
+    event:
+      type: note
+      ts: "2026-09-26T07:23:45Z"
+      host: yolanda-windows
+      summary: |-
+        WITHDRAWN as a duplicate of 1394-mdqj (yoga-silverblue), at the coordinator's direction. Both rows were filed within 20 seconds from the same measurement (this one at 07:17:04Z, 1394-mdqj at 07:17:24Z). Work and closure live on 1394-mdqj. Carried over so nothing is lost (yolanda-windows, same post-fix binary 50afbc94c): piped wall 30558 ms and 30421 ms; redirected-to-file control 745 ms and 723 ms. Criterion as the coordinator framed it: a piped `tillandsias-plan lua …` with a deadline returns within deadline + epsilon on native Windows. Stated for both sh.run and proc.run (group=false).

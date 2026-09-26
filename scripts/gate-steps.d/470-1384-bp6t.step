@@ -1,0 +1,13 @@
+# Gate step 1384-bp6t — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS: one Lua script is one byte stream — three processes print
+# identical output with keys in byte order (json.encode and pairs), next and
+# os.setlocale are withheld in both classes, and a script's attempt to switch to
+# a comma-radix locale cannot reach Lua's number formatting.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking one Lua script is one byte stream: ordered encode/pairs, no next, no os.setlocale (1384-bp6t)"
+STEP_SCRIPT="scripts/test-lua-determinism.sh"
+STEP_ERROR="Lua output varies across processes or a script can change the number locale (1384-bp6t)"
+STEP_OK="Lua output is deterministic and locale-independent"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:lua-determinism:5 arms (skipped=0)"

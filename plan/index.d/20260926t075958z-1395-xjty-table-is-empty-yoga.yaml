@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: lua-std-withholds-next-so-the-idiomatic-emptiness-test-next-t-nil-fails-at-runtime-give-it-table-is-empty-and-a-named-error
+    order: 1395-xjty
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, plan-binary, determinism]
+    estimated_hours: 1
+    owned_files: [crates/tillandsias-plan/src/lua_std.rs, crates/tillandsias-plan/tests/lua_std.rs]
+    observed_by: macuahuitl
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the tests land in tests/lua_std.rs in the same commit
+      as the helper (1136-n8sh).
+    title: |
+      lua_std withholds `next` (1384-bp6t), so the idiomatic emptiness test `next(t) == nil` dies at runtime with "attempt to call a nil value (global 'next')"; give authors `table.is_empty(t)` and make a call to `next` fail with a message that names it
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test lua_std: `table.is_empty({})` is true and
+      `table.is_empty({a=1})` / `table.is_empty({1})` are false in BOTH classes, and calling
+      `next(t)` raises an error whose text contains "table.is_empty". Pre-fix result: FAILS:
+      yolanda's 1380-u7sq archiver Lua (green alone) called `next(terminal_ids)` and the merged
+      tree died with "attempt to call a nil value (global 'next')", relay-fixed by macuahuitl
+      with a pairs-based check.
+    context: |
+      Union break found by the coordinator's relay: 1384-bp6t withdrew global `next` (the raw
+      walk is hash order, which varies per process) while 1380-u7sq moved the archiver into the
+      sandboxed environment. Each was green alone. Keeping `next` withheld is right; what is
+      missing is the replacement authors reach for, and an error that points at it.
+    events:
+      - type: filed
+        ts: "2026-09-26T07:59:58Z"
+        host: yoga
+        summary: Filed by yoga (owner of lua_std) from the coordinator's union-break report.
