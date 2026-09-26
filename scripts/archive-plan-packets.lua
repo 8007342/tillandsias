@@ -99,7 +99,11 @@ local function main()
     refuse(string.format("the fold reports NO PACKETS AT ALL for %s. That is an unreadable ledger, not an empty one — refusing rather than archiving nothing and reporting success.", index_path))
   end
 
-  if next(terminal_ids) == nil then
+  -- 1384-bp6t withdrew the global `next` (iteration order was per-process);
+  -- emptiness needs no order, so ask the canonical `pairs` for one key.
+  local any_terminal = false
+  for _ in pairs(terminal_ids) do any_terminal = true; break end
+  if not any_terminal then
     print("Archived 0 packets (no terminal rows remain — already archived).")
     return
   end

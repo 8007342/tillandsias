@@ -415,7 +415,15 @@ if [ "$1" == "--check" ]; then
     fi
     # The .rb resolves the same binary; hand it the probed answer rather than
     # letting it re-derive one.
-    export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
+    # 1380-u7sq relay-fix: the Lua worker runs rooted in the scratch copy (or the
+# --index tree), so a RELATIVE plan-binary path such as ./target/release/...
+# resolves against the wrong tree there. Absolutize once, keeping native
+# Windows drive paths (C:/...) as they are.
+case "$PLAN_BIN" in
+    /*|[A-Za-z]:*) ;;
+    *) PLAN_BIN="$REPO_ROOT/${PLAN_BIN#./}" ;;
+esac
+export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
     # 1380-u7sq: the Lua worker's fs root is the scratch copy. A native plan
     # binary on Windows reads this variable itself, so it gets the mixed
     # (C:/...) form, which MSYS does not reliably convert for it.
@@ -563,6 +571,14 @@ if ! PLAN_BIN="$(resolve_plan_binary)"; then
     echo "  the base index alone — that silently eats reopened rows."
     exit 3
 fi
+# 1380-u7sq relay-fix: the Lua worker runs rooted in the scratch copy (or the
+# --index tree), so a RELATIVE plan-binary path such as ./target/release/...
+# resolves against the wrong tree there. Absolutize once, keeping native
+# Windows drive paths (C:/...) as they are.
+case "$PLAN_BIN" in
+    /*|[A-Za-z]:*) ;;
+    *) PLAN_BIN="$REPO_ROOT/${PLAN_BIN#./}" ;;
+esac
 export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
 # @trace order:1380-u7sq — the archiver runs in the DEFAULT sandboxed lua
 # environment (proc.run plus rooted fs verbs). The 1375-btuf `--unsandboxed`
