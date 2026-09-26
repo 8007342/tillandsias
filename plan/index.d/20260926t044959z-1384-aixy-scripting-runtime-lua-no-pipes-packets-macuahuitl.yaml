@@ -1,0 +1,339 @@
+packets:
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    order: 1384-aixy
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [lua, rust, exec, async, portability, plan-binary]
+    estimated_hours: 12
+    depends_on: [an-idiomatic-command-executor-in-rust-argv-not-shell-strings-with-separately-captured-fds-concurrent-draining-and-a-run-identity-so-a-stale-marker-cannot-read-as-a-fresh-result, one-lua-std-module-registers-json-yaml-hash-time-path-into-every-lua-environment-the-plan-binary-hosts-by-class-and-the-lua-cli-stops-handing-scripts-an-unsandboxed-vm]
+    owned_files: [crates/tillandsias-exec/src/lib.rs, crates/tillandsias-plan/src/lua_std.rs, crates/tillandsias-plan/src/lua_predicate.rs, crates/tillandsias-plan/Cargo.toml, crates/tillandsias-plan/tests/lua_proc.rs]
+    observed_by: macuahuitl
+    title: |
+      `proc.run{argv=…}` and `proc.spawn{argv=…}:on_line(fn)` on tillandsias_exec with mlua's async feature — a process is a typed result (`status` in exited|signaled|timed_out|spawn_failed, `code`, two captured fds, run_id), a long-running one is an observable stream with per-fd line callbacks driven by the host on one thread, composition passes bytes (`stdin=a.stdout`, `proc.chain`), the group is killed on deadline, and no OS pipe exists between stages
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test lua_proc, each arm failing on the
+      base below: (1) proc.run{argv={"false"}} returns status "exited", code 1,
+      ok false, and raises NO Lua error; proc.run{argv={"printf","a b*c"}}
+      delivers one token with the `*` unexpanded; (2) a child writing 1 MiB to
+      stdout AND 1 MiB to stderr returns both in full; (3) proc.run{argv=
+      {"bash","scripts/fixtures/spawn-grandchild.sh"}, timeout_ms=500} returns
+      status "timed_out" with code nil in under 2 s and the grandchild sleeper
+      is gone (group kill; on Windows the job object); (4) proc.spawn on a
+      10,000-line producer invokes the stdout callback exactly 10,000 times in
+      order and the stderr callback separately, and p:wait() returns after the
+      last callback; (5) proc.run{argv={"bash","-c","true | false"}} is REFUSED
+      with an error naming allow_shell_strings; (6) a consumer given
+      stdin=a.stdout that exits after one line (`head -1`) leaves a.status ==
+      "exited" and a.code == 0 — the SIGPIPE inversion has no pipe to act on;
+      (7) `tillandsias-plan lua --class cacheable -e 'expert.log_info(type(proc))'`
+      prints nil (Cacheable never gains a process). Pre-fix result: FAILS on
+      origin/linux-next 9594a4303 — no test target lua_proc, and in the
+      Observing class type(proc) is nil (only sh.run exists, synchronous, no
+      spawn, no group kill: Running::kill signals the child alone).
+    context: |
+      DESIGN: plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md
+      §4 (the API tables are the contract; do not redesign them here).
+      OPERATOR DIRECTION 2026-09-26: control every execution and every
+      success/error state transfer; non-blocking observable streams and
+      callbacks; no pipes. MEASURED on the base: scripts carry 2,985 pipe
+      sites outside quotes (4,940 raw), litmus command: fields 911, and the
+      ledger records the pipe verdict inverting twice TODAY (792-ksr8 on
+      1370-tjme's fixture, 1359-qf3p instance 1).
+      WHAT EXISTS: tillandsias_exec::Command::run (argv, tokio::join! on three
+      fds, timeout), Command::spawn -> Running (inherit stdio; kill = SIGKILL
+      of the child only), Pipeline (in-memory chain, every stage's Output
+      kept). lua_predicate.rs exposes sh.run{argv} synchronously.
+      WHAT THIS ROW ADDS: Command::group(true) (setsid + killpg on Unix, a job
+      object on Windows) so a deadline kills what the child started
+      (1132-r4mt, 1305-udgs); Running::lines (a line-streaming reader per fd,
+      LF split, CR preserved); Completion::Signaled surfaced to Lua; a run
+      trace (run_id, argv, wall_ms, status) per script; and the Lua tables
+      proc.run / proc.spawn / proc.chain / proc.select / proc.all in the
+      Observing class through mlua `async` (Lua::create_async_function;
+      the script is a coroutine on a current-thread tokio runtime; callbacks
+      are Lua functions run by the host only while the script is suspended in
+      wait/select, so no callback is concurrent with script code).
+      RULES: argv is a table or the call raises; a non-zero exit is DATA;
+      raise only for programmer errors (empty argv, relative cwd, an unknown
+      field — `timeout` misspelt must not mean "no deadline"); `bash -c`/`sh -c`
+      with one string argument is refused unless script{allow_shell_strings=true}
+      is declared (the ratchet, 1384-bxhk, counts those declarations); stdin is
+      null unless given; children get the BASE env (PATH, HOME, TMPDIR,
+      TILLANDSIAS_*, LC_ALL=C, LANG=C, TZ=UTC, GIT_TERMINAL_PROMPT=0) plus the
+      call's additions — one Rust constant. Green on one regime is not green:
+      the fixture runs on Linux; 1384-ddua's macOS arm and a yolanda native
+      run of arm (3) are the other two regimes and must be recorded as events
+      before 902-5bf9 relies on this.
+  - packet_id: the-lua-runtime-encodes-keys-in-a-different-order-every-process-and-exposes-os-setlocale-so-a-sorted-encoder-a-sorted-pairs-and-a-withheld-setlocale-make-one-script-one-byte-stream
+    order: 1384-bp6t
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, determinism, portability, plan-binary, locale]
+    estimated_hours: 4
+    owned_files: [crates/tillandsias-plan/src/lua_std.rs, crates/tillandsias-plan/src/lua_predicate.rs, crates/tillandsias-plan/tests/lua_std.rs, scripts/test-lua-determinism.sh]
+    observed_by: macuahuitl
+    title: |
+      the Lua runtime prints `json.encode` keys in a DIFFERENT order every process (Lua 5.4.7 `luai_makeseed` seeds string hashing from ASLR and the clock, and `pairs` walks the hash) and exposes `os.setlocale`, which flips `string.format("%.2f", 3.5)` to `3,50` in one call — so a sorted encoder, a sorted `pairs`, and a withheld `setlocale` make one script one byte-stream on every host
+    verifiable_closure: |
+      bash scripts/test-lua-determinism.sh, wired as a build.sh --check step
+      in the same commit (1325-ygq5): (1) runs `tillandsias-plan lua --class
+      cacheable scripts/fixtures/determinism.lua` (encodes a 12-key table,
+      iterates pairs over it, prints both) THREE times in three processes and
+      asserts the sha256 of stdout is identical across them; (2) asserts
+      `type(os.setlocale)` is nil in BOTH classes; (3) under LC_ALL set to any
+      installed comma-radix locale (fr_FR.UTF-8, or br_FR on hosts that carry
+      it; a named skip if none is installed) `string.format("%.2f", 3.5)` is
+      `3.50` and `tonumber("3,5")` is nil; (4) `next` is nil in both classes
+      and `table.keys(t)` returns sorted keys. Pre-fix result: FAILS on
+      origin/linux-next 9594a4303, build 0.1.0+4312ec2ceb0c33ae — three
+      consecutive runs printed `{"gamma":3,"eps":5,…}`, `{"delta":4,"alpha":1,
+      …}`, `{"eps":5,"zeta":6,…}` for the same six-key table, and in the
+      Observing class type(os.setlocale) is "function"; after
+      os.setlocale("") under br_FR the same format printed `3,50`.
+    context: |
+      MEASURED 2026-09-26 on macuahuitl (design:
+      plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md §3.2).
+      WHY IT MATTERS NOW: 1375-btuf made lua_std the one registrar and
+      1367-q9yc made the Cacheable memo content-addressed on the bytes READ —
+      but the bytes WRITTEN by a predicate are not stable across processes,
+      so any verdict, fragment or fixture that json.encodes a table differs
+      per run on the same host. That breaks "same script, same verdict" before
+      a single decider is ported. The locale half is 1254-fdsu's class (awk
+      %.2f under LC_NUMERIC) reachable from Lua: a Rust binary never calls
+      setlocale(LC_ALL, ""), so the C library stays in "C" and
+      lua_getlocaledecpoint reads `.` — the property to KEEP is that no
+      script can change it, which withholding os.setlocale does.
+      FIX SHAPE: json.encode/yaml.encode emit keys in byte order unless the
+      value came from json.parse with preserve_order (1375-rn9b); the std
+      environment registers a `pairs` that iterates integer keys ascending
+      then string keys sorted (an O(n log n) wrapper over next) and withholds
+      `next`; `table.keys` sorted; os.setlocale removed from both allow-lists
+      (1367-upz6: add to the allow-list, never widen by deny — this REMOVES).
+      The expert-serve environment (collect.lua, tier.lua) may keep raw next
+      under its own table if the sorted wrapper measures as a cost there;
+      record the measurement either way. Do NOT patch lua-src's seed: a
+      fixed seed would hide the property instead of removing the dependency
+      on it, and lua-src exposes no define for it.
+  - packet_id: tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d
+    order: 1384-bqhy
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [lua, plan-binary, ci-gate, rust, portability]
+    estimated_hours: 10
+    depends_on: [proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages, the-lua-runtime-encodes-keys-in-a-different-order-every-process-and-exposes-os-setlocale-so-a-sorted-encoder-a-sorted-pairs-and-a-withheld-setlocale-make-one-script-one-byte-stream]
+    owned_files: [crates/tillandsias-plan/src/main.rs, crates/tillandsias-plan/src/script_run.rs, crates/tillandsias-plan/src/lua_std.rs, crates/tillandsias-plan/capabilities.txt, build.sh, scripts/test-script-run-verb.sh]
+    observed_by: macuahuitl
+    title: |
+      `tillandsias-plan script run <file.lua> [--timeout <dur>] [--trace]` is the ONE runner for a Lua decider — a `verdict` module with the house grammar (ok/refused/skip/could-not-run/blocked → 0/1/0/3/2), a script that ends without a verdict exits `refused:no-verdict:<name>` so silent green is unconstructible, `verdict.classify` is the one Rust function the gate loop AND the preflight door read, host-side timing and check-logs records, and `STEP_LUA=` beside `STEP_SCRIPT=` in scripts/gate-steps.d — so a gate step can be Lua without a second loop
+    verifiable_closure: |
+      bash scripts/test-script-run-verb.sh, wired as a --check step in the
+      same commit: (1) a .lua calling verdict.ok("x", 3) prints exactly
+      `ok:x:3` on stdout and exits 0; (2) verdict.refused("x", detail) exits 1
+      with `refused:x` on stdout and the detail on stderr; (3) a script that
+      returns without a verdict exits 1 printing `refused:no-verdict:<name>`;
+      (4) a script that sleeps past --timeout exits 124 and prints
+      `status=timed_out`; (5) a scratch copy of gate-steps.d holding a .step
+      with STEP_LUA and no STEP_SCRIPT is run by build.sh's loop and its
+      verdict line appears in the loop's output, while a .step naming a
+      missing .lua is refused, not skipped; (6) the timing record lands in
+      TILLANDSIAS_TIMING_LOG and /tmp/tillandsias-timing.jsonl does not grow
+      (1204-3s2s); (7) verdict.classify over a captured `skip:…` line, a
+      `could-not-run:…` line, a timed_out status and a plain refusal yields
+      the four kinds the door prints, and `git grep -n 'fn classify'` finds
+      ONE definition that both build.sh call sites reach through the binary.
+      Pre-fix result: FAILS on origin/linux-next 9594a4303 —
+      `tillandsias-plan capabilities` lists no `script`, and the gate loop
+      refuses a .step without STEP_SCRIPT as "declares no STEP_DESC/STEP_SCRIPT".
+    context: |
+      DESIGN: plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md
+      §4.4 (verdicts), §6.2 (coexistence), §6.4 (build.sh as a launcher).
+      TODAY the gate loop (build.sh, the `for _step_file in gate-steps.d`
+      loop) runs `_run bash "$STEP_SCRIPT" 2>&1` and the preflight door
+      (`_pf_run_guard` and the classifier below it) greps the MERGED capture
+      for `^skip:`, `^could-not-run:`, `not found` and `No space left` to
+      decide the class of an outcome — 1359-qf3p is the door passing what the
+      gate refuses, twice today. Two classifiers over text drift; one typed
+      classifier cannot.
+      THE VERB: `script run` builds the Observing environment (Cacheable when
+      the script header says class="cacheable", memoised through 1367-q9yc),
+      registers `verdict`, `log`, `out`, `text`, `fs`, `env` (declared names
+      only — no os.getenv), runs the file as a coroutine, and exits with the
+      verdict's status. Exit vocabulary is the one build.sh already branches
+      on (0 ok, 1 refused, 2 blocked, 3 could-not-run, 124 timed out) so no
+      consumer changes. The verdict LINE stays on stdout in the house grammar
+      so check-logs.jsonl, the freshness auditor and cycle-metrics.sh read
+      exactly what they read today.
+      GATE STEPS: STEP_LUA="scripts/lua/<name>.lua" is a LITERAL string
+      (1063-nraf) and the bound-or-retired guard learns the new key; a step
+      names one of STEP_SCRIPT or STEP_LUA, never both. The loop's OOM
+      postmortem and metrics-isolation arms apply to both.
+      NOT IN SCOPE: porting any decider (1384-ddua), the ratchet
+      (1384-bxhk), moving the loop itself into the binary (1384-j3cv).
+  - packet_id: nothing-counts-shell-deciders-or-pipe-sites-so-check-shell-ratchet-prints-the-counts-every-check-refuses-a-new-sh-decider-and-a-new-piped-litmus-command-and-its-floors-only-descend
+    order: 1384-bxhk
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [ci-gate, portability, lua, ratchet, litmus]
+    estimated_hours: 6
+    depends_on: [tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d]
+    owned_files: [scripts/check-shell-ratchet.sh, scripts/test-shell-ratchet.sh, scripts/portability/shell-decider-floor.txt, scripts/portability/pipe-site-floor.txt, scripts/gate-steps.d]
+    observed_by: macuahuitl
+    title: |
+      nothing counts shell deciders or pipe sites, so a Lua door cannot become adoption (rust_queries: 1 adopter in 458 files after four months) — `check-shell-ratchet.sh` prints `ok:shell-ratchet:sh=<n>:floor:<f> pipes=<p>:floor:<pf> litmus-form:command=<c>:steps=<s>:rust_queries=<r> gate-steps:sh=<a>:lua=<b>` on every --check, refuses a NEW `.sh` decider under scripts/ once scripts/lua exists and a NEW piped litmus `command:` once `steps:` exists, and its floors only descend
+    verifiable_closure: |
+      bash scripts/test-shell-ratchet.sh, wired as a --check step in the same
+      commit: (1) on this tree the guard prints the one-line grammar above
+      with every count ≥ 1 and `sh=` equal to an independent
+      `find scripts -maxdepth 1 \( -name 'check-*.sh' -o -name 'test-*.sh' -o
+      -name 'verify-*.sh' -o -name 'guard-*.sh' \) | wc -l`; (2) in a scratch
+      clone with scripts/lua present, adding scripts/check-zzz.sh prints
+      `violation:shell-ratchet:new-decider:scripts/check-zzz.sh` and exits 1,
+      naming `tillandsias-plan script run` as the remedy; (3) adding a litmus
+      file whose command: contains `a | b` outside quotes prints
+      `violation:shell-ratchet:new-piped-command:<file>` and exits 1, while
+      the same pipe inside a single-quoted literal is accepted; (4) raising
+      either floor file is refused, lowering is accepted; (5) an empty scan
+      population prints `could-not-run:shell-ratchet:empty-population` and
+      exits 3, never ok (1374-4u6i, 1174-jd8n); (6) a `script{allow_shell_
+      strings=true}` declaration in scripts/lua is counted in the line as
+      `shell-strings=<k>`. Pre-fix result: FAILS on origin/linux-next
+      9594a4303 — no such guard exists and `./build.sh --check` prints no
+      `shell-ratchet` line.
+    context: |
+      DESIGN: plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md
+      §6.3. THE LESSON is 902-5bf9's: an available seam with no forcing
+      function stays at one adopter (rust_queries, landed 2026-05-22, 1 of
+      458 files today). The jq ratchet (1375-tsfu) is the shape: a count
+      pinned to a published grep pattern, a per-file floor, refusal of NEW
+      sites only, standing debt never reddened (1130-i6xj), the floor as the
+      migration's own score.
+      THE POPULATION on the base (§2 of the design, commands in the doc):
+      762 P1 scripts, 2,985 pipe sites outside quotes (4,940 raw), 146
+      deciders of which 140 carry a pipe, 394 test- fixtures, 911 piped
+      litmus command: steps of 2,921. The counts in the header of the script
+      are the register of record; the doc's numbers are the day-one floors.
+      WHAT IT REFUSES: a NEW file matching the decider prefixes under
+      scripts/ (not scripts/lua) once scripts/lua exists; a NEW litmus
+      command: with a pipe once the runner accepts steps:; a floor that rises.
+      WHAT IT NEVER REFUSES: an existing file that gained lines (that is
+      1375-tsfu's per-file rule, applied only to NEW pipes in files whose
+      pipe count rose), the installers and bootstrap listed in §6.5 (excluded
+      by path and named in the header), and images/ until the image ships the
+      binary. Run the pre-fix arm (5) first: a ratchet whose empty population
+      prints ok is decoration.
+  - packet_id: three-deciders-with-recorded-pipe-and-dialect-incidents-are-ported-to-scripts-lua-on-script-run-their-sh-deleted-in-the-same-commit-and-each-incident-class-shown-unrepresentable
+    order: 1384-ddua
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [lua, ci-gate, portability, macos, windows, pilot]
+    estimated_hours: 10
+    depends_on: [tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d]
+    owned_files: [scripts/lua/check-seam-writers-canonical.lua, scripts/lua/preflight.lua, scripts/lua/check-bash-dialect.lua, scripts/check-seam-writers-canonical.sh, scripts/check-bash-dialect.sh, build.sh, scripts/gate-steps.d, scripts/test-pilot-lua-ports.sh]
+    observed_by: macuahuitl
+    title: |
+      the pilot: three deciders with recorded pipe/dialect incidents — check-seam-writers-canonical (795-imz3, "worked by the ABSENCE of pipefail"), the preflight door `_pf_run_guard` (1352-vmbc, 1353-ryhq, 1359-qf3p, 1132-r4mt) and check-bash-dialect (1374-4u6i's double-counted mapfile) — are ported to scripts/lua on `script run`, each .sh deleted in the same commit, and each incident class is shown UNREPRESENTABLE by a negative arm, not merely avoided
+    verifiable_closure: |
+      bash scripts/test-pilot-lua-ports.sh, wired as a --check step in the
+      same commit, plus one macOS event: (1) `tillandsias-plan script run
+      scripts/lua/check-seam-writers-canonical.lua` prints the byte-identical
+      `ok:seam-writers-canonical:<n>` the .sh printed at the parent commit
+      (n in the commit message), and the verdict is unchanged with
+      `set -o pipefail` in force in the caller and with a 200,000-line
+      synthetic writer file — the two conditions under which the shell form
+      inverts; (2) check-bash-dialect.lua counts a fixture file with ONE
+      mapfile line as exactly one offender (`blocked:bash4-unguarded:1`,
+      1374-4u6i's repro), refuses an empty population as could-not-run, and a
+      second run on an unchanged scripts/ reports a memo hit; (3) preflight.lua
+      run through `./build.sh --preflight` reports the same ran/skipped/
+      could-not-run/deadline/failed accounting as the gate for a tree carrying
+      a fresh `printf | grep -qF` verdict fixture (1359-qf3p instance 1:
+      the door must now say refused where the gate says refused), and a guard
+      that forks a grandchild sleeping 30 s is gone after the deadline (no
+      pgrep hit) on Linux; (4) the macOS event (macbookair): `./build.sh
+      --preflight` on darwin shows no `could-not-run:…:rc=127`, arm (3)'s
+      grandchild is gone, and the accounting matches — recorded with the
+      verdict line pasted; (5) the three .sh files are absent and
+      shell-ratchet's `sh=` floor drops by 3 in the same commit. Pre-fix
+      result: FAILS on origin/linux-next 9594a4303 — scripts/lua does not
+      exist, the mapfile double count reproduces (1374-4u6i is still ready),
+      and the door classifies by grep over merged output.
+    context: |
+      DESIGN: plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md
+      §7 holds the three sketches; port from them, keeping every verdict
+      grammar byte-for-byte so the freshness auditor, check-logs.jsonl and
+      cycle-metrics.sh see no change. Each port DELETES its .sh in the same
+      commit: two substrates for one verdict is the failure 1252-fg9e's sweep
+      warning names.
+      WHY THESE THREE: they are the deciders whose incidents are on the
+      ledger this week, one per class — A (SIGPIPE/pipefail), F+G (group
+      kill, setsid absent, door drift), B+C (bash-4 builtin count, BSD awk).
+      A port that cannot show its class unrepresentable by a NEGATIVE arm is
+      not a pilot; the arms above are the exit, not the ports.
+      HOSTS: Linux first (lenovinha, then yoga); the macOS arm is macbookair's
+      and is recorded as an event on this row before it closes (1353-ryhq's
+      108-guard refusal was a macOS-only shape); never macuahuitl.
+      SEQUENCE WITH 1375-amye and 1353-ryhq: the door port supersedes the
+      `exec setsid` site that 1375-amye names as its first caller; if amye
+      lands first the door port calls its verb, if not this row absorbs
+      1353-ryhq and says so in its closing event.
+  - packet_id: build-sh-is-five-thousand-lines-of-orchestration-in-the-dialect-this-design-retires-so-each-phase-moves-behind-tillandsias-plan-gate-until-build-sh-is-a-launcher
+    order: 1384-j3cv
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.7
+    pickup_role: linux
+    capability_tags: [ci-gate, plan-binary, rust, portability, architecture]
+    estimated_hours: 24
+    depends_on: [tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d, three-deciders-with-recorded-pipe-and-dialect-incidents-are-ported-to-scripts-lua-on-script-run-their-sh-deleted-in-the-same-commit-and-each-incident-class-shown-unrepresentable]
+    owned_files: [build.sh, crates/tillandsias-plan/src/gate.rs, crates/tillandsias-plan/src/main.rs, scripts/test-build-sh-is-a-launcher.sh]
+    observed_by: macuahuitl
+    title: |
+      build.sh is 5,029 lines of orchestration in the dialect this design retires (51 pipe sites, `_now_ms` on GNU date, `_run` with an OOM postmortem, the gate-steps.d loop, the stamp digest, the preflight door) — phase by phase each moves behind `tillandsias-plan gate <phase>` until build.sh is a launcher that detects cargo, builds the plan binary, and execs it with its argv
+    verifiable_closure: |
+      bash scripts/test-build-sh-is-a-launcher.sh: (1) `wc -l build.sh` is
+      under 400; (2) `tillandsias-plan gate check --list` enumerates the same
+      step set as `ls scripts/gate-steps.d/*.step` (count equal, names
+      equal); (3) `./build.sh --check` on a tree with a deliberately refusing
+      step prints that step's STEP_ERROR through the binary and exits 1,
+      and on a clean tree writes the same gate stamp digest the previous
+      build.sh wrote for the same tree (recorded in the commit); (4) the
+      timing records carry the same field set cycle-metrics.sh reads; (5)
+      `_now_ms` no longer exists in build.sh and no `date +%` appears in it.
+      Pre-fix result: FAILS on origin/linux-next 9594a4303 — build.sh is 5,029
+      lines, `capabilities` lists no `gate`, and `_now_ms` forks `date +%s%3N`.
+    context: |
+      DESIGN: plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md
+      §6.4. PHASE 1 is 1384-bqhy (the loop runs Lua steps) and 1384-ddua (the
+      door is Lua). THIS ROW is phase 2: the loop, `_run` (with 1176-fn2p's
+      OOM postmortem as a typed branch), the metrics-isolation check
+      (1204-3s2s, host-side by construction), the stamp digest (reads modes
+      from the INDEX — 1276-mugq's lesson keeps), and the flag parser's
+      phases move into a `gate` verb; build.sh keeps ONLY what must run
+      before the binary exists: detect cargo, `cargo build --release -p
+      tillandsias-plan`, exec. gate-steps.d is already data (1072-b7eq); the
+      binary reads it as such.
+      WHAT STAYS SHELL AFTERWARDS, by name (design §6.5): install-macos.sh,
+      scripts/*.ps1, launch.sh's bootstrap lines, the hook stubs
+      (`exec "$PLAN_BIN" hook <name>`), images/*/entrypoint*.sh until the
+      image ships the binary, ensure_toolbox.sh. Those are excluded from the
+      shell ratchet by path and keep check-bash-dialect coverage.
+      DO THIS LAST and in phases small enough to land under the cut freeze
+      rules: the gate is the trunk's only protection, and a half-moved loop
+      is two gates that disagree (1359-qf3p's shape at the scale of the
+      whole gate).
