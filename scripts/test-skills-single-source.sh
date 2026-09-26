@@ -249,6 +249,25 @@ case "$out" in
 esac
 echo "ok: case 12 — per-skill links are resolved too, not only the directory link"
 
+# ORDER 1256-f7td criterion 4. The gate's refusal must not offer
+# skills/HARNESS-SCOPED.txt as the remedy for a link-shape mismatch: a skill
+# that is REACHABLE is not harness-scoped, and "declare it" silences this check
+# for good. Read from build.sh's skills step with comments STRIPPED, because
+# the explanation beside the fix quotes the very phrase it forbids.
+# PRE-FIX: FAILS — the refusal read "declare it in skills/HARNESS-SCOPED.txt or
+# link it (631-wpkd)".
+_skills_err="$(sed 's/[[:space:]]#.*$//; /^[[:space:]]*#/d' "$ROOT/build.sh" \
+    | awk '/Checking skills have exactly one source of truth/{on=1} on&&/_error /{print; exit}')"
+[ -n "$_skills_err" ] || fail "case 13: could not find the skills-step _error in build.sh (the fixture must not pass blind)"
+case "$_skills_err" in
+    *"declare it in skills/HARNESS-SCOPED"*) fail "case 13: the refusal still offers HARNESS-SCOPED as the remedy: $_skills_err" ;;
+esac
+case "$_skills_err" in
+    *LINK*) ;;
+    *) fail "case 13: the refusal must tell the reader to LINK the runtime tree: $_skills_err" ;;
+esac
+echo "ok: case 13 — the gate's refusal does not offer HARNESS-SCOPED for a link-shape mismatch"
+
 # ORDER 1255-rvr7. DERIVED, not a literal. This printed "(7/7)" while THIRTEEN
 # `ok: case` lines ran — the five arms added by this row passed and were reported
 # as seven. A self-reported count that cannot move cannot tell a reader it
