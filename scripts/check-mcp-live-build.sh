@@ -123,10 +123,18 @@ STAMP_LINE=""
 stamp_field() {
     [ -n "$STAMP_LINE" ] || return 1
     # Space-split, name-anchored — never `\b`, which BSD sed silently never
-    # matches and which cost 803-bqte every macOS attestation.
-    printf '%s\n' "$STAMP_LINE" | tr ' ' '\n' 2>/dev/null \
-        | sed -n "s/^$1=\\(.*\\)\$/\\1/p" \
-        | grep -m1 . || return 1
+    # matches and which cost 803-bqte every macOS attestation. A word loop,
+    # not a pipeline: `| grep -m1` exits early and under pipefail a MATCH can
+    # surface as a failure (the sigpipe-verdict rule). set -f: no globbing.
+    local _w _rc=1
+    set -f
+    for _w in $STAMP_LINE; do
+        case "$_w" in
+            "$1="?*) printf '%s\n' "${_w#"$1="}"; _rc=0; break ;;
+        esac
+    done
+    set +f
+    return "$_rc"
 }
 
 usage() {
