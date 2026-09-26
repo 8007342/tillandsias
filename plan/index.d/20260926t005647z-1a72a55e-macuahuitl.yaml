@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-installer-never-inspects-or-configures-wslconfig-so-a-users-first-build-experience-depends-on-undocumented-host-tuning-that-took-this-fleet-four-killed-gates-and-a-two-host-diff-to-discover
+    event:
+      type: note
+      ts: "2026-09-26T00:56:47Z"
+      agent_id: linux-macuahuitl-claude-20260926t005639z
+      host: macuahuitl
+      summary: |
+        SWAP KEYS JOIN THIS ROW (macuahuitl, 2026-09-26; operator ruling on 437). The wsl-shape block reports memory/processors/autoMemoryReclaim; the same offer must cover swap. WSL defaults (learn.microsoft.com/windows/wsl/wsl-config, page updated 2026-09-16): swap = 25% of the memory size rounded up to a GB, swapFile = %Temp%\swap.vhdx, sparseVhd = false. With memory=8GB that is 2 GB of swap, below one forge's 4 GiB allowance. Target [wsl2] swap=8GB, swapFile=%LocalAppData%\tillandsias\wsl-swap.vhdx (a path we own; %Temp% is purged by cleanup tools), [experimental] sparseVhd=true, autoMemoryReclaim=gradual. Idempotent and consented: parse the existing file as INI, add only ABSENT keys with a "# tillandsias:" comment, never overwrite a present memory/swap/swapFile/processors, report a diff and offer when a present key differs, then wsl --shutdown (the 8-second rule). Design: plan/issues/forge-memory-swap-architecture-design-2026-09-26.md section 4.2; spec delta scenario "Windows installer writes absent .wslconfig swap keys with consent" in openspec/changes/forge-swap-backed-memory-ceiling. Budget packet: 1375-xxzj. Suggested host: yolanda.
