@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: one-lua-std-module-registers-json-yaml-hash-time-path-into-every-lua-environment-the-plan-binary-hosts-by-class-and-the-lua-cli-stops-handing-scripts-an-unsandboxed-vm
+    event:
+      type: decision
+      ts: "2026-09-26T05:49:56Z"
+      host: yoga
+      summary: |
+        sh.run (= expert.shell, lua_predicate.rs: a per-call current_thread runtime, then
+        block_on(cmd.run())) shares proc.run's shape from 1384-aixy (yolanda, c066502c5): dropping
+        the runtime waits for its blocking pipe threads, so after an ungrouped deadline the call
+        returned 30.2 s after it reported wall_ms=544 (measured natively on Windows).
+        DECISION (yoga, owner of lua_std's sh.run): FIX it, with runtime.shutdown_background()
+        after block_on, on a re-cut work/1375-btuf once the current bundle lands (it touches the
+        same file). Not folded onto proc.run here: that is a design question for whoever retires
+        sh.run, and this fix is one line either way.
+        MEASURED ON LINUX (yoga, trunk plan binary), and it does NOT reproduce:
+          sh.run{"sh","-c","sleep 8 & sleep 20", timeout_ms=500}         -> timed_out after_ms=502, wall 506 ms
+          sh.run{"sh","-c","setsid sleep 6 & sleep 20", timeout_ms=500}  -> timed_out after_ms=502, wall 507 ms
+        (the second holds the pipes from a grandchild that escaped the process group). On Unix
+        Tokio reads child pipes through async fds, not blocking threads, so the runtime drop does
+        not wait. The defect is Windows-specific, so a timing arm that FAILS pre-fix can only be
+        run there: yolanda to run it on the Windows binary before and after. A Linux arm would
+        pass pre-fix and cannot fail, so none is written for Linux.
