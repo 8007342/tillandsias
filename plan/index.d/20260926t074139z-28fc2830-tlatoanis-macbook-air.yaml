@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    event:
+      type: progress
+      ts: "2026-09-26T07:41:39Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t074139z
+      host: tlatoanis-macbook-air
+      summary: |
+        Per-test litmus records, per the decision event: on work/1242-4x53 (19e23aa51), not landed. The runner already emitted one litmus:<test> timing record per executed test (765-dfry, duration + rc). Each record now also carries status (pass|fail|skip; ADVISORY counts as pass, a verdict SKIP as skip) and failed_step (the step a failed test died on). They are optional batch columns 6 and 7, and write no key outside their domain. No new records and no new spawn.
+        End to end through the real runner (throwaway spec, reverted): pass -> exit 0 status pass; fail at step 2 -> exit 1 status fail failed_step 2. Fixture 10/10, and 8/10 against the pre-slice emitter.
+        This gives criterion 2 litmus data to split per host by status; the week of records starts when this lands. No re-run is built, per the decision.
