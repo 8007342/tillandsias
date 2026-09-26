@@ -50,3 +50,4 @@ sha2 = { workspace = true }
 # its generators are hand-built (comparable pairs cannot be drawn independently)
 # and a failing case must survive the run that found it.
 proptest = "1"
+tempfile = "3"
