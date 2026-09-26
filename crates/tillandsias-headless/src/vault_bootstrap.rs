@@ -82,10 +82,14 @@ pub(crate) enum DeliveredShareCheck {
     /// dummy key, so adopting it only puts a useless share on disk.
     Malformed(String),
     /// Well-formed, but different from this guest's own
-    /// `tillandsias-vault-unseal` podman secret: the key its vault storage is
-    /// actually unsealed with (803-49re made it authoritative). This is the
-    /// 2026-08-17 shape: a stale host copy, "cipher: message authentication
-    /// failed" against the live storage.
+    /// `tillandsias-vault-unseal` podman secret. NOT A REJECTION (1200-ih38
+    /// review): the podman secret is a STAND-IN for the vault, and in the
+    /// documented dummy-key state it is the wrong one, so refusing on it would
+    /// manufacture a rejection (888-miiy); and refusing skipped the fallback
+    /// write that keeps has_shamir_share_in_keyring true, so a guest with a
+    /// missing share file would WIPE vault-data on its next launch. The share is
+    /// therefore stored exactly as before; rejecting on LIVE evidence (the vault
+    /// observed unsealed with the own secret) is a follow-up row.
     DiffersFromOwnSecret,
     /// Well-formed and byte-identical to the guest's own secret.
     MatchesOwnSecret,
@@ -106,19 +110,25 @@ pub(crate) fn check_delivered_share(
     };
     let bytes = match base64::engine::general_purpose::STANDARD.decode(encoded) {
         Ok(b) => b,
-        Err(e) => return DeliveredShareCheck::Malformed(format!("not base64 ({e})")),
+        // no decoder error text: it names the offending byte and offset, which
+        // would reach tracing::warn! with the reason (1200-ih38 review)
+        Err(_) => return DeliveredShareCheck::Malformed("not base64".to_string()),
     };
-    if bytes.len() != 32 {
-        return DeliveredShareCheck::Malformed(format!(
+    let mut bytes = bytes;
+    let verdict = if bytes.len() != 32 {
+        DeliveredShareCheck::Malformed(format!(
             "decodes to {} bytes, a share is exactly 32",
             bytes.len()
-        ));
-    }
-    match own_secret {
-        Some(own) if own == bytes.as_slice() => DeliveredShareCheck::MatchesOwnSecret,
-        Some(_) => DeliveredShareCheck::DiffersFromOwnSecret,
-        None => DeliveredShareCheck::Unverifiable,
-    }
+        ))
+    } else {
+        match own_secret {
+            Some(own) if own == bytes.as_slice() => DeliveredShareCheck::MatchesOwnSecret,
+            Some(_) => DeliveredShareCheck::DiffersFromOwnSecret,
+            None => DeliveredShareCheck::Unverifiable,
+        }
+    };
+    bytes.zeroize();
+    verdict
 }
 
 // The guest's own unseal secret, for the delivery check. Production reads the
@@ -155,13 +165,12 @@ fn own_unseal_secret_for_delivery_check() -> Option<Vec<u8>> {
 /// it had.
 ///
 /// `Accepted` here means STORED AND PERSISTED — in memory, and to the fallback
-/// file when a cache dir exists — AND (1200-ih38) the share passed every check
-/// possible without a live vault: it is a well-formed 32-byte key, and it
-/// matches this guest's own unseal secret whenever that secret is readable.
-/// A share that fails either check is REJECTED BEFORE anything is stored, so a
-/// share known not to open this installation's storage never reaches disk.
-/// When no own secret is readable the share is accepted unverified: a live
-/// unseal verdict is still a later channel's job, not this function's.
+/// file when a cache dir exists — AND (1200-ih38) the share is a well-formed
+/// 32-byte key; a malformed share is REJECTED BEFORE anything is stored. A
+/// well-formed share that differs from this guest's own unseal secret is still
+/// stored (see DiffersFromOwnSecret: refusing it could wipe vault-data), so
+/// Accepted does NOT claim the share opens the vault; the live verdict is
+/// 1400-b7h4's.
 pub fn set_in_vm_credentials(
     unseal_share_b64: Option<String>,
     installation_uuid: String,
@@ -188,19 +197,25 @@ pub fn set_in_vm_credentials(
     } else {
         None
     };
-    match check_delivered_share(unseal_share_b64.as_deref(), own.as_deref()) {
+    let mut own = own;
+    let check = check_delivered_share(unseal_share_b64.as_deref(), own.as_deref());
+    if let Some(o) = own.as_mut() {
+        o.zeroize();
+    }
+    match check {
+        // A malformed share never kept a vault alive either: the wipe
+        // predicate (has_shamir_share_in_keyring) only counts a file that
+        // decodes to exactly 32 bytes, so refusing it opens no wipe path.
         DeliveredShareCheck::Malformed(why) => {
             return DeliverCredentialsOutcome::Rejected {
                 reason: format!("malformed unseal share: {why}; not stored"),
             };
         }
         DeliveredShareCheck::DiffersFromOwnSecret => {
-            return DeliverCredentialsOutcome::Rejected {
-                reason: "authentication: the delivered unseal share differs from this \
-                         guest's own unseal secret (the key its vault storage is unsealed \
-                         with), so it would not open this installation; not stored"
-                    .to_string(),
-            };
+            eprintln!(
+                "[tillandsias-vault] delivered unseal share differs from this guest's own \
+                 unseal secret; kept UNVERIFIED (no live evidence at delivery; 1400-b7h4)"
+            );
         }
         DeliveredShareCheck::NoShare
         | DeliveredShareCheck::MatchesOwnSecret
@@ -1867,13 +1882,29 @@ fn has_shamir_share_in_keyring() -> bool {
 
     // Fallback: file (populated by keychain_set_blocking when keyring unavailable,
     // e.g. in a VM guest or headless environment without D-Bus)
-    if let Ok(cache_dir) = crate::init_cache_dir()
-        && let Ok(encoded) =
-            fs::read_to_string(cache_dir.join(format!("fallback_{}", VAULT_SHAMIR_SHARE_V1)))
-    {
-        return try_decode(encoded.trim());
+    if let Ok(cache_dir) = crate::init_cache_dir() {
+        return fallback_share_counts(&cache_dir);
     }
     false
+}
+
+/// The FALLBACK half of has_shamir_share_in_keyring: the whole predicate inside
+/// a guest, which has no keychain. Split out (1200-ih38 review) so a test can
+/// assert it hermetically: on a host whose own keyring holds a share, the full
+/// predicate is already true and a test through it proves nothing.
+#[cfg(feature = "vault")]
+fn fallback_share_counts(cache_dir: &Path) -> bool {
+    use base64::Engine;
+    fs::read_to_string(cache_dir.join(format!("fallback_{}", VAULT_SHAMIR_SHARE_V1)))
+        .map(|encoded| {
+            let encoded = encoded.trim();
+            !encoded.is_empty()
+                && base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .map(|v| v.len() == 32)
+                    .unwrap_or(false)
+        })
+        .unwrap_or(false)
 }
 
 /// UNREACHABLE BY CONSTRUCTION — and this comment is the point (701-iu9b).
@@ -5670,20 +5701,6 @@ mod tests {
     /// 701-se6x. The HOST-DELIVERED share must be persisted too, not just the
     /// host-delivered root token.
     ///
-    /// `set_in_vm_credentials` is the tray's delivery path into a running guest.
-    /// It wrote `fallback_vault-root-token-v1` and dropped the share — the exact
-    /// asymmetry 694-mhz8 fixed at the fresh-init site, surviving at this one.
-    /// The consequence is not cosmetic: a guest that has lost only its share
-    /// file gets handed a good share by the host, uses it in memory, still fails
-    /// `has_shamir_share_in_keyring`, and has its intact Vault WIPED on the next
-    /// launch. The host held the evidence and the guest discarded it.
-    ///
-    /// Exercised through `set_in_vm_credentials` ITSELF, not through the shared
-    /// writer. An earlier version of this test called the writer directly and
-    /// was VACUOUS: reverting the call site to pass `None` for the share left it
-    /// passing, because it never touched the code being fixed. That is this
-    /// project's named recurring failure — "verified where it was written is not
-    /// verified where it runs" — reproduced in the test for the fix against it.
     /// A well-formed 32-byte share (bytes 1..=32), for tests that must deliver one.
     const VALID_TEST_SHARE_B64: &str = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=";
 
@@ -5753,24 +5770,61 @@ mod tests {
         (outcome, written)
     }
 
-    /// PRE-FIX RESULT: FAILS — every delivered share was persisted unvalidated
-    /// and reported Accepted, including one this guest's own secret proves
-    /// cannot open its storage (the 2026-08-17 incident's shape).
+    /// 1200-ih38 REVIEW (data-loss path). A share that differs from the own
+    /// secret must still be STORED: the guest's wipe predicate counts only the
+    /// fallback share file, so refusing to write it made a guest with a missing
+    /// share file WIPE vault-data on its next launch; in the 2026-08-17 shape a
+    /// healthy vault. PRE-FIX RESULT (756e30a90): FAILS: Rejected, not written,
+    /// predicate false.
     #[test]
-    fn a_share_that_differs_from_the_own_secret_is_rejected_for_authentication_and_not_stored() {
-        let other: Vec<u8> = (2..=33).collect();
-        let (outcome, written) =
-            deliver_with_own_secret(VALID_TEST_SHARE_B64, Some(other), line!());
-        match outcome {
-            DeliverCredentialsOutcome::Rejected { reason } => {
-                assert!(reason.contains("authentication"), "{reason}")
-            }
-            other => panic!("expected Rejected, got {other:?}"),
-        }
-        assert!(
-            !written,
-            "a share known not to open this installation must not reach disk"
+    fn a_mismatched_share_keeps_the_wipe_predicate_true() {
+        let _serialized = ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
+        let cache_root = std::env::temp_dir().join(format!(
+            "tillandsias-1200-wipe-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = std::fs::remove_dir_all(&cache_root);
+        std::fs::create_dir_all(&cache_root).expect("temp cache root");
+        // SAFETY: env mutation is serialized by ENV_LOCK for the whole test.
+        unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
+        // The GUEST's predicate is the fallback half alone (no keychain in a
+        // guest); asserting through the full predicate was vacuous on a host
+        // whose own keyring holds a share. PREMISE: no share file yet.
+        let dir = cache_root.join("tillandsias");
+        let before = fallback_share_counts(&dir);
+        TEST_OWN_UNSEAL_SECRET.with(|s| *s.borrow_mut() = Some((2..=33).collect()));
+        let outcome = set_in_vm_credentials(
+            Some(VALID_TEST_SHARE_B64.to_string()),
+            "test-installation".to_string(),
+            Some("s.token".to_string()),
         );
+        let after = fallback_share_counts(&dir);
+        TEST_OWN_UNSEAL_SECRET.with(|s| *s.borrow_mut() = None);
+        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+        let _ = std::fs::remove_dir_all(&cache_root);
+        assert!(
+            !before,
+            "premise: the wipe predicate was already true; this test proves nothing here"
+        );
+        assert_eq!(outcome, DeliverCredentialsOutcome::Accepted);
+        assert!(
+            after,
+            "a mismatched share must not re-arm the vault-data wipe"
+        );
+    }
+
+    /// A MALFORMED share is refused, and that opens no wipe path: the predicate
+    /// only counts a file decoding to exactly 32 bytes, so a malformed share
+    /// never kept a vault alive.
+    #[test]
+    fn a_malformed_rejection_leaves_the_wipe_predicate_as_it_was() {
+        let (outcome, written) = deliver_with_own_secret("ZGVsaXZlcmVk", None, line!());
+        assert!(matches!(
+            outcome,
+            DeliverCredentialsOutcome::Rejected { .. }
+        ));
+        assert!(!written);
     }
 
     #[test]
@@ -5801,6 +5855,20 @@ mod tests {
         assert!(uw);
     }
 
+    /// `set_in_vm_credentials` is the tray's delivery path into a running guest.
+    /// It wrote `fallback_vault-root-token-v1` and dropped the share — the exact
+    /// asymmetry 694-mhz8 fixed at the fresh-init site, surviving at this one.
+    /// The consequence is not cosmetic: a guest that has lost only its share
+    /// file gets handed a good share by the host, uses it in memory, still fails
+    /// `has_shamir_share_in_keyring`, and has its intact Vault WIPED on the next
+    /// launch. The host held the evidence and the guest discarded it.
+    ///
+    /// Exercised through `set_in_vm_credentials` ITSELF, not through the shared
+    /// writer. An earlier version of this test called the writer directly and
+    /// was VACUOUS: reverting the call site to pass `None` for the share left it
+    /// passing, because it never touched the code being fixed. That is this
+    /// project's named recurring failure — "verified where it was written is not
+    /// verified where it runs" — reproduced in the test for the fix against it.
     #[test]
     fn host_delivered_share_is_persisted_not_only_the_token() {
         let _serialized = ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
