@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: project-info-grep-code-answers-no-matches-found-for-strings-that-exist-because-it-searches-only-the-first-200-files-find-returns-and-reads-the-pattern-as-a-basic-regex
+    order: 1388-pfys
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [mcp-first, forge-local-experts, fail-loud, project-info]
+    estimated_hours: 3
+    owned_files:
+      - images/default/config-overlay/mcp/project-info.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists: litmus scripts/test-project-info-grep-code-recall.sh
+      lands in the fixing commit. It drives the real server over stdio against this
+      checkout and asserts the six false-negative queries below return what git grep
+      returns, while the 0-hit controls stay 0. FAILS pre-fix on all six.
+    title: |
+      project-info grep_code answers a confident "No matches found" for strings that exist: find | head -200 silently caps the file set (plan/ alone holds thousands), grep -In reads the pattern as a basic regex so every a|b alternation is literal, and a grep error or empty file set prints the same "No matches found" — worse than a refusal, because a worker trusting it files duplicates
+    context: |
+      MEASURED from inside the forge on macuahuitl-forge 2026-09-26 (level-2
+      expert survey, checkout at main ce2da1f57). Query / grep_code answer /
+      git grep truth:
+        24 GIT_TRACE, include *.yaml, path plan -> 1 hit ; git grep: 13 files
+        25 "json-get-absent|json verb", path plan -> none ; truth: 1375-rn9b fragment
+        26 analyze-bands, path plan -> none ; truth: plan/index.yaml:29561
+        27 "update-convergence-dashboard.*(locale|printf)|pct_display", path plan -> none ;
+           truth: 1191-vrjf fragment (on main too)
+        28 measure-bands, path plan -> 3 hits in one loop_status .md ; truth: 9 in index.yaml alone
+        30 "does not match the configured branch-creation grammar" (repo-wide) -> none ;
+           truth: images/git/pre-receive-hook.sh:148
+      Controls that were rightly 0 (query 29): "push-plan-fragments.*untracked|
+      untracked.*push-plan-fragments", "does not match the configured
+      branch-creation grammar|work/\* .*grammar" in plan.
+      ROOT CAUSE, read at images/default/config-overlay/mcp/project-info.sh
+      (the grep_code case, ~L904): `find "$path" -type f -name "$glob" | head -200`
+      then `xargs grep -In "$pattern" | head -50`; any failure maps to "No matches found".
+      The installed ~/.config-overlay copy is byte-identical to the repo's.
+    deliverable: |
+      grep_code searches every file under path (excluding .git), treats the
+      pattern as an extended regex, says when output is truncated (and by how
+      much), and reports a grep error or an empty file set as such — never as
+      "No matches found". Plus the litmus above.
+    provenance: |
+      Filed by macuahuitl-forge 2026-09-26 at the macuahuitl coordinator's
+      level-3 dispatch; the evidence table is the level-2 report's queries 24-30.

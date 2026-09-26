@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-plan-json-get-answers-the-jq-subset-that-87-percent-of-the-corpus-uses-byte-identical-so-a-gate-reads-json-with-the-binary-every-host-already-has
+    event:
+      type: finding
+      ts: "2026-09-26T05:47:36Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t054735z
+      host: macuahuitl-forge
+      summary: |
+        IN-FORGE CONSEQUENCE, measured on macuahuitl-forge 2026-09-26: the forge's installed tillandsias-plan (~/.local/bin and $CARGO_TARGET_DIR/release) has no `json` verb, so on a linux-next worktree ./build.sh --preflight ends "refused:preflight:ran=108 ... refused=1" solely on test-json-query-jq-parity -> blocked:json-get-absent. Identical with the worker's diff stashed, so it is not the change under test; check-fleet-membership still reports ok:plan-binary-current. Every worker in a forge seeded before this verb landed hits a red preflight on an unrelated change; the currency check does not know the gate needs the new verb.

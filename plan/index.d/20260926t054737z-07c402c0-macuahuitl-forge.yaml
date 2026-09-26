@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-dashboard-renderer-formats-percentages-through-bash-printf-under-the-callers-LC_NUMERIC-so-a-comma-decimal-locale-refuses-the-value-outright-and-accepts-the-ones-it-can-parse-with-a-comma-in-them
+    event:
+      type: finding
+      ts: "2026-09-26T05:47:37Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t054735z
+      host: macuahuitl-forge
+      summary: |
+        RECONFIRMED 2026-09-26 by macuahuitl-forge while working 1254-fdsu (sibling sweep): scripts/update-convergence-dashboard.sh:158 `pct_display="$(printf '%.1f' "$pct")"` is still unpinned on linux-next 9fac3f74f. Injection recipe that works on a Linux host without fr_CH/de_DE generated: LC_ALL=en_DK.UTF-8 (comma decimal on glibc); see scripts/test-awk-float-lc-numeric.sh on work/1254-fdsu for the measure-the-locale shape.
