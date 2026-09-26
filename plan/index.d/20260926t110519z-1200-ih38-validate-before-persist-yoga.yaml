@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-guest-adopts-a-delivered-shamir-share-without-ever-asking-the-vault-whether-it-opens-so-the-new-accept-reject-discriminator-can-never-answer-rejected-for-the-case-that-produced-it
+    event:
+      type: progress
+      ts: "2026-09-26T11:05:19Z"
+      host: yoga
+      summary: |
+        VALIDATE-BEFORE-PERSIST, the offline half (work/1200-ih38). Per next_action, nothing waits
+        on vault startup; only what needs no live vault is checked, BEFORE anything is stored:
+          - the share must be base64 decoding to exactly 32 key bytes (ensure_unseal_key already
+            silently SKIPPED any other shape, falling through to the fallback file or a derived
+            dummy key, so a malformed share used to be reported Accepted, written to disk, then
+            ignored) -> otherwise Rejected "malformed unseal share: …; not stored";
+          - "against the known installation": when this guest's own tillandsias-vault-unseal podman
+            secret is readable (the key its storage is unsealed with; 803-49re made it
+            authoritative), a share that DIFFERS is Rejected "authentication: … would not open this
+            installation; not stored" (the 2026-08-17 shape: a stale host copy);
+          - no readable own secret (first boot, or podman unavailable) -> Accepted UNVERIFIED, never
+            a manufactured rejection (888-miiy). A rejection stores nothing, in memory or on disk.
+        CLOSURE INSTRUMENT, stated: cargo tests in vault_bootstrap.rs (run by the gate), not the
+        sketched shell fixture, because the decision is Rust-internal:
+        delivered_share_check_decides_every_branch; a_share_that_differs_from_the_own_secret_is_
+        rejected_for_authentication_and_not_stored; a_malformed_share_is_rejected_and_not_stored;
+        NEGATIVE CONTROL a_matching_share_and_an_unverifiable_share_are_accepted_and_stored. The
+        own-secret source has a cfg(test) override that defaults to unavailable, so no test reads
+        the host's real secret. CONTROL: with the check removed (premise: 0 call sites), exactly the
+        two rejection tests fail (72/74). The existing 701-se6x delivery test's placeholder share
+        ("delivered", 9 bytes) became a valid 32-byte key.
+        NOT DONE, as next_action directs: the LIVE-unseal verdict and a deferred re-report when the
+        unseal actually runs remain a later channel.
