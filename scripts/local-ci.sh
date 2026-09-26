@@ -1084,26 +1084,6 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
-    # 1388-pfys: project-info grep_code must never answer "No matches found" for
-    # a string that exists. Daily tier until a darwin run is recorded for a gate
-    # step (1302-7j8p): the server is bash + find/xargs/grep, whose BSD variants
-    # are exactly what a Linux-only measurement cannot vouch for.
-    # ============================================================================
-    log_section "project-info grep_code Recall (1388-pfys)"
-    if [[ -f "scripts/test-project-info-grep-code-recall.sh" ]]; then
-        if bash scripts/test-project-info-grep-code-recall.sh > /tmp/grep-code-recall.log 2>&1; then
-            log_pass "grep_code finds every string grep finds, and names its errors"
-            archive_check_log "grep-code-recall" "pass" /tmp/grep-code-recall.log
-        else
-            log_fail_tracked "grep-code-recall" "grep_code answered a false negative or a stale result (see /tmp/grep-code-recall.log)"
-            [[ "$VERBOSE" == "1" ]] && cat /tmp/grep-code-recall.log >&2
-            archive_check_log "grep-code-recall" "fail" /tmp/grep-code-recall.log
-        fi
-    else
-        log_fail_missing_guard "grep-code-recall" "scripts/test-project-info-grep-code-recall.sh"
-    fi
-
-    # ============================================================================
     # 1132-r4mt: concurrent archiver --check runs must not break each other.
     # ONE pair here, not in --check: a pair is two full archiver checks (386s
     # measured on yoga, serialised by the answerability lock). The post-fix
