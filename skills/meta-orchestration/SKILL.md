@@ -1243,8 +1243,16 @@ live tool, read the build line out of its answer, attest it:
 # 1. mcp__forge-plan__expert_capability   (through YOUR tool surface, not a shell)
 # 2. read its `server_build: forge-plan=<id> source=<path>` line
 scripts/check-mcp-live-build.sh attest forge-plan=<id> --source <path>
-scripts/check-mcp-live-build.sh check            # the joined verdict
+# 3. mcp__project-info__project_info     (1414-mjdw: the other long-lived server)
+# 4. read its JSON "server_build": "project-info=<id> source=<path>" field
+scripts/check-mcp-live-build.sh attest project-info=<id> --source <path>
+scripts/check-mcp-live-build.sh check            # the WORST attested server
+scripts/check-mcp-live-build.sh check project-info   # one server by name
 ```
+
+Each server keeps its own attestation line, so a current forge-plan never
+vouches for a stale project-info. A project-info answer with no
+`server_build` field predates 1414-mjdw: attest `project-info=unreported`.
 
 If the answer carries **no** `server_build:` line, that is the finding, not a
 reason to skip: the running server predates the emitter. Attest
