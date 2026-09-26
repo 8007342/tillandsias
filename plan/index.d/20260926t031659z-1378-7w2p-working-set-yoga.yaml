@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: measure-a-forge-cargo-builds-peak-rss-swap-and-pids-per-jobs-setting-and-a-tmpfs-spill-benchmark-zram-only-vs-zram-plus-disk-so-the-tier-budgets-are-numbers-not-formulas
+    event:
+      type: progress
+      ts: "2026-09-26T03:16:59Z"
+      host: yoga
+      summary: |
+        §7.1 WORKING-SET PEAKS, one host.
+        MEASURED on yoga 2026-09-26 (floor-ish Linux: 12 cores, 14.8 GiB RAM, zram 8 GiB only,
+        swappiness 60, kernel 7.2.7-200.fc44), rootless podman, image tillandsias-forge:latest,
+        instrument scripts/measure-forge-memory-budget.sh (work/1378-7w2p). Cold
+        `cargo build --workspace --all-targets` of HEAD in a fresh clone, CARGO_HOME pre-fetched,
+        --memory=8g --memory-swap=16g (NOT the design's 12g/24g: this host has ~7 GiB available,
+        so a 12g ceiling is unbacked here; a host guard kills at MemAvailable < 1200 MiB, never tripped).
+          jobs  wall   memory.peak  ANON max  file@anon-max  swap.peak  pids.peak  oom
+           4    117s   5408 MiB     2004 MiB  3274 MiB       0 MiB      38        0
+           6     93s   5375 MiB     2965 MiB  2002 MiB       3 MiB      53        0
+          12     82s   5885 MiB     3318 MiB  1974 MiB       0 MiB      99        0
+        (an earlier pass without the anon poll: peaks 5153/5743/5904 MiB, pids 37/53/101, swap 58/0/0.)
+        READING: memory.peak COUNTS PAGE CACHE (cargo's target/ writes), so about half of it is
+        reclaimable file pages; the working set a budget must keep resident is the ANON column,
+        ~2.0 / 3.0 / 3.3 GiB. Doubling jobs 6->12 adds ~0.35 GiB anon and ~46 pids for 11% less wall.
+        ulimit -u inside = 59567, so RLIMIT_NPROC is not the pids constraint at these jobs (1372-igkr).
+        ALSO MEASURED (rootless crun): --memory=1g --memory-swap=2g writes memory.swap.max = 2147483648
+        (2 GiB), not 1 GiB; the budget must not assume docker's (swap = memory-swap - memory) mapping.
+        NOT YET: §7.2 spill benchmark and §7.3 controls; a fat host (lenovinha) for the other regime.
+  - packet_id: forge-launch-builders-replace-the-437-no-swap-ceiling-with-a-cgroup-memory-budget-so-a-full-tmpfs-spills-to-swap-and-a-cargo-build-fits
+    event:
+      type: note
+      ts: "2026-09-26T03:16:59Z"
+      host: yoga
+      summary: |
+        Numbers for the budget, from 1378-7w2p §7.1 (full table on that row).
+        MEASURED on yoga 2026-09-26 (floor-ish Linux: 12 cores, 14.8 GiB RAM, zram 8 GiB only,
+        swappiness 60, kernel 7.2.7-200.fc44), rootless podman, image tillandsias-forge:latest,
+        instrument scripts/measure-forge-memory-budget.sh (work/1378-7w2p). Cold
+        `cargo build --workspace --all-targets` of HEAD in a fresh clone, CARGO_HOME pre-fetched,
+        --memory=8g --memory-swap=16g (NOT the design's 12g/24g: this host has ~7 GiB available,
+        so a 12g ceiling is unbacked here; a host guard kills at MemAvailable < 1200 MiB, never tripped).
+          jobs  wall   memory.peak  ANON max  file@anon-max  swap.peak  pids.peak  oom
+           4    117s   5408 MiB     2004 MiB  3274 MiB       0 MiB      38        0
+           6     93s   5375 MiB     2965 MiB  2002 MiB       3 MiB      53        0
+          12     82s   5885 MiB     3318 MiB  1974 MiB       0 MiB      99        0
+        (an earlier pass without the anon poll: peaks 5153/5743/5904 MiB, pids 37/53/101, swap 58/0/0.)
+        READING: memory.peak COUNTS PAGE CACHE (cargo's target/ writes), so about half of it is
+        reclaimable file pages; the working set a budget must keep resident is the ANON column,
+        ~2.0 / 3.0 / 3.3 GiB. Doubling jobs 6->12 adds ~0.35 GiB anon and ~46 pids for 11% less wall.
+        ulimit -u inside = 59567, so RLIMIT_NPROC is not the pids constraint at these jobs (1372-igkr).
+        ALSO MEASURED (rootless crun): --memory=1g --memory-swap=2g writes memory.swap.max = 2147483648
+        (2 GiB), not 1 GiB; the budget must not assume docker's (swap = memory-swap - memory) mapping.
+        NOT YET: §7.2 spill benchmark and §7.3 controls; a fat host (lenovinha) for the other regime.

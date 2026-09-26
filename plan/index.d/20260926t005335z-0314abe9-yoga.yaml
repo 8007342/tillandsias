@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: one-lua-std-module-registers-json-yaml-hash-time-path-into-every-lua-environment-the-plan-binary-hosts-by-class-and-the-lua-cli-stops-handing-scripts-an-unsandboxed-vm
+    field: status
+    value: in_progress
+    ts: "2026-09-26T00:53:35Z"
+    host: yoga
+
+events:
+  - packet_id: one-lua-std-module-registers-json-yaml-hash-time-path-into-every-lua-environment-the-plan-binary-hosts-by-class-and-the-lua-cli-stops-handing-scripts-an-unsandboxed-vm
+    event:
+      type: progress
+      ts: "2026-09-26T00:53:35Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: check-claims-across-branches ok; no work/1375-btuf on origin
+  - packet_id: one-lua-std-module-registers-json-yaml-hash-time-path-into-every-lua-environment-the-plan-binary-hosts-by-class-and-the-lua-cli-stops-handing-scripts-an-unsandboxed-vm
+    event:
+      type: note
+      ts: "2026-09-26T00:53:35Z"
+      host: yoga
+      summary: |-
+        coordinator routed: shared lua_std registrar across the three Lua environments

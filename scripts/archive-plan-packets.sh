@@ -188,6 +188,11 @@ _archiver_cleanup() {
     # armed before SCRATCH is assigned on some paths and an unbound expansion
     # under `set -u` would turn a cleanup into a second failure.
     local _s="${SCRATCH:-$REPO_ROOT}"
+    # 1132-r4mt: SCRATCH is now this run's own mktemp dir; remove it whole.
+    # Guarded so the unassigned case can never become `rm -rf $REPO_ROOT`.
+    case "${SCRATCH:-}" in
+        */.archiver-check.*) rm -rf "$SCRATCH" 2>/dev/null || true; return 0 ;;
+    esac
     # AND IT MUST NOT BE ABLE TO FAIL (997-e4v2). Under `set -e` a failing
     # command in an EXIT trap rewrites the script's exit code to 1 — measured
     # by esme-windows in the VM with a genuine EACCES, across every ending form
@@ -290,7 +295,23 @@ if [ "$1" == "--check" ]; then
     # is a native-FS directory, and the check drops from 62.3s to 5.3s doing
     # exactly the same work. It also stops the copy landing in the worktree,
     # which is the leak the cleanup trap above exists to survive.
-    SCRATCH="$(native_scratch_dir archiver-check "$REPO_ROOT")"
+    #
+    # 1132-r4mt: PER RUN, never a fixed path. On Linux the line above used to
+    # hand back $REPO_ROOT itself, so two concurrent --check runs (a stray gate
+    # beside a live one, 1141-vf9w) shared plan_tmp/, plan_tmp_bak/ and the
+    # generated .rb, and each run's cleanup deleted them under the other.
+    # Reproduced 3/3 on yoga 2026-09-25: rc=3 ruby-worker-failed /
+    # unreadable-fragment and a false rc=1 "Not idempotent", while the other
+    # run passed. A mktemp dir per run makes the two runs share nothing.
+    # The fallback is under target/, which the answerability copy prunes and
+    # git ignores, so a leaked dir can neither dirty the tree nor be copied.
+    _ap_base="$(native_scratch_dir archiver-check "$REPO_ROOT/target/archiver-check")"
+    mkdir -p "$_ap_base" 2>/dev/null || true
+    if ! SCRATCH="$(mktemp -d "$_ap_base/.archiver-check.XXXXXX")"; then
+        echo "could-not-run:archiver:no-scratch-dir (1132-r4mt)"
+        echo "Check COULD NOT RUN: cannot create a per-run scratch dir under $_ap_base."
+        exit 3
+    fi
     trap _archiver_cleanup EXIT INT TERM
     rm -rf "$SCRATCH"/plan_tmp "$SCRATCH"/plan_tmp_bak
     cp -a plan/ "$SCRATCH"/plan_tmp/
@@ -299,7 +320,7 @@ if [ "$1" == "--check" ]; then
     # The generated .rb reads and writes the COPY, so it needs the copy's real
     # location. `|` stays the delimiter because the replacement is a path and
     # contains no `|`; it is a directory name we chose, not user input.
-    sed "s|plan/|$SCRATCH/plan_tmp/|g" scripts/archive-plan-packets.rb > scripts/archive-plan-packets-check.rb
+    sed "s|plan/|$SCRATCH/plan_tmp/|g" scripts/archive-plan-packets.rb > "$SCRATCH"/archive-plan-packets-check.rb
     _ap_phase sed-rewrite-rb
 
     # THE ACCEPTANCE ASSERTION (831-ezea). Everything below the idempotency
@@ -397,7 +418,7 @@ if [ "$1" == "--check" ]; then
     _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_before.txt
     _ap_phase orphans-before
 
-    if ! _ruby scripts/archive-plan-packets-check.rb >/dev/null; then
+    if ! _ruby "$SCRATCH"/archive-plan-packets-check.rb >/dev/null; then
         # DISTINCT FROM no-usable-ruby, and the distinction is the point: that
         # one means the lane has no runnable interpreter and is forge-skippable;
         # this one means a ruby WAS runnable and the worker still failed, which
@@ -433,7 +454,7 @@ if [ "$1" == "--check" ]; then
 
     cp -a "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/
     
-    if ! _ruby scripts/archive-plan-packets-check.rb >/dev/null; then
+    if ! _ruby "$SCRATCH"/archive-plan-packets-check.rb >/dev/null; then
         echo "could-not-run:archiver:ruby-worker-failed-idempotency-pass (1132-r4mt)"
         echo "Check COULD NOT RUN: the archiver's ruby worker failed on the second"
         echo "  pass (965-sxec), so idempotency was never evaluated."
@@ -500,8 +521,24 @@ if ! PLAN_BIN="$(resolve_plan_binary)"; then
 fi
 export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
 
+# @trace order:1375-btuf — the named raw-VM opt-in. This .lua shells out
+# (io.popen, os.execute, os.getenv), which the sandboxed `lua` default removes.
+# FEATURE-DETECTED, once, and reused by every call in this file: a plan binary
+# that predates 1375-btuf reads `--unsandboxed` as a SCRIPT PATH ("read
+# --unsandboxed: No such file or directory", rc=1) — and without the flag that
+# old binary already IS the raw VM. So the flag is passed only to a binary that
+# accepts it, and an old binary on a host that cannot rebuild still sweeps.
+# Unquoted at the call site ON PURPOSE: empty must expand to no argument.
+# MIGRATE: 1380-u7sq ports the .lua onto sh.run{argv} + fs verbs and retires the
+# flag; tests/lua_std.rs pins every caller to this file.
+if "$PLAN_BIN" lua --unsandboxed -e '' >/dev/null 2>&1; then
+    _lua_unsandboxed=--unsandboxed
+else
+    _lua_unsandboxed=
+fi
+
 if [ -f "$DIR/archive-plan-packets.lua" ]; then
-    "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua" "$@"
+    "$PLAN_BIN" lua $_lua_unsandboxed "$DIR/archive-plan-packets.lua" "$@"
 else
     _ruby scripts/archive-plan-packets.rb
 fi

@@ -38,15 +38,23 @@ die() { printf '  ERROR: %s\n' "$*" >&2; exit 1; }
 #   unstable           -> /releases/download/unstable (newest DAILY, rolling)
 # Smoke still overrides everything via TILLANDSIAS_RELEASE_BASE.
 LOGIN_ITEM=0
-CHANNEL="${TILLANDSIAS_CHANNEL:-stable}"
+# ORDER 1369-sjbc. The DEFAULT is the channel of the release this copy was
+# published in: the release job rewrites the next line in the copy it uploads
+# to `unstable` (scripts/stage-unstable-installers.sh), because a script cannot
+# see the URL it was fetched from. Keep it exactly `DEFAULT_CHANNEL="stable"`;
+# the rewrite refuses unless it matches exactly once.
+DEFAULT_CHANNEL="stable"
+CHANNEL="${TILLANDSIAS_CHANNEL:-$DEFAULT_CHANNEL}"
+CHANNEL_SOURCE="default of this installer copy"
+[[ -n "${TILLANDSIAS_CHANNEL:-}" ]] && CHANNEL_SOURCE="TILLANDSIAS_CHANNEL"
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --login-item) LOGIN_ITEM=1; shift ;;
         --channel)
             [[ "$#" -ge 2 ]] || die "--channel needs a value"
-            CHANNEL="$2"; shift 2
+            CHANNEL="$2"; CHANNEL_SOURCE="--channel"; shift 2
             ;;
-        --channel=*) CHANNEL="${1#--channel=}"; shift ;;
+        --channel=*) CHANNEL="${1#--channel=}"; CHANNEL_SOURCE="--channel"; shift ;;
         --help|-h)
             cat <<EOF
 Usage: install-macos.sh [--login-item] [--channel stable|unstable]
@@ -73,6 +81,17 @@ case "$CHANNEL" in
     *) die "unknown channel: $CHANNEL (want stable or unstable)" ;;
 esac
 RELEASE_BASE_LATEST="${TILLANDSIAS_RELEASE_BASE:-$CHANNEL_BASE}"
+
+# ORDER 1369-sjbc. Resolved channel, its source and base URL, printed before
+# the gates and before anything is downloaded or swapped. With
+# TILLANDSIAS_INSTALL_RESOLVE_ONLY=1 the script stops here, which is how the
+# fixture reads it on a non-macOS host.
+if [[ -n "${TILLANDSIAS_VERSION:-}" ]]; then
+    say "resolved-channel: $CHANNEL ($CHANNEL_SOURCE) base: https://github.com/${REPO}/releases/download/v${TILLANDSIAS_VERSION#v}"
+else
+    say "resolved-channel: $CHANNEL ($CHANNEL_SOURCE) base: $RELEASE_BASE_LATEST"
+fi
+[[ "${TILLANDSIAS_INSTALL_RESOLVE_ONLY:-0}" == "1" ]] && exit 0
 
 # ── gates ─────────────────────────────────────────────────────────────────
 [[ "$(uname -s)" == "Darwin" ]] || die "install-macos.sh must run on macOS"
@@ -369,3 +388,23 @@ say "Launching Tillandsias (--init / VM provisioning runs automatically on first
 open -a "$DEST" || say "warning: open returned non-zero — right-click Tillandsias.app in $INSTALL_DIR and choose Open"
 say "Tray started. Look for the Tillandsias icon in the menu bar."
 say "(Provisioning runs in the background on first launch — no extra step needed.)"
+
+# ── PENDING ACTIONS (order 1380-zmpi, design section 9.4) ───────────────────
+# Nothing is pending on macOS today: the VM's swap lives inside the guest
+# (1377-hcnv) and needs no host step. "PENDING: none" is printed rather than
+# omitted, because silence and "nothing pending" produce the same bytes. A
+# future pending step appends its line to the call below. The marker lines are
+# what scripts/test-installers-print-pending-banner.sh cuts on; keep them.
+# BEGIN-PENDING-BANNER
+pending_banner() {
+    _rule="================================================================"
+    printf '\n%s\n  PENDING ACTIONS\n%s\n' "$_rule" "$_rule"
+    if [[ "$#" -eq 0 ]]; then
+        printf '  PENDING: none\n'
+    else
+        for _p in "$@"; do printf '  >> %s\n' "$_p"; done
+    fi
+    printf '%s\n\n' "$_rule"
+}
+pending_banner
+# END-PENDING-BANNER

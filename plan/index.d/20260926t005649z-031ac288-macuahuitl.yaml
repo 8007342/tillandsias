@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-cloud-forge-on-a-16-core-host-panics-rustc-on-every-crate-during-its-own-pre-push-gate-so-no-gated-push-can-leave-the-forge
+    event:
+      type: note
+      ts: "2026-09-26T00:56:49Z"
+      agent_id: linux-macuahuitl-claude-20260926t005639z
+      host: macuahuitl
+      summary: |
+        PIDS SIZING PROPOSAL AND THE MEASUREMENT THAT DECIDES IT (macuahuitl, 2026-09-26). Proposed rule until pids.peak is measured: pids.max = clamp(512 x nproc, 4096, 16384), so 8192 on a 16-thread host and 4096 on the floor, applied in container_profile.rs (forge_opencode_profile, forge_claude_profile and siblings) and threaded through ContainerSpec::pids_limit. Two things to read before raising anything, both in the measurement packet 1378-7w2p: /sys/fs/cgroup/pids.peak of the forge after the gate (from the host: podman inspect --format '{{.State.CgroupPath}}'), and ulimit -u inside the forge, because "fork: retry: Resource temporarily unavailable" is EAGAIN and RLIMIT_NPROC produces the same text as the pids cgroup. On macuahuitl the user slice's pids.max is 168294, so the container limit is the binding one. The memory side of the same launch is the budget packet 1375-xxzj. Design: plan/issues/forge-memory-swap-architecture-design-2026-09-26.md section 6.

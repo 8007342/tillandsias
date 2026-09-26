@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-check-bash-dialect-fixture-runs-in-no-gate-and-one-of-its-arms-has-been-red-since-a-second-rule-started-counting-mapfile-twice
+    field: status
+    value: completed
+    ts: "2026-09-26T01:29:26Z"
+    host: macos
+
+events:
+  - packet_id: the-check-bash-dialect-fixture-runs-in-no-gate-and-one-of-its-arms-has-been-red-since-a-second-rule-started-counting-mapfile-twice
+    event:
+      type: completed
+      ts: "2026-09-26T01:29:26Z"
+      host: macos
+      summary: |-
+        status 'completed' with evidence_refs: bb9e99441 (landed on origin/linux-next, carries work/1374-4u6i f8d0cec22) + Linux land gate ran gate step 427-1374-4u6i: 'PASS: check-bash-dialect fixture 25/25 scenarios green' (macuahuitl); macOS bash 3.2.57: 25/25; negative control: checker change reverted -> step script rc=1 (unguarded-builtin-refused, two-files-count-two)
+  - packet_id: the-check-bash-dialect-fixture-runs-in-no-gate-and-one-of-its-arms-has-been-red-since-a-second-rule-started-counting-mapfile-twice
+    event:
+      type: note
+      ts: "2026-09-26T01:29:26Z"
+      host: macos
+      summary: |-
+        closed after landing: per-file count fixed, fixture bound as a gate step, green on both regimes

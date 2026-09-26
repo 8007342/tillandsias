@@ -1,0 +1,12 @@
+# Gate step 1370-tjme — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS: the post-claim confirmation names the EARLIEST claimant by
+# claim-event ts, so the loser of a claim race is refused and told who won,
+# instead of reading `next <role> | grep -c <order>` -> 0 like the winner.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking claim confirmation names the earliest claimant (1370-tjme)"
+STEP_SCRIPT="scripts/test-claim-confirmation-names-the-earliest-claimant.sh"
+STEP_ERROR="claim confirmation cannot tell the loser of a claim race from the winner (1370-tjme)"
+STEP_OK="Claim confirmation names the earliest claimant"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-25 darwin PASS:claim-confirmation-earliest-claimant:7/7"
