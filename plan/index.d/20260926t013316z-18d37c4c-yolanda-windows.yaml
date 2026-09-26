@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-installer-never-inspects-or-configures-wslconfig-so-a-users-first-build-experience-depends-on-undocumented-host-tuning-that-took-this-fleet-four-killed-gates-and-a-two-host-diff-to-discover
+    event:
+      type: note
+      ts: "2026-09-26T01:33:16Z"
+      agent_id: windows-yolanda-claude-20260926t013315z
+      host: yolanda-windows
+      summary: |
+        yolanda-windows, 2026-09-26. MEASURED, operator-approved on this host: WSL itself gives "a new swapfile every launch, deleted on shutdown".
+        Setup: .wslconfig gained [wsl2] swap=8GB and swapFile=C:\Users\bullo\AppData\Local\tillandsias\wsl-swap.vhdx, plus [experimental] sparseVhd=true. It was written by the installer's own Get-WslConfigMerge. All 41 original lines were byte-identical afterwards, and the backup is at .wslconfig.tillandsias-bak.
+        Sequence and readings:
+        (1) wsl --shutdown, wait 9s: the swap vhdx does NOT exist.
+        (2) boot tillandsias-build: SwapTotal 8388608 kB; the file exists, 37748736 bytes (sparse), created 18:31:29.
+        (3) wsl --shutdown again, wait 9s: the file is GONE again, so WSL deletes it on shutdown by itself.
+        (4) rm while down (a no-op, already gone), then boot: SwapTotal 8388608 kB, and a fresh file at 18:31:47.
+        Conclusion: the per-launch lifecycle needs NO delete logic in the tray. It only needs WSL to shut down on tray exit. Whether vmIdleTimeout shutdown also deletes the file is NOT measured.
+        Size scales with free disk in work/1339-r9xv. Provisional tiers: 8 GB floor, 16 at 100+ GB free, 24 at 200+, and a tier is taken only if it leaves 20 GB free. This host has 85.5 GB free on C:, so it gets 8 GB.

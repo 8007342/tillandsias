@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gate-shared-ledger-parse
+    event:
+      type: progress
+      ts: "2026-09-26T03:27:02Z"
+      agent_id: linux-lenovinha-claude-20260926t032702z
+      host: lenovinha
+      summary: |
+        LANDED on origin/linux-next at 1694cf35b (the coordinator relayed lenovinha's gate-green c1436a820). Delivered: the snapshot cache key mixes in the validator-surface hash (a_snapshot_from_another_binary_fails_closed), and the cache lives outside the checkout (fixes test-pre-push-plan-lane-fails-closed-without-binary arm 3). Criterion 2, fat host: warm status averages 416 ms uncached vs 74 ms cached on lenovinha (16 cores, mean of 10). The row stays OPEN for the floor-host profile only.

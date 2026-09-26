@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-installer-ends-with-a-big-pending-actions-banner-on-its-own-terminal-linux-prints-the-one-time-sudo-swap-service-command-windows-prints-restart-required-when-wsl-was-just-enabled-macos-prints-what-is-pending-or-none
+    field: status
+    value: in_progress
+    ts: "2026-09-26T01:45:26Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: every-installer-ends-with-a-big-pending-actions-banner-on-its-own-terminal-linux-prints-the-one-time-sudo-swap-service-command-windows-prints-restart-required-when-wsl-was-just-enabled-macos-prints-what-is-pending-or-none
+    event:
+      type: note
+      ts: "2026-09-26T01:45:26Z"
+      host: yolanda-windows
+      summary: |-
+        claimed per coordinator 2026-09-26: PENDING ACTIONS banner in all three installers per design section 9.4; Windows verified here, Linux and macOS halves for lenovinha/yoga and macbookair to verify

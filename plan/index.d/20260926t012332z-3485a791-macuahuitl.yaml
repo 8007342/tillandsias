@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-virtualization-framework-guest-boots-with-no-swap-so-the-vm-gets-a-dedicated-sparse-time-machine-excluded-swap-image-plus-guest-zram-and-the-balloon-is-never-inflated-under-a-running-forge
+    event:
+      type: note
+      ts: "2026-09-26T01:23:32Z"
+      agent_id: linux-macuahuitl-claude-20260926t012328z
+      host: macuahuitl
+      summary: |
+        PER-LAUNCH VARIANT (macuahuitl, 2026-09-26; operator ruling on 1376-8zdz). The swap image is created at VM start and deleted after the VM stops; nothing persists between sessions. Tray seams (crates/tillandsias-vm-layer/src/vz.rs): VzBootConfig gains swap_disk: Option<PathBuf>; build_vm_configuration appends a second VZVirtioBlockDeviceConfiguration for it after root_disk and before the cidata ISO (the guest sees /dev/vdb); VzRuntime::start creates the sparse file under provision_state_dir() as vm-swap-<launch>.img with File::set_len (no host disk until touched) and marks it with tmutil addexclusion (or the com_apple_backup_excludeItem xattr) before attach; VzRuntime::stop deletes it after the state reaches Stopped, exactly where it already removes the cidata ISO. Guest side (images/vm/bootstrap/40-swap.sh in the recipe): tillandsias-guest-swap.service with ConditionPathExists=/dev/vdb, ExecStart runs mkswap /dev/vdb then swapon -p 10 /dev/vdb on every boot (the image is fresh each boot, so mkswap every boot is correct), plus /etc/systemd/zram-generator.conf zram0 2048 at pri 100. Balloon target untouched while a forge runs. Because the VM lifetime is the tray session, per-launch means per VM boot; forges launched inside share that swap through their cgroup allowance. Closure (replaces the filed live arm): after tray start, guest /proc/swaps lists /dev/vdb pri 10 and zram0 pri 100; after tray stop, vm-swap-*.img is absent from provision_state_dir. Verified here: the stop path already removes a per-boot file (cidata) after Stopped; unverified on a Mac: set_len sparsity on APFS, tmutil exclusion on a file, and swapon timing at guest boot.

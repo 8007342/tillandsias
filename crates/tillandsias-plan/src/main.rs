@@ -95,6 +95,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "fragment-terminal-events",
     "fragments",
     "grade",
+    "json",
     "loop-status",
     "loop-status-append",
     "loop-status-compact",
@@ -126,6 +127,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "status",
     "validate-yaml",
     "verify-answer",
+    "yaml",
     "yaml-get",
     "yaml-json",
     "yaml-type",
@@ -511,7 +513,9 @@ const USAGE: &str = concat!(
     "                                     lost, operator-owned sections byte-identical, fold idempotent\n",
     "           loop-status-fragments      ORDER 582-nqw5. Report the loop_status.d/ overlay: live\n",
     "                                     fragments, malformed ones, and whether compaction is eligible\n",
-    "           lua <script.lua | -e code> [args...]\n",
+    "           lua [--class cacheable|observing | --unsandboxed] <script.lua | -e code> [args...]\n",
+    "                                     1375-btuf: SANDBOXED by default (observing env + json/yaml/hash/path/time);\n",
+    "                                     --unsandboxed is the named raw-VM opt-in (archive-plan-packets.sh only).\n",
     "                                     Run a Lua script or snippet with the embedded, tillandsias-managed\n",
     "                                     Lua 5.4 runtime (eliminates heterogeneous external script dependencies).\n",
     "           predicate <script.lua> [arg] [--class cacheable|observing] [--name fn_name]\n",
@@ -2884,6 +2888,193 @@ fn carry_forward_gaps(doc: &serde_yaml::Value) -> Vec<String> {
 /// runner calls these in a per-file loop where that overhead multiplies into
 /// minutes. Measured 2026-08-29 on macuahuitl: yaml-type on a 40-line file,
 /// 227ms behind the ledger load; the parse itself is under 5ms.
+/// ORDER 1375-rn9b. `json get` / `yaml get`: the jq subset, on the binary every
+/// gate host already has. Argument order is jq's (flags, filter, files) so a
+/// call site swaps `jq` for `tillandsias-plan json get` and nothing else.
+///
+/// Exit codes are jq's: 0; 1 and 4 under `-e` (last result false/null; no
+/// result at all); 2 for usage and unreadable input; 3 for a filter that does
+/// not parse — and here also for one outside the subset, printed as
+/// `unsupported:<construct>` so the 1375-tsfu ratchet can tell the two apart;
+/// 5 when any input raised a runtime error (the remaining inputs still run).
+/// `--parse-only` parses and exits, for the ratchet.
+///
+/// Output is LF on every platform: CRLF from jq.exe was the reason
+/// run-litmus-test.sh strips CR, and this closes that class at the source.
+fn json_query_dispatch(subcommand: &str, args: &[String]) {
+    use std::io::Write as _;
+    use tillandsias_plan::json_query;
+
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan {subcommand} get [-r] [-c] [-e] [-n] [-s] [--arg k v] \
+             [--argjson k v] [--parse-only] <filter> [file...]"
+        );
+        std::process::exit(2);
+    };
+    if args.get(1).map(String::as_str) != Some("get") {
+        usage();
+    }
+    let (mut raw, mut compact, mut exit_status, mut null_input, mut slurp, mut parse_only) =
+        (false, false, false, false, false, false);
+    let mut opts = json_query::Opts::default();
+    let mut positional: Vec<&str> = Vec::new();
+    let mut i = 2;
+    while i < args.len() {
+        let a = args[i].as_str();
+        match a {
+            "--arg" | "--argjson" => {
+                let (Some(k), Some(v)) = (args.get(i + 1), args.get(i + 2)) else {
+                    usage();
+                };
+                let value = if a == "--arg" {
+                    serde_json::Value::String(v.clone())
+                } else {
+                    match serde_json::from_str(v) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            eprintln!("{subcommand} get: --argjson {k}: invalid JSON: {e}");
+                            std::process::exit(2);
+                        }
+                    }
+                };
+                opts.args.insert(k.clone(), value);
+                i += 3;
+                continue;
+            }
+            "--parse-only" => parse_only = true,
+            "--raw-output" => raw = true,
+            "--compact-output" => compact = true,
+            "--exit-status" => exit_status = true,
+            "--null-input" => null_input = true,
+            "--slurp" => slurp = true,
+            "-" => positional.push(a),
+            _ if a.starts_with("--") => usage(),
+            _ if a.starts_with('-') && a.len() > 1 && positional.is_empty() => {
+                for c in a[1..].chars() {
+                    match c {
+                        'r' => raw = true,
+                        'c' => compact = true,
+                        'e' => exit_status = true,
+                        'n' => null_input = true,
+                        's' => slurp = true,
+                        'M' => {}
+                        _ => usage(),
+                    }
+                }
+            }
+            _ => positional.push(a),
+        }
+        i += 1;
+    }
+    let Some((filter_src, files)) = positional.split_first() else {
+        usage();
+    };
+    let filter = match json_query::parse(filter_src) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(3);
+        }
+    };
+    if parse_only {
+        return;
+    }
+    if let Some(unbound) = filter
+        .variables()
+        .into_iter()
+        .find(|v| !opts.args.contains_key(v))
+    {
+        eprintln!("parse:0: ${unbound} is not defined");
+        std::process::exit(3);
+    }
+
+    // Collect every input value, in order, from every source.
+    let mut inputs: Vec<serde_json::Value> = Vec::new();
+    if !null_input || slurp {
+        let sources: Vec<&str> = if files.is_empty() {
+            vec!["-"]
+        } else {
+            files.to_vec()
+        };
+        for src in sources {
+            let text = if src == "-" {
+                let mut s = String::new();
+                if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut s) {
+                    eprintln!("{subcommand} get: cannot read stdin: {e}");
+                    std::process::exit(2);
+                }
+                s
+            } else {
+                match std::fs::read_to_string(src) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("{subcommand} get: cannot read {src}: {e}");
+                        std::process::exit(2);
+                    }
+                }
+            };
+            if subcommand == "yaml" {
+                match serde_yaml::from_str::<serde_yaml::Value>(&text)
+                    .map_err(|e| e.to_string())
+                    .and_then(|y| serde_json::to_value(y).map_err(|e| e.to_string()))
+                {
+                    Ok(v) => inputs.push(v),
+                    Err(e) => {
+                        eprintln!("yaml get: {src}: {e}");
+                        std::process::exit(2);
+                    }
+                }
+                continue;
+            }
+            for v in serde_json::Deserializer::from_str(&text).into_iter::<serde_json::Value>() {
+                match v {
+                    Ok(v) => inputs.push(v),
+                    Err(e) => {
+                        eprintln!("json get: {src}: cannot parse input: {e}");
+                        std::process::exit(2);
+                    }
+                }
+            }
+        }
+    }
+    if slurp {
+        let all = serde_json::Value::Array(std::mem::take(&mut inputs));
+        inputs.push(all);
+    } else if null_input {
+        inputs = vec![serde_json::Value::Null];
+    }
+
+    let stdout = std::io::stdout();
+    let mut out = std::io::BufWriter::new(stdout.lock());
+    let mut last: Option<serde_json::Value> = None;
+    let mut failed = false;
+    for input in &inputs {
+        let mut results = Vec::new();
+        let r = json_query::eval_partial(input, &filter, &opts, &mut results);
+        for v in results {
+            let _ = writeln!(out, "{}", json_query::render(&v, raw, compact));
+            last = Some(v);
+        }
+        if let Err(e) = r {
+            let _ = out.flush();
+            eprintln!("{e}");
+            failed = true;
+        }
+    }
+    let _ = out.flush();
+    if failed {
+        std::process::exit(5);
+    }
+    if exit_status {
+        match last {
+            None => std::process::exit(4),
+            Some(serde_json::Value::Null | serde_json::Value::Bool(false)) => std::process::exit(1),
+            Some(_) => {}
+        }
+    }
+}
+
 fn yaml_read_dispatch(subcommand: &str, args: &[String]) {
     match subcommand {
         // ORDER 746-htj9. The read half of the everywhere-reader.
@@ -3737,6 +3928,11 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             yaml_read_dispatch(subcommand, args);
             true
         }
+        // ORDER 1375-rn9b. File-local like the yaml readers: no ledger load.
+        "json" | "yaml" => {
+            json_query_dispatch(subcommand, args);
+            true
+        }
         _ => false,
     }
 }
@@ -3756,7 +3952,54 @@ fn run_lua_cli(args: &[String]) {
         }
     }
 
-    let lua = mlua::Lua::new();
+    // 1375-btuf. SANDBOXED BY DEFAULT: the predicate bridge's Observing
+    // environment plus lua_std (json/yaml/hash/path/time, fs.read rooted at
+    // the repo, sh.run{argv}), with os.execute/io.popen/os.getenv gone.
+    // `--class cacheable` builds the pure environment, so an author can prove
+    // a predicate is pure before registering it. `--unsandboxed` is the NAMED
+    // opt-in to a raw mlua::Lua::new(); its only callers live in
+    // scripts/archive-plan-packets.sh (coordinator ruling 2026-09-26, pinned
+    // by tests/lua_std.rs) until that archiver is ported onto the std API.
+    let mut args: &[String] = args;
+    let mut unsandboxed = false;
+    let mut class = tillandsias_plan::lua_predicate::PredicateClass::Observing;
+    loop {
+        match args.first().map(String::as_str) {
+            Some("--unsandboxed") => {
+                unsandboxed = true;
+                args = &args[1..];
+            }
+            Some("--class") => {
+                class = match args.get(1).map(String::as_str) {
+                    Some("cacheable") => tillandsias_plan::lua_predicate::PredicateClass::Cacheable,
+                    Some("observing") => tillandsias_plan::lua_predicate::PredicateClass::Observing,
+                    other => {
+                        eprintln!("error: --class expects cacheable|observing, got {other:?}");
+                        std::process::exit(2);
+                    }
+                };
+                args = &args[2..];
+            }
+            _ => break,
+        }
+    }
+    if args.is_empty() {
+        eprintln!(
+            "usage: tillandsias-plan lua [--class cacheable|observing | --unsandboxed] <script.lua | -e code> [args...]"
+        );
+        std::process::exit(2);
+    }
+    let lua = if unsandboxed {
+        mlua::Lua::new()
+    } else {
+        match tillandsias_plan::lua_predicate::build_environment(class) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("error: failed to build the Lua environment: {e}");
+                std::process::exit(1);
+            }
+        }
+    };
 
     if args[0] == "-e" {
         if args.len() < 2 {

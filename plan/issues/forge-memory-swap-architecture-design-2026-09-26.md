@@ -280,8 +280,9 @@ yoga; the coordinator desktop is the operator's and is never dispatched).
 | 1376-8zdz | Linux host with only zram is offered a Silverblue-safe disk swapfile | linux | p1 | lenovinha, then yoga |
 | 1377-hcnv | macOS guest VM gets a sparse swap image (Time Machine excluded) plus zram | macos | p2 | tlatoanis-macbook-air |
 | 1379-vvct | every forge mount carries a class; swap allowance from HOT only | any | p3 | any |
+| 1380-zmpi | every installer ends with a PENDING ACTIONS banner (Linux: the one-time sudo command; Windows: restart required; macOS: none) | any | p1 | any; Windows arm on yolanda, macOS arm on macbookair |
 
-Events (no new rows): 1339-r9xv carries the `.wslconfig` swap keys
+Events (no new rows): 1376-8zdz carries the second ruling (decision) and the per-launch closure (amendment); 1339-r9xv carries the `.wslconfig` swap keys and the per-VM-boot variant
 (windows, yolanda); 1337-7jr5 carries the host-side swap read on WSL2;
 1372-igkr carries the pids sizing rule and the `pids.peak` / `ulimit -u`
 measurement; 437 carries the operator ruling (decision) and this packet
@@ -291,7 +292,211 @@ Dependency order: 1378-7w2p (numbers) → 1375-xxzj (can land with the
 provisional constants, then retune) → 1376-8zdz, 1377-hcnv and the
 1339-r9xv swap keys (independent of each other) → 1379-vvct.
 
-## 9. Sources
+## 9. Per-launch ephemeral swap (operator rulings of 2026-09-26, second and addendum)
+
+Ruling (decision event on 1376-8zdz): consent to a swapfile, but "a new
+swapfile every launch … thrown away and deleted on shutdown"; the installer
+prints the one-time command and a big pending-actions banner. Addendum: the
+one-time step may create a group with the right permissions so every future
+tray launch starts and stops its own swap; 8 GiB floor growing to 16/24 GiB
+on generous disks; does this need SELinux, and does it force an RPM?
+
+Section 4.1's persistent `/var/swap/tillandsias.swap` is superseded by this
+section. Sections 4.2 and 4.3 keep their sizes; their lifetime becomes
+per VM boot, as stated below.
+
+### 9.1 Linux native: a root-owned template service, started per launch
+
+What was verified on macuahuitl (Fedora 44, systemd 259, polkit 127,
+SELinux enforcing) and what was not, is marked.
+
+**Mechanism.** One-time, printed by the installer:
+`sudo tillandsias-install-swap-service` (a bundled script; the tray never
+runs sudo itself). It installs:
+
+- `/etc/systemd/system/tillandsias-swap@.service` — `Type=oneshot`,
+  `RemainAfterExit=yes`, `EnvironmentFile=/etc/tillandsias/swap.conf`,
+  `ExecStartPre=<helper> reap`, `ExecStart=<helper> start %i`,
+  `ExecStop=<helper> stop %i`, `TimeoutStopSec=5min`, `ProtectHome=yes`,
+  `NoNewPrivileges=yes`. *Verified*: `systemd-analyze verify` accepts the
+  template, the gc service and the timer as drafted (with a stand-in helper
+  path).
+- `/usr/local/libexec/tillandsias-swap` (root-owned, 0755; on ostree hosts
+  `/usr/local` is `/var/usrlocal`, writable and persistent — ostree docs).
+  The instance string is opaque: the helper refuses anything outside
+  `[A-Za-z0-9-]{1,64}`; size, directory and priority come from the
+  root-owned `/etc/tillandsias/swap.conf` (or are computed by the helper,
+  §9.6), never from `%i`, so there is no path or size injection.
+  `start`: `btrfs filesystem mkswapfile --size <N> /var/swap/tillandsias-<id>`
+  on btrfs (*verified* on a fresh file: NODATACOW set, fully allocated —
+  `du` equals apparent size), else `fallocate` + `chmod 600` + `mkswap`
+  (*verified* `fallocate` allocates fully on btrfs); `chcon -t swapfile_t`
+  (§9.7); `swapon -p 10` (below zram's 100). `stop`: `swapoff` + `rm`.
+  `reap`: delete `/var/swap/tillandsias-*` that `/proc/swaps` does not list
+  (crash or reboot leftovers; nothing re-activates them at boot because no
+  instance is enabled).
+- `/etc/polkit-1/rules.d/50-tillandsias-swap.rules` — grants
+  `org.freedesktop.systemd1.manage-units` only when
+  `action.lookup("unit")` matches `^tillandsias-swap@[A-Za-z0-9-]{1,64}\.service$`
+  and `action.lookup("verb")` is `start` or `stop`, to
+  `subject.isInGroup("tillandsias")` or the installing `subject.user`.
+  *Verified*: systemd builds the polkit details as
+  `{"unit", id, "verb", verb}` in `bus_verify_manage_units_async_impl`
+  (`src/core/dbus-util.c`) and `StartUnit`/`StopUnit` pass the job type
+  (`start`/`stop`); polkit 127's JS API (`action.lookup`,
+  `subject.isInGroup`) is the one Fedora's own `50-libvirt.rules` uses; the
+  rule's logic was exercised under node with fixture subjects (YES for
+  start/stop of a matching unit, NO otherwise). *Not verified*: polkitd
+  evaluating the installed file (needs root to install).
+- `tillandsias-swap-gc.timer` (every 2 min) → `gc`: for each active
+  instance, `flock -n` on the tray's lease
+  `/run/user/<uid>/tillandsias/swap-<id>.lease`; if the lock is acquirable
+  the tray is gone, so `systemctl stop tillandsias-swap@<id>`. *Verified*:
+  `flock -n` is refused while the holder lives and succeeds after it exits.
+  A user-manager `BindsTo=`/`StopWhenUnneeded=` cannot reach a system unit,
+  which is why the lease exists.
+
+**Per launch.** The tray: open and `flock` the lease → `systemctl start
+tillandsias-swap@<launch-id>` (no password, via the rule) → `podman run`
+with `memory.swap.max` set → on stop: `podman rm` → `systemctl stop
+tillandsias-swap@<launch-id>` → close the lease.
+
+**swapoff cost.** `swapoff` must page back into RAM everything still on the
+device. The order above removes the forge first; *verified* here that swap
+use returned to zero once the probe's tmpfs and cgroup were gone, so the
+file is normally empty at `stop` and `swapoff` is O(ms). If another tenant
+spilled onto it (possible: the kernel fills higher-priority zram first and
+only then this file), `swapoff` reads those pages back — bounded by the file
+size and RAM; `TimeoutStopSec=5min` is the backstop. Wall time with a
+loaded file is a measurement for 1376-8zdz (needs root).
+
+**Silverblue.** `/etc` is per-deployment with a three-way merge that keeps
+local files; `/var` is persistent and shared across deployments; `/usr` is
+read-only (ostree and rpm-ostree docs). Everything above lives in `/etc`,
+`/var/swap` and `/var/usrlocal`, so it survives upgrades without layering.
+
+### 9.2 WSL2: per VM boot, and WSL does the deleting itself (measured)
+
+Measured on yolanda-windows 2026-09-26 with its operator's approval (event
+on 1339-r9xv, fragment 20260926t013316z-18d37c4c on work/1339-r9xv): with
+`[wsl2] swap=8GB`, `swapFile=%LocalAppData%\tillandsias\wsl-swap.vhdx`
+and `[experimental] sparseVhd=true` written by the installer's
+`Get-WslConfigMerge` (the user's 41 original lines byte-identical, backup
+at `.wslconfig.tillandsias-bak`): after `wsl --shutdown` the VHDX does not
+exist; a boot gives `SwapTotal 8388608 kB` and a fresh 37,748,736-byte
+sparse VHDX; the next `wsl --shutdown` removes it again; the next boot
+creates a fresh one. So WSL already implements "a new swapfile every
+launch, deleted on shutdown" at VM-boot granularity: the tray needs NO
+delete logic, only a WSL shutdown on exit (when `wsl --list --running`
+shows only its own distro). Still unmeasured: whether a `vmIdleTimeout`
+shutdown also deletes the file. Per-forge granularity is refused on this
+platform (it would restart the user's other distros).
+
+### 9.3 macOS: created at VM start, deleted after VM stop
+
+Seams in `crates/tillandsias-vm-layer/src/vz.rs`: `VzBootConfig` gains
+`swap_disk: Option<PathBuf>`; `build_vm_configuration` appends a second
+`VZVirtioBlockDeviceConfiguration` after `root_disk` (guest `/dev/vdb`);
+`VzRuntime::start` creates `vm-swap-<launch>.img` under
+`provision_state_dir()` with `File::set_len` (sparse on APFS — unverified)
+and excludes it with `tmutil addexclusion`; `VzRuntime::stop` removes it
+after the VM reaches `Stopped`, where it already removes the cidata ISO
+(*verified* in the source). Guest recipe `40-swap.sh`:
+`tillandsias-guest-swap.service` with `ConditionPathExists=/dev/vdb`,
+`mkswap` then `swapon -p 10` every boot (fresh image each boot), plus
+`zram-size = 2048`. Lifetime = the VM session; forges inside share it via
+their cgroup allowance. Balloon target untouched while a forge runs.
+
+### 9.4 Installer banner (1380-zmpi)
+
+Each installer ends, after its "launch the tray" line, with a large
+`PENDING ACTIONS` block: Linux — the exact `sudo` command above (or
+`PENDING: none` once the unit exists); Windows — `RESTART REQUIRED` when
+`install-windows.ps1` classified the WSL enable as `reboot-pending`
+(VirtualMachinePlatform enabled, DISM 3010 — the state it already
+computes and turns into `NoLaunchReason`); macOS — `PENDING: none` (nothing
+is pending today), printed rather than omitted because silence and "nothing
+pending" produce the same bytes.
+
+### 9.5 Group versus user in the polkit rule
+
+Yes: the one-time step runs `groupadd -f tillandsias` and `usermod -aG
+tillandsias <user>`, and the rule grants the GROUP. Re-login: polkit does
+not read the calling process's supplementary groups; it resolves the
+subject's groups with `getgrouplist(passwd->pw_name, …)` at check time
+(*verified* in `src/polkitbackend/polkitbackendduktapeauthority.c`), so a
+freshly added member is authorised on the next `systemctl start` without
+logging out. What DOES need a re-login is anything that reads the process
+credentials (a `sudoers` group, file-group permissions on the lease
+directory), which this design avoids. The rule also matches the installing
+`subject.user` so the first launch works even on an NSS setup that caches
+group membership; trade-off: the username is baked into a root-owned file,
+so a renamed account needs the one-time step again — acceptable, and the
+group path covers every other user of the host.
+
+### 9.6 Size policy (one rule, all platforms)
+
+The rule yolanda implemented in `install-windows.ps1` (`Get-WslSwapSizeGB`,
+`SwapReserveGB = 20`) is adopted for Linux and macOS as well, computed at
+launch from the free space where the swap lives (`statvfs` on `/var/swap`,
+the WSL swap directory, the macOS provision dir; decimal GB as the Windows
+code counts them):
+
+```
+tiers: 24 GB if free ≥ 200 GB, else 16 GB if free ≥ 100 GB, else 8 GB
+a tier is taken only if (free − size) ≥ 20 GB; otherwise the next tier down
+below the 8 GB floor (free < 28 GB): refuse the launch, printing the free-space figure
+```
+
+yolanda (85.5 GB free) gets 8 GB. The 32 GiB `MIN_GUEST_ROOT_AVAIL_GIB`
+floor in the WSL and vz code is a different quantity (the guest root
+filesystem's forge-fit headroom) and is not changed by this rule.
+
+Linux swapfiles cannot have holes, so the per-launch file consumes its full
+size while alive (*verified*: `mkswapfile` and `fallocate` both allocate
+fully) and is returned at stop. The WSL VHDX is sparse (*measured*: 37.7 MB
+at creation for `swap=8GB`); the macOS image is created sparse with
+`File::set_len` (unverified on APFS until 1377-hcnv lands). On Linux the
+helper computes the size from `/etc/tillandsias/swap.conf`
+(`SWAP_TIERS_GB=8:16:24 SWAP_RESERVE_GB=20`, or an override `SWAP_SIZE_GB=`)
+and the measured free space; nothing about size crosses the D-Bus call.
+
+### 9.7 SELinux
+
+On this host (enforcing, `selinux-policy` 44.10) the type `swapfile_t`
+exists in the loaded policy (*verified*: `chcon -t swapfile_t` on a test
+file succeeds; a nonexistent type is refused with `Invalid argument`), and
+Fedora's policy grants the swapping domain
+`allow fsadm_t swapfile_t:file { rw_file_perms swapon }`
+(`policy/modules/system/fstools.te`). `/var/swap/*` carries no file-context
+rule and defaults to `var_t` (*verified* with `matchpathcon`), which lacks
+the `swapon` file permission, so the helper labels the file: `chcon -t
+swapfile_t "$f"` right after creation. `chcon` is in coreutils on every
+Fedora variant; a persistent `semanage fcontext -a -t swapfile_t
+'/var/swap/tillandsias-.*'` is optional (it only matters for `restorecon`
+runs, and the file lives minutes), and `semanage` may be absent on
+Silverblue. **No custom policy module is needed**: the type and the allow
+rule are stock. Unverified: an actual `swapon` under enforcing mode from the
+unit (needs root); the live arm of 1376-8zdz covers it and any AVC shows in
+`ausearch -m avc -ts recent`.
+
+### 9.8 Does this force an RPM?
+
+No. The one-time step writes only `/etc` (unit, polkit rule, config) and
+`/var` (`/var/usrlocal` helper, `/var/swap`), all persistent on Silverblue
+without layering (§9.1); no SELinux module, no `/usr` content. An RPM
+would mean `rpm-ostree install` (offline by default: takes effect on
+reboot; `apply-live` is the exception with caveats — rpm-ostree
+administrator handbook) for a payload that needs neither. An RPM or COPR
+becomes worth it when (a) a custom SELinux module is required (it is not),
+(b) the helper must live in `/usr/libexec` with a policy-defined context,
+(c) the fleet wants `rpm -V`-style integrity and automatic updates of the
+root-owned parts rather than the curl installer re-running the sudo step,
+or (d) other people install Tillandsias on Fedora and expect a package.
+Until then the curl install prints the sudo command and the sudo step is
+idempotent.
+
+## 10. Sources
 
 - cgroup v2 memory controller (`memory.high`, `memory.max`,
   `memory.swap.max`, `memory.low`, shmem accounting):
@@ -324,3 +529,21 @@ provisional constants, then retune) → 1376-8zdz, 1377-hcnv and the
   https://developer.apple.com/documentation/virtualization/vzvirtiotraditionalmemoryballoondevice
 - Time Machine exclusion (`tmutil addexclusion`, sticky xattr):
   https://ss64.com/mac/tmutil.html
+- systemd polkit details `unit`/`verb` for manage-units
+  (`bus_verify_manage_units_async_impl`):
+  https://github.com/systemd/systemd/blob/main/src/core/dbus-util.c
+- polkit JS authority: subject groups via `getgrouplist` (NSS at check
+  time): https://github.com/polkit-org/polkit/blob/main/src/polkitbackend/polkitbackendduktapeauthority.c
+  and https://github.com/polkit-org/polkit/blob/main/src/polkitbackend/init.js
+- Fedora selinux-policy `swapfile_t` and `allow fsadm_t swapfile_t:file { rw_file_perms swapon }`:
+  https://github.com/fedora-selinux/selinux-policy/blob/rawhide/policy/modules/system/fstools.te
+- rpm-ostree administrator handbook (offline layering, `apply-live`, only
+  `/etc` and `/var` writable):
+  https://coreos.github.io/rpm-ostree/administrator-handbook/
+- ostree `/etc` three-way merge and `/var` persistence:
+  https://ostreedev.github.io/ostree/atomic-upgrades/ and
+  https://ostreedev.github.io/ostree/var/ ; `/usr/local → /var/usrlocal`:
+  https://ostreedev.github.io/ostree/adapting-existing/
+- WSL recreates `swap.vhdx` when absent; default under `%Temp%`:
+  https://github.com/microsoft/WSL/discussions/10885 (and the yolanda
+  measurement above: created at every VM boot, deleted by `wsl --shutdown`)

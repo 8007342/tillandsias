@@ -2734,6 +2734,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "unstable-channel installer default fixture passed"
 
+    # ORDER 1380-zmpi. Every installer ends with a PENDING ACTIONS banner; the
+    # fixture RUNS each banner block (bash, and PowerShell where present).
+    # Hermetic, a few seconds; wired in local-ci.sh as well.
+    _step "Checking the installers' PENDING ACTIONS banner (1380-zmpi)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-installers-print-pending-banner.sh" 2>&1; then
+        _error "an installer can again finish without telling the user what is still pending"
+        exit 1
+    fi
+    _info "pending-actions banner fixture passed"
+
     # ORDER 970-7fqk. The stale-stamp refusal names paths whose CONTENT moved,
     # on the same axis the staleness decision uses, and keeps the mtime list as
     # the live-writer hint 864-q7dm built it to be. Hermetic: every arm stamps

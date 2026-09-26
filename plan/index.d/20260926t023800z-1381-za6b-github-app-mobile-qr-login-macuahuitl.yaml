@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: github-app-mobile-qr-device-login
+    order: 1381-za6b
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [auth, github, login, qr, ux]
+    deliverable: crates/tillandsias-headless/src/main.rs
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/Cargo.toml
+      - Cargo.toml
+      - Cargo.lock
+      - openspec/specs/gh-auth-script/spec.md
+    title: |
+      GitHub App mobile QR device-flow login: replace token-paste with blocky QR code and automatic user-token flow
+    context: |
+      OPERATOR DIRECTIVE (The Tlatoāni, 2026-09-25; replaces 777-kyjp token paste):
+      The operator configured a dedicated GitHub App (Owned by: @8007342, App ID: 5081125,
+      Client ID: Iv23liddVkg9ME6OB1K1) with Device Flow enabled.
+
+      When a user launches tillandsias or initiates GitHub login from the tray with an
+      expired or missing credential, tillandsias prompts them with a terminal QR code
+      using Unicode half-block characters (▀ / ▄) encoding the verification URI with
+      pre-filled user_code (https://github.com/login/device?user_code=...). The user finishes
+      authentication and 2FA on their cellphone; zero local desktop browser is involved.
+
+      Upon approval on mobile, the in-container helper collects the user access token,
+      streams it directly into Vault at secret/github/token (token field) without host memory
+      exposure (preserving spec:gh-auth-script and spec:tillandsias-vault), auto-configures
+      git author identity from api.github.com/user, and cleanly closes the terminal without
+      hanging on Enter (resolving github-login-device-flow-dangling-enter-prompt).
+
+      Permanently resolves the fleet-wide 10-token OAuth eviction cascade discovered in 1025-a896
+      (gh-auth-token-invalidation-investigation-2026-09-04.md), as GitHub Apps do not have the
+      per-user 10-token limit of OAuth Apps.
+    exit_criteria:
+      - |
+          The GitHub login flow presents NO token-paste prompt anywhere; the mobile QR device flow is the only path and completes the sign-in.
+      - |
+          GH_LOGIN_TOKEN_SCRIPT and manual PAT paste guidance are completely removed; pure-Rust qrcode renders high-contrast blocky QR to the terminal.
+      - |
+          Token is polled and written to Vault at secret/github/token inside the container without touching host memory; git user.name and user.email are auto-populated from GitHub API.
+      - |
+          openspec/specs/gh-auth-script/spec.md is updated to specify the GitHub App mobile QR device flow, and 777-kyjp is superseded.
+    verifiable_closure: |
+      litmus:gh-auth-script-shape passes, and cargo test -p tillandsias-headless passes with the mobile device flow verified.

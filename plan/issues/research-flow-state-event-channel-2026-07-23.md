@@ -1,9 +1,15 @@
 # RESEARCH: first-class message-channel + event propagation so flow/dependency transitions are OBSERVABLE (2026-07-23)
 
 - **Class**: research (MANDATORY before implementation, operator standing rule)
-- **Status**: proposed
+- **Status**: done
 - **Desired release**: future (v0.5+) — NOT blocking current v0.4/v0.3 work; durable direction
 - **Owner host**: any (the control-wire backbone + push listeners span the guest headless and all three trays)
+- **Completed date**: 2026-09-26 (lenovinha)
+- **Evidence**:
+  - `crates/tillandsias-control-wire/src/lib.rs` (`FlowSource`, `SubscriptionTopic::FlowState`, `ControlMessage::FlowStatePush`, discriminant index 33, `DECLARED_VARIANTS = 34`).
+  - `crates/tillandsias-control-wire/src/flow_event.rs` (`FlowEventChannel`, default capacity 64, lag-skip contract).
+  - `crates/tillandsias-headless/src/control_dispatch.rs` (routing matrices updated and pinned).
+  - Passing tests: `cargo test -p tillandsias-control-wire` (78 tests passed, including `incident_observable_collected_but_not_persisted`, `dependency_node_state_transitions`, `bounded_capacity_lag_skip_contract`, `flow_state_push_roundtrip`, `every_variant_discriminant_is_pinned_against_literals`).
 - **Operator vision (2026-07-23, The Tlatoāni, paraphrased)**: event propagation through
   our idiomatic layers must PROPAGATE flow-state events — today they are inferred, not
   emitted. Since we own the backbone (the control-wire), we likely need a proper
@@ -148,6 +154,111 @@ states (i) or the nodes (ii) it carries.
 - Confirmation that the emitted transition can be the authoritative signal while the
   existing Vault-re-check remains a reconciliation backstop, with one shared code vocabulary
   (no parallel taxonomy).
+
+## Research Findings & Architecture Deliverables
+
+### 1. Wire Design & Additivity Proof
+
+The flow-state event propagation channel extends `tillandsias-control-wire` with strictly additive, trailing definitions that preserve discriminant positions across all historical variants:
+
+```rust
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum FlowSource {
+    Login { provider: String },
+    DependencyNode { node: String },
+    PushTransaction { repo: String, ref_name: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SubscriptionTopic {
+    VmStatus,
+    LoginState,
+    CloudProjects,
+    FlowState, // index 3 (trailing)
+}
+
+pub enum ControlMessage {
+    // ... variants 0..=32 unchanged ...
+    FlowStatePush {
+        seq: u64,
+        source: FlowSource,
+        from_state: String,
+        to_state: String,
+        reason: Option<String>,
+        ts_unix: u64,
+    }, // index 33 (trailing)
+}
+```
+
+**Additivity & Compatibility Proof**:
+- Postcard assigns discriminants sequentially by enum declaration index. Appending `FlowStatePush` to `ControlMessage` at index 33 and `FlowState` to `SubscriptionTopic` at index 3 leaves every preceding variant untouched.
+- `WIRE_VERSION` remains at `4`. No wire version bump is required for trailing variant additions (per `WIRE_VERSION` documentation and project convention).
+- The 1029-5wvd discriminant pinning test (`every_variant_discriminant_is_pinned_against_literals`) was updated to `DECLARED_VARIANTS = 34` with literal `ControlMessage::FlowStatePush => 33`. The one-past-the-end probe proves index 34 is rejected with an unknown variant error, confirming exhaustiveness and absence of holes.
+- `kind()` is pinned to `"FlowStatePush"`.
+- `ControlMessage` is `#[non_exhaustive]`. An older peer decoding frame 33 returns `postcard::Error::UnknownVariant`. On the host tray push stream (`action_host.rs` and `notify_icon.rs`), unhandled frames fall into the `other => { tracing::debug!("push stream: ignoring frame {}", other.kind()); }` wildcard, safely ignoring unfamiliar pushes without stream corruption.
+
+### 2. Decision Record
+
+1. **Topic Granularity (One Topic vs Many)**:
+   - **Decision**: Single unified `SubscriptionTopic::FlowState`.
+   - **Rationale**: In `vsock_server.rs` (`VmStateHandle`), each subscription topic entails a separate broadcast channel, receiver cell, notify waker, and async dispatch loop. Multiplying topics creates thread and lock contention for low-volume telemetry. A unified topic with typed `source: FlowSource` tagging allows subscribers to easily filter transitions locally (`match source { FlowSource::Login { .. } => ... }`) while incurring only one push loop on the wire.
+2. **Transition-Only vs Transition + Snapshot**:
+   - **Decision**: Transition-only push stream (`FlowStatePush`) complemented by on-demand snapshot request/reply when needed.
+   - **Rationale**: Continuous snapshot pushes duplicate state and consume variable-length bandwidth. A transition event (`from -> to + reason`) is tiny (~60-120 bytes). For newly connecting or reconnecting subscribers, the existing `GithubLoginStatusRequest` / `VmStatusRequest` (or future `FlowSnapshotRequest`) provides the full state baseline; live pushes thereafter stream delta events.
+3. **Ordering & Loss (Lag-Skip vs Gap-Recovery)**:
+   - **Decision**: Bounded broadcast channel with lag-skip, paired with client-side monotonic `seq` gap detection.
+   - **Rationale**: In-guest servers must never block on a slow or paused host GUI thread (e.g. while macOS AppKit or Windows Win32 message loops are tracking modal menus). Tokio's `broadcast::error::RecvError::Lagged(skipped)` ensures that if a tray lags, older events are dropped without wedging the VM guest. The tray detects the sequence skip and issues an on-demand snapshot request to reconcile its state cache.
+4. **Bounded Capacity Sizing**:
+   - **Decision**: Bounded capacity of 64 frames (`FLOW_STATE_PUSH_CAPACITY = 64`).
+   - **Rationale**: Observed event rates: login flows transition once every few seconds (~0.2 Hz, 4-6 events total). Sibling ii dependency graph resolution processes 7-15 nodes, yielding at most 15-30 transitions during a cold start burst. A buffer of 64 frames accommodates more than two concurrent dependency evaluation storms with zero dropped frames, consuming under 10 KiB RAM in the guest.
+
+### 3. Prototype & Incident Verification
+
+The prototype is implemented in `crates/tillandsias-control-wire/src/flow_event.rs`, exporting `FlowEventChannel`:
+- `FlowEventChannel::with_default_capacity()` constructs a broadcast channel of capacity 64 with atomic monotonic sequence numbering.
+- `FlowEventChannel::emit(source, from, to, reason, ts)` stamps `seq`, builds `FlowStatePush`, and broadcasts to all active subscribers.
+
+**Motivating Incident Verification Test**:
+- Motivating incident: `plan/issues/macos-tray-github-login-stuck-no-prompt-refresh-2026-07-23.md`. An operator enters a PAT. The token is collected, but before Vault write can occur, an environment pre-check fails (e.g. CA bundle or proxy egress down). Under the prior snapshot model, no bytes were written to Vault, no state flipped, nothing was emitted, and the tray chip remained stuck on "Logging In".
+- Unit test `incident_observable_collected_but_not_persisted`:
+  - Step 1 emits: `FlowSource::Login { provider: "github" }`, `from: "auth.github.awaiting-operator"`, `to: "auth.github.token-collected"`.
+  - Step 2 emits: `from: "auth.github.token-collected"`, `to: "auth.github.blocked"`, `reason: Some("persist(ca_bundle)")`.
+  - The subscriber receives both frames in order and observes the exact failure reason (`persist(ca_bundle)`), proving that silent failures are completely converted into observable events.
+- Unit test `dependency_node_state_transitions`:
+  - Sibling ii resource node transitions (`node.absent -> node.satisfying -> node.present` for node `"ca_bundle"`) are received and verified.
+- Unit test `bounded_capacity_lag_skip_contract`:
+  - Proves that emitting 10 events into a capacity-4 channel causes a lagging subscriber to receive `Lagged(N)`, keeps the publisher non-blocking, and allows immediate recovery of latest events.
+
+### 4. Cross-Tray Consumption Sketch
+
+1. **macOS Native AppKit Tray** (`crates/tillandsias-macos-tray/src/action_host.rs`):
+   - **Subscription**: In `push_subscribe_topics()`, append `SubscriptionTopic::FlowState`.
+   - **Handling**: In `start_push_subscription()`, add:
+     ```rust
+     ControlMessage::FlowStatePush { source, to_state, reason, .. } => {
+         apply_flow_state(source, &to_state, reason.as_deref(), &menu_state);
+         dispatch_rebuild(&menu_state, &status_item, &status_menu_item, &self_handle);
+     }
+     ```
+   - **Rendering**: Updates `MenuState.status_text` via `render_status_chip(to_state, reason)` (clamped to `TRAY_STATUS_CHIP_MAX_CHARS = 37`). A blocked login renders immediately as `⚠️ Auth: ca_bundle` instead of `Logging In...`.
+2. **Windows NotifyIcon Tray** (`crates/tillandsias-windows-tray/src/notify_icon.rs`):
+   - **Subscription**: In `vm_status_subscribe_topics()`, append `SubscriptionTopic::FlowState`.
+   - **Handling**: In the push loop, add:
+     ```rust
+     ControlMessage::FlowStatePush { source, to_state, reason, .. } => {
+         hwnd.apply_flow_state(source, &to_state, reason.as_deref());
+     }
+     ```
+   - Updates tray icon tooltip and contextual status items promptly on push receipt.
+3. **Inbound Dispatch Routing** (`crates/tillandsias-headless/src/control_dispatch.rs`):
+   - Registered `FlowStatePush` under `DispatchOutcome::ResponseOnly` across both Unix socket and Vsock transports.
+
+### 5. Reconciliation Backstop Relationship
+
+- **Authoritative Signal**: The emitted transition via `FlowStatePush` is the primary, authoritative signal. The login FSM and dependency graph emit transitions immediately upon state change.
+- **Reconciliation Backstop**: The periodic in-VM Vault check (`is_github_logged_in` in `remote_projects.rs` / `main.rs`) is preserved strictly as a reconciliation backstop to detect out-of-band external changes (e.g. token revoked upstream on GitHub or modified directly via CLI).
+- **Single Vocabulary**: If the reconciliation backstop detects a divergence between the live Vault probe and the in-memory state cell, it does NOT invent a parallel format; it emits a reconciling `FlowStatePush` using the identical dotted taxonomy (`auth.github.ready`, `auth.github.logged-out`). Thus, UI and diagnostic surfaces consume a single unified vocabulary.
 
 ## Existing-code references
 

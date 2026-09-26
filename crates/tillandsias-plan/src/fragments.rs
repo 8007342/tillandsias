@@ -2062,6 +2062,16 @@ impl Ledger {
     /// server and the expert disagree about what the plan says, the retrieval
     /// surface is worse than useless.
     pub fn load_with_fragments(path: &Path) -> Result<Self, String> {
+        if let Some(cached) = crate::ledger_cache::get_ledger(path) {
+            if std::env::var_os("TILLANDSIAS_PLAN_PROFILE").is_some() {
+                eprintln!(
+                    "[profile load_with_fragments] hit cache for {}",
+                    path.display()
+                );
+            }
+            return Ok(cached);
+        }
+
         // Load the BASE first and keep its ledger wholesale, so `spans` stay
         // byte-exact against the real plan/index.yaml.
         //
@@ -2078,8 +2088,12 @@ impl Ledger {
         //
         // So the base ledger is never rebuilt. Fragment content is layered ON
         // TOP of it.
-        let mut ledger = Self::load(path)?;
+        let t0 = std::time::Instant::now();
+        let (mut ledger, base_doc) = Self::load_with_doc(path)?;
+        let t_load = t0.elapsed();
+        let t1 = std::time::Instant::now();
         let fragments = load_all(path);
+        let t_frags = t1.elapsed();
         // Freshness input set: EVERY fragment file beside the index, parseable
         // or not — a malformed fragment still changes the corpus, and hiding it
         // from freshness would make its absence from answers look current.
@@ -2117,18 +2131,23 @@ impl Ledger {
                 corpus_files,
                 skipped,
             );
+            crate::ledger_cache::save_ledger(path, &ledger);
+            if std::env::var_os("TILLANDSIAS_PLAN_PROFILE").is_some() {
+                eprintln!(
+                    "[profile load_with_fragments] load: {t_load:?}, frags: {t_frags:?}, total: {:?}",
+                    t0.elapsed()
+                );
+            }
             return Ok(ledger);
         }
 
-        let base_doc: Value = {
-            let raw = std::fs::read_to_string(path)
-                .map_err(|e| format!("read {}: {e}", path.display()))?;
-            serde_yaml::from_str(&raw).map_err(|e| format!("parse: {e}"))?
-        };
+        let t3 = std::time::Instant::now();
         let (merged, provenance) = fold_with_sources(&base_doc, &fragments);
+        let t_fold = t3.elapsed();
 
         // Replace the packet list with the folded one so queries see everything,
         // while `spans` and `source_path` remain those of the base parse.
+        let t4 = std::time::Instant::now();
         let mut folded_packets = Vec::new();
         crate::collect_packets(&merged, &mut folded_packets);
         ledger.packets = folded_packets;
@@ -2138,6 +2157,7 @@ impl Ledger {
         // over the folded list, preserving the same ambiguity policy the base
         // parse applies (duplicates are dropped, never resolved arbitrarily).
         ledger.reindex();
+        let t_reindex = t4.elapsed();
 
         // ORDER 606-h9vy — CITABILITY NOW EXTENDS TO FRAGMENT CONTENT via
         // per-packet source attribution. `span_of` still returns None for a
@@ -2154,6 +2174,7 @@ impl Ledger {
         // Spans are recovered from the fragment's retained raw text and always
         // contain the `packet_id: <id>` line, so the order-523 verifier can
         // substantiate them exactly like base spans.
+        let t5 = std::time::Instant::now();
         let mut origin_sources = std::collections::BTreeMap::new();
         for (pid, idx) in &provenance.new_packets {
             let frag = &fragments[*idx];
@@ -2204,6 +2225,7 @@ impl Ledger {
                 );
             }
         }
+        let t_sources = t5.elapsed();
         ledger.set_fragment_sources(
             origin_sources,
             field_sources,
@@ -2211,6 +2233,13 @@ impl Ledger {
             corpus_files,
             skipped,
         );
+        crate::ledger_cache::save_ledger(path, &ledger);
+        if std::env::var_os("TILLANDSIAS_PLAN_PROFILE").is_some() {
+            eprintln!(
+                "[profile load_with_fragments] load: {t_load:?}, frags: {t_frags:?}, fold: {t_fold:?}, reindex: {t_reindex:?}, sources: {t_sources:?}, total: {:?}",
+                t0.elapsed()
+            );
+        }
         Ok(ledger)
     }
 }

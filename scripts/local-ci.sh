@@ -1669,6 +1669,21 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "unstable-installer-default" "skipped"
     fi
 
+    # Order 1380-zmpi: every installer ends with a PENDING ACTIONS banner.
+    # Wired in build.sh --check as well; hermetic, a few seconds.
+    if [[ -f "scripts/test-installers-print-pending-banner.sh" ]]; then
+        if bash scripts/test-installers-print-pending-banner.sh 2>&1 | tee /tmp/pending-banner.log; then
+            log_pass "Installers end with a PENDING ACTIONS banner"
+            archive_check_log "pending-banner" "pass" /tmp/pending-banner.log
+        else
+            log_fail_tracked "pending-banner" "Pending-actions banner regression (see /tmp/pending-banner.log)"
+            archive_check_log "pending-banner" "fail" /tmp/pending-banner.log
+        fi
+    else
+        log_fail_missing_guard "pending-banner" "scripts/test-installers-print-pending-banner.sh"
+        archive_check_log "pending-banner" "skipped"
+    fi
+
     # Order 970-7fqk, sibling of the above.
     if [[ -f "scripts/test-gate-stamp-names-content-movers.sh" ]]; then
         if bash scripts/test-gate-stamp-names-content-movers.sh 2>&1 | tee /tmp/gate-stamp-movers.log; then

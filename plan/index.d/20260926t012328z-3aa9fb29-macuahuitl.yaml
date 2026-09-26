@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-linux-host-with-only-zram-swap-is-offered-a-silverblue-safe-disk-swapfile-behind-zram-sized-to-its-tier-and-diagnose-reports-the-swap-shape
+    event:
+      type: decision
+      ts: "2026-09-26T01:23:28Z"
+      agent_id: linux-macuahuitl-claude-20260926t012328z
+      host: macuahuitl
+      summary: |
+        OPERATOR RULING (the Tlatoani, 2026-09-26, relayed by the coordinator; ellipses are in the relayed text): "Yes, I consent to creating a swapfile." … "Print the command at the end of a curl/irm install, on that terminal, print some big text with what's pending, like a restart for windows hosts where WSL was just enabled. Linux hosts should just print that sudo command. Is that something that new users opening a forge for the first time would need to do only? Is that swap file then reused on every launch? I don't like that, I want a new swapfile every launch, and I want it thrown away and deleted on shutdown 🙂 How can we achieve this?"
+        DECIDED: swap is EPHEMERAL PER LAUNCH on every platform; the Linux one-time step is a sudo install of a root-owned service (never the swapfile itself), printed by the installer; the swapfile is created by the service at each forge launch and swapoff+deleted at stop. Design section 9 of plan/issues/forge-memory-swap-architecture-design-2026-09-26.md.

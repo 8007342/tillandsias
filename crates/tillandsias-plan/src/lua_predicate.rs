@@ -140,10 +140,13 @@ pub const CACHEABLE_STDLIB_GLOBALS: &[&str] = &[
     "expect",
     "fs",
     "getmetatable",
+    "hash",
     "ipairs",
+    "json",
     "math",
     "next",
     "pairs",
+    "path",
     "pcall",
     "rawequal",
     "rawget",
@@ -158,6 +161,7 @@ pub const CACHEABLE_STDLIB_GLOBALS: &[&str] = &[
     "type",
     "utf8",
     "xpcall",
+    "yaml",
 ];
 
 /// Locate the repository root by checking environment variables, parent directories
@@ -487,6 +491,12 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
             .map_err(|e| LuaError::VmError(format!("failed to set expect global: {e}")))?;
     }
 
+    // 1375-btuf: the shared std tables, by class. Registered AFTER the
+    // Cacheable allow-list cut, and every name it adds for Cacheable is on
+    // that allow-list (lua_std::tables), so this adds, never widens by deny.
+    crate::lua_std::register(&lua, class)
+        .map_err(|e| LuaError::VmError(format!("lua_std: {e}")))?;
+
     let expert = lua
         .create_table()
         .map_err(|e| LuaError::VmError(format!("failed to create expert table: {e}")))?;
@@ -584,8 +594,18 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                 })
                 .map_err(|e| LuaError::VmError(format!("shell: {e}")))?;
             expert
-                .set("shell", f)
+                .set("shell", f.clone())
                 .map_err(|e| LuaError::VmError(format!("shell: {e}")))?;
+            // 1375-btuf: `sh.run{argv}` is the std name for the same verb;
+            // `expert.shell` stays for the scripts that already call it.
+            let sh = lua
+                .create_table()
+                .map_err(|e| LuaError::VmError(format!("sh: {e}")))?;
+            sh.set("run", f)
+                .map_err(|e| LuaError::VmError(format!("sh.run: {e}")))?;
+            lua.globals()
+                .set("sh", sh)
+                .map_err(|e| LuaError::VmError(format!("sh: {e}")))?;
         }
     }
 

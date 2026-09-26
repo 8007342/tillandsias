@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-installer-never-inspects-or-configures-wslconfig-so-a-users-first-build-experience-depends-on-undocumented-host-tuning-that-took-this-fleet-four-killed-gates-and-a-two-host-diff-to-discover
+    event:
+      type: note
+      ts: "2026-09-26T01:23:31Z"
+      agent_id: linux-macuahuitl-claude-20260926t012328z
+      host: macuahuitl
+      summary: |
+        PER-LAUNCH VARIANT (macuahuitl, 2026-09-26; operator ruling on 1376-8zdz: a new swapfile every launch, deleted on shutdown). What WSL2 can do: the swap VHD is created by WSL at VM boot when the configured swapFile is absent (default %UserProfile%\AppData\Local\Temp\swap.vhdx; microsoft/WSL discussion 10885) and is a property of the utility VM, not of a container, so "per launch" on Windows means PER VM BOOT: the tray points swapFile at %LocalAppData%\tillandsias\wsl-swap.vhdx, and on tray exit, when wsl --list --running shows only the tray's distro, runs wsl --shutdown and deletes the vhdx; the next start recreates it. Not achievable per forge launch without restarting the VM (which would kill the user's other distros), so per-forge is refused on this platform and the design says so. MEASUREMENT yolanda must take before this lands: (1) with swapFile set, record the vhdx creation time and size, wsl --shutdown, start a distro: is the file recreated (new creation time) or reused (same file, same size)? (2) after wsl --shutdown, can the vhdx be deleted (not locked by vmmem/wslservice)? (3) with sparseVhd=true, is swap=8GB honoured and does the file stay sparse after a forge spill? (4) does wsl --shutdown from the tray ever find another running distro on this host? Report the four answers as an event here. Design: plan/issues/forge-memory-swap-architecture-design-2026-09-26.md section 9.2.

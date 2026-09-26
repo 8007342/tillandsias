@@ -13,6 +13,12 @@ sources:
   - https://learn.microsoft.com/en-us/windows/wsl/wsl-config
   - https://developer.apple.com/documentation/virtualization/vzvirtiotraditionalmemoryballoondevice
   - https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/managing_storage_devices/getting-started-with-swap_managing-storage-devices
+  - https://github.com/systemd/systemd/blob/main/src/core/dbus-util.c
+  - https://github.com/polkit-org/polkit/blob/main/src/polkitbackend/polkitbackendduktapeauthority.c
+  - https://github.com/fedora-selinux/selinux-policy/blob/rawhide/policy/modules/system/fstools.te
+  - https://coreos.github.io/rpm-ostree/administrator-handbook/
+  - https://ostreedev.github.io/ostree/var/
+  - https://github.com/microsoft/WSL/discussions/10885
 authority: high
 status: draft
 tier: bundled
@@ -119,31 +125,58 @@ Fedora 44 ships `zram-size = min(ram, 8192)` (the generator's own default is
 data (the urandom probe) gets no saving. zram is the fast first tier, not
 capacity for a spilling tmpfs.
 
-### Add a disk swapfile behind zram (btrfs, Silverblue-safe; not yet run on a Silverblue host)
+### Per-launch swapfile through a root-owned template service (operator ruling 2026-09-26)
+
+Swap is created at every forge launch and deleted at stop. One-time root
+install, printed by the installer; afterwards the tray needs no password.
 
 ```bash
-sudo mkdir -p /var/swap
-sudo btrfs filesystem mkswapfile --size 16g /var/swap/tillandsias.swap   # btrfs-progs >= 6.1, sets NODATACOW
-sudo tee /etc/systemd/system/var-swap-tillandsias.swap >/dev/null <<'EOF'
-[Unit]
-Description=Tillandsias forge spill swap (disk, behind zram)
-[Swap]
-What=/var/swap/tillandsias.swap
-Options=pri=10
-[Install]
-WantedBy=swap.target
-EOF
-sudo systemctl daemon-reload && sudo systemctl enable --now var-swap-tillandsias.swap
-swapon --show     # zram0 prio 100, the file prio 10
+# one-time (installer prints exactly this): group, config, helper, units, polkit rule
+sudo tillandsias-install-swap-service        # groupadd -f tillandsias; usermod -aG tillandsias $USER; writes the files below
+systemctl status tillandsias-swap-gc.timer   # verified-syntax units (systemd-analyze verify passes)
+
+# per launch (the tray does this; no sudo, no password: polkit rule)
+flock -n 9 9>"/run/user/$(id -u)/tillandsias/swap-$id.lease"   # lease the gc timer checks
+systemctl start "tillandsias-swap@$id.service"                  # helper: mkswapfile|fallocate, chcon -t swapfile_t, swapon -p 10
+swapon --show                                                   # /var/swap/tillandsias-$id  file  8G  pri 10 (zram0 pri 100)
+systemctl stop  "tillandsias-swap@$id.service"                  # after podman rm: swapoff + rm
 ```
 
-Older btrfs-progs: `truncate -s 0 f; chattr +C f; fallocate -l 16G f;
-chmod 600 f; mkswap f`. Rules: single-device filesystem, no compression on
-the file (NODATACOW implies it), the holding subvolume cannot be
-snapshotted while the swap is active — `/var` on Silverblue is not
-snapshotted and persists across deployments; `/home` here is a separate
-subvolume and would be the wrong place if snapshots are ever taken there.
-Do not put the file on `/` of an ostree system (read-only bind).
+Polkit rule (verified: systemd passes `unit` and `verb` details; polkit
+resolves groups by NSS at check time, so no re-login after `usermod -aG`):
+
+```js
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        (subject.isInGroup("tillandsias") || subject.user == "INSTALLING_USER") &&
+        /^tillandsias-swap@[A-Za-z0-9-]{1,64}\.service$/.test(action.lookup("unit")) &&
+        (action.lookup("verb") == "start" || action.lookup("verb") == "stop")) {
+        return polkit.Result.YES;
+    }
+});
+```
+
+Rules the helper enforces: instance string `[A-Za-z0-9-]{1,64}` only; size
+from `/etc/tillandsias/swap.conf` and free space (one rule on all platforms:
+24 GB at >= 200 GB free, 16 at >= 100, else 8; a tier only if 20 GB stays
+free; below 28 GB free refuse), never from `%i`;
+a Linux swapfile is fully allocated while alive (verified: `mkswapfile` and
+`fallocate` allocate the whole size); `ExecStartPre` reaps
+`/var/swap/tillandsias-*` absent from `/proc/swaps`.
+
+SELinux (verified on Fedora 44 enforcing): `/var/swap/*` defaults to
+`var_t`; swapping needs `swapfile_t` (`allow fsadm_t swapfile_t:file
+{ rw_file_perms swapon }` in stock policy), so `chcon -t swapfile_t "$f"`
+after creation; no custom policy module. `ausearch -m avc -ts recent` if
+`swapon` is refused.
+
+Silverblue: `/etc/systemd/system`, `/etc/polkit-1/rules.d` and
+`/var/usrlocal` (`/usr/local`) are writable and persist across deployments;
+nothing needs `rpm-ostree` layering.
+
+Unverified here (needs root; the landing host proves it): polkitd
+evaluating the installed rule, `swapon` under enforcing from the unit,
+`swapoff` wall time with another tenant's pages on the file.
 
 ## WSL2 (`%UserProfile%\.wslconfig`; apply with `wsl --shutdown`)
 
@@ -164,13 +197,19 @@ sparseVhd=true
 ```
 
 Only add keys that are absent; never overwrite a user's `memory`, `swap`,
-`swapFile` or `processors`. Inside the guest `free -m` shows the VM's swap
+`swapFile` or `processors`. Per-launch on WSL2 is per VM boot and WSL does it
+itself (measured on yolanda 2026-09-26): the VHDX is created fresh and sparse
+at every boot (37.7 MB for `swap=8GB`) and deleted by `wsl --shutdown`; the
+tray only shuts WSL down on exit when `wsl --list --running` shows just its
+own distro. Unmeasured: deletion on a `vmIdleTimeout` shutdown. Inside the guest `free -m` shows the VM's swap
 (= `swap=`), not the Windows state that reaps the VM (1337-7jr5).
 Inspect: `wsl -e sh -c 'cat /proc/swaps; cat /sys/fs/cgroup/cgroup.controllers'`.
 
 ## macOS Virtualization.framework guest
 
-The guest boots with no swap. Recommended shape (not yet run on a Mac):
+The guest boots with no swap. Per-launch shape: the tray creates the sparse
+image at VM start and deletes it after the VM stops; the guest runs
+`mkswap` + `swapon` every boot (not yet run on a Mac):
 
 ```bash
 # host: a sparse raw image, excluded from Time Machine, as a second virtio block device
