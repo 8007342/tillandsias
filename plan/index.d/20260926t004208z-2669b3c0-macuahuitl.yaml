@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: jq-loop-callers-need-restructuring-not-dispatch-conversion
+    event:
+      type: note
+      ts: "2026-09-26T00:42:08Z"
+      agent_id: linux-macuahuitl-claude-20260926t004208z
+      host: macuahuitl
+      summary: |
+        Design 2026-09-26 (plan/issues/lua-runtime-host-dependency-replacement-design-2026-09-26.md, macuahuitl): the relay's quoting defect ("$JQ" holding a multi-word toolbox arm) is moot for most of the 19 remaining loop callers. Surveyed 277 bare jq invocations in 68 files: 87% are path extraction or iterate-select. Those callers do not need dispatch at all — 1375-rn9b gives tillandsias-plan json get (byte-identical on that subset, LF on Windows, no toolbox) and 1375-2x4e migrates the every-cycle callers and the subset-filter loop callers to it, lowering a counted floor (1375-tsfu). fast_tool/resolve_tool jq remains the right answer ONLY for bucket C/D residue (join, group_by, @tsv, strftime — 33 sites) until 1375-btuf gives those a Lua home. Recommendation for this row's holder: split the work ref by filter bucket before re-offering; do not convert a bucket A/B caller to "$JQ" dispatch when json get is the destination. On a duplicate fix, hold — 1375-2x4e's pickup must coordinate with this ref.

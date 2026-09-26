@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-predicates-have-no-pure-shims-so-every-observation-goes-through-the-shell-verb-and-no-assertion-can-be-cached
+    event:
+      type: note
+      ts: "2026-09-26T00:42:08Z"
+      agent_id: linux-macuahuitl-claude-20260926t004208z
+      host: macuahuitl
+      summary: |
+        Design 2026-09-26 (plan/issues/lua-runtime-host-dependency-replacement-design-2026-09-26.md, macuahuitl): this row is the base of the host-dependency replacement story. 1375-btuf (lua_std: json/yaml/hash/path in both classes, time/fs.read/sh.run in Observing; the lua CLI switched off raw Lua::new()) depends_on this row because json.query over fs.read is pure ONLY while the memo is content-addressed on the bytes read. Ledger note: at writing, origin/work/1367-q9yc (24c8a7cd5) is relayed as 7a660180d on the coordinator's local linux-next, mid-gate, not yet on origin/linux-next (cda7f75c4 lacks the 655-line diff). The predicate CLI and content-addressed memo reach trunk with that relay; 1375-btuf must not start before it is on origin.
