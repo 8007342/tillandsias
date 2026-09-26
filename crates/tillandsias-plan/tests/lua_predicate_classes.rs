@@ -284,10 +284,13 @@ const CACHEABLE_GLOBALS: &[&str] = &[
     "expert",
     "fs",
     "getmetatable",
+    "hash", // 1375-btuf lua_std (pure)
     "ipairs",
+    "json", // 1375-btuf lua_std (pure)
     "math",
     "next",
     "pairs",
+    "path", // 1375-btuf lua_std (pure, lexical)
     "pcall",
     "rawequal",
     "rawget",
@@ -302,6 +305,7 @@ const CACHEABLE_GLOBALS: &[&str] = &[
     "type",
     "utf8",
     "xpcall",
+    "yaml", // 1375-btuf lua_std (pure)
 ];
 
 #[test]

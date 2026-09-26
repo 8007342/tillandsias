@@ -522,7 +522,11 @@ fi
 export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
 
 if [ -f "$DIR/archive-plan-packets.lua" ]; then
-    "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua" "$@"
+    # @trace order:1375-btuf — the named raw-VM opt-in: this .lua shells out
+    # (io.popen, os.execute, os.getenv), which the sandboxed default removes.
+    # MIGRATE: the follow-up row ports it onto sh.run{argv} + fs verbs and
+    # retires the flag; tests/lua_std.rs pins every caller to this file.
+    "$PLAN_BIN" lua --unsandboxed "$DIR/archive-plan-packets.lua" "$@"
 else
     _ruby scripts/archive-plan-packets.rb
 fi
