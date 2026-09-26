@@ -403,6 +403,8 @@ impl VzRuntime {
             self.rootfs_image_path().with_extension("qcow2"),
             self.console_log_path(),
             self.image_root.join("cidata.iso"),
+            // 1377-hcnv: the swap image goes with the VM it served.
+            self.image_root.join(boot::SWAP_IMAGE_FILE),
         ] {
             let _ = std::fs::remove_file(&best_effort);
         }
@@ -894,6 +896,45 @@ done
 dnf install -y podman socat
 systemctl enable podman.socket
 systemctl start podman.socket
+
+# 1377-hcnv. SWAP. The guest booted with none, so a forge spilling past guest
+# RAM was OOM-killed where a Linux host would swap. Two tiers, fast first:
+#   zram0, 2 GiB, priority 100 (compressed RAM, via zram-generator)
+#   the host's sparse vm-swap.img, priority 10, found by its virtio serial
+#   (/dev/disk/by-id/virtio-tillandsias-swap) because the cidata ISO also
+#   rides the bus and position is an accident of attach order.
+# NON-FATAL on purpose: this script is set -e with an ERR trap that marks
+# provisioning failed, and a guest without swap is degraded, not broken.
+{
+  dnf install -y zram-generator \
+    && printf '[zram0]\nzram-size = 2048\nswap-priority = 100\n' > /etc/systemd/zram-generator.conf
+  cat > /usr/local/sbin/tillandsias-swapon << 'EOF'
+#!/bin/bash
+dev=/dev/disk/by-id/virtio-tillandsias-swap
+[ -b "$dev" ] || { echo "tillandsias-swapon: no $dev — host attached no swap image"; exit 0; }
+blkid -t TYPE=swap "$dev" >/dev/null 2>&1 || mkswap -L tillandsias-swap "$dev"
+swapon --show=NAME --noheadings | grep -qx "$(readlink -f "$dev")" || swapon -p 10 "$dev"
+EOF
+  chmod 0755 /usr/local/sbin/tillandsias-swapon
+  cat > /etc/systemd/system/tillandsias-swap.service << 'EOF'
+[Unit]
+Description=Tillandsias guest disk swap (order 1377-hcnv)
+After=dev-disk-by\x2did-virtio\x2dtillandsias\x2dswap.device
+DefaultDependencies=no
+Before=swap.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/tillandsias-swapon
+
+[Install]
+WantedBy=swap.target
+EOF
+  systemctl daemon-reload
+  systemctl enable tillandsias-swap.service
+  systemctl start systemd-zram-setup@zram0.service tillandsias-swap.service
+} || echo "[tillandsias-provision] WARNING: guest swap setup incomplete (1377-hcnv); continuing without it" >&2
 
 # Mount host ~/src via virtio-fs when the VZ config provides the home-src tag.
 # PERSISTED via /etc/fstab (2026-07-10 attended-smoke finding): cloud-init
@@ -1855,6 +1896,10 @@ pub mod boot {
         pub root_disk: Option<PathBuf>,
         /// Optional cloud-init CIDATA ISO path.
         pub cidata_iso: Option<PathBuf>,
+        /// Optional dedicated swap image (order 1377-hcnv), attached right
+        /// after the root disk under [`SWAP_BLOCK_DEVICE_ID`]. The caller
+        /// creates it with [`ensure_sparse_swap_image`] first.
+        pub swap_disk: Option<PathBuf>,
         /// Host directories exposed to the guest over virtio-fs, in order.
         /// Empty installs no directory-sharing device at all — which is what
         /// `None` used to mean.
@@ -1879,10 +1924,120 @@ pub mod boot {
                 memory_bytes: 2 * 1024 * 1024 * 1024,
                 root_disk: None,
                 cidata_iso: None,
+                swap_disk: None,
                 shares: Vec::new(),
                 nvram: None,
                 serial_writer_fd: None,
             }
+        }
+    }
+
+    /// File name of the guest's dedicated swap image, beside `rootfs.img`.
+    ///
+    /// ORDER 1377-hcnv. The guest booted with NO swap, so an 8 GiB forge
+    /// guest OOMed where a Linux host spills. Design:
+    /// plan/issues/forge-memory-swap-architecture-design-2026-09-26.md §4.3.
+    /// A separate image rather than a swapfile inside `rootfs.img`: blocks a
+    /// swapfile touches un-sparsify the 250 GiB root image permanently and
+    /// travel with it, while this one can be deleted and recreated freely.
+    pub const SWAP_IMAGE_FILE: &str = "vm-swap.img";
+
+    /// Size of the swap image: the floor tier's 4 GiB forge allowance plus
+    /// the guest's own headroom (design §6, macOS VM row). Sparse, so the
+    /// host pays only for pages the guest actually writes.
+    pub const GUEST_SWAP_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+
+    /// virtio-blk serial the guest finds its swap disk by, as
+    /// `/dev/disk/by-id/virtio-tillandsias-swap`. By identity rather than
+    /// by position, because the cidata ISO also rides the bus and position
+    /// is an accident of attach order.
+    pub const SWAP_BLOCK_DEVICE_ID: &str = "tillandsias-swap";
+
+    /// One disk to attach, in bus order. Pure data, so the order the guest
+    /// sees is testable without instantiating Virtualization.framework.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct StorageAttachment {
+        pub path: PathBuf,
+        pub read_only: bool,
+        pub identifier: Option<&'static str>,
+    }
+
+    /// The disks [`build_vm_configuration`] attaches, in order: root, swap,
+    /// cidata. Root stays first so it remains `/dev/vda` for the kernel
+    /// command line; swap is found by [`SWAP_BLOCK_DEVICE_ID`], cidata by its
+    /// filesystem label, so neither depends on where it lands.
+    pub fn storage_attachment_plan(spec: &VzBootConfig) -> Vec<StorageAttachment> {
+        let mut plan = Vec::new();
+        if let Some(path) = &spec.root_disk {
+            plan.push(StorageAttachment {
+                path: path.clone(),
+                read_only: false,
+                identifier: None,
+            });
+        }
+        if let Some(path) = &spec.swap_disk {
+            plan.push(StorageAttachment {
+                path: path.clone(),
+                read_only: false,
+                identifier: Some(SWAP_BLOCK_DEVICE_ID),
+            });
+        }
+        if let Some(path) = &spec.cidata_iso {
+            plan.push(StorageAttachment {
+                path: path.clone(),
+                read_only: true,
+                identifier: None,
+            });
+        }
+        plan
+    }
+
+    /// Create the swap image SPARSE at exactly `bytes` if it is missing or a
+    /// different size, and exclude it from Time Machine. Idempotent: an
+    /// image already at `bytes` is left alone, so the guest's mkswap
+    /// signature survives restarts.
+    ///
+    /// `set_len` on a fresh file extends it without writing blocks, which
+    /// APFS stores as a hole: `du` reports kilobytes for an 8 GiB file.
+    pub fn ensure_sparse_swap_image(path: &Path, bytes: u64) -> std::io::Result<()> {
+        let current = std::fs::metadata(path).map(|m| m.len()).ok();
+        if current != Some(bytes) {
+            if current.is_some() {
+                std::fs::remove_file(path)?;
+            }
+            let f = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)?;
+            f.set_len(bytes)?;
+        }
+        exclude_from_time_machine(path);
+        Ok(())
+    }
+
+    /// `tmutil addexclusion` writes the sticky
+    /// `com.apple.metadata:com_apple_backup_excludeItem` attribute, which
+    /// survives moves. Best-effort: a host without tmutil, or one that
+    /// refuses, still boots with swap; the cost is only a larger backup.
+    fn exclude_from_time_machine(path: &Path) {
+        match std::process::Command::new("/usr/bin/tmutil")
+            .arg("addexclusion")
+            .arg(path)
+            .output()
+        {
+            Ok(out) if out.status.success() => {}
+            Ok(out) => eprintln!(
+                "[tillandsias-vz] WARNING: tmutil addexclusion {} failed ({}): {} \
+                 — the swap image may be included in Time Machine backups (order 1377-hcnv).",
+                path.display(),
+                out.status,
+                String::from_utf8_lossy(&out.stderr).trim()
+            ),
+            Err(err) => eprintln!(
+                "[tillandsias-vz] WARNING: could not run tmutil for {} ({err}) \
+                 — the swap image may be included in Time Machine backups (order 1377-hcnv).",
+                path.display()
+            ),
         }
     }
 
@@ -1928,36 +2083,30 @@ pub mod boot {
             let efi_super: &VZBootLoader = &efi;
             cfg.setBootLoader(Some(efi_super));
 
-            // Storage devices (root disk and optional cidata ISO).
+            // Storage devices, in the order storage_attachment_plan fixes:
+            // root, optional swap (1377-hcnv), optional cidata ISO.
             let mut storage_devices = Vec::new();
-
-            if let Some(path) = &spec.root_disk {
-                let url = ns_url_for_path(path);
+            for disk in storage_attachment_plan(spec) {
+                let url = ns_url_for_path(&disk.path);
                 let att = VZDiskImageStorageDeviceAttachment::initWithURL_readOnly_error(
                     VZDiskImageStorageDeviceAttachment::alloc(),
                     &url,
-                    false,
+                    disk.read_only,
                 )
-                .map_err(|e| format!("disk attach: {}", e.localizedDescription()))?;
+                .map_err(|e| {
+                    format!(
+                        "disk attach {}: {}",
+                        disk.path.display(),
+                        e.localizedDescription()
+                    )
+                })?;
                 let blk = VZVirtioBlockDeviceConfiguration::initWithAttachment(
                     VZVirtioBlockDeviceConfiguration::alloc(),
                     &att,
                 );
-                storage_devices.push(Retained::cast(blk));
-            }
-
-            if let Some(path) = &spec.cidata_iso {
-                let url = ns_url_for_path(path);
-                let att = VZDiskImageStorageDeviceAttachment::initWithURL_readOnly_error(
-                    VZDiskImageStorageDeviceAttachment::alloc(),
-                    &url,
-                    true,
-                )
-                .map_err(|e| format!("cidata attach: {}", e.localizedDescription()))?;
-                let blk = VZVirtioBlockDeviceConfiguration::initWithAttachment(
-                    VZVirtioBlockDeviceConfiguration::alloc(),
-                    &att,
-                );
+                if let Some(id) = disk.identifier {
+                    blk.setBlockDeviceIdentifier(&NSString::from_str(id));
+                }
                 storage_devices.push(Retained::cast(blk));
             }
 
@@ -2454,11 +2603,28 @@ impl VmRuntime for VzRuntime {
             ),
         }
 
+        // 1377-hcnv: a guest with no swap OOMs a spilling forge. Boot without
+        // it rather than refuse to boot when the image cannot be made.
+        let swap_image = self.image_root.join(boot::SWAP_IMAGE_FILE);
+        let swap_disk = match boot::ensure_sparse_swap_image(&swap_image, boot::GUEST_SWAP_BYTES) {
+            Ok(()) => Some(swap_image),
+            Err(err) => {
+                eprintln!(
+                    "[tillandsias-vz] WARNING: could not create the swap image {} ({err}). \
+                     Booting WITHOUT guest disk swap — a forge that spills past guest RAM will \
+                     OOM (order 1377-hcnv).",
+                    swap_image.display()
+                );
+                None
+            }
+        };
+
         let spec = boot::VzBootConfig {
             cpu_count,
             memory_bytes: guest_memory_bytes,
             root_disk: Some(rootfs),
             cidata_iso: Some(cidata_iso_path),
+            swap_disk,
             shares,
             nvram: Some(self.image_root.join("nvram.bin")),
             serial_writer_fd,
@@ -3523,6 +3689,105 @@ mod tests {
     ///
     /// Below the crossover the RESERVE now wins. These are the cases the old
     /// policy could not express.
+    /// 1377-hcnv verifiable closure. The guest must see root first (it is
+    /// /dev/vda on the kernel command line), then the swap image under its
+    /// serial, then the cidata ISO read-only.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn vz_config_attaches_swap_image_after_root_disk() {
+        use super::boot::{
+            SWAP_BLOCK_DEVICE_ID, StorageAttachment, VzBootConfig, storage_attachment_plan,
+        };
+        use std::path::PathBuf;
+        let mut spec = VzBootConfig::defaults();
+        spec.root_disk = Some(PathBuf::from("/vm/rootfs.img"));
+        spec.swap_disk = Some(PathBuf::from("/vm/vm-swap.img"));
+        let plan = storage_attachment_plan(&spec);
+        assert_eq!(
+            plan,
+            vec![
+                StorageAttachment {
+                    path: PathBuf::from("/vm/rootfs.img"),
+                    read_only: false,
+                    identifier: None,
+                },
+                StorageAttachment {
+                    path: PathBuf::from("/vm/vm-swap.img"),
+                    read_only: false,
+                    identifier: Some(SWAP_BLOCK_DEVICE_ID),
+                },
+            ]
+        );
+        spec.cidata_iso = Some(PathBuf::from("/vm/cidata.iso"));
+        let plan = storage_attachment_plan(&spec);
+        assert_eq!(plan.len(), 3);
+        assert_eq!(plan[1].path, PathBuf::from("/vm/vm-swap.img"));
+        assert_eq!(plan[2].path, PathBuf::from("/vm/cidata.iso"));
+        assert!(plan[2].read_only, "cidata must stay read-only");
+        // No swap image configured: nothing gains an identifier or moves.
+        spec.swap_disk = None;
+        let plan = storage_attachment_plan(&spec);
+        assert_eq!(plan.len(), 2);
+        assert!(plan.iter().all(|d| d.identifier.is_none()));
+    }
+
+    /// The swap image is created at its full logical size but SPARSE, and a
+    /// second call leaves an existing image (and its mkswap signature) alone.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn swap_image_is_created_sparse_and_left_alone_when_present() {
+        use super::boot::ensure_sparse_swap_image;
+        use std::os::unix::fs::MetadataExt;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("vm-swap.img");
+        let bytes: u64 = 1024 * 1024 * 1024;
+        ensure_sparse_swap_image(&path, bytes).expect("create");
+        let meta = std::fs::metadata(&path).expect("stat");
+        assert_eq!(meta.len(), bytes, "logical size is the requested size");
+        let allocated = meta.blocks() * 512;
+        assert!(
+            allocated < 16 * 1024 * 1024,
+            "a fresh swap image must be sparse, got {allocated} bytes allocated for {bytes}"
+        );
+        // A byte the guest wrote (stand-in for the mkswap signature) survives.
+        std::fs::write(&path, b"")
+            .and_then(|_| std::fs::OpenOptions::new().write(true).open(&path))
+            .and_then(|f| f.set_len(bytes))
+            .expect("rewrite");
+        let marker = {
+            use std::io::{Seek, SeekFrom, Write};
+            let mut f = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+            f.seek(SeekFrom::Start(4086)).unwrap();
+            f.write_all(b"SWAPSPACE2").unwrap();
+            4086u64
+        };
+        ensure_sparse_swap_image(&path, bytes).expect("second call");
+        let data = std::fs::read(&path).expect("read");
+        assert_eq!(&data[marker as usize..marker as usize + 10], b"SWAPSPACE2");
+        // A wrong-sized image is replaced at the right size.
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_len(4096)
+            .unwrap();
+        ensure_sparse_swap_image(&path, bytes).expect("resize");
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), bytes);
+    }
+
+    /// The provisioning script sets up both swap tiers, and does so without
+    /// being able to fail provisioning.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn provision_user_data_sets_up_zram_and_disk_swap_non_fatally() {
+        let ud = super::provision_user_data_for_test();
+        assert!(ud.contains("/dev/disk/by-id/virtio-tillandsias-swap"));
+        assert!(ud.contains("swapon -p 10"));
+        assert!(ud.contains("swap-priority = 100"));
+        assert!(ud.contains("zram-size = 2048"));
+        assert!(ud.contains("guest swap setup incomplete (1377-hcnv); continuing"));
+    }
+
     #[test]
     fn guest_sizing_lets_the_reserve_win_below_the_crossover() {
         let gib = 1024 * 1024 * 1024;
