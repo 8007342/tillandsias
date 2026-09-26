@@ -1084,6 +1084,27 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
+    # 1132-r4mt: concurrent archiver --check runs must not break each other.
+    # ONE pair here, not in --check: a pair is two full archiver checks (386s
+    # measured on yoga, serialised by the answerability lock). The post-fix
+    # result is deterministic (6/6), so this is a real gate on the daily tier.
+    # ============================================================================
+    log_section "Archiver Concurrent Check (1132-r4mt)"
+    if [[ -f "scripts/test-archiver-concurrent-check.sh" ]]; then
+        if bash scripts/test-archiver-concurrent-check.sh 1 > /tmp/archiver-concurrent.log 2>&1; then
+            log_pass "Concurrent archiver --check runs share no scratch"
+            archive_check_log "archiver-concurrent-check" "pass" /tmp/archiver-concurrent.log
+        else
+            log_fail_tracked "archiver-concurrent-check" "Concurrent archiver --check runs broke each other (see /tmp/archiver-concurrent.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/archiver-concurrent.log >&2
+            archive_check_log "archiver-concurrent-check" "fail" /tmp/archiver-concurrent.log
+        fi
+    else
+        log_fail_missing_guard "archiver-concurrent-check" "scripts/test-archiver-concurrent-check.sh"
+        archive_check_log "archiver-concurrent-check" "skipped"
+    fi
+
+    # ============================================================================
     # CHECK 3: Spec trace coverage threshold (90%)
     # ============================================================================
 
