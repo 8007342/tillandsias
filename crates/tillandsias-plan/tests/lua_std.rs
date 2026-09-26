@@ -126,9 +126,11 @@ fn the_lua_cli_unsandboxed_opt_in_keeps_the_raw_vm() {
 
 /// Coordinator ruling 2026-09-26 (A): every `lua --unsandboxed` CALLER lives in
 /// scripts/archive-plan-packets.sh. Pinned by FILE, not count, because a second
-/// call in that same script (560) is expected. The search is restricted to
-/// shell/yaml callers so this file and main.rs, which name the flag, are not
-/// counted as callers.
+/// call in that same script (560) is expected. The search covers only places
+/// that EXECUTE: shell scripts, build.sh, litmus YAML and CI workflows. Not
+/// plan/ or methodology YAML — ledger prose quotes the flag (the amendment and
+/// 1380-u7sq rows do), and a pin that counts its own documentation reports
+/// itself; nor this file or main.rs, which name the flag.
 #[test]
 fn every_unsandboxed_caller_lives_in_the_archiver_script() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -141,9 +143,9 @@ fn every_unsandboxed_caller_lives_in_the_archiver_script() {
             "lua --unsandboxed",
             "--",
             "*.sh",
-            "*.yaml",
-            "*.yml",
             "build.sh",
+            "openspec/litmus-tests/*.yaml",
+            ".github/workflows/*.yml",
         ])
         .output()
         .expect("git grep");
@@ -155,5 +157,76 @@ fn every_unsandboxed_caller_lives_in_the_archiver_script() {
         files,
         vec!["scripts/archive-plan-packets.sh".to_string()],
         "the --unsandboxed opt-in spread beyond the archiver"
+    );
+}
+
+/// Coordinator ruling on the land hazard (2026-09-26): a plan binary that
+/// PREDATES 1375-btuf reads `--unsandboxed` as a script path and fails, while
+/// WITHOUT the flag it already is the raw VM. archive-plan-packets.sh therefore
+/// feature-detects the flag. An old-binary stand-in (rejects the flag exactly as
+/// the trunk binary did, runs the raw VM otherwise) must still sweep: the
+/// completed row is archived and the open row stays.
+/// PRE-FIX RESULT: FAILS — with the flag passed unconditionally the archiver
+/// printed "Error: read --unsandboxed: No such file or directory" and exited 1
+/// (measured by yoga 2026-09-26 with the trunk binary).
+#[cfg(unix)]
+#[test]
+fn the_archiver_still_sweeps_with_a_plan_binary_that_predates_the_flag() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let work = std::env::temp_dir().join(format!("btuf-oldbin-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&work);
+    std::fs::create_dir_all(work.join("plan/index.d")).unwrap();
+    std::fs::create_dir_all(work.join("plan/archive")).unwrap();
+    std::fs::write(
+        work.join("plan/index.yaml"),
+        "plan_index:\n  version: v1\n  steps:\n    - packet_id: fixture-done-row\n      order: 9998-done\n      status: completed\n      kind: defect\n      priority: p2\n      title: done row\n      events:\n        - type: completed\n          ts: \"2026-09-01T00:00:00Z\"\n          host: yoga\n          summary: done\n          evidence_refs: [fixture]\n    - packet_id: fixture-open-row\n      order: 9998-open\n      status: ready\n      kind: defect\n      priority: p2\n      title: open row\n",
+    )
+    .unwrap();
+    let old = work.join("old-plan");
+    std::fs::write(
+        &old,
+        format!(
+            "#!/bin/sh\n\
+             if [ \"$1\" = lua ] && [ \"$2\" = --unsandboxed ]; then echo 'Error: read --unsandboxed: No such file or directory (os error 2)' >&2; exit 1; fi\n\
+             if [ \"$1\" = lua ]; then shift; exec '{real}' lua --unsandboxed \"$@\"; fi\n\
+             exec '{real}' \"$@\"\n",
+            real = plan_bin().display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&old, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let premise = std::process::Command::new(&old)
+        .args(["lua", "--unsandboxed", "-e", ""])
+        .output()
+        .unwrap();
+    assert!(
+        !premise.status.success(),
+        "the stand-in must reject the flag like a pre-btuf binary"
+    );
+
+    let out = std::process::Command::new("bash")
+        .current_dir(&root)
+        .env("TILLANDSIAS_PLAN_BIN", &old)
+        .arg("scripts/archive-plan-packets.sh")
+        .arg("--index")
+        .arg(work.join("plan/index.yaml"))
+        .arg("--archive")
+        .arg(work.join("plan/archive"))
+        .output()
+        .unwrap();
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let index = std::fs::read_to_string(work.join("plan/index.yaml")).unwrap();
+    let _ = std::fs::remove_dir_all(&work);
+    assert!(out.status.success(), "old-binary sweep failed: {text}");
+    assert!(text.contains("Archived 1 packets."), "{text}");
+    assert!(
+        index.contains("fixture-open-row") && !index.contains("fixture-done-row"),
+        "{index}"
     );
 }
