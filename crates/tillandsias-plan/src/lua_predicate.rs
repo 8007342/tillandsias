@@ -1057,9 +1057,15 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                         .enable_all()
                         .build()
                         .map_err(|e| mlua::Error::RuntimeError(format!("runtime: {e}")))?;
-                    let out = rt
-                        .block_on(cmd.run())
-                        .map_err(|e| mlua::Error::RuntimeError(format!("{e}")))?;
+                    let result = rt.block_on(cmd.run());
+                    // 1392-bcby, proc.run's 1384-aixy defect in this verb: DROPPING
+                    // the runtime waits for its blocking pipe threads, which on
+                    // Windows outlive a deadline while a grandchild holds the pipes
+                    // (proc.run: reported wall_ms=544, returned 30.2 s later). On
+                    // EVERY path, error included, hand them off instead. Unix reads
+                    // pipes through async fds and never waited (yoga: 506/507 ms).
+                    rt.shutdown_background();
+                    let out = result.map_err(|e| mlua::Error::RuntimeError(format!("{e}")))?;
                     shell_result_to_lua(lua, out)
                 })
                 .map_err(|e| LuaError::VmError(format!("shell: {e}")))?;
