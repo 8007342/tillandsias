@@ -108,6 +108,32 @@ New-Item -ItemType Directory -Force -Path $DataRootDir | Out-Null
 function Say   { param([string]$msg) Write-Host "  $msg" }
 function SayOk { param([string]$msg) Write-Host "  $msg" -ForegroundColor Green }
 function SayWn { param([string]$msg) Write-Host "  $msg" -ForegroundColor Yellow }
+
+# -- PENDING ACTIONS banner (order 1380-zmpi, design section 9.4) -------------
+# Operator, 2026-09-26: "print some big text with what's pending, like a
+# restart for windows hosts where WSL was just enabled." Steps below APPEND to
+# $PendingActions as they discover something the user must still do; the
+# banner is the script's LAST output. "PENDING: none" is printed rather than
+# omitted, because silence and "nothing pending" produce the same bytes.
+# Format-PendingBanner is pure (items in, lines out) so the fixture
+# scripts/test-installers-print-pending-banner.sh runs it through PowerShell;
+# the marker lines around it are what that fixture cuts on.
+$PendingActions = New-Object System.Collections.Generic.List[string]
+# BEGIN-PENDING-BANNER
+function Format-PendingBanner {
+    param([string[]]$Items)
+    $rule = '=' * 64
+    $out = @('', $rule, '  PENDING ACTIONS', $rule)
+    if ($null -eq $Items -or $Items.Count -eq 0) {
+        $out += '  PENDING: none'
+    } else {
+        foreach ($i in $Items) { $out += "  >> $i" }
+    }
+    $out += $rule
+    $out += ''
+    return ,$out
+}
+# END-PENDING-BANNER
 function Die   { param([string]$msg) Write-Host "  ERROR: $msg" -ForegroundColor Red; exit 1 }
 
 function New-Shortcut {
@@ -593,6 +619,7 @@ if (-not (Test-HcsAccess)) {
                 SayOk "Membership active."
             } else {
                 SayOk "Added to Hyper-V Administrators. SIGN OUT AND BACK IN before launching Tillandsias (new logon token required)."
+                $PendingActions.Add('SIGN OUT AND BACK IN: the Hyper-V Administrators membership needs a new logon token.')
             }
         } catch {
             SayWn "Group add declined or failed ($_). Fix later from an elevated PowerShell:"
@@ -936,4 +963,16 @@ try {
 
 } finally {
     Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue
+}
+
+# -- PENDING ACTIONS (order 1380-zmpi): the last thing on the terminal --------
+# The WSL platform state was classified near the top (Get-WslPlatformState);
+# reboot-pending is VirtualMachinePlatform just enabled, DISM 3010.
+if ($WslState -eq 'reboot-pending') {
+    $PendingActions.Insert(0, 'RESTART REQUIRED: WSL was just enabled. Restart Windows, then launch Tillandsias from the Start Menu.')
+} elseif ($NoLaunchReason) {
+    $PendingActions.Insert(0, "BEFORE FIRST LAUNCH: $NoLaunchReason.")
+}
+foreach ($l in (Format-PendingBanner -Items $PendingActions.ToArray())) {
+    if ($PendingActions.Count -gt 0) { Write-Host $l -ForegroundColor Yellow } else { Write-Host $l }
 }

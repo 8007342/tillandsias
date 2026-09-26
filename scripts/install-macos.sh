@@ -388,3 +388,23 @@ say "Launching Tillandsias (--init / VM provisioning runs automatically on first
 open -a "$DEST" || say "warning: open returned non-zero — right-click Tillandsias.app in $INSTALL_DIR and choose Open"
 say "Tray started. Look for the Tillandsias icon in the menu bar."
 say "(Provisioning runs in the background on first launch — no extra step needed.)"
+
+# ── PENDING ACTIONS (order 1380-zmpi, design section 9.4) ───────────────────
+# Nothing is pending on macOS today: the VM's swap lives inside the guest
+# (1377-hcnv) and needs no host step. "PENDING: none" is printed rather than
+# omitted, because silence and "nothing pending" produce the same bytes. A
+# future pending step appends its line to the call below. The marker lines are
+# what scripts/test-installers-print-pending-banner.sh cuts on; keep them.
+# BEGIN-PENDING-BANNER
+pending_banner() {
+    _rule="================================================================"
+    printf '\n%s\n  PENDING ACTIONS\n%s\n' "$_rule" "$_rule"
+    if [[ "$#" -eq 0 ]]; then
+        printf '  PENDING: none\n'
+    else
+        for _p in "$@"; do printf '  >> %s\n' "$_p"; done
+    fi
+    printf '%s\n\n' "$_rule"
+}
+pending_banner
+# END-PENDING-BANNER
