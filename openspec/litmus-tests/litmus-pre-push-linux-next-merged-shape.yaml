@@ -39,7 +39,7 @@ critical_path:
   - step: "all fixture scenarios pass (refusal, allow twin, scope, deletion, no-ref, mutation control, skill pins)"
     command: "bash scripts/test-pre-push-linux-next-merged.sh 2>&1 | tail -1"
     timeout_ms: 60000
-    expected_behavior: "ok:pre-push-linux-next-merged-fixture:12"
+    expected_behavior: "ok:pre-push-linux-next-merged-fixture:17"
 
   - step: "the installed-hook composition includes the merge gate (installer generates a versioned hook with the merge gate composed)"
     # The property is COMPOSITION — the installer's generated hook
