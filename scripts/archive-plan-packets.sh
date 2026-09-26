@@ -345,8 +345,11 @@ if [ "$1" == "--check" ]; then
     # One sweep of the per-run copy with the selected worker (order 560).
     _ap_sweep() {
         if [ "$_ap_backend" = "lua" ]; then
-            # shellcheck disable=SC2086  # unquoted on purpose, see the probe
-            "$PLAN_BIN" lua $_lua_unsandboxed "$DIR/archive-plan-packets.lua" \
+            # 1380-u7sq: the default SANDBOXED lua, rooted at this run's
+            # scratch copy, so the script can read and write that copy and
+            # nothing else. The plan binary is handed over, never guessed.
+            TILLANDSIAS_REPO_ROOT="$_ap_lua_root" "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua" \
+                --plan-bin "$PLAN_BIN" \
                 --index "$SCRATCH"/plan_tmp/index.yaml \
                 --archive "$SCRATCH"/plan_tmp/archive
         else
@@ -413,12 +416,13 @@ if [ "$1" == "--check" ]; then
     # The .rb resolves the same binary; hand it the probed answer rather than
     # letting it re-derive one.
     export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
-    # 1375-btuf sandboxes `tillandsias-plan lua` by default; this worker needs
-    # os.execute/io.popen/os.getenv, so it passes the named opt-in WHEN the
-    # binary knows it. Feature-detected, not assumed: a pre-btuf binary rejects
-    # the flag and already runs the raw VM. Left UNQUOTED at each call so an
-    # empty value expands to no argument.
-    if "$PLAN_BIN" lua --unsandboxed -e '' >/dev/null 2>&1; then _lua_unsandboxed=--unsandboxed; else _lua_unsandboxed=; fi
+    # 1380-u7sq: the Lua worker's fs root is the scratch copy. A native plan
+    # binary on Windows reads this variable itself, so it gets the mixed
+    # (C:/...) form, which MSYS does not reliably convert for it.
+    _ap_lua_root="$SCRATCH"
+    if command -v cygpath >/dev/null 2>&1; then
+        _ap_lua_root="$(cygpath -m "$SCRATCH")"
+    fi
     "$PLAN_BIN" --index "$SCRATCH"/plan_tmp/index.yaml ready > "$SCRATCH"/plan_tmp_ready_before.txt
     _ap_phase ready-before
 
@@ -560,25 +564,31 @@ if ! PLAN_BIN="$(resolve_plan_binary)"; then
     exit 3
 fi
 export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
-# @trace order:1375-btuf — the named raw-VM opt-in. This .lua shells out
-# (io.popen, os.execute, os.getenv), which the sandboxed `lua` default removes.
-# FEATURE-DETECTED, once, and reused by every call in this file: a plan binary
-# that predates 1375-btuf reads `--unsandboxed` as a SCRIPT PATH ("read
-# --unsandboxed: No such file or directory", rc=1) — and without the flag that
-# old binary already IS the raw VM. So the flag is passed only to a binary that
-# accepts it, and an old binary on a host that cannot rebuild still sweeps.
-# Unquoted at the call site ON PURPOSE: empty must expand to no argument.
-# MIGRATE: 1380-u7sq ports the .lua onto sh.run{argv} + fs verbs and retires the
-# flag; tests/lua_std.rs pins every caller to this file.
-if "$PLAN_BIN" lua --unsandboxed -e '' >/dev/null 2>&1; then
-    _lua_unsandboxed=--unsandboxed
-else
-    _lua_unsandboxed=
+# @trace order:1380-u7sq — the archiver runs in the DEFAULT sandboxed lua
+# environment (proc.run plus rooted fs verbs). The 1375-btuf `--unsandboxed`
+# opt-in and its feature probe are gone, and tests/lua_std.rs pins that no
+# caller of it remains. The fs root is the checkout, or, when the caller
+# names an --index, the tree that index lives in (the directory above its
+# plan/), so a sweep of another tree is confined to THAT tree.
+_ap_lua_root="$REPO_ROOT"
+_ap_prev=""
+for _ap_arg in "$@"; do
+    if [ "$_ap_prev" = "--index" ]; then
+        _ap_idx_dir="$(dirname "$_ap_arg")"
+        _ap_lua_root="$(cd "$_ap_idx_dir/.." 2>/dev/null && pwd)" || {
+            echo "archive-plan-packets: --index $_ap_arg is not in a readable tree" >&2
+            exit 3
+        }
+    fi
+    _ap_prev="$_ap_arg"
+done
+if command -v cygpath >/dev/null 2>&1; then
+    _ap_lua_root="$(cygpath -m "$_ap_lua_root")"
 fi
 
 if [ "$_ap_backend" = "lua" ]; then
-    # shellcheck disable=SC2086  # unquoted on purpose, see the probe
-    "$PLAN_BIN" lua $_lua_unsandboxed "$DIR/archive-plan-packets.lua" "$@"
+    TILLANDSIAS_REPO_ROOT="$_ap_lua_root" "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua" \
+        --plan-bin "$PLAN_BIN" "$@"
 else
     _ruby scripts/archive-plan-packets.rb
 fi
