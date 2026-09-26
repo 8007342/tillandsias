@@ -95,6 +95,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "fragment-terminal-events",
     "fragments",
     "grade",
+    "hash",
     "json",
     "loop-status",
     "loop-status-append",
@@ -125,6 +126,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "spec-index",
     "spec-retrieve",
     "status",
+    "time",
     "validate-yaml",
     "verify-answer",
     "yaml",
@@ -2888,6 +2890,49 @@ fn carry_forward_gaps(doc: &serde_yaml::Value) -> Vec<String> {
 /// runner calls these in a per-file loop where that overhead multiplies into
 /// minutes. Measured 2026-08-29 on macuahuitl: yaml-type on a 40-line file,
 /// 227ms behind the ledger load; the parse itself is under 5ms.
+/// ORDER 1375-8g5t. `hash sha256 <file|->` and `time now --ms|--iso|--rfc3339`:
+/// the sha256 tool and the millisecond clock, identical on every platform.
+/// `hash sha256` prints the lowercase hex digest alone (no `  -`, no filename:
+/// the `cut -d' ' -f1` every caller appends is not needed). `time now --ms` is
+/// real milliseconds where BSD `date +%s%3N` has one-second resolution
+/// (1279-a7b6). Usage errors exit 2; an unreadable file exits 1.
+fn host_verbs_dispatch(subcommand: &str, args: &[String]) {
+    use tillandsias_plan::host_verbs;
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan hash sha256 <file|->  |  tillandsias-plan time now --ms|--iso|--rfc3339"
+        );
+        std::process::exit(2);
+    };
+    match (
+        subcommand,
+        args.get(1).map(String::as_str),
+        args.get(2).map(String::as_str),
+    ) {
+        ("hash", Some("sha256"), Some(src)) if args.len() == 3 => {
+            let digest = if src == "-" {
+                host_verbs::sha256_hex_reader(std::io::stdin().lock())
+            } else {
+                std::fs::File::open(src).and_then(host_verbs::sha256_hex_reader)
+            };
+            match digest {
+                Ok(d) => println!("{d}"),
+                Err(e) => {
+                    eprintln!("hash sha256: {src}: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        ("time", Some("now"), Some(flag)) if args.len() == 3 => match flag {
+            "--ms" => println!("{}", host_verbs::now_ms()),
+            "--iso" => println!("{}", host_verbs::now_iso()),
+            "--rfc3339" => println!("{}", host_verbs::now_rfc3339()),
+            _ => usage(),
+        },
+        _ => usage(),
+    }
+}
+
 /// ORDER 1375-rn9b. `json get` / `yaml get`: the jq subset, on the binary every
 /// gate host already has. Argument order is jq's (flags, filter, files) so a
 /// call site swaps `jq` for `tillandsias-plan json get` and nothing else.
@@ -3931,6 +3976,11 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
         // ORDER 1375-rn9b. File-local like the yaml readers: no ledger load.
         "json" | "yaml" => {
             json_query_dispatch(subcommand, args);
+            true
+        }
+        // ORDER 1375-8g5t. File-local too: no ledger load.
+        "hash" | "time" => {
+            host_verbs_dispatch(subcommand, args);
             true
         }
         _ => false,

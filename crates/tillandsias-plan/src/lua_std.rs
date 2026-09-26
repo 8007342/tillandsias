@@ -232,11 +232,8 @@ fn hash_table(lua: &Lua) -> LuaResult<LuaTable> {
     let t = lua.create_table()?;
     t.set(
         "sha256",
-        lua.create_function(|_, s: LuaString| {
-            use sha2::{Digest, Sha256};
-            let d = Sha256::digest(&*s.as_bytes());
-            Ok(d.iter().map(|b| format!("{b:02x}")).collect::<String>())
-        })?,
+        // ORDER 1375-8g5t: the same function the `hash sha256` verb calls.
+        lua.create_function(|_, s: LuaString| Ok(crate::host_verbs::sha256_hex(&s.as_bytes())))?,
     )?;
     Ok(t)
 }
@@ -313,17 +310,13 @@ fn time_table(lua: &Lua) -> LuaResult<LuaTable> {
     let t = lua.create_table()?;
     t.set(
         "now_ms",
-        lua.create_function(|_, ()| {
-            Ok(std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64)
-        })?,
+        // ORDER 1375-8g5t: the same function `time now --ms` calls.
+        lua.create_function(|_, ()| Ok(crate::host_verbs::now_ms()))?,
     )?;
     // The fragment-filename clock: 20260926t004655z.
     t.set(
         "iso_utc",
-        lua.create_function(|_, ()| Ok(chrono::Utc::now().format("%Y%m%dt%H%M%Sz").to_string()))?,
+        lua.create_function(|_, ()| Ok(crate::host_verbs::now_iso()))?,
     )?;
     Ok(t)
 }
