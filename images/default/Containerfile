@@ -54,6 +54,9 @@ COPY brew-shim-exec.sh /usr/local/bin/tillandsias-brew-shim-exec
 # a harness SIGSEGV becomes a loud named verdict + evidence file + truthful
 # nonzero container exit instead of a silent status-139 death. Never restarts.
 COPY harness-supervisor.sh /usr/local/bin/harness-supervisor
+# 1385-h6uz: announce each opencode tool call as it STARTS (opencode run prints
+# a call only on completion, so a long build was silent for hours).
+COPY opencode-tool-start-follower.sh /usr/local/bin/opencode-tool-start-follower
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 COPY codex-device-auth.sh /usr/local/bin/codex-device-auth
 COPY codex-oauth-vault.sh /usr/local/bin/codex-oauth-vault
@@ -103,6 +106,7 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-terminal.sh \
              /usr/local/bin/tillandsias-brew-shim-exec \
              /usr/local/bin/harness-supervisor \
+             /usr/local/bin/opencode-tool-start-follower \
              /usr/local/bin/vault-cli.sh \
              /usr/local/bin/codex-device-auth \
              /usr/local/bin/codex-oauth-vault \
