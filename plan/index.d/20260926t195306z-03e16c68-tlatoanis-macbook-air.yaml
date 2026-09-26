@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nothing-runs-the-mcp-live-build-check-fixture-so-its-arms-and-the-1414-mutation-control-only-execute-when-someone-types-the-command
+    field: status
+    value: completed
+    ts: "2026-09-26T19:53:06Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: nothing-runs-the-mcp-live-build-check-fixture-so-its-arms-and-the-1414-mutation-control-only-execute-when-someone-types-the-command
+    event:
+      type: completed
+      ts: "2026-09-26T19:53:06Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: cdf810686 (landed on origin/linux-next under a1ec46492, land49); litmus:mcp-live-build-check-fixture PASS in forge-environment-discoverability on darwin (19/0) and linux (19/0); mutation (single-slot attest) -> failed=1
+  - packet_id: nothing-runs-the-mcp-live-build-check-fixture-so-its-arms-and-the-1414-mutation-control-only-execute-when-someone-types-the-command
+    event:
+      type: note
+      ts: "2026-09-26T19:53:06Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Landed; fixture now runs in the litmus.
