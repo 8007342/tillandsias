@@ -13,9 +13,14 @@
 # DATA IS INCOMPRESSIBLE (/dev/urandom): zram compresses, so real source trees
 # spill cheaper than this. This is the conservative bound, and it is stated.
 #
-# Swap ceiling: rootless crun writes --memory-swap to memory.swap.max
-# LITERALLY (measured: 1g/1g -> swap.max 1 GiB, 1g/2g -> 2 GiB, 1g/0 -> 0),
-# so --swap-mib sets memory.swap.max directly; 0 is the §7.3 no-swap control.
+# Swap ceiling: --swap-mib is written to memory.swap.max on the libpod SCOPE
+# that `podman inspect` reports. The container runs in a nested LEAF below it,
+# which podman sets with Docker semantics (swap = memory-swap - memory:
+# 1g/1g -> 0, 1g/2g -> 1 GiB, bare 1g -> 1 GiB; the scope holds the TOTAL).
+# The effective ceiling is the minimum along the path, so the leaf is sized
+# generously (--memory-swap = M + swap) and the scope write is what binds:
+# 0 is the §7.3 no-swap control. (An earlier comment here claimed crun wrote
+# --memory-swap "literally"; that was a reading of the scope, not the leaf.)
 #
 # OUTPUT: measure:forge-spill:backing=<>:M=<>:W=<>:swap_max=<>:write_ms=<>:read_ms=<>:
 #   swap_peak_mib=<>:memory_peak_mib=<>:oom=<>:oom_kill=<>:high=<>:max=<>:rc=<>:verdict=<>
