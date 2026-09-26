@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: archive-plan-packets-lua-shells-out-through-io-popen-strings-and-os-execute-so-it-is-the-last-caller-that-needs-the-unsandboxed-lua-cli
+    field: status
+    value: in_progress
+    ts: "2026-09-26T06:36:52Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: archive-plan-packets-lua-shells-out-through-io-popen-strings-and-os-execute-so-it-is-the-last-caller-that-needs-the-unsandboxed-lua-cli
+    event:
+      type: note
+      ts: "2026-09-26T06:36:52Z"
+      host: yolanda-windows
+      summary: |-
+        claimed per coordinator 2026-09-26: port archive-plan-packets.lua onto proc.run (landed 96203966f) plus Observing-only rooted fs write verbs; drop the target/release fallback; retire the last lua --unsandboxed caller; closure includes a NATIVE Windows archive-plan-packets.sh --check
