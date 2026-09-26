@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: resolve-plan-binary-treats-a-drive-letter-cargo-target-dir-as-relative-and-prefixes-it-with-dot-slash
+    order: 1415-my8j
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, plan-binary, regime]
+    estimated_hours: 1
+    owned_files: [scripts/plan-binary-probe.sh]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds a fixture arm resolving with
+      CARGO_TARGET_DIR=C:/... in the same commit (1136-n8sh).
+    title: |
+      scripts/plan-binary-probe.sh tests absoluteness only by a leading `/`, so CARGO_TARGET_DIR=C:/... (the spelling cygpath -m and Windows tools emit) is rewritten to ./C:/... and never resolves
+    verifiable_closure: |
+      With CARGO_TARGET_DIR=C:/<checkout>/target and cwd outside the checkout,
+      resolve_plan_binary prints the .exe under it. Pre-fix result: FAILS, measured on
+      yolanda 2026-09-26: rc=1 from `/` with CARGO_TARGET_DIR="$(cygpath -m .../target)",
+      while the /c/... spelling of the same directory resolves.
+    context: |
+      Found during 1401-x76w: the first pre-fix run of the new decider used the C:/
+      spelling, and the "masked" regime was red, so the decider reported
+      red-in-both instead of refusing. Both sites: plan-binary-probe.sh:72 (resolve_plan_binary)
+      and :356 (the same test in a second function), each `[ "${ctd#/}" = "$ctd" ]`. The right
+      test already exists in the tree: archive-plan-packets.sh:423 and :579 use
+      `case "$p" in /*|[A-Za-z]:*) ;;`. This is the absoluteness-DETECTION bug, not the
+      deferred interface change of returning absolute paths (coordinator, 2026-09-26).
+    events:
+      - type: filed
+        ts: "2026-09-26T20:00:00Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request, from 1401-x76w.
