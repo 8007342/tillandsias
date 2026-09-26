@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-bare-drain-queue-invocation-claims-a-packet-and-launches-a-paid-agent-without-asking
+    order: 1404-4x3r
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [orchestration, agent-spend, fail-closed, safety]
+    estimated_hours: 2
+    owned_files: [scripts/drain-queue.sh]
+    observed_by: yoga
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds a hermetic fixture that invokes the script
+      bare and asserts it refuses and launches nothing, in the same commit (1136-n8sh).
+    title: |
+      `scripts/drain-queue.sh` with NO arguments defaults to an UNLIMITED drain: it claims a ready packet on origin, salvages "dirt" to origin and launches a paid agent session, without asking, so operator spend is one accidental invocation away
+    verifiable_closure: |
+      A bare `scripts/drain-queue.sh` (no packet, no explicit dispatch flag) REFUSES with its
+      usage/affordance text, exits non-zero, and spends nothing: no claim written, no salvage
+      ref pushed, no agent process started (a hermetic fixture with stubbed repeat/agent
+      binaries asserts none is invoked). An explicit dispatch invocation still works, and
+      --dry-run still prints the plan. Pre-fix result: FAILS: measured on yoga 2026-09-26, a
+      bare invocation claimed packet 278 on origin/linux-next as host yoga (568d08d02), pushed
+      salvage/yoga/20260926-packet-278-startup-dirt, and started
+      `repeat --prompt "Use the /advance-work-from-plan skill to work on packet 278 …"` ->
+      codex, killed after about 6 minutes.
+    context: |
+      How it was reached: yoga, triaging a red litmus, ran every scripts/*.sh that the litmus
+      MENTIONED to find its scanner (a grep result executed as a to-do list). drain-queue.sh
+      was one of them because check-plan-ledger-readers.sh's allowlist names it. That was
+      yoga's error (memory rule filed). The coordinator's point stands independently: the
+      script's own default made an accidental invocation expensive, and a tool that spends
+      operator money should refuse unless the spend is asked for by name. The claim was
+      released (20260926t130201z-2a1a2ea4-yoga.yaml); the salvage ref is log-only and left to
+      the stray sweep.
+    events:
+      - type: filed
+        ts: "2026-09-26T13:07:17Z"
+        host: yoga
+        summary: Filed by yoga at the coordinator's request after the accidental drain-queue run.
