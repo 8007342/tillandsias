@@ -1,0 +1,35 @@
+packets:
+  - packet_id: five-meta-orchestration-litmus-tests-fail-on-darwin-on-an-unmodified-trunk-cause-unknown
+    order: 1418-bug2
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [testing, litmus, macos]
+    estimated_hours: 3
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the cause is unknown; the pins are the five named litmus tests, which must go green on darwin.
+    title: |
+      scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size instant on darwin gives passed=18 failed=5
+      on UNMODIFIED origin/linux-next (eac34b4b9) in a linked worktree, in both the normal env and a scratch
+      HOME/GIT_CONFIG_GLOBAL=/dev/null env; cause not diagnosed
+    verifiable_closure: |
+      on darwin the meta-orchestration spec reports failed=0 for litmus:forge-expert-base-guard-shape,
+      litmus:e2e-eligibility-probe-shape, litmus:ledger-node-claim-shape, litmus:long-running-view-agreement and
+      litmus:resumable-claim-dirt-shape (or each red is traced to a named, filed cause); pre-fix result: FAILS (5 red).
+    context: |
+      MEASURED 2026-09-26 on tlatoanis-macbook-air while verifying 1409-65d5 (the reds are identical with and without
+      that change). Failing tests:
+        litmus:forge-expert-base-guard-shape
+        litmus:e2e-eligibility-probe-shape
+        litmus:ledger-node-claim-shape  (step 6/7 "a claim on an id that names no packet is REFUSED and leases
+          nothing (790-u8x6)" -> [FAIL] rc=0, i.e. the claim was NOT refused; steps 1-5 and 7 OK)
+        litmus:long-running-view-agreement
+        litmus:resumable-claim-dirt-shape
+      Ruled out: env isolation (same 5 in normal env), and "no plan binary" (target/ exists in the worktree).
+      Not yet checked: whether the reds reproduce in the MAIN checkout (not a linked worktree), and whether they
+      are darwin-only (the coordinator's Linux union passes these specs).
+    exit_criteria:
+      - 'each of the five is green on darwin or traced to a filed cause; pre-fix result: FAILS'
