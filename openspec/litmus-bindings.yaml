@@ -951,6 +951,7 @@ specs:
   - litmus:spec-traceability-shape
   - litmus:spec-traceability-usage-shape
   - litmus:litmus-runner-backslash-escaping-shape
+  - litmus:litmus-no-plan-binary-refusal
   - litmus:litmus-stdlib-portability-shape
   - litmus:litmus-name-filter-fail-loud-shape
   - litmus:litmus-name-filter-hint-shape

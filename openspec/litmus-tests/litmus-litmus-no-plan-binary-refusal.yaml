@@ -1,0 +1,39 @@
+# @trace spec:spec-traceability, order:1419-zydw
+name: litmus:litmus-no-plan-binary-refusal
+spec: spec-traceability
+phase: pre-build
+size: instant
+severity: high
+description: >
+  scripts/run-litmus-test.sh refuses ONCE, by name, when no RUNNABLE
+  tillandsias-plan resolves (resolve_plan_binary, then `capabilities`), rather
+  than letting plan-backed steps degrade into unrelated-looking reds. MEASURED
+  2026-09-26 on darwin in a fresh linked worktree: meta-orchestration went red
+  on four tests with four surfaces (a lease on the fixture's fake id, missing=2,
+  "no runnable tillandsias-plan", a failed methodology query), each green once
+  a binary was supplied; and a broken TILLANDSIAS_PLAN_BIN ended the runner with
+  the stub's rc and no output (`set -e` on the capabilities probe).
+
+preconditions:
+  - workspace contains scripts/run-litmus-test.sh
+  - workspace contains scripts/plan-binary-probe.sh
+  - workspace contains scripts/test-litmus-no-plan-binary.sh
+
+critical_path:
+  - step: "no binary and an unrunnable binary each give ONE named refusal (rc 2); the opt-out proceeds; a runnable binary is admitted"
+    command: "bash scripts/test-litmus-no-plan-binary.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:litmus-no-plan-binary:"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: "blocked:litmus-no-plan-binary / blocked:litmus-plan-binary-unrunnable:<path>, never per-test reds"
+  log_fields:
+    spec: "spec-traceability"
+    test: "litmus-no-plan-binary-refusal"
+
+failure_modes:
+  - "the runner proceeds with no runnable binary and plan-backed steps degrade into misleading reds"
+  - "the capabilities probe loses its `&& … || …` guard and a broken binary ends the run silently under set -e"
+  - "the check tests for a path instead of running the binary, so a stale binary passes as present"
