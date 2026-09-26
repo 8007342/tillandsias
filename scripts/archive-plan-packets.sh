@@ -592,6 +592,7 @@ for _ap_arg in "$@"; do
     if [ "$_ap_prev" = "--index" ]; then
         _ap_idx_dir="$(dirname "$_ap_arg")"
         _ap_lua_root="$(cd "$_ap_idx_dir/.." 2>/dev/null && pwd)" || {
+            echo "could-not-run:archiver:index-tree-unreadable (1380-u7sq)"
             echo "archive-plan-packets: --index $_ap_arg is not in a readable tree" >&2
             exit 3
         }
