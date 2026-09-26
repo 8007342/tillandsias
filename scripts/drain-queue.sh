@@ -6,7 +6,7 @@
 ##  cost: "1 fresh agent session per packet (~5-30m each depending on packet complexity)"
 ##  output: "structured log to drain-queue-<date>.log with COMPLETE/FAILED/SKIP per packet"
 ##  see_also: "scripts/claim-ledger-node.sh (used internally for node claiming)"
-##  example: "./scripts/drain-queue.sh --release v0.4 --limit 3"
+##  example: "./scripts/drain-queue.sh --drain --release v0.4 --limit 3"
 ##  example: "./scripts/drain-queue.sh --dry-run --tag linux"
 #
 # Parses the FOLDED plan ledger (plan/index.yaml ⊕ plan/index.d/ fragments, via
@@ -15,9 +15,10 @@
 # runs one advance-work-from-plan session, and releases the claim.
 #
 # Usage:
-#   ./scripts/drain-queue.sh [--limit <n>] [--release <v0.4|v0.5>] [--tag <tag>] [--dry-run] [--help]
+#   ./scripts/drain-queue.sh --drain [--limit <n>] [--release <v0.4|v0.5>] [--tag <tag>] [--dry-run] [--help]
 #
 # Options:
+#   --drain           Required to claim and launch; a bare run refuses (1404-4x3r)
 #   --limit <n>       Max packets to drain (default: unlimited)
 #   --release <ver>   Only packets for this desired_release (e.g. v0.4, v0.5)
 #   --tag <tag>       Only packets whose capability_tags include this tag
@@ -44,9 +45,11 @@ tillandsias-plan CLI) and launches fresh agent sessions via ./repeat to drain
 them one at a time.
 
 Usage:
-  ./scripts/drain-queue.sh [OPTIONS]
+  ./scripts/drain-queue.sh --drain [OPTIONS]
+  ./scripts/drain-queue.sh --dry-run [OPTIONS]
 
 Options:
+  --drain           Claim packets and launch agent sessions (spends; required)
   --limit <n>       Max packets to drain (default: unlimited)
   --release <ver>   Only packets for this desired_release (e.g. v0.4, v0.5)
   --tag <tag>       Only packets whose capability_tags include this tag
@@ -58,10 +61,10 @@ Examples:
   ./scripts/drain-queue.sh --dry-run --release v0.4
 
   # Drain up to 3 v0.4 packets
-  ./scripts/drain-queue.sh --release v0.4 --limit 3
+  ./scripts/drain-queue.sh --drain --release v0.4 --limit 3
 
   # Drain linux-tagged v0.5 work
-  ./scripts/drain-queue.sh --release v0.5 --tag linux
+  ./scripts/drain-queue.sh --drain --release v0.5 --tag linux
 
 Output: logs to drain-queue-<date>.log with COMPLETE/FAILED/SKIP per packet.
 EOF
@@ -71,6 +74,7 @@ LIMIT=""
 RELEASE_FILTER=""
 TAG_FILTER=""
 DRY_RUN=false
+DRAIN=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -78,10 +82,21 @@ while [[ $# -gt 0 ]]; do
     --release) RELEASE_FILTER="$2"; shift 2 ;;
     --tag) TAG_FILTER="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
+    --drain) DRAIN=true; shift ;;
     --help|-h) show_help; exit 0 ;;
     *) echo "Unknown option: $1 (try --help)" >&2; exit 1 ;;
   esac
 done
+
+# ORDER 1404-4x3r. Every drained packet is a claim on origin plus a paid agent
+# session, and a bare run used to drain the WHOLE queue: on yoga, 2026-09-26,
+# it claimed packet 278 and ran codex for ~6 minutes. Spend must be asked for
+# by name, so without --drain (or --dry-run) refuse before anything is written.
+if ! $DRAIN && ! $DRY_RUN; then
+  show_help
+  echo "refused:drain-queue:bare-invocation: this claims packets and launches paid agent sessions; pass --drain to do that, or --dry-run to see the plan" >&2
+  exit 2
+fi
 
 LOGFILE="drain-queue-$(date -u '+%Y%m%d').log"
 DRAIN_COUNT=0

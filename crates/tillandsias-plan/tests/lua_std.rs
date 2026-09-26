@@ -334,3 +334,62 @@ fn the_empty_array_rule_prints_the_same_bytes_in_three_processes() {
     );
     assert_eq!((a.as_str(), b.as_str()), (c.as_str(), c.as_str()));
 }
+
+/// ORDER 1412-n5cp, end to end through the REAL verbs. A dangling in-root
+/// symlink to an outside path: fs.write and fs.mkdir must be REFUSED by the
+/// sandbox, and nothing may exist outside the root afterwards. Before this
+/// order the verbs were safe only by incident (fs.write's rename replaced the
+/// link; fs.mkdir hit EEXIST) while the sandbox admitted the path, so this
+/// asserts both the refusal and the outcome.
+#[cfg(unix)]
+#[test]
+fn a_dangling_in_root_symlink_cannot_be_used_to_write_outside_the_root() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dir.path().join("root");
+    let outside = dir.path().join("outside");
+    std::fs::create_dir(&root).expect("mkdir root");
+    std::fs::create_dir(&outside).expect("mkdir outside");
+    let git = std::process::Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(&root)
+        .status()
+        .expect("git init");
+    assert!(git.success());
+    std::os::unix::fs::symlink(outside.join("newfile"), root.join("x")).expect("link x");
+    std::os::unix::fs::symlink(outside.join("newdir"), root.join("d")).expect("link d");
+
+    for script in [
+        r#"fs.write("x", "escaped")"#,
+        r#"fs.mkdir("d")"#,
+        r#"fs.mkdir("d/sub")"#,
+    ] {
+        let out = std::process::Command::new(plan_bin())
+            .args(["lua", "-e", script])
+            .current_dir(&root)
+            .env("TILLANDSIAS_REPO_ROOT", &root)
+            .output()
+            .expect("run lua");
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(!out.status.success(), "{script} was not refused: {text}");
+        assert!(
+            text.contains("cannot be resolved"),
+            "{script}: refusal must name why: {text}"
+        );
+    }
+    let leaked: Vec<_> = std::fs::read_dir(&outside).expect("read outside").collect();
+    assert!(
+        leaked.is_empty(),
+        "something was written OUTSIDE the root: {leaked:?}"
+    );
+    assert!(
+        std::fs::symlink_metadata(root.join("x"))
+            .expect("x")
+            .file_type()
+            .is_symlink(),
+        "the refused write must leave the link untouched"
+    );
+}

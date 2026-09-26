@@ -45,10 +45,23 @@ _fail() { echo "$*" >&2; exit 2; }
 # run from `/` (the fixture's cwd-independence arm) it found nothing on every Mac
 # gate, where no CARGO_TARGET_DIR masks it (1411-b5fk follow-up; class 1401-x76w).
 # An explicit TILLANDSIAS_PLAN_BIN keeps its caller-relative meaning.
+#
+# The case statement lives in a FUNCTION, never inline inside $( ): bash 3.2
+# (every Mac) reads an unparenthesised `pattern)` inside a command substitution
+# as the substitution's closing paren, so the inline form did not even parse
+# there ("_p: unbound variable"), while bash 5 on Linux accepted it.
+_abs_plan() {
+    local p
+    p="$(resolve_plan_binary 2>/dev/null)" || return 1
+    case "$p" in
+        /*) printf '%s' "$p" ;;
+        *) printf '%s/%s' "$PWD" "${p#./}" ;;
+    esac
+}
 if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
     PLAN="$(resolve_plan_binary 2>/dev/null)" || _fail "hardware-fingerprint: no runnable tillandsias-plan (it reads the document with json get)"
 else
-    PLAN="$(cd "$SCRIPT_DIR/.." && _p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in /*) printf '%s' "$_p" ;; *) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || _fail "hardware-fingerprint: no runnable tillandsias-plan (it reads the document with json get)"
+    PLAN="$(cd "$SCRIPT_DIR/.." && _abs_plan)" || _fail "hardware-fingerprint: no runnable tillandsias-plan (it reads the document with json get)"
 fi
 _q() { "$PLAN" json get "$@"; }
 
