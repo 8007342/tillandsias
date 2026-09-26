@@ -138,6 +138,21 @@ else
 fi
 TREE="$WORK/tree"
 LOG="$WORK/log"
+if ! mkdir -p "$WORK"; then
+    echo "fail:${NAME}:cannot-create-workdir:$WORK"; exit 2
+fi
+# 1132-r4mt: $WORK is STABLE (the cargo cache above), so two concurrent runs
+# would wipe each other's $TREE mid-check — the same race as the archiver's
+# fixed scratch. SERIALISE rather than split: a per-run tree would cost the
+# warm cache every run. A second run waits its turn and then runs normally.
+# Where flock is absent (BSD/macOS userland) this is unchanged from before;
+# the stray-gate concurrency it guards against is a toolbox (Linux) defect.
+if command -v flock >/dev/null 2>&1; then
+    exec 9>"$WORK/.lock"
+    if ! flock -w 1800 9; then
+        echo "fail:${NAME}:cannot-create-workdir:lock-timeout:$WORK"; exit 2
+    fi
+fi
 rm -rf "$TREE" "$LOG"
 if ! mkdir -p "$TREE" "$LOG"; then
     echo "fail:${NAME}:cannot-create-workdir:$WORK"; exit 2

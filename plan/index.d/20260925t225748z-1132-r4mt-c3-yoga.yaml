@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: progress
+      ts: "2026-09-25T22:57:48Z"
+      host: yoga
+      summary: |
+        CRITERION 3 on yoga (a host that reproduced the refusal), tree 165f00c71 (work/1132-r4mt):
+          IN GATE    ./build.sh --check rc=0 (1202s): archiver ran for real,
+                     "ok:archive-answerability:333/333 ... ready set unchanged at 625", "Check passed";
+                     "PASS: archiver could-not-run on absent ruby 5/5 (965-sxec)"
+          STANDALONE same tree: archive-plan-packets.sh --check rc=0, same 333/333 at 625, "Check passed";
+                     test-archiver-ruby-could-not-run.sh 5/5
+        Same verdict both ways. C5 (negative control), from test-archiver-concurrent-check.sh 3 with both
+        premises asserted first: trunk scripts FAIL 3/6 (every pair rc=3, no ruby token); fixed scripts PASS
+        6/6, worktree clean. Absent ruby is still refused (965-sxec fixture 5/5). Wired into local-ci.sh
+        pre-build (--ci-full, log_fail_tracked, 1 pair = 386s) and declared excluded in
+        gate-divergence-declared.txt; check-added-test-is-referenced ok (standing 43 -> 42).
+        C4 (arm 5, kill mid-archiver) NOT exercised; still open.
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: note
+      ts: "2026-09-25T22:57:48Z"
+      host: yoga
+      summary: |
+        LATENT SAME-CLASS SHAPE, not fixed, no row (coordinator ruling: file one when a second caller appears).
+        scripts/native-scratch-dir.sh native_scratch_dir returns a FIXED "<base>/tillandsias-scratch/<slug>"
+        on a slow filesystem (9p / WSL drvfs), so any caller that uses that dir directly for per-run state
+        has this row's race on those hosts. Today the only caller is archive-plan-packets.sh, which now
+        mktemps UNDER it (1132-r4mt). A new caller must do the same.

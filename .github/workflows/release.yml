@@ -31,6 +31,18 @@ jobs:
         uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
         with:
           flakehub: false
+          # v56.9.25.1's Linux job failed three times on ONE NAR: the CDN edge
+          # serving the runners dropped cache.nixos.org's cargo-package-winapi-
+          # i686 NAR at exactly 2 MiB ("Stream error in the HTTP/2 framing
+          # layer"), the resume got HTTP 416, and with no fallback nix aborted
+          # ("no substituter that can build it") although the same NAR fetched
+          # whole over HTTP/2 and HTTP/1.1 from a host. http2=false avoids the
+          # framing layer; fallback=true builds a path whose substitution
+          # failed instead of failing the release (a cargo-package-* path is a
+          # fixed-output crates.io fetch, so building it is cheap and exact).
+          extra-conf: |
+            http2 = false
+            fallback = true
 
       - name: Nix Cache
         id: nix-cache
@@ -377,6 +389,25 @@ jobs:
           git push origin refs/tags/unstable --force
           echo "Updated rolling tag: unstable -> ${GITHUB_SHA}"
 
+      - name: Stage the unstable channel copy (installers default to unstable)
+        run: |
+          # Order 1369-sjbc. The same bytes went to v${VERSION} and to
+          # `unstable`, so an installer fetched from /releases/download/unstable/
+          # defaulted to STABLE and installed the promoted build. v${VERSION} is
+          # what promote-stable.sh later marks latest, so it keeps the stable
+          # default; only this copy is rewritten, re-signed and re-verified.
+          bash scripts/stage-unstable-installers.sh release-artifacts unstable-artifacts \
+            | tee /tmp/stage-unstable.out
+          grep -q '^ok:stage-unstable-installers:' /tmp/stage-unstable.out
+          sed -n 's/^resign://p' /tmp/stage-unstable.out > /tmp/stage-unstable.resign
+          cd unstable-artifacts
+          while IFS= read -r artifact; do
+            cosign sign-blob --yes --bundle "${artifact}.cosign.bundle" "${artifact}"
+            test -f "${artifact}.cosign.bundle"
+          done < /tmp/stage-unstable.resign
+          bash ../scripts/check-release-asset-integrity.sh .
+          grep -qx 'DEFAULT_CHANNEL="unstable"' install.sh
+
       - name: Refresh unstable channel release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -392,7 +423,7 @@ jobs:
           # windows-release jobs re-upload their halves from this same run.
           gh release delete unstable --yes --cleanup-tag=false 2>/dev/null || true
           gh release create unstable \
-            release-artifacts/* \
+            unstable-artifacts/* \
             --target "${GITHUB_SHA}" \
             --title "Unstable channel (rolling) — v${VERSION}" \
             --prerelease \
@@ -528,7 +559,19 @@ jobs:
           echo "Uploaded macOS assets to v${VERSION}"
           # Mirror into the rolling UNSTABLE channel the Linux job recreated
           # this run, so /releases/download/unstable carries the macOS half.
-          gh release upload unstable release-artifacts/* --clobber
+          # Order 1369-sjbc: from a staged copy whose install-macos.sh defaults
+          # to unstable, re-signed; v${VERSION} above keeps the stable default.
+          bash scripts/stage-unstable-installers.sh release-artifacts unstable-artifacts \
+            | tee /tmp/stage-unstable.out
+          grep -q '^ok:stage-unstable-installers:' /tmp/stage-unstable.out
+          sed -n 's/^resign://p' /tmp/stage-unstable.out > /tmp/stage-unstable.resign
+          while IFS= read -r artifact; do
+            cosign sign-blob --yes --bundle "unstable-artifacts/${artifact}.cosign.bundle" \
+              "unstable-artifacts/${artifact}"
+            test -f "unstable-artifacts/${artifact}.cosign.bundle"
+          done < /tmp/stage-unstable.resign
+          grep -qx 'DEFAULT_CHANNEL="unstable"' unstable-artifacts/install-macos.sh
+          gh release upload unstable unstable-artifacts/* --clobber
           echo "Mirrored macOS assets to the unstable channel"
 
   windows-release:
@@ -799,5 +842,20 @@ jobs:
           echo "Uploaded Windows assets to v${VERSION}"
           # Mirror into the rolling UNSTABLE channel the Linux job recreated
           # this run, so /releases/download/unstable carries the Windows half.
-          gh release upload unstable release-artifacts/* --clobber
+          # Order 1369-sjbc: from a staged copy whose install-windows.ps1
+          # defaults to unstable, with its SHA256SUMS-windows line rewritten
+          # and both files re-signed; v${VERSION} above keeps the stable default.
+          bash scripts/stage-unstable-installers.sh release-artifacts unstable-artifacts \
+            | tee /tmp/stage-unstable.out
+          grep -q '^ok:stage-unstable-installers:' /tmp/stage-unstable.out
+          sed -n 's/^resign://p' /tmp/stage-unstable.out > /tmp/stage-unstable.resign
+          while IFS= read -r artifact; do
+            cosign sign-blob --yes --bundle "unstable-artifacts/${artifact}.cosign.bundle" \
+              "unstable-artifacts/${artifact}"
+            test -f "unstable-artifacts/${artifact}.cosign.bundle"
+          done < /tmp/stage-unstable.resign
+          bash scripts/check-release-asset-integrity.sh unstable-artifacts
+          # Not -x: the runner's checkout may carry CRLF, which the helper keeps.
+          grep -q "^\$DefaultChannel = 'unstable'" unstable-artifacts/install-windows.ps1
+          gh release upload unstable unstable-artifacts/* --clobber
           echo "Mirrored Windows assets to the unstable channel"

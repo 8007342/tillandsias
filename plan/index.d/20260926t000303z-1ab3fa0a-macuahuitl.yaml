@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-release-workflow-s-linux-job-misses-its-nix-cache-on-every-cut-with-unchanged-flake-inputs-two-cuts-in-one-day-rebuilt-for-57-and-32-minutes-and-the-step-that-calls-it-a-regression-is-advisory
+    event:
+      type: correction
+      ts: "2026-09-26T00:03:03Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        CORRECTION to macuahuitl's evidence event 20260925t231858z-25252ce0 on this row, which called `http2 = false` + `fallback = true` the fix: MEASURED FALSE on release run 36203050569 (v56.9.25.2, 2026-09-25 ~00:01Z). http2=false took effect (the curl error changed from "Stream error in the HTTP/2 framing layer" to "Transferred a partial file"), but the runners' CDN edge still serves nar/18glck8z2qvfvfb54hn1nyh6sxv09m1jr90i4gvsmbp07whrjq40.nar.zst truncated at exactly 2097152 of 2740849 bytes, the resume still gets 416, and fallback=true did NOT build the path: nix still said "/nix/store/pl3ajga5fr54api91dvgp24197gcvjjj-cargo-package-winapi-i686-pc-windows-gnu-0.4.0 is required, but there is no substituter that can build it". So this path reaches the build as a substitution-only path. Nix scheduled it to be fetched (its drv did not appear in the "will be built" list), which is how crane's vendoring presents it, and fallback cannot apply to a path with no derivation in the build. Unfixed by any nix.conf setting. The v56.9.25.2 cut is waiting on the CDN (reruns of the failed job every 30 min). A durable mitigation needs the path to be buildable or held in a cache we control: restore it from the actions cache (cache-nix-action save is false), or add a substituter we operate. Both are open questions for this row.
