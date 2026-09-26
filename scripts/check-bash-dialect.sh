@@ -18,6 +18,20 @@
 # freshness: auditor=macos-tlatoanis-macbook-air-fable5 date=2026-08-16 verdict=refreshed scope=761-g36m authoring
 set -u
 
+# 1413-8bee: TILLANDSIAS_DIALECT_SCAN_FILES is an ALIAS for a single-path
+# TILLANDSIAS_DIALECT_SCAN_DIR. litmus:enclave-service-health-shape scoped its
+# one-file check with that name, which this script never read, so the "one
+# file" check silently scanned every script plus build.sh: 16.9 s on darwin,
+# 9.2 s on macuahuitl, against a 10 s step budget. Scoped, it is 0.03 s.
+if [ -z "${TILLANDSIAS_DIALECT_SCAN_DIR:-}" ] && [ -n "${TILLANDSIAS_DIALECT_SCAN_FILES:-}" ]; then
+  case "$TILLANDSIAS_DIALECT_SCAN_FILES" in
+    (*[[:space:]]*)
+      echo "blocked:bash-dialect:scan-files-multiple"
+      echo "[check-bash-dialect] TILLANDSIAS_DIALECT_SCAN_FILES names ONE path (file or directory); got: '$TILLANDSIAS_DIALECT_SCAN_FILES'" >&2
+      exit 1 ;;
+  esac
+  TILLANDSIAS_DIALECT_SCAN_DIR="$TILLANDSIAS_DIALECT_SCAN_FILES"
+fi
 SCAN_DIR="${TILLANDSIAS_DIALECT_SCAN_DIR:-scripts}"
 SELF_NAME="check-bash-dialect.sh"
 

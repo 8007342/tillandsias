@@ -195,6 +195,13 @@ expect "case-in-cs-exemption-passes" "ok:bash-dialect-clean" 0
 # A case in a plain ( ) subshell, or in a function called through $(f), parses.
 printf '#!/usr/bin/env bash\n( %s "$1" in /*) echo a ;; esac )\nf() { %s "$1" in /*) echo a ;; esac; }\nx=$(f "$1")\n' "$C" "$C" > "$TMP/cics.sh"
 expect "case-outside-cs-passes" "ok:bash-dialect-clean" 0
+# TILLANDSIAS_DIALECT_SCAN_FILES scopes like SCAN_DIR (the enclave-service-health
+# litmus used that name, which was never read: a "one-file" check scanned the
+# whole tree). Ignored, this falls back to the clean live tree and reads ok.
+printf '#!/usr/bin/env bash\nx=$(%s "$1" in /*) echo a ;; esac)\n' "$C" > "$TMP/cics.sh"
+got="$(TILLANDSIAS_DIALECT_SCAN_FILES="$TMP/cics.sh" bash "$CHECKER" 2>/dev/null)"
+[ "$got" = "blocked:bash4-unguarded:1" ] \
+  || { echo "FAIL: scan-files-alias-scopes — got '$got'" >&2; fails=$((fails + 1)); }
 rm "$TMP/cics.sh"
 
 # 1374-4u6i: the count is FILES. One file tripping two rules is one; two
@@ -208,5 +215,5 @@ if [ "$fails" -gt 0 ]; then
   echo "FAIL: check-bash-dialect fixture: $fails scenario(s) diverged" >&2
   exit 1
 fi
-echo "PASS: check-bash-dialect fixture 32/32 scenarios green"
+echo "PASS: check-bash-dialect fixture 33/33 scenarios green"
 exit 0
