@@ -2,20 +2,29 @@
 # @trace order:1395-ue3i
 #
 # test-centicolon-ratchet.sh — the ADVISORY CentiColon R line: printed every
-# run, WARNS on a lost satisfaction, reports added/removed obligations as scope
-# (never as regression), prints blocked: rather than R=0, and ALWAYS exits 0.
+# run, WARNS only on a regression, reports added obligations as scope and
+# tombstoned ones as retired, prints blocked: rather than R=0, ALWAYS exits 0.
 #
-# Hermetic corpus (the same shape test-centicolon-grade.sh builds): one
-# requirement satisfied by an enforced, bound, pre-build litmus step with a
-# green record; others unbound. Arms, in order against one snapshot:
-#   1 first run            -> regime=baseline, R/satisfied/denominator printed
-#   2 unchanged rerun      -> regime=monotone
-#   3 green record removed -> warn:centicolon-ratchet:lost=1:<id>, regime=lost:1, rc 0
-#   4 --no-snapshot twice with the loss still present -> both warn (a report
-#     never swallows the next --check's warning)
-#   5 a requirement added  -> regime=scope-added:1, no lost warning
-#   6 a requirement removed -> regime=scope-removed:1
-#   7 no spec corpus       -> "centicolon: blocked:…", rc 0, never R=0
+# The ratchet semantics are the operator's (813a552e2, on 1395-ue3i):
+# added = scope growth; retired = vanished WITH a tombstone trail (a registry
+# `tombstone:` for an obsoleted spec, or an openspec/changes record); lost =
+# vanished with no record, or a state moving down. Only lost warns.
+#
+# Hermetic corpus (the shape test-centicolon-grade.sh builds): requirement a is
+# satisfied by an enforced, bound, pre-build litmus step with a green record.
+# Arms, in order against one snapshot:
+#   1 first run              -> regime=baseline, added/retired/lost 0
+#   2 unchanged rerun        -> regime=monotone
+#   3 --no-snapshot twice with a's record gone -> both warn (a report never
+#     swallows the next --check's warning)
+#   4 green record removed   -> lost=1 (down), warn names a's id, rc 0
+#   5 a requirement added    -> added=1, regime=scope-added, no warning
+#   6 a requirement removed with NO record -> lost=1 (vanished), warn
+#   7 a requirement removed WITH an openspec/changes record naming its req-id
+#                            -> retired=1, no warning
+#   8 a spec obsoleted with a registry tombstone -> retired=<its obligations>,
+#     no warning
+#   9 no spec corpus         -> "centicolon: blocked:…", rc 0, never R=0
 # Pre-fix every arm FAILS: the script does not exist.
 
 set -uo pipefail
@@ -58,33 +67,56 @@ green() {
 run() { OUT="$(TILLANDSIAS_REPO_ROOT="$H" TILLANDSIAS_TIMING_LOG="$WORK/log.jsonl" bash "$RATCHET" "$@" 2>&1)"; RC=$?; LINE="$(grep '^centicolon:' <<<"$OUT")"; }
 ID_A="cc:aaaa000a:$(printf 'Scenario a' | "${SHA[@]}" | cut -c1-8)"
 
+warns() { grep '^warn:centicolon-ratchet:' <<<"$OUT"; }
+
 green; run
-[ "$RC" -eq 0 ] && [ "$LINE" = "centicolon: R=1 satisfied=1 denominator=2 histogram=declared:1,traced:0,positively_tested:1 regime=baseline (advisory)" ] \
+[ "$RC" -eq 0 ] && [ "$LINE" = "centicolon: R=1 satisfied=1 denominator=2 added=0 retired=0 lost=0 histogram=declared:1,traced:0,positively_tested:1 regime=baseline (advisory)" ] \
     && ok "1 baseline line printed" || bad "1: rc=$RC [$LINE]"
 run
-[ "$RC" -eq 0 ] && grep -q ' regime=monotone (advisory)$' <<<"$LINE" && ok "2 unchanged rerun -> monotone" || bad "2: [$LINE]"
+[ "$RC" -eq 0 ] && grep -q ' added=0 retired=0 lost=0 .* regime=monotone (advisory)$' <<<"$LINE" && ok "2 unchanged rerun -> monotone" || bad "2: [$LINE]"
 
 : >"$WORK/log.jsonl"
-run --no-snapshot; w1="$(grep -c '^warn:centicolon-ratchet:lost=1:' <<<"$OUT")"
-run --no-snapshot; w2="$(grep -c '^warn:centicolon-ratchet:lost=1:' <<<"$OUT")"
-[ "$w1" = 1 ] && [ "$w2" = 1 ] && ok "4 --no-snapshot reports the loss without swallowing it" || bad "4: warnings $w1/$w2"
+run --no-snapshot; w1="$(warns | grep -c .)"
+run --no-snapshot; w2="$(warns | grep -c .)"
+[ "$w1" = 1 ] && [ "$w2" = 1 ] && ok "3 --no-snapshot reports the loss without swallowing it" || bad "3: warnings $w1/$w2"
 run
-if [ "$RC" -eq 0 ] && grep -qx "warn:centicolon-ratchet:lost=1:$ID_A" <<<"$OUT" && grep -q ' satisfied=0 .* regime=lost:1 (advisory)$' <<<"$LINE"; then
-    ok "3 lost satisfaction -> warn by id, regime=lost:1, exit 0 (advisory, never refused)"
-else bad "3: rc=$RC [$(grep -E '^(warn|centicolon):' <<<"$OUT" | tr '\n' ' ')]"; fi
+if [ "$RC" -eq 0 ] && [ "$(warns)" = "warn:centicolon-ratchet:lost=1:vanished=0,down=1:$ID_A" ] && grep -q ' satisfied=0 .* lost=1 .* regime=lost (advisory)$' <<<"$LINE"; then
+    ok "4 lost satisfaction (down) -> warn by id, exit 0 (advisory, never refused)"
+else bad "4: rc=$RC [$(grep -E '^(warn|centicolon):' <<<"$OUT" | tr '\n' ' ')]"; fi
 
-green; run   # regain A, re-snapshot
+green; run   # regain a, re-snapshot
 spec a b c; run
-if grep -q ' denominator=3 .* regime=scope-added:1 (advisory)$' <<<"$LINE" && ! grep -q '^warn:centicolon-ratchet:lost' <<<"$OUT"; then
-    ok "5 added requirement -> scope-added:1, R rises honestly, no lost warning"
-else bad "5: [$LINE] $(grep '^warn:centicolon-ratchet' <<<"$OUT")"; fi
+if grep -q ' denominator=3 added=1 retired=0 lost=0 .* regime=scope-added (advisory)$' <<<"$LINE" && [ -z "$(warns)" ]; then
+    ok "5 added requirement -> added=1, scope growth, no warning"
+else bad "5: [$LINE] $(warns)"; fi
+
 spec a c; run
-grep -q ' denominator=2 .* regime=scope-removed:1 (advisory)$' <<<"$LINE" && ok "6 removed requirement -> scope-removed:1" || bad "6: [$LINE]"
+ID_B="cc:aaaa000b:$(printf 'Scenario b' | "${SHA[@]}" | cut -c1-8)"
+if [ "$(warns)" = "warn:centicolon-ratchet:lost=1:vanished=1,down=0:$ID_B" ] && grep -q ' retired=0 lost=1 ' <<<"$LINE"; then
+    ok "6 requirement removed with NO record -> lost=1 (vanished), warned"
+else bad "6: [$LINE] $(warns)"; fi
+
+mkdir -p "$H/openspec/changes/drop-c"; printf 'Removes requirement aaaa000c (Req c).\n' >"$H/openspec/changes/drop-c/proposal.md"
+spec a; run
+if grep -q ' retired=1 lost=0 .* regime=retired (advisory)$' <<<"$LINE" && [ -z "$(warns)" ]; then
+    ok "7 requirement removed WITH an openspec/changes record -> retired=1, no warning"
+else bad "7: [$LINE] $(warns)"; fi
+
+mkdir -p "$H/openspec/specs/beta"
+printf 'status: active\n\n### Requirement: Beta one\n<!-- req-id: bbbb0001 -->\n\n#### Scenario: B1\n\n#### Scenario: B2\n' >"$H/openspec/specs/beta/spec.md"
+printf -- "- spec_id: beta\n  status: active\n  litmus_tests: []\n" >>"$H/openspec/litmus-bindings.yaml"
+run
+printf 'status: obsolete\n' >"$H/openspec/specs/beta/spec.md"
+awk '{print} /^- spec_id: beta$/ {print "  tombstone: superseded:alpha"}' "$H/openspec/litmus-bindings.yaml" >"$WORK/reg" && mv "$WORK/reg" "$H/openspec/litmus-bindings.yaml"
+run
+if grep -q ' retired=2 lost=0 .* regime=retired (advisory)$' <<<"$LINE" && [ -z "$(warns)" ]; then
+    ok "8 spec obsoleted with a registry tombstone -> retired=2, no warning"
+else bad "8: [$LINE] $(warns)"; fi
 
 rm -rf "$H/openspec/specs"; run
 if [ "$RC" -eq 0 ] && grep -q '^centicolon: blocked:' <<<"$LINE" && ! grep -q 'R=0' <<<"$LINE"; then
-    ok "7 no corpus -> blocked, exit 0, never R=0"
-else bad "7: rc=$RC [$LINE]"; fi
+    ok "9 no corpus -> blocked, exit 0, never R=0"
+else bad "9: rc=$RC [$LINE]"; fi
 
 if [ "$fail" -eq 0 ]; then echo "ok:centicolon-ratchet:$pass"; exit 0; fi
 echo "fail:centicolon-ratchet:$fail failed, $pass passed"; exit 1
