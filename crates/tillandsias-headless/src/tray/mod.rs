@@ -2211,7 +2211,8 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
         // launcher (main.rs build_forge_agent_run_args_with_vault): 512 is
         // reachable by one tool-install fork storm on floor hardware. This
         // legacy path stays value-aligned with the live one.
-        .pids_limit(4096)
+        // ORDER 1375-xxzj: the forge cgroup budget (the 4096 pids floor is its clamp).
+        .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host())
         .volume(
             project_path.display().to_string(),
             format!("/home/forge/src/{project_name}"),
