@@ -3570,6 +3570,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Fragment-backlog advisory reported"
 
+    # Order 1395-ue3i. The CentiColon R line — obligations below
+    # positively_tested, with the satisfied count, denominator, histogram and
+    # regime — printed on EVERY --check. ADVISORY by operator ruling
+    # (2026-09-26): it warns on a lost satisfaction and never refuses, so the
+    # script always exits 0; a non-zero exit here means it could not run.
+    _step "Reporting the CentiColon R line (1395-ue3i, advisory)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-centicolon-ratchet.sh" 2>&1; then
+        _error "the CentiColon advisory could not run — that is a broken checkout, not a score"
+        exit 1
+    fi
+    _info "CentiColon advisory reported"
+
     # Order 810-k8jy. Which file classes under a corpus root the RAG indexer
     # indexes, declines, or has never been told about. ADVISORY like the
     # carry-forward line above, and for the same reason: a new file class in the

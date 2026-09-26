@@ -1090,6 +1090,42 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
+    # 1395-88tp: the grader earns positively_tested only from an enforced, reachable, tiered step with a green record for the exact bytes. Daily tier until a darwin run is recorded for a gate
+    # step (1302-7j8p).
+    # ============================================================================
+    log_section "CentiColon Grader (1395-88tp)"
+    if [[ -f "scripts/test-centicolon-grade.sh" ]]; then
+        if bash scripts/test-centicolon-grade.sh > /tmp/test-centicolon-grade.log 2>&1; then
+            log_pass "CentiColon Grader holds"
+            archive_check_log "centicolon-grade" "pass" /tmp/test-centicolon-grade.log
+        else
+            log_fail_tracked "centicolon-grade" "CentiColon grader miscredited an obligation (see /tmp/test-centicolon-grade.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/test-centicolon-grade.log >&2
+            archive_check_log "centicolon-grade" "fail" /tmp/test-centicolon-grade.log
+        fi
+    else
+        log_fail_missing_guard "centicolon-grade" "scripts/test-centicolon-grade.sh"
+    fi
+
+    # ============================================================================
+    # 1395-ue3i: the advisory R line warns on a lost satisfaction, reports scope, never refuses. Daily tier until a darwin run is recorded for a gate
+    # step (1302-7j8p).
+    # ============================================================================
+    log_section "CentiColon Advisory R Line (1395-ue3i)"
+    if [[ -f "scripts/test-centicolon-ratchet.sh" ]]; then
+        if bash scripts/test-centicolon-ratchet.sh > /tmp/test-centicolon-ratchet.log 2>&1; then
+            log_pass "CentiColon Advisory R Line holds"
+            archive_check_log "centicolon-ratchet" "pass" /tmp/test-centicolon-ratchet.log
+        else
+            log_fail_tracked "centicolon-ratchet" "CentiColon advisory R line misreported (see /tmp/test-centicolon-ratchet.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/test-centicolon-ratchet.log >&2
+            archive_check_log "centicolon-ratchet" "fail" /tmp/test-centicolon-ratchet.log
+        fi
+    else
+        log_fail_missing_guard "centicolon-ratchet" "scripts/test-centicolon-ratchet.sh"
+    fi
+
+    # ============================================================================
     # 1132-r4mt: concurrent archiver --check runs must not break each other.
     # ONE pair here, not in --check: a pair is two full archiver checks (386s
     # measured on yoga, serialised by the answerability lock). The post-fix
