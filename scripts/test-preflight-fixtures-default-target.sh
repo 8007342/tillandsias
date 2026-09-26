@@ -23,6 +23,7 @@
 #        never refused.
 # ARM 6  With no arguments the population is the added fixtures (untracked
 #        against the base), and the count is the fixtures examined.
+# ARM 7  No timeout command: a NAMED skip, never an unbounded run.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEC="$ROOT/scripts/preflight-fixtures-default-target.sh"
@@ -124,6 +125,15 @@ if [ "$rc5" -eq 0 ] && [[ "$o5" == *"note:fixture-default-target:red-in-both-or-
     ok "ARM 5 a fixture red in the caller's regime is noted, not refused"
 else
     bad "ARM 5 the always-red fixture was mis-classed (rc=$rc5): $(printf '%s' "$o5" | tail -2 | tr '\n' ';')"
+fi
+
+# ARM 7: no timeout command (a stock macOS without coreutils) is a NAMED
+# skip, never an unbounded run of a fixture that might hang the gate.
+o7="$(TILLANDSIAS_DEFAULT_TARGET_TIMEOUT_CMD=none by_ctd scripts/test-cd-first.sh)"; rc7=$?
+if [ "$rc7" -eq 0 ] && [ "$(printf '%s' "$o7" | tail -1)" = "skip:fixture-default-target:no-timeout-command" ]; then
+    ok "ARM 7 with no timeout command the decider skips by name instead of running unbounded"
+else
+    bad "ARM 7 expected skip:fixture-default-target:no-timeout-command (rc=$rc7): $(printf '%s' "$o7" | tail -2 | tr '\n' ';')"
 fi
 
 # ARM 6: population mode. Base holds only the decider and resolver; the

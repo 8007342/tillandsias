@@ -54,6 +54,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 3
 DEADLINE="${TILLANDSIAS_DEFAULT_TARGET_DEADLINE:-300}"
 
+# Every run is BOUNDED, or none happens: an added fixture that hangs must not
+# hang every gate. A stock macOS has no `timeout`; Homebrew coreutils installs
+# `gtimeout`. With neither, skip by name rather than run unbounded.
+# TILLANDSIAS_DEFAULT_TARGET_TIMEOUT_CMD overrides the lookup (fixture seam;
+# "none" forces the skip).
+TIMEOUT_CMD="${TILLANDSIAS_DEFAULT_TARGET_TIMEOUT_CMD:-$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true)}"
+if [ -z "$TIMEOUT_CMD" ] || [ "$TIMEOUT_CMD" = none ]; then
+    echo "skip:fixture-default-target:no-timeout-command"
+    exit 0
+fi
+
 if [ "$#" -gt 0 ]; then
     fixtures="$(printf '%s\n' "$@")"
 else
@@ -79,7 +90,8 @@ IFS="$_ifs"
 # The stripped regime must still find a binary from the checkout itself, or a
 # refusal would say nothing about the fixture. Resolve it the way the
 # fixtures do (plan-binary-probe.sh), in that regime, which also RUNS it.
-if ! (cd "$ROOT" && env -u CARGO_TARGET_DIR -u TILLANDSIAS_PLAN_BIN PATH="$stripped_path"         bash -c '. scripts/plan-binary-probe.sh && resolve_plan_binary' >/dev/null 2>&1); then
+if ! (cd "$ROOT" && env -u CARGO_TARGET_DIR -u TILLANDSIAS_PLAN_BIN PATH="$stripped_path" \
+        bash -c '. scripts/plan-binary-probe.sh && resolve_plan_binary' >/dev/null 2>&1); then
     echo "skip:fixture-default-target:no-default-target-plan-binary"
     exit 0
 fi
@@ -87,8 +99,8 @@ fi
 scratch="$(mktemp -d)" || exit 3
 trap 'rm -rf "$scratch"' EXIT
 
-_bounded() { # run "$@" under the deadline when timeout exists
-    if command -v timeout >/dev/null 2>&1; then timeout "$DEADLINE" "$@"; else "$@"; fi
+_bounded() { # run "$@" under the deadline
+    "$TIMEOUT_CMD" "$DEADLINE" "$@"
 }
 
 checked=0; refused=0
@@ -101,8 +113,7 @@ while IFS= read -r f; do
     checked=$((checked + 1))
     normal="$(cd "$scratch" && _bounded bash "$ROOT/$f" 2>&1)"; rc_n=$?
     strip="$(cd "$scratch" && env -u CARGO_TARGET_DIR -u TILLANDSIAS_PLAN_BIN PATH="$stripped_path" \
-             bash -c '_b() { if command -v timeout >/dev/null 2>&1; then timeout "$0" "$@"; else "$@"; fi; }; _b bash "$1"' \
-             "$DEADLINE" "$ROOT/$f" 2>&1)"; rc_s=$?
+             "$TIMEOUT_CMD" "$DEADLINE" bash "$ROOT/$f" 2>&1)"; rc_s=$?
     if [ "$rc_n" -ne 0 ]; then
         echo "note:fixture-default-target:red-in-both-or-normal-regime:$f:rc=$rc_n" >&2
         continue
