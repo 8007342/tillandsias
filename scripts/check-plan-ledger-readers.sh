@@ -48,6 +48,7 @@ ALLOWLIST=(
   "crates/tillandsias-plan/src/loop_status.rs"        # overlay: loop_status fold engine (separate doc, same discipline)
   "crates/tillandsias-plan/src/answer.rs"             # overlay: answers come from the folded ledger
   "crates/tillandsias-plan/src/groundtruth.rs"        # overlay: grades the experts against the folded ledger
+  "crates/tillandsias-plan/tests/lua_std.rs"         # base-only-reason: reads a scratch FIXTURE ledger the test wrote into a temp dir (w.join("plan/index.yaml")) to assert the archiver's sweep output; never the real plan/index.yaml (1405-3mrp)
   "crates/tillandsias-policy/src/main.rs"             # base-only-reason: plan-orders is superseded by `tillandsias-plan check` (fragment-aware duplicate-order gate); kept for legacy script wrappers only
 )
 
