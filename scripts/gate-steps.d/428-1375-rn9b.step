@@ -1,0 +1,12 @@
+# Gate step 1375-rn9b — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS: `tillandsias-plan json get` answers every filter in
+# scripts/portability/jq-subset-corpus.txt byte-identically to jq (stdout and
+# exit status), against a golden generated from jq, so the check runs on hosts
+# without jq.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking json get matches jq on the bucket A/B corpus (1375-rn9b)"
+STEP_SCRIPT="scripts/test-json-query-jq-parity.sh"
+STEP_ERROR="json get diverges from jq on a corpus filter, or the verb is absent (1375-rn9b)"
+STEP_OK="json get is byte-identical to jq on the jq-subset corpus"
