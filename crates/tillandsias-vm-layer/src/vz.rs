@@ -406,7 +406,7 @@ impl VzRuntime {
             self.console_log_path(),
             self.image_root.join("cidata.iso"),
             // 1377-hcnv: the swap image goes with the VM it served.
-            self.image_root.join(boot::SWAP_IMAGE_FILE),
+            self.image_root.join(SWAP_IMAGE_FILE),
         ] {
             let _ = std::fs::remove_file(&best_effort);
         }
@@ -1837,6 +1837,12 @@ impl std::error::Error for OpenVsockError {}
 /// macOS-only — the module isn't even defined on Linux/Windows.
 ///
 /// @trace spec:vm-idiomatic-layer, spec:macos-native-tray
+/// 1377-hcnv: the per-launch guest swap image, named at module scope because
+/// the cleanup in `stop()` compiles on every target while `boot` is
+/// macOS-only (the 690-w94k / 804-deux shape: green on osx-next, E0433 on
+/// linux-next). See plan/issues/forge-memory-swap-architecture-design-2026-09-26.md §4.3.
+pub const SWAP_IMAGE_FILE: &str = "vm-swap.img";
+
 #[cfg(target_os = "macos")]
 pub mod boot {
     use std::os::raw::c_int;
@@ -1946,7 +1952,9 @@ pub mod boot {
     /// A separate image rather than a swapfile inside `rootfs.img`: blocks a
     /// swapfile touches un-sparsify the 250 GiB root image permanently and
     /// travel with it, while this one can be deleted and recreated freely.
-    pub const SWAP_IMAGE_FILE: &str = "vm-swap.img";
+    /// Defined at module scope (all targets) and re-exported here: the
+    /// cross-platform `stop()` cleanup names it too (1377-hcnv relay-fix).
+    pub use super::SWAP_IMAGE_FILE;
 
     /// virtio-blk serial the guest finds its swap disk by, as
     /// `/dev/disk/by-id/virtio-tillandsias-swap`. By identity rather than
