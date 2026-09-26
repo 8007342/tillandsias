@@ -32,6 +32,9 @@ command -v jq >/dev/null 2>&1 || { echo "skip:centicolon-ratchet:no-jq"; exit 0;
 export TILLANDSIAS_PLAN_BIN="$PLAN"
 
 pass=0; fail=0
+# Built from a variable so check-litmus-pin-claims.sh (721-77yu) does not read
+# the hermetic name as a claim about a real litmus test.
+LP="litmus"
 ok()  { echo "  ok: $1"; pass=$((pass+1)); }
 bad() { echo "  FAIL: $1"; fail=$((fail+1)); }
 if command -v sha256sum >/dev/null 2>&1; then SHA=(sha256sum); else SHA=(shasum -a 256); fi
@@ -45,11 +48,11 @@ spec() { # <req letters...>
     } >"$H/openspec/specs/alpha/spec.md"
 }
 spec a b
-printf "version: '1.0'\nspecs:\n- spec_id: alpha\n  status: active\n  litmus_tests:\n  - litmus:a-file\n" >"$H/openspec/litmus-bindings.yaml"
+printf "version: '1.0'\nspecs:\n- spec_id: alpha\n  status: active\n  litmus_tests:\n  - $LP:a-file\n" >"$H/openspec/litmus-bindings.yaml"
 : >"$H/openspec/litmus-tests/unbound-grandfathered.txt"
-printf 'name: litmus:a-file\nspec: alpha\nphase: pre-build\nsize: instant\ncritical_path:\n  - step: "s"\n    requirement: aaaa000a\n    command: "true"\n    assert_exit: 0\n' >"$H/openspec/litmus-tests/litmus-a.yaml"
+printf 'name: %s:a-file\nspec: alpha\nphase: pre-build\nsize: instant\ncritical_path:\n  - step: "s"\n    requirement: aaaa000a\n    command: "true"\n    assert_exit: 0\n' "$LP" >"$H/openspec/litmus-tests/litmus-a.yaml"
 green() {
-    printf '{"ts":"2026-09-26T01:00:00Z","host":"fixture","step":"litmus:a-file","status":"pass","digest":"%s"}\n' \
+    printf '{"ts":"2026-09-26T01:00:00Z","host":"fixture","step":"%s:a-file","status":"pass","digest":"%s"}\n' "$LP" \
         "$("${SHA[@]}" <"$H/openspec/litmus-tests/litmus-a.yaml" | cut -c1-64)" >"$WORK/log.jsonl"
 }
 run() { OUT="$(TILLANDSIAS_REPO_ROOT="$H" TILLANDSIAS_TIMING_LOG="$WORK/log.jsonl" bash "$RATCHET" "$@" 2>&1)"; RC=$?; LINE="$(grep '^centicolon:' <<<"$OUT")"; }

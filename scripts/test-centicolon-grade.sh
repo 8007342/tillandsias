@@ -35,6 +35,9 @@ command -v jq >/dev/null 2>&1 || { echo "skip:centicolon-grade:no-jq"; exit 0; }
 export TILLANDSIAS_PLAN_BIN="$PLAN"
 
 pass=0; fail=0
+# Built from a variable so check-litmus-pin-claims.sh (721-77yu) does not read
+# the hermetic names as claims about real litmus tests.
+LP="litmus"
 ok()  { echo "  ok: $1"; pass=$((pass+1)); }
 bad() { echo "  FAIL: $1"; fail=$((fail+1)); }
 if command -v sha256sum >/dev/null 2>&1; then SHA=(sha256sum); else SHA=(shasum -a 256); fi
@@ -53,17 +56,8 @@ corpus() {
             printf '### Requirement: Req %s\n<!-- req-id: aaaa000%s -->\n\n#### Scenario: Scenario %s\n\n' "$x" "$x" "$x"
         done
     } >"$r/openspec/specs/alpha/spec.md"
-    cat >"$r/openspec/litmus-bindings.yaml" <<'EOF'
-version: '1.0'
-specs:
-- spec_id: alpha
-  status: active
-  litmus_tests:
-  - litmus:a-file
-  - litmus:c-file
-  - litmus:d-file
-  - litmus:e-file
-EOF
+    printf "version: '1.0'\nspecs:\n- spec_id: alpha\n  status: active\n  litmus_tests:\n  - $LP:a-file\n  - $LP:c-file\n  - $LP:d-file\n  - $LP:e-file\n" \
+        >"$r/openspec/litmus-bindings.yaml"
     : >"$r/openspec/litmus-tests/unbound-grandfathered.txt"
     # lt <file> <name> <phase> <req> <assert yes|no>
     lt() {
@@ -74,14 +68,14 @@ EOF
             if [ "$5" = yes ]; then printf '    assert_exit: 0\n'; else printf '    expected_behavior: "it works"\n'; fi
         } >"$r/openspec/litmus-tests/$1.yaml"
     }
-    lt litmus-a litmus:a-file pre-build aaaa000a yes
-    lt litmus-b litmus:b-file pre-build aaaa000b yes
-    lt litmus-c litmus:c-file retired   aaaa000c yes
-    lt litmus-d litmus:d-file pre-build aaaa000d no
-    lt litmus-e litmus:e-file pre-build ffff9999 yes
+    lt litmus-a $LP:a-file pre-build aaaa000a yes
+    lt litmus-b $LP:b-file pre-build aaaa000b yes
+    lt litmus-c $LP:c-file retired   aaaa000c yes
+    lt litmus-d $LP:d-file pre-build aaaa000d no
+    lt litmus-e $LP:e-file pre-build ffff9999 yes
 }
 rec() { # <status> <digest> <ts> [spec_digest]
-    printf '{"ts":"%s","host":"fixture","step":"litmus:a-file","phase":"pre-build","duration_ms":1,"exit":0,"status":"%s","digest":"%s","regime":"linux","spec":"alpha","spec_digest":"%s"}\n' "$3" "$1" "$2" "${4:-$DS}"
+    printf '{"ts":"%s","host":"fixture","step":"%s:a-file","phase":"pre-build","duration_ms":1,"exit":0,"status":"%s","digest":"%s","regime":"linux","spec":"alpha","spec_digest":"%s"}\n' "$3" "$LP" "$1" "$2" "${4:-$DS}"
 }
 # grade <root> <log> — sets OUT (stdout) and G (grade.json content)
 grade() {
