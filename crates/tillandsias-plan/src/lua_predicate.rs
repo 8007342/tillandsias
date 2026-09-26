@@ -437,6 +437,11 @@ pub const CACHEABLE_STDLIB_GLOBALS: &[&str] = &[
     "ipairs",
     "json",
     "math",
+    // "next" survives THIS cut only so lua_std::determinism can capture it as
+    // the private walk behind its defined-order `pairs`; it then sets the
+    // global to nil (1384-bp6t: the raw walk is hash order, which varies per
+    // process). The final global set, without next, is pinned by
+    // tests/lua_predicate_classes.rs.
     "next",
     "pairs",
     "path",
