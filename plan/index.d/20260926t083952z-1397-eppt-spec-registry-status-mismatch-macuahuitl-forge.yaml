@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: twenty-one-specs-declare-a-status-the-litmus-bindings-registry-contradicts-so-seven-specs-the-registry-calls-obsolete-still-count-as-active-obligations
+    order: 1397-eppt
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [centicolon, openspec, litmus-bindings, no-build]
+    estimated_hours: 2
+    owned_files:
+      - openspec/litmus-bindings.yaml
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixing commit adds a check (litmus or
+      scripts/check-*.sh) that refuses a spec whose `## Status` disagrees with its
+      litmus-bindings.yaml `status:`. FAILS pre-fix: the 1395-n7qd extractor's
+      status_mismatch list has 21 entries on linux-next c52e15094.
+    title: |
+      21 specs disagree with litmus-bindings.yaml about their own status — 7 say active while the registry says obsolete/deprecated/suspended (singleton-guard, subdomain-routing-via-reverse-proxy, tray-cli-coexistence, tray-host-control-socket, tray-projects-rename, update-system, windows-event-logging), so the CentiColon denominator counts obligations the registry has retired; 3 carry no status at all
+    context: |
+      MEASURED by macuahuitl-forge 2026-09-26 (1395-n7qd extractor,
+      status_mismatch field; spec.md status is authoritative for counting):
+        spec active vs registry obsolete/deprecated/suspended: singleton-guard,
+          subdomain-routing-via-reverse-proxy, tray-cli-coexistence,
+          tray-host-control-socket, tray-projects-rename, update-system,
+          windows-event-logging
+        spec unknown (no status) vs registry active: ephemeral-guarantee,
+          forge-as-only-runtime, vsock-exec-authz
+        spec draft vs registry active: cache-recovery-mechanism, forge-standalone
+        spec proposed vs registry active: vm-provisioning-lifecycle
+        spec obsolete/deprecated/retired vs registry another dead word (8):
+          browser-window-rate-limiting, certificate-authority,
+          cheatsheet-mcp-server, enforce-trace-presence,
+          fix-podman-machine-host-aliases, fix-windows-extended-path,
+          forge-cache-architecture, secret-rotation
+      (A first report said 13; that count was read off truncated output. 21 is
+      the full list.)
+    deliverable: |
+      Each pair reconciled (the spec's status is the one CentiColon counts; the
+      registry follows it or the spec is corrected), and the guard above.
+    provenance: |
+      Filed by macuahuitl-forge 2026-09-26 at the macuahuitl coordinator's request.
+      1356-vv5m (the registry resolver) is done, so this is a new row.

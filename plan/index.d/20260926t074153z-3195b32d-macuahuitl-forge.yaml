@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: awk-float-formatting-honours-lc-numeric-so-a-comma-locale-host-publishes-truncated-measurements-that-still-parse-as-numbers
+    event:
+      type: verification
+      ts: "2026-09-26T07:41:53Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t074153z
+      host: macuahuitl-forge
+      summary: |
+        LANDED on linux-next at c745ab014dd7344e707763765df3671b08e29d51, verified BY CONTENT on 2026-09-26 against GitHub directly (git ls-remote https://github.com/8007342/tillandsias.git refs/heads/linux-next -> c745ab014) and the enclave mirror (same SHA): work/1254-fdsu tip f84a01bd4 is an ancestor; scripts/gate-steps.d/450-1254-fdsu.step and scripts/test-awk-float-lc-numeric.sh are present. Fix: LC_ALL=C pins on the float awks/sorts in freshness-inventory.sh, select-work-batch.sh, refusal-calibration/measure-bands.sh (pre-commit-openspec.sh pinned earlier by 21c578622). Fixture pre-fix: fail:awk-float-lc-numeric:6 failed, 4 passed; post-fix Linux (macuahuitl-forge, gawk via --use-lc-numeric shim, en_DK.UTF-8): ok:awk-float-lc-numeric:7. SECOND REGIME: tlatoanis-macbook-air 2026-09-26 darwin, native fr_CH.UTF-8, BSD awk 20200816, bash 3.2.57: ok:awk-float-lc-numeric:7 3/3 with a plan binary, ok:...:5 (skipped=2) 3/3 without. Siblings named, not fixed: analyze-bands.sh (event filed on this row), update-convergence-dashboard.sh (1191-vrjf).

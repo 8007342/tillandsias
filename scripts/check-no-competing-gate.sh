@@ -210,6 +210,21 @@ stray_report=""
 
 # Collect token -> (has_host, worker_pids) in one pass.
 tokens=""
+# _opaque_candidate <procdir>: an environ we could not read makes a process
+# AMBIGUOUS only if it could be a dispatch's live wrapper — it still exists,
+# is not a zombie (Z/X: no memory, running nothing), and its world-readable
+# cmdline is wrapper-shaped. Both opaque increments below call this, so the
+# arms that reach it through the constructible path cover the one a fake tree
+# cannot build (1141-vf9w).
+_opaque_candidate() {
+    [ -d "$1" ] || return 1
+    case "$(awk '/^State:/ { print $2 }' "$1/status" 2>/dev/null)" in Z|X) return 1 ;; esac
+    case "$(tr '\0' ' ' < "$1/cmdline" 2>/dev/null)" in
+        *"toolbox run"*|*with-tillandsias-builder*|*with-wsl2-builder*|*podman*exec*) return 0 ;;
+    esac
+    return 1
+}
+
 for d in "$PROC_ROOT"/[0-9]*; do
     pid="${d##*/}"
     [ "$pid" = "$self" ] && continue
@@ -240,18 +255,24 @@ for d in "$PROC_ROOT"/[0-9]*; do
     # an unprivileged user's gate. Measured floor after this filter on an idle
     # host: ZERO.
     if [ ! -r "$d/environ" ]; then
-        _oc="$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null)"
-        case "$_oc" in
-            *"toolbox run"*|*with-tillandsias-builder*|*with-wsl2-builder*|*podman*exec*)
-                opaque=$((opaque + 1)) ;;
-        esac
+        _opaque_candidate "$d" && opaque=$((opaque + 1))
         continue
     fi
     tok=""
     if ! { while IFS= read -r -d '' e; do
                case "$e" in TILLANDSIAS_WRAPPER_TOKEN=*) tok="${e#*=}"; break ;; esac
            done < "$d/environ"; } 2>/dev/null; then
-        opaque=$((opaque + 1)); continue
+        # THE SAME RULE AS ABOVE, via the same function (1141-vf9w, yoga
+        # 2026-09-26). An environ can pass `-r` (0400, ours) and still refuse
+        # the OPEN: a ZOMBIE has no memory to read, and a non-dumpable daemon of
+        # this user (systemd --user) fails the ptrace check. This increment
+        # counted those UNCONDITIONALLY: with a genuine stray alive on yoga,
+        # systemd --user and two bash zombies made six of six runs answer
+        # unreadable-processes:3, so the detector could not accuse. Sharing
+        # _opaque_candidate is what lets the fixture test this path: a fake
+        # tree cannot build "passes -r, fails open" without root.
+        _opaque_candidate "$d" && opaque=$((opaque + 1))
+        continue
     fi
     [ -n "$tok" ] || continue
     cmd="$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null)"
