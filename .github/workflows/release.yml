@@ -555,6 +555,9 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           # Release was created by the Linux `release` job (needs:); we just
           # add the macOS assets via --clobber so a re-run is idempotent.
+          # Order 1406-9ctt: the same integrity check the release and
+          # windows-release jobs run, before EACH upload (756-rfdr).
+          bash scripts/check-release-asset-integrity.sh release-artifacts
           gh release upload "v${VERSION}" release-artifacts/* --clobber
           echo "Uploaded macOS assets to v${VERSION}"
           # Mirror into the rolling UNSTABLE channel the Linux job recreated
@@ -571,6 +574,7 @@ jobs:
             test -f "unstable-artifacts/${artifact}.cosign.bundle"
           done < /tmp/stage-unstable.resign
           grep -qx 'DEFAULT_CHANNEL="unstable"' unstable-artifacts/install-macos.sh
+          bash scripts/check-release-asset-integrity.sh unstable-artifacts
           gh release upload unstable unstable-artifacts/* --clobber
           echo "Mirrored macOS assets to the unstable channel"
 
