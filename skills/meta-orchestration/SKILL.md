@@ -1054,7 +1054,7 @@ It prints exactly one line matching the falsifiable grammar
 absent or blocked. A usable channel is present when ANY of these holds (the
 script checks them in order):
 
-- `<git-dir>/.gh-credentials` exists and is non-empty (repo-local store helper), or
+- `<common-git-dir>/.gh-credentials` (absolute `git rev-parse --path-format=absolute --git-common-dir`, so every linked worktree shares it; 1409-65d5) exists and is non-empty (repo-local store helper), or
 - `GH_TOKEN` or `GITHUB_TOKEN` is set in the environment, or
 - `gh auth status` succeeds (reachable, unlocked keyring), or
 - `TILLANDSIAS_HOST_KIND=forge` is set AND the enclave git mirror is reachable
