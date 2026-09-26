@@ -1,0 +1,30 @@
+packets:
+  - packet_id: the-macos-one-shot-opencode-lane-ran-three-hours-silent-on-a-cold-host-without-reaching-the-credential-guard-and-the-guest-kept-no-record-of-it
+    order: 1385-h6uz
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, forge, opencode, observability, smoke]
+    estimated_hours: 4
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the mechanism is unexplained and the first deliverable is making the
+      lane's output reachable from the host; the pin lands with the mechanism.
+    title: |
+      on macOS, `tillandsias-tray --opencode <path> --prompt "Use the /meta-orchestration skill"` after a clean wipe ran 3h silent and never printed blocked:upstream-no-credential (Linux hit it promptly on the same release), and the guest journal holds nothing after lane minute 3, so the run left nothing to diagnose
+    context: |
+      v56.9.25.2 macOS smoke, 2026-09-26, report plan/issues/smoke-e2e-findings-v56.9.25.2-2026-09-26-macos-macbookair.md.
+      Lane log: 24 lines, last at 01:57:43Z ("[forge] All changes must be committed to persist."), stopped at the
+      agreed 3h cap by SIGTERM (opencode_exit=143). Guest journal of the lane boot: 01:55:11Z to 01:58:01Z only,
+      while the VM ran to 04:55Z at ~1 core and wrote rootfs.img continuously.
+      RULED OUT, measured: the stale seed lacking the guard (check-credential-channel.sh exists at 341ab0010 and
+      the seeded skill calls it); SELinux (137 denials, all permissive=1 in vault_container_t); the local model
+      missing (models/blobs, manifests, .preloaded written 01:58Z).
+      UNEXPLAINED: what the in-forge agent did for 3h and why the guard was not reached.
+    exit_criteria:
+      - 'the one-shot lane''s agent output reaches the host while it runs (streamed, or on a host-visible share), so a stopped run leaves a record; pre-fix result: FAILS (24 lines and an empty guest journal after 01:58Z for a 3h run)'
+      - the mechanism for the missing guard line is NAMED from that record, or recorded as unexplained with what was ruled out
+      - 'on a cold macOS host the lane ends at blocked:upstream-no-credential, as on Linux'
