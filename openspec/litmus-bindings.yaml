@@ -400,6 +400,7 @@ specs:
   - litmus:mcp-discoverability-shape
   - litmus:mcp-server-request-fault-isolation
   - litmus:mcp-live-build-check-fixture
+  - litmus:json-get-help-names-its-subset
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
   - litmus:forge-experts-stale-source-honesty
