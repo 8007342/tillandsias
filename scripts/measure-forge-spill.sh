@@ -73,20 +73,19 @@ guarded() {  # run a podman exec, killing the container if the host runs short
     done
     wait "$p"
 }
-# NOT $EPOCHREALTIME: its decimal separator follows the LOCALE (a comma under
-# fr_FR on yoga), and stripping "." from "1790393686,018710" made bash
-# arithmetic fabricate 4-16 ms for multi-GiB writes (and one negative). Every
-# timing of that first matrix was discarded. date +%s%N is locale-free.
-ms() { echo $(( $(date +%s%N) / 1000000 )); }
+# Host-side timing is gone: $EPOCHREALTIME used the LOCALE's decimal comma
+# (fr_FR on yoga) and fabricated 4-16 ms and a negative value, and the guard's
+# 1 s poll quantised anything timed out here. Both loops below time
+# themselves INSIDE the Fedora forge container, where GNU date is the date.
 guard_hit=0
 # Timed INSIDE the container around exactly the work: the host guard polls
 # once a second, so host-side timing was quantised to whole seconds (1007 ms /
 # 1008 ms for a 128 MiB probe). The exec prints its own elapsed ns.
-guarded podman exec "$name" sh -c "cd /home/forge/src && s=\$(date +%s%N) && for i in \$(seq 1 $files); do head -c 67108864 /dev/urandom > f\$i || exit 1; done && sync && e=\$(date +%s%N) && echo \$(( (e - s) / 1000000 )) > /tmp/w.ms" ; wrc=$?
+guarded podman exec "$name" sh -c "cd /home/forge/src && s=\$(date +%s%N) && for i in \$(seq 1 $files); do head -c 67108864 /dev/urandom > f\$i || exit 1; done && sync && e=\$(date +%s%N) && echo \$(( (e - s) / 1000000 )) > /tmp/w.ms" ; wrc=$?  # gnu-date: ok (runs INSIDE the Fedora forge image via podman exec, never on the host)
 write_ms=$(podman exec "$name" cat /tmp/w.ms 2>/dev/null || echo unmeasured)
 rrc=1; read_ms=0
 if [ "$wrc" = 0 ]; then
-    guarded podman exec "$name" sh -c 'cd /home/forge/src && s=$(date +%s%N) && ls | shuf | while read -r f; do cat "$f" > /dev/null || exit 1; done && e=$(date +%s%N) && echo $(( (e - s) / 1000000 )) > /tmp/r.ms'; rrc=$?
+    guarded podman exec "$name" sh -c 'cd /home/forge/src && s=$(date +%s%N) && ls | shuf | while read -r f; do cat "$f" > /dev/null || exit 1; done && e=$(date +%s%N) && echo $(( (e - s) / 1000000 )) > /tmp/r.ms'; rrc=$?  # gnu-date: ok (runs INSIDE the Fedora forge image via podman exec, never on the host)
     read_ms=$(podman exec "$name" cat /tmp/r.ms 2>/dev/null || echo unmeasured)
 fi
 mib() { echo $(( ${1:-0} / 1048576 )); }
