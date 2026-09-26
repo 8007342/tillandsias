@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-lua-runtime-encodes-keys-in-a-different-order-every-process-and-exposes-os-setlocale-so-a-sorted-encoder-a-sorted-pairs-and-a-withheld-setlocale-make-one-script-one-byte-stream
+    field: status
+    value: completed
+    ts: "2026-09-26T07:00:32Z"
+    host: yoga
+
+events:
+  - packet_id: the-lua-runtime-encodes-keys-in-a-different-order-every-process-and-exposes-os-setlocale-so-a-sorted-encoder-a-sorted-pairs-and-a-withheld-setlocale-make-one-script-one-byte-stream
+    event:
+      type: completed
+      ts: "2026-09-26T07:00:32Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: landed on origin/linux-next at 419e83c35 (work/1384-bp6t 409cbe792); gate step 470; darwin record tlatoanis-macbook-air 2026-09-26 ok:lua-determinism:5 arms (skipped=0)
+  - packet_id: the-lua-runtime-encodes-keys-in-a-different-order-every-process-and-exposes-os-setlocale-so-a-sorted-encoder-a-sorted-pairs-and-a-withheld-setlocale-make-one-script-one-byte-stream
+    event:
+      type: note
+      ts: "2026-09-26T07:00:32Z"
+      host: yoga
+      summary: |-
+        json.encode and pairs in byte order (numbers, then strings), table.keys, next and os.setlocale withheld in both classes; lua CLI prints chunk returns; test-lua-determinism.sh 5/5 on yoga (fr_FR.utf8) and on darwin (BSD libc, fr_FR.UTF-8, macbookair 3/3); a mutant without the fix fails every arm
