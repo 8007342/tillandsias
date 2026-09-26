@@ -146,7 +146,7 @@ fake_hook "$scratch/.git/hooks"
 mkdir -p "$W/empty-hooks"
 git -C "$scratch" config core.hooksPath "$W/empty-hooks"
 o7="$(JOIN_FLEET_ROOT="$scratch" JOIN_FLEET_PROBES=0 bash "$CHECKER" 2>&1)"
-if printf '%s\n' "$o7" | grep -q -e '^todo:join-the-fleet:hooks:scripts/install-hooks.sh$'; then
+if grep -q -e '^todo:join-the-fleet:hooks:scripts/install-hooks.sh$' <<<"$o7"; then
     good "a redirected, empty hooks path is a todo, not ok"
 else
     bad "arm7: core.hooksPath at an empty dir was not a todo: $(printf '%s\n' "$o7" | grep -e hooks | tr '\n' ' ')"
@@ -160,7 +160,7 @@ rm -f "$scratch/.git/hooks/pre-push"
 fake_hook "$W/shared-hooks"
 git -C "$scratch" config core.hooksPath "$W/shared-hooks"
 o8="$(JOIN_FLEET_ROOT="$scratch" JOIN_FLEET_PROBES=0 bash "$CHECKER" 2>&1)"
-if printf '%s\n' "$o8" | grep -q -e '^ok:join-the-fleet:hooks:tillandsias-pre-push-v8$'; then
+if grep -q -e '^ok:join-the-fleet:hooks:tillandsias-pre-push-v8$' <<<"$o8"; then
     good "a shared core.hooksPath with the hook is ok"
 else
     bad "arm8: a shared core.hooksPath hook was not ok: $(printf '%s\n' "$o8" | grep -e hooks | tr '\n' ' ')"
