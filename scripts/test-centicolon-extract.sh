@@ -33,7 +33,8 @@ fi
 if ! grep -qx 'predicate' <<<"$("$PLAN" capabilities 2>/dev/null)"; then
     echo "skip:centicolon-extract:plan-binary-lacks-predicate-verb:$PLAN"; exit 0
 fi
-command -v jq >/dev/null 2>&1 || { echo "skip:centicolon-extract:no-jq"; exit 0; }
+# JSON reads go through the plan binary (`json get`, 1375-rn9b), not jq.
+jg() { "$PLAN" json get -r "$1" - <<<"$2" 2>/dev/null | tr -d '\r'; }
 
 pass=0; fail=0
 ok()  { echo "  ok: $1"; pass=$((pass+1)); }
@@ -125,17 +126,17 @@ run "$H" "alpha,beta,gamma"
 if [ "$RC" -ne 0 ]; then
     bad "H1 predicate rc=$RC: $(head -3 <<<"$ERR")"
 else
-    got="$(jq -r '.obligations[].id' <<<"$JSON" | tr -d '\r' | sort)"
+    got="$(jg '.obligations[].id' "$JSON" | sort)"
     want="$(printf '%s\n' "cc:aaaa0001:$(sha8 'Opened by a key')" "cc:aaaa0001:$(sha8 'Opened by a code')" "cc:aaaa0002:$(sha8 'Locked at night')" "cc:aaaa0003:$(sha8 'Chimes on open')" | sort)"
     if [ "$got" = "$want" ]; then ok "H1 active spec: 4 obligations (one under a numbered, req-id'd heading), ids match sha256(title)[:8] computed independently (fenced scenario ignored)"
     else bad "H1 obligation ids: got [$(tr '\n' ' ' <<<"$got")] want [$(tr '\n' ' ' <<<"$want")]"; fi
-    if [ "$(jq -r '.requirements' <<<"$JSON")" = 3 ]; then ok "H1 requirements=3"; else bad "H1 requirements=$(jq -r '.requirements' <<<"$JSON")"; fi
-    if [ "$(jq -r '.unkeyed|join(",")' <<<"$JSON" | tr -d '\r')" = "alpha:The door has no id yet" ]; then ok "H1 numbered heading with no req-id -> unkeyed, not counted"
-    else bad "H1 unkeyed: $(jq -c '.unkeyed' <<<"$JSON")"; fi
-    if [ "$(jq -r '.excluded.obsolete // 0' <<<"$JSON")" = 1 ] && ! grep -q 'bbbb0001' <<<"$JSON"; then ok "H1 obsolete spec: zero obligations, excluded.obsolete=1"
-    else bad "H1 obsolete spec not excluded: $(jq -c '.excluded' <<<"$JSON")"; fi
-    if [ "$(jq -r '.unregistered|join(",")' <<<"$JSON")" = gamma ] && ! grep -q 'cccc0001' <<<"$JSON"; then ok "H1 unregistered spec dir named, not counted"
-    else bad "H1 unregistered: $(jq -c '.unregistered' <<<"$JSON")"; fi
+    if [ "$(jg '.requirements' "$JSON")" = 3 ]; then ok "H1 requirements=3"; else bad "H1 requirements=$(jg '.requirements' "$JSON")"; fi
+    if [ "$(jg '.unkeyed[]' "$JSON" | paste -sd, -)" = "alpha:The door has no id yet" ]; then ok "H1 numbered heading with no req-id -> unkeyed, not counted"
+    else bad "H1 unkeyed: $(jg '.unkeyed[]' "$JSON" | paste -sd, -)"; fi
+    if [ "$(jg '.excluded.obsolete // 0' "$JSON")" = 1 ] && ! grep -q 'bbbb0001' <<<"$JSON"; then ok "H1 obsolete spec: zero obligations, excluded.obsolete=1"
+    else bad "H1 obsolete spec not excluded: $(jg '.excluded | keys[]' "$JSON" | paste -sd, -)"; fi
+    if [ "$(jg '.unregistered[]' "$JSON" | paste -sd, -)" = gamma ] && ! grep -q 'cccc0001' <<<"$JSON"; then ok "H1 unregistered spec dir named, not counted"
+    else bad "H1 unregistered: $(jg '.unregistered[]' "$JSON" | paste -sd, -)"; fi
     if grep -q '^ok:centicolon-extract:obligations=4 ' <<<"$ERR"; then ok "H1 verdict line ok:…obligations=4"
     else bad "H1 verdict: $(grep -E '^(ok|refused|blocked):' <<<"$ERR")"; fi
 fi
@@ -176,7 +177,7 @@ else bad "H4 rc=$RC: $(grep -E '^(ok|refused|blocked):' <<<"$ERR" | head -2)"; f
 
 # ── R1: the real gh-auth-script spec ─────────────────────────────────────────
 run "$ROOT" "gh-auth-script"
-r="$(jq -r '"\(.requirements) \(.obligation_count)"' <<<"$JSON" 2>/dev/null)"
+r="$(jg '.requirements' "$JSON") $(jg '.obligation_count' "$JSON")"
 if [ "$RC" -eq 0 ] && [ "$r" = "7 19" ]; then ok "R1 gh-auth-script: 7 requirements, 19 scenario obligations"
 else bad "R1 gh-auth-script rc=$RC: requirements/obligations=$r (want 7 19)"; fi
 
@@ -186,7 +187,7 @@ digests=""; counts=""
 for i in 1 2 3; do
     run "$ROOT" "$DIRS"
     digests="$digests $(printf '%s' "$JSON" | "${SHA[@]}" | cut -c1-16)"
-    counts="$counts $(jq -r '.obligation_count' <<<"$JSON" 2>/dev/null)"
+    counts="$counts $(jg '.obligation_count' "$JSON")"
 done
 read -r d1 d2 d3 <<<"$digests"; read -r c1 _ <<<"$counts"
 if [ -n "$d1" ] && [ "$d1" = "$d2" ] && [ "$d2" = "$d3" ] && [ "${c1:-0}" -gt 0 ] 2>/dev/null; then

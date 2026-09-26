@@ -27,14 +27,18 @@
 set -uo pipefail
 SCRIPTS="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${TILLANDSIAS_REPO_ROOT:-$(cd "$SCRIPTS/.." && pwd)}"
+
+# The binary is resolved from THIS checkout (the scripts' own root), never from
+# the graded root, and made absolute before the cd below.
+. "$SCRIPTS/plan-binary-probe.sh"
+if ! PLAN="$(cd "$SCRIPTS/.." && resolve_plan_binary)"; then
+    echo "blocked:centicolon-grade:no-runnable-plan-binary"; exit 1
+fi
+case "$PLAN" in /*) ;; *) PLAN="$(cd "$SCRIPTS/.." && cd "$(dirname "$PLAN")" && pwd)/$(basename "$PLAN")" ;; esac
+
 cd "$ROOT" || { echo "blocked:centicolon-grade:no-root:$ROOT"; exit 1; }
 OUT_REL="${TILLANDSIAS_CENTICOLON_DIR:-target/centicolon}"
 mkdir -p "$OUT_REL" || { echo "blocked:centicolon-grade:cannot-create:$OUT_REL"; exit 1; }
-
-. "$SCRIPTS/plan-binary-probe.sh"
-if ! PLAN="$(resolve_plan_binary)"; then
-    echo "blocked:centicolon-grade:no-runnable-plan-binary"; exit 1
-fi
 if ! grep -qx 'predicate' <<<"$("$PLAN" capabilities 2>/dev/null)"; then
     echo "blocked:centicolon-grade:plan-binary-lacks-predicate-verb:$PLAN"; exit 1
 fi

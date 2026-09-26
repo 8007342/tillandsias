@@ -92,6 +92,10 @@ local function observe(arg)
         obs[#obs + 1] = { id = o.id, req_id = o.req_id, spec = o.spec, state = state,
                           reason = reason, host = by_host, regime = regime }
     end
+    local snapshot = A()
+    for _, o in ipairs(obs) do
+        snapshot[#snapshot + 1] = table.concat({ o.id, o.state, tostring(o.spec), tostring(o.req_id) }, " ")
+    end
     local denominator = #obs
     return {
         schema = "centicolon-grade-observed/1",
@@ -102,6 +106,7 @@ local function observe(arg)
         histogram = hist,
         residue_reasons = reasons,
         obligations = obs,
+        snapshot = snapshot,
         static_refused = st.refused or A(),
     }
 end

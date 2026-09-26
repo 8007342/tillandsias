@@ -32,12 +32,14 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 RATCHET="$ROOT/scripts/check-centicolon-ratchet.sh"
 [ -f "$RATCHET" ] || { echo "fail:centicolon-ratchet:no-script:$RATCHET"; exit 1; }
 
+cd "$ROOT" || exit 1
 . "$ROOT/scripts/plan-binary-probe.sh"
 if ! PLAN="$(resolve_plan_binary)"; then echo "skip:centicolon-ratchet:no-runnable-plan-binary"; exit 0; fi
 if ! grep -qx 'predicate' <<<"$("$PLAN" capabilities 2>/dev/null)"; then
     echo "skip:centicolon-ratchet:plan-binary-lacks-predicate-verb:$PLAN"; exit 0
 fi
-command -v jq >/dev/null 2>&1 || { echo "skip:centicolon-ratchet:no-jq"; exit 0; }
+# Absolute before export: the wrapper cds into a hermetic root (1380-u7sq).
+case "$PLAN" in /*) ;; *) PLAN="$ROOT/${PLAN#./}" ;; esac
 export TILLANDSIAS_PLAN_BIN="$PLAN"
 
 pass=0; fail=0

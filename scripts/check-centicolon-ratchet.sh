@@ -37,6 +37,15 @@ OUT="$ROOT/${TILLANDSIAS_CENTICOLON_DIR:-target/centicolon}"
 snapshot=1
 [ "${1:-}" = "--no-snapshot" ] && snapshot=0
 
+# The plan binary answers the JSON reads below (`json get`, 1375-rn9b — no jq).
+# Resolved from this checkout and made absolute, then handed to the wrapper.
+. "$SCRIPTS/plan-binary-probe.sh"
+if ! PLAN="$(cd "$SCRIPTS/.." && resolve_plan_binary)"; then
+    echo "centicolon: blocked:no-runnable-plan-binary (advisory)"; exit 0
+fi
+case "$PLAN" in /*) ;; *) PLAN="$(cd "$SCRIPTS/.." && cd "$(dirname "$PLAN")" && pwd)/$(basename "$PLAN")" ;; esac
+export TILLANDSIAS_PLAN_BIN="$PLAN"
+
 res="$(bash "$SCRIPTS/centicolon-grade.sh" 2>&1)"
 grep '^warn:' <<<"$res" || true
 verdict="$(grep -m1 -E '^(ok|blocked):centicolon-grade:' <<<"$res")"
@@ -49,9 +58,10 @@ kv() { sed -n "s/.* $1=\([0-9]*\).*/\1/p" <<<" ${verdict#ok:centicolon-grade:}";
 R="$(kv R)"; sat="$(kv satisfied)"; den="$(kv denominator)"
 dec="$(kv declared)"; tra="$(kv traced)"; pt="$(kv positively_tested)"
 
-# One line per obligation: "<id> <state> <spec> <req-id>", sorted.
-now="$(jq -r '.obligations[] | "\(.id) \(.state) \(.spec) \(.req_id)"' "$OUT/grade.json" 2>/dev/null | tr -d '\r' | LC_ALL=C sort)"
-counted_specs="$(jq -r '.specs_counted | keys[]' "$OUT/obligations.json" 2>/dev/null | tr -d '\r')"
+# One line per obligation: "<id> <state> <spec> <req-id>", sorted (the observed
+# grader emits them ready-made as `snapshot`, so no string building here).
+now="$("$PLAN" json get -r '.snapshot[]' "$OUT/grade.json" 2>/dev/null | tr -d '\r' | LC_ALL=C sort)"
+counted_specs="$("$PLAN" json get -r '.specs_counted | keys[]' "$OUT/obligations.json" 2>/dev/null | tr -d '\r')"
 
 # has_trail <spec> <req-id> — a tombstone trail for a vanished obligation.
 has_trail() {

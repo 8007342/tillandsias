@@ -26,12 +26,16 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 GRADE="$ROOT/scripts/centicolon-grade.sh"
 [ -f "$GRADE" ] || { echo "fail:centicolon-grade:no-wrapper:$GRADE"; exit 1; }
 
+cd "$ROOT" || exit 1
 . "$ROOT/scripts/plan-binary-probe.sh"
 if ! PLAN="$(resolve_plan_binary)"; then echo "skip:centicolon-grade:no-runnable-plan-binary"; exit 0; fi
 if ! grep -qx 'predicate' <<<"$("$PLAN" capabilities 2>/dev/null)"; then
     echo "skip:centicolon-grade:plan-binary-lacks-predicate-verb:$PLAN"; exit 0
 fi
-command -v jq >/dev/null 2>&1 || { echo "skip:centicolon-grade:no-jq"; exit 0; }
+# JSON reads go through the plan binary (`json get`, 1375-rn9b), not jq.
+jg() { "$PLAN" json get -r "$1" - <<<"$2" 2>/dev/null | tr -d '\r'; }
+# Absolute before export: the wrapper cds into a hermetic root (1380-u7sq).
+case "$PLAN" in /*) ;; *) PLAN="$ROOT/${PLAN#./}" ;; esac
 export TILLANDSIAS_PLAN_BIN="$PLAN"
 
 pass=0; fail=0
@@ -82,7 +86,12 @@ grade() {
     OUT="$(TILLANDSIAS_REPO_ROOT="$1" TILLANDSIAS_TIMING_LOG="$2" bash "$GRADE" 2>&1)"
     G="$(cat "$1/target/centicolon/grade.json" 2>/dev/null)"
 }
-state_of() { jq -r --arg r "aaaa000$1" '.obligations[] | select(.req_id == $r) | "\(.state)/\(.reason)"' <<<"$G" | tr -d '\r'; }
+# "<req-id> <state>/<reason>" per obligation, then pick one — plain gets, no
+# select/interpolation (the jq-retirement subset, 1375-tsfu).
+state_of() {
+    paste -d' ' <(jg '.obligations[].req_id' "$G") <(jg '.obligations[].state' "$G") <(jg '.obligations[].reason' "$G") \
+        | awk -v r="aaaa000$1" '$1 == r {print $2 "/" $3; exit}'
+}
 
 H="$WORK/h"; corpus "$H" yes
 DA="$(digest "$H/openspec/litmus-tests/litmus-a.yaml")"
