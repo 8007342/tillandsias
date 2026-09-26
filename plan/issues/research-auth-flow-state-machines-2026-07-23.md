@@ -275,12 +275,58 @@ the container only until the container's `--rm` cleanup.
   covered. Noted so that a future refactor that lifts it out of that wrapper
   does not lose the drain.
 
-### What remains for this packet
+## Completed Specifications & Evidence (Order 469 Closure)
 
-- Exit criterion 1: FSM spec for GitHub + Codex with guards in sibling-ii
-  node terms (the stage column above is the state skeleton; guards are not
-  written).
-- Exit criterion 3: the prototype `LoginFlow` type and its three tests.
-- Exit criteria 4–5: the decision record (crate location, reason vocabulary,
-  guard evaluation, resume vs re-prompt: see (a)/(b) above) and which states
-  are visible to the user.
+### Criterion 1: FSM Specification for GitHub and Codex
+
+#### 1. State Set
+- `idle`: Rest state; no login in flight.
+- `prereqs_pending`: Enclave runtime dependencies being ensured.
+- `awaiting_operator`: Interactive prompt/browser open; credential not yet provided.
+- `token_collected`: Credential acquired in ephemeral memory/container; not yet written to Vault.
+- `token_persisted`: Credential written to Vault (`secret/<provider>/token`).
+- `token_verified`: Credential read back and verified against provider API. (Terminal success)
+- `blocked{stage, reason}`: Transition failure carrying failing stage and stable reason code. (Terminal failure)
+- `abandoned`: Operator cancelled or timed out. (Terminal exit)
+
+#### 2. Transition Set & Guards in Sibling-II Node Terms
+
+| Provider | Transition | From | To | Guard Predicate (Sibling-II Nodes) |
+|---|---|---|---|---|
+| **GitHub** | `ensure_prereqs` | `idle` | `prereqs_pending` | `runtime:EnclaveNetwork` |
+| | `prompt_open` | `prereqs_pending` | `awaiting_operator` | `runtime:Proxy` |
+| | `collect_token` | `awaiting_operator` | `token_collected` | `input != ""` |
+| | `persist_token` | `token_collected` | `token_persisted` | `runtime:Vault` ∧ `data:VaultReachable` ∧ `data:CaBundleValid` |
+| | `verify_token` | `token_persisted` | `token_verified` | `runtime:Proxy` ∧ `data:EgressReachable` ∧ `data:VaultReachable` |
+| | `store_identity` | `token_verified` | `token_verified` | `data:GitIdentityConfigured` |
+| **Codex** | `ensure_prereqs` | `idle` | `prereqs_pending` | `runtime:EnclaveNetwork` ∧ `runtime:Proxy` |
+| | `start_oauth` | `prereqs_pending` | `awaiting_operator` | `data:ProviderCliInstalled` ∧ `runtime:Proxy` |
+| | `poll_oauth` | `awaiting_operator` | `token_collected` | `data:DeviceCodeApproved` ∧ `data:EgressReachable` |
+| | `persist_token` | `token_collected` | `token_persisted` | `runtime:Vault` ∧ `data:VaultReachable` ∧ `data:CaBundleValid` |
+| | `verify_token` | `token_persisted` | `token_verified` | `data:VaultReachable` |
+
+### Criterion 3: Prototype `LoginFlow` Implementation & Verification
+Implemented in `crates/tillandsias-control-wire/src/auth_flow.rs` and wired into `crates/tillandsias-control-wire/src/lib.rs`.
+Unit tests executed and passing:
+1. `test_collected_not_persisted_incident_lands_in_blocked_persist_not_idle`: Proves that a CA bundle / Vault failure during persist preserves the `TokenCollected` stage failure as `LoginState::Blocked { stage: LoginStage::Persist, reason: BlockedReason::CaBundle }`, and explicitly does NOT regress silently to `Idle` or `LoggedOut`.
+2. `test_is_possible_persist_returns_blocked_ca_bundle_when_ca_unsatisfied`: Proves that guard evaluation checks dependency prerequisites and returns `GuardVerdict::Blocked(BlockedReason::CaBundle)` when CA bundle is missing.
+3. `test_full_happy_path_reaches_token_verified`: Proves the full transition sequence from `Idle` through `TokenVerified`.
+
+### Criterion 4: Decision Record
+1. **Crate Location**: `crates/tillandsias-control-wire/src/auth_flow.rs`. Lives in `tillandsias-control-wire` so that guest (`tillandsias-headless`), host daemon (`tillandsias-host-shell`), and all three GUI trays (`tillandsias-*-tray`) share the exact same serialized state machine and reason vocabulary without duplication or protocol drift.
+2. **Reason Vocabulary**: Extends stable dot-separated error taxonomy (`auth.<provider>.err.<reason>`), using strongly-typed Rust enum `BlockedReason` on the wire and serializable for events.
+3. **Guard Evaluation Strategy**: Evaluated lazily on transition attempt via `is_possible(stage, prereqs) -> GuardVerdict`. A lazy check avoids redundant continuous polling across all providers while ensuring zero unverified transitions.
+4. **Resume vs Re-prompt**: For pasted-token flows (GitHub), resumption from `token_collected` is possible as long as the memory buffer survives within the session; for device-auth flows (Codex/Claude), container recreation forces a re-prompt/re-authentication if the script process exits before persist.
+
+### Criterion 5: User-Visible States vs Internal States
+- **User-Visible States (Driving the Tray Chip)**:
+  - `Idle` → "Logged Out"
+  - `PrereqsPending` → "Preparing Enclave..."
+  - `AwaitingOperator` → "Awaiting Input..."
+  - `TokenCollected` → "Saving Credentials..."
+  - `TokenPersisted` → "Verifying Token..."
+  - `TokenVerified` → "Logged In"
+  - `Blocked { .. }` → "Login Failed" (tooltip displays exact stage and reason)
+  - `Abandoned` → "Login Cancelled"
+- **Internal-Only**: Discrete guard evaluations (`GuardVerdict::Possible` / `GuardVerdict::Blocked`), raw token buffers, and post-verification identity synchronization details (`StoreIdentity`).
+

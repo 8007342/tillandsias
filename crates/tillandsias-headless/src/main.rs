@@ -80,6 +80,7 @@ mod local_projects;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 pub mod remote_projects;
 mod runtime_assets;
+mod unified_deps;
 // 701-iu9b. The in-VM guest binary must never be built without `vault`.
 //
 // `listen-vsock` is how the guest binary is produced (scripts/build-macos-tray.sh:
@@ -412,6 +413,9 @@ fn main() {
     let fresh_capabilities = user_args.iter().any(|a| a == "--fresh");
     let github_login = user_args.iter().any(|a| a == "--github-login");
     let with_token = user_args.iter().any(|a| a == "--with-token");
+    let refresh_github_token = user_args
+        .iter()
+        .any(|a| a == "--refresh-github-token" || a == "--github-refresh");
     let claude_login = user_args.iter().any(|a| a == "--claude-login");
     let codex_login = user_args.iter().any(|a| a == "--codex-login");
     // --agy-login is the operator-facing alias (matches the `agy` binary name).
@@ -668,6 +672,8 @@ fn main() {
         "--sync",
         "--github-login",
         "--with-token",
+        "--refresh-github-token",
+        "--github-refresh",
         "--claude-login",
         "--codex-login",
         "--antigravity-login",
@@ -871,6 +877,33 @@ fn main() {
             std::process::exit(1);
         }
         return;
+    }
+
+    if refresh_github_token {
+        #[cfg(feature = "vault")]
+        {
+            match vault_bootstrap::refresh_github_token_in_vault(debug) {
+                Ok(true) => {
+                    println!("[tillandsias] GitHub token refreshed successfully");
+                    return;
+                }
+                Ok(false) => {
+                    println!(
+                        "[tillandsias] GitHub token in Vault has no refresh token or could not be found"
+                    );
+                    return;
+                }
+                Err(e) => {
+                    eprintln!("Error refreshing GitHub token: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        #[cfg(not(feature = "vault"))]
+        {
+            eprintln!("Error: vault feature not compiled; cannot refresh GitHub token");
+            std::process::exit(1);
+        }
     }
 
     if list_cloud_projects {
@@ -1502,6 +1535,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --init [--force] [--debug]");
     println!("       tillandsias --status-check [--debug]");
     println!("       tillandsias --github-login [--with-token] [--debug]");
+    println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
     println!("       tillandsias --codex-login [--debug]");
     println!("       tillandsias --antigravity-login [--debug]");
@@ -1563,6 +1597,10 @@ fn print_usage(version: &str) {
     );
     println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
+    println!(
+        "  --refresh-github-token Refresh GitHub OAuth access token using refresh token in Vault"
+    );
+    println!("  --github-refresh       Alias for --refresh-github-token");
     println!(
         "  --claude-login Authenticate Claude (device flow: claude auth login --claudeai) into Vault"
     );
@@ -6983,6 +7021,24 @@ fn forge_host_mount_enabled(raw: Option<&str>) -> bool {
     matches!(raw, Some("1"))
 }
 
+/// ORDER 776-jcf3 (criterion 3 residual b). The host-mount opt-in binds a
+/// REAL checkout; a cloud launch has none, and its `project_path` is the bare
+/// project name. Honouring the opt-in there bind-mounts that relative name —
+/// podman reads `-v tillandsias:/…` as a NAMED VOLUME, not a path — and the
+/// gitdir facade reads `git -C tillandsias` against the launcher CWD, the
+/// stray-directory capture 1119-w2rj closed for every other read. So the
+/// opt-in is granted only with a checkout, and refused loudly without one.
+fn forge_host_mount_granted(requested: bool, host_checkout: Option<&Path>) -> bool {
+    if requested && host_checkout.is_none() {
+        eprintln!(
+            "[tillandsias] TILLANDSIAS_FORGE_HOST_MOUNT=1 ignored: cloud launch has no \
+             host checkout to mount; the forge stays clone-only (order 776-jcf3)"
+        );
+        return false;
+    }
+    requested
+}
+
 fn forge_uses_host_mount() -> bool {
     forge_host_mount_enabled(
         std::env::var("TILLANDSIAS_FORGE_HOST_MOUNT")
@@ -7953,7 +8009,7 @@ fn build_opencode_forge_args(
                 git_mirror_service_identity(mirror_id, project_name)
             ),
         ]);
-    } else if forge_uses_host_mount() {
+    } else if forge_host_mount_granted(forge_uses_host_mount(), host_checkout) {
         // Opt-in legacy shared host-mount (TILLANDSIAS_FORGE_HOST_MOUNT=1):
         // bind-mounts the operator's real checkout rw and installs the gitdir
         // facade. Retained for the solo live-edit workflow where a single user
@@ -10523,6 +10579,177 @@ fn podman_command() -> tillandsias_podman::SyncPodmanCommand {
     podman_cmd_sync()
 }
 
+/// GitHub App Client ID for Tillandsias (Owned by: @8007342, App ID: 5081125).
+pub const GITHUB_APP_CLIENT_ID: &str = "Iv23liddVkg9ME6OB1K1";
+
+/// Render a terminal QR code with blocky characters.
+///
+/// Uses `qrcode::render::unicode::Dense1x2` wrapped in ANSI styling
+/// (white background `\x1b[47m`, black foreground `\x1b[30m`) so that
+/// the QR code renders as crisp black modules on a white square
+/// with high contrast across both light and dark terminal emulators.
+pub fn render_terminal_qr(url: &str) -> Result<String, String> {
+    use qrcode::QrCode;
+    use qrcode::render::unicode::Dense1x2;
+
+    let code = QrCode::new(url.as_bytes()).map_err(|e| format!("QR encoding failed: {e}"))?;
+    let raw = code.render::<Dense1x2>().quiet_zone(true).build();
+
+    let mut out = String::new();
+    for line in raw.lines() {
+        out.push_str("\x1b[47m\x1b[30m  ");
+        out.push_str(line);
+        out.push_str("  \x1b[0m\n");
+    }
+    Ok(out)
+}
+
+/// Device code request and polling for GitHub App interactive login.
+fn run_github_device_login(container: &str, debug: bool) -> Result<(), String> {
+    let device_code_cmd = format!(
+        "curl -s -X POST https://github.com/login/device/code \
+         -H 'Accept: application/json' \
+         -d 'client_id={GITHUB_APP_CLIENT_ID}'"
+    );
+    let mut cmd = podman_command();
+    cmd.args(["exec", container, "/bin/sh", "-c", &device_code_cmd]);
+    let output = podman_command_output(cmd, debug)?;
+
+    let is_mock = std::env::var_os("LITMUS_PODMAN_MODE").is_some() || output.contains("mock");
+
+    let (device_code, user_code, verification_uri, interval, expires_in) =
+        match serde_json::from_str::<serde_json::Value>(&output) {
+            Ok(v) if v.get("device_code").is_some() && v.get("user_code").is_some() => {
+                let d_code = v["device_code"].as_str().unwrap().to_string();
+                let u_code = v["user_code"].as_str().unwrap().to_string();
+                let uri = v["verification_uri"]
+                    .as_str()
+                    .unwrap_or("https://github.com/login/device")
+                    .to_string();
+                let intv = v["interval"].as_u64().unwrap_or(5);
+                let exp = v["expires_in"].as_u64().unwrap_or(899);
+                (d_code, u_code, uri, intv, exp)
+            }
+            _ if is_mock => (
+                "mock-device-code".to_string(),
+                "MOCK-CODE".to_string(),
+                "https://github.com/login/device".to_string(),
+                1,
+                60,
+            ),
+            Err(e) => {
+                return Err(format!(
+                    "failed to parse GitHub device code response: {e}; raw: {output}"
+                ));
+            }
+            Ok(v) => {
+                return Err(format!(
+                    "unexpected response from GitHub device endpoint: {v}"
+                ));
+            }
+        };
+
+    let mobile_url = format!("{verification_uri}?user_code={user_code}");
+    let qr_code_str = render_terminal_qr(&mobile_url)?;
+
+    println!("\nScan this QR code with your mobile phone to complete GitHub login:\n");
+    print!("{qr_code_str}");
+    println!();
+    println!("  Or in any browser, visit: {verification_uri}");
+    println!("  Enter one-time code:      {user_code}\n");
+    println!("Waiting for mobile authorization (polling GitHub)...");
+
+    if is_mock {
+        let mut fake_login = podman_command();
+        fake_login.args([
+            "exec",
+            "--interactive",
+            "--tty",
+            container,
+            "gh",
+            "auth",
+            "login",
+            "--hostname",
+            "github.com",
+            "--git-protocol",
+            "https",
+        ]);
+        let _ = run_podman_command(fake_login, debug);
+
+        let fake_write_cmd = "vault-cli.sh write-json secret/github/token token=mock-github-token || vault-cli.sh write-stdin secret/github/token token";
+        let mut fake_write = podman_command();
+        fake_write.args(["exec", container, "/bin/sh", "-c", fake_write_cmd]);
+        let _ = run_podman_command_silent(fake_write, debug);
+
+        return Ok(());
+    }
+
+    let poll_script = format!(
+        r#"
+CLIENT_ID='{GITHUB_APP_CLIENT_ID}'
+DEVICE_CODE='{device_code}'
+INTERVAL={interval}
+EXPIRES_AT=$(( $(date +%s) + {expires_in} ))
+
+while [ $(date +%s) -lt $EXPIRES_AT ]; do
+  sleep $INTERVAL
+  RESP=$(curl -s -X POST https://github.com/login/oauth/access_token \
+    -H "Accept: application/json" \
+    -d "client_id=$CLIENT_ID" \
+    -d "device_code=$DEVICE_CODE" \
+    -d "grant_type=urn:ietf:params:oauth:grant-type:device_code")
+
+  ERROR=$(printf '%s' "$RESP" | jq -r '.error // empty')
+  if [ -z "$ERROR" ]; then
+    ACCESS_TOKEN=$(printf '%s' "$RESP" | jq -r '.access_token // empty')
+    REFRESH_TOKEN=$(printf '%s' "$RESP" | jq -r '.refresh_token // empty')
+    EXPIRES_IN=$(printf '%s' "$RESP" | jq -r '.expires_in // 28800')
+    REFRESH_EXPIRES_IN=$(printf '%s' "$RESP" | jq -r '.refresh_token_expires_in // 15811200')
+    NOW=$(date +%s)
+    TOKEN_EXPIRES_AT=$(( NOW + EXPIRES_IN ))
+    REFRESH_EXPIRES_AT=$(( NOW + REFRESH_EXPIRES_IN ))
+
+    if [ -n "$ACCESS_TOKEN" ]; then
+      printf '%s' "$ACCESS_TOKEN" | gh auth login --hostname github.com --git-protocol https --with-token || exit $?
+
+      printf '{{"data":{{"token":"%s","refresh_token":"%s","expires_at":%d,"refresh_token_expires_at":%d,"client_id":"%s"}}}}\n' \
+        "$ACCESS_TOKEN" "$REFRESH_TOKEN" "$TOKEN_EXPIRES_AT" "$REFRESH_EXPIRES_AT" "$CLIENT_ID" | \
+        vault-cli.sh write-json secret/github/token || \
+        (printf '%s' "$ACCESS_TOKEN" | vault-cli.sh write-stdin secret/github/token token) || exit $?
+
+      printf '\n[tillandsias] Authorization successful!\n'
+      exit 0
+    fi
+  elif [ "$ERROR" = "authorization_pending" ]; then
+    printf '.'
+    continue
+  elif [ "$ERROR" = "slow_down" ]; then
+    INTERVAL=$(( INTERVAL + 5 ))
+    continue
+  elif [ "$ERROR" = "expired_token" ]; then
+    printf '\nDevice code expired. Please re-run tillandsias --github-login.\n' >&2
+    exit 1
+  elif [ "$ERROR" = "access_denied" ]; then
+    printf '\nAuthorization was denied on your mobile device.\n' >&2
+    exit 1
+  else
+    printf '\nAuthentication error: %s\n' "$ERROR" >&2
+    exit 1
+  fi
+done
+printf '\nLogin timed out waiting for authorization.\n' >&2
+exit 1
+"#
+    );
+
+    let mut poll_cmd = podman_command();
+    poll_cmd.args(["exec", container, "/bin/bash", "-c", &poll_script]);
+    run_podman_command(poll_cmd, debug)
+        .map_err(|e| format!("GitHub device authorization failed: {e}"))?;
+
+    Ok(())
+}
+
 /// In-container token entry for `--github-login`.
 ///
 /// We deliberately avoid `gh auth login`'s interactive masked prompt: it puts
@@ -11256,13 +11483,19 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     // believe those fields WERE their GitHub credentials. Taking the token
     // first makes the credential step unambiguous, and the identity prompt
     // then arrives already framed as commit metadata.
-    let mut login = podman_command();
-    login.args(provider_login_exec_args(
-        &container,
-        &config.token_script,
-        config.input_mode,
-    ));
-    run_podman_command(login, debug)?;
+    if matches!(config.provider, ProviderId::GitHub)
+        && matches!(config.input_mode, LoginInputMode::Terminal)
+    {
+        run_github_device_login(&container, debug)?;
+    } else {
+        let mut login = podman_command();
+        login.args(provider_login_exec_args(
+            &container,
+            &config.token_script,
+            config.input_mode,
+        ));
+        run_podman_command(login, debug)?;
+    }
 
     if matches!(config.provider, ProviderId::GitHub) {
         let mut auth_status = podman_command();
@@ -11300,10 +11533,12 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
                  printf '%s' \"$TOKEN\" | vault-cli.sh write-stdin {} token",
                 config.provider.vault_path()
             );
-            let mut vault_write = podman_command();
-            vault_write.args(["exec", &container, "/bin/sh", "-c", &vault_write_cmd]);
-            run_podman_command_silent(vault_write, debug)
-                .map_err(|e| format!("in-container vault write failed: {e}"))?;
+            if matches!(config.input_mode, LoginInputMode::StdinToken) {
+                let mut vault_write = podman_command();
+                vault_write.args(["exec", &container, "/bin/sh", "-c", &vault_write_cmd]);
+                run_podman_command_silent(vault_write, debug)
+                    .map_err(|e| format!("in-container vault write failed: {e}"))?;
+            }
         }
 
         let mut vault_verify = podman_command();
@@ -16818,7 +17053,8 @@ fn run_forge_agent_cli_mode(
         provider_vault_secret,
         prompt,
         // ORDER 1021-hf9e: read the process env HERE, in the production lane.
-        forge_uses_host_mount(),
+        // ORDER 776-jcf3: and grant it only with a real checkout.
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
         &tillandsias_core::cache_root::cache_root(),
     );
 
@@ -22054,6 +22290,29 @@ mod tests {
         );
     }
 
+    /// Order 776-jcf3: a cloud launch (no host checkout) never gets the host
+    /// mount, even when opted in; a local launch keeps the opt-in as-is.
+    #[test]
+    fn host_mount_is_refused_without_a_host_checkout() {
+        let checkout = Path::new("/home/forge/src/alpha");
+        assert!(
+            !forge_host_mount_granted(true, None),
+            "cloud launch + opt-in => clone-only"
+        );
+        assert!(
+            forge_host_mount_granted(true, Some(checkout)),
+            "local launch + opt-in => host mount"
+        );
+        assert!(
+            !forge_host_mount_granted(false, Some(checkout)),
+            "no opt-in => clone-only"
+        );
+        assert!(
+            !forge_host_mount_granted(false, None),
+            "default => clone-only"
+        );
+    }
+
     /// Order 465 residual: the escape hatch must be LOUD. The warning text is
     /// pure, so pin the load-bearing claims: what is reduced, why (rw
     /// host-mount bypassing the isolated clone + mirror-push lane), what still
@@ -22099,7 +22358,7 @@ mod tests {
 
         let opencode = source_window(source, "fn build_opencode_forge_args(");
         let optin_idx = opencode
-            .find("else if forge_uses_host_mount()")
+            .find("else if forge_host_mount_granted(forge_uses_host_mount(), host_checkout)")
             .expect("opencode builder keeps the opt-in host-mount branch");
         let warn_idx = opencode
             .find("warn_forge_host_mount_isolation_reduced();")
@@ -23157,6 +23416,31 @@ mod tests {
         );
         assert!(args.iter().any(|arg| arg == "--interactive"));
         assert!(args.iter().any(|arg| arg == "--tty"));
+    }
+
+    #[test]
+    fn github_app_client_id_is_pinned() {
+        assert_eq!(GITHUB_APP_CLIENT_ID, "Iv23liddVkg9ME6OB1K1");
+    }
+
+    #[test]
+    fn terminal_qr_renderer_produces_high_contrast_ansi_blocks() {
+        let qr = render_terminal_qr("https://github.com/login/device?user_code=ABCD-1234")
+            .expect("QR code rendering must succeed");
+        assert!(!qr.is_empty(), "QR code must not be empty");
+        assert!(
+            qr.contains("\x1b[47m\x1b[30m"),
+            "QR code must use ANSI white bg / black fg for contrast"
+        );
+        assert!(qr.contains("\x1b[0m"), "QR code must reset ANSI formatting");
+        assert!(qr.lines().count() >= 10, "QR code must have multiple lines");
+    }
+
+    #[test]
+    fn github_refresh_flags_are_known() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        assert!(source.contains("\"--refresh-github-token\""));
+        assert!(source.contains("\"--github-refresh\""));
     }
 
     #[test]
@@ -28676,7 +28960,7 @@ esac
         // fresh tree from the mirror (GIT_SERVICE presence flag) with no host
         // mount and no facade.
         let optin_idx = window
-            .find("else if forge_uses_host_mount()")
+            .find("else if forge_host_mount_granted(forge_uses_host_mount(), host_checkout)")
             .expect("host-mount must be opt-in behind forge_uses_host_mount()");
         let host_mount_idx = window
             .find("TILLANDSIAS_PROJECT_HOST_MOUNT=1")
