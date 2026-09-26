@@ -10,4 +10,4 @@ STEP_DESC="Checking one Lua script is one byte stream: ordered encode/pairs, no 
 STEP_SCRIPT="scripts/test-lua-determinism.sh"
 STEP_ERROR="Lua output varies across processes or a script can change the number locale (1384-bp6t)"
 STEP_OK="Lua output is deterministic and locale-independent"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:lua-determinism:5 arms (skipped=0)"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:lua-determinism:6 arms (skipped=0)"

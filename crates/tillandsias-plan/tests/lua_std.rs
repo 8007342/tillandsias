@@ -252,3 +252,30 @@ fn the_archiver_sweeps_in_the_default_sandbox() {
         .expect("the completed row lands in its month's archive");
     assert!(archived.contains("fixture-done-row"), "{archived}");
 }
+
+/// 1395-xjty. `next` stays withheld (1384-bp6t), so authors get the emptiness
+/// test they reach for, and a call to `next` names it instead of dying with
+/// "attempt to call a nil value (global 'next')". PRE-FIX RESULT: FAILS —
+/// 1380-u7sq's archiver called next(terminal_ids) and the merged tree died
+/// with exactly that message.
+#[test]
+fn table_is_empty_exists_and_next_names_it_in_both_classes() {
+    for class in [PredicateClass::Cacheable, PredicateClass::Observing] {
+        assert_eq!(
+            eval_str(
+                class,
+                "return tostring(table.is_empty({})) .. tostring(table.is_empty({a=1})) .. tostring(table.is_empty({1}))"
+            ),
+            "truefalsefalse"
+        );
+        let lua = build_environment(class).expect("env");
+        let err = lua
+            .load("return next({a=1})")
+            .eval::<mlua::Value>()
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("table.is_empty"), "{class:?}: {err}");
+        // every OTHER undefined global still reads nil
+        assert_eq!(eval_str(class, "return tostring(no_such_global)"), "nil");
+    }
+}

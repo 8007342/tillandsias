@@ -563,3 +563,72 @@ fn pure_shims_available_in_observing_class_too() {
         .expect("eval");
     assert!(verdict);
 }
+
+// ---------------------------------------------------------------------------
+// 1395-ue3i. fs.list(dir): sorted names, rooted, and part of the memo's input set.
+
+fn scratch_dir(tag: &str) -> (std::path::PathBuf, String) {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let rel = format!("target/fs-list-{tag}-{}", std::process::id());
+    let dir = root.join(&rel);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("mkdir");
+    (dir, rel)
+}
+
+/// Operator ruling (2026-09-26, on 1395-ue3i): fs.list is for orchestration,
+/// not hard tests, so it exists in the OBSERVING class and is ABSENT from the
+/// Cacheable one; no memoized verdict can depend on a directory's membership.
+#[test]
+fn fs_list_is_observing_only_and_absent_from_the_cacheable_class() {
+    let obs = tillandsias_plan::lua_predicate::build_environment(PredicateClass::Observing)
+        .expect("observing env");
+    let ty: String = obs.load("return type(fs.list)").eval().expect("observing");
+    assert_eq!(ty, "function");
+    let cac = tillandsias_plan::lua_predicate::build_environment(PredicateClass::Cacheable)
+        .expect("cacheable env");
+    let ty: String = cac.load("return type(fs.list)").eval().expect("cacheable");
+    assert_eq!(ty, "nil", "fs.list must not reach a memoized verdict");
+    let read: String = cac
+        .load("return type(fs.read)")
+        .eval()
+        .expect("cacheable read");
+    assert_eq!(
+        read, "function",
+        "Cacheable keeps fs.read (named files, content-addressed)"
+    );
+}
+
+#[test]
+fn fs_list_returns_regular_file_names_in_byte_order_and_never_a_symlink() {
+    let (dir, rel) = scratch_dir("order");
+    for n in ["b", "a", "C", "é"] {
+        std::fs::write(dir.join(n), "").expect("seed");
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("/etc", dir.join("zz-link")).expect("symlink");
+    let lua =
+        tillandsias_plan::lua_predicate::build_environment(PredicateClass::Observing).expect("env");
+    let got: String = lua
+        .load(format!(r#"return table.concat(fs.list("{rel}"), ",")"#))
+        .eval()
+        .expect("fs.list");
+    let _ = std::fs::remove_dir_all(&dir);
+    // Regular files only, in UTF-8 byte order; the symlink is EXCLUDED (so
+    // it is never followed), which is fs.list's contract since 1380-u7sq.
+    assert_eq!(got, "C,a,b,é");
+}
+
+#[test]
+fn fs_list_refuses_outside_the_root_by_name() {
+    let lua =
+        tillandsias_plan::lua_predicate::build_environment(PredicateClass::Observing).expect("env");
+    for bad in ["../", "/etc"] {
+        let err = lua
+            .load(format!(r#"return fs.list("{bad}")"#))
+            .eval::<mlua::Value>()
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("fs.list: refused"), "{bad}: {err}");
+    }
+}

@@ -91,7 +91,17 @@ fn determinism(lua: &Lua) -> LuaResult<()> {
             end, t, nil
         end
         table.keys = keys
+        -- 1395-xjty: the emptiness test authors reach for is next(t) == nil;
+        -- give them the replacement, and make reaching for next SAY so.
+        table.is_empty = function(t) return rawnext(t) == nil end
         next = nil
+        setmetatable(_G, { __index = function(_, k)
+            if k == "next" then
+                error("next is withheld in lua_std (1384-bp6t: its walk order varies per " ..
+                      "process); test emptiness with table.is_empty(t), iterate with pairs(t)", 2)
+            end
+            return nil
+        end })
         if type(os) == "table" then os.setlocale = nil end
         "#,
     )
