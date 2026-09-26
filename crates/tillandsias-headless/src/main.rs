@@ -3476,8 +3476,11 @@ fn build_stack_common_args(
         // took a PID-1 harness SIGSEGV with it (667-se87, 604-vmcg third
         // sighting, 2026-08-10). This is a fork-bomb ceiling, not a scheduler:
         // size it above the workload's honest peak.
-        "--pids-limit=4096".into(),
     ];
+    // ORDER 1375-xxzj: the forge cgroup budget — memory.max/high/low,
+    // memory.swap.max and pids.max = clamp(512·nproc, 4096, 16384), which
+    // keeps the 4096 floor above.
+    args.extend(tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args());
     args.extend(proxy_env_args());
     args.extend([
         "--env".into(),
@@ -7867,10 +7870,10 @@ fn build_opencode_forge_args(
         "--security-opt=no-new-privileges".into(),
         "--security-opt=label=disable".into(),
         "--userns=keep-id".into(),
-        // Same 4096 rationale as build_stack_common_args (667-se87): this
-        // lane hosts workspace builds too.
-        "--pids-limit=4096".into(),
     ];
+    // Same budget as build_stack_common_args (1375-xxzj; the 4096 pids floor of
+    // 667-se87 is kept by the clamp): this lane hosts workspace builds too.
+    args.extend(tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args());
     match mode {
         ForgeMode::Cli => {
             // When a prompt is provided, the entrypoint execs
@@ -16405,7 +16408,8 @@ fn build_forge_agent_run_args_with_vault(
         // forge. The rationale travels with EVERY site now; a fix whose
         // comment rides only some copies makes the missed ones look
         // intentional.
-        .pids_limit(4096);
+        // ORDER 1375-xxzj: the full cgroup budget; its pids clamp keeps the 4096 floor.
+        .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host());
     if !non_interactive_prompt {
         spec = spec.interactive().tty();
         // D3 of order 702-6jza. With --tty, podman injects its DEFAULT
