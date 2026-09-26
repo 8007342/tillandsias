@@ -78,14 +78,24 @@ counts="$(cd "$ROOT" && printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 grep -c
 # Join counts with the floor: "<path> <count> <floor or -1>".
 floor_text=""
 [ -f "$FLOOR" ] && floor_text="$(grep -vE '^[[:space:]]*(#|$)' "$FLOOR")"
-joined="$(awk -v ft="$floor_text" '
-    BEGIN { n = split(ft, L, "\n"); for (i = 1; i <= n; i++) { split(L[i], p, " "); if (p[2] != "") F[p[2]] = p[1] } }
+# The floor goes in through the ENVIRONMENT, never `awk -v`: BSD awk rejects a
+# newline in a -v value ("newline in string") where gawk and mawk accept it, so
+# on macOS the join came out empty and the guard printed ok:jq-callsites:0:floor:0
+# with rc 0 — a silent false green (macbookair, 2026-09-26).
+joined="$(FT="$floor_text" awk '
+    BEGIN { n = split(ENVIRON["FT"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], p, " "); if (p[2] != "") F[p[2]] = p[1] } }
     NF == 2 { f = ($1 in F) ? F[$1] : -1; print $1, $2, f; seen[$1] = 1 }
     END { for (k in F) if (!(k in seen)) print k, 0, F[k] }
 ' <<EOF
 $counts
 EOF
 )"
+# A join that lost its input is a broken instrument, not a clean tree: sites
+# were counted, so the join must carry them. Refuse rather than read as ok:0.
+if [ -n "$counts" ] && [ -z "$joined" ]; then
+    echo "could-not-run:jq-ratchet:join-produced-nothing (counted sites vanished in the floor join)"
+    exit 3
+fi
 total=0; floor_sum=0
 while read -r path n f; do
     [ -n "$path" ] || continue
