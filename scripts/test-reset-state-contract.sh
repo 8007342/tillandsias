@@ -153,4 +153,41 @@ if grep -q -- '"--reset-the-entire-machine"' "$MACMAIN"; then
     bad "ARM6 negative control matched — the probes are not discriminating"
 else ok "ARM6 NEGATIVE CONTROL — a flag that does not exist is not found"; fi
 
+# ARM 8 — NO RESET BODY CALLS A CREDENTIAL CLEARER (order 1437-qza3; operator
+# directive 2026-09-27, tillandsias-vault "The Vault store and its unseal
+# material survive every destructive reset; only uninstall removes them").
+# Supersedes 900-z3kv option (a): a reset used to clear the share, the root
+# token and the store, and install.sh runs --reset-state on every install, so
+# every install since 2026-09-20 discarded every sign-in.
+#
+# The Linux bodies are asserted HARD. The macOS and Windows bodies are their own
+# packets (1437-av8u, 1437-3iux), so until those land a clearer there is a
+# NAMED PENDING line, not a pass and not a red that would block every gate on a
+# sibling's schedule. When a sibling lands, its line turns ok by itself.
+CLEARERS='clear_host_vault_credentials|clear_guest_vault_credentials|CLEARED_CREDENTIALS'
+fn_body() {   # <file> <literal that opens the fn>: from that line to the first column-0 '}'
+    awk -v pat="$2" 'index($0, pat) { p = 1 } p { print } p && /^}/ { exit }' "$1"
+}
+WINNOTIFY=crates/tillandsias-windows-tray/src/notify_icon.rs
+for spec in \
+    "linux|$LIN|fn run_reset_state(debug: bool)" \
+    "linux|$LIN|fn run_reset_guest(debug: bool)" \
+    "1437-av8u|$MAC|pub fn run_reset_state()" \
+    "1437-3iux|$WINNOTIFY|pub fn reset_state_once()"; do
+    owner="${spec%%|*}"; rest="${spec#*|}"; file="${rest%%|*}"; opener="${rest#*|}"
+    body="$(fn_body "$file" "$opener")"
+    if [ -z "$body" ]; then bad "ARM8 could not find '$opener' in $file — the probe no longer reaches its subject"; continue; fi
+    calls="$(printf '%s\n' "$body" | grep -vE '^[[:space:]]*(//|\*)' | grep -cE "$CLEARERS")"
+    if [ "$calls" -eq 0 ]; then ok "ARM8 $file '$opener' calls no credential clearer"
+    elif [ "$owner" = linux ]; then bad "ARM8 $file '$opener' calls a credential clearer ($calls site(s)) — only uninstall may"
+    else printf 'PENDING(%s): ARM8 %s %s still calls a credential clearer (%s site(s)) — owned by %s, NOT a pass\n' "$owner" "$file" "$opener" "$calls" "$owner"; fi
+done
+# ARM 8b — POSITIVE CONTROL: the extractor and the pattern catch a clearer call.
+CTL8="$(mktemp)"
+printf 'fn run_reset_state(debug: bool) -> Result<(), String> {\n    let _ = clear_host_vault_credentials(debug);\n}\n' > "$CTL8"
+if [ "$(fn_body "$CTL8" 'fn run_reset_state(debug: bool)' | grep -cE "$CLEARERS")" -eq 1 ]; then
+    ok "ARM8b POSITIVE CONTROL — a clearer call inside a reset body is detected"
+else bad "ARM8b the clearer probe cannot see a call it must see"; fi
+rm -f "$CTL8"
+
 [ "$FAIL" -eq 0 ] && { echo "PASS"; exit 0; } || { echo "FAILED"; exit 1; }

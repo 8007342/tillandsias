@@ -9973,12 +9973,16 @@ fn reset_guest_network_scope(names: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// Host-side directories the reset deletes under the init cache dir. ONLY
-/// `vault-data` (the vault storage backend) — never `models` (the inference
-/// model cache, explicitly out of the ephemeral doctrine's scope) and never
-/// the cache dir itself.
-fn reset_guest_wipe_paths(cache_dir: &Path) -> Vec<PathBuf> {
-    vec![cache_dir.join("vault-data")]
+/// Host-side directories the reset deletes under the init cache dir: NONE.
+///
+/// Order 1437-qza3 (host-state-lifecycle): everything under the cache dir is
+/// operator data. This used to return `vault-data`, which was the worst
+/// combination: the store died while the keyring share survived, so the next
+/// launch re-initialised Vault and overwrote the share. The function stays,
+/// empty, so a future derived path has one obvious home and the test below
+/// keeps pinning what must never appear in it.
+fn reset_guest_wipe_paths(_cache_dir: &Path) -> Vec<PathBuf> {
+    Vec::new()
 }
 
 /// Enumerate podman object names via `--format {{.Names}}`/`{{.Name}}`.
@@ -10052,22 +10056,36 @@ fn run_reset_state(_debug: bool) -> Result<(), String> {
 /// this flag is the stronger sibling, not a redefinition.
 #[cfg(target_os = "linux")]
 fn run_reset_state(debug: bool) -> Result<(), String> {
+    // Order 1437-qza3 (operator directive 2026-09-27, host-state-lifecycle):
+    // a reset destroys DERIVED state only. The Vault store and its unseal
+    // material are operator data and survive; only `--uninstall` clears them.
+    // This supersedes 900-z3kv option (a) and the premise of 1118-fqfk, whose
+    // fallback-file question stays open with the operator, so the fallback
+    // files are preserved here too.
     announce_reset_plan(
         &[
             "every Tillandsias podman container, volume, secret and network",
             "ALL podman images on this host (podman system reset --force)",
-            "the host keychain entries vault-shamir-share-v1 and vault-root-token-v1",
-            "the host fallback files fallback_vault-shamir-share-v1 and fallback_vault-root-token-v1",
-            "<cache>/tillandsias/vault-data (the Vault store)",
+            "the build and provision markers under <cache>/tillandsias",
         ],
         &[
+            "<cache>/tillandsias/vault-data (the Vault store) and \
+             <cache>/tillandsias/vault-audit — your sign-ins survive the reset",
+            "the keyring entries vault-shamir-share-v1 and vault-root-token-v1, \
+             and their fallback files where no keyring exists — a freshly built \
+             Vault unseals the preserved store with them",
             "installation-uuid-v1 in the keychain — the INSTALLATION anchor; the \
-             in-guest Vault derives its master key from it, so clearing it would \
-             make the next vault underivable rather than re-initialised (803-49re)",
+             in-guest Vault derives its master key from it (803-49re)",
+            "<cache>/tillandsias/models and every other download in the cache",
             "the installed tillandsias binary itself",
-            "~/.cache/tillandsias/models (the podman reset does not reach it)",
         ],
     );
+    if std::env::var_os("TILLANDSIAS_RESET_KEEP_MODELS").is_some() {
+        eprintln!(
+            "[tillandsias] TILLANDSIAS_RESET_KEEP_MODELS is ignored: a reset always \
+             preserves models and every other operator download (spec: host-state-lifecycle)"
+        );
+    }
 
     // ONE affordance, and it already existed: `--reset-guest` has honoured
     // TILLANDSIAS_DESTRUCTIVE_RESET_OK since it was written, and the smoke
@@ -10080,9 +10098,6 @@ fn run_reset_state(debug: bool) -> Result<(), String> {
         return run_init(debug, false);
     }
 
-    // ORDER: podman reset FIRST, then the host credentials. Not arbitrary —
-    // clearing vault-data needs `podman unshare`, which needs a working podman,
-    // and the smoke's §2 has run this order since 900-z3kv.
     // THROUGH THE SHARED LAYER. The first draft built the process command
     // directly and `tests::idiomatic_podman_launch_paths_do_not_bypass_shared_layer`
     // caught it: "headless runtime must not construct podman commands directly".
@@ -10099,20 +10114,10 @@ fn run_reset_state(debug: bool) -> Result<(), String> {
     run_podman_command(reset_cmd, debug)
         .map_err(|e| format!("podman system reset --force failed: {e}"))?;
 
-    let (cleared, failed) = vault_bootstrap::clear_host_vault_credentials(debug);
-    eprintln!("[tillandsias] --reset-state: cleared {}", cleared.join(" "));
-    if !failed.is_empty() {
-        // REFUSE, do not warn. 1284-jf86 is the row about a clearer that
-        // printed "the room is NOT cold" and exited 0; a reset that cannot
-        // clear the credentials has not produced the state the caller asked
-        // for, and reprovisioning on top of it would recover the old share.
-        return Err(format!(
-            "--reset-state could not clear: {} — the local state is NOT reset, so \
-             reprovisioning now would recover the old Vault share. Nothing further \
-             was attempted.",
-            failed.join(" ")
-        ));
-    }
+    // Order 1437-qza3: NO credential clearer here. The store is a host
+    // directory (the podman reset above cannot reach it) and the share is in
+    // the keyring, so the next `--init` builds a fresh Vault that takes the
+    // subsequent-boot path and unseals the preserved store.
 
     eprintln!("[tillandsias] --reset-state: local state reset \u{2713} — reprovisioning ...");
     run_init(debug, false)
@@ -10126,9 +10131,11 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
                 .to_string(),
         );
     }
+    // Order 1437-qza3: this line used to promise the Vault and the cached
+    // credentials were discarded; they now survive, so it says what happens.
     eprintln!(
-        "[tillandsias] EPHEMERAL RESET: this discards the local guest (containers, vault, \
-         cached credentials). Everything lives in the cloud \u{2014} you'll re-authenticate once."
+        "[tillandsias] EPHEMERAL RESET: this discards the local guest (containers, volumes, \
+         secrets, networks). Your sign-ins are kept in the Tillandsias vault."
     );
 
     // 1. Containers (vault, proxy, git services, forges, web) — force-remove
@@ -10207,10 +10214,8 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
         eprintln!("[tillandsias] vault feature not compiled; reset finished without Vault");
     }
 
-    eprintln!(
-        "[tillandsias] guest reset complete \u{2713} \u{2014} re-authenticate with \
-         --github-login (or the tray's GitHub Login) to restore cloud access."
-    );
+    // Order 1437-qza3: the store and the share survive, so no re-login is due.
+    eprintln!("[tillandsias] guest reset complete \u{2713} \u{2014} your sign-ins were kept.");
     Ok(())
 }
 
@@ -31502,11 +31507,55 @@ esac
     /// storage dir and NEVER the inference model cache (the operator's
     /// ephemeral doctrine covers the guest+vault, not the downloaded
     /// models) nor the cache dir itself (build-state, images metadata).
+    /// Order 1437-qza3, criterion 4: `--reset-state` announces the Vault
+    /// store, the models and the keyring entries as PRESERVED, and none of
+    /// them as destroyed. Pinned on the source because announce_reset_plan
+    /// prints and returns nothing.
+    #[test]
+    fn reset_state_announces_operator_data_as_preserved() {
+        let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let start = src
+            .find("fn run_reset_state(debug: bool)")
+            .expect("the Linux reset body");
+        let body = &src[start..];
+        let call = body.find("announce_reset_plan(").expect("the announcement");
+        let lists = &body[call..call + body[call..].find(");").expect("end of call")];
+        let (destroyed, preserved) = lists.split_at(lists.find("],").expect("two lists"));
+        for kept in [
+            "vault-data",
+            "vault-audit",
+            "models",
+            "vault-shamir-share-v1",
+            "vault-root-token-v1",
+        ] {
+            assert!(
+                preserved.contains(kept),
+                "{kept} must be announced as preserved"
+            );
+            assert!(
+                !destroyed.contains(kept),
+                "{kept} must not be announced as destroyed"
+            );
+        }
+    }
+
     #[test]
     fn reset_guest_wipe_paths_exclude_model_cache() {
         let cache_dir = Path::new("/home/u/.cache/tillandsias");
         let paths = reset_guest_wipe_paths(cache_dir);
-        assert_eq!(paths, vec![cache_dir.join("vault-data")]);
+        // Order 1437-qza3: the Vault store and its audit log are operator data.
+        for kept in ["vault-data", "vault-audit"] {
+            let kept = cache_dir.join(kept);
+            assert!(
+                !paths.iter().any(|p| *p == kept || kept.starts_with(p)),
+                "{} must never be in the reset wipe set: {paths:?}",
+                kept.display()
+            );
+        }
+        assert!(
+            paths.is_empty(),
+            "nothing under the cache dir is derived state: {paths:?}"
+        );
         let models = cache_dir.join("models");
         assert!(
             !paths.iter().any(|p| *p == models || models.starts_with(p)),

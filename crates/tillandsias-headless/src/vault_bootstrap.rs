@@ -2349,7 +2349,16 @@ fn build_vault_image(debug: bool) -> Result<String, String> {
 /// shapes, and it reaches for `podman unshare` and `libc::getuid`, neither of
 /// which exists on `x86_64-pc-windows-gnu`. The Windows and macOS equivalents
 /// clear Credential Manager and the keychain from their own trays.
+///
+/// UNINSTALL-ONLY (order 1437-qza3, operator directive 2026-09-27). No reset
+/// may call this: the store and the unseal material are operator data that
+/// survive every destructive reset (tillandsias-vault, host-state-lifecycle).
+/// Its caller is `--uninstall`, which lands with 1437-evzi; until then it has
+/// none, which is why dead code is allowed here rather than the function being
+/// deleted and rewritten. `scripts/test-reset-state-contract.sh` ARM 8 fails if
+/// a reset body calls it.
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
     let mut cleared: Vec<String> = Vec::new();
     let mut failed: Vec<String> = Vec::new();
@@ -3051,6 +3060,18 @@ fn vault_selinux_label_opt(_debug: bool) -> Option<String> {
     None
 }
 
+/// The one line printed before the partial-init guard wipes the store
+/// (order 1437-qza3): the store path, the missing share's name, and that every
+/// credential in it is lost.
+fn partial_init_wipe_line(vault_dir: &std::path::Path) -> String {
+    format!(
+        "[tillandsias-vault] WIPING {}: the unseal share {VAULT_SHAMIR_SHARE_V1} is in neither \
+         the keyring nor its fallback file, so this store cannot be opened; every credential \
+         stored in it is lost and Vault will be initialised afresh",
+        vault_dir.display()
+    )
+}
+
 fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     let image_tag = canonical_vault_launch_tag(image_tag)?;
     let host_publish_arg = vault_host_publish_arg(is_running_in_vm());
@@ -3076,15 +3097,14 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // guard fixes. @trace spec:tillandsias-vault
     let is_partial_init = vault_data_volume_exists() && !has_shamir_share_in_keyring();
     if is_partial_init {
-        if debug {
-            eprintln!(
-                "[tillandsias-vault] removing stale partial-init data volume \
-                 (volume exists but no Shamir share in keychain)"
-            );
-        }
         let vault_dir = crate::init_cache_dir()
             .unwrap_or_else(|_| PathBuf::from("."))
             .join("vault-data");
+        // Order 1437-qza3: ALWAYS say this, not only under --debug. Since no
+        // reset clears the share any more, reaching this branch means the
+        // share went missing some other way, and the wipe below destroys every
+        // stored sign-in. The operator must be able to see that it happened.
+        eprintln!("{}", partial_init_wipe_line(&vault_dir));
         let _ = std::fs::remove_dir_all(vault_dir);
     } else if debug && vault_data_volume_exists() {
         eprintln!(
@@ -7506,6 +7526,38 @@ mod tests {
         assert!(
             !entrypoint.contains("sign/*"),
             "no sign/* wildcard may appear anywhere in the vault entrypoint"
+        );
+    }
+
+    /// Order 1437-qza3: the partial-init wipe names the store, the missing
+    /// share and the loss, so the one path that still destroys credentials is
+    /// never silent.
+    #[test]
+    fn partial_init_wipe_line_names_store_share_and_loss() {
+        let line = partial_init_wipe_line(std::path::Path::new("/c/tillandsias/vault-data"));
+        assert!(line.contains("/c/tillandsias/vault-data"), "{line}");
+        assert!(line.contains(VAULT_SHAMIR_SHARE_V1), "{line}");
+        assert!(line.contains("every credential"), "{line}");
+    }
+
+    /// The line is printed unconditionally, not behind --debug: a source pin
+    /// on the guard, since the branch needs a real store to reach.
+    #[test]
+    fn partial_init_wipe_line_is_not_debug_gated() {
+        let src = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let start = src.find("if is_partial_init {").expect("guard");
+        let guard = &src[start..start + 900];
+        let print = guard
+            .find("partial_init_wipe_line(&vault_dir)")
+            .expect("the guard prints the line");
+        let wipe = guard.find("remove_dir_all(vault_dir)").expect("the wipe");
+        assert!(print < wipe, "announce before wiping");
+        assert!(
+            !guard[..print].contains("if debug"),
+            "the wipe line must not be gated on --debug"
         );
     }
 }
