@@ -138,8 +138,8 @@ New here:
 - **Default flip** (ruling 2: "Deny after a measured time period"): the
   seed's `default: {deny_after_quiet_days: N}` flips unmatched requests to
   deny once the host's audit shows N consecutive days with zero deny and
-  zero ask from `caller=pretooluse`; proposed N = 14; the operator confirms
-  the number. Not a calendar date.
+  zero ask from `caller=pretooluse`; N = 14, operator-confirmed 2026-09-27
+  ("14 days is a good starting point"). Not a calendar date.
 - **Audit**: `.cache/metrics/command-policy-audit.jsonl`, redaction before
   formatting, `policy audit --since`.
 - **Network and credential rules**: `no-credential-mutation` (`gh auth
@@ -340,9 +340,10 @@ event cross-references it: fragment
    is committed in `.claude/settings.json` and the forge overlay
    (1443-we89 note event; design.md decision 10).
 2. Default flip — "Deny after a measured time period." → `default:
-   {deny_after_quiet_days: N}`, proposed **N = 14** fleet days with zero
-   bridge deny/ask; not a calendar date (1443-isrk note event; command-policies
-   spec). **The operator confirms N.**
+   {deny_after_quiet_days: 14}`: **N = 14** fleet days with zero bridge
+   deny/ask, operator-confirmed the same day ("14 days is a good starting
+   point"); not a calendar date (1443-isrk note events; command-policies
+   spec).
 3. Consent — "Forges should keep pre-authorizing SOFT RESET always. HARD
    RESET should require explicit approval each time." → `soft-reset`
    allowed in forges, smoke-skill env on bare metal; `hard-reset` per-run
@@ -351,8 +352,13 @@ event cross-references it: fragment
 4. Discipline source — "We should try to derive the discipline but check
    against reality." → `discipline derive`, refuse only where seed and
    observation agree, drift reported with an affordance (1446-664f).
-5. Probe push — dropped on the coordinator's recommendation; it was
-   load-bearing nowhere (1443-uit6 headline and note).
+5. Probe push — dropped; it was load-bearing nowhere (1443-uit6 headline
+   and note). Operator, same day: "Drop the probe-push namespace, but keep
+   the document in case we need it later, it could work for something
+   else." The design text is kept as a PARKED ALTERNATIVE (not a
+   requirement, not a packet) in design.md under "Parked alternative":
+   what it was, why a dry-run push cannot replace it and the published ref
+   does, and what it could serve later.
 6. "Integration branch should be per project, and enforcement raised
    organically." → the seed alone names the integration branch; `raise`
    moves one rule at a time (1443-z3vb note; 1446-xqi6).
@@ -370,7 +376,7 @@ event cross-references it: fragment
    raise), 1446-87cy (mirror per-event dispatch), 1446-qkx4 (the skill);
    1443-u66u re-scoped as Tillandsias's level-2 land template.
 
-Remaining for the operator: confirm N (ruling 2).
+Nothing remains open for the operator: N = 14 was confirmed 2026-09-27.
 
 ## 9. What was not verified
 

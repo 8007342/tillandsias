@@ -133,8 +133,8 @@ What exists (read before designing; none of it is re-filed):
    MEASURED, not dated (operator ruling 2, 2026-09-27: "Deny after a
    measured time period"): `default: {deny_after_quiet_days: N}` flips to
    deny once the host's audit shows N consecutive days with zero deny and
-   zero ask from `caller=pretooluse`; N is proposed as 14 and the operator
-   confirms it.
+   zero ask from `caller=pretooluse`; N = 14, operator-confirmed
+   2026-09-27 ("14 days is a good starting point").
 
 5. **Host kind and regime are inputs, not trust.** Host kind is derived
    from the env var, the container file and the forge marker together and
@@ -358,10 +358,42 @@ seed to fall back to the default, which still protects the HEAD branch).
 
 ## Open Questions
 
-The seven questions of the first draft were answered by the operator on
-2026-09-27 (design note §8 records each ruling verbatim and where it
-landed). One number remains for the operator to confirm: N, the quiet
-period in fleet days after which the policy default flips to deny
-(proposed 14). Not re-opened: the level's determination is now BOTH
-derived and declared, checked against each other (decision 16), and the
-probe-push namespace is gone (decision 12).
+None. The seven questions of the first draft were answered by the operator
+on 2026-09-27 (design note §8 records each ruling verbatim and where it
+landed), and N = 14 was confirmed the same day. The level's determination
+is BOTH derived and declared, checked against each other (decision 16); the
+probe-push namespace is gone from the requirements and packets (decision
+12) and kept below as a parked alternative.
+
+## Parked alternative (not a requirement, not a packet)
+
+**Discipline probe push.** Kept at the operator's request (2026-09-27:
+"Drop the probe-push namespace, but keep the document in case we need it
+later, it could work for something else").
+
+- *What it was:* a client that wanted the mirror's OWN wording of the
+  enforced discipline, without changing any ref, would push an empty
+  commit to `refs/tillandsias/discipline-probe/<epoch>`; the mirror's
+  pre-receive would ALWAYS reject that namespace and put the discipline
+  lines (level and enforcement, default branch, integration branches, work
+  grammar, rebase guidance) in the rejection message. A rejected push
+  mutates nothing on the mirror or upstream, and the local pre-push gate
+  already exempts `refs/tillandsias/*` (1176-9vqn), so the round trip was
+  side-effect free.
+- *Why it was dropped:* it existed to stand in for the operator's
+  "`--dry-run` push" idea, and that idea cannot work as stated — `git push
+  --dry-run` sends no ref commands, so a pre-receive hook never runs for
+  it. Once the mirror publishes
+  `refs/tillandsias/discipline/<level>/<enforcement>/<derived>/<digest>/<epoch>`
+  on every reconcile tick, a plain `ls-remote` answers the same question
+  with no push at all, and the probe added a second path to one answer.
+  It was load-bearing nowhere.
+- *What it could serve later:* any question a client wants the SERVER to
+  answer at push time rather than from a published ref — for example a
+  "would this ref be accepted" check that runs the project's own
+  `mirror-pre-receive.lua` (decision 15) against a candidate tree without
+  relaying it, or a per-push capability handshake where the rejection
+  message carries the mirror's runtime version and the templates it can
+  dispatch. If revived, it stays a rejected push into a reserved
+  `refs/tillandsias/*` namespace, so nothing it does can be mistaken for a
+  ref update.

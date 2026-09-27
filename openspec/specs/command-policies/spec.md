@@ -46,7 +46,8 @@ ruling 2026-09-27): the seed's `default: {deny_after_quiet_days: N}` flips
 unmatched requests to deny once the host's audit shows N consecutive days
 with zero deny and zero ask decisions from `caller=pretooluse`; the first
 flipped evaluation prints `ok:policy:default=deny:since=<date>`. N is
-proposed as 14 and confirmed by the operator.
+14, operator-confirmed 2026-09-27 ("14 days is a good starting point");
+changing it is a seed edit reviewed like code.
 
 #### Scenario: The default flips on a quiet period, not a date
 

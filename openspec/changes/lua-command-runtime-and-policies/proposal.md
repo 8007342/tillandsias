@@ -83,8 +83,9 @@ disagree (methodology admits `work/<order>`; the mirror's
   COMMITTED to the project's `.claude/settings.json` and the forge overlay
   (ruling 1).
 - **Policy defaults and consent** (rulings 2 and 3): the allow default flips
-  to deny after a MEASURED quiet period (`deny_after_quiet_days`, proposed
-  14, operator to confirm); SOFT reset is pre-authorised in forges always,
+  to deny after a MEASURED quiet period (`deny_after_quiet_days: 14`,
+  operator-confirmed 2026-09-27: "14 days is a good starting point"); SOFT
+  reset is pre-authorised in forges always,
   HARD reset needs a per-run operator token every time with no environment
   pre-authorisation.
 - **MODIFIED** deciders: `check-bash-dialect`, `check-sigpipe-verdict-pipelines-added`

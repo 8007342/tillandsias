@@ -44,8 +44,8 @@ the size and the implementer tier. Order is the drain order.
       forge. M / opus.
 - [ ] 2.4 `1443-w9hf` audit log with redaction; `policy audit`. S / sonnet.
 - [ ] 2.5 `1443-isrk` addendum (ruling 2): `default: {deny_after_quiet_days: N}`,
-      proposed N = 14, flips on the measured quiet period; operator confirms
-      N. (Inside the existing row; L / opus.)
+      N = 14 (operator-confirmed 2026-09-27), flips on the measured quiet
+      period. (Inside the existing row; L / opus.)
 
 ## 3. Doors and the Lua land tool
 
