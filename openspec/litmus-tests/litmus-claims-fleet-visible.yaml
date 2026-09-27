@@ -49,3 +49,12 @@ critical_path:
     command: "bash scripts/push-plan-fragments-to-trunk.sh --bogus 2>/dev/null | tail -1"
     timeout_ms: 10000
     expected_behavior: "refused:fragments-to-trunk:usage:--bogus"
+
+  - step: "1232-av4p: status writes stranded on salvage/work refs are named by PACKET, and a write trunk has moved past is not a finding"
+    # A claim or an `implemented` that exists only on a ref is invisible to
+    # plan_next, which keeps offering the packet (eight rows, 2026-09-16). The
+    # check folds each candidate fragment into a scratch copy of trunk's
+    # ledger, so an old claim trunk has since completed reads `superseded`.
+    command: "bash scripts/test-stranded-plan-writes.sh 2>&1 | tail -1"
+    success_pattern: "^ok:stranded-plan-writes-fixture:[0-9]+ arms$"
+    timeout_ms: 60000
