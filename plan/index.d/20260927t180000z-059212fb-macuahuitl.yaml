@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: on-windows-the-model-weights-live-inside-the-wsl-distro-so-wsl-unregister-cannot-spare-them-and-the-keep-models-flag-needs-a-host-side-models-mount
+    event:
+      type: note
+      ts: "2026-09-27T18:00:00Z"
+      agent_id: linux-macuahuitl-claude-20260927t180000z
+      host: macuahuitl
+      summary: |-
+        FOLDED 2026-09-27 (1438-pk9j): the operator's one-folder and SOFT/HARD rulings put the model weights host-side at %USERPROFILE%\.tillandsias\downloads\models shared into the distro (host-state-lifecycle; inference-container "Models survive every destructive reset on every platform"). 1437-3iux now carries the share and its drvfs/9p measurement for the model directory; when that share lands, close this row superseded_by 1437-3iux's packet_id. If the measurement rules the share out for models, 1437-3iux records that HARD costs a re-pull and this row stays as the open alternative.

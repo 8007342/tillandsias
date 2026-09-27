@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-uninstall-flag-on-every-binary-removes-everything-manifest-driven
+    field: title
+    value: tillandsias --uninstall on every binary is the preferred removal and leaves ZERO traces (binary, registrations, every keyring entry including the anchors, podman objects, service account, merged-file blocks reverted), then asks once [y/N] whether to remove ~/.tillandsias too (default N; --remove-home / --keep-home for non-interactive) and prints the large this-is-the-only-leftover notice on N; uninstall.sh and -Uninstall/-Purge delegate to it
+    ts: "2026-09-27T18:00:00Z"
+    host: macuahuitl
+
+events:
+  - packet_id: tillandsias-uninstall-flag-on-every-binary-removes-everything-manifest-driven
+    event:
+      type: note
+      ts: "2026-09-27T18:00:00Z"
+      host: macuahuitl
+      summary: |-
+        operator uninstall ruling 2026-09-27 (1438-pk9j); the dropped line is my own 1437-8c6p title, superseded
