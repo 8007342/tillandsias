@@ -43,6 +43,10 @@ serde_json = { workspace = true }
 # already in the workspace graph — it adds no OS import to the tray binary,
 # which is the surface this packet's litmus pins.
 chrono = { workspace = true }
+# 1420-ev7i: the tillandsia-palette renderer (1420-9vpk) for the
+# --provision-once / --reset-state console. Portable, so provision_console's
+# tests run on every host.
+tillandsias-progress-tty = { path = "../tillandsias-progress-tty" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # The real provisioning fetch path only compiles on Windows, so the download

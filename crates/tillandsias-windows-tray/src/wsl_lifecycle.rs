@@ -831,10 +831,13 @@ impl WslLifecycle {
             if last_pct.swap(pct, std::sync::atomic::Ordering::Relaxed) == pct {
                 return;
             }
-            let mb = downloaded / (1024 * 1024);
-            let total_mb = total / (1024 * 1024);
-            progress_for_cb.report_message(&format!(
-                "\u{1F535} Downloading Fedora rootfs {mb} / {total_mb} MB ({pct}%)"
+            // ORDER 1443-bgbs: a TYPED event, the Windows counterpart of
+            // x6rz on macOS. This used to fold the bytes into prose ("... N / M
+            // MB (P%)"), which a tray could only print. Surfaces that draw a
+            // bar read the fields; the default report_event still flattens it
+            // to one plain line for those that do not.
+            progress_for_cb.report_event(&crate::tray_phase_icon::rootfs_download_event(
+                downloaded, total,
             ));
         };
         download_verified(&artifact, &xz_dest, &on_progress).await?;
