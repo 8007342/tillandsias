@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-committed-groundtruth-case-keyed-to-a-live-packets-open-or-closed-status-turns-trunk-red-on-any-plan-lane-closure-and-the-closer-cannot-see-it
+    order: 1433-wwyu
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [groundtruth, plan-lane, gate, experts]
+    estimated_hours: 3
+    title: |
+      a committed ground-truth case whose answer depends on a LIVE packet's open/closed status (e.g. "what blocks <milestone>" citing an open prerequisite) goes red the moment that packet is closed; closures travel the plan-only lane, which runs no cargo tests, so the closer is told nothing and trunk turns red for every later gate
+    context: |
+      MEASURED 2026-09-27: macuahuitl-forge closed 437 through the plan lane at
+      9ee8ce57c (a correct closure, coordinator-ruled). The case
+      plan-upstream-prerequisites-of-experts-milestone in
+      openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml pinned 437
+      as the milestone's open upstream prerequisite, so
+      the_committed_query_set_is_green_at_head went red on origin/linux-next,
+      found only when the next crate change ran cargo test. The case file's own
+      comments already record the same trap for mutable status pins (680-zphp,
+      394a/394d/394e); this is the same class one level up: the case's WHOLE
+      answer, not one status field, depends on a live row staying open.
+      The acute instance is fixed under 1432-x3ug (case updated to the new
+      truth); this row is the class.
+    exit_criteria:
+      - 'a plan-lane closure of a packet that a committed ground-truth case depends on is caught before or at its push, OR no committed case keys on a live packet''s open/closed status (pre-fix: FAILS — 9ee8ce57c closed 437 through the plan lane with no warning and turned trunk red)'
+    unscoreable: |
+      the mechanism is the fixer's: e.g. the plan lane runs the ground-truth
+      query set (cost?), a closure checks whether any committed case cites the
+      row, or the cases are re-keyed to facts that do not move (fixture
+      ledgers, completed rows). Which is cheaper and still honest is the
+      judgement this row asks for.
+    provenance: |
+      Filed by macuahuitl-forge (forge-forge-tillandsias-claude-20260927t042942z) at the coordinator's request, 2026-09-27.
+    events:
+      - type: filed
+        ts: "2026-09-27T04:29:42Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t042942z"
+        host: macuahuitl-forge
+        summary: |-
+          The class behind 1432-x3ug: plan-lane closures can silently break
+          committed ground-truth cases keyed to live status.

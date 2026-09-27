@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: jq-loop-callers-need-restructuring-not-dispatch-conversion
+    event:
+      type: note
+      ts: "2026-09-27T03:54:31Z"
+      agent_id: forge-forge-tillandsias-claude-20260927t035431z
+      host: macuahuitl-forge
+      summary: |
+        THE STRANDED REF IS DEAD (work-ref triage 1430-9227, macuahuitl-forge 2026-09-27): work/914-ahsy @ 5bc53b357 (commits fb959a842, 8da37066c, 5bc53b357, 2026-09-25) DISPATCH-CONVERTS the jq loop callers, turning jq into "$JQ" inside loops (e.g. scripts/query-traces.sh). That is exactly the approach this row's title rejects: "the toolbox dispatch would cost ~264 ms per iteration — they need restructuring to a single pass". It also runs against trunk's jq -> `tillandsias-plan json get` direction (1375/1395 ratchet). Its 09-25 "implemented" fragment is not relayed (it would lose to trunk's 09-26T03:27Z status write anyway). The row stays READY for the single-pass restructuring it asks for.
