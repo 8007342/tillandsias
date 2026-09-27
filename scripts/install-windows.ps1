@@ -662,13 +662,21 @@ New-Item -ItemType Directory -Force -Path $Tmp | Out-Null
 
 try {
     # -- Download SHA256SUMS-windows -------------------------------------------
+# BEGIN-SUMS-DOWNLOAD
     $SumsUrl = "$Base/SHA256SUMS-windows"
     Say "Fetching SHA256SUMS-windows..."
     try {
-        Invoke-WebRequest -Uri $SumsUrl -OutFile "$Tmp\SHA256SUMS-windows" -UseBasicParsing -ErrorAction Stop
+        # ORDER 1420-jmp4: Invoke-WebRequest's own bar is slow and flickers on
+        # PowerShell 5, so it runs silenced in a child scope; the script's
+        # Write-Progress elsewhere keeps its default preference.
+        & {
+            $ProgressPreference = 'SilentlyContinue'
+            Invoke-WebRequest -Uri $SumsUrl -OutFile "$Tmp\SHA256SUMS-windows" -UseBasicParsing -ErrorAction Stop
+        }
     } catch {
         Die "Could not download SHA256SUMS-windows from $SumsUrl -- check network or version."
     }
+# END-SUMS-DOWNLOAD
 
     # Find zip filename (e.g. tillandsias-tray-0.3.260622.4-windows-x64.zip)
     $SumsContent = Get-Content "$Tmp\SHA256SUMS-windows" -Raw
@@ -680,11 +688,59 @@ try {
     # -- Download zip ----------------------------------------------------------
     $ZipUrl = "$Base/$ZipName"
     Say "Downloading $ZipUrl..."
+# BEGIN-PROGRESS-DOWNLOAD
+    # ORDER 1420-jmp4: one clean progress bar for the release zip. The download
+    # is streamed here and reported with Write-Progress once per whole percent,
+    # instead of Invoke-WebRequest's bar, which on PowerShell 5 redraws per
+    # chunk, flickers, and slows the download itself several-fold.
+    function Save-WithProgress {
+        param([string]$Url, [string]$OutFile, [string]$Activity)
+        Add-Type -AssemblyName System.Net.Http
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        $client = New-Object System.Net.Http.HttpClient
+        $in = $null; $out = $null
+        try {
+            $resp = $client.GetAsync($Url, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+            [void]$resp.EnsureSuccessStatusCode()
+            $total = $resp.Content.Headers.ContentLength
+            $in = $resp.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+            $out = [System.IO.File]::Create($OutFile)
+            $buf = New-Object byte[] 262144
+            $done = [long]0; $last = -1
+            $tick = [Diagnostics.Stopwatch]::StartNew()
+            while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) {
+                $out.Write($buf, 0, $n)
+                $done += $n
+                if ($total -gt 0) {
+                    $pct = [int][Math]::Floor(100 * $done / $total)
+                    if ($pct -ne $last) {
+                        $last = $pct
+                        Write-Progress -Activity $Activity -PercentComplete $pct `
+                            -Status ('{0:N1} of {1:N1} MB' -f ($done / 1MB), ($total / 1MB))
+                    }
+                } elseif ($tick.ElapsedMilliseconds -ge 250) {
+                    # No Content-Length: report bytes, throttled, without a percent.
+                    $tick.Restart()
+                    Write-Progress -Activity $Activity -Status ('{0:N1} MB' -f ($done / 1MB))
+                }
+            }
+        } finally {
+            if ($out) { $out.Dispose() }
+            if ($in) { $in.Dispose() }
+            $client.Dispose()
+            Write-Progress -Activity $Activity -Completed
+        }
+    }
+    # The tillandsia palette's leaf green (LEAF, crates/tillandsias-progress-tty)
+    # for the bar where PowerShell can style it (7.2+). PowerShell 5 draws its
+    # own fixed colours.
+    if ($PSStyle) { $PSStyle.Progress.Style = "$([char]27)[38;2;79;138;91m" }
     try {
-        Invoke-WebRequest -Uri $ZipUrl -OutFile "$Tmp\$ZipName" -UseBasicParsing -ErrorAction Stop
+        Save-WithProgress -Url $ZipUrl -OutFile "$Tmp\$ZipName" -Activity "Downloading Tillandsias"
     } catch {
         Die "Download failed: $_"
     }
+# END-PROGRESS-DOWNLOAD
 
     # -- Verify SHA-256 --------------------------------------------------------
     Say "Verifying SHA-256..."
