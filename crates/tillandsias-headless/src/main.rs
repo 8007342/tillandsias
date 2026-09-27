@@ -71,6 +71,7 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+mod image_build_progress;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
@@ -9510,8 +9511,10 @@ pub(crate) fn build_image_with_logging(
     // Process stdout to catch layer pull progress
     use std::io::BufRead;
 
-    let mut progress_percent = 0;
-    let mut last_reported = 0;
+    // Order 1420-6brx: progress comes from podman's own STEP n/m and COMMIT
+    // lines as typed ProgressEvents, not from keyword-triggered 50/75/100.
+    let mut progress = image_build_progress::ImageBuildProgress::new(image_name);
+    let mut last_reported: Option<usize> = None;
 
     if let Some(stdout_reader) = stdout {
         let buf_reader = std::io::BufReader::new(stdout_reader);
@@ -9526,29 +9529,22 @@ pub(crate) fn build_image_with_logging(
                 let _ = writeln!(f, "{}", line);
             }
 
-            // @trace gap:ON-005 — parse podman progress indicators
-            // Look for "Pulling" and percentage indicators to compute progress
-            if line.contains("Pulling") || line.contains("Digest:") || line.contains("Loaded image")
-            {
-                // Estimate progress based on visible output
-                if line.contains("Pulling") && progress_percent < 50 {
-                    progress_percent = 50;
-                } else if line.contains("Digest:") && progress_percent < 75 {
-                    progress_percent = 75;
-                } else if line.contains("Loaded image") || line.contains("Commit") {
-                    progress_percent = 100;
+            // @trace gap:ON-005, order:1420-6brx — real per-step progress
+            if let Some(event) = progress.observe(&line) {
+                if let Some(ref log) = log_handle
+                    && let Ok(mut f) = log.lock()
+                {
+                    let _ = writeln!(f, "{}", image_build_progress::event_log_line(&event));
                 }
-
-                // Emit progress update if it changed significantly
-                if progress_percent > last_reported + 10 || progress_percent == 100 {
+                // The user-facing line keeps its approved format; only the
+                // number is now real. Printed once per whole-ten change.
+                let percent = progress.percent();
+                if last_reported.is_none_or(|last| percent / 10 > last / 10) {
                     println!(
-                        "Pulling image {} [{}{}] {}%",
-                        image_name,
-                        "█".repeat(progress_percent / 10),
-                        "░".repeat(10 - (progress_percent / 10)),
-                        progress_percent
+                        "{}",
+                        image_build_progress::legacy_bar_line(image_name, percent)
                     );
-                    last_reported = progress_percent;
+                    last_reported = Some(percent);
                 }
             }
         }
@@ -9561,14 +9557,24 @@ pub(crate) fn build_image_with_logging(
     // Wait for the stderr thread to finish logging
     let _ = stderr_thread.join();
 
-    if status.success() {
-        if progress_percent < 100 {
-            println!("Pulling image {} [{}] 100%", image_name, "█".repeat(10));
+    let result = if status.success() {
+        if last_reported != Some(100) {
+            println!("{}", image_build_progress::legacy_bar_line(image_name, 100));
         }
         Ok(())
     } else {
         Err(format!("Build exited with status {}", status))
+    };
+    if let Some(ref log) = log_handle
+        && let Ok(mut f) = log.lock()
+    {
+        let _ = writeln!(
+            f,
+            "{}",
+            image_build_progress::event_log_line(&progress.finish(&result))
+        );
     }
+    result
 }
 
 fn podman_build_argv(
@@ -30451,60 +30457,10 @@ esac
         assert!(!is_optional_image("web"));
     }
 
-    #[test]
-    fn progress_output_format_is_valid() {
-        // @trace gap:ON-005 — validate progress output format
-        // Test that progress output lines are well-formed and show percentage
-        // Format: "Pulling image <name> [████░░░░░░] <percent>%"
-
-        let test_cases = vec![
-            (0, 0), // percent -> filled blocks
-            (10, 1),
-            (25, 2),
-            (50, 5),
-            (75, 7),
-            (100, 10),
-        ];
-
-        for (percent, expected_filled) in test_cases {
-            // Build the progress line as the code would
-            let bar_filled = "█".repeat(percent / 10);
-            let bar_empty = "░".repeat(10 - (percent / 10));
-            let line = format!(
-                "Pulling image {} [{}{}] {}%",
-                "forge", bar_filled, bar_empty, percent
-            );
-
-            // Validate it contains required parts
-            assert!(
-                line.contains("Pulling image"),
-                "Must contain 'Pulling image'"
-            );
-            assert!(line.contains("["), "Must contain progress bar opening");
-            assert!(line.contains("]"), "Must contain progress bar closing");
-            assert!(line.contains("%"), "Must contain percentage sign");
-            assert!(
-                line.contains(&percent.to_string()),
-                "Must contain percentage value"
-            );
-
-            // Verify bar has correct number of filled characters
-            let bar_start = line.find('[').unwrap();
-            let bar_end = line.find(']').unwrap();
-            let bar_content = &line[bar_start + 1..bar_end];
-            let filled_count = bar_content.chars().filter(|&c| c == '█').count();
-            let empty_count = bar_content.chars().filter(|&c| c == '░').count();
-            assert_eq!(
-                filled_count, expected_filled,
-                "Progress bar filled count should match"
-            );
-            assert_eq!(
-                filled_count + empty_count,
-                10,
-                "Progress bar should have 10 total characters"
-            );
-        }
-    }
+    // progress_output_format_is_valid was retired by order 1420-6brx: it
+    // asserted a format string it built itself, so it pinned nothing about
+    // the emitter. image_build_progress::tests::legacy_line_keeps_its_format
+    // and a_real_build_yields_determinate_events_before_done replace it.
 
     #[test]
     fn image_build_argv_uses_docker_format_for_healthchecks() {
