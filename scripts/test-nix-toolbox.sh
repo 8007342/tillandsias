@@ -294,9 +294,63 @@ for caller in check-nix-deps-stability.sh select-work-batch.sh check-nix-builder
         || failures+=("$caller does not consult nix-toolbox.sh for nix capability")
 done
 
+# 14/15. `run` REACHES THE RUNG'S STORE (799-nx4r). A fake nix that behaves
+#     like the real failure: a store-touching call with no --store and no
+#     NIX_REMOTE is the dead daemon ("Connection refused", rc 1); with the rung
+#     store it answers `store=<path>`. Pre-fix, arm 15 got the refusal (the
+#     chroot arm exec'd verbatim) and arm 14 got it too (the toolbox arm ran in
+#     the container with no store — measured on yoga as "creating directory
+#     /nix/store/.links: Permission denied"). Arm 14's nix is reachable ONLY
+#     through the fake `toolbox run`, so `in=toolbox` proves the command ran
+#     inside the container, not that the wrapper merely exited 0.
+if [ -n "$TMPROOT" ]; then
+    mk_nix() {   # <file> <where-label>
+        cat > "$1" <<EOFNIX
+#!/usr/bin/env bash
+store=""
+while [ \$# -gt 0 ]; do
+    case "\$1" in --store) store="\$2"; shift 2 ;; --extra-experimental-features) shift 2 ;; *) break ;; esac
+done
+[ -n "\$store" ] || store="\${NIX_REMOTE:-}"
+[ -n "\$store" ] || { echo "error: cannot connect to socket: Connection refused" >&2; exit 1; }
+case "\$1 \$2" in
+    "store ping") exit 0 ;;
+    "probe-run "*|"probe-run") echo "store=\$store in=$2" ;;
+esac
+EOFNIX
+        chmod +x "$1"
+    }
+    # 15: chroot rung — host nix present, daemon dead, chroot store answers.
+    B15="$TMPROOT/bin15"; mkdir -p "$B15"; mk_nix "$B15/nix" host
+    o15="$(env PATH="$B15:/usr/bin:/bin" HOME="$TMPROOT/h15" \
+             TILLANDSIAS_NIX_CHROOT_STORE="$TMPROOT/s15" \
+             bash "$SCRIPT" run -- nix probe-run 2>&1)"
+    [ "$o15" = "store=$TMPROOT/s15 in=host" ] \
+        || failures+=("run on the chroot rung must reach the chroot store, got: $o15 — 799-nx4r")
+    # 14: toolbox rung — host nix shadowed (fails every call), the container's
+    #     nix lives in $B14 and is reachable only through `toolbox run`.
+    B14="$TMPROOT/bin14"; B14H="$TMPROOT/bin14host"; mkdir -p "$B14" "$B14H"
+    mk_nix "$B14/nix" toolbox
+    printf '#!/usr/bin/env bash\nexit 127\n' > "$B14H/nix"; chmod +x "$B14H/nix"
+    cat > "$B14H/toolbox" <<EOF14
+#!/usr/bin/env bash
+case "\$1" in
+    list) printf 'CONTAINER ID  CONTAINER NAME  CREATED\n0000  tillandsias-nix  now\n' ;;
+    run)  shift; [ "\$1" = "-c" ] && shift 2; exec env PATH="$B14:/usr/bin:/bin" "\$@" ;;
+    *) exit 1 ;;
+esac
+EOF14
+    chmod +x "$B14H/toolbox"
+    o14="$(env PATH="$B14H:/usr/bin:/bin" HOME="$TMPROOT/h14" \
+             TILLANDSIAS_NIX_CHROOT_STORE="$TMPROOT/s14" \
+             bash "$SCRIPT" run -- nix probe-run 2>&1)"
+    [ "$o14" = "store=$TMPROOT/s14 in=toolbox" ] \
+        || failures+=("run on the toolbox rung must execute INSIDE the toolbox against the rung store, got: $o14 — 799-nx4r")
+fi
+
 if [ "${#failures[@]}" -gt 0 ]; then
     printf 'FAIL: %s\n' "${failures[@]}" >&2
     echo "nix-toolbox: FAIL ${#failures[@]} scenario(s)"
     exit 1
 fi
-echo "PASS: nix-toolbox fixture 13/13 (grammar, exit-code agreement, idempotence, store-probe-not-pure-eval, nix-args usable, store-path override, delete-and-rebuild, pinned-survives-gc, gc-refuses-when-deps-unresolved, capability-grammar, capability-never-creates, toolbox-only-nix-is-capable, callers-off-host-binary) rung=${out#ok:nix-toolbox:}"
+echo "PASS: nix-toolbox fixture 15/15 (grammar, exit-code agreement, idempotence, store-probe-not-pure-eval, nix-args usable, store-path override, delete-and-rebuild, pinned-survives-gc, gc-refuses-when-deps-unresolved, capability-grammar, capability-never-creates, toolbox-only-nix-is-capable, callers-off-host-binary, run-reaches-rung-store x2) rung=${out#ok:nix-toolbox:}"

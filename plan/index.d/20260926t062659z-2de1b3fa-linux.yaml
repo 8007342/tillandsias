@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-launch-builders-replace-the-437-no-swap-ceiling-with-a-cgroup-memory-budget-so-a-full-tmpfs-spills-to-swap-and-a-cargo-build-fits
+    field: status
+    value: completed
+    ts: "2026-09-26T06:26:59Z"
+    host: linux
+
+events:
+  - packet_id: forge-launch-builders-replace-the-437-no-swap-ceiling-with-a-cgroup-memory-budget-so-a-full-tmpfs-spills-to-swap-and-a-cargo-build-fits
+    event:
+      type: completed
+      ts: "2026-09-26T06:26:59Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 96203966f (landed on origin/linux-next, relaying lenovinha's gate-green fbfa66456; ./build.sh --check rc=0) + container-leaf cgroup read on lenovinha: memory.max=6442450944 memory.high=5475663872 memory.low=2147483648 memory.swap.max=8589934592 pids.max=8192, libpod scope swap.max=12884901888 so the leaf binds + spill control: 2 GiB tmpfs write under --memory=1g gives rc=137 at memory.swap.max=0 and rc=0 oom_kill 0 swap_current=1081495552 at 4 GiB + pids control: -j16 cargo build at pids.max=40 panics 'failed to spawn thread ... Resource temporarily unavailable' (pids.events max 14), at 8192 rc=0 pids_peak=125 max 0
+  - packet_id: forge-launch-builders-replace-the-437-no-swap-ceiling-with-a-cgroup-memory-budget-so-a-full-tmpfs-spills-to-swap-and-a-cargo-build-fits
+    event:
+      type: note
+      ts: "2026-09-26T06:26:59Z"
+      host: linux
+      summary: |-
+        closed: forge cgroup budget landed; every forge launcher applies ForgeBudget::for_this_host(); 437's no-swap ceiling kept out; tests core 6, podman 177, headless 761 passed

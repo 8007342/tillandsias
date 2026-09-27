@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: a-linux-host-with-only-zram-swap-is-offered-a-silverblue-safe-disk-swapfile-behind-zram-sized-to-its-tier-and-diagnose-reports-the-swap-shape
+    event:
+      type: progress
+      ts: "2026-09-26T04:22:30Z"
+      host: yoga
+      summary: |
+        PART 1 (root side) on work/1376-8zdz (6b1f7e4b8): scripts/forge-swap/ (helper,
+        tillandsias-swap@ template, gc service + 2-min timer, polkit rule, swap.conf),
+        scripts/install-forge-swap-service.sh (the one-time sudo step; idempotent; --prefix for
+        scratch installs), scripts/test-forge-swap-service.sh: ok:forge-swap-service:28 arms
+        (skipped=0) in the builder toolbox; on the host 19 with the node arm a NAMED skip. Three
+        mutations caught (instance regex loosened, restart granted, gc ignoring the lease).
+        DEVIATION FROM §9.1, deliberate: the GC SERVICE does NOT set ProtectHome=yes. ProtectHome
+        makes /home, /root AND /run/user inaccessible, and the gc must flock the tray's lease at
+        /run/user/<uid>/tillandsias/swap-<id>.lease: with ProtectHome it would find no lease, read
+        every tray as gone and stop every live instance. The per-launch TEMPLATE keeps
+        ProtectHome=yes (it touches only /var/swap).
+        REMAINING: the tray half (lease + systemctl start/stop around the forge); the gate step
+        (awaiting macbookair's darwin record); the live arm after the operator's one-time
+        `sudo bash scripts/install-forge-swap-service.sh` (polkitd's real evaluation, swapon
+        under enforcing, pri 10 on launch, removal on stop and within 3 min of kill -9).

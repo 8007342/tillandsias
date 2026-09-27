@@ -18,6 +18,20 @@
 # freshness: auditor=macos-tlatoanis-macbook-air-fable5 date=2026-08-16 verdict=refreshed scope=761-g36m authoring
 set -u
 
+# 1413-8bee: TILLANDSIAS_DIALECT_SCAN_FILES is an ALIAS for a single-path
+# TILLANDSIAS_DIALECT_SCAN_DIR. litmus:enclave-service-health-shape scoped its
+# one-file check with that name, which this script never read, so the "one
+# file" check silently scanned every script plus build.sh: 16.9 s on darwin,
+# 9.2 s on macuahuitl, against a 10 s step budget. Scoped, it is 0.03 s.
+if [ -z "${TILLANDSIAS_DIALECT_SCAN_DIR:-}" ] && [ -n "${TILLANDSIAS_DIALECT_SCAN_FILES:-}" ]; then
+  case "$TILLANDSIAS_DIALECT_SCAN_FILES" in
+    (*[[:space:]]*)
+      echo "blocked:bash-dialect:scan-files-multiple"
+      echo "[check-bash-dialect] TILLANDSIAS_DIALECT_SCAN_FILES names ONE path (file or directory); got: '$TILLANDSIAS_DIALECT_SCAN_FILES'" >&2
+      exit 1 ;;
+  esac
+  TILLANDSIAS_DIALECT_SCAN_DIR="$TILLANDSIAS_DIALECT_SCAN_FILES"
+fi
 SCAN_DIR="${TILLANDSIAS_DIALECT_SCAN_DIR:-scripts}"
 SELF_NAME="check-bash-dialect.sh"
 
@@ -111,6 +125,23 @@ GNUSED_EXEMPT='# gnu-sed: ok'
 PAT_BASH4='(^|[^A-Za-z0-9_])(mapfile|readarray)([^A-Za-z0-9_]|$)|(^|[^A-Za-z0-9_])read([[:space:]]+-[A-Za-z]*)*[[:space:]]+-[A-Za-z]*N'
 BASH4_EXEMPT='# bash4: ok'
 
+# SOURCING A PROCESS SUBSTITUTION (1373-sr9g, 2026-09-25). `. <(cmd)` and
+# `source <(cmd)` parse on bash 3.2, run, and return 0 — and define NOTHING
+# (or, racing the pipe, occasionally define it). The consumer reads an empty
+# variable and reports a finding against a correct tree.
+#
+# MEASURED 2026-09-25 on tlatoanis-macbook-air, bash 3.2.57:
+# `bash -c '. <(echo X=1); echo ${X:-unset}'` printed `unset` 5 times of 5.
+# test-preflight-scratch-is-off-checkout.sh arm5 (1349-53h6) read
+# build-sidecar.sh's derivation that way and REDDED EVERY macOS GATE; its
+# sibling in test-plan-only-lane-structural.sh failed the same way. This gate
+# passed both files: the third time its class shipped with no rule for it.
+#
+# REMEDY: eval "$(cmd)" — the text arrives as one word, no pipe to race.
+# Line-level exemption: `# procsub-source: ok (<reason>)`.
+PAT_PROCSUB_SOURCE='(^|[[:space:];&|(])(\.|source)[[:space:]]+<\('
+PROCSUB_SOURCE_EXEMPT='# procsub-source: ok'
+
 # EMPTY-ARRAY EXPANSION UNDER `set -u` (761-g36m extension, 2026-08-30).
 # Not a bash-4-ism: `"${arr[@]}"` parses in both dialects. It is a SEMANTIC
 # divergence, the same family as the GNU date/du/sed rules above — bash 3.2
@@ -140,6 +171,124 @@ BASH4_EXEMPT='# bash4: ok'
 # provably populated on every path reaching the loop.
 PAT_EMPTYARR='for +[A-Za-z_][A-Za-z0-9_]* +in +"\$\{[A-Za-z_][A-Za-z0-9_]*\[@\]\}"'
 EMPTYARR_EXEMPT='# maybe-empty: ok'
+
+# A MULTI-LINE VALUE IN `awk -v` (1399-wtpq, 2026-09-26). BSD awk — the awk
+# macOS ships — REJECTS a newline in a -v assignment ("awk: newline in string")
+# where gawk and mawk accept it. The awk exits non-zero and prints nothing, so
+# `x="$(awk -v v="$multi" ...)"` is simply EMPTY on darwin, and any
+# `2>/dev/null` or `|| true` around it turns the failure fully silent.
+#   /usr/bin/awk -v x="$(printf 'a\nb')" 'BEGIN{print x}'   -> awk: newline in string
+#   X="$(printf 'a\nb')" /usr/bin/awk 'BEGIN{print ENVIRON["X"]}'  -> a / b
+# It bit three times: 923-mp4w (the litmus target list, fe6ce4751), 1375-tsfu's
+# ratchet (`-v ft="$floor_text"`: ok:jq-callsites:0:floor:0 rc 0 on every Mac),
+# and 1395-88tp's per-test records (`-v digests="$_pt_digests"`: 324 tests run,
+# 0 records written, masked by `{ ... } 2>/dev/null || true`). Found on darwin
+# by macbookair each time — invisible on the lanes where the code was written.
+#
+# A static rule cannot know a value is multi-line in general, so it flags the
+# case where the PROGRAM SAYS SO: a variable-fed `-v NAME="$..."` whose awk
+# program (the same line or the 20 after it) calls `split(NAME, …, "\n")`.
+# That is the author declaring the value multi-line; both 2026-09-26 sites
+# have exactly that shape, and at filing it flagged one more live site and
+# nothing else.
+#
+# REMEDY: pass it through the environment — NAME="$var" awk '... ENVIRON["NAME"] ...'
+# Line-level exemption (on the -v line): `# awk-v-multiline: ok (<reason>)`.
+AWKV_MULTILINE_EXEMPT='# awk-v-multiline: ok'
+
+awkv_multiline_sites() {
+  # "<line>:<name>" for every variable-fed -v whose program splits it on "\n".
+  awk '
+    { line[NR] = $0 }
+    END {
+      for (i = 1; i <= NR; i++) {
+        s = line[i]
+        if (s ~ /^[[:space:]]*#/) continue
+        if (index(s, "# awk-v-multiline: ok")) continue
+        while (match(s, /-v[[:space:]]*[A-Za-z_][A-Za-z0-9_]*="?\$/)) {
+          m = substr(s, RSTART, RLENGTH); sub(/^-v[[:space:]]*/, "", m); sub(/=.*/, "", m)
+          for (j = i; j <= i + 20 && j <= NR; j++)
+            if (index(line[j], "split(" m ",") && index(line[j], "\"\\n\"")) { print i ":" m; break }
+          s = substr(s, RSTART + RLENGTH)
+        }
+      }
+    }' "$1" 2>/dev/null
+}
+
+# AN UNPARENTHESISED CASE PATTERN INSIDE $( ) (1413-8bee, 2026-09-26). bash 3.2
+# ends the command substitution at the pattern's `)`, so the script does not
+# PARSE on macOS while bash 4+ accepts it. It redded every Mac gate via
+# 84f37ff24 (1375-2x4e). MEASURED on /bin/bash 3.2.57, 2026-09-26:
+#   x=$(case "$p" in /*) a ;; *) b ;; esac)            syntax error, rc=2
+#   the same with $( and case on their own lines       syntax error, rc=2
+#   x=$(echo pre; case "$p" in b) m ;; esac)           syntax error, rc=2
+#   x=$(case "$p" in (b) p1 ;; *) p2 ;; esac)          syntax error: EVERY arm
+#   x="$(case "$p" in /*) a ;; esac)"                  WORSE: `bash -n` passes, then a
+#       runtime syntax error; x is EMPTY or the REST OF THE LINE as text
+#       (84f37ff24 shape: " printf %s  ;; *) printf rel ;; esac)") and the
+#       script carries on
+#   every arm written (pat) / backticks / ( case ) subshell / $(f)   all parse
+# REMEDY: the leading-paren form `(pat)` on EVERY arm, or move the case into a
+# function and call it through $(f).
+# Line-level exemption (on the arm line): `# case-in-cs: ok (<reason>)`.
+CASE_IN_CS_EXEMPT='# case-in-cs: ok'
+
+case_in_cs_sites() {
+  # "<line>" for every unparenthesised case arm inside a command substitution.
+  awk '
+    function arms_bad(t,   n, i, seg, parts) {
+      # t: the text after "case WORD in". Every arm must open with "(".
+      n = split(t, parts, ";;")
+      for (i = 1; i <= n; i++) {
+        seg = parts[i]; sub(/^[[:space:]]+/, "", seg)
+        if (seg == "" || seg ~ /^esac/ || seg ~ /^\)/) continue
+        if (substr(seg, 1, 1) != "(") return 1
+      }
+      return 0
+    }
+    {
+      s = $0
+      if (s ~ /^[[:space:]]*#/) next
+      if (index(s, "# case-in-cs: ok")) next
+      if (in_case > 0) {
+        if (s ~ /^[[:space:]]*esac([[:space:];)]|$)/) { in_case--; if (in_case == 0) cs_open = 0; next }
+        if (s ~ /^[[:space:]]*case[[:space:]].*[[:space:]]in[[:space:]]*$/) { in_case++; next }
+        if (match(s, /^[[:space:]]*[^([:space:]#][^[:space:]]*\)/)) {
+          tok = substr(s, RSTART, RLENGTH)
+          if (index(tok, "$(") == 0 && index(tok, "=") == 0) print NR
+        }
+        next
+      }
+      # Multi-line: a $( left open at end of line, then a case line.
+      if (cs_open && s ~ /^[[:space:]]*\)/) cs_open = 0
+      if (cs_open && s ~ /^[[:space:]]*case[[:space:]].*[[:space:]]in[[:space:]]*$/) { in_case = 1; next }
+      if (s ~ /\$\([[:space:]]*$/) { cs_open = 1; next }
+      # Single line (or a $(case ... in that continues on the next lines).
+      # From each $( walk forward counting parens, so a NESTED $(...) before
+      # the case (84f37ff24: `$(cd … && _p="$(resolve…)" && case …`) does not
+      # hide it; stop where this $( closes.
+      rest = s
+      while ((p = index(rest, "$(")) > 0) {
+        rest = substr(rest, p + 2)
+        cpos = 0; depth = 1; L = length(rest)
+        for (k = 1; k <= L && depth > 0; k++) {
+          c = substr(rest, k, 1)
+          if (c == "(") depth++
+          else if (c == ")") depth--
+          else if (c == "c" && substr(rest, k, 5) ~ /^case[[:space:]]/ \
+                   && (k == 1 || substr(rest, k - 1, 1) ~ /[[:space:];&|(]/)) { cpos = k + 5; break }
+        }
+        if (cpos > 0) {
+          after = substr(rest, cpos)
+          if (match(after, /[[:space:]]in([[:space:]]|$)/)) {
+            tail = substr(after, RSTART + RLENGTH)
+            if (tail ~ /^[[:space:]]*$/) { in_case = 1; break }
+            if (arms_bad(tail)) { print NR; break }
+          }
+        }
+      }
+    }' "$1" 2>/dev/null
+}
 
 in_allowlist() {
   case " $ALLOWLIST " in
@@ -206,6 +355,11 @@ if [ -z "$SCAN_FILES" ]; then
 fi
 
 for f in $SCAN_FILES; do
+  # 1374-4u6i: count FILES, as the summary line says. Each rule below used to
+  # increment the counter itself, so one mapfile line (PAT_BUILTIN and PAT_BASH4
+  # both match it) was reported as two files and the fixture arm expecting :1
+  # was red from d2ceb4e4d (2026-09-05) on, unnoticed because no gate ran it.
+  _file_bad=0
   [ -f "$f" ] || continue
   base="${f##*/}"
   [ "$base" = "$SELF_NAME" ] && continue
@@ -219,7 +373,7 @@ for f in $SCAN_FILES; do
     else
       echo "[check-bash-dialect] UNGUARDED bash-4-ism in '$f' (first hits):" >&2
       printf '%s\n' "$hits" | head -3 >&2
-      unguarded=$((unguarded + 1))
+      _file_bad=1
     fi
   elif in_allowlist "$base"; then
     echo "[check-bash-dialect] note: '$base' is allowlisted but carries no bash-4-ism any more — shrink the allowlist (761-g36m burndown)" >&2
@@ -260,7 +414,7 @@ for f in $SCAN_FILES; do
   if [ -n "$gnudate_bad" ]; then
     echo "[check-bash-dialect] UNEXEMPTED GNU-date-ism in '$f' (BSD date succeeds with garbage output — exit-code guards cannot catch it):" >&2
     printf '%s' "$gnudate_bad" | head -3 >&2
-    unguarded=$((unguarded + 1))
+    _file_bad=1
   fi
 
   # GNU-du-isms. Judged per line like the date rule, and for the same reason:
@@ -288,7 +442,7 @@ for f in $SCAN_FILES; do
   if [ -n "$gnudu_bad" ]; then
     echo "[check-bash-dialect] UNEXEMPTED GNU-du-ism in '$f' (BSD du REFUSES -b, so the substitution is empty and a '|| n=0' fallback silently becomes the answer):" >&2
     printf '%s' "$gnudu_bad" | head -3 >&2
-    unguarded=$((unguarded + 1))
+    _file_bad=1
   fi
 
   # GNU-sed perl classes. Judged per line like the date and du rules. No
@@ -311,7 +465,7 @@ for f in $SCAN_FILES; do
   if [ -n "$gnused_bad" ]; then
     echo "[check-bash-dialect] UNEXEMPTED GNU-sed class in '$f' (BSD sed does not implement \\S \\s \\w \\b \\d and does NOT error — the substitution silently leaves the input unchanged, so the consumer gets the whole line; see 803-bqte):" >&2
     printf '%s' "$gnused_bad" | head -3 >&2
-    unguarded=$((unguarded + 1))
+    _file_bad=1
   fi
 
   # bash-4 builtins / builtin options. No `set -u` precondition: these are
@@ -332,7 +486,28 @@ for f in $SCAN_FILES; do
   if [ -n "$bash4_bad" ]; then
     echo "[check-bash-dialect] UNEXEMPTED bash-4 builtin in '$f' (mapfile/readarray/read -N do not exist in bash 3.2; darwin errors and then reports a violation against a healthy tree; see 1055-6yp8):" >&2
     printf '%s' "$bash4_bad" | head -3 >&2
-    unguarded=$((unguarded + 1))
+    _file_bad=1
+  fi
+
+  # Sourcing a process substitution: silently empty on bash 3.2. No `set -u`
+  # precondition — the definition is missing under every option set.
+  procsub_bad=""
+  _ps="$(code_of "$f" | grep -nE "$PAT_PROCSUB_SOURCE" || true)"
+  if [ -n "$_ps" ]; then
+    while IFS= read -r _h; do
+      [ -n "$_h" ] || continue
+      _ln="${_h%%:*}"
+      if sed -n "${_ln}p" "$f" | grep -qF "$PROCSUB_SOURCE_EXEMPT"; then
+        continue
+      fi
+      procsub_bad="${procsub_bad}${_h}
+"
+    done <<< "$_ps"
+  fi
+  if [ -n "$procsub_bad" ]; then
+    echo "[check-bash-dialect] SOURCED process substitution in '$f' (bash 3.2 — the only bash macOS ships — sources NOTHING from '. <(cmd)' and returns 0, so the consumer reads an empty variable; redded every macOS gate via 1349-53h6 arm5, see 1373-sr9g). Use eval \"\$(cmd)\":" >&2
+    printf '%s' "$procsub_bad" | head -3 >&2
+    _file_bad=1
   fi
 
   # Empty-array expansion under `set -u`. Only meaningful when the file
@@ -360,8 +535,23 @@ for f in $SCAN_FILES; do
   if [ -n "$emptyarr_bad" ]; then
     echo "[check-bash-dialect] EMPTY-ARRAY expansion under set -u in '$f' (bash 3.2 — the only bash macOS ships — dies with 'unbound variable' on an EMPTY array here, while bash 4.4+ expands to nothing, so this is invisible on linux/windows and fatal on darwin; broke 747-knbp 2026-08-30). Use \${arr[@]+\"\${arr[@]}\"}:" >&2
     printf '%s' "$emptyarr_bad" | head -3 >&2
-    unguarded=$((unguarded + 1))
+    _file_bad=1
   fi
+  # Multi-line value in `awk -v` (1399-wtpq): silent-empty on BSD awk.
+  awkv_bad="$(awkv_multiline_sites "$f")"
+  if [ -n "$awkv_bad" ]; then
+    echo "[check-bash-dialect] MULTI-LINE awk -v value in '$f' (BSD awk — the awk macOS ships — rejects a newline in a -v assignment with 'newline in string' and prints nothing; the program splits this variable on \"\\n\", so it IS multi-line. Silent on darwin, and fully silent under 2>/dev/null or || true; 1399-wtpq). Pass it via the environment: NAME=\"\$var\" awk '... ENVIRON[\"NAME\"] ...':" >&2
+    printf '%s\n' "$awkv_bad" | head -3 | sed "s|^|  $f:|" >&2
+    _file_bad=1
+  fi
+  # Unparenthesised case arm inside $( ) (1413-8bee): does not PARSE on 3.2.
+  caseincs_bad="$(case_in_cs_sites "$f")"
+  if [ -n "$caseincs_bad" ]; then
+    echo "[check-bash-dialect] UNPARENTHESISED case pattern inside \$( ) in '$f' (bash 3.2 — the only bash macOS ships — ends the substitution at the pattern's ')' and the script does not parse; quoted \"\$( )\" passes bash -n, then yields EMPTY or the rest of the line as the value; redded every Mac gate via 84f37ff24, 1413-8bee). Write EVERY arm as (pat), or call a function through \$(f):" >&2
+    printf '%s\n' "$caseincs_bad" | head -3 | sed "s|^|  $f:|" >&2
+    _file_bad=1
+  fi
+  if [ "$_file_bad" -eq 1 ]; then unguarded=$((unguarded + 1)); fi
 done
 
 if [ "$unguarded" -gt 0 ]; then

@@ -140,17 +140,42 @@ remote_head() {
 }
 
 # converge_remote <branch> <want-sha> <timeout-s> — poll the remote head for
-# <branch> until it equals <want-sha> or the bounded window closes. Prints the
+# <branch> until it CONTAINS <want-sha> (1110-4v4h) or the bounded window closes. Prints the
 # last observed head to stdout; returns 0 on convergence, 1 otherwise. Shared by
 # check (verifying a marker's claimed remote) and self (verifying live HEAD), so
 # the polling grammar lives in one place.
+# ORDER 1110-4v4h: the question is CONTAINMENT — is <want> on the remote — not
+# equality with the remote's head. Equality answered it only while nobody else
+# pushed, so a cycle that had landed everything was refused whenever any host
+# pushed inside the window: three times on 2026-09-06/26 (lenovinha, yoga twice),
+# the last with BOTH hosts deliberately holding their pushes, because a land
+# gate cannot be paused mid-gate. A head that is NOT an ancestor of the remote
+# still refuses — unpushed work, a lost relay, and the fabricated SHA 651-2x5s
+# exists for all fail the ancestry test (a sha the store does not hold is never
+# an ancestor of anything).
+remote_contains() {
+    local branch="$1" want="$2" actual="$3"
+    [ -n "$actual" ] || return 1
+    [ "$actual" = "$want" ] && return 0
+    # The remote's head may be newer than anything fetched. Fetch it — but never
+    # under the fixture's injected probe, which must not touch a live remote.
+    if [ -z "${MO_FULL_REMOTE_PROBE:-}" ] && ! git cat-file -e "${actual}^{commit}" 2>/dev/null; then
+        git fetch -q origin "refs/heads/${branch}" 2>/dev/null || true
+    fi
+    git merge-base --is-ancestor "$want" "$actual" 2>/dev/null
+}
+
 converge_remote() {
     local branch="$1" want="$2" timeout_s="$3"
     local deadline now actual
     deadline=$(( $(date +%s) + timeout_s ))
     while :; do
         actual="$(remote_head "$branch" | tr -d '[:space:]')"
-        if [ "$actual" = "$want" ]; then
+        if remote_contains "$branch" "$want" "$actual"; then
+            # Name the containing head when it is not the attested one, so a
+            # reader sees WHY a moved remote still counts. stderr: the marker
+            # must stay the last `MO-FULL: ` line on stdout.
+            [ "$actual" = "$want" ] || printf 'note:mo-full:contained:%s@%s\n' "$branch" "$actual" >&2
             printf '%s' "$actual"
             return 0
         fi
@@ -387,6 +412,12 @@ record_attest() {
         return "$rc"
     fi
     marker="$(grep -E '^MO-FULL: ' "$out" | tail -1 || true)"
+    # 1110-4v4h follow-up: pass self's note: lines through. record kept only the
+    # marker, so the containing-head note — the one line saying WHY a moved
+    # remote still counts — never reached finalize's log. Measured on the live
+    # proof (yoga 2026-09-26T21:14Z): COMPLETE with origin at 4c18cb340, and
+    # no note anywhere.
+    grep -E '^note:mo-full:' "$out" >&2 || true
     rm -f "$out"
     if [ -z "$marker" ]; then
         echo "MO-FULL: FAIL record: self-attestation produced no marker line"
@@ -587,6 +618,35 @@ fixture() {
         run_self_case "self-no-ledger-record" "$work/good-stamp" 1 \
             "wrote no durable ledger record" "$work/absent-record-stamp"
 
+        # 10c/10d. ORDER 1110-4v4h — the remote MOVED past the attested head.
+        #    A real descendant of HEAD, written as a dangling object only
+        #    (commit-tree: no ref, no worktree, no index touched), stands in for a
+        #    plan fragment another host landed inside the window.
+        local moved_on behind
+        moved_on="$(git commit-tree "${live_head}^{tree}" -p "$live_head" -m 'fixture: a later remote head (1110-4v4h)' 2>/dev/null || true)"
+        behind="$(git rev-parse "${live_head}~1" 2>/dev/null || true)"
+        if [ -n "$moved_on" ] && [ -n "$behind" ]; then
+            self_cases=$((self_cases + 2))
+            local mrc=0
+            MO_FULL_BOUNDARY_STAMP="$work/good-stamp" MO_FULL_RECORD_STAMP="$work/record-stamp" \
+            MO_FULL_REMOTE_PROBE="printf '${moved_on}'" \
+                "$0" self 2 >"$work/moved-out" 2>&1 || mrc=$?
+            if [ "$mrc" -ne 0 ] || ! grep -Fq "MO-FULL: COMPLETE $live_head $live_branch $live_head" "$work/moved-out"; then
+                failures+=("self-remote-moved-past-head: expected COMPLETE (the head is CONTAINED), exit=$mrc: $(grep -E '^MO-FULL: ' "$work/moved-out" | tail -1)")
+            elif ! grep -Fq "note:mo-full:contained:${live_branch}@${moved_on}" "$work/moved-out"; then
+                failures+=("self-remote-moved-past-head: COMPLETE but the containing head was not named")
+            fi
+            # NEGATIVE CONTROL: the remote is BEHIND the head (HEAD is not on it).
+            # Containment must not become "anything related passes".
+            mrc=0
+            MO_FULL_BOUNDARY_STAMP="$work/good-stamp" MO_FULL_RECORD_STAMP="$work/record-stamp" \
+            MO_FULL_REMOTE_PROBE="printf '${behind}'" \
+                "$0" self 2 >"$work/behind-out" 2>&1 || mrc=$?
+            if [ "$mrc" -eq 0 ] || ! grep -Fq "is not durably on" "$work/behind-out"; then
+                failures+=("self-remote-behind-head: expected FAIL (HEAD not on the remote), exit=$mrc: $(grep -E '^MO-FULL: ' "$work/behind-out" | tail -1)")
+            fi
+        fi
+
         # 11-12. record mode — the durable-ledger path (651-2x5s). record runs
         #    self internally, so these use the same live-repo gating and must
         #    never touch the real ledger (always a scratch file under $work).
@@ -618,6 +678,23 @@ fixture() {
         # 11. record appends the verified marker to the ledger and prints it.
         run_record_case "record-verified-boundary" "$work/good-stamp" 0 ""
 
+        # 11b. 1110-4v4h: record with the remote MOVED past HEAD must still
+        #      attest AND surface the containing-head note to its caller —
+        #      record used to keep only the marker, so the note was lost.
+        if [ -n "${moved_on:-}" ]; then
+            self_cases=$((self_cases + 1))
+            local rmrc=0
+            rm -f "$ledger_path"
+            MO_FULL_BOUNDARY_STAMP="$work/good-stamp" MO_FULL_RECORD_STAMP="$work/record-stamp-scratch" \
+            MO_FULL_REMOTE_PROBE="printf '${moved_on}'" \
+                "$0" record "$ledger_path" 2 >"$work/record-moved-out" 2>&1 || rmrc=$?
+            if [ "$rmrc" -ne 0 ] || ! grep -Fq "MO-FULL: COMPLETE $live_head $live_branch $live_head" "$ledger_path" 2>/dev/null; then
+                failures+=("record-remote-moved-past-head: expected a COMPLETE ledger line, exit=$rmrc: $(tail -1 "$work/record-moved-out")")
+            elif ! grep -Fq "note:mo-full:contained:${live_branch}@${moved_on}" "$work/record-moved-out"; then
+                failures+=("record-remote-moved-past-head: attested, but the containing-head note did not reach record's caller")
+            fi
+        fi
+
         # 12. NEGATIVE CONTROL: record with no boundary must fail AND leave the
         #     ledger untouched — a failed verification records nothing.
         run_record_case "record-no-boundary" "$work/absent-stamp" 1 "no verified startup boundary"
@@ -634,7 +711,7 @@ fixture() {
         echo "PASS: mo-full-attest fixture 9/9 check scenarios green (no-marker, no-marker-but-refused, no-marker-prose-only, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha); self/record boundary scenarios SKIPPED — not attestable from branch '${live_branch:-none}'"
         return 0
     fi
-    echo "PASS: mo-full-attest fixture 15/15 scenarios green (no-marker, no-marker-but-refused, no-marker-prose-only, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha, self-no-boundary, self-stale-boundary, self-verified-boundary, self-no-ledger-record, record-verified-boundary, record-no-boundary)"
+    echo "PASS: mo-full-attest fixture $((9 + self_cases + 3))/$((9 + self_cases + 3)) scenarios green (no-marker, no-marker-but-refused, no-marker-prose-only, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha, self-no-boundary, self-stale-boundary, self-verified-boundary, self-no-ledger-record, $( [ "$self_cases" -ge 5 ] && echo 'self-remote-moved-past-head, self-remote-behind-head, ')record-verified-boundary, $( [ "$self_cases" -ge 6 ] && echo 'record-remote-moved-past-head, ')record-no-boundary)"
     return 0
 }
 

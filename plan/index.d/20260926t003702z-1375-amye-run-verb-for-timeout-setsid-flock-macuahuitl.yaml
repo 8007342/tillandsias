@@ -1,0 +1,60 @@
+packets:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    order: 1375-amye
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [portability, plan-binary, rust, exec, macos, windows]
+    estimated_hours: 5
+    depends_on: [an-idiomatic-command-executor-in-rust-argv-not-shell-strings-with-separately-captured-fds-concurrent-draining-and-a-run-identity-so-a-stale-marker-cannot-read-as-a-fresh-result]
+    owned_files: [crates/tillandsias-plan/src/run_verb.rs, crates/tillandsias-plan/src/main.rs, crates/tillandsias-plan/capabilities.txt, scripts/test-plan-run-verb.sh]
+    observed_by: macuahuitl
+    title: |
+      timeout (356 sites, absent on stock macOS), setsid (68 sites, absent on macOS — 1352-vmbc/1353-ryhq took 110 preflight guards down at once) and flock (59 sites) are process control, which Lua cannot do and Rust already does in tillandsias_exec; `tillandsias-plan run [--timeout <dur>] [--detach] [--lock <path>] -- argv…` is the one portable spelling, and build.sh's preflight `exec setsid` is its first caller
+    verifiable_closure: |
+      bash scripts/test-plan-run-verb.sh asserts: `run --timeout 1s -- sleep
+      5` exits 124 within 2 s and prints `status=timed_out after_ms=<n>` on
+      stderr; `run --detach -- sh -c 'sleep 3'` returns within 1 s and the
+      child's session id differs from the caller's (`ps -o sess=` on
+      Linux/macOS; on Windows the child survives the caller's exit); two
+      concurrent `run --lock <path> -- sh -c 'echo x >> f'` produce two
+      lines and never interleave a partial write (100 iterations); an argv
+      element containing spaces and a `*` reaches the child as ONE token
+      (argv, never a shell string — 1252-fg9e's contract). Wired as a
+      build.sh --check step in the same commit (1325-ygq5). Pre-fix result:
+      FAILS — `tillandsias-plan capabilities` lists no `run`.
+    context: |
+      MEASURED 2026-09-26 (design:
+      plan/issues/lua-runtime-host-dependency-replacement-design-2026-09-26.md).
+      This is the one place the operator's Lua-first rule genuinely stops:
+      Lua 5.4 has no fork, exec, session, signal or file-lock primitive, and
+      the Cacheable class must never gain one (1367-upz6). The executor
+      lives in Rust — 1252-fg9e's tillandsias_exec::Command with argv,
+      separately captured fds and a run identity — and lua_predicate.rs
+      already calls it for expert.shell. A `run` verb exposes that executor
+      to shell scripts, which is where 356 timeout and 68 setsid sites are.
+      Go would add a toolchain, a build lane and a signing asset on three
+      platforms to reach the same syscalls Rust reaches today; it is not
+      considered.
+      INCIDENTS: 1352-vmbc (done) and 1353-ryhq (ready) — build.sh preflight
+      execs setsid unconditionally; on macOS all 108-110 deciders refused
+      without measuring. check-host-tools.sh (989-ykks) probes `timeout` as
+      a required host tool, which is the inverse of portability: it names
+      the floor as a requirement. After this row `run --timeout` is the
+      spelling and the probe can drop `timeout` from the required set.
+      SEMANTICS: --timeout takes `<n>s|<n>ms`; exit 124 mirrors coreutils
+      timeout so existing `|| rc=$?` callers keep their vocabulary; --detach
+      is setsid+nohup on Unix (new session, stdio to /dev/null unless
+      --log <file>) and CREATE_NEW_PROCESS_GROUP|DETACHED_PROCESS on
+      Windows; --lock is an advisory whole-file lock (fs2/flock on Unix,
+      LockFileEx on Windows) held for the child's lifetime, `--lock-wait
+      <dur>` bounds the wait and exits 75 on expiry. Stdout/stderr of the
+      child pass through unmerged (1268-fx87 is about merged channels;
+      do not merge). The verb never invokes a shell.
+      FIRST CALLER: build.sh's preflight runner (the 1353-ryhq site) — the
+      row that closes 1353-ryhq should land on this verb rather than on a
+      second `command -v setsid` fork; sequence: this row, then 1353-ryhq.
+      Lua: 1375-btuf's Observing sh.run{argv, timeout_ms=} gains the same
+      options from the same Rust function.

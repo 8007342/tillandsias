@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d
+    event:
+      type: finding
+      ts: "2026-09-26T08:40:12Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t084012z
+      host: macuahuitl-forge
+      summary: |
+        FROM 1395-n7qd, macuahuitl-forge 2026-09-26 — (b) `tillandsias-plan predicate` prints only PASS/FAIL on stdout, so a Cacheable predicate's payload (the extractor's canonical JSON and its ok:/refused:/blocked: verdict lines) rides expert.log_info on STDERR behind a "[lua-predicate] " prefix, interleaved with any runtime diagnostics. Every consumer must `sed 's/^\[lua-predicate\] //'` and then pick its line by prefix. The design's out.line (this row's `script run`) is the fix; the extractor and scripts/test-centicolon-extract.sh are the first consumer to port when it lands. Also noted: the file->function naming (predicate name = file stem) forces `_G["centicolon-extract"] = …` for a hyphenated stem; --name exists but nothing says so in the error.

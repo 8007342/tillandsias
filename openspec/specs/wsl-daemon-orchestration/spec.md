@@ -13,6 +13,7 @@ active
 ## Requirements
 
 ### Requirement 1: WSL daemon startup via systemd
+<!-- req-id: ecbb2658 -->
 **Modality:** MUST
 
 On Windows WSL2 distributions where Tillandsias daemon runs, the daemon MUST:
@@ -29,6 +30,7 @@ On Windows WSL2 distributions where Tillandsias daemon runs, the daemon MUST:
 ---
 
 ### Requirement 2: Socket location strategy
+<!-- req-id: 42dc32f0 -->
 **Modality:** MUST
 
 The router daemon socket MUST be created at a location that satisfies three constraints:
@@ -44,6 +46,7 @@ The router daemon socket MUST be created at a location that satisfies three cons
 ---
 
 ### Requirement 3: Coordinated startup handshake
+<!-- req-id: 7ab494bb -->
 **Modality:** MUST
 
 When the Windows host tray starts:
@@ -59,6 +62,7 @@ When the Windows host tray starts:
 ---
 
 ### Requirement 4: Daemon health monitoring
+<!-- req-id: 71694f23 -->
 **Modality:** SHOULD
 
 The daemon SHOULD emit periodic `sd_notify("WATCHDOG=1")` signals to systemd, allowing systemd to detect deadlocks or hangs:
@@ -73,6 +77,7 @@ The daemon SHOULD emit periodic `sd_notify("WATCHDOG=1")` signals to systemd, al
 ---
 
 ### Requirement 5: Environment variable propagation
+<!-- req-id: 4f73b9a8 -->
 **Modality:** MUST
 
 The systemd service unit MUST pass necessary environment variables from host to daemon:
@@ -87,6 +92,7 @@ The systemd service unit MUST pass necessary environment variables from host to 
 ---
 
 ### Requirement 6: Daemon process lifecycle
+<!-- req-id: ea6e8259 -->
 **Modality:** MUST
 
 The daemon MUST:
@@ -102,6 +108,7 @@ The daemon MUST:
 ---
 
 ### Requirement 7: Cross-platform logging
+<!-- req-id: b9c08c6c -->
 **Modality:** MUST
 
 All daemon events MUST be logged to:

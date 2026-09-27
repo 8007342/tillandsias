@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: centicolon-extractor-is-a-cacheable-lua-predicate-over-spec-scenarios-so-the-obligation-denominator-is-a-pure-function-of-repo-bytes
+    event:
+      type: decision
+      ts: "2026-09-26T08:45:09Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        OPERATOR RULING (the Tlatoāni, 2026-09-26, verbatim): "Enable the CENTICOLON requirements in the spec, even if there's a bunch of red and missing metrics, the methodology stands, as long as the score increases monotonically then we're making progress :) is that a sound approach? enable in some advisory mode and just flip it on :) any progress, and any agents touching files could just gradually add the missing tests". Also: "LUA lacks directory listing, but I bet RUST does not ;) can we add the missing bits as a callable RUST function for LUA? With it's deterministic alphabetical listing".
+        COORDINATOR INTERPRETATION, stated so it can be checked: (1) CentiColon is ENABLED IN ADVISORY MODE (the design's Phase 0): every --check prints R, the denominator, the per-state histogram and the regime; losses WARN and refuse nothing. (2) The monotonic promise attaches to the COUNT OF SATISFIED OBLIGATIONS and to "no satisfied obligation is lost" (the design's ratchet), NOT to the raw ratio: added requirements are reported as added scope, never as regression, so adding honest requirements never reads as backsliding. (3) R and the histogram go into scripts/cycle-metrics.sh output, so every handoff carries the trend (the adoption-visibility lesson of rust_queries 1/395). (4) The CentiColon requirement is written into the spec through an OpenSpec change (methodology-accountability or the spec named by the design), marked advisory. (5) Flipping warn→refuse remains a separate operator decision (the design's bar-raise list). (6) fs.list: a Rust-backed Cacheable verb returning names only, sorted by UTF-8 bytes, no symlink following, whose listing digest enters the content-addressed memo so an added file invalidates cached verdicts.

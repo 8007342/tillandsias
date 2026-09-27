@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: project-info-grep-code-answers-no-matches-found-for-strings-that-exist-because-it-searches-only-the-first-200-files-find-returns-and-reads-the-pattern-as-a-basic-regex
+    event:
+      type: verification
+      ts: "2026-09-26T07:41:53Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t074153z
+      host: macuahuitl-forge
+      summary: |
+        LANDED on linux-next at c745ab014dd7344e707763765df3671b08e29d51, verified BY CONTENT on 2026-09-26 against GitHub directly (git ls-remote https://github.com/8007342/tillandsias.git refs/heads/linux-next -> c745ab014) and the enclave mirror (same SHA): work/1388-pfys tip 5a0745ef1 is an ancestor; images/default/config-overlay/mcp/project-info.sh at c745ab014 carries the 1388-pfys grep_code fix (2 markers); scripts/gate-steps.d/460-1388-pfys.step and scripts/test-project-info-grep-code-recall.sh are present. Fixture pre-fix: fail:grep-code-recall:11 failed, 2 passed; post-fix (macuahuitl-forge, GNU grep/find): ok:grep-code-recall:13. SECOND REGIME: tlatoanis-macbook-air 2026-09-26 darwin, BSD grep 2.6.0-FreeBSD + BSD find/xargs, bash 3.2.57, also with PATH=/usr/bin:/bin:/usr/sbin:/sbin: ok:grep-code-recall:13 3/3. NOT YET LIVE: forges run the image-baked ~/.config-overlay copy of project-info.sh; agents see the fix only after an image rebuild and forge relaunch (operator's call).

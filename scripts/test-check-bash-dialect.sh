@@ -121,9 +121,99 @@ printf '#!/usr/bin/env bash\nfile_list=()\nfor file in "${file_list[@]}"; do\n  
 expect "no-set-u-not-flagged" "ok:bash-dialect-clean" 0
 rm "$TMP/emptyarr.sh"
 
+# 1373-sr9g: sourcing a process substitution defines nothing on bash 3.2.
+# MUTATION ARM: the exact pre-fix line from test-preflight-scratch-is-off-checkout.sh:102.
+printf '#!/usr/bin/env bash\n    . <(sed -n %s "$SIDECAR")\n' "'/if \\[ -n \"\\\${TILLANDSIAS_SIDECAR_TARGET_DIR/,/^fi/p'" > "$TMP/procsub.sh"
+expect "dot-procsub-refused" "blocked:bash4-unguarded:1" 1
+printf '#!/usr/bin/env bash\nsource <(printf X=1)\n' > "$TMP/procsub.sh"
+expect "source-procsub-refused" "blocked:bash4-unguarded:1" 1
+# The remedy passes, and so does a process substitution that is not sourced.
+printf '#!/usr/bin/env bash\n    eval "$(sed -n %s "$SIDECAR")"\n' "'/if \\[ -n \"\\\${TILLANDSIAS_SIDECAR_TARGET_DIR/,/^fi/p'" > "$TMP/procsub.sh"
+expect "eval-remedy-passes" "ok:bash-dialect-clean" 0
+printf '#!/usr/bin/env bash\ndiff <(sort a) <(sort b)\nwhile read -r l; do :; done < <(ls)\n' > "$TMP/procsub.sh"
+expect "unsourced-procsub-not-flagged" "ok:bash-dialect-clean" 0
+printf '#!/usr/bin/env bash\n. <(printf X=1) # procsub-source: ok (fixture)\n' > "$TMP/procsub.sh"
+expect "procsub-exemption-passes" "ok:bash-dialect-clean" 0
+rm "$TMP/procsub.sh"
+
+# 1399-wtpq: a multi-line value in `awk -v` is EMPTY on BSD awk ("newline in
+# string"). The two real call sites of 2026-09-26, verbatim in shape; both
+# were masked (the 88tp block ran under `2>/dev/null || true`, the tsfu join
+# had no rc check), which is why each read as a clean run on darwin.
+cat > "$TMP/awkv.sh" <<'EOF'
+#!/usr/bin/env bash
+_pt_digests="$(tr '\n' '\0' <<<"$_pt_files" | xargs -0 sha256sum 2>/dev/null || true)"
+{ printf '%s' "$_PER_TEST_LOG" | awk -F'\t' \
+    -v digests="$_pt_digests" \
+    'BEGIN { n = split(digests, dl, "\n") } { print }'; } 2>/dev/null || true
+EOF
+expect "awkv-88tp-digests-refused" "blocked:bash4-unguarded:1" 1
+cat > "$TMP/awkv.sh" <<'EOF'
+#!/usr/bin/env bash
+floor_text="$(grep -vE '^#' "$FLOOR")"
+joined="$(awk -v ft="$floor_text" '
+    BEGIN { n = split(ft, L, "\n") } NF == 2 { print }' <<<"$counts")"
+EOF
+expect "awkv-tsfu-floor-refused" "blocked:bash4-unguarded:1" 1
+# The remedy passes; so does a scalar -v the program never splits on "\n";
+# so does the exemption marker on the -v line.
+cat > "$TMP/awkv.sh" <<'EOF'
+#!/usr/bin/env bash
+joined="$(FT="$floor_text" awk 'BEGIN { n = split(ENVIRON["FT"], L, "\n") }' <<<"$counts")"
+EOF
+expect "awkv-environ-remedy-passes" "ok:bash-dialect-clean" 0
+cat > "$TMP/awkv.sh" <<'EOF'
+#!/usr/bin/env bash
+ps -W | awk -v p="$pid" '$4 == p { found = 1 } END { exit !found }'
+EOF
+expect "awkv-scalar-not-flagged" "ok:bash-dialect-clean" 0
+cat > "$TMP/awkv.sh" <<'EOF'
+#!/usr/bin/env bash
+awk -v t="$tags" 'BEGIN { n = split(t, T, "\n") }' # awk-v-multiline: ok (fixture)
+EOF
+expect "awkv-exemption-passes" "ok:bash-dialect-clean" 0
+rm "$TMP/awkv.sh"
+
+# 1413-8bee: an unparenthesised case arm inside $( ) does not parse on bash
+# 3.2 (measured, both shapes). The keyword is spliced in with %s so this file,
+# which the live scan also reads, never spells the shape it refuses.
+C=case
+printf '#!/usr/bin/env bash\nx=$(%s "$1" in /*) echo a ;; *) echo r ;; esac)\n' "$C" > "$TMP/cics.sh"
+expect "case-in-cs-single-line-refused" "blocked:bash4-unguarded:1" 1
+printf '#!/usr/bin/env bash\nx=$(%s "$1" in (/*) echo a ;; (*) echo r ;; esac)\n' "$C" > "$TMP/cics.sh"
+expect "case-in-cs-single-line-parenthesised-passes" "ok:bash-dialect-clean" 0
+printf '#!/usr/bin/env bash\nx=$(\n  %s "$1" in\n    /*) echo a ;;\n    *) echo r ;;\n  esac\n)\n' "$C" > "$TMP/cics.sh"
+expect "case-in-cs-multi-line-refused" "blocked:bash4-unguarded:1" 1
+printf '#!/usr/bin/env bash\nx=$(\n  %s "$1" in\n    (/*) echo a ;;\n    (*) echo r ;;\n  esac\n)\n' "$C" > "$TMP/cics.sh"
+expect "case-in-cs-multi-line-parenthesised-passes" "ok:bash-dialect-clean" 0
+# The 84f37ff24 shape: quoted, with a NESTED $( ) before the case. bash -n
+# passes it; at runtime the value is the rest of the line as text.
+printf '#!/usr/bin/env bash\nP="$(cd / && _p="$(pwd)" && %s "$_p" in /*) printf a ;; *) printf r ;; esac)"\n' "$C" > "$TMP/cics.sh"
+expect "case-in-cs-quoted-nested-refused" "blocked:bash4-unguarded:1" 1
+printf '#!/usr/bin/env bash\nx=$(%s "$1" in /*) echo a ;; esac) # case-in-cs: ok (fixture)\n' "$C" > "$TMP/cics.sh"
+expect "case-in-cs-exemption-passes" "ok:bash-dialect-clean" 0
+# A case in a plain ( ) subshell, or in a function called through $(f), parses.
+printf '#!/usr/bin/env bash\n( %s "$1" in /*) echo a ;; esac )\nf() { %s "$1" in /*) echo a ;; esac; }\nx=$(f "$1")\n' "$C" "$C" > "$TMP/cics.sh"
+expect "case-outside-cs-passes" "ok:bash-dialect-clean" 0
+# TILLANDSIAS_DIALECT_SCAN_FILES scopes like SCAN_DIR (the enclave-service-health
+# litmus used that name, which was never read: a "one-file" check scanned the
+# whole tree). Ignored, this falls back to the clean live tree and reads ok.
+printf '#!/usr/bin/env bash\nx=$(%s "$1" in /*) echo a ;; esac)\n' "$C" > "$TMP/cics.sh"
+got="$(TILLANDSIAS_DIALECT_SCAN_FILES="$TMP/cics.sh" bash "$CHECKER" 2>/dev/null)"
+[ "$got" = "blocked:bash4-unguarded:1" ] \
+  || { echo "FAIL: scan-files-alias-scopes — got '$got'" >&2; fails=$((fails + 1)); }
+rm "$TMP/cics.sh"
+
+# 1374-4u6i: the count is FILES. One file tripping two rules is one; two
+# offending files are two.
+printf '#!/usr/bin/env bash\nmap%s -t arr < "$1"\n' 'file' > "$TMP/two-a.sh"
+printf '#!/usr/bin/env bash\nx="$1"\nprintf %%s "${x,,}"\n' > "$TMP/two-b.sh"
+expect "two-files-count-two" "blocked:bash4-unguarded:2" 1
+rm "$TMP/two-a.sh" "$TMP/two-b.sh"
+
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: check-bash-dialect fixture: $fails scenario(s) diverged" >&2
   exit 1
 fi
-echo "PASS: check-bash-dialect fixture 19/19 scenarios green"
+echo "PASS: check-bash-dialect fixture 33/33 scenarios green"
 exit 0

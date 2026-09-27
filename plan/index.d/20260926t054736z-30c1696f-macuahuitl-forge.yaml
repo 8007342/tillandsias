@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-or-closure-recorded-on-a-platform-branch-is-invisible-to-plan-next-on-every-other-host-until-the-next-relay-so-two-hosts-can-work-one-row
+    event:
+      type: finding
+      ts: "2026-09-26T05:47:36Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t054735z
+      host: macuahuitl-forge
+      summary: |
+        OBSERVED on macuahuitl-forge 2026-09-26: run from a forge checkout on main (where check-committable-branch refuses commits), push-plan-fragments-to-trunk pushed the claim fragment to linux-next correctly (ok:fragments-on-trunk:7924895c6:1), but leaves plan/index.d/20260926t053611z-15bb4806-macuahuitl-forge.yaml UNTRACKED in the main checkout indefinitely. The design note ("your platform branch keeps its own copy ... relay merges it clean") assumes a platform branch that will commit and relay it; on main nothing ever does, so the file lingers as dirt in `git status` and trips clean-workspace checks.

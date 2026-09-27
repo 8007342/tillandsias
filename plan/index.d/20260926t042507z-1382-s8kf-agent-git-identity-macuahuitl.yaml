@@ -1,0 +1,45 @@
+packets:
+  - packet_id: every-agent-harness-commits-under-a-distinct-git-identity-so-a-commit-says-which-agent-on-which-host-wrote-it
+    order: 1382-s8kf
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [fleet-coordination, attribution, git]
+    estimated_hours: 3
+    owned_files: [scripts/check-fleet-membership.sh, scripts/agent-identity.sh, skills/join-the-fleet/SKILL.md]
+    observed_by: macuahuitl
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable adds the identity check
+      to check-fleet-membership.sh with its fixture arm, bound in the same commit
+      (1136-n8sh); its future test lives in scripts/test-join-the-fleet-idempotent.sh.
+    title: |
+      two agent harnesses on one host commit as the same person — macuahuitl has no git user.name/user.email at any level, so Claude's relays and the operator's Antigravity agent both author as `Tlatoani <tlatoani@macuahuitl…>`, and on lenovinha Antigravity and lenovinha's Claude share `lenovinha@lenovinha…` — so no commit says which agent wrote it
+    verifiable_closure: |
+      On a host running two harnesses, each harness's commits carry a distinct,
+      stable author identity derived from scripts/agent-identity.sh (host plus
+      backend, e.g. `macuahuitl-claude` / `macuahuitl-antigravity`), set per
+      process (GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL) or per checkout,
+      never by editing the other harness's config; and
+      scripts/check-fleet-membership.sh prints
+      `todo:join-the-fleet:git-identity:<remedy>` when the effective identity is
+      unset or is the bare `<user>@<host>` fallback. Pre-fix result: FAILS: on
+      macuahuitl `git config user.email` is empty at every level and
+      `git log --format='%ae'` shows tlatoani@macuahuitl.ayahuitlcalpan.com for
+      both the coordinator's relay commits (5412c1165) and Antigravity's
+      3a2b01d9e, while the checker prints no identity line at all.
+    context: |
+      Found 2026-09-26 while reviewing Antigravity's GitHub App login change
+      (PR #186, 3a2b01d9e, 1381-za6b). The operator identified the cause: the
+      harness had no git credential identity configured, so git fell back to
+      username@host. lenovinha-silverblue reported the same shape the same night:
+      the Antigravity agent in /var/home/lenovinha/agy/tillandsias and
+      lenovinha's Claude share lenovinha@lenovinha.ayahuitlcalpan.com, and its
+      relays (0442e230e, 362911024) were first attributed to the wrong agent.
+      3a2b01d9e also carries NO `Generated-By:` or `Co-Authored-By:` trailer,
+      so nothing in the object names the tool. The fix must not set a single
+      per-checkout identity when two harnesses share a checkout: that would
+      relabel the other harness's commits. Per-process env from the harness
+      launcher is the safe default. Also require the `Generated-By: tool=<backend>`
+      trailer every harness already knows how to write.

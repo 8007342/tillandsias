@@ -71,6 +71,88 @@ pub static IN_VM_CREDENTIALS: OnceLock<Mutex<Option<InVmCredentials>>> = OnceLoc
 #[allow(dead_code)]
 pub static PENDING_HANDOVER: OnceLock<Mutex<Option<PendingHandover>>> = OnceLock::new();
 
+/// ORDER 1200-ih38. What can be known about a delivered share WITHOUT a live
+/// vault, decided before anything is stored or persisted.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum DeliveredShareCheck {
+    /// The delivery carried no share (token-only): nothing to check.
+    NoShare,
+    /// Not base64, or not exactly 32 key bytes. `ensure_unseal_key` would
+    /// silently skip it and fall through to the fallback file or a derived
+    /// dummy key, so adopting it only puts a useless share on disk.
+    Malformed(String),
+    /// Well-formed, but different from this guest's own
+    /// `tillandsias-vault-unseal` podman secret. NOT A REJECTION (1200-ih38
+    /// review): the podman secret is a STAND-IN for the vault, and in the
+    /// documented dummy-key state it is the wrong one, so refusing on it would
+    /// manufacture a rejection (888-miiy); and refusing skipped the fallback
+    /// write that keeps has_shamir_share_in_keyring true, so a guest with a
+    /// missing share file would WIPE vault-data on its next launch. The share is
+    /// therefore stored exactly as before; rejecting on LIVE evidence (the vault
+    /// observed unsealed with the own secret) is a follow-up row.
+    DiffersFromOwnSecret,
+    /// Well-formed and byte-identical to the guest's own secret.
+    MatchesOwnSecret,
+    /// Well-formed, and the guest has no readable own secret to compare
+    /// against (first boot before init, or podman unavailable). NOT a
+    /// rejection: "could not check" is not "checked and refused" (888-miiy).
+    Unverifiable,
+}
+
+/// Pure decision, so every branch is testable without podman or a cache dir.
+pub(crate) fn check_delivered_share(
+    delivered_b64: Option<&str>,
+    own_secret: Option<&[u8]>,
+) -> DeliveredShareCheck {
+    use base64::Engine;
+    let Some(encoded) = delivered_b64.map(str::trim).filter(|s| !s.is_empty()) else {
+        return DeliveredShareCheck::NoShare;
+    };
+    let bytes = match base64::engine::general_purpose::STANDARD.decode(encoded) {
+        Ok(b) => b,
+        // no decoder error text: it names the offending byte and offset, which
+        // would reach tracing::warn! with the reason (1200-ih38 review)
+        Err(_) => return DeliveredShareCheck::Malformed("not base64".to_string()),
+    };
+    let mut bytes = bytes;
+    let verdict = if bytes.len() != 32 {
+        DeliveredShareCheck::Malformed(format!(
+            "decodes to {} bytes, a share is exactly 32",
+            bytes.len()
+        ))
+    } else {
+        match own_secret {
+            Some(own) if own == bytes.as_slice() => DeliveredShareCheck::MatchesOwnSecret,
+            Some(_) => DeliveredShareCheck::DiffersFromOwnSecret,
+            None => DeliveredShareCheck::Unverifiable,
+        }
+    };
+    bytes.zeroize();
+    verdict
+}
+
+// The guest's own unseal secret, for the delivery check. Production reads the
+// podman secret (bounded; does not need the vault running, so delivery never
+// waits on vault startup). Tests get a hermetic override that defaults to
+// "unavailable", so no test ever reads the host's real secret.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static TEST_OWN_UNSEAL_SECRET: std::cell::RefCell<Option<Vec<u8>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(feature = "vault")]
+fn own_unseal_secret_for_delivery_check() -> Option<Vec<u8>> {
+    #[cfg(test)]
+    {
+        TEST_OWN_UNSEAL_SECRET.with(|s| s.borrow().clone())
+    }
+    #[cfg(not(test))]
+    {
+        read_unseal_secret_bytes()
+    }
+}
+
 #[cfg(feature = "vault")]
 #[allow(dead_code)]
 /// ORDER 890-y72v. Returns WHAT HAPPENED, where this used to return unit.
@@ -83,10 +165,12 @@ pub static PENDING_HANDOVER: OnceLock<Mutex<Option<PendingHandover>>> = OnceLock
 /// it had.
 ///
 /// `Accepted` here means STORED AND PERSISTED — in memory, and to the fallback
-/// file when a cache dir exists. It does NOT mean the share authenticates
-/// against a live vault; that is the larger half of this order and is NOT
-/// claimed by this value. Read `DeliverCredentialsOutcome`'s docs before
-/// treating an `Accepted` as proof the vault will open.
+/// file when a cache dir exists — AND (1200-ih38) the share is a well-formed
+/// 32-byte key; a malformed share is REJECTED BEFORE anything is stored. A
+/// well-formed share that differs from this guest's own unseal secret is still
+/// stored (see DiffersFromOwnSecret: refusing it could wipe vault-data), so
+/// Accepted does NOT claim the share opens the vault; the live verdict is
+/// 1400-b7h4's.
 pub fn set_in_vm_credentials(
     unseal_share_b64: Option<String>,
     installation_uuid: String,
@@ -103,6 +187,39 @@ pub fn set_in_vm_credentials(
     // anything is broken.
     if get_pending_handover().1.is_some() {
         return DeliverCredentialsOutcome::Superseded;
+    }
+
+    // 1200-ih38: VALIDATE BEFORE PERSIST, using only what needs no live vault.
+    // A rejection here stores nothing — neither in memory (ensure_unseal_key
+    // tries the delivered share FIRST) nor on disk.
+    let own = if unseal_share_b64.is_some() {
+        own_unseal_secret_for_delivery_check()
+    } else {
+        None
+    };
+    let mut own = own;
+    let check = check_delivered_share(unseal_share_b64.as_deref(), own.as_deref());
+    if let Some(o) = own.as_mut() {
+        o.zeroize();
+    }
+    match check {
+        // A malformed share never kept a vault alive either: the wipe
+        // predicate (has_shamir_share_in_keyring) only counts a file that
+        // decodes to exactly 32 bytes, so refusing it opens no wipe path.
+        DeliveredShareCheck::Malformed(why) => {
+            return DeliverCredentialsOutcome::Rejected {
+                reason: format!("malformed unseal share: {why}; not stored"),
+            };
+        }
+        DeliveredShareCheck::DiffersFromOwnSecret => {
+            eprintln!(
+                "[tillandsias-vault] delivered unseal share differs from this guest's own \
+                 unseal secret; kept UNVERIFIED (no live evidence at delivery; 1400-b7h4)"
+            );
+        }
+        DeliveredShareCheck::NoShare
+        | DeliveredShareCheck::MatchesOwnSecret
+        | DeliveredShareCheck::Unverifiable => {}
     }
 
     let share_for_disk = unseal_share_b64.clone();
@@ -929,6 +1046,333 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
     Ok(())
 }
 
+/// Where the GitHub App credential lives in Vault (order 1383-5hpk).
+///
+/// TWO PATHS, deliberately. `secret/github/token` holds only what a git
+/// operation needs (the access token and its expiry) and is what the
+/// git-mirror policy reads. The REFRESH token mints new access tokens for
+/// months and must not be readable by the git-mirror service, which only ever
+/// needs the short-lived one. Vault KV v2 policies are path-scoped, not
+/// field-scoped, so the refresh token gets its own path, which no git-mirror
+/// grant covers (images/vault/policies/git-mirror.hcl names
+/// secret/data/github/token exactly).
+pub const GITHUB_TOKEN_PATH: &str = "secret/github/token";
+pub const GITHUB_REFRESH_PATH: &str = "secret/github/refresh";
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GitHubTokenBundle {
+    pub token: String,
+    pub refresh_token: Option<String>,
+    pub expires_at: Option<u64>,
+    pub refresh_token_expires_at: Option<u64>,
+    pub client_id: Option<String>,
+}
+
+/// The token-path record: what the git-mirror service may read.
+fn github_token_record(b: &GitHubTokenBundle) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    map.insert("token".into(), b.token.clone().into());
+    if let Some(exp) = b.expires_at {
+        map.insert("expires_at".into(), exp.into());
+    }
+    if let Some(cid) = &b.client_id {
+        map.insert("client_id".into(), cid.clone().into());
+    }
+    serde_json::Value::Object(map)
+}
+
+/// The refresh-path record: never readable by git-mirror.
+fn github_refresh_record(b: &GitHubTokenBundle) -> Option<serde_json::Value> {
+    let rt = b.refresh_token.as_ref()?;
+    let mut map = serde_json::Map::new();
+    map.insert("refresh_token".into(), rt.clone().into());
+    if let Some(rexp) = b.refresh_token_expires_at {
+        map.insert("refresh_token_expires_at".into(), rexp.into());
+    }
+    if let Some(cid) = &b.client_id {
+        map.insert("client_id".into(), cid.clone().into());
+    }
+    Some(serde_json::Value::Object(map))
+}
+
+/// Vault as the rotation sees it. A trait so the ordering and failure rules of
+/// [`rotate_github_token`] are testable without a Vault.
+pub trait GitHubTokenStore {
+    fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String>;
+    fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String>;
+}
+
+/// Write a bundle: the REFRESH record first, then the token record.
+///
+/// The order is the failure rule. GitHub refresh tokens are single-use, so
+/// after a successful refresh the old one is already dead and the new one
+/// exists only in this process. Writing it first means the scarce credential
+/// is persisted before anything else can go wrong. If that write fails,
+/// NOTHING in Vault has changed and the old bundle is intact. If the token
+/// write fails afterwards, the new refresh token is already safe and the old
+/// access token stays valid until its own expiry.
+pub fn store_github_token_bundle(
+    store: &dyn GitHubTokenStore,
+    bundle: &GitHubTokenBundle,
+) -> Result<(), String> {
+    if let Some(refresh) = github_refresh_record(bundle) {
+        store
+            .write_record(GITHUB_REFRESH_PATH, refresh)
+            .map_err(|e| format!("could not store the rotated refresh token: {e}"))?;
+    }
+    store
+        .write_record(GITHUB_TOKEN_PATH, github_token_record(bundle))
+        .map_err(|e| format!("could not store the rotated access token: {e}"))
+}
+
+/// The live store: Vault through the root token, the same client the rest of
+/// this module uses.
+pub struct VaultGitHubTokenStore {
+    pub debug: bool,
+}
+
+impl GitHubTokenStore for VaultGitHubTokenStore {
+    fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String> {
+        let debug = self.debug;
+        if !container_running(VAULT_CONTAINER_NAME) {
+            return Ok(None);
+        }
+        let _stability = vault_stability_lease(debug)?;
+        let rt = tokio_runtime()?;
+        let base_url = vault_api_base_url();
+        let root_token = match read_and_handover_root_token(debug) {
+            Ok(t) => t,
+            Err(_) => return Ok(None),
+        };
+        let client = vault_client(&base_url, &root_token, debug)?;
+        let secret = match rt.block_on(client.read_secret(GITHUB_TOKEN_PATH)) {
+            Ok(s) => s,
+            Err(_) => return Ok(None),
+        };
+        let token = match secret["token"].as_str() {
+            Some(t) if !t.is_empty() => t.to_string(),
+            _ => return Ok(None),
+        };
+        // An absent refresh record is a legitimate state (a token-only login);
+        // a read error is not the same thing and is reported as one.
+        let refresh = rt.block_on(client.read_secret(GITHUB_REFRESH_PATH)).ok();
+        let refresh_token = refresh
+            .as_ref()
+            .and_then(|r| r["refresh_token"].as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        Ok(Some(GitHubTokenBundle {
+            token,
+            refresh_token,
+            expires_at: secret["expires_at"].as_u64(),
+            refresh_token_expires_at: refresh
+                .as_ref()
+                .and_then(|r| r["refresh_token_expires_at"].as_u64()),
+            client_id: secret["client_id"].as_str().map(|s| s.to_string()),
+        }))
+    }
+
+    fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+        let debug = self.debug;
+        if !container_running(VAULT_CONTAINER_NAME) {
+            ensure_vault_running(debug)
+                .map_err(|e| format!("could not bring Vault up to store {path}: {e}"))?;
+        }
+        let _stability = vault_stability_lease(debug)?;
+        let rt = tokio_runtime()?;
+        let base_url = vault_api_base_url();
+        let root_token = read_and_handover_root_token(debug)?;
+        let client = vault_client(&base_url, &root_token, debug)?;
+        rt.block_on(client.write_secret(path, value.clone()))
+            .map_err(|e| format!("vault write of {path} failed: {e}"))?;
+        // Read back and compare, without echoing either side into the error.
+        let read_back = rt
+            .block_on(client.read_secret(path))
+            .map_err(|e| format!("vault read-back of {path} failed: {e}"))?;
+        if read_back != value {
+            return Err(format!(
+                "vault read-back of {path} did not match what was written"
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GitHubRefreshResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub expires_in: u64,
+    pub refresh_token_expires_in: u64,
+}
+
+/// Parse GitHub's refresh response WITHOUT ever putting the body in an error.
+///
+/// Order 1383-5hpk: the first version formatted the whole body into
+/// "missing refresh_token in refresh response: {body}". When GitHub returns a
+/// new access token but no refresh token, that body CONTAINS the fresh access
+/// token, and the error was printed. Errors here name the missing field, and
+/// GitHub's `error` code only after checking it is a plain identifier, never
+/// `error_description` or any other body text.
+pub fn parse_github_refresh_response(
+    body: &serde_json::Value,
+) -> Result<GitHubRefreshResponse, String> {
+    if let Some(err) = body.get("error").and_then(|e| e.as_str()) {
+        let code = if !err.is_empty()
+            && err.len() <= 64
+            && err.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
+        {
+            err
+        } else {
+            "unrecognised-error-code"
+        };
+        return Err(format!("GitHub refused the token refresh ({code})"));
+    }
+    let access_token = body["access_token"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or("GitHub's refresh response has no access_token")?
+        .to_string();
+    let refresh_token = body["refresh_token"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or("GitHub's refresh response has no refresh_token")?
+        .to_string();
+    Ok(GitHubRefreshResponse {
+        access_token,
+        refresh_token,
+        expires_in: body["expires_in"].as_u64().unwrap_or(28800),
+        refresh_token_expires_in: body["refresh_token_expires_in"]
+            .as_u64()
+            .unwrap_or(15_811_200),
+    })
+}
+
+pub fn perform_github_token_refresh(
+    client_id: &str,
+    refresh_token: &str,
+    debug: bool,
+) -> Result<GitHubRefreshResponse, String> {
+    let rt = tokio_runtime()?;
+    rt.block_on(async {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| format!("failed to build HTTP client for token refresh: {e}"))?;
+        if debug {
+            eprintln!(
+                "[tillandsias] POST https://github.com/login/oauth/access_token (grant_type=refresh_token)"
+            );
+        }
+        let res = client
+            .post("https://github.com/login/oauth/access_token")
+            .header(reqwest::header::ACCEPT, "application/json")
+            .form(&[
+                ("client_id", client_id),
+                ("grant_type", "refresh_token"),
+                ("refresh_token", refresh_token),
+            ])
+            .send()
+            .await
+            .map_err(|e| format!("token refresh HTTP request failed: {e}"))?;
+        if !res.status().is_success() {
+            return Err(format!(
+                "token refresh request failed with HTTP {}",
+                res.status()
+            ));
+        }
+        // A parse failure names the failure, never the bytes it failed on.
+        let body: serde_json::Value = res
+            .json()
+            .await
+            .map_err(|_| "GitHub's refresh response is not valid JSON".to_string())?;
+        parse_github_refresh_response(&body)
+    })
+}
+
+/// What a rotation did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RotationOutcome {
+    Rotated,
+    /// There is a stored token but no refresh token: nothing can be rotated.
+    /// Callers must treat this as a NON-ZERO verdict (order 1383-5hpk): a
+    /// "refresh" that could not refresh anything did not succeed.
+    NoRefreshToken,
+    /// There is no GitHub credential in Vault at all.
+    NoToken,
+}
+
+/// Rotate the GitHub App token: read, refresh, then STORE, and only then
+/// return the new pair to anyone.
+///
+/// The new pair is written to Vault before this function hands it out, so
+/// nothing can use a token that Vault does not hold. The caller holds the
+/// exclusive rotation lock (see [`refresh_github_token_in_vault`]); two
+/// unserialised rotations would both spend the same single-use refresh token,
+/// and the loser's write could replace the winner's live pair with a dead one.
+pub fn rotate_github_token(
+    store: &dyn GitHubTokenStore,
+    refresh: &dyn Fn(&str, &str) -> Result<GitHubRefreshResponse, String>,
+    now: u64,
+) -> Result<(RotationOutcome, Option<GitHubTokenBundle>), String> {
+    let Some(bundle) = store.read_bundle()? else {
+        return Ok((RotationOutcome::NoToken, None));
+    };
+    let Some(old_refresh) = bundle.refresh_token.as_deref().filter(|s| !s.is_empty()) else {
+        return Ok((RotationOutcome::NoRefreshToken, None));
+    };
+    let client_id = bundle
+        .client_id
+        .clone()
+        .unwrap_or_else(|| crate::GITHUB_APP_CLIENT_ID.to_string());
+    let resp = refresh(&client_id, old_refresh)?;
+    let rotated = GitHubTokenBundle {
+        token: resp.access_token,
+        refresh_token: Some(resp.refresh_token),
+        expires_at: Some(now + resp.expires_in),
+        refresh_token_expires_at: Some(now + resp.refresh_token_expires_in),
+        client_id: Some(client_id),
+    };
+    store_github_token_bundle(store, &rotated)?;
+    Ok((RotationOutcome::Rotated, Some(rotated)))
+}
+
+/// The lock every rotation takes: an exclusive advisory flock under the
+/// runtime dir (resource_lock), so a second tillandsias process that decides
+/// to refresh at the same moment waits and then sees the first one's result.
+pub const GITHUB_ROTATION_LOCK: &str = "github-token-rotation";
+
+/// [`rotate_github_token`] under the exclusive rotation lock. The lock is
+/// taken BEFORE the bundle is read, so a process that waited sees the winner's
+/// new refresh token rather than spending the dead one.
+pub fn rotate_github_token_locked(
+    lock_timeout: std::time::Duration,
+    store: &dyn GitHubTokenStore,
+    refresh: &dyn Fn(&str, &str) -> Result<GitHubRefreshResponse, String>,
+    now: u64,
+    debug: bool,
+) -> Result<(RotationOutcome, Option<GitHubTokenBundle>), String> {
+    let _lock = crate::resource_lock::acquire(GITHUB_ROTATION_LOCK, lock_timeout, debug)
+        .map_err(|e| format!("another GitHub token rotation holds the lock: {e}"))?;
+    rotate_github_token(store, refresh, now)
+}
+
+pub fn refresh_github_token_in_vault(debug: bool) -> Result<RotationOutcome, String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
+    let store = VaultGitHubTokenStore { debug };
+    let (outcome, _) = rotate_github_token_locked(
+        std::time::Duration::from_secs(60),
+        &store,
+        &|client_id, refresh_token| perform_github_token_refresh(client_id, refresh_token, debug),
+        now,
+        debug,
+    )?;
+    Ok(outcome)
+}
+
 /// In-container address of the Vault TLS listener. The Vault server listens on
 /// the container loopback at :8200; `podman exec` does NOT inherit the
 /// entrypoint's environment, so every exec'd `vault` CLI call must set this (and
@@ -1438,13 +1882,29 @@ fn has_shamir_share_in_keyring() -> bool {
 
     // Fallback: file (populated by keychain_set_blocking when keyring unavailable,
     // e.g. in a VM guest or headless environment without D-Bus)
-    if let Ok(cache_dir) = crate::init_cache_dir()
-        && let Ok(encoded) =
-            fs::read_to_string(cache_dir.join(format!("fallback_{}", VAULT_SHAMIR_SHARE_V1)))
-    {
-        return try_decode(encoded.trim());
+    if let Ok(cache_dir) = crate::init_cache_dir() {
+        return fallback_share_counts(&cache_dir);
     }
     false
+}
+
+/// The FALLBACK half of has_shamir_share_in_keyring: the whole predicate inside
+/// a guest, which has no keychain. Split out (1200-ih38 review) so a test can
+/// assert it hermetically: on a host whose own keyring holds a share, the full
+/// predicate is already true and a test through it proves nothing.
+#[cfg(feature = "vault")]
+fn fallback_share_counts(cache_dir: &Path) -> bool {
+    use base64::Engine;
+    fs::read_to_string(cache_dir.join(format!("fallback_{}", VAULT_SHAMIR_SHARE_V1)))
+        .map(|encoded| {
+            let encoded = encoded.trim();
+            !encoded.is_empty()
+                && base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .map(|v| v.len() == 32)
+                    .unwrap_or(false)
+        })
+        .unwrap_or(false)
 }
 
 /// UNREACHABLE BY CONSTRUCTION — and this comment is the point (701-iu9b).
@@ -4775,6 +5235,229 @@ pub async fn ensure_mirror_identity_provisioned(
 mod tests {
     use super::*;
 
+    // ---- 1383-5hpk: GitHub App token rotation ------------------------------
+
+    /// A fake Vault: records every write in order, can fail a chosen path.
+    struct FakeStore {
+        records: std::cell::RefCell<std::collections::BTreeMap<String, serde_json::Value>>,
+        writes: std::cell::RefCell<Vec<String>>,
+        fail_path: Option<&'static str>,
+    }
+
+    impl FakeStore {
+        fn with_bundle(b: &GitHubTokenBundle, fail_path: Option<&'static str>) -> Self {
+            let mut m = std::collections::BTreeMap::new();
+            m.insert(GITHUB_TOKEN_PATH.to_string(), github_token_record(b));
+            if let Some(r) = github_refresh_record(b) {
+                m.insert(GITHUB_REFRESH_PATH.to_string(), r);
+            }
+            Self {
+                records: std::cell::RefCell::new(m),
+                writes: std::cell::RefCell::new(Vec::new()),
+                fail_path,
+            }
+        }
+        fn snapshot(&self) -> std::collections::BTreeMap<String, serde_json::Value> {
+            self.records.borrow().clone()
+        }
+    }
+
+    impl GitHubTokenStore for FakeStore {
+        fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String> {
+            let m = self.records.borrow();
+            let Some(t) = m.get(GITHUB_TOKEN_PATH) else {
+                return Ok(None);
+            };
+            let r = m.get(GITHUB_REFRESH_PATH);
+            Ok(Some(GitHubTokenBundle {
+                token: t["token"].as_str().unwrap_or_default().to_string(),
+                refresh_token: r
+                    .and_then(|r| r["refresh_token"].as_str())
+                    .map(String::from),
+                expires_at: t["expires_at"].as_u64(),
+                refresh_token_expires_at: r.and_then(|r| r["refresh_token_expires_at"].as_u64()),
+                client_id: t["client_id"].as_str().map(String::from),
+            }))
+        }
+        fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+            self.writes.borrow_mut().push(path.to_string());
+            if self.fail_path == Some(path) {
+                return Err("simulated vault write failure".into());
+            }
+            self.records.borrow_mut().insert(path.to_string(), value);
+            Ok(())
+        }
+    }
+
+    fn old_bundle() -> GitHubTokenBundle {
+        GitHubTokenBundle {
+            token: "ghu_OLDACCESS".into(),
+            refresh_token: Some("ghr_OLDREFRESH".into()),
+            expires_at: Some(100),
+            refresh_token_expires_at: Some(1_000_000),
+            client_id: Some("Iv23liddVkg9ME6OB1K1".into()),
+        }
+    }
+
+    fn good_refresh(_: &str, old: &str) -> Result<GitHubRefreshResponse, String> {
+        assert_eq!(
+            old, "ghr_OLDREFRESH",
+            "the rotation must spend the stored refresh token"
+        );
+        Ok(GitHubRefreshResponse {
+            access_token: "ghu_NEWACCESS".into(),
+            refresh_token: "ghr_NEWREFRESH".into(),
+            expires_in: 28800,
+            refresh_token_expires_in: 15_811_200,
+        })
+    }
+
+    /// Criterion 4: the new pair is in Vault BEFORE rotation hands it out, the
+    /// refresh record (single-use) first, then the token record.
+    #[test]
+    fn rotation_stores_the_refresh_record_first_then_the_token() {
+        let store = FakeStore::with_bundle(&old_bundle(), None);
+        let (outcome, rotated) = rotate_github_token(&store, &good_refresh, 1000).unwrap();
+        assert_eq!(outcome, RotationOutcome::Rotated);
+        assert_eq!(
+            *store.writes.borrow(),
+            vec![
+                GITHUB_REFRESH_PATH.to_string(),
+                GITHUB_TOKEN_PATH.to_string()
+            ]
+        );
+        let stored = store.read_bundle().unwrap().unwrap();
+        assert_eq!(
+            Some(stored),
+            rotated,
+            "what rotation returns is exactly what Vault holds"
+        );
+        assert_eq!(
+            store.snapshot()[GITHUB_TOKEN_PATH]["expires_at"],
+            1000 + 28800
+        );
+    }
+
+    /// Criterion 4: a failed write of the refresh record leaves the OLD bundle
+    /// intact and never attempts the token write.
+    #[test]
+    fn a_failed_refresh_write_keeps_the_old_bundle_intact() {
+        let store = FakeStore::with_bundle(&old_bundle(), Some(GITHUB_REFRESH_PATH));
+        let before = store.snapshot();
+        let err = rotate_github_token(&store, &good_refresh, 1000).unwrap_err();
+        assert!(err.contains("refresh token"), "{err}");
+        assert_eq!(
+            store.snapshot(),
+            before,
+            "no record may change on a failed rotation"
+        );
+        assert_eq!(
+            *store.writes.borrow(),
+            vec![GITHUB_REFRESH_PATH.to_string()]
+        );
+        assert!(
+            !err.contains("ghr_") && !err.contains("ghu_"),
+            "no token in the error: {err}"
+        );
+    }
+
+    /// Criterion 4: the rotation runs under an exclusive lock. While another
+    /// holder has it, a rotation refuses and never calls GitHub.
+    #[cfg(unix)]
+    #[test]
+    fn rotation_refuses_while_another_holds_the_rotation_lock() {
+        let _held = crate::resource_lock::acquire(
+            GITHUB_ROTATION_LOCK,
+            std::time::Duration::from_secs(5),
+            false,
+        )
+        .expect("test must be able to take the lock");
+        let store = FakeStore::with_bundle(&old_bundle(), None);
+        let called = std::cell::Cell::new(false);
+        let refresh = |c: &str, r: &str| {
+            called.set(true);
+            good_refresh(c, r)
+        };
+        let err = rotate_github_token_locked(
+            std::time::Duration::from_millis(300),
+            &store,
+            &refresh,
+            1000,
+            false,
+        )
+        .unwrap_err();
+        assert!(err.contains("lock"), "{err}");
+        assert!(!called.get(), "GitHub must not be called without the lock");
+        assert!(store.writes.borrow().is_empty());
+    }
+
+    /// A missing refresh token is its own outcome (the CLI maps it to a
+    /// non-zero exit), and GitHub is never called.
+    #[test]
+    fn no_refresh_token_is_reported_and_github_is_not_called() {
+        let mut b = old_bundle();
+        b.refresh_token = None;
+        let store = FakeStore::with_bundle(&b, None);
+        let refresh = |_: &str, _: &str| -> Result<GitHubRefreshResponse, String> {
+            panic!("must not refresh without a refresh token")
+        };
+        let (outcome, _) = rotate_github_token(&store, &refresh, 1000).unwrap();
+        assert_eq!(outcome, RotationOutcome::NoRefreshToken);
+        assert!(store.writes.borrow().is_empty());
+    }
+
+    /// Criterion 2: a response with a fresh access token but no refresh token
+    /// produces an error with NO substring of the body. The old code formatted
+    /// the whole body, fresh token included, into the printed error.
+    #[test]
+    fn a_refresh_response_error_never_contains_the_body() {
+        let body = serde_json::json!({
+            "access_token": "ghu_FAKEFRESHTOKEN0123456789",
+            "expires_in": 28800,
+            "token_type": "bearer"
+        });
+        let err = parse_github_refresh_response(&body).unwrap_err();
+        assert!(!err.contains("ghu_"), "error leaks the token: {err}");
+        assert!(
+            !err.contains("bearer") && !err.contains("28800"),
+            "error quotes the body: {err}"
+        );
+        assert!(
+            err.contains("refresh_token"),
+            "error names the missing field: {err}"
+        );
+
+        let refused = serde_json::json!({
+            "error": "bad_refresh_token",
+            "error_description": "The refresh token passed is incorrect or expired. ghu_SNEAKY"
+        });
+        let err = parse_github_refresh_response(&refused).unwrap_err();
+        assert!(err.contains("bad_refresh_token"));
+        assert!(!err.contains("ghu_") && !err.contains("incorrect"), "{err}");
+
+        let hostile = serde_json::json!({ "error": "ghu_TOKEN_IN_THE_CODE_FIELD" });
+        let err = parse_github_refresh_response(&hostile).unwrap_err();
+        assert!(
+            !err.contains("ghu_"),
+            "an error code that is not an identifier is not echoed: {err}"
+        );
+    }
+
+    /// Criterion 7, the other half: the token record the git-mirror service can
+    /// read never carries the refresh token.
+    #[test]
+    fn the_token_record_never_carries_the_refresh_token() {
+        let rec = github_token_record(&old_bundle());
+        assert!(rec.get("refresh_token").is_none());
+        assert!(!rec.to_string().contains("ghr_"));
+        assert!(
+            github_refresh_record(&old_bundle())
+                .unwrap()
+                .to_string()
+                .contains("ghr_")
+        );
+    }
+
     /// 1371-a7w2: an already-absent keychain entry is CLEARED, not failed.
     /// The old text match missed keyring's "No matching entry found in secure
     /// storage", so --reset-state refused on every clean host.
@@ -5018,6 +5701,160 @@ mod tests {
     /// 701-se6x. The HOST-DELIVERED share must be persisted too, not just the
     /// host-delivered root token.
     ///
+    /// A well-formed 32-byte share (bytes 1..=32), for tests that must deliver one.
+    const VALID_TEST_SHARE_B64: &str = "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=";
+
+    // ---- order 1200-ih38: validate a delivered share before persisting it ----
+
+    #[test]
+    fn delivered_share_check_decides_every_branch() {
+        let own: Vec<u8> = (1..=32).collect();
+        let other: Vec<u8> = (2..=33).collect();
+        assert_eq!(
+            check_delivered_share(None, Some(&own)),
+            DeliveredShareCheck::NoShare
+        );
+        assert_eq!(
+            check_delivered_share(Some("  "), Some(&own)),
+            DeliveredShareCheck::NoShare
+        );
+        assert!(matches!(
+            check_delivered_share(Some("not base64!!"), None),
+            DeliveredShareCheck::Malformed(_)
+        ));
+        assert!(matches!(
+            check_delivered_share(Some("ZGVsaXZlcmVk"), None),
+            DeliveredShareCheck::Malformed(ref w) if w.contains("9 bytes")
+        ));
+        assert_eq!(
+            check_delivered_share(Some(VALID_TEST_SHARE_B64), Some(&own)),
+            DeliveredShareCheck::MatchesOwnSecret
+        );
+        assert_eq!(
+            check_delivered_share(Some(VALID_TEST_SHARE_B64), Some(&other)),
+            DeliveredShareCheck::DiffersFromOwnSecret
+        );
+        assert_eq!(
+            check_delivered_share(Some(VALID_TEST_SHARE_B64), None),
+            DeliveredShareCheck::Unverifiable
+        );
+    }
+
+    /// Runs `set_in_vm_credentials` against a scratch cache with the given own
+    /// secret, and returns (outcome, whether the share file was written).
+    fn deliver_with_own_secret(
+        share: &str,
+        own: Option<Vec<u8>>,
+        tag: u32,
+    ) -> (DeliverCredentialsOutcome, bool) {
+        let _serialized = ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
+        let cache_root =
+            std::env::temp_dir().join(format!("tillandsias-1200-{}-{}", std::process::id(), tag));
+        let _ = std::fs::remove_dir_all(&cache_root);
+        std::fs::create_dir_all(&cache_root).expect("temp cache root");
+        // SAFETY: env mutation is serialized by ENV_LOCK for the whole call.
+        unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
+        TEST_OWN_UNSEAL_SECRET.with(|s| *s.borrow_mut() = own);
+        let outcome = set_in_vm_credentials(
+            Some(share.to_string()),
+            "test-installation".to_string(),
+            Some("s.token".to_string()),
+        );
+        let written = cache_root
+            .join("tillandsias")
+            .join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
+            .is_file();
+        TEST_OWN_UNSEAL_SECRET.with(|s| *s.borrow_mut() = None);
+        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+        let _ = std::fs::remove_dir_all(&cache_root);
+        (outcome, written)
+    }
+
+    /// 1200-ih38 REVIEW (data-loss path). A share that differs from the own
+    /// secret must still be STORED: the guest's wipe predicate counts only the
+    /// fallback share file, so refusing to write it made a guest with a missing
+    /// share file WIPE vault-data on its next launch; in the 2026-08-17 shape a
+    /// healthy vault. PRE-FIX RESULT (756e30a90): FAILS: Rejected, not written,
+    /// predicate false.
+    #[test]
+    fn a_mismatched_share_keeps_the_wipe_predicate_true() {
+        let _serialized = ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
+        let cache_root = std::env::temp_dir().join(format!(
+            "tillandsias-1200-wipe-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = std::fs::remove_dir_all(&cache_root);
+        std::fs::create_dir_all(&cache_root).expect("temp cache root");
+        // SAFETY: env mutation is serialized by ENV_LOCK for the whole test.
+        unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
+        // The GUEST's predicate is the fallback half alone (no keychain in a
+        // guest); asserting through the full predicate was vacuous on a host
+        // whose own keyring holds a share. PREMISE: no share file yet.
+        let dir = cache_root.join("tillandsias");
+        let before = fallback_share_counts(&dir);
+        TEST_OWN_UNSEAL_SECRET.with(|s| *s.borrow_mut() = Some((2..=33).collect()));
+        let outcome = set_in_vm_credentials(
+            Some(VALID_TEST_SHARE_B64.to_string()),
+            "test-installation".to_string(),
+            Some("s.token".to_string()),
+        );
+        let after = fallback_share_counts(&dir);
+        TEST_OWN_UNSEAL_SECRET.with(|s| *s.borrow_mut() = None);
+        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+        let _ = std::fs::remove_dir_all(&cache_root);
+        assert!(
+            !before,
+            "premise: the wipe predicate was already true; this test proves nothing here"
+        );
+        assert_eq!(outcome, DeliverCredentialsOutcome::Accepted);
+        assert!(
+            after,
+            "a mismatched share must not re-arm the vault-data wipe"
+        );
+    }
+
+    /// A MALFORMED share is refused, and that opens no wipe path: the predicate
+    /// only counts a file decoding to exactly 32 bytes, so a malformed share
+    /// never kept a vault alive.
+    #[test]
+    fn a_malformed_rejection_leaves_the_wipe_predicate_as_it_was() {
+        let (outcome, written) = deliver_with_own_secret("ZGVsaXZlcmVk", None, line!());
+        assert!(matches!(
+            outcome,
+            DeliverCredentialsOutcome::Rejected { .. }
+        ));
+        assert!(!written);
+    }
+
+    #[test]
+    fn a_malformed_share_is_rejected_and_not_stored() {
+        let own: Vec<u8> = (1..=32).collect();
+        let (outcome, written) = deliver_with_own_secret("ZGVsaXZlcmVk", Some(own), line!());
+        match outcome {
+            DeliverCredentialsOutcome::Rejected { reason } => {
+                assert!(reason.contains("malformed"), "{reason}")
+            }
+            other => panic!("expected Rejected, got {other:?}"),
+        }
+        assert!(!written);
+    }
+
+    /// NEGATIVE CONTROL: a share that matches the own secret is still Accepted
+    /// and persisted, and with NO readable own secret a well-formed share is
+    /// accepted unverified — never a rejection manufactured out of an absent
+    /// check (888-miiy's class).
+    #[test]
+    fn a_matching_share_and_an_unverifiable_share_are_accepted_and_stored() {
+        let own: Vec<u8> = (1..=32).collect();
+        let (m, mw) = deliver_with_own_secret(VALID_TEST_SHARE_B64, Some(own), line!());
+        assert_eq!(m, DeliverCredentialsOutcome::Accepted);
+        assert!(mw);
+        let (u, uw) = deliver_with_own_secret(VALID_TEST_SHARE_B64, None, line!());
+        assert_eq!(u, DeliverCredentialsOutcome::Accepted);
+        assert!(uw);
+    }
+
     /// `set_in_vm_credentials` is the tray's delivery path into a running guest.
     /// It wrote `fallback_vault-root-token-v1` and dropped the share — the exact
     /// asymmetry 694-mhz8 fixed at the fresh-init site, surviving at this one.
@@ -5046,7 +5883,9 @@ mod tests {
         unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
 
         set_in_vm_credentials(
-            Some("ZGVsaXZlcmVk".to_string()),
+            // 1200-ih38: a delivered share must now be a well-formed 32-byte
+            // key, so the placeholder ("delivered", 9 bytes) became one.
+            Some(VALID_TEST_SHARE_B64.to_string()),
             "test-installation".to_string(),
             Some("s.delivered-token".to_string()),
         );
@@ -5067,7 +5906,7 @@ mod tests {
             std::fs::read_to_string(&share)
                 .expect("share readable")
                 .trim(),
-            "ZGVsaXZlcmVk",
+            VALID_TEST_SHARE_B64,
             "a corrupted share cannot unseal, so it must round-trip verbatim"
         );
 

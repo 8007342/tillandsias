@@ -7,6 +7,7 @@ pub mod cache_validation;
 pub mod config;
 pub mod container_profile;
 pub mod event;
+pub mod forge_budget;
 pub mod format;
 pub mod genus;
 /// Order 1019-ivia: where the host stages the guest binary. Declared once so

@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-lua-runtime-encodes-keys-in-a-different-order-every-process-and-exposes-os-setlocale-so-a-sorted-encoder-a-sorted-pairs-and-a-withheld-setlocale-make-one-script-one-byte-stream
+    event:
+      type: note
+      ts: "2026-09-26T05:35:06Z"
+      host: yoga
+      summary: |
+        WHY scripts/test-lua-determinism.sh LOOKS THE WAY IT DOES (work/1384-bp6t d0deb12db).
+        Two arms as first written could not fail, and each is now shaped by that:
+        (1) VACUOUS IDENTITY. The criterion runs the fixture with --class cacheable, and the
+            Cacheable class has no print (1367-upz6). My first three runs errored, printed
+            nothing, and compared EQUAL (cksum 4294967295 0, three times). Remedies: the lua CLI
+            prints a chunk's RETURN values (the pure class's output channel, no print added to
+            the allow-list; a script returning nothing prints nothing, as before), and arm 1
+            splits a PREMISE (a non-empty encoded object) from IDENTITY (three processes, same
+            bytes) and ORDER (keys in byte order in json.encode and pairs), so a failure names
+            which one broke.
+        (2) A LOCALE ARM THAT CANNOT FAIL. The Rust binary never calls setlocale, so a bare
+            string.format("%.2f", 3.5) under LC_ALL=fr_FR reads 3.50 PRE-fix too. The arm now
+            ATTEMPTS the attack, calling os.setlocale("") if the function exists and then
+            formatting. Pre-fix that gives "3,50 3,5"; post-fix os.setlocale is nil and it gives
+            "3.50 nil".
+        CONTROL: a mutant build with determinism() and canonical() disabled (premise: 0 call
+        sites of each) failed every arm, including "3,50 3,5". Restored, 5/5 on yoga
+        (fr_FR.utf8 installed).

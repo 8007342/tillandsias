@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: centicolon-extractor-is-a-cacheable-lua-predicate-over-spec-scenarios-so-the-obligation-denominator-is-a-pure-function-of-repo-bytes
+    event:
+      type: finding
+      ts: "2026-09-26T10:39:06Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t103906z
+      host: macuahuitl-forge
+      summary: |
+        CONFIRMED unkeyed=0 on linux-next after 1396-35we (merged at 5cbcf7dc7; measured by macuahuitl-forge 2026-09-26 on work/1395-88tp 3bb99e9a0). 1396-35we kept the NUMBERED heading (`### Requirement <n>: …`) and added the req-id line under it, which the extractor at ca7dda583 still counted as unkeyed. The extractor now counts a numbered heading whose next line is a req-id (new fixture arm; ok:centicolon-extract:11). Corpus: obligations=1409 requirements=639 specs=106 invariants=125 excluded deprecated=3,obsolete=32 unregistered=38 missing=0 unkeyed=0 population=argument. First ratchet reading across that change: added=64 retired=2 (update-system, registry tombstone) lost=0.

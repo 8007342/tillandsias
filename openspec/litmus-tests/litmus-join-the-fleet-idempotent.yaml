@@ -25,9 +25,9 @@ critical_path:
     expected_behavior: "ok:join-the-fleet-scripts-parse"
     assert_exit: 0
     timeout_ms: 5000
-  - step: "the fixture's six arms hold"
-    command: "bash scripts/test-join-the-fleet-idempotent.sh 2>&1 | grep -E '^ok:join-the-fleet-idempotent:6/6$'"
-    expected_behavior: "ok:join-the-fleet-idempotent:6/6"
+  - step: "the fixture's eight arms hold (arms 7-8: core.hooksPath, 1255-s4im)"
+    command: "bash scripts/test-join-the-fleet-idempotent.sh 2>&1 | grep -E '^ok:join-the-fleet-idempotent:8/8$'"
+    expected_behavior: "ok:join-the-fleet-idempotent:8/8"
     assert_exit: 0
     assert_output_nonempty: true
     timeout_ms: 120000

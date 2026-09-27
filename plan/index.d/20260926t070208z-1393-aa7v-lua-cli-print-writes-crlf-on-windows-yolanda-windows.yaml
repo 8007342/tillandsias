@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-tillandsias-plan-lua-cli-writes-crlf-through-print-on-native-windows-so-two-lua-std-tests-fail-there-and-a-script-output-is-not-byte-stable-across-platforms
+    order: 1393-aa7v
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [lua, windows, determinism, tests]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+      - crates/tillandsias-plan/tests/lua_std.rs
+    title: |
+      `tillandsias-plan lua` prints through C stdio in text mode on native Windows, so `print` ends lines with CRLF; two lua_std tests fail there, and a script's stdout is not the same bytes on every platform
+    context: |
+      MEASURED on yolanda-windows 2026-09-26, native Windows, on trunk's
+      tests (unchanged by 1380-u7sq):
+        the_lua_cli_is_sandboxed_by_default
+          left:  "nil\ttrue\r\n"   right: "nil\ttrue\n"
+        the_lua_cli_unsandboxed_opt_in_keeps_the_raw_vm
+          left:  "function\tnil\r\n"   right: "function\tnil\n"
+      The tests are right to expect LF. The design's determinism rules
+      (1384-bp6t, "one script, one byte stream") and its `out.line` (LF, the
+      only stdout writer) say a verdict line must not depend on the platform.
+      Normalising in the TEST would hide exactly that. The preferred fix is to
+      make the CLI's stdout byte-stable (binary-mode stdout, or print/io.write
+      routed through a Rust writer that emits LF); normalising in the test is
+      the fallback, and only if the CLI's CRLF is ruled intended.
+    exit_criteria:
+      - 'both tests pass natively on Windows and on Linux (pre-fix: both fail natively on Windows with a trailing \r)'
+      - 'the fix is in the CLI output path, OR a written ruling says CRLF on Windows is intended and the tests normalise; not a silent test-side strip'
+      - 'a script that prints a verdict line produces identical bytes on Linux and native Windows'
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test lua_std the_lua_cli, green natively
+      on Windows and on Linux. Pre-fix result: FAILS natively on Windows,
+      both tests, a trailing \r (yolanda-windows, 2026-09-26).
+    events:
+      - type: filed
+        ts: "2026-09-26T07:02:08Z"
+        agent_id: windows-yolanda-claude-20260926t070208z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request; found while running 1380-u7sq's
+          tests natively. Ties into 1384-bp6t's determinism contract.

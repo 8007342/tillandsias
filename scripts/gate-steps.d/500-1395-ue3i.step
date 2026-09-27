@@ -1,0 +1,10 @@
+# Gate step 1395-ue3i — the ADVISORY CentiColon R line: added is scope, retired
+# needs a tombstone trail, only lost (vanished unrecorded or a state moving
+# down) warns; blocked never reads as R=0; always exit 0.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the advisory CentiColon R line: added / retired / lost (1395-ue3i)"
+STEP_SCRIPT="scripts/test-centicolon-ratchet.sh"
+STEP_ERROR="the CentiColon R line misclassified added/retired/lost, or refused (1395-ue3i) — see the verdict line above"
+STEP_OK="CentiColon advisory R line holds"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:centicolon-ratchet:9"

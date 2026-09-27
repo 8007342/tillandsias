@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-forge-mount-carries-a-class-hot-quarantine-warm-ro-cold-and-the-swap-allowance-is-derived-from-hot-caps-only
+    event:
+      type: finding
+      ts: "2026-09-26T06:20:35Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t062035z
+      host: macuahuitl-forge
+      summary: |
+        CORRECTION to macuahuitl-forge's 2026-09-26T05:47Z event: the /home/forge/src tmpfs caps the WHOLE git object store, not just the checkout. Measured on macuahuitl-forge 2026-09-26 ~06:30Z: 256M tmpfs at 100% (256M used, 896K free). Breakdown: .git 174M (size-pack 164.26 MiB, 118,275 objects in 2 packs), working tree 82M. Worktrees placed on the overlay (/home/forge/w-*, 387G free) STILL write their index, refs and every new object into the main repo's .git on the tmpfs (.git/worktrees/<name>/index ~1.1-2.6M each, plus fetched packs), so moving the worktree off the tmpfs does not escape the cap. At 100%, `git stash` in an overlay worktree failed: "fatal: sha1 file '/home/forge/src/tillandsias/.git/worktrees/w-1388/index.lock' write error. Out of diskspace". Recovered 4.6M only by removing two finished worktrees. Implication for the memory design: size the tmpfs for the object store plus growth (fetches, worktree indexes, commits), or put .git (or objects/, via alternates) on the overlay and keep only the hot checkout in RAM.

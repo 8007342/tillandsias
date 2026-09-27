@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: every-installer-ends-with-a-big-pending-actions-banner-on-its-own-terminal-linux-prints-the-one-time-sudo-swap-service-command-windows-prints-restart-required-when-wsl-was-just-enabled-macos-prints-what-is-pending-or-none
+    order: 1380-zmpi
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [install, installer, user-experience, linux, windows, macos, swap, operator-visible]
+    estimated_hours: 4
+    owned_files:
+      - scripts/install.sh
+      - scripts/install-windows.ps1
+      - scripts/install-macos.sh
+      - scripts/test-installer-pending-banner.sh
+    observed_by: macuahuitl
+    title: |
+      every curl/irm installer ends with a big PENDING ACTIONS banner on its own terminal: Linux prints the exact one-time sudo command that installs the per-launch swap service, Windows prints RESTART REQUIRED when WSL was just enabled (the installer's reboot-pending state), macOS prints what is pending or "nothing pending" — operator direction 2026-09-26
+    verifiable_closure: |
+      bash scripts/test-installer-pending-banner.sh prints ok:installer-pending-banner:<n> arms:
+      the Linux banner function of scripts/install.sh, run with a fixture host state
+      "swap service absent", prints a block whose last lines contain "PENDING" and the
+      literal sudo command naming tillandsias-swap (and prints "PENDING: none" when the
+      unit is installed); scripts/install-windows.ps1's banner, run under pwsh when
+      present and otherwise checked by a grep arm, prints "RESTART REQUIRED" for the
+      reboot-pending state and nothing pending otherwise; scripts/install-macos.sh's
+      banner prints "PENDING: none" on a provisioned host. Each banner is the LAST
+      output of its installer, after the "launch the tray" line.
+      Pre-fix result: FAILS: the test does not exist; scripts/install.sh ends with
+      "Reset and reprovision complete. Launch the tray with:" and prints no pending
+      block; scripts/install-windows.ps1 prints "NEXT: 1) restart Windows" inside the
+      WSL branch mid-run and only a one-line "Reminder:" at the end; install-macos.sh
+      prints "Tray started" and nothing about pending steps.
+    context: |
+      OPERATOR DIRECTION 2026-09-26 (decision event on 1376-8zdz): "Print the command
+      at the end of a curl/irm install, on that terminal, print some big text with
+      what's pending, like a restart for windows hosts where WSL was just enabled.
+      Linux hosts should just print that sudo command." The Linux command installs
+      the root-owned tillandsias-swap@.service, helper, polkit rule and gc timer
+      (1376-8zdz); it is one-time per host, and the swapfile itself is created by
+      that service at every forge launch and deleted at stop, so a user never runs
+      sudo again for swap. Windows: install-windows.ps1 already classifies the
+      reboot-pending state (VirtualMachinePlatform enabled, DISM 3010) and sets
+      NoLaunchReason; the banner restates it in big text at the very end. macOS:
+      nothing is pending today after install-macos.sh (provisioning runs on first
+      launch), so the banner says so rather than staying silent, because silence
+      and "nothing pending" print the same bytes. The 1286-4437 install-is-repair
+      row is completed, so this is a new row rather than an event there.
+      Any host can land the Linux and test halves; the Windows arm is best proven on
+      yolanda and the macOS arm on tlatoanis-macbook-air.

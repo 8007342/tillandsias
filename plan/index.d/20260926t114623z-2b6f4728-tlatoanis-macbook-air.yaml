@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-tray-github-login-waits-for-a-token-paste-prompt-the-device-flow-never-prints-so-login-hangs-and-the-qr-is-never-shown
+    event:
+      type: progress
+      ts: "2026-09-26T11:46:23Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t114623z
+      host: tlatoanis-macbook-air
+      summary: |
+        CODE LANDED: work/1383-dkxi (18ae18ae5) is on origin/linux-next via relay commit ef7ab87a6 ("relay: land work/1383-dkxi"), verified by merge-base --is-ancestor on both, and trunk's diagnose.rs carries exec_over_stream_expect_dynamic_with_output. The row stays in_progress for its LIVE arm: one real tray --github-login on a Mac whose guest runs a headless carrying 3a2b01d9e and 1383-5hpk. That is the operator's to drive; no login was attempted against the fleet token.

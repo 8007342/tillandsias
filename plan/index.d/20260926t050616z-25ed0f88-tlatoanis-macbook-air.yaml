@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-tray-github-login-waits-for-a-token-paste-prompt-the-device-flow-never-prints-so-login-hangs-and-the-qr-is-never-shown
+    event:
+      type: progress
+      ts: "2026-09-26T05:06:16Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t050616z
+      host: tlatoanis-macbook-air
+      summary: |
+        Fix on work/1383-dkxi (18ae18ae5), not landed. vm-layer gains exec_over_stream_expect_dynamic_with_output, a raw output sink; the existing function wraps it with a no-op sink. The macOS tray drops the "authentication token" expect (the device flow prints nothing to type), writes guest output to the terminal verbatim so the QR code and one-time code are visible, and stops echoing escaped previews on top. tests/github_login_expect_order.rs is rewritten to read the branch the guest takes (GitHub + Terminal -> run_github_device_login) instead of checking that the retired paste string exists somewhere. Against the pre-fix diagnose.rs, 2 of its 5 pins FAIL (host_waits_for_no_prompt_the_device_flow_never_prints, host_shows_the_guest_output_raw). vm-layer --all-features 180 passed / 4 ignored; macos-tray suites green; clippy -D warnings 0; zigbuild x86_64-linux-musl --tests Finished. OPEN: the live arm (one tray login against a guest headless carrying 3a2b01d9e and 1383-5hpk) is the operator's to drive, and no login was attempted against the shared fleet token.

@@ -1,7 +1,9 @@
 <!-- @trace spec:update-system -->
 ## Status
 
-status: active
+obsolete
+
+Reconciled 2026-09-26 (1397-eppt): the registry's obsolete is TRUE: the native crates carry only an unused UpdatesConfig (crates/tillandsias-core/src/config.rs) and no updater; "active" came from 2902b12f1, which generated spec files from code annotations. Registry tombstone: obsolete:src-tauri-deferred.
 
 ## Requirements
 

@@ -86,6 +86,10 @@ set +e
 # times each litmus phase; a timing failure must NEVER change local-ci's exit.
 . "$REPO_ROOT/scripts/timing-log.sh" 2>/dev/null || true
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+# 1242-4x53: re-run a failed check's failures once, same regime, and record
+# whether they REPRODUCED. Best-effort like the timing side-channel above.
+. "$REPO_ROOT/scripts/lib-rerun-failed-rust-tests.sh" 2>/dev/null || true
+command -v rerun_failed_rust_tests >/dev/null 2>&1 || rerun_failed_rust_tests() { return 0; }
 # 765-dfry: per-check duration anchor. Checks run sequentially and each ends
 # in archive_check_log, so "time since the previous archive (or section
 # start)" IS the check's own duration. Re-anchored by log_section and by
@@ -906,6 +910,8 @@ archive_check_log() {
     local status="$2"
     local source_log="${3:-}"
     local archive_name="${4:-${check_id}.log}"
+    # 1242-4x53: yes|no when a failed check was re-run once in the same regime.
+    local reproduced="${5:-}"
 
     mkdir -p "$CHECK_LOG_DIR"
     touch "$CHECK_LOG_INDEX"
@@ -959,7 +965,7 @@ archive_check_log() {
     if [[ "$status" != "skipped" && "$_acl_dur" -gt 0 ]]; then
         local _acl_rc=0
         [[ "$status" == "fail" ]] && _acl_rc=1
-        timing_emit "check:$check_id" "$CI_PHASE" "$((_acl_now - _acl_dur))" "$_acl_rc"
+        timing_emit "check:$check_id" "$CI_PHASE" "$((_acl_now - _acl_dur))" "$_acl_rc" "$reproduced"
     fi
 }
 
@@ -1081,6 +1087,57 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     else
         log_fail_missing_guard "spec-code-drift" "scripts/hooks/pre-commit-openspec.sh"
         archive_check_log "spec-code-drift" "skipped"
+    fi
+
+    # ============================================================================
+    log_section "CentiColon Grader (1395-88tp)"
+    if [[ -f "scripts/test-centicolon-grade.sh" ]]; then
+        if bash scripts/test-centicolon-grade.sh > /tmp/test-centicolon-grade.log 2>&1; then
+            log_pass "CentiColon Grader holds"
+            archive_check_log "centicolon-grade" "pass" /tmp/test-centicolon-grade.log
+        else
+            log_fail_tracked "centicolon-grade" "CentiColon grader miscredited an obligation (see /tmp/test-centicolon-grade.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/test-centicolon-grade.log >&2
+            archive_check_log "centicolon-grade" "fail" /tmp/test-centicolon-grade.log
+        fi
+    else
+        log_fail_missing_guard "centicolon-grade" "scripts/test-centicolon-grade.sh"
+    fi
+
+    # ============================================================================
+    log_section "CentiColon Advisory R Line (1395-ue3i)"
+    if [[ -f "scripts/test-centicolon-ratchet.sh" ]]; then
+        if bash scripts/test-centicolon-ratchet.sh > /tmp/test-centicolon-ratchet.log 2>&1; then
+            log_pass "CentiColon Advisory R Line holds"
+            archive_check_log "centicolon-ratchet" "pass" /tmp/test-centicolon-ratchet.log
+        else
+            log_fail_tracked "centicolon-ratchet" "CentiColon advisory R line misreported (see /tmp/test-centicolon-ratchet.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/test-centicolon-ratchet.log >&2
+            archive_check_log "centicolon-ratchet" "fail" /tmp/test-centicolon-ratchet.log
+        fi
+    else
+        log_fail_missing_guard "centicolon-ratchet" "scripts/test-centicolon-ratchet.sh"
+    fi
+
+    # ============================================================================
+    # 1132-r4mt: concurrent archiver --check runs must not break each other.
+    # ONE pair here, not in --check: a pair is two full archiver checks (386s
+    # measured on yoga, serialised by the answerability lock). The post-fix
+    # result is deterministic (6/6), so this is a real gate on the daily tier.
+    # ============================================================================
+    log_section "Archiver Concurrent Check (1132-r4mt)"
+    if [[ -f "scripts/test-archiver-concurrent-check.sh" ]]; then
+        if bash scripts/test-archiver-concurrent-check.sh 1 > /tmp/archiver-concurrent.log 2>&1; then
+            log_pass "Concurrent archiver --check runs share no scratch"
+            archive_check_log "archiver-concurrent-check" "pass" /tmp/archiver-concurrent.log
+        else
+            log_fail_tracked "archiver-concurrent-check" "Concurrent archiver --check runs broke each other (see /tmp/archiver-concurrent.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/archiver-concurrent.log >&2
+            archive_check_log "archiver-concurrent-check" "fail" /tmp/archiver-concurrent.log
+        fi
+    else
+        log_fail_missing_guard "archiver-concurrent-check" "scripts/test-archiver-concurrent-check.sh"
+        archive_check_log "archiver-concurrent-check" "skipped"
     fi
 
     # ============================================================================
@@ -1246,7 +1303,12 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     else
         log_fail_tracked "rust-tests" "Test failures detected: run 'cargo test --workspace --lib --no-fail-fast' to see details (see /tmp/test-check.log)"
         [[ "$VERBOSE" == "1" ]] && cat /tmp/test-check.log >&2
-        archive_check_log "rust-tests" "fail" /tmp/test-check.log
+        # 1242-4x53: did it fail AGAIN, same env and seat? Two reds in one
+        # release tier passed on re-run, and until now the record could not say.
+        _rust_reproduced="$(rerun_failed_rust_tests /tmp/test-check.log \
+            run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast)"
+        [[ -n "$_rust_reproduced" ]] && log_info "rust-tests failure reproduced on a same-regime re-run: $_rust_reproduced (1242-4x53)"
+        archive_check_log "rust-tests" "fail" /tmp/test-check.log "rust-tests.log" "$_rust_reproduced"
     fi
 
     # Tray + vsock-server feature contract
@@ -1630,6 +1692,37 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     else
         log_fail_missing_guard "must-ship-rows" "scripts/test-must-ship-rows.sh"
         archive_check_log "must-ship-rows" "skipped"
+    fi
+
+    # Order 1369-sjbc: the copy the release jobs upload to `unstable` defaults
+    # its installers to unstable; the versioned (later stable) copy does not.
+    # Wired in build.sh --check as well; hermetic, a few seconds.
+    if [[ -f "scripts/test-unstable-installer-defaults-to-unstable.sh" ]]; then
+        if bash scripts/test-unstable-installer-defaults-to-unstable.sh 2>&1 | tee /tmp/unstable-installer-default.log; then
+            log_pass "Unstable-channel installers default to unstable; stable copies do not"
+            archive_check_log "unstable-installer-default" "pass" /tmp/unstable-installer-default.log
+        else
+            log_fail_tracked "unstable-installer-default" "Unstable installer default regression (see /tmp/unstable-installer-default.log)"
+            archive_check_log "unstable-installer-default" "fail" /tmp/unstable-installer-default.log
+        fi
+    else
+        log_fail_missing_guard "unstable-installer-default" "scripts/test-unstable-installer-defaults-to-unstable.sh"
+        archive_check_log "unstable-installer-default" "skipped"
+    fi
+
+    # Order 1380-zmpi: every installer ends with a PENDING ACTIONS banner.
+    # Wired in build.sh --check as well; hermetic, a few seconds.
+    if [[ -f "scripts/test-installers-print-pending-banner.sh" ]]; then
+        if bash scripts/test-installers-print-pending-banner.sh 2>&1 | tee /tmp/pending-banner.log; then
+            log_pass "Installers end with a PENDING ACTIONS banner"
+            archive_check_log "pending-banner" "pass" /tmp/pending-banner.log
+        else
+            log_fail_tracked "pending-banner" "Pending-actions banner regression (see /tmp/pending-banner.log)"
+            archive_check_log "pending-banner" "fail" /tmp/pending-banner.log
+        fi
+    else
+        log_fail_missing_guard "pending-banner" "scripts/test-installers-print-pending-banner.sh"
+        archive_check_log "pending-banner" "skipped"
     fi
 
     # Order 970-7fqk, sibling of the above.

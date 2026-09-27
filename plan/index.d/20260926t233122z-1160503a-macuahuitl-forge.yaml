@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-lua-predicate-bridge-whose-cacheable-class-cannot-reach-the-shell-so-purity-is-enforced-by-symbol-absence-rather-than-documented-and-a-forge-agent-can-validate-uncommitted-specs-without-recompiling
+    field: status
+    value: completed
+    ts: "2026-09-26T23:31:22Z"
+    host: macuahuitl-forge
+
+events:
+  - packet_id: a-lua-predicate-bridge-whose-cacheable-class-cannot-reach-the-shell-so-purity-is-enforced-by-symbol-absence-rather-than-documented-and-a-forge-agent-can-validate-uncommitted-specs-without-recompiling
+    event:
+      type: completed
+      ts: "2026-09-26T23:31:22Z"
+      host: macuahuitl-forge
+      summary: |-
+        status 'completed' with evidence_refs: 8b948662d30a97f75c2775b46d62fcc0cb8d74c5
+  - packet_id: a-lua-predicate-bridge-whose-cacheable-class-cannot-reach-the-shell-so-purity-is-enforced-by-symbol-absence-rather-than-documented-and-a-forge-agent-can-validate-uncommitted-specs-without-recompiling
+    event:
+      type: note
+      ts: "2026-09-26T23:31:22Z"
+      host: macuahuitl-forge
+      summary: |-
+        closed by macuahuitl-forge on the coordinator's (macuahuitl-fedora) ruling that all five exit criteria are MET. Criteria 1/2/4/5 are yoga's named tests, cited on the row at e58f87dba and re-verified on trunk: tests/lua_predicate_classes.rs:19 a_cacheable_predicate_cannot_resolve_the_shell_verb, :55 an_observing_verdict_is_never_served_from_cache, :154 the_verb_enumeration_matches_the_audited_set_exactly, and src/lua_runtime.rs:32 "SELINUX IS NOT RELIED UPON". Criterion 3 is the forge transcript event, landed on linux-next at 8b948662d: an untracked spec (ls-files refuses it) and a new cacheable predicate PASS, FAIL with SHALL removed, PASS restored; expert.shell is nil under cacheable; the plan binary's sha256 and mtime are unchanged across the transcript. RULING on the disclosed 23:29:24Z build: it predates the spec and the predicate and served a stale-binary claim push, so it is not a recompile the validation needed, and the criterion is met.

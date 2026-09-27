@@ -1,5 +1,11 @@
 # vsock-exec-authz
 
+## Status
+
+active
+
+Reconciled 2026-09-26 (1397-eppt): had no Status section; implemented (code traces this spec) and bound to a litmus in the registry, which says active.
+
 The host-to-guest-to-container exec path crosses a critical trust boundary: the host shell or tray uses the vsock control wire (`PtyOpen`) to spawn arbitrary commands in the VM guest. Without an authorization boundary, any process that can write to the control wire could execute arbitrary code as the VM root.
 
 The boundary has TWO admission arms. The name-based arm below is the original one, and it accepts a command FLATTENED into a shell string. The verbatim-argv arm (order 795-zshi) exists so structured callers stop flattening: it accepts an argv vector and passes the arguments to `execve` untouched. Everything reachable through the verbatim arm was already reachable through `/bin/bash -lc <string>`, which never inspects its script — the arm changes HOW a request is expressed, not what authority it carries, and that removes the quoting layer behind four field defects (the Esmeralda unbalanced-quote crashes, the `wt.exe` semicolon split, orders 326 and 366).

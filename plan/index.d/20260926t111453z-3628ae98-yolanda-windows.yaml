@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-skills-single-source-direction-2-asserts-that-sixteen-per-skill-symlinks-are-individually-tracked-which-is-the-mechanism-rather-than-the-output-so-a-directory-symlink-that-satisfies-the-actual-invariant-reds-the-gate-fleet-wide
+    field: status
+    value: completed
+    ts: "2026-09-26T11:14:53Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: check-skills-single-source-direction-2-asserts-that-sixteen-per-skill-symlinks-are-individually-tracked-which-is-the-mechanism-rather-than-the-output-so-a-directory-symlink-that-satisfies-the-actual-invariant-reds-the-gate-fleet-wide
+    event:
+      type: completed
+      ts: "2026-09-26T11:14:53Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: 4a1bb0e96
+  - packet_id: check-skills-single-source-direction-2-asserts-that-sixteen-per-skill-symlinks-are-individually-tracked-which-is-the-mechanism-rather-than-the-output-so-a-directory-symlink-that-satisfies-the-actual-invariant-reds-the-gate-fleet-wide
+    event:
+      type: note
+      ts: "2026-09-26T11:14:53Z"
+      host: yolanda-windows
+      summary: |-
+        LANDED on origin/linux-next at 4a1bb0e96 ("relay: land work/1256-f7td", whose parent is my 2453528d1). Verified on trunk: test-skills-single-source.sh passes 15/15. Criteria 1, 2, 3 and 5 were already met by 4572648e4 (1238-u84w) and 4c4006b58 (1255-rvr7), and are covered by fixture cases 6 (directory symlink passes), 11 (a genuine second source is still refused), 1 (per-skill links pass) and 4 (a missing canonical skill is refused). The live tree is one directory symlink and passes ok:skills-single-source:5:18. Criterion 4 was closed by this row: build.sh's skills-step refusal no longer offers skills/HARNESS-SCOPED.txt as the remedy for a link-shape mismatch; it points at the violation and says to LINK the runtime tree. Case 13 reads that refusal with comments stripped; PRE-FIX it FAILED against trunk's build.sh, quoting "declare it in skills/HARNESS-SCOPED.txt or link it".

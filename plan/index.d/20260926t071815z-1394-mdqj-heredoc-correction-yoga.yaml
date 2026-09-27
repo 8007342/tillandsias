@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# CORRECTION (yoga): 20260926t071724z-yoga-1392-1141-1394.yaml was written with an UNQUOTED
+# heredoc, so bash executed the backticked phrases in 1394-mdqj's title and verifiable_closure
+# and deleted them. Each field below KEEPS the damaged line origin carries (the 1261-bn7v drop
+# guard refuses a correction that drops it) and appends the intended text. Written with <<'EOF'.
+status:
+  - packet_id: on-windows-a-child-spawned-by-the-plan-binary-inherits-the-cli-stdout-handle-so-a-leaked-grandchild-holds-the-caller-pipe-open
+    field: title
+    value: |
+      on Windows a child spawned by the plan binary (sh.run / proc.run) inherits the CLI's own inheritable stdout handle, so a leaked grandchild holds the CALLER's pipe open and every  waits for the grandchild, even after the runtime-drop fix
+      [the line above lost a backticked phrase to an unquoted heredoc; intended:] on Windows a child spawned by the plan binary (sh.run / proc.run) inherits the CLI's own inheritable stdout handle, so a leaked grandchild holds the CALLER's pipe open and every `tillandsias-plan lua … | <reader>` waits for the grandchild, even after the runtime-drop fix
+    ts: "2026-09-26T07:18:15Z"
+    host: yoga
+  - packet_id: on-windows-a-child-spawned-by-the-plan-binary-inherits-the-cli-stdout-handle-so-a-leaked-grandchild-holds-the-caller-pipe-open
+    field: verifiable_closure
+    value: |
+      On native Windows, 
+      returns within 1 s of after_ms, as the file-redirected form already does (1392-bcby).
+      Pre-fix result: FAILS: measured by yolanda 2026-09-26 through a pipe, about 30.4 s on BOTH
+      the pre- and post-1392-bcby trees (post run1 30558, run2 30421), while file redirection
+      read 745/723 ms post-fix.
+      [the first line above lost its command to an unquoted heredoc; the intended closure:]
+      On native Windows, `tillandsias-plan lua -e "…sh.run{…pipe-holding grandchild…, timeout_ms=500}…" | tr -d '\r'`
+      returns within 1 s of after_ms, as the file-redirected form (1392-bcby) already does.
+    ts: "2026-09-26T07:18:15Z"
+    host: yoga

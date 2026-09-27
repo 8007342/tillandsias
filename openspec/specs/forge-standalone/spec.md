@@ -3,7 +3,9 @@
 
 ## Status
 
-draft
+active
+
+Reconciled 2026-09-26 (1397-eppt): "draft" was the value this file was CREATED with in ba5de86f4 (a 150-spec checkpoint), not a later downgrade; implemented and bound to litmus:forge-standalone-traceability.
 
 ## Purpose
 

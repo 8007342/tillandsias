@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Filed by yoga at macuahuitl's direction (2026-09-26), after closing three rows
+# from a linked worktree while finalize-cycle.sh held the main checkout.
+packets:
+  - packet_id: a-push-from-a-linked-worktree-cannot-authenticate-because-the-repo-local-credential-store-is-configured-by-a-path-relative-to-the-main-checkout
+    order: 1409-65d5
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [credential, git, worktree, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-credential-channel.sh
+    unscoreable: "unpinnable-until-the-guard-exists: the closure is a fixture arm that builds a scratch repo with a linked worktree and a store-helper credential, and asserts a push (or `git credential fill`) FROM THE WORKTREE resolves the stored credential. Pre-fix result: FAILS with `fatal: unable to open .git/.gh-credentials: Not a directory` (measured on yoga 2026-09-26, French locale: `N'est pas un dossier`). NEGATIVE CONTROL: the same credential still resolves from the main checkout, and a SECOND linked worktree resolves the same store (one credential, not one per worktree)."
+    title: |
+      A push from a linked `git worktree` cannot authenticate: the repo-local credential helper is `store --file=.git/.gh-credentials`, a path relative to the working directory, and in a linked worktree `.git` is a FILE — so the sanctioned path for concurrent work (a separate worktree) cannot push, and the only workaround (push the sha from the main repo) is one a newcomer will not find
+    context: |
+      MEASURED on yoga 2026-09-26. finalize-cycle.sh held the main checkout, so
+      three closures were written in a linked worktree
+      ($HOME/.cache/tillandsias-close-wt, `git worktree add --detach … origin/linux-next`).
+      `git push origin HEAD:linux-next` from there:
+
+        fatal : unable to open .git/.gh-credentials: N'est pas un dossier
+        fatal : could not read Username for 'https://github.com': Aucun périphérique ou adresse
+        rc=128
+
+      The same commit pushed BY SHA from the main checkout went through:
+      `git push origin 128d07a83:refs/heads/linux-next` -> plan-only lane clean,
+      0da70ebaa..128d07a83.
+
+      THE CONFIGURATION (`git config --show-origin --get-all credential.helper`):
+        file:.git/config  (empty — resets the global list)
+        file:.git/config  store --file=.git/.gh-credentials
+      The linked worktree reads the same .git/config, so it inherits a RELATIVE
+      path that only resolves from the main checkout's root.
+
+      WHERE IT COMES FROM (source, not measured end to end):
+      scripts/check-credential-channel.sh:738 prints the remedy
+        git config --local --add credential.helper "store --file=$(git rev-parse --git-dir)/.gh-credentials"
+      and in the main checkout `git rev-parse --git-dir` answers the RELATIVE
+      `.git`, so following the remedy writes exactly this configuration. The
+      checker's own probe (line 444, cred_file="${git_dir}/.gh-credentials") has
+      the mirror defect: in a linked worktree git-dir is .git/worktrees/<name>,
+      so it looks for the store where it is not.
+
+      DIRECTION (not a mandate): the store belongs to the repository, not the
+      worktree — `git rev-parse --path-format=absolute --git-common-dir` for both
+      the remedy and the probe; and hosts already carrying the relative form need
+      a one-line migration the checker can name. Nothing here reads or prints the
+      credential itself.
+
+      WHY IT MATTERS: skills/advance-work-from-plan §1b names "a separate git
+      worktree or a clean temp clone" as THE sanctioned path for concurrent work
+      on one host, and a background gate reserves the checkout for many minutes.
+      Every host that uses the store helper and follows that advice hits this.

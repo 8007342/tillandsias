@@ -185,8 +185,36 @@ else
     bad "GATE unavailable base ref did not skip [$out7]"
 fi
 
+# ── ORDER 1391-8ikx: UNTRACKED FILES ARE IN SCOPE, AND THE COUNT IS HONEST ──
+# The gate enumerated `git diff --name-only <base>`, which never lists an
+# untracked file, so a brand-new script was invisible until staged, and the gate
+# printed ok:...:0 checked over that empty population. It bit twice on
+# 2026-09-26 (macbookair's 1385 fixture, refused only at relay).
+git -C "$repo" checkout -q -- . 2>/dev/null
+git -C "$repo" clean -qfd -- scripts 2>/dev/null
+
+# U1. A NEW, UNTRACKED script adding a dangerous verdict pipeline is refused.
+#     PRE-FIX: FAILS (rc=0, the file is never enumerated).
+printf '#!/usr/bin/env bash\nset -uo pipefail\nif cat /etc/hosts | grep -q root; then :; fi\n' > "$repo/scripts/brand-new.sh"
+if git -C "$repo" ls-files --error-unmatch scripts/brand-new.sh >/dev/null 2>&1; then
+    bad "GATE U1 precondition: brand-new.sh must be UNTRACKED"
+fi
+run_gate 1 "GATE U1 an untracked new script's verdict pipeline is refused"
+
+# U2. A clean untracked script is EXAMINED and COUNTED: `checked` names the
+#     files looked at, so ok:...:0 can only mean nothing was in scope.
+#     PRE-FIX: FAILS (the counter moved only on a violation, so ok always read 0).
+printf '#!/usr/bin/env bash\nset -uo pipefail\nv="$(cat /etc/hosts)"\ngrep -q root <<<"$v" && :\n' > "$repo/scripts/brand-new.sh"
+out_u2="$(TILLANDSIAS_SIGPIPE_ROOT="$repo" TILLANDSIAS_SIGPIPE_BASE=testbase bash "$GATE" 2>/dev/null)"
+case "$out_u2" in
+    "ok:sigpipe-verdict-added:0 checked") bad "GATE U2 a clean untracked script was not counted [$out_u2]" ;;
+    ok:sigpipe-verdict-added:[1-9]*" checked") pass "GATE U2 a clean untracked script is examined and counted [$out_u2]" ;;
+    *) bad "GATE U2 unexpected verdict [$out_u2]" ;;
+esac
+rm -f "$repo/scripts/brand-new.sh"
+
 if [ "$fail" -eq 0 ]; then
-    echo "ok:sigpipe-verdict-pipelines-fixture:11"
+    echo "ok:sigpipe-verdict-pipelines-fixture:13"
     exit 0
 fi
 echo "fail:sigpipe-verdict-pipelines-fixture"

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: github-app-mobile-qr-device-login
+    event:
+      type: correction
+      ts: "2026-09-26T04:29:43Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        REOPENED by the macuahuitl coordinator 2026-09-26 after a security/guideline review of 3a2b01d9e (merged via PR #186 as be25a7f39), requested by the operator ("I'm not sure it followed all of our guidelines so please validate"). Closure 23bbaf3aa claimed completion with three of four exit criteria unmet: (1) macOS still asks for a token paste (macos-tray diagnose.rs github_login_main waits for the text "authentication token", which the new flow never prints: a HANG once the guest runs this headless); (2) the paste script is still in main.rs; (3) the identity is still prompted, not derived from GitHub. Coordinator-verified by reading origin/linux-next: main.rs:10618 `is_mock = LITMUS_PODMAN_MODE.is_some() || output.contains("mock")` puts a test branch (interactive gh auth login, then a write that can blank the Vault token, errors discarded by `let _`) inside the real credential path; vault_bootstrap.rs refresh_github_token_if_needed is #[allow(dead_code)], so nothing refreshes the 8 h token despite the spec saying "automatic"; vault_bootstrap.rs:1107 formats the whole refresh response (carrying a fresh access token) into an error the caller prints. Reviewer-verified (read, not run): the poll dies at the 300 s podman timeout while the device code lives 899 s; rotation is refresh-before-write with no lock (GitHub invalidates the old pair on use, so a failed write or a second refresher locks the host out); --refresh-github-token has no session gate, consent or audit event; the device code travels on podman argv and --debug; the mirror policy can read the 6-month refresh token; the device code is interpolated into a bash script in single quotes. Tests are mostly vacuous (the client-id test compares a constant to itself; the flags test greps its own source). v56.9.25.2 does NOT contain this change. Fix rows: 1383-5hpk (headless credential-path fixes, p0) and 1383-dkxi (macOS tray login hang, p1). No release may carry 3a2b01d9e until 1383-5hpk lands.

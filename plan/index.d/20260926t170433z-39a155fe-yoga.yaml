@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-unreachable-forge-session-completed-eight-packets-onto-a-salvage-ref-so-trunk-offers-that-work-to-other-hosts-as-ready
+    field: next_action
+    value: '2026-09-26 yoga, the release-gate claim checked by RUNNING THE PRODUCER (1232-av4p criterion 2). MEASURED, trunk 3921bfeda: `env -i HOME=$HOME PATH=<bash+coreutils only, no nix/toolbox/podman/cargo/clang> bash scripts/build-guest-binaries.sh` -> producer_rc=1. Log: "nix lane UNAVAILABLE: … nix: command not found on PATH", "blocked:nix-toolbox:create-failed", "DEGRADED to the local Cargo fallback (reason above)", "ERROR: failed to build guest binaries with Nix or local Cargo." target-guest/ was absent before and after (nothing staged). So the 2026-08-29 observation (ERROR then rc 0) does NOT reproduce: the ERROR path is `exit 1` at scripts/build-guest-binaries.sh:459. LAYER 2 BY SOURCE, NOT RUN: build.sh:25 is `set -euo pipefail`; _prepare_ci_full_install_inputs (build.sh:1790) ends with the bare producer call, and is itself called as a plain statement (build.sh:1855), not an if-condition, so a non-zero producer aborts --ci-full. NOT MEASURED: an end-to-end --ci-full on a toolchain-less host, and the row''s negative control (a corrupt staged binary fails loud). NOT MEASURED EITHER: the exact "missing aarch64 musl linker" arm (line 435) — this run failed earlier in the cargo lane; that arm is `return 1` into the same exit 1.'
+    ts: "2026-09-26T17:04:33Z"
+    host: yoga
+
+events:
+  - packet_id: an-unreachable-forge-session-completed-eight-packets-onto-a-salvage-ref-so-trunk-offers-that-work-to-other-hosts-as-ready
+    event:
+      type: progress
+      ts: "2026-09-26T17:04:33Z"
+      host: yoga
+      summary: |-
+        status '2026-09-26 yoga, the release-gate claim checked by RUNNING THE PRODUCER (1232-av4p criterion 2). MEASURED, trunk 3921bfeda: `env -i HOME=$HOME PATH=<bash+coreutils only, no nix/toolbox/podman/cargo/clang> bash scripts/build-guest-binaries.sh` -> producer_rc=1. Log: "nix lane UNAVAILABLE: … nix: command not found on PATH", "blocked:nix-toolbox:create-failed", "DEGRADED to the local Cargo fallback (reason above)", "ERROR: failed to build guest binaries with Nix or local Cargo." target-guest/ was absent before and after (nothing staged). So the 2026-08-29 observation (ERROR then rc 0) does NOT reproduce: the ERROR path is `exit 1` at scripts/build-guest-binaries.sh:459. LAYER 2 BY SOURCE, NOT RUN: build.sh:25 is `set -euo pipefail`; _prepare_ci_full_install_inputs (build.sh:1790) ends with the bare producer call, and is itself called as a plain statement (build.sh:1855), not an if-condition, so a non-zero producer aborts --ci-full. NOT MEASURED: an end-to-end --ci-full on a toolchain-less host, and the row's negative control (a corrupt staged binary fails loud). NOT MEASURED EITHER: the exact "missing aarch64 musl linker" arm (line 435) — this run failed earlier in the cargo lane; that arm is `return 1` into the same exit 1.' (not terminal) with evidence_refs: 3921bfeda
+  - packet_id: an-unreachable-forge-session-completed-eight-packets-onto-a-salvage-ref-so-trunk-offers-that-work-to-other-hosts-as-ready
+    event:
+      type: note
+      ts: "2026-09-26T17:04:33Z"
+      host: yoga
+      summary: |-
+        release-gate claim checked by running the producer

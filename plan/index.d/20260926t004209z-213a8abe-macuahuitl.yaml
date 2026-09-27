@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: build-sh-preflight-runs-every-guard-through-an-unguarded-exec-setsid-which-macos-does-not-have-so-all-110-guards-report-as-refusals-rather-than-as-a-missing-capability-and-the-lane-the-fleet-is-about-to-mandate-before-pr-ready-is-dead-on-every-mac
+    event:
+      type: note
+      ts: "2026-09-26T00:42:09Z"
+      agent_id: linux-macuahuitl-claude-20260926t004208z
+      host: macuahuitl
+      summary: |
+        Design 2026-09-26 (plan/issues/lua-runtime-host-dependency-replacement-design-2026-09-26.md, macuahuitl): process control (timeout 356 sites, setsid 68, flock 59) is the one dependency class Lua cannot replace and Rust already does in tillandsias_exec. 1375-amye adds tillandsias-plan run [--timeout] [--detach] [--lock] -- argv on that executor (after 1252-fg9e) and names build.sh's preflight exec setsid — this row's site — as its FIRST caller. Recommendation: close this row on that verb rather than on a second command -v setsid fork; if this row must close before 1375-amye lands, the fork is acceptable as a stop-gap with a note pointing here, so the follow-up is not lost. Go was weighed and not adopted: Rust reaches the same syscalls on all three platforms with the binary every host already builds.

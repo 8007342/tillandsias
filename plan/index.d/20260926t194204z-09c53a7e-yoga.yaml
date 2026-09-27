@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    field: next_action
+    value: |-
+      2026-09-26 yoga, 9th pre-build red for the tally: litmus:vault-audit-persistence-shape ("0 mounts target /vault/audit"). CAUSED BY A RELAY: 1200-ih38 (756e30a90, relayed in land33) added a #[cfg(test)] thread_local! override at vault_bootstrap.rs:138, and the pin defined "non-test code" as everything above the FIRST #[cfg(test)], which shrank to 137 lines. The property held; the heuristic broke. Neither the author (yoga) nor the relay ran litmus-covering-specs for the touched file. Reproduced by yoga on origin/linux-next in a scratch worktree: tillandsias-vault litmus FAIL on this test. FIX at d8d19b462 (macuahuitl, in land40: the pin stops at the #[cfg(test)] that opens `mod`; pre-fix 0, post-fix 1, negative control with a second mount 2). d8d19b462 did NOT resolve from yoga at the time of writing; verify it on origin/linux-next once land40 lands.
+
+      [2026-09-26T15:28:29Z yoga] 2026-09-26 yoga: VERIFIED d8d19b462 (the vault-audit-persistence-shape pin fix, 9th red) is an ancestor of origin/linux-next, landed under 31fe1ee3e with 10f1a4857. With 1405-3mrp (59ff474da) and 1406-9ctt (10f1a4857) also landed, every non-flake red in this sample now has a landed fix: 3 mine (1405-3mrp), 2 stale pins + 1 budget (1406-9ctt), 1 relay-caused (d8d19b462); the 2 flakes stand as recorded.
+
+      [2026-09-26T15:44:44Z yoga] 2026-09-26 flake SAMPLE (reported by macuahuitl, relayed and recorded by yoga; not reproduced by yoga): litmus:e2e-eligibility-probe-shape (spec meta-orchestration, pre-build, instant) went FAIL, FAIL, PASS on macuahuitl on the SAME trunk tree 2aeabbc70 within ~15 min, while a land gate ran podman in the builder toolbox. The probe reads live host state (it answers skip:live-runtime-present on macuahuitl, where the operator's tray runs), so the candidate cause is host state varying under a concurrent gate. That is a HYPOTHESIS: the failing step is UNNAMED, because the red runs' output was not captured. One host, one regime: a sample to accumulate, not an action. Next time, capture the step verdict before re-running.
+
+      [2026-09-26T19:42:04Z yoga] 2026-09-26 yoga-regime re-run AFTER land46 (03cc8fa7b), trunk 6f8d134dd, trunk-built binary, by spec (ci-release, meta-orchestration, methodology-accountability). sigpipe-verdict-pipeline-shape and join-the-fleet-idempotent now PASS (land46's repins). THREE remain red on yoga, output captured:
+      (1) litmus:local-ci-self-clean-evidence STEP 4/5 — "scripts/update-convergence-dashboard.sh: ligne 158 : printf: 89.8989898989899: nombre non valable". CAUSE MEASURED: the caller's numeric locale (yoga is fr_FR); the same command under LC_ALL=C prints ok:dashboard-target-routed. This is 1191-vrjf (filed by yoga 09-14); fixed on work/1191-vrjf (bbd4d77b9, merged 95d33cabd) with a two-locale byte-identity guard. Green on every C-locale host, which is why the fleet never saw it.
+      (2) litmus:preflight-front-door — under the runner 10/12: "[FAIL] a newly wired guard was invisible to the front door (rc=1)" and "[FAIL] the verdict does not report its wall clock". Standalone `bash scripts/test-preflight-front-door.sh` is 12/12 rc=0 TWICE, under LC_ALL=C and under the host's fr_FR — so NOT the locale class. Cause UNKNOWN; the difference is runner vs standalone. Not guessed further.
+      (3) litmus:opencode-prompt-e2e-shape STEP 5/9 — FORGE_EXIT=1: "Continuing would rebuild the enclave's images from this older app's embedded assets … Please update the Tillandsias app … --force-downgrade". HOST STATE: the installed app on yoga is older than this tree. Not a code defect; whether an e2e arm should name-skip on a stale install instead of red is a design question for the owner.
+    ts: "2026-09-26T19:42:04Z"
+    host: yoga
+
+events:
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    event:
+      type: progress
+      ts: "2026-09-26T19:42:04Z"
+      host: yoga
+      summary: |-
+        status '2026-09-26 yoga, 9th pre-build red for the tally: litmus:vault-audit-persistence-shape ("0 mounts target /vault/audit"). CAUSED BY A RELAY: 1200-ih38 (756e30a90, relayed in land33) added a #[cfg(test)] thread_local! override at vault_bootstrap.rs:138, and the pin defined "non-test code" as everything above the FIRST #[cfg(test)], which shrank to 137 lines. The property held; the heuristic broke. Neither the author (yoga) nor the relay ran litmus-covering-specs for the touched file. Reproduced by yoga on origin/linux-next in a scratch worktree: tillandsias-vault litmus FAIL on this test. FIX at d8d19b462 (macuahuitl, in land40: the pin stops at the #[cfg(test)] that opens `mod`; pre-fix 0, post-fix 1, negative control with a second mount 2). d8d19b462 did NOT resolve from yoga at the time of writing; verify it on origin/linux-next once land40 lands.
+        
+        [2026-09-26T15:28:29Z yoga] 2026-09-26 yoga: VERIFIED d8d19b462 (the vault-audit-persistence-shape pin fix, 9th red) is an ancestor of origin/linux-next, landed under 31fe1ee3e with 10f1a4857. With 1405-3mrp (59ff474da) and 1406-9ctt (10f1a4857) also landed, every non-flake red in this sample now has a landed fix: 3 mine (1405-3mrp), 2 stale pins + 1 budget (1406-9ctt), 1 relay-caused (d8d19b462); the 2 flakes stand as recorded.
+        
+        [2026-09-26T15:44:44Z yoga] 2026-09-26 flake SAMPLE (reported by macuahuitl, relayed and recorded by yoga; not reproduced by yoga): litmus:e2e-eligibility-probe-shape (spec meta-orchestration, pre-build, instant) went FAIL, FAIL, PASS on macuahuitl on the SAME trunk tree 2aeabbc70 within ~15 min, while a land gate ran podman in the builder toolbox. The probe reads live host state (it answers skip:live-runtime-present on macuahuitl, where the operator's tray runs), so the candidate cause is host state varying under a concurrent gate. That is a HYPOTHESIS: the failing step is UNNAMED, because the red runs' output was not captured. One host, one regime: a sample to accumulate, not an action. Next time, capture the step verdict before re-running.
+        
+        [2026-09-26T19:42:04Z yoga] 2026-09-26 yoga-regime re-run AFTER land46 (03cc8fa7b), trunk 6f8d134dd, trunk-built binary, by spec (ci-release, meta-orchestration, methodology-accountability). sigpipe-verdict-pipeline-shape and join-the-fleet-idempotent now PASS (land46's repins). THREE remain red on yoga, output captured:
+        (1) litmus:local-ci-self-clean-evidence STEP 4/5 — "scripts/update-convergence-dashboard.sh: ligne 158 : printf: 89.8989898989899: nombre non valable". CAUSE MEASURED: the caller's numeric locale (yoga is fr_FR); the same command under LC_ALL=C prints ok:dashboard-target-routed. This is 1191-vrjf (filed by yoga 09-14); fixed on work/1191-vrjf (bbd4d77b9, merged 95d33cabd) with a two-locale byte-identity guard. Green on every C-locale host, which is why the fleet never saw it.
+        (2) litmus:preflight-front-door — under the runner 10/12: "[FAIL] a newly wired guard was invisible to the front door (rc=1)" and "[FAIL] the verdict does not report its wall clock". Standalone `bash scripts/test-preflight-front-door.sh` is 12/12 rc=0 TWICE, under LC_ALL=C and under the host's fr_FR — so NOT the locale class. Cause UNKNOWN; the difference is runner vs standalone. Not guessed further.
+        (3) litmus:opencode-prompt-e2e-shape STEP 5/9 — FORGE_EXIT=1: "Continuing would rebuild the enclave's images from this older app's embedded assets … Please update the Tillandsias app … --force-downgrade". HOST STATE: the installed app on yoga is older than this tree. Not a code defect; whether an e2e arm should name-skip on a stale install instead of red is a design question for the owner.' (not terminal) with evidence_refs: 6f8d134dd
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    event:
+      type: note
+      ts: "2026-09-26T19:42:04Z"
+      host: yoga
+      summary: |-
+        yoga-regime reds after land46, output captured

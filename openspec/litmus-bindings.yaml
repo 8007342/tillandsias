@@ -85,10 +85,11 @@ specs:
   last_verified: '2026-05-12'
   tombstone: superseded:host-browser-mcp
 - spec_id: browser-window-rate-limiting
-  status: deprecated
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+  tombstone: superseded:host-browser-mcp
 - spec_id: build-lock
   status: obsolete
   litmus_tests: []
@@ -109,10 +110,11 @@ specs:
   coverage_ratio: 100
   last_verified: '2026-05-16'
 - spec_id: certificate-authority
-  status: deprecated
+  status: obsolete
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-12'
+  tombstone: superseded:reverse-proxy-internal
 - spec_id: cheatsheet-mcp-server
   status: obsolete
   litmus_tests: []
@@ -397,6 +399,8 @@ specs:
   - litmus:forge-environment-discoverability-install-shape
   - litmus:mcp-discoverability-shape
   - litmus:mcp-server-request-fault-isolation
+  - litmus:mcp-live-build-check-fixture
+  - litmus:json-get-help-names-its-subset
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
   - litmus:forge-experts-stale-source-honesty
@@ -938,17 +942,17 @@ specs:
   coverage_ratio: 67
   last_verified: '2026-05-30'
 - spec_id: singleton-guard
-  status: obsolete
+  status: active
   litmus_tests: null
   coverage_ratio: 0
   last_verified: '2026-05-14'
-  tombstone: obsolete:src-tauri-deferred
 - spec_id: spec-traceability
   status: active
   litmus_tests:
   - litmus:spec-traceability-shape
   - litmus:spec-traceability-usage-shape
   - litmus:litmus-runner-backslash-escaping-shape
+  - litmus:litmus-no-plan-binary-refusal
   - litmus:litmus-stdlib-portability-shape
   - litmus:litmus-name-filter-fail-loud-shape
   - litmus:litmus-name-filter-hint-shape
@@ -967,7 +971,7 @@ specs:
   coverage_ratio: 75
   last_verified: '2026-05-30'
 - spec_id: subdomain-routing-via-reverse-proxy
-  status: deprecated
+  status: active
   litmus_tests:
   - litmus:browser-isolation-e2e
   coverage_ratio: 60
@@ -991,11 +995,10 @@ specs:
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: tray-cli-coexistence
-  status: obsolete
+  status: active
   litmus_tests: null
   coverage_ratio: 0
   last_verified: '2026-05-14'
-  tombstone: obsolete:src-tauri-deferred
 - spec_id: tray-host-control-socket
   status: obsolete
   tombstone: "Superseded by orders 123-128 normalization."
@@ -1022,11 +1025,10 @@ specs:
   coverage_ratio: 100
   last_verified: '2026-05-13'
 - spec_id: tray-projects-rename
-  status: obsolete
+  status: active
   litmus_tests: null
   coverage_ratio: 0
   last_verified: '2026-05-14'
-  tombstone: obsolete:src-tauri-deferred
 - spec_id: tray-ux
   status: active
   litmus_tests:
@@ -1065,7 +1067,7 @@ specs:
   coverage_ratio: 0
   last_verified: '2026-05-13'
 - spec_id: windows-event-logging
-  status: suspended
+  status: active
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-03'

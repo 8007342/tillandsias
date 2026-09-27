@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-archive-answerability-tree-copy-dies-on-an-untracked-symlink-whose-target-does-not-exist-on-this-host-so-a-leftover-nix-result-link-fails-the-archiver-check-before-it-judges-anything
+    order: 1392-6tbs
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [archiver, harness, symlinks, windows, nix]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-archive-answerability.sh
+    title: |
+      check-archive-answerability.sh copies the whole working tree, and an untracked symlink whose target does not exist on this host (a Nix `result` -> /nix/store/... left by a WSL build) makes native tar fail, so `archive-plan-packets.sh --check` reports tree-copy-failed before it judges anything
+    context: |
+      MEASURED on yolanda-windows 2026-09-26, native Windows, while collecting
+      1380-u7sq's closure evidence. log/copy.err:
+        tar: ./result: Cannot create symlink to
+          '/nix/store/swqkkbiacxi7vsb4cqh53s1kj70v8v24-tillandsias-0.0.0':
+          No such file or directory
+        tar: Exiting with failure status due to previous errors
+      and the verdict was
+        fail:archive-answerability:tree-copy-failed
+      `result` is gitignored and untracked: an artifact of a Nix build that ran
+      inside WSL, whose target exists only in that distro's store. With it
+      moved aside, the same run got past the copy.
+      The harness copies what is ON DISK, so the check depends on which build
+      artifacts a host happens to have lying around, not on the ledger.
+    exit_criteria:
+      - 'a checkout carrying an untracked dangling symlink (pre-fix: a `result` pointing at a missing /nix/store path) no longer fails with tree-copy-failed; the copy prunes or skips it'
+      - 'a skipped entry is NAMED in the harness output (skip:archive-answerability:dangling-symlink:<path>), never silently dropped'
+      - 'a TRACKED file that fails to copy still fails the run: only untracked dangling links are skippable'
+    unscoreable: |
+      unpinnable-until-the-guard-exists (1136-n8sh): the deliverable includes
+      the fixture that scores it. FUTURE FILENAME:
+      scripts/test-answerability-copy-skips-dangling-symlinks.sh, written in
+      the same commit as the harness change and bound as a litmus there.
+    verifiable_closure: |
+      A fixture that creates an untracked symlink to a non-existent absolute
+      target in a scratch checkout, runs the harness's tree copy, and asserts
+      the copy succeeds and names the skip; plus a control where a tracked file
+      is unreadable and the copy still fails. Pre-fix result: FAILS with
+      tree-copy-failed (yolanda-windows, native, 2026-09-26).
+    events:
+      - type: filed
+        ts: "2026-09-26T07:02:07Z"
+        agent_id: windows-yolanda-claude-20260926t070208z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request; found while running 1380-u7sq's
+          native --check.

@@ -430,6 +430,10 @@ critical_path:
     timeout_ms: 120000
     expected_behavior: "ok:groundtruth-corpus-declaration-fixture:9"
 
+  # 1405-3mrp: the pinned set gained regex (1367-q9yc: lua_std expect.matches) and
+  # sha2 (1367-q9yc: the content-addressed predicate memo, and 1375-btuf hash.sha256).
+  # Both were already workspace dependencies, so no new crate was downloaded; the pin
+  # exists to make that a DECISION, and this comment is where it is recorded.
   - step: "NO NEW DEPENDENCY, no interpreter, and the query set is DATA not code"
     # The ratified §5 constraints of the 394 family, carried into slice 4. The
     # dependency count is asserted, not inspected: three workspace deps, the
@@ -456,7 +460,7 @@ critical_path:
     # STRUCTURALLY — the grader spawns no process at all — because a word-grep
     # would fire on the query set's own honest text (one of its cases is
     # literally "is Python allowed in a committed script?").
-    command: "test ! -d crates/tillandsias-groundtruth || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\" = 'chrono redb serde serde_json serde_yaml tokio ' || { echo \"FAIL: the dependency set changed: $(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\"; exit 1; }; test \"$(grep -c 'std::process::Command' crates/tillandsias-plan/src/groundtruth.rs)\" = '0' || { echo 'FAIL: the grader spawns a subprocess'; exit 1; }; Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; grep -qE '^\\s*(command|script|shell|exec):' \"$Q\" && { echo 'FAIL: the query set carries executable keys — ground truth is DATA'; exit 1; }; echo 'ok: no-new-dependency-data-only-query-set'"
+    command: "test ! -d crates/tillandsias-groundtruth || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\" = 'chrono redb regex serde serde_json serde_yaml sha2 tokio ' || { echo \"FAIL: the dependency set changed: $(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\"; exit 1; }; test \"$(grep -c 'std::process::Command' crates/tillandsias-plan/src/groundtruth.rs)\" = '0' || { echo 'FAIL: the grader spawns a subprocess'; exit 1; }; Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; grep -qE '^\\s*(command|script|shell|exec):' \"$Q\" && { echo 'FAIL: the query set carries executable keys — ground truth is DATA'; exit 1; }; echo 'ok: no-new-dependency-data-only-query-set'"
     timeout_ms: 15000
     expected_behavior: "ok: no-new-dependency-data-only-query-set"
 

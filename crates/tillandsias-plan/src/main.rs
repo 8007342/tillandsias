@@ -95,6 +95,8 @@ const DISPATCH_ARMS: &[&str] = &[
     "fragment-terminal-events",
     "fragments",
     "grade",
+    "hash",
+    "json",
     "loop-status",
     "loop-status-append",
     "loop-status-compact",
@@ -110,6 +112,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "validator-surface-hash",
     "parked-blocks",
     "pipeline",
+    "predicate",
     "query",
     "ready",
     "forgotten",
@@ -123,8 +126,10 @@ const DISPATCH_ARMS: &[&str] = &[
     "spec-index",
     "spec-retrieve",
     "status",
+    "time",
     "validate-yaml",
     "verify-answer",
+    "yaml",
     "yaml-get",
     "yaml-json",
     "yaml-type",
@@ -510,9 +515,16 @@ const USAGE: &str = concat!(
     "                                     lost, operator-owned sections byte-identical, fold idempotent\n",
     "           loop-status-fragments      ORDER 582-nqw5. Report the loop_status.d/ overlay: live\n",
     "                                     fragments, malformed ones, and whether compaction is eligible\n",
-    "           lua <script.lua | -e code> [args...]\n",
+    "           lua [--class cacheable|observing | --unsandboxed] <script.lua | -e code> [args...]\n",
+    "                                     1375-btuf: SANDBOXED by default (observing env + json/yaml/hash/path/time);\n",
+    "                                     --unsandboxed is the named raw-VM opt-in (archive-plan-packets.sh only).\n",
     "                                     Run a Lua script or snippet with the embedded, tillandsias-managed\n",
-    "                                     Lua 5.4 runtime (eliminates heterogeneous external script dependencies).\n"
+    "                                     Lua 5.4 runtime (eliminates heterogeneous external script dependencies).\n",
+    "           predicate <script.lua> [arg] [--class cacheable|observing] [--name fn_name]\n",
+    "                                     Default class: cacheable (no shell, no clock); observing is opt-in.\n",
+    "                                     ORDER 1252-hsrz. Evaluate a Lua predicate with the capability-bounded\n",
+    "                                     predicate runtime (pure shims fs.read/expect.*, shell only in observing class).\n",
+    "                                     Enables forge agents to validate uncommitted specs without host recompilation.\n"
 );
 
 /// Read a cycle fragment for `loop-status-append`, refusing every input shape
@@ -1789,6 +1801,8 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
 
     let started = std::time::Instant::now();
     let mut outcomes: Vec<groundtruth::Outcome> = Vec::new();
+    // 1258-u8re: degenerate-retrieval findings, gathered from every harness.
+    let mut degenerate: Vec<String> = Vec::new();
     let mut skipped: Vec<(String, String, String)> = Vec::new();
 
     if let Some(src) = envelope_src {
@@ -1937,10 +1951,18 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
                 stale: found.stale,
             });
         }
+        for (_, _, h) in &harnesses {
+            degenerate.extend(h.degenerate_retrieval().iter().cloned());
+        }
     }
 
+    // 1258-u8re criterion 4: a dead retriever, reported on its own terms. It
+    // invalidates the spec.answer measurement, so it also fails the run.
+    for d in &degenerate {
+        println!("DEGENERATE RETRIEVAL: {d}");
+    }
     let failed = report(&outcomes, &skipped, &sets, started);
-    i32::from(failed > 0)
+    i32::from(failed > 0 || !degenerate.is_empty())
 }
 
 /// Print the per-case verdicts plus ONE machine-readable summary line, and
@@ -2441,10 +2463,14 @@ fn read_query_vec(path: &Path) -> Vec<f32> {
         eprintln!("error: read {}: {e}", path.display());
         std::process::exit(1);
     });
-    serde_json::from_str::<Vec<f32>>(text.trim()).unwrap_or_else(|e| {
-        eprintln!("error: {} is not a JSON float array: {e}", path.display());
-        std::process::exit(1);
-    })
+    // 1258-u8re: the same parser the grader uses, so the self-describing form
+    // ({"model","dim","vector"}) and the legacy bare array both load here too.
+    tillandsias_plan::groundtruth::parse_query_vector(&text, &path.display().to_string())
+        .map(|q| q.vector)
+        .unwrap_or_else(|e| {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        })
 }
 
 /// Event type and summary prefix for a `set-field --evidence` write (696-6byc).
@@ -2878,6 +2904,301 @@ fn carry_forward_gaps(doc: &serde_yaml::Value) -> Vec<String> {
 /// runner calls these in a per-file loop where that overhead multiplies into
 /// minutes. Measured 2026-08-29 on macuahuitl: yaml-type on a 40-line file,
 /// 227ms behind the ledger load; the parse itself is under 5ms.
+/// ORDER 1375-8g5t. `hash sha256 <file|->` and `time now --ms|--iso|--rfc3339`:
+/// the sha256 tool and the millisecond clock, identical on every platform.
+/// `hash sha256` prints the lowercase hex digest alone (no `  -`, no filename:
+/// the `cut -d' ' -f1` every caller appends is not needed). `time now --ms` is
+/// real milliseconds where BSD `date +%s%3N` has one-second resolution
+/// (1279-a7b6). Usage errors exit 2; an unreadable file exits 1.
+fn host_verbs_dispatch(subcommand: &str, args: &[String]) {
+    use tillandsias_plan::host_verbs;
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan hash sha256 <file|->  |  tillandsias-plan time now --ms|--iso|--rfc3339"
+        );
+        std::process::exit(2);
+    };
+    match (
+        subcommand,
+        args.get(1).map(String::as_str),
+        args.get(2).map(String::as_str),
+    ) {
+        ("hash", Some("sha256"), Some(src)) if args.len() == 3 => {
+            let digest = if src == "-" {
+                host_verbs::sha256_hex_reader(std::io::stdin().lock())
+            } else {
+                std::fs::File::open(src).and_then(host_verbs::sha256_hex_reader)
+            };
+            match digest {
+                Ok(d) => println!("{d}"),
+                Err(e) => {
+                    eprintln!("hash sha256: {src}: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        ("time", Some("now"), Some(flag)) if args.len() == 3 => match flag {
+            "--ms" => println!("{}", host_verbs::now_ms()),
+            "--iso" => println!("{}", host_verbs::now_iso()),
+            "--rfc3339" => println!("{}", host_verbs::now_rfc3339()),
+            _ => usage(),
+        },
+        _ => usage(),
+    }
+}
+
+/// ORDER 1401-bcd7. What `json get --help` / `yaml get --help` print, so a
+/// jq-ratchet migration reads the surface instead of probing the binary for it.
+/// `{SUB}` is replaced with `json` or `yaml`. Every "refused" line names the
+/// reshape that stays inside the subset; scripts/test-json-get-help-names-its-subset.sh
+/// pins each line against what the parser actually accepts.
+const JSON_QUERY_HELP: &str = "\
+usage: tillandsias-plan {SUB} get [flags] <filter> [file...]
+
+A jq SUBSET over {SUB} input. Argument order is jq's, so a call site swaps
+`jq` for `tillandsias-plan {SUB} get`. No file, or `-`, reads stdin.
+
+flags:
+  -r, --raw-output       print strings without quotes
+  -c, --compact-output   one line per result
+  -e, --exit-status      exit 1 if the last result is false/null, 4 if none
+  -n, --null-input       run the filter once against null; read no input
+  -s, --slurp            read every input into one array
+  -M                     accepted and ignored (output is never coloured)
+  --arg k v              bind $k to the string v
+  --argjson k v          bind $k to the JSON value v
+  --parse-only           parse the filter and exit (0 in the subset, 3 not)
+  -h, --help             this text
+
+supported:
+  paths                  .a  .a.b  .[\"x-y\"]  .a[0]  .a[-1]  .[$k]
+  iterate                .a[]   keys[]   .o | keys[]
+  optional               .a?   .a[]?
+  pipe, comma            .a | .b     .a, .b
+  alternative            .a // \"default\"
+  array construction     [.a[] | .k]
+  compare, logic         ==  !=  <  <=  >  >=  and  or  not
+  literals               \"str\"  1  true  false  null  $var
+  builtins               select(f)  has(k)  length  keys  keys_unsorted
+                         type  not  empty  ascii_downcase  tostring
+
+refused (exit 3, `unsupported:<construct>`), and the reshape:
+  join(\",\")              -r '.a[]' | paste -sd, -
+  \"\\(.a) \\(.b)\"          -r '.a, .b' and assemble the lines in shell
+  {a: .a}                one query per field, or the array [.a, .b]
+  map(f)                 [.[] | f]
+  arithmetic (+ - * / %) compute in shell: $(( ... ))
+  if/then/else           select(cond), with // for the default
+  . as $v                --arg/--argjson, or two queries
+  slices .[1:3]          index .[n], or trim in shell
+  @csv @tsv @sh @base64  -r the fields and format in shell
+  test split startswith contains ltrimstr
+                         -r the string and match with case/grep in shell
+  first last             .[0]   .[-1]
+  sort unique            -r '.[]' | sort -u
+  to_entries values      -r 'keys[]', then .[$k] per key with --arg k
+  any                    [.[] | select(cond)] | length > 0
+  ..  reduce  def  try   no reshape inside the subset: use a Lua table
+
+exit: 0 ok; 1/4 under -e; 2 usage or unreadable input; 3 parse error or
+unsupported; 5 a runtime error in some input (the rest still run).
+";
+
+/// ORDER 1375-rn9b. `json get` / `yaml get`: the jq subset, on the binary every
+/// gate host already has. Argument order is jq's (flags, filter, files) so a
+/// call site swaps `jq` for `tillandsias-plan json get` and nothing else.
+///
+/// Exit codes are jq's: 0; 1 and 4 under `-e` (last result false/null; no
+/// result at all); 2 for usage and unreadable input; 3 for a filter that does
+/// not parse — and here also for one outside the subset, printed as
+/// `unsupported:<construct>` so the 1375-tsfu ratchet can tell the two apart;
+/// 5 when any input raised a runtime error (the remaining inputs still run).
+/// `--parse-only` parses and exits, for the ratchet.
+///
+/// Output is LF on every platform: CRLF from jq.exe was the reason
+/// run-litmus-test.sh strips CR, and this closes that class at the source.
+fn json_query_dispatch(subcommand: &str, args: &[String]) {
+    use std::io::Write as _;
+    use tillandsias_plan::json_query;
+
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan {subcommand} get [-r] [-c] [-e] [-n] [-s] [--arg k v] \
+             [--argjson k v] [--parse-only] <filter> [file...]"
+        );
+        std::process::exit(2);
+    };
+    let help = || -> ! {
+        print!("{}", JSON_QUERY_HELP.replace("{SUB}", subcommand));
+        std::process::exit(0);
+    };
+    match args.get(1).map(String::as_str) {
+        Some("get") => {}
+        Some("-h" | "--help") => help(),
+        _ => usage(),
+    }
+    let (mut raw, mut compact, mut exit_status, mut null_input, mut slurp, mut parse_only) =
+        (false, false, false, false, false, false);
+    let mut opts = json_query::Opts::default();
+    let mut positional: Vec<&str> = Vec::new();
+    let mut i = 2;
+    while i < args.len() {
+        let a = args[i].as_str();
+        match a {
+            "--arg" | "--argjson" => {
+                let (Some(k), Some(v)) = (args.get(i + 1), args.get(i + 2)) else {
+                    usage();
+                };
+                let value = if a == "--arg" {
+                    serde_json::Value::String(v.clone())
+                } else {
+                    match serde_json::from_str(v) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            eprintln!("{subcommand} get: --argjson {k}: invalid JSON: {e}");
+                            std::process::exit(2);
+                        }
+                    }
+                };
+                opts.args.insert(k.clone(), value);
+                i += 3;
+                continue;
+            }
+            "--parse-only" => parse_only = true,
+            "--help" => help(),
+            "--raw-output" => raw = true,
+            "--compact-output" => compact = true,
+            "--exit-status" => exit_status = true,
+            "--null-input" => null_input = true,
+            "--slurp" => slurp = true,
+            "-" => positional.push(a),
+            _ if a.starts_with("--") => usage(),
+            _ if a.starts_with('-') && a.len() > 1 && positional.is_empty() => {
+                for c in a[1..].chars() {
+                    match c {
+                        'r' => raw = true,
+                        'c' => compact = true,
+                        'e' => exit_status = true,
+                        'n' => null_input = true,
+                        's' => slurp = true,
+                        'h' => help(),
+                        'M' => {}
+                        _ => usage(),
+                    }
+                }
+            }
+            _ => positional.push(a),
+        }
+        i += 1;
+    }
+    let Some((filter_src, files)) = positional.split_first() else {
+        usage();
+    };
+    let filter = match json_query::parse(filter_src) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(3);
+        }
+    };
+    if parse_only {
+        return;
+    }
+    if let Some(unbound) = filter
+        .variables()
+        .into_iter()
+        .find(|v| !opts.args.contains_key(v))
+    {
+        eprintln!("parse:0: ${unbound} is not defined");
+        std::process::exit(3);
+    }
+
+    // Collect every input value, in order, from every source.
+    let mut inputs: Vec<serde_json::Value> = Vec::new();
+    if !null_input || slurp {
+        let sources: Vec<&str> = if files.is_empty() {
+            vec!["-"]
+        } else {
+            files.to_vec()
+        };
+        for src in sources {
+            let text = if src == "-" {
+                let mut s = String::new();
+                if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut s) {
+                    eprintln!("{subcommand} get: cannot read stdin: {e}");
+                    std::process::exit(2);
+                }
+                s
+            } else {
+                match std::fs::read_to_string(src) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("{subcommand} get: cannot read {src}: {e}");
+                        std::process::exit(2);
+                    }
+                }
+            };
+            if subcommand == "yaml" {
+                match serde_yaml::from_str::<serde_yaml::Value>(&text)
+                    .map_err(|e| e.to_string())
+                    .and_then(|y| serde_json::to_value(y).map_err(|e| e.to_string()))
+                {
+                    Ok(v) => inputs.push(v),
+                    Err(e) => {
+                        eprintln!("yaml get: {src}: {e}");
+                        std::process::exit(2);
+                    }
+                }
+                continue;
+            }
+            for v in serde_json::Deserializer::from_str(&text).into_iter::<serde_json::Value>() {
+                match v {
+                    Ok(v) => inputs.push(v),
+                    Err(e) => {
+                        eprintln!("json get: {src}: cannot parse input: {e}");
+                        std::process::exit(2);
+                    }
+                }
+            }
+        }
+    }
+    if slurp {
+        let all = serde_json::Value::Array(std::mem::take(&mut inputs));
+        inputs.push(all);
+    } else if null_input {
+        inputs = vec![serde_json::Value::Null];
+    }
+
+    let stdout = std::io::stdout();
+    let mut out = std::io::BufWriter::new(stdout.lock());
+    let mut last: Option<serde_json::Value> = None;
+    let mut failed = false;
+    for input in &inputs {
+        let mut results = Vec::new();
+        let r = json_query::eval_partial(input, &filter, &opts, &mut results);
+        for v in results {
+            let _ = writeln!(out, "{}", json_query::render(&v, raw, compact));
+            last = Some(v);
+        }
+        if let Err(e) = r {
+            let _ = out.flush();
+            eprintln!("{e}");
+            failed = true;
+        }
+    }
+    let _ = out.flush();
+    if failed {
+        std::process::exit(5);
+    }
+    if exit_status {
+        match last {
+            None => std::process::exit(4),
+            Some(serde_json::Value::Null | serde_json::Value::Bool(false)) => std::process::exit(1),
+            Some(_) => {}
+        }
+    }
+}
+
 fn yaml_read_dispatch(subcommand: &str, args: &[String]) {
     match subcommand {
         // ORDER 746-htj9. The read half of the everywhere-reader.
@@ -3731,11 +4052,38 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             yaml_read_dispatch(subcommand, args);
             true
         }
+        // ORDER 1375-rn9b. File-local like the yaml readers: no ledger load.
+        "json" | "yaml" => {
+            json_query_dispatch(subcommand, args);
+            true
+        }
+        // ORDER 1375-8g5t. File-local too: no ledger load.
+        "hash" | "time" => {
+            host_verbs_dispatch(subcommand, args);
+            true
+        }
         _ => false,
     }
 }
 
 /// Run a Lua script or snippet with the embedded, tillandsias-managed Lua 5.4 runtime.
+/// 1384-bp6t. The chunk's RETURN VALUES are printed, one per line: the
+/// Cacheable class has no `print` (1367-upz6 keeps it out of the pure
+/// allow-list), so a pure script's only output channel is what it returns.
+/// A script that returns nothing (the archiver) prints nothing, as before.
+fn print_lua_returns(vals: mlua::MultiValue) {
+    for v in vals {
+        match v {
+            mlua::Value::Nil => println!("nil"),
+            mlua::Value::Boolean(b) => println!("{b}"),
+            mlua::Value::Integer(i) => println!("{i}"),
+            mlua::Value::Number(n) => println!("{n}"),
+            mlua::Value::String(s) => println!("{}", s.to_string_lossy()),
+            other => println!("{}", other.type_name()),
+        }
+    }
+}
+
 fn run_lua_cli(args: &[String]) {
     if args.is_empty() {
         eprintln!("usage: tillandsias-plan lua <script.lua | -e code> [args...]");
@@ -3750,7 +4098,54 @@ fn run_lua_cli(args: &[String]) {
         }
     }
 
-    let lua = mlua::Lua::new();
+    // 1375-btuf. SANDBOXED BY DEFAULT: the predicate bridge's Observing
+    // environment plus lua_std (json/yaml/hash/path/time, fs.read rooted at
+    // the repo, sh.run{argv}), with os.execute/io.popen/os.getenv gone.
+    // `--class cacheable` builds the pure environment, so an author can prove
+    // a predicate is pure before registering it. `--unsandboxed` is the NAMED
+    // opt-in to a raw mlua::Lua::new(); its only callers live in
+    // scripts/archive-plan-packets.sh (coordinator ruling 2026-09-26, pinned
+    // by tests/lua_std.rs) until that archiver is ported onto the std API.
+    let mut args: &[String] = args;
+    let mut unsandboxed = false;
+    let mut class = tillandsias_plan::lua_predicate::PredicateClass::Observing;
+    loop {
+        match args.first().map(String::as_str) {
+            Some("--unsandboxed") => {
+                unsandboxed = true;
+                args = &args[1..];
+            }
+            Some("--class") => {
+                class = match args.get(1).map(String::as_str) {
+                    Some("cacheable") => tillandsias_plan::lua_predicate::PredicateClass::Cacheable,
+                    Some("observing") => tillandsias_plan::lua_predicate::PredicateClass::Observing,
+                    other => {
+                        eprintln!("error: --class expects cacheable|observing, got {other:?}");
+                        std::process::exit(2);
+                    }
+                };
+                args = &args[2..];
+            }
+            _ => break,
+        }
+    }
+    if args.is_empty() {
+        eprintln!(
+            "usage: tillandsias-plan lua [--class cacheable|observing | --unsandboxed] <script.lua | -e code> [args...]"
+        );
+        std::process::exit(2);
+    }
+    let lua = if unsandboxed {
+        mlua::Lua::new()
+    } else {
+        match tillandsias_plan::lua_predicate::build_environment(class) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("error: failed to build the Lua environment: {e}");
+                std::process::exit(1);
+            }
+        }
+    };
 
     if args[0] == "-e" {
         if args.len() < 2 {
@@ -3772,7 +4167,12 @@ fn run_lua_cli(args: &[String]) {
         }
         let _ = lua.globals().set("arg", arg_table);
 
-        if let Err(e) = lua.load(code).set_name("=(command line)").exec() {
+        if let Err(e) = lua
+            .load(code)
+            .set_name("=(command line)")
+            .eval::<mlua::MultiValue>()
+            .map(print_lua_returns)
+        {
             eprintln!("lua error: {e}");
             std::process::exit(1);
         }
@@ -3812,9 +4212,122 @@ fn run_lua_cli(args: &[String]) {
     }
     let _ = lua.globals().set("arg", arg_table);
 
-    if let Err(e) = lua.load(&script_source).set_name(script_path).exec() {
+    if let Err(e) = lua
+        .load(&script_source)
+        .set_name(script_path)
+        .eval::<mlua::MultiValue>()
+        .map(print_lua_returns)
+    {
         eprintln!("lua error: {e}");
         std::process::exit(1);
+    }
+}
+
+/// ORDER 1252-hsrz. The predicate CLI entrypoint: evaluate a Lua predicate against
+/// an uncommitted spec without recompiling the host binary.
+fn run_predicate_cli(args: &[String]) {
+    if args.is_empty() {
+        eprintln!(
+            "usage: tillandsias-plan predicate <script.lua> [arg] [--class cacheable|observing] [--name fn_name]"
+        );
+        std::process::exit(2);
+    }
+
+    let mut file_path: Option<PathBuf> = None;
+    let mut arg: Option<String> = None;
+    // Cacheable by DEFAULT (review of 1367-q9yc): the shell and the clock are an
+    // explicit opt-in (`--class observing`), never what a bare call gets.
+    let mut class = tillandsias_plan::lua_predicate::PredicateClass::Cacheable;
+    let mut func_name: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--file" if i + 1 < args.len() => {
+                file_path = Some(PathBuf::from(&args[i + 1]));
+                i += 2;
+            }
+            "--class" if i + 1 < args.len() => {
+                match args[i + 1].as_str() {
+                    "cacheable" => {
+                        class = tillandsias_plan::lua_predicate::PredicateClass::Cacheable
+                    }
+                    "observing" => {
+                        class = tillandsias_plan::lua_predicate::PredicateClass::Observing
+                    }
+                    other => {
+                        eprintln!(
+                            "error: unknown predicate class: {other} (expected cacheable or observing)"
+                        );
+                        std::process::exit(2);
+                    }
+                }
+                i += 2;
+            }
+            "--name" if i + 1 < args.len() => {
+                func_name = Some(args[i + 1].clone());
+                i += 2;
+            }
+            "--arg" if i + 1 < args.len() => {
+                arg = Some(args[i + 1].clone());
+                i += 2;
+            }
+            other if other.starts_with("--") => {
+                eprintln!("error: unrecognized option '{other}'");
+                std::process::exit(2);
+            }
+            other => {
+                if file_path.is_none() {
+                    file_path = Some(PathBuf::from(other));
+                } else if arg.is_none() {
+                    arg = Some(other.to_string());
+                } else {
+                    eprintln!("error: unexpected argument '{other}'");
+                    std::process::exit(2);
+                }
+                i += 1;
+            }
+        }
+    }
+
+    let Some(path) = file_path else {
+        eprintln!("error: missing predicate script file");
+        std::process::exit(2);
+    };
+
+    if !path.exists() {
+        eprintln!("error: predicate file '{}' does not exist", path.display());
+        std::process::exit(1);
+    }
+
+    let name = func_name.unwrap_or_else(|| {
+        path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("predicate")
+            .to_string()
+    });
+
+    let arg_str = arg.unwrap_or_default();
+
+    let mut reg = tillandsias_plan::lua_predicate::PredicateRegistry::new();
+    if let Err(e) = reg.register_file(&name, class, &path) {
+        eprintln!("error: failed to load predicate: {e}");
+        std::process::exit(1);
+    }
+
+    match reg.eval(&name, &arg_str) {
+        Ok(true) => {
+            println!("PASS");
+            std::process::exit(0);
+        }
+        Ok(false) => {
+            println!("FAIL");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("error: predicate failed: {e}");
+            std::process::exit(1);
+        }
     }
 }
 
@@ -3879,6 +4392,11 @@ fn main() {
 
     if args[0] == "lua" {
         run_lua_cli(&args[1..]);
+        return;
+    }
+
+    if args[0] == "predicate" {
+        run_predicate_cli(&args[1..]);
         return;
     }
 

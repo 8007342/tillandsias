@@ -64,8 +64,12 @@ for f in $SPEC_GLOB; do
                     ;;
             esac
         fi
+        # Both heading dialects are requirements (order 1396-35we): the colon
+        # form, and the numbered pre-976-suab form `### Requirement <n>:`,
+        # which four active specs used and this matcher never saw, so their
+        # 29 requirements were neither counted nor checked.
         case "$line" in
-            '### Requirement:'*) prev_was_heading=1; total=$((total + 1)) ;;
+            '### Requirement:'* | '### Requirement '[0-9]*':'*) prev_was_heading=1; total=$((total + 1)) ;;
         esac
     done < "$f"
     if [ "$prev_was_heading" -eq 1 ]; then

@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-rust-hosted-lua-step-form-for-litmus-offered-beside-shell-not-replacing-it
+    event:
+      type: decision
+      ts: "2026-09-26T08:52:15Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        OPERATOR TEST-AUTHORING PRINCIPLE (the Tlatoāni, 2026-09-26, verbatim): "a file list might include last updated time of the listed files as part of its memoization hash, maybe the parent file as well, making it unique and a stable hash over file changes, or clearly mark it as unstable and use it for orchestration but not for hard tests. For example a tests should not say folder.forEachFile(verifySomething) but instead folder.file1.verifySomething(); folder.file2.verifySomething();, folder.file3...., etc, following unit test principles of removing unnecessary complexity and actually hardcoding lists explicitly for this very reason."
+        ADOPTED AS: (1) directory listing (fs.list) exists ONLY in the Observing class, documented UNSTABLE and never memoized: for orchestration and discovery, never for hard tests. (2) Lua-form litmus steps and Cacheable predicates name their subjects EXPLICITLY (a hardcoded list), never iterate a directory; each file's verdict is then individually cacheable and individually reported. (3) No mtime in any memo key: git does not preserve mtime (checkout time differs per clone and host) and same-second edits defeat it. The stable key for membership, if ever needed, is names plus per-entry content digests. (4) A candidate lint for the Lua step form (this row): refuse fs.list or directory iteration inside a Cacheable predicate or a litmus `steps:` assertion. Applies to CentiColon: the counted population is the committed spec registry, and a directory scan feeds only the advisory unregistered warning.

@@ -101,6 +101,23 @@ run() {
 
 now="$(date -u +%s)"
 
+# ORDER 1242-4x53, failure 2 of that row, CLASSIFIED: a one-second clock race.
+# This fixture fakes an exit at `now - 250492` and expects the reporter to print
+# age_s=250492 EXACTLY, but the reporter read the clock again itself
+# (check-enclave-service-health.sh: `now="$(date -u +%s …)"`). When a second
+# boundary fell between the two reads it printed age_s=250493 and the exited(143)
+# arm failed "22 passed, 1 failed". The gap between the reads widens under a
+# busy gate, which is why it failed in the release tier and passed alone.
+# MEASURED on macOS 2026-09-26: 1 of 20 serial runs, same shape.
+# The reporter's only clock read is `date -u +%s`, so pin exactly that call to
+# the fixture's `now`, and hand every other `date` invocation to the real one.
+_real_date="$(command -v date)"
+cat > "$BIN/date" <<EOF
+#!/bin/bash
+if [ "\$*" = "-u +%s" ]; then echo "$now"; else exec "$_real_date" "\$@"; fi
+EOF
+chmod +x "$BIN/date"
+
 # A tools-only PATH for the no-podman scenario. It must carry what the guard
 # uses (date, tr) and NOT podman — pointing at /usr/bin would find the real
 # one, which is how this scenario first "passed" by reporting the live host.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-dashboard-renderer-formats-percentages-through-bash-printf-under-the-callers-LC_NUMERIC-so-a-comma-decimal-locale-refuses-the-value-outright-and-accepts-the-ones-it-can-parse-with-a-comma-in-them
+    field: status
+    value: in_progress
+    ts: "2026-09-26T19:30:43Z"
+    host: yoga
+
+events:
+  - packet_id: the-dashboard-renderer-formats-percentages-through-bash-printf-under-the-callers-LC_NUMERIC-so-a-comma-decimal-locale-refuses-the-value-outright-and-accepts-the-ones-it-can-parse-with-a-comma-in-them
+    event:
+      type: note
+      ts: "2026-09-26T19:30:43Z"
+      host: yoga
+      summary: |-
+        claimed 2026-09-26 by yoga-silverblue: re-measured red on trunk 6f8d134dd (ligne 158 nombre non valable), C-locale control green

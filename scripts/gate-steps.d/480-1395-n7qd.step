@@ -1,0 +1,11 @@
+# Gate step 1395-n7qd — the CentiColon extractor is a Cacheable Lua predicate
+# whose obligation list is a pure function of repo bytes: hermetic arms (ids,
+# obsolete exclusion, unregistered, refusals, zero population) plus the real
+# corpus (gh-auth-script 7/19; three processes byte-identical).
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the CentiColon extractor: obligation ids, refusals, determinism (1395-n7qd)"
+STEP_SCRIPT="scripts/test-centicolon-extract.sh"
+STEP_ERROR="the CentiColon extractor miscounted, failed to refuse, or was not deterministic (1395-n7qd) — see the verdict line above"
+STEP_OK="CentiColon extractor holds"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:centicolon-extract:11"

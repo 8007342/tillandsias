@@ -1,0 +1,49 @@
+packets:
+  - packet_id: bsd-awk-rejects-a-newline-in-an-awk-v-value-so-a-variable-fed-awk-v-silently-empties-on-macos-and-check-bash-dialect-has-no-rule-for-it
+    order: 1399-wtpq
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [portability, bash, macos, guard, fail-loud]
+    estimated_hours: 2
+    owned_files: [scripts/check-bash-dialect.sh, scripts/test-check-bash-dialect.sh]
+    observed_by: lenovinha
+    verifiers: [macbookair]
+    unscoreable: |
+      unpinnable-until-the-rule-exists: the deliverable is the dialect rule and
+      its fixture arm; the pin lands with them.
+    title: |
+      BSD awk rejects a newline in an `awk -v` value ("newline in string") where gawk and mawk accept it, so `awk -v x="$multiline"` silently yields nothing on macOS — it turned 1375-tsfu's ratchet into ok:jq-callsites:0:floor:0 rc 0 on every Mac — and check-bash-dialect has no rule for it
+    verifiable_closure: |
+      scripts/check-bash-dialect.sh flags `awk -v <name>="$<var>"` (an
+      `awk -v` whose value is fed from a shell variable or command
+      substitution, which can carry a newline), with an exemption marker for
+      a value that is provably single-line (e.g. `# awk-v-ok: <reason>`).
+      The remedy printed is ENVIRON: `NAME="$var" awk '... ENVIRON["NAME"] ...'`.
+      scripts/test-check-bash-dialect.sh gains an arm that FAILS pre-fix
+      (a scratch script with `awk -v ft="$floor_text"` is not flagged) and
+      passes after. MECHANISM recorded, BSD repro (macbookair, 2026-09-26,
+      /usr/bin/awk = BSD onetrue awk, bash 3.2.57):
+        /usr/bin/awk -v x="$(printf 'a\nb')" 'BEGIN{print x}'   -> awk: newline in string
+        X="$(printf 'a\nb')" /usr/bin/awk 'BEGIN{print ENVIRON["X"]}'  -> a / b
+      A darwin run of the fixture by macbookair (named BSD verifier) is the
+      second regime.
+    context: |
+      Found 2026-09-26 by macbookair running 1375-tsfu's fixture on darwin:
+      3/6, arm 1 "guard n=0, git grep=362", arm 5 "--ratchet raised the
+      floor". scripts/check-jq-callsite-ratchet.sh passed its multi-line floor
+      file as `awk -v ft="$floor_text"`; BSD awk refused the value, the join
+      came out empty, and the guard printed an ok line over nothing: a silent
+      false green on every macOS host. Fixed there at d77aae938 (the floor
+      goes in via ENVIRON, and an empty join is now could-not-run rather than
+      ok). This row is the CLASS guard, so the next instance is refused at
+      write time on Linux, where it cannot be seen failing. Same family as
+      1373-sr9g's `. <(` rule (bash 3.2 sourcing an empty process
+      substitution): a construct GNU accepts and BSD rejects without a
+      non-zero exit the caller checks. Scope at filing, by
+      `git grep -cE 'awk[[:space:]]+(-[a-zA-Z]+[[:space:]]+)*-v[[:space:]]*[A-Za-z_]+="\$'`
+      over scripts/*.sh and build.sh: 72 sites in 55 files at filing;
+      most are single-line values (pids, tags) and take the exemption, and
+      the rule's value is the NEW multi-line one.

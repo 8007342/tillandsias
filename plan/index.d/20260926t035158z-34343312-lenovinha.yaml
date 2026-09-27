@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: measure-a-forge-cargo-builds-peak-rss-swap-and-pids-per-jobs-setting-and-a-tmpfs-spill-benchmark-zram-only-vs-zram-plus-disk-so-the-tier-budgets-are-numbers-not-formulas
+    event:
+      type: progress
+      ts: "2026-09-26T03:51:58Z"
+      agent_id: linux-lenovinha-claude-20260926t035158z
+      host: lenovinha
+      summary: |
+        FAT-HOST REGIME, measured by lenovinha 2026-09-26 with scripts/measure-forge-memory-budget.sh at 799b22aba, image pinned to localhost/tillandsias-forge:v56.9.25.2 (id 1062a80101e8), --memory 8g --memory-swap 16g, cold cargo build --workspace --all-targets per run. Verbatim lines:
+        regime:host=lenovinha:kernel=7.2.7-200.fc44.x86_64:nproc=16:mem_total_mib=13811:swap=/dev/zram0,partition,8G:swappiness=60:image=localhost/tillandsias-forge:v56.9.25.2:image_id=1062a80101e8
+        measure:forge-memory:jobs=4:mem_max=8g:swap_max=16g:rc=0:wall_s=147:memory_peak_mib=6194:swap_peak_mib=0:pids_peak=37:poll_mem_max_mib=6140:poll_swap_max_mib=0:poll_anon_max_mib=2454:file_at_anon_max_mib=3566:oom=0:oom_kill=0:high=0:max=0:ulimit_u=54302:host_min_avail_mib=7046:verdict=ok
+        measure:forge-memory:jobs=6:mem_max=8g:swap_max=16g:rc=0:wall_s=111:memory_peak_mib=6031:swap_peak_mib=0:pids_peak=52:poll_mem_max_mib=5942:poll_swap_max_mib=0:poll_anon_max_mib=3055:file_at_anon_max_mib=2848:oom=0:oom_kill=0:high=0:max=0:ulimit_u=54302:host_min_avail_mib=7008:verdict=ok
+        measure:forge-memory:jobs=12:mem_max=8g:swap_max=16g:rc=0:wall_s=98:memory_peak_mib=6624:swap_peak_mib=1:pids_peak=98:poll_mem_max_mib=6351:poll_swap_max_mib=1:poll_anon_max_mib=3907:file_at_anon_max_mib=1818:oom=0:oom_kill=0:high=0:max=0:ulimit_u=54302:host_min_avail_mib=6298:verdict=ok
+        measure:forge-memory:jobs=16:mem_max=8g:swap_max=16g:rc=0:wall_s=93:memory_peak_mib=7172:swap_peak_mib=0:pids_peak=126:poll_mem_max_mib=7031:poll_swap_max_mib=0:poll_anon_max_mib=4049:file_at_anon_max_mib=2926:oom=0:oom_kill=0:high=0:max=0:ulimit_u=54302:host_min_avail_mib=5592:verdict=ok
+        Summary, anon peak MiB by -j: 4->2454, 6->3055, 12->3907, 16->4049 (yoga reported ~2.0/3.0/3.3 GiB at -j4/6/12). pids.peak 37/52/98/126: a cargo build alone uses about 8 pids per job, nowhere near 4096, so 1372-igkr's rustc panics at pids.max=4096 are NOT explained by the compiler's own process count. The startup brew/agent installers running concurrently are the remaining candidate, and the pids.max 4096 hypothesis is weakened. Zero OOM, zero swap (1 MiB at -j12), host MemAvailable minimum 5592 MiB at -j16. Wall time flattens past -j6 (147/111/98/93 s).

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-plan-only-lanes-append-vs-origin-fold-check-rebuilds-every-long-form-field-in-the-whole-ledger-on-every-push-so-the-cheap-lane-costs-two-minutes-on-a-floor-host-and-grows-with-the-corpus-rather-than-with-the-push
+    field: status
+    value: completed
+    ts: "2026-09-26T14:25:45Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: the-plan-only-lanes-append-vs-origin-fold-check-rebuilds-every-long-form-field-in-the-whole-ledger-on-every-push-so-the-cheap-lane-costs-two-minutes-on-a-floor-host-and-grows-with-the-corpus-rather-than-with-the-push
+    event:
+      type: completed
+      ts: "2026-09-26T14:25:45Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: 7c07a0f11
+  - packet_id: the-plan-only-lanes-append-vs-origin-fold-check-rebuilds-every-long-form-field-in-the-whole-ledger-on-every-push-so-the-cheap-lane-costs-two-minutes-on-a-floor-host-and-grows-with-the-corpus-rather-than-with-the-push
+    event:
+      type: note
+      ts: "2026-09-26T14:25:45Z"
+      host: yolanda-windows
+      summary: |-
+        LANDED on origin/linux-next at 7c07a0f11 ("relay: land work/1310-7apk", my 38577276a). Verified by content on trunk: fold pairs are derived only from the push's own fragments, bounded by TILLANDSIAS_APPEND_FOLD_DEADLINE with could-not-run exit 3, and the hook passes the push's plan/index.d files. test-append-vs-origin-fold.sh passes 5/5, including the scoped NEGATIVE CONTROL (arm 3: narrowed, the dropped line is still refused). Criteria 1, 3 and 4 are met by the fixture. EVIDENCE FROM THE HOST THAT COULD NOT PUSH TONIGHT (yolanda-windows, native, OWN plan lane, no relay, no salvage): rc=0 in 58 s (landed 47b0f9d6e) and rc=0 in 56 s (landed 840fb3901), against a 420 s timeout before the fix. The scoped fold alone is about 10 s (checked:1) against 76.3 s for the whole corpus (checked:162). CRITERION 2 (a floor Linux host under 30 s) is MOVED, not dropped, to 1408-8ifb (low-end/floor-tier, routed to pirria or esme), which carries the pre-fix number to beat: 135.8 s on pirria.

@@ -237,6 +237,12 @@ impl LuaRuntime {
         // Register the `expert` table — the Rust<->Lua bridge
         Self::register_expert_table(&lua)?;
 
+        // 1375-btuf: the same std tables every plan-binary Lua environment
+        // gets. Observing, because this runtime already exposes the clock
+        // (expert.now_ms) and is never cached.
+        crate::lua_std::register(&lua, crate::lua_predicate::PredicateClass::Observing)
+            .map_err(|e| LuaError::VmError(format!("lua_std: {e}")))?;
+
         let mut rt = Self {
             lua,
             lua_dir: lua_dir.to_path_buf(),

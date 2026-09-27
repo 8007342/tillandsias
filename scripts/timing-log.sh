@@ -142,12 +142,14 @@ timing_clock_resolution() {
     printf '%s' "${_p%% *}"
 }
 
-# timing_emit <step> <phase> <t0_ms> <exit_code>
+# timing_emit <step> <phase> <t0_ms> <exit_code> [reproduced]
+# The optional fifth argument (yes|no, order 1242-4x53) says whether a failed
+# step failed AGAIN on a same-regime re-run; omit it when nothing re-ran.
 # Computes duration = now - t0 and appends one record via cycle-metrics.sh
 # --emit-timing. Returns 0 unconditionally so `set -e` callers are safe and the
 # wrapped step's own exit code is never disturbed.
 timing_emit() {
-    local _step="${1:-unknown}" _phase="${2:-unknown}" _t0="${3:-0}" _rc="${4:-0}"
+    local _step="${1:-unknown}" _phase="${2:-unknown}" _t0="${3:-0}" _rc="${4:-0}" _repro="${5:-}"
     {
         local _dir _cm _now _dur _host
         # 697-s3by: use the absolute directory captured at SOURCE time, not a
@@ -199,7 +201,7 @@ timing_emit() {
         if [ -x "$_cm" ] || [ -r "$_cm" ]; then
             bash "$_cm" --emit-timing \
                 step="$_step" phase="$_phase" duration_ms="$_dur" exit="$_rc" \
-                host="$_host" >/dev/null 2>&1 || true
+                host="$_host" ${_repro:+reproduced="$_repro"} >/dev/null 2>&1 || true
         fi
     } 2>/dev/null || true
     return 0

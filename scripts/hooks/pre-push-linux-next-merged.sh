@@ -28,10 +28,23 @@
 # sibling advancing linux-next between your fetch and your push cannot fail
 # you. The fetch half of the gate stays procedural (skill Finalization).
 #
+# THE SUBSET EXCEPTION (order 1259-kn83; coordinator ruling 2026-09-26). The
+# rule assumes a gate is fast next to trunk's landing cadence, and on a slow
+# host it is not: over 24h of origin/linux-next, 78% of the gaps between CODE
+# landings were shorter than one full osx-next gate (1799s), so "merge, gate,
+# push" was overtaken about four times in five and never converged. A push is
+# therefore ADMITTED without containing origin/linux-next when, for every path
+# outside plan/ (the fragment lanes), the pushed tip's TREE is byte-identical to
+# the tree of a commit that IS on origin/linux-next's first-parent line. Then
+# every byte of code the push carries is code trunk already gated. Trees are
+# compared, not a diff against the moving base, which can miss a file the
+# branch changed and trunk later changed back. The matched commit is named.
+#
 # Verdict grammar (single stdout line; diagnostics on stderr):
-#   ok:linux-next-merged:<n>            n gated refs verified (0 = none gated)
-#   ok:no-linux-next-ref                no origin/linux-next tracking ref here
-#   blocked:linux-next-not-merged:<br>  exit 1 — merge origin/linux-next first
+#   ok:linux-next-merged:<n>                 n gated refs verified (0 = none gated)
+#   ok:pre-push:platform-subset-of:<sha>     admitted: code identical to trunk commit <sha>
+#   ok:no-linux-next-ref                     no origin/linux-next tracking ref here
+#   blocked:linux-next-not-merged:<br>       exit 1 — merge origin/linux-next first
 #
 # Pinned by scripts/test-pre-push-linux-next-merged.sh (hermetic fixture with
 # a mutation-control arm) via litmus:pre-push-linux-next-merged-shape.
@@ -51,7 +64,24 @@ if [ -z "$LINUX_NEXT" ]; then
     exit 0
 fi
 
+# subset_of <sha> — print the first commit on origin/linux-next's first-parent
+# line, from its tip back to where <sha> diverged from it, whose tree equals
+# <sha>'s tree outside plan/. Prints nothing (rc 1) when there is none.
+subset_of() {
+    local tip="$1" base cand
+    base="$(git merge-base "$LINUX_NEXT" "$tip" 2>/dev/null)" || return 1
+    [ -n "$base" ] || return 1
+    for cand in $(git rev-list --first-parent "$LINUX_NEXT" "^$base" 2>/dev/null) "$base"; do
+        if git diff --quiet "$cand" "$tip" -- . ':(exclude)plan/' 2>/dev/null; then
+            printf '%s\n' "$cand"
+            return 0
+        fi
+    done
+    return 1
+}
+
 checked=0
+subset_sha=""
 while read -r _lref lsha rref _rsha; do
     [ -n "${rref:-}" ] || continue
     case "$rref" in
@@ -63,6 +93,10 @@ while read -r _lref lsha rref _rsha; do
     [ "$lsha" = "$ZERO_SHA" ] && continue
     if git merge-base --is-ancestor "$LINUX_NEXT" "$lsha" 2>/dev/null; then
         checked=$((checked + 1))
+    elif matched="$(subset_of "$lsha")"; then
+        # 1259-kn83: no code this push carries is new to trunk.
+        checked=$((checked + 1))
+        subset_sha="$matched"
     else
         branch="${rref#refs/heads/}"
         {
@@ -80,5 +114,9 @@ while read -r _lref lsha rref _rsha; do
     fi
 done
 
+if [ -n "$subset_sha" ]; then
+    echo "ok:pre-push:platform-subset-of:$subset_sha"
+    exit 0
+fi
 echo "ok:linux-next-merged:$checked"
 exit 0

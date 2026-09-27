@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    field: status
+    value: completed
+    ts: "2026-09-26T00:25:00Z"
+    host: yoga
+
+events:
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: completed
+      ts: "2026-09-26T00:25:00Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: landed on origin/linux-next at 21027af15 (work/1132-r4mt 8f4f0a627)
+  - packet_id: the-archiver-ruby-fixture-refuses-inside-the-gate-and-passes-standalone-on-the-same-tree-on-two-hosts-with-opposite-ruby-layouts
+    event:
+      type: note
+      ts: "2026-09-26T00:25:00Z"
+      host: yoga
+      summary: |-
+        C1-C5 evidenced: C1 out2 print (6e7de8915); C2 concurrent-scratch mechanism reproduced 3/3; C3 same verdict in gate and standalone on 165f00c71; C4 arms 4/5 one cause, kill probe with pre-fix control; C5 concurrent fixture trunk FAIL 3/6, fixed PASS 6/6, daily on --ci-full

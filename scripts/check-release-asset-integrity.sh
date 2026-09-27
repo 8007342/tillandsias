@@ -124,14 +124,87 @@ for a in $names; do
     violations+=("$a")
 done
 
+# ── BYTES, not names (1407-6jr8). Everything above asks whether an asset HAS
+# an integrity path, never whether the path still describes the bytes: a
+# 0-byte tarball with its bundle kept passed (macbookair, 2026-09-26). Two
+# checks, both only over a staged dir (--tag mode downloads the manifests,
+# not the assets, so it has no bytes to compare and says so):
+#   1. every manifest entry that is present must match its sha256 — always on;
+#   2. `cosign verify-blob` for each `<asset>.cosign.bundle` — opt-in, because
+#      it needs real keyless bundles and the signer's identity:
+#        RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP=<regexp>
+#        RELEASE_VERIFY_COSIGN_ISSUER=<issuer>  (default: GitHub Actions OIDC)
+#      Unset, or cosign absent, is a NAMED skip on stderr, never a silent pass.
+mismatched=()
+if [ -z "$TAG" ]; then
+    if command -v sha256sum >/dev/null 2>&1; then _sha() { sha256sum "$1" | awk '{print $1}'; }
+    else _sha() { shasum -a 256 "$1" | awk '{print $1}'; }
+    fi
+    for m in $(printf '%s\n' "$names" | grep '^SHA256SUMS' | grep -v '\.cosign\.bundle$'); do
+        while read -r want n; do
+            n="${n#\*}"
+            [ -n "$n" ] && [ -f "$DIR/$n" ] || continue
+            [ "$(_sha "$DIR/$n")" = "$want" ] || mismatched+=("$n (per $m)")
+        done < "$DIR/$m"
+    done
+    if [ -n "${RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP:-}" ] && command -v cosign >/dev/null 2>&1; then
+        issuer="${RELEASE_VERIFY_COSIGN_ISSUER:-https://token.actions.githubusercontent.com}"
+        for b in $(printf '%s\n' "$names" | grep '\.cosign\.bundle$'); do
+            a="${b%.cosign.bundle}"
+            [ -f "$DIR/$a" ] || continue
+            # cosign v2 reads a sigstore v0.3 bundle only with
+            # --new-bundle-format and otherwise says "bundle does not contain
+            # cert" (measured, cosign v2.4.1 on the v56.9.25.2 set: 0/15 plain,
+            # 15/15 with the flag). v3 reads it by default. The retry is keyed
+            # on that one message, so an identity or signature failure is
+            # never retried into a pass.
+            cerr="$(cosign verify-blob --bundle "$DIR/$b" \
+                --certificate-identity-regexp "$RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP" \
+                --certificate-oidc-issuer "$issuer" "$DIR/$a" 2>&1 >/dev/null)" && continue
+            case "$cerr" in
+                *"bundle does not contain cert"*)
+                    cosign verify-blob --new-bundle-format --bundle "$DIR/$b" \
+                        --certificate-identity-regexp "$RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP" \
+                        --certificate-oidc-issuer "$issuer" "$DIR/$a" >/dev/null 2>&1 && continue ;;
+            esac
+            mismatched+=("$a (cosign verify-blob against $b)")
+        done
+    elif [ -z "${RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP:-}" ]; then
+        echo "  skip:cosign-verify-blob:no RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP (bundles checked for presence only)" >&2
+    else
+        echo "  skip:cosign-verify-blob:cosign not on PATH (bundles checked for presence only)" >&2
+    fi
+else
+    echo "  skip:byte-checks:--tag mode has the manifests, not the assets" >&2
+fi
+for v in ${mismatched[@]+"${mismatched[@]}"}; do
+    violations+=("$v")
+done
+
 if [ "${#violations[@]}" -gt 0 ]; then
     echo "violation:release-asset-integrity:${#violations[@]}"
+    # Two defects, two remedies (1407-6jr8): an asset with NO integrity path
+    # is a signing-loop fault; an asset whose BYTES changed is a staging
+    # fault, and sending its reader to fix signing re-signs the corruption.
+    uncovered=0
     for v in ${violations[@]+"${violations[@]}"}; do
+        case "$v" in *" (per "*|*" (cosign "*) continue ;; esac
+        uncovered=$((uncovered + 1))
         echo "  $v has no integrity path: no ${v}.cosign.bundle, and no signed SHA256SUMS names it" >&2
     done
-    echo "  A downloader cannot verify these. Sign them in the release workflow" >&2
-    echo "  (the loop must be \`for artifact in *\`, not an allow-list) or name them" >&2
-    echo "  in a SHA256SUMS that is itself signed (756-rfdr)." >&2
+    if [ "$uncovered" -gt 0 ]; then
+        echo "  A downloader cannot verify these. Sign them in the release workflow" >&2
+        echo "  (the loop must be \`for artifact in *\`, not an allow-list) or name them" >&2
+        echo "  in a SHA256SUMS that is itself signed (756-rfdr)." >&2
+    fi
+    if [ "${#mismatched[@]}" -gt 0 ]; then
+        for v in ${mismatched[@]+"${mismatched[@]}"}; do
+            echo "  $v: the bytes do not match what was signed or manifested" >&2
+        done
+        echo "  The bytes changed after the manifest line or signature was written." >&2
+        echo "  Re-stage the artifact from the build output, then regenerate and re-sign" >&2
+        echo "  the manifest. Do NOT edit the manifest or re-sign to match these bytes." >&2
+    fi
     exit 1
 fi
 

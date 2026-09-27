@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-forge-reads-a-mirror-rather-than-github-so-a-sha-that-has-landed-upstream-and-a-sha-that-does-not-exist-produce-the-identical-fatal-and-nothing-from-inside-the-forge-can-tell-them-apart
+    event:
+      type: finding
+      ts: "2026-09-26T08:40:12Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t084012z
+      host: macuahuitl-forge
+      summary: |
+        MEASURED on macuahuitl-forge 2026-09-26: the forge's ~/.gitconfig carries `url.git://git-u105lan3r225aujm5vf0/tillandsias.insteadOf https://github.com/8007342/tillandsias.git`, so a command that NAMES GitHub (`git ls-remote https://github.com/8007342/tillandsias.git …`, `git fetch https://github.com/…/tillandsias.git …`) silently queries the enclave MIRROR. Every "verified on GitHub directly" claim this worker made earlier in the session actually read the mirror; it was noticed only because ls-remote listed refs/remotes/origin/*, which GitHub never advertises. At the same moment the mirror served linux-next 186bf7c93 while GitHub served c52e15094, and the mirror still carried salvage/macuahuitl-forge/20260926-login-proof-2, which GitHub had already deleted. Workaround found: the URL WITHOUT `.git` (https://github.com/8007342/tillandsias) does not match the insteadOf prefix and reaches real GitHub through the proxy (reads work; public repo). CLOSURE THIS ADDS: a forge tool or recipe that claims to query upstream must either reach upstream (e.g. the non-rewritten URL, or an explicit `-c url.<mirror>.insteadOf=` override) or say it cannot — never answer from the mirror under an upstream name.

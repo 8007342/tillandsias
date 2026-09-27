@@ -409,6 +409,7 @@ if [ "${1:-}" = "--emit-timing" ]; then
     shift
     et_host="-"; et_step="-"; et_phase="-"
     et_duration_ms=0; et_exit=0
+    et_reproduced=""
     for tok in "$@"; do
         case "$tok" in
             host=*)         et_host="${tok#host=}" ;;
@@ -416,6 +417,7 @@ if [ "${1:-}" = "--emit-timing" ]; then
             phase=*)        et_phase="${tok#phase=}" ;;
             duration_ms=*)  et_duration_ms="${tok#duration_ms=}" ;;
             exit=*)         et_exit="${tok#exit=}" ;;
+            reproduced=*)   et_reproduced="${tok#reproduced=}" ;;
         esac
     done
     # Numeric fields must be integers or the rolling arithmetic downstream breaks;
@@ -433,6 +435,18 @@ if [ "${1:-}" = "--emit-timing" ]; then
     et_host="${et_host//[\"\\]/}"; et_step="${et_step//[\"\\]/}"; et_phase="${et_phase//[\"\\]/}"
     et_host="${et_host//[[:cntrl:]]/_}"; et_step="${et_step//[[:cntrl:]]/_}"; et_phase="${et_phase//[[:cntrl:]]/_}"
     [ -n "$et_step" ] || et_step="-"
+    # ORDER 1242-4x53. DID THIS FAILURE REPRODUCE when the step was re-run once
+    # in the same regime? Two reds in one release tier passed on re-run in both
+    # regimes, and a timing log carrying only an exit code cannot tell a
+    # regression from non-determinism, so the fleet's 25-29% gate failure rate
+    # is one number when it should be two. Only yes|no is written; anything
+    # else, including absence, writes NO key: absent means "not re-run" (or a
+    # pre-field record), never "did not reproduce". Appended after the root
+    # fields, like them, so field order and every current reader are untouched.
+    case "$et_reproduced" in
+        yes|no) et_repro_field=",\"reproduced\":\"$et_reproduced\"" ;;
+        *)      et_repro_field="" ;;
+    esac
     {
         et_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
         # ORDER 1299-s2sv. WHERE THIS RECORD WAS WRITTEN FROM, so the question
@@ -441,9 +455,9 @@ if [ "${1:-}" = "--emit-timing" ]; then
         # 1268-m2ir cost. Appended as a pre-rendered fragment so the existing
         # field order is untouched and every current reader stays inert.
         et_root_fields="$(metrics_root_fields "$TIMING_LOG" 2>/dev/null || true)"
-        printf '{"ts":"%s","host":"%s","step":"%s","phase":"%s","duration_ms":%s,"exit":%s%s}\n' \
+        printf '{"ts":"%s","host":"%s","step":"%s","phase":"%s","duration_ms":%s,"exit":%s%s%s}\n' \
             "$et_ts" "$et_host" "$et_step" "$et_phase" \
-            "$et_duration_ms" "$et_exit" "$et_root_fields" \
+            "$et_duration_ms" "$et_exit" "$et_root_fields" "$et_repro_field" \
             >>"$TIMING_LOG"
     } 2>/dev/null || true
     exit 0
@@ -518,8 +532,25 @@ if [ "${1:-}" = "--emit-timing-batch" ]; then
                 if (phase == "") phase = "-"
                 if (host == "") host = "-"
                 gsub(/["\\]/, "", step); gsub(/["\\]/, "", phase); gsub(/["\\]/, "", host)
-                printf "{\"ts\":\"%s\",\"host\":\"%s\",\"step\":\"%s\",\"phase\":\"%s\",\"duration_ms\":%d,\"exit\":%d%s}\n", \
-                    ts, host, step, phase, dur, ec, rootf
+                # ORDER 1242-4x53 (coordinator decision 2026-09-26): optional
+                # column 6 = pass|fail|skip, column 7 = the step a failed test
+                # died on. Outside the domain writes no key, and absence never
+                # reads as a verdict. Appended after the root fields so every
+                # current reader stays inert.
+                extra = ""
+                if ($6 == "pass" || $6 == "fail" || $6 == "skip") extra = extra ",\"status\":\"" $6 "\""
+                if ($7 ~ /^[0-9]+$/) extra = extra ",\"failed_step\":" $7
+                # ORDER 1395-88tp: optional column 8 = sha256 of the litmus
+                # file bytes, the key the CentiColon grader credits a green
+                # record to. Only a 64-hex value writes the key.
+                if ($8 ~ /^[0-9a-f]+$/ && length($8) == 64) extra = extra ",\"digest\":\"" $8 "\""
+                # Columns 9-11 (1395-88tp): regime (darwin, linux, msys), the
+                # spec the test ran under, and the sha256 of that spec file.
+                if ($9 ~ /^[a-z0-9_-]+$/) extra = extra ",\"regime\":\"" $9 "\""
+                if ($10 ~ /^[A-Za-z0-9_.-]+$/) extra = extra ",\"spec\":\"" $10 "\""
+                if ($11 ~ /^[0-9a-f]+$/ && length($11) == 64) extra = extra ",\"spec_digest\":\"" $11 "\""
+                printf "{\"ts\":\"%s\",\"host\":\"%s\",\"step\":\"%s\",\"phase\":\"%s\",\"duration_ms\":%d,\"exit\":%d%s%s}\n", \
+                    ts, host, step, phase, dur, ec, rootf, extra
             }' >>"$TIMING_LOG"
     } 2>/dev/null || true
     exit 0
@@ -1192,6 +1223,15 @@ fi
 printf 'timing: steps=%s build_check_ms_avg=%s%s litmus_ms_avg=%s slowest=%s source=%s\n' \
     "${timing_steps:-0}" "${timing_build_check_avg:--}" "$timing_mix" "${timing_litmus_avg:--}" \
     "${timing_slowest:--:-}" "$timing_source"
+
+# ORDER 1395-ue3i: the CentiColon R line, ADVISORY, in the cycle record so
+# V_c can be computed from it on trunk (1395-miwn). --no-snapshot: reporting
+# here must never advance the snapshot and swallow the next --check's
+# lost-satisfaction warning. Best-effort: a pipeline that cannot run prints
+# `centicolon: blocked:…`, and a missing script prints nothing.
+if [ -f "$(dirname "$0")/check-centicolon-ratchet.sh" ]; then
+    { bash "$(dirname "$0")/check-centicolon-ratchet.sh" --no-snapshot 2>/dev/null | grep '^centicolon:'; } || true
+fi
 
 if [ "$EXPERTS_ONLY" = true ] || [ "$NO_REPO_SCAN" = true ]; then
     exit 0

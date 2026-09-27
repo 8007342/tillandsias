@@ -103,8 +103,46 @@ out="$(run_check)"; rc=$?
 [ "$rc" = 1 ] || fail "a duplicate identifier should fail the validator (got rc=$rc)"
 case "$out" in *"violation:requirement-ids-duplicated:1"*) ;; *) fail "expected a duplicate verdict, got: $out" ;; esac
 
+# 7. THE NUMBERED DIALECT IS A REQUIREMENT TOO (order 1396-35we). Four active
+#    specs wrote `### Requirement <n>: <title>`, which the colon-only matcher
+#    never saw: their 29 requirements were neither counted nor checked, and the
+#    CentiColon extractor listed them as unkeyed. A numbered heading without an
+#    id must be reported MISSING.
+#    PRE-FIX RESULT: FAILS, ok:requirement-ids:3 (the numbered one is invisible).
+mkcorpus
+run_stamp >/dev/null
+mkdir -p "$TMP/openspec/specs/gamma"
+cat > "$TMP/openspec/specs/gamma/spec.md" <<'EOF'
+# gamma Specification
+
+### Requirement 1: G-1 — a numbered obligation
+
+The system MUST do the numbered thing.
+EOF
+out="$(run_check)"; rc=$?
+[ "$rc" = 1 ] || fail "a numbered requirement without an id should fail the validator (got rc=$rc: $out)"
+case "$out" in *"violation:requirement-ids-missing:1"*) ;; *) fail "expected missing:1 for the numbered heading, got: $out" ;; esac
+
+# 8. ...and the stamper mints it a NEW random id in the corpus format (8 hex),
+#    leaves every existing id alone, and a second run is a no-op.
+before_alpha="$(grep -h 'req-id' "$TMP/openspec/specs/alpha/spec.md")"
+run_stamp >/dev/null
+gid="$(sed -n 's/^<!-- req-id: \([0-9a-f]*\) -->$/\1/p' "$TMP/openspec/specs/gamma/spec.md")"
+case "$gid" in
+    [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+    *) fail "the numbered heading should get one 8-hex id, got '$gid'" ;;
+esac
+[ "$(grep -h 'req-id' "$TMP/openspec/specs/alpha/spec.md")" = "$before_alpha" ] \
+    || fail "stamping the numbered heading reassigned an existing id"
+out="$(run_check)"; rc=$?
+[ "$rc" = 0 ] || fail "after stamping, the numbered corpus should pass (got rc=$rc: $out)"
+case "$out" in *"ok:requirement-ids:4 "*) ;; *) fail "expected 4 requirements counted, got: $out" ;; esac
+snap="$(cat "$TMP/openspec/specs/gamma/spec.md")"
+run_stamp >/dev/null
+[ "$(cat "$TMP/openspec/specs/gamma/spec.md")" = "$snap" ] || fail "a second stamp changed the numbered spec"
+
 if [ "$failures" -gt 0 ]; then
     echo "FAILED: $failures case(s)"
     exit 1
 fi
-echo "ok: requirement-id generator and validator fixture 6/6"
+echo "ok: requirement-id generator and validator fixture 8/8"

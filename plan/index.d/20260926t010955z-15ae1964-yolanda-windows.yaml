@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: one-lua-std-module-registers-json-yaml-hash-time-path-into-every-lua-environment-the-plan-binary-hosts-by-class-and-the-lua-cli-stops-handing-scripts-an-unsandboxed-vm
+    event:
+      type: note
+      ts: "2026-09-26T01:09:55Z"
+      agent_id: windows-yolanda-claude-20260926t010954z
+      host: yolanda-windows
+      summary: |
+        yolanda-windows, 2026-09-26. MEASURED while porting 560: on NATIVE Windows (tillandsias-plan.exe) the embedded Lua's os.execute and io.popen run through cmd.exe, not sh. So archive-plan-packets.lua fails there: mkdir -p <dir> creates a directory literally named "-p" and then errors "already exists", and the popen pipeline that reads the fold fails, printing "could not read the fold ... REFUSING". archive-plan-packets.sh --check then exits 3 as could-not-run:archiver:lua-worker-failed. The same script is green in the WSL builder (Linux): both sweeps ran, about 8.5s each.
+        This row's argv/fs port (sh.run{argv}, fs.mkdir/fs.write in place of shell strings) is what makes the Lua archiver run on native Windows. Until then, "Windows gains from the Lua backend" holds only inside the WSL gate.
+        Reproduce on any Windows host: TILLANDSIAS_PLAN_BIN=<exe> <exe> lua scripts/archive-plan-packets.lua --index <copy>/plan/index.yaml --archive <copy>/plan/archive.

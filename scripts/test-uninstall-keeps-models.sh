@@ -107,6 +107,8 @@ run_uninstall() {
     mkdir -p "$_home/fixture-bin"
     HOME="$_home" \
     PATH="$STUBBIN:$PATH" \
+    TILLANDSIAS_UNINSTALL_APPS_DIR="$_home/Applications" \
+    TILLANDSIAS_UNINSTALL_TRAY_PROC="nonce-tray-1401" \
     TILLANDSIAS_UNINSTALL_FAKE_UNAME="Linux" \
     TILLANDSIAS_UNINSTALL_INSTALL_DIR="$_home/fixture-bin" \
         bash "$_uninstall" "$@" 2>&1

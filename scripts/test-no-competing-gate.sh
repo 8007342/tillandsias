@@ -240,6 +240,43 @@ else
     check "an unreadable NON-wrapper does not suspend the accusation" 0 "competing-gate:" "$rc" "$out"
 fi
 
+# 11. BOTH OPAQUE INCREMENTS SHARE ONE RULE (a structural pin, and why). On a
+#     real host a same-uid daemon's environ passes `[ -r ]` (0400, ours) and
+#     then REFUSES THE OPEN (a non-dumpable process fails the ptrace check),
+#     which lands in the detector's SECOND opaque increment. That increment
+#     counted unconditionally: measured on yoga 2026-09-26 with a genuine stray
+#     alive, systemd --user plus two bash zombies made six of six runs answer
+#     unreadable-processes:3 while arm 10 stayed green, because arm 10's
+#     dangling symlink fails `-r` and only ever reached the FIRST increment.
+#     "Passes -r, fails open" cannot be built in a fake tree without root: a
+#     directory opens fine for a read loop, and sockets and ttys are not
+#     portable. So the property is pinned structurally — both increments call
+#     _opaque_candidate, which arms 10 and 12 exercise — and this arm fails if a
+#     later edit gives either increment its own rule again.
+n_calls="$(grep -c '_opaque_candidate "\$d" && opaque=\$((opaque + 1))' "$CHECK")"
+n_bare="$(grep -c 'opaque=\$((opaque + 1))' "$CHECK")"
+if [ "$n_calls" = 2 ] && [ "$n_bare" = 2 ]; then
+    pass=$((pass+1)); echo "ok: both opaque increments go through _opaque_candidate"
+else
+    fail=$((fail+1)); echo "FAIL: opaque increments: $n_bare total, $n_calls through _opaque_candidate (want 2 and 2)"
+fi
+
+# 12. A ZOMBIE IS NOBODY'S LIVE WRAPPER, even wrapper-shaped: it has no memory
+#     and runs nothing. Built on the constructible path (environ absent).
+r="$(newroot zombie)"
+mkproc "$r" 101 tok-a "/usr/bin/conmon --api-version 1 -c abc"
+mkproc "$r" 102 tok-a "bash /repo/./build.sh --check"
+mkproc "$r" 103 tok-d "toolbox run --container tillandsias-builder bash -l -c x"
+rm -f "$r/103/environ"
+ln -s /nonexistent-so-there-is-nothing-to-read "$r/103/environ" 2>/dev/null || true
+printf 'Name:\tbash\nState:\tZ (zombie)\n' > "$r/103/status"
+if [ -r "$r/103/environ" ]; then
+    fail=$((fail+1)); echo "FAIL: premise: could not make the zombie's environ unreadable — this arm would have asserted nothing"
+else
+    out="$(run_check "$r")"; rc=$?
+    check "a wrapper-shaped ZOMBIE does not suspend the accusation" 0 "competing-gate:" "$rc" "$out"
+fi
+
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then echo "PASS: competing-gate detector $pass/$total (1141-vf9w)"; exit 0; fi
 echo "FAIL: competing-gate detector $pass/$total (1141-vf9w)"; exit 1

@@ -62,6 +62,41 @@ $StartMenuDir  = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
 $ShortcutPath  = Join-Path $StartMenuDir "$AppName.lnk"
 $StartupDir    = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'
 $StartupLnk    = Join-Path $StartupDir "$AppName.lnk"
+
+# -- Resolve the release channel FIRST (order 1369-sjbc) ----------------------
+# Release channels (plan order 305 stable, 621-* unstable):
+#   stable   (default) -> /releases/latest/download - newest PROMOTED release.
+#   unstable           -> /releases/download/unstable - a rolling prerelease the
+#                         release workflow re-points at EVERY daily build.
+# `iex`-piped invocations cannot take parameters, so the channel is selected via
+# the environment: $env:TILLANDSIAS_CHANNEL='unstable' before the pipe.
+#
+# ORDER 1369-sjbc. The DEFAULT is the channel of the release this copy was
+# published in: the release job rewrites the next line in the copy it uploads
+# to `unstable` (scripts/stage-unstable-installers.sh), because a script cannot
+# see the URL it was fetched from. Before that, `irm .../unstable/...| iex`
+# with no variable set silently installed STABLE and still ran the reset.
+# Keep the line exactly as written; the rewrite refuses unless it matches once.
+$DefaultChannel = 'stable'
+if ($env:TILLANDSIAS_CHANNEL) {
+    $Channel = $env:TILLANDSIAS_CHANNEL
+    $ChannelSource = 'TILLANDSIAS_CHANNEL'
+} else {
+    $Channel = $DefaultChannel
+    $ChannelSource = 'default of this installer copy'
+}
+switch ($Channel) {
+    'stable'   { $ChannelBase = "https://github.com/$Repo/releases/latest/download" }
+    'unstable' { $ChannelBase = "https://github.com/$Repo/releases/download/unstable" }
+    default    { throw "Unknown TILLANDSIAS_CHANNEL '$Channel' (want stable or unstable)" }
+}
+
+# ORDER 1369-sjbc. Resolved channel, its source and base URL, printed before
+# anything is downloaded and long before the reset, so a mismatch can still be
+# stopped. TILLANDSIAS_INSTALL_RESOLVE_ONLY=1 stops here (fixture seam).
+$ResolvedBase = if ($env:TILLANDSIAS_VERSION) { "https://github.com/$Repo/releases/download/v$($env:TILLANDSIAS_VERSION.TrimStart('v'))" } else { $ChannelBase }
+Write-Host "  resolved-channel: $Channel ($ChannelSource) base: $ResolvedBase"
+if ($env:TILLANDSIAS_INSTALL_RESOLVE_ONLY -eq '1') { return }
 # windows-260722-3: the tray (and thus its child processes, e.g. the WSL
 # keepalive) must NEVER run with the INSTALL dir as CWD -- children that
 # outlive a hard-killed tray hold the directory handle and block the next
@@ -73,6 +108,32 @@ New-Item -ItemType Directory -Force -Path $DataRootDir | Out-Null
 function Say   { param([string]$msg) Write-Host "  $msg" }
 function SayOk { param([string]$msg) Write-Host "  $msg" -ForegroundColor Green }
 function SayWn { param([string]$msg) Write-Host "  $msg" -ForegroundColor Yellow }
+
+# -- PENDING ACTIONS banner (order 1380-zmpi, design section 9.4) -------------
+# Operator, 2026-09-26: "print some big text with what's pending, like a
+# restart for windows hosts where WSL was just enabled." Steps below APPEND to
+# $PendingActions as they discover something the user must still do; the
+# banner is the script's LAST output. "PENDING: none" is printed rather than
+# omitted, because silence and "nothing pending" produce the same bytes.
+# Format-PendingBanner is pure (items in, lines out) so the fixture
+# scripts/test-installers-print-pending-banner.sh runs it through PowerShell;
+# the marker lines around it are what that fixture cuts on.
+$PendingActions = New-Object System.Collections.Generic.List[string]
+# BEGIN-PENDING-BANNER
+function Format-PendingBanner {
+    param([string[]]$Items)
+    $rule = '=' * 64
+    $out = @('', $rule, '  PENDING ACTIONS', $rule)
+    if ($null -eq $Items -or $Items.Count -eq 0) {
+        $out += '  PENDING: none'
+    } else {
+        foreach ($i in $Items) { $out += "  >> $i" }
+    }
+    $out += $rule
+    $out += ''
+    return ,$out
+}
+# END-PENDING-BANNER
 function Die   { param([string]$msg) Write-Host "  ERROR: $msg" -ForegroundColor Red; exit 1 }
 
 function New-Shortcut {
@@ -269,6 +330,99 @@ if ($NoLaunchReason -and -not $NoLaunch) {
 # file is the user's and may carry settings for work that has nothing to do
 # with us; writing it behind their back would be a worse defect than the one
 # being fixed. Same consent discipline the destructive reset already follows.
+# The ONE write below (the swap keys, 2026-09-26) is behind an explicit yes.
+#
+# SWAP KEYS (1339-r9xv, design plan/issues/forge-memory-swap-architecture-
+# design-2026-09-26.md section 4.2). WSL's default swap is 25% of the guest's
+# memory: 2 GB at memory=8GB, below a single forge's spill allowance, so a
+# forge that should spill to swap is reaped instead. Target: [wsl2] swap=8GB
+# and a swapFile under %LocalAppData%\tillandsias (a path we own; %Temp% is
+# purged by cleanup tools); [experimental] sparseVhd=true and
+# autoMemoryReclaim=gradual. ONLY ABSENT KEYS ARE ADDED, each under a
+# "# tillandsias:" comment. A present memory, swap, swapFile or processors is
+# never overwritten; a present key with another value is reported, not changed.
+#
+# Get-WslConfigMerge is PURE (lines in, lines out, no I/O) so the fixture
+# scripts/test-installer-merges-wslconfig-swap-keys.sh runs the real function
+# through PowerShell rather than reading its source. The two marker lines
+# around it are what that fixture cuts on; keep them.
+# BEGIN-WSLCONFIG-MERGE
+# SWAP SIZE SCALES WITH FREE DISK (operator, 2026-09-26: "start at 8GB, but if
+# the host has generous amounts of diskspace ... 16 or 24gb. Disk is the
+# cheapest resource."). PROVISIONAL thresholds, pending the design agent's on
+# 1339-r9xv: 24 GB at >= 200 GB free, 16 GB at >= 100 GB free, else 8 GB; a
+# tier is taken only if it still leaves SwapReserveGB free. 8 GB is the floor
+# and is never refused, but a host that cannot keep the reserve is warned.
+# WSL creates the file sparse at VM boot and deletes it at `wsl --shutdown`
+# (measured on yolanda-windows 2026-09-26), so the size is a ceiling on disk
+# use under pressure, not an allocation.
+$SwapReserveGB = 20
+function Get-WslSwapSizeGB {
+    param([double]$FreeGB)
+    foreach ($tier in @(@{ Size = 24; Min = 200 }, @{ Size = 16; Min = 100 })) {
+        if ($FreeGB -ge $tier.Min -and ($FreeGB - $tier.Size) -ge $SwapReserveGB) {
+            return [pscustomobject]@{ SizeGB = $tier.Size; Warn = $false }
+        }
+    }
+    return [pscustomobject]@{ SizeGB = 8; Warn = (($FreeGB - 8) -lt $SwapReserveGB) }
+}
+function Get-WslConfigMerge {
+    param([string[]]$Lines, [string]$SwapFile, [int]$SwapSizeGB = 8)
+    if ($null -eq $Lines) { $Lines = @() }
+    # .wslconfig does not expand environment variables and wants doubled
+    # backslashes in a Windows path.
+    $want = [ordered]@{
+        'wsl2'         = [ordered]@{ 'swap' = "${SwapSizeGB}GB"; 'swapFile' = ($SwapFile -replace '\\', '\\') }
+        'experimental' = [ordered]@{ 'sparseVhd' = 'true'; 'autoMemoryReclaim' = 'gradual' }
+    }
+    # Pass 1: where each section ends, and which keys each section holds.
+    $section = ''
+    $present = @{}
+    $lastLine = @{}
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        $t = $Lines[$i].Trim()
+        if ($t -match '^\[([^\]]+)\]$') { $section = $Matches[1].Trim().ToLowerInvariant(); $lastLine[$section] = $i; continue }
+        if ($t -eq '' -or $t.StartsWith('#') -or $t.StartsWith(';')) { continue }
+        if ($t -match '^([^=\s]+)\s*=\s*(.*)$') {
+            $present["$section/$($Matches[1].ToLowerInvariant())"] = $Matches[2].Trim()
+            $lastLine[$section] = $i
+        }
+    }
+    $added = @()
+    $differs = @()
+    $insertAfter = @{}   # line index -> lines to insert after it
+    $appendAtEnd = @()
+    foreach ($sec in $want.Keys) {
+        $block = @()
+        foreach ($k in $want[$sec].Keys) {
+            $v = $want[$sec][$k]
+            $pk = "$sec/$($k.ToLowerInvariant())"
+            if ($present.ContainsKey($pk)) {
+                if ($present[$pk] -ne $v) { $differs += "[$sec] $k=$($present[$pk]) (tillandsias would use $v; left unchanged)" }
+                continue
+            }
+            $block += "# tillandsias: added by the Tillandsias installer (order 1339-r9xv)"
+            $block += "$k=$v"
+            $added += "[$sec] $k=$v"
+        }
+        if ($block.Count -eq 0) { continue }
+        if ($lastLine.ContainsKey($sec)) {
+            $insertAfter[$lastLine[$sec]] = @($insertAfter[$lastLine[$sec]]) + $block | Where-Object { $null -ne $_ }
+        } else {
+            if ($Lines.Count -gt 0 -or $appendAtEnd.Count -gt 0) { $appendAtEnd += '' }
+            $appendAtEnd += "[$sec]"
+            $appendAtEnd += $block
+        }
+    }
+    $out = New-Object System.Collections.Generic.List[string]
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        $out.Add($Lines[$i])
+        if ($insertAfter.ContainsKey($i)) { foreach ($l in $insertAfter[$i]) { $out.Add($l) } }
+    }
+    foreach ($l in $appendAtEnd) { $out.Add($l) }
+    return [pscustomobject]@{ Added = $added; Differs = $differs; Lines = $out.ToArray() }
+}
+# END-WSLCONFIG-MERGE
 $WslCfgPath = Join-Path $env:USERPROFILE '.wslconfig'
 $HostLogicalCpus = 0
 $HostMemGiB = 0
@@ -310,10 +464,19 @@ if ($HostLogicalCpus -le 0) {
     # failure to know whether it applies to them.
     $MbPerCpu = 0
     if ($EffCpus -gt 0) { $MbPerCpu = [int](($EffMemGiB * 1024) / $EffCpus) }
-    $RatioBad = ($EffCpus -ge 8 -and $MbPerCpu -gt 0 -and $MbPerCpu -lt 700)
+    # PROVISIONAL THRESHOLD, bracketed by two measurements on one host rather
+    # than derived: ~320 MB/vCPU killed four consecutive builds, and 512 MB/vCPU
+    # (memory=8GB, processors=16, autoMemoryReclaim=gradual) completed a
+    # 6704-second gate with no reap (yolanda-windows, 2026-09-21). The first
+    # shipped value, 700, flagged that known-good 512 as dangerous. The
+    # boundary between 320 and 512 is not measured.
+    $RatioBad = ($EffCpus -ge 8 -and $MbPerCpu -gt 0 -and $MbPerCpu -lt 450)
     $ReclaimOff = ($CfgReclaim -eq '')
+    # Never recommend the configuration already in force (v56.9.22.1 did: a
+    # warning whose advice is a no-op teaches the reader to ignore the next one).
+    $AlreadyRecommended = ($CfgMemory -ieq '8GB' -and $CfgProcessors -eq "$HostLogicalCpus" -and -not $ReclaimOff)
 
-    if ($RatioBad -or $ReclaimOff) {
+    if (($RatioBad -or $ReclaimOff) -and -not $AlreadyRecommended) {
         Write-Host ""
         SayWn "  Your WSL2 guest is shaped in a way that has killed builds on a host like this."
         if ($RatioBad) {
@@ -337,6 +500,61 @@ if ($HostLogicalCpus -le 0) {
         SayWn "  This installer does not modify that file -- it is yours and may hold other settings."
         Write-Host ""
     }
+}
+
+# -- WSL2 swap keys: add the ABSENT ones, with consent (order 1339-r9xv) ------
+# Consent: interactive -> ask [y/N]. TILLANDSIAS_WSLCONFIG=apply answers yes
+# without a prompt; =skip, or any non-interactive run without =apply, adds
+# nothing and says so. The default is NO because the file is the user's.
+$SwapFileTarget = Join-Path $env:LOCALAPPDATA 'tillandsias\wsl-swap.vhdx'
+$SwapFreeGB = -1
+try { $SwapFreeGB = [math]::Round((Get-Item $env:LOCALAPPDATA -ErrorAction Stop).PSDrive.Free / 1GB, 1) } catch {}
+if ($SwapFreeGB -lt 0) {
+    # Could not measure the volume: take the floor rather than guess upward.
+    $SwapSize = [pscustomobject]@{ SizeGB = 8; Warn = $false }
+    Say "  wsl-swap: could not read free space for $SwapFileTarget; sizing swap at the 8 GB floor."
+} else {
+    $SwapSize = Get-WslSwapSizeGB -FreeGB $SwapFreeGB
+    Say "  wsl-swap: $SwapFreeGB GB free on the swap volume -> swap=$($SwapSize.SizeGB)GB (8 GB floor; 16 at 100+ GB free, 24 at 200+)."
+    if ($SwapSize.Warn) { SayWn "  wsl-swap: under $SwapReserveGB GB would remain free if the 8 GB swap filled; free some disk space." }
+}
+$WslCfgLines = @()
+if (Test-Path $WslCfgPath) { $WslCfgLines = @(Get-Content $WslCfgPath -ErrorAction SilentlyContinue) }
+$WslMerge = Get-WslConfigMerge -Lines $WslCfgLines -SwapFile $SwapFileTarget -SwapSizeGB $SwapSize.SizeGB
+foreach ($d in $WslMerge.Differs) { Say "  wsl-swap: present and kept: $d" }
+if ($WslMerge.Added.Count -eq 0) {
+    Say "  wsl-swap: .wslconfig already has swap, swapFile, sparseVhd and autoMemoryReclaim; nothing to add."
+} else {
+    Write-Host ""
+    SayWn "  WSL's default swap is 25% of the guest's memory (2 GB at memory=8GB), below what one"
+    SayWn "  Tillandsias forge spills. WSL creates the swap file fresh at each VM boot and deletes"
+    SayWn "  it at shutdown. These keys are ABSENT from $WslCfgPath"
+    foreach ($a in $WslMerge.Added) { Say "    + $a" }
+    Say "  Nothing already in the file is changed. A backup is written beside it first."
+    Say "  They take effect after 'wsl --shutdown', which STOPS every running WSL distro."
+    $doWsl = $false
+    if ($env:TILLANDSIAS_WSLCONFIG -eq 'apply') {
+        $doWsl = $true
+    } elseif ($env:TILLANDSIAS_WSLCONFIG -ne 'skip' -and [Environment]::UserInteractive) {
+        $resp = Read-Host "  Add these keys and run 'wsl --shutdown' now? [y/N]"
+        if ($resp -match '^[yY]') { $doWsl = $true }
+    }
+    if ($doWsl) {
+        try {
+            New-Item -ItemType Directory -Force -Path (Split-Path $SwapFileTarget -Parent) | Out-Null
+            if (Test-Path $WslCfgPath) { Copy-Item -LiteralPath $WslCfgPath -Destination "$WslCfgPath.tillandsias-bak" -Force }
+            # UTF-8 without a BOM: WSL's parser does not skip one.
+            [System.IO.File]::WriteAllLines($WslCfgPath, [string[]]$WslMerge.Lines, (New-Object System.Text.UTF8Encoding($false)))
+            SayOk "  wsl-swap: added $($WslMerge.Added.Count) key(s) to $WslCfgPath (backup: .wslconfig.tillandsias-bak)."
+            & wsl.exe --shutdown 2>$null
+            Say "  wsl-swap: ran 'wsl --shutdown'; WSL needs ~8 seconds before the new settings apply."
+        } catch {
+            SayWn "  wsl-swap: could not update ${WslCfgPath}: $($_.Exception.Message). Nothing else was changed."
+        }
+    } else {
+        Say "  wsl-swap: not applied. To apply later: set TILLANDSIAS_WSLCONFIG=apply and re-run, or add the keys above yourself."
+    }
+    Write-Host ""
 }
 
 # -- Hyper-V Administrators membership (order 312) ---------------------------
@@ -401,6 +619,7 @@ if (-not (Test-HcsAccess)) {
                 SayOk "Membership active."
             } else {
                 SayOk "Added to Hyper-V Administrators. SIGN OUT AND BACK IN before launching Tillandsias (new logon token required)."
+                $PendingActions.Add('SIGN OUT AND BACK IN: the Hyper-V Administrators membership needs a new logon token.')
             }
         } catch {
             SayWn "Group add declined or failed ($_). Fix later from an elevated PowerShell:"
@@ -420,18 +639,8 @@ Say "Install path: $InstalledExe"
 Write-Host ""
 
 # -- Resolve version and base URL ---------------------------------------------
-# Release channels (plan order 305 stable, 621-* unstable):
-#   stable   (default) -> /releases/latest/download - newest PROMOTED release.
-#   unstable           -> /releases/download/unstable - a rolling prerelease the
-#                         release workflow re-points at EVERY daily build.
-# `iex`-piped invocations cannot take parameters, so the channel is selected via
-# the environment: $env:TILLANDSIAS_CHANNEL='unstable' before the pipe.
-$Channel = if ($env:TILLANDSIAS_CHANNEL) { $env:TILLANDSIAS_CHANNEL } else { 'stable' }
-switch ($Channel) {
-    'stable'   { $ChannelBase = "https://github.com/$Repo/releases/latest/download" }
-    'unstable' { $ChannelBase = "https://github.com/$Repo/releases/download/unstable" }
-    default    { throw "Unknown TILLANDSIAS_CHANNEL '$Channel' (want stable or unstable)" }
-}
+# The channel itself is resolved at the top of this script (order 1369-sjbc),
+# before any host-side step runs; $Channel and $ChannelBase are set there.
 
 if ($env:TILLANDSIAS_VERSION) {
     $Version = $env:TILLANDSIAS_VERSION.TrimStart('v')
@@ -754,4 +963,16 @@ try {
 
 } finally {
     Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue
+}
+
+# -- PENDING ACTIONS (order 1380-zmpi): the last thing on the terminal --------
+# The WSL platform state was classified near the top (Get-WslPlatformState);
+# reboot-pending is VirtualMachinePlatform just enabled, DISM 3010.
+if ($WslState -eq 'reboot-pending') {
+    $PendingActions.Insert(0, 'RESTART REQUIRED: WSL was just enabled. Restart Windows, then launch Tillandsias from the Start Menu.')
+} elseif ($NoLaunchReason) {
+    $PendingActions.Insert(0, "BEFORE FIRST LAUNCH: $NoLaunchReason.")
+}
+foreach ($l in (Format-PendingBanner -Items $PendingActions.ToArray())) {
+    if ($PendingActions.Count -gt 0) { Write-Host $l -ForegroundColor Yellow } else { Write-Host $l }
 }

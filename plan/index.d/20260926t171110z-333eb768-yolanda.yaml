@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-bare-drain-queue-invocation-claims-a-packet-and-launches-a-paid-agent-without-asking
+    event:
+      type: note
+      ts: "2026-09-26T17:11:10Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        Sibling sweep (grep for ./repeat, codex exec, claude -p, opencode run, claim-ledger-node.sh claim across tracked scripts). Only drain-queue.sh got the --drain guard; the others, and why not:
+        - scripts/tillandsias-cycle-driver.sh: fires one agent per call when run bare, BY DESIGN. It is the ExecStart of the systemd cycle timer, and the timer is the operator's standing instruction. Guarding it means editing packaging/systemd/user/tillandsias-cycle.service.in at the same time, and this Windows host cannot exercise a systemd user unit. Left for a Linux host; it should get its own row if the coordinator wants it.
+        - scripts/install-cycle-timer.sh: a bare run installs a recurring hourly timer, which is standing spend. It needs systemctl --user, so it fails closed (no-systemctl) off Linux. Same reason: a Linux host should decide on an explicit --install flag.
+        - scripts/litmus-codex-e2e-launch.sh and litmus-opencode-e2e-launch.sh: a bare run starts a real forge agent session (tillandsias . --codex/--opencode --prompt). The litmus yamls, mo-full-attest.sh and forge-liveness-probe.sh invoke them bare, so a guard needs every caller changed together. They also sit behind forge-e2e-rate-limit.sh's shared budget. Flagged, not changed.
+        - ./repeat: already refuses without --prompt (usage exit), so a bare run spends nothing.
+        - claim-ledger-node.sh: the claim subcommand is required, and a bare run prints usage.

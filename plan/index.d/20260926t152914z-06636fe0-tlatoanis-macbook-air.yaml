@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-merge-rule-assumes-the-gate-is-fast-relative-to-trunk-landing-cadence-so-a-twenty-minute-host-can-be-refused-indefinitely-through-no-fault-of-its-own
+    event:
+      type: progress
+      ts: "2026-09-26T15:29:14Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t152914z
+      host: tlatoanis-macbook-air
+      summary: |
+        REPRODUCED on tlatoanis-macbook-air, 2026-09-26, twice, both on osx-next:
+        (a) A --check went red on salvage-audit ARM 1b (241 audited vs 242 salvage+work refs) because a work ref was pushed DURING the ~30-min gate. The gate reads live origin, so any ref push is movement it can see.
+        (b) The re-run went green (rc=0, 1799s), then `git push origin osx-next` was refused: `blocked:linux-next-not-merged:osx-next` — trunk moved during the gate. After the merge, the incoming diff held code plus plan-crate changes, so the plan-only lane refused (stale plan binary) and a third full gate was required. I stopped chasing; the coordinator later fast-forwarded origin/osx-next itself.
+        MEASURED (last 24h of origin/linux-next, first-parent):
+        - 148 landings, median gap 80s. But 100 of the 148 are plan-only, and the gate stamp EXCLUDES the plan fast lane (gate-stamp.sh: 930-i6x4, plan/index.d/*.yaml etc.), so those do not force a re-gate.
+        - CODE landings: 48; gaps median 1122s, p25 40s, p75 1592s, min 0s, max 9340s.
+        - This host's passing build-check: 286 runs, median 331s, p75 603s, max 2166s. A full osx-next gate here measured 1799s.
+        - 20 of 47 code gaps (42%) are shorter than this host's MEDIAN gate; 37 of 47 (78%) are shorter than a full osx-next gate. A 30-minute gate is overtaken by a code landing about 4 times in 5, so "merge, gate, push" does not converge for a slow host at this cadence.
+        The work-ref lane (1315-4a7j: push work/<order> ungated; the landing queue gates it ONCE on the merged candidate) already removes this race for CODE, since the slow host never gates against a moving trunk. What remains exposed is pushing the PLATFORM BRANCH itself. Candidate remedy for the row: stop requiring a platform-branch push to contain origin/linux-next when the branch adds nothing trunk lacks, or let the coordinator fast-forward platform branches as a standing duty (done for osx-next and windows-next on 2026-09-26). Next: decide between those with the coordinator before writing code.

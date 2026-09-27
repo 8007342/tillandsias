@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-forge-plan-experts-index-the-checkouts-own-branch-so-a-forge-seeded-from-main-answers-no-packet-matches-for-every-row-that-exists-only-on-linux-next
+    order: 1389-3hyf
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [mcp-first, forge-local-experts, plan-binary]
+    estimated_hours: 4
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixing commit adds a litmus that seeds a
+      checkout on a branch lacking a row present on the fetched trunk ref and asserts
+      plan_status resolves it. FAILS pre-fix: plan_status 1375-rn9b -> "no packet matches"
+      on a main-seeded forge while the row is live on origin/linux-next.
+    title: |
+      forge-plan's plan_status / plan_answer fold the ledger of the checkout's CURRENT branch (freshness.source_commit = main ce2da1f57 in a main-seeded forge), so every row filed on linux-next since the last release — the rows a worker is most likely to need — answers "no packet matches", and a worker trusting that files duplicates
+    context: |
+      MEASURED on macuahuitl-forge 2026-09-26: plan_status 1379-vvct and
+      1375-rn9b -> "error: no packet matches" while both were live on
+      origin/linux-next; plan_answer "what is blocked by 1375-rn9b" ->
+      unsupported. freshness.indexed_at advanced (claims pushed from main were
+      seen) but source_commit stayed main's. Related: 965-rb3v (forge seeded
+      from main), 1153-j2nm (claims visible on trunk).
+    deliverable: |
+      The experts fold the fetched trunk (origin/linux-next, or the ref the
+      methodology names as trunk) plus local unpushed fragments, and say which
+      ref they answered from, so a branch seed cannot hide trunk rows.
+    provenance: |
+      Filed by macuahuitl-forge 2026-09-26, level-2 expert survey queries 2, 8, 20.

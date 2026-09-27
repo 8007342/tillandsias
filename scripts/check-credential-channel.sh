@@ -48,7 +48,8 @@ fi
 # constraint).
 #
 # A usable git push credential channel is present when ANY of these holds:
-#   - <git-dir>/.gh-credentials exists and is non-empty (repo-local store), or
+#   - <common-git-dir>/.gh-credentials exists and is non-empty (repo-local store,
+#     shared by every linked worktree; 1409-65d5), or
 #   - GH_TOKEN or GITHUB_TOKEN is set in the environment, or
 #   - `gh auth status` succeeds (reachable, unlocked keyring).
 #
@@ -438,9 +439,40 @@ _ccc_emit_unprobed() {
   return 1
 }
 
+# ORDER 1409-65d5. The repo-local store lives in the COMMON git dir, ABSOLUTE.
+# `--git-dir` is wrong twice over: in the main checkout it answers the RELATIVE
+# `.git`, so a helper configured from it (`store --file=.git/.gh-credentials`)
+# breaks in every linked worktree, where `.git` is a FILE ("unable to open
+# .git/.gh-credentials: Not a directory", measured 2026-09-26 with git 2.54);
+# and in a linked worktree it answers .git/worktrees/<name>, a store nobody
+# seeded. Every worktree shares the common dir, so one store serves them all.
+_ccc_common_dir() {
+  git rev-parse --path-format=absolute --git-common-dir 2>/dev/null
+}
+
+# A helper configured by the pre-1409 remedy carries a RELATIVE store path.
+# It works in the main checkout and fails in every linked worktree, so name it
+# and print the one-line migration (stderr; the verdict line is unchanged).
+_ccc_note_relative_store_helper() {
+  local all h="" _h
+  all="$(git config --local --get-all credential.helper 2>/dev/null)" || true
+  while IFS= read -r _h; do
+    case "$_h" in
+      ("store --file=/"*) ;;
+      ("store --file="?*) h="$_h"; break ;;
+    esac
+  done <<< "$all"
+  [ -n "$h" ] || return 0
+  echo "note:credential-helper-relative-store:$h" >&2
+  echo "  A RELATIVE store path resolves against the CWD, so a push from a linked" >&2
+  echo "  worktree cannot open it (1409-65d5). MIGRATE (keeps the stored credential):" >&2
+  echo "    git config --local --replace-all credential.helper \"store --file=\$(git rev-parse --path-format=absolute --git-common-dir)/.gh-credentials\" '^store --file=[^/]'" >&2
+}
+
 credential_channel_verdict() {
   local git_dir cred_file
-  if git_dir="$(git rev-parse --git-dir 2>/dev/null)"; then
+  _ccc_note_relative_store_helper
+  if git_dir="$(_ccc_common_dir)" && [ -n "$git_dir" ]; then
     cred_file="${git_dir}/.gh-credentials"
     if [ -s "$cred_file" ]; then
       # ORDER 1092-uv3k. `unverified:`, not `ok:`. THIS ARM VERIFIES NOTHING —
@@ -735,7 +767,7 @@ credential_channel_verdict() {
         echo "    # seed repo-local (1052-548e: a bare token is REFUSED and ECHOED)" >&2
         _ccc_seed_remedy_line >&2
         echo "    git config --local --replace-all credential.helper ''         # empty entry DROPS the system manager" >&2
-        echo "    git config --local --add credential.helper \"store --file=\$(git rev-parse --git-dir)/.gh-credentials\"" >&2
+        echo "    git config --local --add credential.helper \"store --file=\$(git rev-parse --path-format=absolute --git-common-dir)/.gh-credentials\"" >&2
         echo "blocked:interactive-credential-helper"
         return 1
         ;;
@@ -1171,12 +1203,12 @@ _ccc_seed_remedy_line() {
     cat <<'REMEDY'
     printf 'protocol=https\nhost=github.com\nusername=%s\npassword=%s\n\n' \
       "$(gh api user --jq .login)" "$(gh auth token)" \
-      | git credential-store --file "$(git rev-parse --git-dir)/.gh-credentials" store
+      | git credential-store --file "$(git rev-parse --path-format=absolute --git-common-dir)/.gh-credentials" store
 REMEDY
 }
 
 _ccc_stamp_path() {
-    printf '%s/tillandsias-credential-verified' "$(git rev-parse --git-dir 2>/dev/null || echo .)"
+    printf '%s/tillandsias-credential-verified' "$(_ccc_common_dir || echo .)"
 }
 
 _ccc_record_pass() {

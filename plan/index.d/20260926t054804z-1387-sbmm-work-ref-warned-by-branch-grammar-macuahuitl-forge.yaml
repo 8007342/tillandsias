@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-mirror-pre-receive-warns-that-a-work-order-ref-breaks-the-branch-creation-grammar-although-methodology-prescribes-work-order-as-the-gated-hand-off-lane
+    order: 1387-sbmm
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, fail-loud, methodology-drift]
+    estimated_hours: 1
+    owned_files:
+      - images/git/entrypoint.sh
+      - images/git/pre-receive-hook.sh
+      - scripts/test-pre-receive-yaml-gate.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists: litmus test-pre-receive-yaml-gate.sh (new arm: work/<order> push is silent) lands in the fixing commit.
+      FAILS pre-fix: TILLANDSIAS_BRANCH_GRAMMAR_HINT in images/git/entrypoint.sh:142 lists agent/ and salvage/ but not work/.
+    title: |
+      Every `git push origin work/<order>` through the enclave mirror prints "WARNING: new branch 'refs/heads/work/<order>' does not match the configured branch-creation grammar", though methodology (work_ref_lane, 1315-4a7j) and join-the-fleet §3 prescribe work/<order> as THE hand-off lane — a warning on every correct push trains workers to ignore the warning
+    context: |
+      OBSERVED on macuahuitl-forge 2026-09-26 pushing work/1254-fdsu:
+        remote: [pre-receive] WARNING: new branch 'refs/heads/work/1254-fdsu' does not match the configured branch-creation grammar
+        remote: [pre-receive] WARNING: expected namespaces: main | linux-next | windows-next | osx-next | gh-pages | release/* | claude/* | revert-* | agent/<host>/<base>/<yyyymmdd>-<slug> | salvage/<host>/<yyyymmdd>-<slug>
+        remote: [pre-receive] WARNING: push accepted anyway — the branch-name grammar is warn-only at this rung
+      The grammar lives in images/git/entrypoint.sh:142
+      (TILLANDSIAS_BRANCH_GRAMMAR_HINT) and pre-receive-hook.sh:148;
+      methodology/multi-host-development.yaml:264 defines work/<order>.
+      When the grammar moves past warn-only, every correct hand-off will be REFUSED.
+    deliverable: |
+      work/<order> (order grammar: digits-4char) added to the branch-creation
+      grammar and its hint, with the pre-receive fixture asserting a work/ push
+      is silent and a malformed work/ name still warns.
+    provenance: |
+      Filed by macuahuitl-forge 2026-09-26, level-2 expert survey. The source
+      location was found by git grep after project-info grep_code returned
+      "No matches found" for the exact warning string (a false negative).

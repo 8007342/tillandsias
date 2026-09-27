@@ -1,0 +1,12 @@
+# Gate step 1375-6pnd — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS: the litmus runner SELECTS the same tests, byte-identical
+# (the ordered list, not a count), with and without jq/yq/toolbox on PATH,
+# including a quoted/commented phase that the awk fallback would misread.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the litmus runner selects identically with and without jq/yq (1375-6pnd)"
+STEP_SCRIPT="scripts/test-litmus-runner-reads-without-jq.sh"
+STEP_ERROR="the litmus runner's test selection depends on jq/yq being present (1375-6pnd)"
+STEP_OK="litmus selection is byte-identical with and without jq/yq"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin PASS: litmus-runner-reads-without-jq selection=24 tests, byte-identical"

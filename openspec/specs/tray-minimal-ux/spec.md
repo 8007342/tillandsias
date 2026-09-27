@@ -13,6 +13,7 @@ active
 ## Requirements
 
 ### Requirement 1: First-launch minimal tray
+<!-- req-id: da13e677 -->
 **Modality:** MUST
 
 The tray MUST display exactly four elements when Tillandsias starts:
@@ -28,6 +29,7 @@ The tray MUST display exactly four elements when Tillandsias starts:
 ---
 
 ### Requirement 2: Dynamic environment verification status
+<!-- req-id: b0533552 -->
 **Modality:** MUST
 
 The first tray element MUST update dynamically as enclave containers transition through build states:
@@ -47,6 +49,7 @@ The first tray element MUST update dynamically as enclave containers transition 
 ---
 
 ### Requirement 3: Post-initialization menu expansion
+<!-- req-id: 0b54d516 -->
 **Modality:** MUST
 
 Once all enclave images are healthy (`enclave_status == OK`), the tray MUST conditionally add menu items:
@@ -62,6 +65,7 @@ Once all enclave images are healthy (`enclave_status == OK`), the tray MUST cond
 ---
 
 ### Requirement 4: Project launch flow
+<!-- req-id: 1a6fc2ea -->
 **Modality:** MUST_NOT
 
 This spec MUST NOT own project launch, browser session wiring, or tray socket behavior. Those behaviors are owned by `spec:tray-app` and `spec:browser-isolation-tray-integration`.
@@ -73,6 +77,7 @@ This spec MUST NOT own project launch, browser session wiring, or tray socket be
 ---
 
 ### Requirement 5: Stale container cleanup
+<!-- req-id: f243cc4e -->
 **Modality:** MUST_NOT
 
 This spec MUST NOT own stale-container cleanup at tray startup. Cleanup is owned by the tray/runtime lifecycle contract, not the minimal tray menu contract.
@@ -84,6 +89,7 @@ This spec MUST NOT own stale-container cleanup at tray startup. Cleanup is owned
 ---
 
 ### Requirement 6: Annotation enforcement
+<!-- req-id: eaf982b3 -->
 **Modality:** MUST
 
 All code implementing this spec MUST be annotated with `@trace spec:tray-minimal-ux` near the relevant function or block.

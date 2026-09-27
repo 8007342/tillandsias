@@ -2724,6 +2724,26 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "must-ship-next release advisory fixture passed"
 
+    # ORDER 1369-sjbc. The release jobs upload a staged copy to `unstable` whose
+    # installers default to unstable; the versioned copy keeps stable. Hermetic,
+    # a few seconds; wired in local-ci.sh as well.
+    _step "Checking the unstable-channel installer default (1369-sjbc)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-unstable-installer-defaults-to-unstable.sh" 2>&1; then
+        _error "an installer fetched from the unstable release can again install stable"
+        exit 1
+    fi
+    _info "unstable-channel installer default fixture passed"
+
+    # ORDER 1380-zmpi. Every installer ends with a PENDING ACTIONS banner; the
+    # fixture RUNS each banner block (bash, and PowerShell where present).
+    # Hermetic, a few seconds; wired in local-ci.sh as well.
+    _step "Checking the installers' PENDING ACTIONS banner (1380-zmpi)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-installers-print-pending-banner.sh" 2>&1; then
+        _error "an installer can again finish without telling the user what is still pending"
+        exit 1
+    fi
+    _info "pending-actions banner fixture passed"
+
     # ORDER 970-7fqk. The stale-stamp refusal names paths whose CONTENT moved,
     # on the same axis the staleness decision uses, and keeps the mtime list as
     # the live-writer hint 864-q7dm built it to be. Hermetic: every arm stamps
@@ -3550,6 +3570,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Fragment-backlog advisory reported"
 
+    # Order 1395-ue3i. The CentiColon R line — obligations below
+    # positively_tested, with the satisfied count, denominator, histogram and
+    # regime — printed on EVERY --check. ADVISORY by operator ruling
+    # (2026-09-26): it warns on a lost satisfaction and never refuses, so the
+    # script always exits 0; a non-zero exit here means it could not run.
+    _step "Reporting the CentiColon R line (1395-ue3i, advisory)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-centicolon-ratchet.sh" 2>&1; then
+        _error "the CentiColon advisory could not run — that is a broken checkout, not a score"
+        exit 1
+    fi
+    _info "CentiColon advisory reported"
+
     # Order 810-k8jy. Which file classes under a corpus root the RAG indexer
     # indexes, declines, or has never been told about. ADVISORY like the
     # carry-forward line above, and for the same reason: a new file class in the
@@ -3746,6 +3778,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "SIGPIPE verdict-pipeline enforcement passed"
+
+    # Order 1401-x76w. RUN every added scripts/test-*.sh in the regime an
+    # ordinary checkout has: CARGO_TARGET_DIR and TILLANDSIAS_PLAN_BIN unset and
+    # every PATH entry holding a plan binary stripped, from a cwd outside the
+    # checkout. A fixture that passes only where the plan binary is found some
+    # other way (the builder toolbox's absolute CARGO_TARGET_DIR, an installed
+    # ~/.local/bin copy) is refused by name. Three relay bounces on 2026-09-26
+    # (1380-u7sq, 1395-88tp, 1375-2x4e), the last red on every Mac --check.
+    # Diff-scoped: it runs fixtures, so its cost is the added fixtures twice.
+    _step "Checking added fixtures pass without a masking plan-binary regime (1401-x76w)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/preflight-fixtures-default-target.sh" 2>&1; then
+        _error "an added fixture passes only where CARGO_TARGET_DIR or an installed plan binary finds tillandsias-plan (1401-x76w)"
+        exit 1
+    fi
+    _info "Default-target fixture regime passed"
 
     # Order 686-7qcm criterion 3. Refuse a NEWLY ADDED fragment that records a
     # closure rung (completed/verified/done) with no evidence-bearing event —
@@ -4124,7 +4171,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # stopped being true.
     _step "Checking skills have exactly one source of truth (631-wpkd)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-skills-single-source.sh" 2>&1; then
-        _error "a skill has drifted out of canonical skills/ — declare it in skills/HARNESS-SCOPED.txt or link it (631-wpkd)"
+        # Order 1256-f7td. The remedy follows the VIOLATION printed above, and it
+        # never offers HARNESS-SCOPED.txt for a link-shape problem: a skill that
+        # is reachable is not harness-scoped, and "declare it" is the one-commit
+        # exit that silences this check permanently under push pressure.
+        _error "skills are not single-source (631-wpkd): read the violation line above. missing-from-runtime / link-leaves-canonical / a real directory where a link belongs => LINK the runtime tree to canonical skills/ (one directory symlink or per-skill links). skills/HARNESS-SCOPED.txt is ONLY for a skill that genuinely exists for one runtime alone, never a fix for a link-shape mismatch."
         exit 1
     fi
     _info "Skills single-source check passed"
@@ -4147,6 +4198,24 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Litmus bindings reconciliation passed"
+
+    # Order 1397-eppt. CentiColon counts obligations from each spec's `## Status`
+    # while tooling reads the litmus registry; 21 pairs disagreed (7 specs
+    # counted active that the registry had retired, 3 with no status at all),
+    # corrupting the denominator. A spec and its registry entry must now agree;
+    # a pair that could not be decided from evidence is NAMED on every run.
+    _step "Checking every spec and its registry entry agree on status (1397-eppt)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-spec-registry-status.sh" 2>&1; then
+        _error "a spec's ## Status disagrees with openspec/litmus-bindings.yaml (1397-eppt) — reconcile the pair with a recorded reason"
+        exit 1
+    fi
+    _info "Spec/registry status agreement passed"
+    # ...and the guard itself can fail: hermetic arms for a flipped word, a
+    # missing section, an annotated line, and a named undecided pair.
+    if ! _run bash "$SCRIPT_DIR/scripts/test-spec-registry-status.sh" 2>&1; then
+        _error "the spec/registry status guard no longer refuses what it must (1397-eppt)"
+        exit 1
+    fi
 
     # Order 875-v7hv. The runner parses step fields with bash regexes, which
     # capture the RAW bytes of a double-quoted YAML scalar, so a `\"` arrives

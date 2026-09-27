@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: forge-launch-builders-replace-the-437-no-swap-ceiling-with-a-cgroup-memory-budget-so-a-full-tmpfs-spills-to-swap-and-a-cargo-build-fits
+    order: 1375-xxzj
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: linux
+    capability_tags: [linux, forge, tmpfs, cgroup, memory, podman, spec]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-core/src/preflight.rs
+      - crates/tillandsias-podman/src/container_spec.rs
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-core/src/container_profile.rs
+      - openspec/changes/forge-swap-backed-memory-ceiling/specs/forge-hot-cold-split/spec.md
+    observed_by: macuahuitl
+    title: |
+      the forge launch builders emit a cgroup memory BUDGET (memory.max, memory.high, memory.low and a swap allowance at least the HOT tmpfs sum plus 1 GiB) in place of 437's equal --memory/--memory-swap ceiling, so a full tmpfs spills to swap or ENOSPCs and a cargo build inside the forge has room
+    verifiable_closure: |
+      cargo test -p tillandsias-headless forge_launch_emits_swap_allowance_above_memory_ceiling
+      passes: for both build_forge_agent_run_args_with_vault and build_opencode_forge_args
+      the argv carries --memory=<N>m, --memory-swap=<M>m with M - N >= sum(HOT tmpfs caps) + 1024,
+      --memory-reservation, and --cgroup-conf=memory.high=<bytes>; and a unit test in
+      tillandsias-podman refuses ContainerSpec with memory_swap_mb == memory_mb.
+      Live arm on the landing host: inside a launched forge,
+      dd if=/dev/zero of=/home/forge/src/spill bs=1M count=$((memory_max_mb + 256))
+      exits 0 or with ENOSPC, and /sys/fs/cgroup/memory.events reads oom_kill 0.
+      Pre-fix result: FAILS. On origin/linux-next no forge builder emits --memory at all
+      (the test's search for --memory finds nothing); on origin/work/437-forge-src-tmpfs-topology
+      (f623728c8) --memory equals --memory-swap and the dd writer is OOM-killed
+      (measured shape on macuahuitl 2026-09-26: a 192 MiB tmpfs write under a 64 MiB
+      memory.max with memory.swap.max=0 kills the writer at 62.5 MiB; with a 448 MiB
+      swap allowance it completes with oom_kill 0).
+    context: |
+      Operator ruling 2026-09-26 (decision event on 437): swap-backed tmpfs as a
+      transparent RAM-disk extension, generous swap on every platform. Design:
+      plan/issues/forge-memory-swap-architecture-design-2026-09-26.md. Spec delta:
+      openspec/changes/forge-swap-backed-memory-ceiling. Numbers: provisional
+      tier constants from the design doc's sizing table (floor 3/2.5/1 GiB +
+      4 GiB swap; fat Linux 6/5/2 + 8; coordinator 12/10/4 + 12), replaced when
+      the measurement packet reports. Mechanics verified rootless on Fedora 44:
+      --memory-swap minus --memory lands in memory.swap.max; --memory-reservation
+      lands in memory.low; --cgroup-conf=memory.high= wants BYTES (crun refuses 48m).
+      check_host_ram compares MemAvailable with memory.high x 1.25; a swap
+      shortfall clamps the allowance and warns (decision=degrade), never refuses.
+      Keep compute_memory_ceiling_mb as the swap-allowance term and
+      FORGE_WORKING_SET_BASELINE_MB as memory.low's floor. Rebase the 437 work
+      ref's wiring onto this; invert its equal-values test. Suggested host:
+      lenovinha, then yoga.

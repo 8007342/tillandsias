@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: one-lua-std-module-registers-json-yaml-hash-time-path-into-every-lua-environment-the-plan-binary-hosts-by-class-and-the-lua-cli-stops-handing-scripts-an-unsandboxed-vm
+    event:
+      type: note
+      ts: "2026-09-26T01:06:50Z"
+      host: yoga
+      summary: |
+        CRITERION AMENDED. Authority: coordinator ruling (macuahuitl, 2026-09-26), option A.
+        Conflict found by yoga: the criterion's sandboxed `lua` CLI default breaks the CLI's one
+        live caller, scripts/archive-plan-packets.sh:525 (the real sweep, which the answerability
+        harness runs inside every --check), whose .lua uses os.execute (:24), os.getenv (:27),
+        io.popen with a shell STRING (:33), io.stderr and os.exit.
+        AMENDMENT: the default door stays sandboxed exactly as written; a NAMED opt-in
+        `tillandsias-plan lua --unsandboxed <script>` keeps the raw VM; ADDED CLAUSE: every
+        `lua --unsandboxed` caller lives in scripts/archive-plan-packets.sh, pinned by FILE not
+        count (yolanda's 560 adds a second call in that script), by a git grep over *.sh/*.yaml in
+        tests/lua_std.rs (every_unsandboxed_caller_lives_in_the_archiver_script).
+        Porting the .lua onto the std API (option B) is a follow-up row; closing it retires the
+        last --unsandboxed caller and the pin tightens to zero files.
+        json.query: surface agreed with lenovinha (json_query::parse/eval -> Vec<Value>, Display
+        prefixed parse:/unsupported:/runtime:); until 1375-rn9b lands it refuses by name
+        ("unsupported:engine-not-landed"), so this row closes after rn9b.

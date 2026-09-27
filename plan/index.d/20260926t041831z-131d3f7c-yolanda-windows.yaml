@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-ruby-sanctioned-yaml-validator
+    event:
+      type: note
+      ts: "2026-09-26T04:18:31Z"
+      agent_id: windows-yolanda-claude-20260926t041830z
+      host: yolanda-windows
+      summary: |
+        CLOSURE EVIDENCE for the completed event at 2026-09-26T04:12:32Z (evidence b38f71052). That event was written with an empty reason by a shell chain that failed before its reason file existed; this note carries what the reason should have said.
+        LANDED on origin/linux-next at b38f71052, merged in the relay with 1375-btuf (one feature-detected $_lua_unsandboxed probe per path, and 560's _ap_backend selection at the call). Verified by content on trunk: _ap_backend=lua selection, the Lua call in the --check sweep, the ${_ap_backend}-worker-failed token, the memo digesting the .lua, and yamlcheck using validate-yaml "$1".
+        Linux verification by macuahuitl-fedora: test-archiver-ruby-could-not-run 5/5, test-archiver-could-not-run-verdict 4/4, check-archive-answerability 337/337 (ready set unchanged at 628), test-archiver-concurrent-check 2/2, lua_std 11/11.
+        Known limit, recorded on 1375-btuf: on native Windows the embedded Lua shells through cmd.exe, so --check exits 3 as lua-worker-failed until btuf's argv/fs port lands. TILLANDSIAS_ARCHIVER_BACKEND=ruby remains the opt-in fallback.

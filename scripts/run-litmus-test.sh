@@ -109,7 +109,9 @@ readonly LITMUS_BINDINGS="${TILLANDSIAS_LITMUS_BINDINGS:-${PROJECT_ROOT}/openspe
 # The default is unchanged, so every existing caller resolves identically.
 readonly LITMUS_TESTS_DIR="${TILLANDSIAS_LITMUS_TESTS_DIR:-${PROJECT_ROOT}/openspec/litmus-tests}"
 readonly METHODOLOGY_LITMUS="${PROJECT_ROOT}/methodology/litmus.yaml"
-readonly LITMUS_RUNTIME_DIR="${PROJECT_ROOT}/target/litmus-runtime"
+# TILLANDSIAS_LITMUS_RUNTIME_DIR (1375-6pnd): a fixture that must run with NO
+# yq needs a runtime dir without the cached toolbox yq shim below.
+readonly LITMUS_RUNTIME_DIR="${TILLANDSIAS_LITMUS_RUNTIME_DIR:-${PROJECT_ROOT}/target/litmus-runtime}"
 readonly LITMUS_PODMAN_ROOT="${PROJECT_ROOT}/target/litmus-podman/root"
 readonly LITMUS_PODMAN_RUNROOT="${PROJECT_ROOT}/target/litmus-podman/runroot"
 readonly LITMUS_PODMAN_TMPDIR="${PROJECT_ROOT}/target/litmus-podman/tmp"
@@ -284,6 +286,56 @@ if [[ -f "$PROJECT_ROOT/scripts/plan-binary-probe.sh" ]]; then
         LITMUS_PLAN_BIN="$(resolve_plan_binary 2>/dev/null)" || LITMUS_PLAN_BIN=""
     fi
 fi
+# Whether that binary answers `yaml get` (1375-6pnd), decided ONCE here: _yaml_jq
+# always runs inside $(...), so a cache set there would not outlive the call.
+_LITMUS_HAS_YAML_GET=0
+_litmus_caps_rc=1
+if [[ -n "$LITMUS_PLAN_BIN" ]]; then
+    # `&& … || …`, not `; rc=$?`: this runner is `set -e`, and a failing $( ) in
+    # a plain assignment EXITS it — with the stub's own rc and no output at all,
+    # which is how a broken TILLANDSIAS_PLAN_BIN ended the run before 1419-zydw.
+    _litmus_caps="$("$LITMUS_PLAN_BIN" capabilities 2>/dev/null)" && _litmus_caps_rc=0 || _litmus_caps_rc=$?
+    case $'\n'"$_litmus_caps"$'\n' in *$'\nyaml\n'*) _LITMUS_HAS_YAML_GET=1 ;; esac
+fi
+
+# ── ORDER 1419-zydw: NO RUNNABLE PLAN BINARY IS ONE NAMED REFUSAL ─────────────
+# Without it, plan-backed steps do not refuse — each degrades its own way, and
+# the run reads as several unrelated regressions. MEASURED 2026-09-26 on darwin
+# in a fresh linked worktree (meta-orchestration): four reds, four surfaces —
+# claim-ledger-node LEASED the fixture's fake near-miss id (the unverifiable-
+# ledger path leases by design), the long-running view read missing=2, a
+# fixture said "no runnable tillandsias-plan", a methodology query failed —
+# every one green once a binary was supplied. So refuse ONCE, before any test.
+# The binary must RUN (`capabilities`), not merely exist: an explicit
+# TILLANDSIAS_PLAN_BIN is honoured on existence alone by resolve_plan_binary,
+# so a stale or foreign binary would otherwise pass as "present".
+# ./build.sh --check builds the binary in preflight and never reaches this.
+# Opt-out, for a caller KNOWINGLY running binary-free:
+# TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN=1 (the pre-1419 behaviour).
+# ONLY ON PATHS THAT EXECUTE TESTS: --parse-only and --list never run a step,
+# so they must not be gated on a binary they do not use. It first ran at top
+# level and refused test-litmus-item-opener-refused.sh ARM 3, whose mutant copy
+# of this runner does --parse-only from a $TMP root with no binary (land57).
+_litmus_require_plan_binary() {
+    [[ "${TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN:-}" != "1" ]] || return 0
+    local _litmus_nobin=""
+    if [[ -z "$LITMUS_PLAN_BIN" ]]; then
+        _litmus_nobin="blocked:litmus-no-plan-binary"
+    elif [[ "$_litmus_caps_rc" -ne 0 ]]; then
+        _litmus_nobin="blocked:litmus-plan-binary-unrunnable:$LITMUS_PLAN_BIN"
+    fi
+    if [[ -n "$_litmus_nobin" ]]; then
+        echo "$_litmus_nobin"
+        {
+            echo "[litmus] no RUNNABLE tillandsias-plan resolved (resolve_plan_binary + capabilities)."
+            echo "  Plan-backed steps would not refuse; each would degrade and read as its own"
+            echo "  regression (a lease, missing=N, a failed query). Nothing was run."
+            echo "  REMEDY: cargo build --release -p tillandsias-plan   (or TILLANDSIAS_PLAN_BIN=<runnable binary>)"
+            echo "  To run anyway, knowingly: TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN=1"
+        } >&2
+        exit 2
+    fi
+}
 # _yaml_jq <file> <jq-filter> — the first tier. Returns non-zero (and prints
 # nothing) when the tier is unavailable or the file does not load, so callers
 # fall through to the next tier. A `blocked:` verdict from yaml-json lands on
@@ -314,8 +366,21 @@ fi
 # fix becomes a claim.
 _yaml_jq() {
     [[ -n "$LITMUS_PLAN_BIN" ]] || return 1
-    command -v jq &>/dev/null || return 1
     local out
+    # ORDER 1375-6pnd: `yaml get` answers the runner's filters (all inside the
+    # json get subset) from the binary itself, so the test SELECTION no longer
+    # depends on jq or yq being on the host. Measured before this change: with
+    # jq, yq and the toolbox yq shim all absent, a spec whose tests are
+    # pre-build selected NOTHING (the yq tier's `|| echo runtime` default
+    # claimed every phase was runtime) while a host with jq selected them all.
+    # LF on every platform, so no CR strip is needed on this path.
+    if [[ "$_LITMUS_HAS_YAML_GET" == 1 ]]; then
+        out="$("$LITMUS_PLAN_BIN" yaml get -r "$2" "$1" 2>/dev/null)" || return 1
+        [[ -n "$out" ]] && printf '%s\n' "$out"
+        return 0
+    fi
+    # An older binary without `yaml get`: the previous yaml-json | jq path.
+    command -v jq &>/dev/null || return 1
     out="$("$LITMUS_PLAN_BIN" yaml-json "$1" 2>/dev/null | jq -r "$2" 2>/dev/null)" || return 1
     printf '%s\n' "${out//$'\r'/}"
 }
@@ -1643,6 +1708,7 @@ run_litmus_test_file() {
         local exit_code=0
 
         step_index=$((step_index + 1))
+        _LT_CUR_STEP=$step_index  # 1242-4x53: the step a failed test died on
         local timeout_sec=$(( step_timeout_ms / 1000 ))
 
         # Progress reporting: show step start and timeout value
@@ -2079,9 +2145,10 @@ run_tests_for_spec() {
         # test-by-test. Capture is two clock reads; emission is batched at
         # suite end. Best-effort: a stubbed clock yields t0=0 and the record
         # is dropped downstream, never poisoned.
-        local _pt_t0 _pt_dur _pt_rc _lt_verdict
+        local _pt_t0 _pt_dur _pt_rc _lt_verdict _lt_status _lt_failed_step
         _pt_t0="$(timing_now_ms 2>/dev/null || echo 0)"
         LITMUS_LAST_TEST_TIMED_OUT=0
+        _LT_CUR_STEP=0
         # ORDER 1309-fhxb: 2 = SKIPPED (asked no question), 3 = ADVISORY (held,
         # with a note). Both are non-failures and neither is a plain PASS.
         # `set -e` IS IN FORCE (:44). A BARE call whose function returns non-zero
@@ -2092,6 +2159,10 @@ run_tests_for_spec() {
         # that read as success downstream. Measured here 2026-09-20, and the only
         # symptom was output that stopped rather than output that complained.
         if run_litmus_test_file "$test_file" "$spec_id"; then _lt_verdict=0; else _lt_verdict=$?; fi
+        # 1242-4x53: the per-test record carries HOW the test went and, for a
+        # failure, WHICH step. ADVISORY (3) counts as pass here as it does in
+        # the summary; a verdict SKIP (2) is recorded as skip, never as pass.
+        case "$_lt_verdict" in 0|3) _lt_status=pass ;; 2) _lt_status=skip ;; *) _lt_status=fail ;; esac
         case "$_lt_verdict" in
             0)  _pt_rc=0
                 log_test_result "$spec_id" "$test_name" "PASS" "" ;;
@@ -2118,7 +2189,12 @@ run_tests_for_spec() {
         if [[ "$_pt_t0" =~ ^[0-9]+$ && "$_pt_t0" -gt 0 ]]; then
             _pt_dur=$(( $(timing_now_ms 2>/dev/null || echo 0) - _pt_t0 ))
             [[ "$_pt_dur" -ge 0 && "$_pt_dur" -lt 86400000 ]] || _pt_dur=0
-            _PER_TEST_LOG="${_PER_TEST_LOG}${_pt_dur}	${test_name}	${_pt_rc}
+            _lt_failed_step=""
+            [[ "$_lt_status" == fail ]] && _lt_failed_step="$_LT_CUR_STEP"
+            # 1395-88tp: fields 6/7 are the litmus FILE and the spec it ran
+            # under, digested once for the whole suite at emission so the
+            # record names the bytes it ran against.
+            _PER_TEST_LOG="${_PER_TEST_LOG}${_pt_dur}	${test_name}	${_pt_rc}	${_lt_status}	${_lt_failed_step}	${test_file}	${spec_id}
 "
         fi
         if [[ "$_pt_rc" -ne 0 ]] && should_fail_fast_for_spec "$spec_id"; then
@@ -2236,11 +2312,38 @@ print_summary() {
     # lives in the timing records; 734-sjb3 noise discipline).
     if [[ -n "$_PER_TEST_LOG" ]]; then
         {
-            printf '%s' "$_PER_TEST_LOG" | awk -F'\t' \
+            # 1395-88tp: column 8 is the sha256 of the litmus file's bytes, so the
+            # CentiColon grader credits a green record only to the bytes that
+            # ran (a record dies when the file changes). ONE hashing spawn for
+            # the whole suite; a host with neither tool writes no digest, and
+            # absence never reads as a verdict.
+            _pt_files="$(awk -F'\t' -v root="$PROJECT_ROOT" 'NF >= 6 && $6 != "" {print $6; if ($7 != "") print root "/openspec/specs/" $7 "/spec.md"}' <<<"$_PER_TEST_LOG" | sort -u)"
+            _pt_digests=""
+            if [[ -n "$_pt_files" ]]; then
+                if command -v sha256sum >/dev/null 2>&1; then
+                    _pt_digests="$(tr '\n' '\0' <<<"$_pt_files" | xargs -0 sha256sum 2>/dev/null || true)"
+                elif command -v shasum >/dev/null 2>&1; then
+                    _pt_digests="$(tr '\n' '\0' <<<"$_pt_files" | xargs -0 shasum -a 256 2>/dev/null || true)"
+                fi
+            fi
+            # The digest list is MULTI-LINE, so it travels through ENVIRON: BSD
+            # awk rejects a newline inside a -v value ("newline in string"),
+            # and on macOS that silently emptied every per-test record
+            # (macbookair, 2026-09-26: 324 tests executed, 0 records written).
+            _pt_rows="$(printf '%s' "$_PER_TEST_LOG" | PT_DIGESTS="$_pt_digests" awk -F'\t' \
                 -v phase="${FILTER_PHASE:-unknown}" \
                 -v host="${TILLANDSIAS_HOST_ID:-$(hostname 2>/dev/null || echo unknown)}" \
-                'NF >= 3 { name = $2; sub(/^litmus:/, "", name); printf "litmus:%s\t%s\t%s\t%s\t%s\n", name, phase, $1, $3, host }' \
-                | bash "$PROJECT_ROOT/scripts/cycle-metrics.sh" --emit-timing-batch
+                -v root="$PROJECT_ROOT" \
+                -v regime="$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/^mingw.*/msys/; s/^msys.*/msys/; s/^cygwin.*/msys/')" \
+                'BEGIN { digests = ENVIRON["PT_DIGESTS"]; n = split(digests, dl, "\n"); for (i = 1; i <= n; i++) { h = dl[i]; f = dl[i]; sub(/[ \t].*$/, "", h); sub(/^[0-9a-f]+[ \t]+\*?/, "", f); if (h ~ /^[0-9a-f]+$/) dg[f] = h } }
+                 NF >= 3 { name = $2; sub(/^litmus:/, "", name); sp = root "/openspec/specs/" $7 "/spec.md"; printf "litmus:%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", name, phase, $1, $3, host, $4, $5, (($6 in dg) ? dg[$6] : ""), regime, $7, ((sp in dg) ? dg[sp] : "") }')"
+            # Rows went in and none came out: the producer failed. Say so —
+            # the enclosing `2>/dev/null || true` is what hid the BSD case.
+            if [[ -z "$_pt_rows" ]]; then
+                echo "could-not-run:litmus-per-test-records:producer-emitted-nothing ($(grep -c . <<<"$_PER_TEST_LOG") rows in)"
+            else
+                printf '%s\n' "$_pt_rows" | bash "$PROJECT_ROOT/scripts/cycle-metrics.sh" --emit-timing-batch
+            fi
         } 2>/dev/null || true
         # `|| true`: under `set -eo pipefail`, head's early close SIGPIPEs
         # sort/awk (rc 141) once the sweep is big enough to overflow ten
@@ -2716,6 +2819,9 @@ main() {
         list_all_tests
         exit 0
     fi
+
+    # 1419-zydw: from here on tests EXECUTE, so a runnable plan binary is required.
+    _litmus_require_plan_binary
 
     log_info "Timeout per test: ${TIMEOUT_SECONDS}s"
     log_info "Phase filter: ${FILTER_PHASE}"

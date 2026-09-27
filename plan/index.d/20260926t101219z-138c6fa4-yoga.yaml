@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lua-std-json-encode-renders-an-empty-array-as-an-empty-object-so-a-consumer-cannot-tell-no-items-from-no-fields
+    field: status
+    value: completed
+    ts: "2026-09-26T10:12:19Z"
+    host: yoga
+
+events:
+  - packet_id: lua-std-json-encode-renders-an-empty-array-as-an-empty-object-so-a-consumer-cannot-tell-no-items-from-no-fields
+    event:
+      type: completed
+      ts: "2026-09-26T10:12:19Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: landed on origin/linux-next at 5cbcf7dc7 (work/1398-3qiz c8f306997)
+  - packet_id: lua-std-json-encode-renders-an-empty-array-as-an-empty-object-so-a-consumer-cannot-tell-no-items-from-no-fields
+    event:
+      type: note
+      ts: "2026-09-26T10:12:19Z"
+      host: yoga
+      summary: |-
+        json.array marks a table so an empty list encodes as []; unmarked {} stays {}; json.parse keeps arrays marked; identical bytes in three processes

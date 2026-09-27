@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: change-class-gate-selector
+    event:
+      type: finding
+      ts: "2026-09-26T11:57:52Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        SECOND INSTANCE, a different path from the 07:19Z land-tool refusal above (reported by macuahuitl-forge 2026-09-26 ~12:00Z, relayed by the macuahuitl coordinator). A PLAN-ONLY fragment push (three closure fragments for 1395-n7qd/88tp/ue3i) was refused by pre-push-local-gate.sh's scoped-stamp check: "the gate stamp is scoped to 'build-scripts' but this push also changes: plan-ledger". The checkout held a scoped stamp from an earlier --check of code work. A push with NO stamp would have been admitted by the plan-only lane; a stale scoped stamp shadowed that lane and turned a fragment push into a full-gate requirement. The workaround was a fresh ./build.sh --check, ~20 min, to close three rows. Expected: the plan-only lane's admission (outgoing diff = new plan fragments only) is decided BEFORE, or independently of, any scoped stamp, or plan-ledger is always covered for a fragment-only diff. Exit criterion shape: in a checkout holding a scoped stamp for class build-scripts, a push whose outgoing diff adds only plan/index.d fragments is admitted. PRE-FIX RESULT: FAILS (refused as above).

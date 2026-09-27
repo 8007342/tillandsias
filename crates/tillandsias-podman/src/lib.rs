@@ -960,6 +960,32 @@ impl SyncPodmanCommand {
         let mut child = self.inner.spawn()?;
         wait_for_exit(&mut child, budget, None)
     }
+
+    /// [`Self::status_bounded`] with `input` written to the child's stdin,
+    /// stdout and stderr left inherited so the caller's terminal sees progress.
+    ///
+    /// Order 1383-5hpk: the GitHub device-login poll script embeds the device
+    /// code. Passed as `-c <script>` it sat on podman's argv, readable by any
+    /// process on the host through /proc. On stdin it is not on any argv.
+    pub fn status_bounded_with_stdin(
+        &mut self,
+        input: &[u8],
+        budget: std::time::Duration,
+    ) -> std::io::Result<std::process::ExitStatus> {
+        use std::io::Write;
+
+        self.inner.stdin(std::process::Stdio::piped());
+        let mut child = self.inner.spawn()?;
+        {
+            let mut stdin = child
+                .stdin
+                .take()
+                .ok_or_else(|| std::io::Error::other("podman stdin pipe unavailable"))?;
+            stdin.write_all(input)?;
+            // Dropping the handle closes the pipe, so a `bash -s` reader sees EOF.
+        }
+        wait_for_exit(&mut child, budget, None)
+    }
 }
 
 /// Park until `child` exits or the deadline expires, then kill and reap it.

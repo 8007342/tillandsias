@@ -1,0 +1,83 @@
+events:
+  - packet_id: a-rust-hosted-lua-step-form-for-litmus-offered-beside-shell-not-replacing-it
+    event:
+      type: note
+      ts: "2026-09-26T04:50:00Z"
+      host: macuahuitl
+      summary: |-
+        DESIGN LANDED for the API this row's `steps:` form runs on:
+        plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md §4.
+        The step form needs no API of its own: proc.run{argv}, proc.chain,
+        text.*, verdict.* (1384-aixy, 1384-bqhy). The FIVE acceptance items
+        map to construction, not discipline: (1) `| tee | head` truncation —
+        no OS pipe exists, bytes are a field; (2) `$?` of tail — status is a
+        field of the stage that produced it; (3) PIPESTATUS under zsh — no
+        shell runs the step; (4) `2>/dev/null` swallowing `ps: unknown option`
+        — stderr is captured separately and delivered; (5) a captured log
+        destroyed by the producer's EXIT trap — the bytes are in the result
+        table, never a file. MEASURED on the base 9594a4303: 2,921 command:
+        lines, 911 with a pipe outside quotes, 334 files with a pipe and no
+        pipefail of their own (the runner's `set -eo pipefail` applies to all
+        of them and merges both streams before adjudication). The adoption
+        counter this row names (`litmus-form: steps= command= rust_queries=`)
+        is a field of the shell-ratchet line (1384-bxhk); rust_queries is
+        still 1 adopter in 458 files today. Sequence: 1384-aixy, 1384-bqhy,
+        then this row.
+  - packet_id: an-idiomatic-command-executor-in-rust-argv-not-shell-strings-with-separately-captured-fds-concurrent-draining-and-a-run-identity-so-a-stale-marker-cannot-read-as-a-fresh-result
+    event:
+      type: note
+      ts: "2026-09-26T04:50:00Z"
+      host: macuahuitl
+      summary: |-
+        STATUS MISMATCH: the crate landed (326def3d2 "the Result type and one
+        verb", 98859cdc7 "stdin, in-memory pipeline, spawn/reap") and the row
+        is still `ready`. Read for the scripting-runtime design
+        (plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md
+        §3.1): Command::run drains three fds with tokio::join!, Pipeline is
+        already an in-memory chain keeping every stage's Output, Running::kill
+        SIGKILLs the CHILD ONLY (no group/session — the 1132-r4mt shape),
+        spawn inherits stdio (no streaming reader), and Completion::Signaled
+        is not surfaced to Lua. That delta is filed as 1384-aixy's scope
+        (Command::group, Running::lines, group kill, run trace) so this row
+        can close on what it delivered; whoever picks it up should flip it to
+        in_progress or completed against the two SHAs with the exit criteria
+        re-checked (the stderr-survives and 1 MiB/1 MiB arms are in the
+        crate's tests).
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    event:
+      type: note
+      ts: "2026-09-26T04:50:00Z"
+      host: macuahuitl
+      summary: |-
+        SEQUENCE NOTE from the scripting-runtime design (§4.1, §4.3, §7.2):
+        the `run` verb and Lua's proc.run share one Rust implementation and
+        one semantics — group=true by default (setsid+killpg on Unix, a job
+        object on Windows), `timed_out` as a status the child never produced
+        (exit 124 only at the CLI boundary for `|| rc=$?` callers), stdout and
+        stderr unmerged. This row's named first caller (build.sh's preflight
+        `exec setsid`) is ALSO the subject of 1384-ddua's port of the door to
+        Lua; whichever lands first, the other calls it — ddua's context says
+        how. `--lock` stays this row's alone (proc.run has no lock field; a
+        script that needs one calls the verb). Keep exit 124 and add
+        `status=timed_out after_ms=` on stderr as already specified.
+  - packet_id: one-lua-std-module-registers-json-yaml-hash-time-path-into-every-lua-environment-the-plan-binary-hosts-by-class-and-the-lua-cli-stops-handing-scripts-an-unsandboxed-vm
+    event:
+      type: note
+      ts: "2026-09-26T04:50:00Z"
+      host: macuahuitl
+      summary: |-
+        TWO DETERMINISM DEFECTS measured on the landed environment (build
+        0.1.0+4312ec2ceb0c33ae, 2026-09-26), filed as 1384-bp6t: (1)
+        json.encode of the same six-key table printed three different key
+        orders in three consecutive processes — Lua 5.4.7's luai_makeseed
+        seeds string hashing from ASLR and time(NULL), so pairs order and
+        every encoder that walks it are per-process random; (2) os.setlocale
+        is a function in the Observing class, and after os.setlocale("")
+        under a comma-radix locale string.format("%.2f", 3.5) printed `3,50`
+        and tonumber("3,5") returned 3,5 — 1254-fdsu's class reachable from
+        Lua. The property to keep is that a Rust binary never calls
+        setlocale(LC_ALL, ""), so "C" holds by construction UNTIL a script
+        calls it. This row's closure test should add `os.setlocale == nil`
+        in both classes and a three-process byte-identity arm, or defer both
+        to 1384-bp6t explicitly. Design:
+        plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md §3.2, §5.

@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-budgets-are-calibrated-against-a-corpus-that-only-grows-so-five-correct-steps-red-the-release-gate-on-the-busiest-host-first
+    field: next_action
+    value: |-
+      2026-09-26 yoga, SLICE 1 on work/1233-jqp4 (4f8523391, merged 7943f9fa8) — the measurement the unscoreable asked for ("where the 30 seconds actually goes"), on yoga, QUIET (load ~0.8), timing log 81,225 records / 13.4 MB:
+        cycle-metrics.sh 14,653 ms, of which the groundtruth `grade` over all sets was 10.8 s (bash -x with EPOCHREALTIME stamps, LC_ALL=C); the timing-log readers were ~1.0 s + 0.6 s. ON THIS HOST THE TIMING LOG IS NOT THE DOMINANT READER.
+        grade: 9,883 ms in expert-groundtruth-rung1; two cases hold it (plan-ready-for-linux-excludes-done 5,958 ms, plan-active-release-experts-milestone 3,401 ms). A PATH-shadowed git wrapper counted 569 git calls for the first case, 372 of them `git show <frame>:plan/index.yaml` at ONE commit: answer::relate evaluated drift per citation (git show + a 5.9 MB working-tree read each) although its outputs are sets keyed by path. This reader grows with the LEDGER and with the ROWS a list answer cites — a second growing corpus this row did not name.
+        FIX (4f8523391): once per (path, frame). After, same host/load: case 1,471 ms (182 git calls, one per distinct fragment), all 33 groundtruth 3,239 ms (33/33 pass), cycle-metrics.sh 6,976 ms. Test repeated_citations_of_one_file_still_see_the_frame_where_it_drifted FAILS when the key drops the frame (control run). plan lib 349 passed in 109.48 s; clippy/fmt clean; deciders rc=0.
+        Covering-spec litmus: ci-release 3 FAIL, meta-orchestration 1, methodology-accountability 1 — the SAME five fail on trunk b2fe36e88 with a trunk-built binary, so they pre-exist this change.
+      REMAINING (criteria not met by this slice): (1) the five steps under GATE LOAD on a host at >=115,860 records — macuahuitl's corpus, not mine; (2) the timing-log readers still scale with history (cost now ~1.6 s here, grows with the log); (3) the inventory of every budget reading a growing corpus, with the unchanged ones named; (4) the hung/wrong-producer negative control; (5) regime lines on any recalibrated budget. Row stays in_progress with yoga.
+
+      [2026-09-26T19:03:33Z yoga] 2026-09-26 yoga: SLICE 1 LANDED — relay commit 171d5a31f ("relay: land work/1233-jqp4"), verified an ancestor of origin/linux-next along with the fix 4f8523391. Row stays open for criteria 1-5 (see slice-1 note).
+      REGIME READING from macuahuitl (their measurement, relayed): host=macuahuitl, timing_records=173,881, binary WITH the relate() fix, a concurrent land gate running (4 gate processes) but THROTTLED — loadavg ~1.0 for the whole gate, 0.80 at its end, so on this operator desktop ~1.0 IS the gate-load regime. `scripts/cycle-metrics.sh` wall 12.25 s, rc=0, expert_accuracy 33/33. An ABSOLUTE reading, not a speedup: there is no pre-fix sample on that host in that regime. Read against the budgets (10-20 s), the biggest-corpus host now fits the 15 s and 20 s steps and still exceeds the 10 s ones. The timing-log readers are the next suspect there (174k records vs yoga's 81k); not yet profiled on that host.
+    ts: "2026-09-26T19:03:33Z"
+    host: yoga
+
+events:
+  - packet_id: litmus-budgets-are-calibrated-against-a-corpus-that-only-grows-so-five-correct-steps-red-the-release-gate-on-the-busiest-host-first
+    event:
+      type: progress
+      ts: "2026-09-26T19:03:33Z"
+      host: yoga
+      summary: |-
+        status '2026-09-26 yoga, SLICE 1 on work/1233-jqp4 (4f8523391, merged 7943f9fa8) — the measurement the unscoreable asked for ("where the 30 seconds actually goes"), on yoga, QUIET (load ~0.8), timing log 81,225 records / 13.4 MB:
+          cycle-metrics.sh 14,653 ms, of which the groundtruth `grade` over all sets was 10.8 s (bash -x with EPOCHREALTIME stamps, LC_ALL=C); the timing-log readers were ~1.0 s + 0.6 s. ON THIS HOST THE TIMING LOG IS NOT THE DOMINANT READER.
+          grade: 9,883 ms in expert-groundtruth-rung1; two cases hold it (plan-ready-for-linux-excludes-done 5,958 ms, plan-active-release-experts-milestone 3,401 ms). A PATH-shadowed git wrapper counted 569 git calls for the first case, 372 of them `git show <frame>:plan/index.yaml` at ONE commit: answer::relate evaluated drift per citation (git show + a 5.9 MB working-tree read each) although its outputs are sets keyed by path. This reader grows with the LEDGER and with the ROWS a list answer cites — a second growing corpus this row did not name.
+          FIX (4f8523391): once per (path, frame). After, same host/load: case 1,471 ms (182 git calls, one per distinct fragment), all 33 groundtruth 3,239 ms (33/33 pass), cycle-metrics.sh 6,976 ms. Test repeated_citations_of_one_file_still_see_the_frame_where_it_drifted FAILS when the key drops the frame (control run). plan lib 349 passed in 109.48 s; clippy/fmt clean; deciders rc=0.
+          Covering-spec litmus: ci-release 3 FAIL, meta-orchestration 1, methodology-accountability 1 — the SAME five fail on trunk b2fe36e88 with a trunk-built binary, so they pre-exist this change.
+        REMAINING (criteria not met by this slice): (1) the five steps under GATE LOAD on a host at >=115,860 records — macuahuitl's corpus, not mine; (2) the timing-log readers still scale with history (cost now ~1.6 s here, grows with the log); (3) the inventory of every budget reading a growing corpus, with the unchanged ones named; (4) the hung/wrong-producer negative control; (5) regime lines on any recalibrated budget. Row stays in_progress with yoga.
+        
+        [2026-09-26T19:03:33Z yoga] 2026-09-26 yoga: SLICE 1 LANDED — relay commit 171d5a31f ("relay: land work/1233-jqp4"), verified an ancestor of origin/linux-next along with the fix 4f8523391. Row stays open for criteria 1-5 (see slice-1 note).
+        REGIME READING from macuahuitl (their measurement, relayed): host=macuahuitl, timing_records=173,881, binary WITH the relate() fix, a concurrent land gate running (4 gate processes) but THROTTLED — loadavg ~1.0 for the whole gate, 0.80 at its end, so on this operator desktop ~1.0 IS the gate-load regime. `scripts/cycle-metrics.sh` wall 12.25 s, rc=0, expert_accuracy 33/33. An ABSOLUTE reading, not a speedup: there is no pre-fix sample on that host in that regime. Read against the budgets (10-20 s), the biggest-corpus host now fits the 15 s and 20 s steps and still exceeds the 10 s ones. The timing-log readers are the next suspect there (174k records vs yoga's 81k); not yet profiled on that host.' (not terminal) with evidence_refs: 171d5a31f
+  - packet_id: litmus-budgets-are-calibrated-against-a-corpus-that-only-grows-so-five-correct-steps-red-the-release-gate-on-the-busiest-host-first
+    event:
+      type: note
+      ts: "2026-09-26T19:03:33Z"
+      host: yoga
+      summary: |-
+        slice 1 landed at 171d5a31f; macuahuitl regime reading

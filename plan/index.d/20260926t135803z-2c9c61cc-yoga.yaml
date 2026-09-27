@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-last-three-release-tier-reds-two-litmus-pin-a-count-or-a-verb-list-instead-of-a-property-and-the-plan-suite-outgrew-its-budget
+    field: next_action
+    value: '2026-09-26 yoga (c): the lib-suite budget breach was ONE test, fragments::compaction_text_tests::compaction_on_the_real_ledger_preserves_every_comment_and_item (201219 of 203 s), which reads the REAL plan/index.yaml (5.9 MB) and its 2221 fragments — so its time is a function of the CORPUS, not the code (the 1310-7apk shape). 1986e8cf3 renders its candidate once instead of twice (99766 ms; suite 106.92 s), but the cost still grows with the ledger and will approach 180 s again unless the ledger is compacted or the test samples a bounded corpus.'
+    ts: "2026-09-26T13:58:03Z"
+    host: yoga
+
+events:
+  - packet_id: the-last-three-release-tier-reds-two-litmus-pin-a-count-or-a-verb-list-instead-of-a-property-and-the-plan-suite-outgrew-its-budget
+    event:
+      type: progress
+      ts: "2026-09-26T13:58:03Z"
+      host: yoga
+      summary: |-
+        status '2026-09-26 yoga (c): the lib-suite budget breach was ONE test, fragments::compaction_text_tests::compaction_on_the_real_ledger_preserves_every_comment_and_item (201219 of 203 s), which reads the REAL plan/index.yaml (5.9 MB) and its 2221 fragments — so its time is a function of the CORPUS, not the code (the 1310-7apk shape). 1986e8cf3 renders its candidate once instead of twice (99766 ms; suite 106.92 s), but the cost still grows with the ledger and will approach 180 s again unless the ledger is compacted or the test samples a bounded corpus.' (not terminal) with evidence_refs: 1986e8cf3
+  - packet_id: the-last-three-release-tier-reds-two-litmus-pin-a-count-or-a-verb-list-instead-of-a-property-and-the-plan-suite-outgrew-its-budget
+    event:
+      type: note
+      ts: "2026-09-26T13:58:03Z"
+      host: yoga
+      summary: |-
+        corpus-dependent test cost, per coordinator

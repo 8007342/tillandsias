@@ -241,7 +241,7 @@ report_ready_but_claimed() {   # <index-path> <fragments-dir>
     # One fold pass, then a set membership test per hit — a git/grep pass per
     # packet is the shape ARM 3 already avoided.
     "$PLAN" --index "$idx" select-rows --status ready --limit 2000 2>/dev/null | \
-        awk -v c="$claimed" 'BEGIN{n=split(c,cs,"\n"); for(i=1;i<=n;i++) have[cs[i]]=1} $4 in have {print $3}'
+        CLAIMED="$claimed" awk 'BEGIN{n=split(ENVIRON["CLAIMED"],cs,"\n"); for(i=1;i<=n;i++) have[cs[i]]=1} $4 in have {print $3}'
 }
 
 # ------------------------------------------------------------ ARM 2 REPORTER --
@@ -389,6 +389,44 @@ if printf '%s\n' "$_claimed" | grep -qxF '900-land'; then
 else
     ok "arm1: the claim check does not report on claim-free packets"
 fi
+# TWO claimed packets at once (1399-wtpq). The claimed set reaches awk as one
+# newline-separated value; with a single id there is no newline, so every arm
+# above passes even where the set is passed wrongly. BSD awk (macOS) rejects a
+# newline in `awk -v` ("newline in string") and matches nothing, so before the
+# ENVIRON fix this arm reported NEITHER packet on darwin (measured by
+# macbookair: two ids -> newline in string; one id -> hit).
+mkdir -p "$_fx/two/fragments.d"
+cp "$_fx/ledger.yaml" "$_fx/two/ledger.yaml"
+cat >> "$_fx/two/ledger.yaml" <<'YAML'
+  - packet_id: claimed-but-ready-two
+    order: 900-cl2
+    status: ready
+    desired_release: v0.5
+    pickup_role: linux
+    priority: p2
+YAML
+cat > "$_fx/two/fragments.d/claim-frag.yaml" <<'YAML'
+events:
+  - packet_id: claimed-but-ready
+    event:
+      type: claim
+      ts: "2026-09-10T06:00:00Z"
+      host: fixture-host
+      summary: first of two claims in one set
+  - packet_id: claimed-but-ready-two
+    event:
+      type: claim
+      ts: "2026-09-10T06:01:00Z"
+      host: fixture-host
+      summary: second of two claims in one set
+YAML
+_claimed_two="$(report_ready_but_claimed "$_fx/two/ledger.yaml" "$_fx/two/fragments.d")"
+if grep -qxF '900-clm' <<<"$_claimed_two" && grep -qxF '900-cl2' <<<"$_claimed_two"; then
+    ok "arm1-two: both packets of a two-claim set are reported (multi-line set survives the reader)"
+else
+    bad "arm1-two: a two-claim set lost packets: got [$(tr '\n' ' ' <<<"$_claimed_two")]"
+fi
+
 # And the exclusion: a claim that WAS resolved by a release returns the packet
 # to `ready` deliberately — status matches events, nothing is blind. A checker
 # that reports it has a false-positive on the healthy case, which is the failure
@@ -482,5 +520,11 @@ if [ "${LIVE_LANE:-0}" = "1" ] || [ "${1:-}" = "--live" ]; then
     exit 0
 fi
 
-echo "ok:ledger-write-reaches-its-reader:$_n arm assertion(s)"
-[ "$_fail" = 0 ] || exit 1
+# The verdict line must agree with the exit code: it used to print ok: even
+# when an arm had failed and the script then exited 1.
+if [ "$_fail" = 0 ]; then
+    echo "ok:ledger-write-reaches-its-reader:$_n arm assertion(s)"
+    exit 0
+fi
+echo "FAIL:ledger-write-reaches-its-reader:$_n arm assertion(s) passed, at least one failed"
+exit 1

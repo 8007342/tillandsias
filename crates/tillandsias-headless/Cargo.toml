@@ -56,6 +56,7 @@ tillandsias-secure-channel = { workspace = true }
 # lockfile entry; it is unconditional (not vault-gated) because the id
 # grammar and its tests must build without the vault feature.
 getrandom = "0.4"
+qrcode = { version = "0.14", default-features = false }
 
 # @trace spec:tillandsias-vault — Phase 6: Vault is now the default secrets
 # backend for Linux. The `vault` feature is enabled by default.

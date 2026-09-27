@@ -42,7 +42,7 @@ impl ContainerLauncher {
             // no production callers today (2026-09-02 census) — it is
             // value-aligned anyway so a future caller cannot silently
             // inherit the retired ceiling.
-            .pids_limit(4096);
+            .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host());
 
         // GPU passthrough (Linux only, silent when absent)
         if cfg!(target_os = "linux") {

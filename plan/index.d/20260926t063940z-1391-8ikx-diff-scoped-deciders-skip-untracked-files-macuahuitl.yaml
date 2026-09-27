@@ -1,0 +1,33 @@
+packets:
+  - packet_id: diff-scoped-deciders-read-git-diff-against-a-base-which-omits-untracked-files-so-a-brand-new-script-is-invisible-until-it-is-staged
+    order: 1391-8ikx
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, deciders, fail-loud]
+    estimated_hours: 2
+    owned_files: [scripts/check-sigpipe-verdict-pipelines-added.sh]
+    observed_by: macuahuitl-forge
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable adds an untracked-file
+      arm to the decider's own fixture in the same commit (1136-n8sh).
+    title: |
+      check-sigpipe-verdict-pipelines-added (and any sibling decider that scopes by `git diff --name-only $base`) never sees an UNTRACKED new file, so run before `git add` it answers rc=0 over a brand-new fixture full of the exact pipelines it exists to refuse
+    verifiable_closure: |
+      A fixture arm creates an untracked new script carrying a
+      `printf … | grep -q` verdict and runs the decider BEFORE staging it: the
+      decider either refuses on it (it includes
+      `git ls-files --others --exclude-standard`) or refuses with a named
+      "untracked files present, stage them first" verdict, and never answers
+      rc=0. Pre-fix result: FAILS, rc=0 with the violation invisible (measured by
+      macuahuitl-forge on work/1388-pfys, 2026-09-26). The same commit greps the
+      sibling diff-scoped deciders for `git diff --name-only` and lists which share
+      the shape, fixing each or naming it.
+    context: |
+      Found by macuahuitl-forge (the operator's forge, dispatched as a worker),
+      correcting the coordinator's wrong mirror-base diagnosis on 1359-qf3p.
+      Consequence: a worker who runs the deciders mid-edit gets a false green,
+      pushes, and the relay gate refuses 20 minutes later (11 violations on
+      2026-09-26).

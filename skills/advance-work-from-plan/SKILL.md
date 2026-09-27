@@ -359,8 +359,10 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     Your platform branch keeps its copy; the relay merges the identical file
     clean. `refused:fragments-to-trunk:trunk-fold:…` means a fragment names a
     packet trunk has never seen (you filed it on this branch): run it without
-    arguments so the filing rides along. The control, from any trunk checkout:
-    `tillandsias-plan next <role> | grep -c <packet-id>` → 0.
+    arguments so the filing rides along. The control, from any trunk checkout
+    after `git pull`: `scripts/check-claim-confirmed.sh <order> --host <host>`
+    → `ok:claim-confirmed` (1370-tjme; `refused:claim-lost` names the earlier
+    claimant, and you yield).
 
     **YOUR FOLD DOES NOT SHOW OTHER HOSTS' CLAIMS, and the gap is measured in
     HOURS, not seconds** (1034-whsp). A claim lands on the claimant's PLATFORM
@@ -601,12 +603,15 @@ skipped it on direct knowledge, which does not scale.
 After the flip is PUSHED, run the control:
 
 ```bash
-tillandsias-plan next <your-role> --limit 5 | grep -c '<order>'   # must print 0 (5 is the cap)
+git pull && scripts/check-claim-confirmed.sh <order> --host <your-host>   # ok:claim-confirmed:<order>:<host>@<ts>
 ```
 
-If it prints 1 the claim did not take (unpushed, wrong field, refused by the
-ladder) and the row is still being offered to the fleet; fix that before
-starting the work. A host whose push is blocked reports the blocker with the
+`refused:no-live-claim` means the claim did not take (unpushed, wrong field,
+refused by the ladder): fix that before starting the work.
+`refused:claim-lost:…:earlier=<host>@<ts>` means another host claimed first
+by claim-event `ts`: yield and take the next item (1370-tjme). The former
+control, `next <role> | grep -c <order>` → 0, printed 0 for the loser of a
+race too, because any host's claim hides the row. A host whose push is blocked reports the blocker with the
 committed SHA and the coordinator pushes the flip on its behalf.
 
 ## 4 — Host Write Scope & Unblock-with-NOOP
@@ -851,8 +856,16 @@ git grep -nE '^(<<<<<<<|=======|>>>>>>>)( |$)' && { echo "CONFLICT MARKER PRESEN
 #    and is FORBIDDEN for committed automation (tlatoani_hard_no_python) — its
 #    presence is not permission, and it is the trap this fallback chain exists
 #    to keep you out of.
+#    ORDER 560: the plan binary is the validator every regime already has
+#    (Windows hosts have no ruby and often no yq). It must parse THE FILE:
+#    `tillandsias-plan check` ignores its argument and exits 0 on a malformed
+#    file, so a yamlcheck built on it can never fail. Resolved through the
+#    shared probe, because the binary is usually not on PATH.
+_yc_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _yc_plan=""
 if command -v tillandsias-policy >/dev/null 2>&1; then
   yamlcheck() { tillandsias-policy validate-yaml "$1"; }
+elif [ -n "$_yc_plan" ]; then
+  yamlcheck() { "$_yc_plan" validate-yaml "$1" >/dev/null; }
 elif command -v yq >/dev/null 2>&1; then
   yamlcheck() { yq . "$1" >/dev/null; }
 elif command -v ruby >/dev/null 2>&1; then

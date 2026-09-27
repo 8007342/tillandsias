@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: diff-scoped-deciders-read-git-diff-against-a-base-which-omits-untracked-files-so-a-brand-new-script-is-invisible-until-it-is-staged
+    field: status
+    value: in_progress
+    ts: "2026-09-26T14:27:55Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: diff-scoped-deciders-read-git-diff-against-a-base-which-omits-untracked-files-so-a-brand-new-script-is-invisible-until-it-is-staged
+    event:
+      type: note
+      ts: "2026-09-26T14:27:55Z"
+      host: yolanda-windows
+      summary: |-
+        claimed 2026-09-26 at the coordinator's suggestion: the diff-scoped *-added deciders read git diff against a base, so untracked (and, measured here, staged-but-uncommitted) changes are invisible and they print ok:...:0 checked over an empty population; examine them or print could-not-run, never ok over nothing; sweep every *-added decider

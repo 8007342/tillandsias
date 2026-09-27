@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: the-macos-virtualization-framework-guest-boots-with-no-swap-so-the-vm-gets-a-dedicated-sparse-time-machine-excluded-swap-image-plus-guest-zram-and-the-balloon-is-never-inflated-under-a-running-forge
+    order: 1377-hcnv
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: macos
+    capability_tags: [macos, virtualization-framework, vm-recipe, swap, zram, balloon]
+    estimated_hours: 5
+    owned_files:
+      - crates/tillandsias-vm-layer/src/vz.rs
+      - images/vm/Recipefile
+      - images/vm/bootstrap/40-swap.sh
+    observed_by: macuahuitl
+    title: |
+      the macOS guest VM boots with no swap, so an 8 GiB forge guest OOMs where a Linux host would spill; provision a dedicated sparse swap image (Time Machine excluded) as a second virtio block device plus a 2 GiB guest zram, and never lower the balloon target while a forge runs
+    verifiable_closure: |
+      cargo test -p tillandsias-vm-layer vz_config_attaches_swap_image_after_root_disk
+      passes: the VM configuration's block-device list is [root image, vm-swap.img]
+      and the swap image path is created sparse before attach.
+      Live arm on an Apple Silicon host after tillandsias provisions the VM: the guest's
+      cat /proc/swaps (via the tray's vsock exec) lists /dev/vdb with a size of
+      at least 8 GiB at priority 10 and /dev/zram0 at priority 100; on the host
+      tmutil isexcluded "<app support>/tillandsias/vm-swap.img" prints [Excluded]
+      and du -h on it reports well under 1 GiB (sparse). A unit test in vz.rs
+      asserts the swap image is in the block-device list after the root image.
+      Pre-fix result: FAILS: guest /proc/swaps is empty (the recipe bootstrap
+      scripts create no swap; guest_sizing attaches only the root disk and the
+      balloon), and no vm-swap.img exists.
+    context: |
+      Design: plan/issues/forge-memory-swap-architecture-design-2026-09-26.md
+      section 4.3. guest_sizing gives the VM min(half host, host - 4 GiB, 8 GiB):
+      8 GiB on the 16 GiB MacBook Air. Options weighed: a swapfile inside the
+      250 GiB sparse root image (un-sparsifies the root image permanently), a
+      separate sparse raw image (recommended: created with truncate, excluded
+      with tmutil addexclusion whose sticky xattr survives moves, deleted with
+      the VM), guest zram as the fast tier in front. Balloon:
+      targetVirtualMachineMemorySize is a request to the guest, not a cap;
+      inflating it under a spilling forge steals the guest's RAM. Size: floor
+      tier (3 GiB memory.max, 4 GiB swap allowance per forge, 1 forge) so an
+      8 GiB image. Suggested host: tlatoanis-macbook-air.

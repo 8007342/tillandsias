@@ -117,5 +117,64 @@ case "$out2" in
     *) echo "FAIL: ARM 2 expected admission, got: $(printf '%s' "$out2" | head -2)"; fail=1 ;;
 esac
 
+# --- ORDER 1310-7apk: the pair list follows the PUSH, not the corpus --------
+# An unrelated long-form pair ALREADY ON ORIGIN (a different field of the same
+# packet, committed into origin's history), so the checker really folds it.
+# The whole-corpus mode counts it; the push-scoped mode must not. The pair
+# has to exist on origin, or both modes skip it as unset and read the same.
+_add_unrelated() {
+    cat > "$1/plan/index.d/20260101t000000z-unrelated-hostc.yaml" <<'YAML'
+status:
+  - packet_id: fixture-packet
+    field: context
+    value: |-
+      UNRELATED CONTEXT LINE.
+    ts: "2026-01-01T00:00:00Z"
+    host: host-c
+YAML
+    git -C "$1" add plan/index.d/20260101t000000z-unrelated-hostc.yaml >/dev/null 2>&1
+    git -C "$1" commit -qm unrelated-on-origin
+    git -C "$1" update-ref refs/remotes/origin/linux-next HEAD
+}
+PUSHED="plan/index.d/20260101t000002z-push-hostb.yaml"
+
+# ARM 3  SCOPED NEGATIVE CONTROL, the point of the row: with the pair list
+#        narrowed to the pushed fragment, the dropped line is STILL caught.
+#        Narrowing what is checked must not narrow what is caught.
+R3="$WORK/scoped-stale"; _build_repo "$R3" "without-l1"; _add_unrelated "$R3"
+out3="$(cd "$R3" && TILLANDSIAS_PLAN_BIN="$PLAN_ABS" bash scripts/check-append-vs-origin-fold.sh "$PUSHED" 2>&1)"; rc3=$?
+case "$out3" in
+    *"refused:append-drops-lines-vs-origin:fixture-packet:next_action"*L1-PEER-WARNING-DO-NOT-DROP*)
+        [ "$rc3" -ne 0 ] && echo "ok:   ARM 3 scoped to the push, the dropped line is still refused" \
+                         || { echo "FAIL: ARM 3 refusal printed but exit was 0"; fail=1; } ;;
+    *) echo "FAIL: ARM 3 expected the scoped refusal naming L1, got: $(printf '%s' "$out3" | head -2)"; fail=1 ;;
+esac
+
+# ARM 4  COST FOLLOWS THE PUSH: scoped to one pushed fragment the check folds
+#        exactly that fragment's pair (checked:1), although the corpus holds
+#        two long-form pairs; unscoped it folds both (checked:2).
+#        PRE-FIX: FAILS — the argument is ignored and the scoped run reads 2.
+R4="$WORK/scope-count"; _build_repo "$R4" "with-l1"; _add_unrelated "$R4"
+out4s="$(cd "$R4" && TILLANDSIAS_PLAN_BIN="$PLAN_ABS" bash scripts/check-append-vs-origin-fold.sh "$PUSHED" 2>&1)"
+out4a="$(cd "$R4" && TILLANDSIAS_PLAN_BIN="$PLAN_ABS" bash scripts/check-append-vs-origin-fold.sh 2>&1)"
+if [ "$out4s" = "ok:append-vs-origin:checked:1" ] && [ "$out4a" = "ok:append-vs-origin:checked:2" ]; then
+    echo "ok:   ARM 4 scoped checks 1 pair, the whole corpus 2"
+else
+    echo "FAIL: ARM 4 expected scoped checked:1 and unscoped checked:2, got '$out4s' / '$out4a'"; fail=1
+fi
+
+# ARM 5  BOUNDED: past its deadline the check refuses by NAME with exit 3,
+#        instead of hanging the push (it hung for tens of minutes on
+#        yolanda-windows, 2026-09-26, and left orphaned hooks).
+#        PRE-FIX: FAILS — no deadline exists and the run answers ok.
+R5="$WORK/deadline"; _build_repo "$R5" "with-l1"
+out5="$(cd "$R5" && TILLANDSIAS_APPEND_FOLD_DEADLINE=0 TILLANDSIAS_PLAN_BIN="$PLAN_ABS" bash scripts/check-append-vs-origin-fold.sh "$PUSHED" 2>&1)"; rc5=$?
+case "$out5" in
+    could-not-run:append-vs-origin:deadline:*)
+        [ "$rc5" -eq 3 ] && echo "ok:   ARM 5 a spent deadline is a named could-not-run, exit 3" \
+                         || { echo "FAIL: ARM 5 named but exit was $rc5"; fail=1; } ;;
+    *) echo "FAIL: ARM 5 expected could-not-run:append-vs-origin:deadline, got: $(printf '%s' "$out5" | head -2)"; fail=1 ;;
+esac
+
 [ "$fail" -eq 0 ] || { echo "violation:append-vs-origin-fixture"; exit 1; }
-echo "ok:append-vs-origin:refused-drop:${refused_drop}:admitted-current:${admitted_current}"
+echo "ok:append-vs-origin:refused-drop:${refused_drop}:admitted-current:${admitted_current}:scoped:3"

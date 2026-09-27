@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-pre-push-merge-rule-assumes-the-gate-is-fast-relative-to-trunk-landing-cadence-so-a-twenty-minute-host-can-be-refused-indefinitely-through-no-fault-of-its-own
+    field: status
+    value: completed
+    ts: "2026-09-26T15:56:32Z"
+    host: macos
+
+events:
+  - packet_id: the-pre-push-merge-rule-assumes-the-gate-is-fast-relative-to-trunk-landing-cadence-so-a-twenty-minute-host-can-be-refused-indefinitely-through-no-fault-of-its-own
+    event:
+      type: completed
+      ts: "2026-09-26T15:56:32Z"
+      host: macos
+      summary: |-
+        status 'completed' with evidence_refs: defa7b33d (relay: land work/1259-kn83, on origin/linux-next; carries c93b76b2f) + test-pre-push-linux-next-merged.sh 17/17 x3 on Linux (macuahuitl) and 17/17 x3 on macOS bash 3.2 (tlatoanis-macbook-air); against the pre-fix guard S7 (plan-only platform behind trunk) and S9 (measured slow-gate case) FAIL while S8 (one code file trunk lacks) is still refused
+  - packet_id: the-pre-push-merge-rule-assumes-the-gate-is-fast-relative-to-trunk-landing-cadence-so-a-twenty-minute-host-can-be-refused-indefinitely-through-no-fault-of-its-own
+    event:
+      type: note
+      ts: "2026-09-26T15:56:32Z"
+      host: macos
+      summary: |-
+        closed after landing: a platform push whose tree outside plan/ equals a commit on origin/linux-next's first-parent line is admitted as ok:pre-push:platform-subset-of:<sha>; anything carrying code trunk lacks is still refused. The first live darwin proof will be appended when an osx-next push hits it.

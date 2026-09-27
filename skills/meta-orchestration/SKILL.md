@@ -1054,7 +1054,7 @@ It prints exactly one line matching the falsifiable grammar
 absent or blocked. A usable channel is present when ANY of these holds (the
 script checks them in order):
 
-- `<git-dir>/.gh-credentials` exists and is non-empty (repo-local store helper), or
+- `<common-git-dir>/.gh-credentials` (absolute `git rev-parse --path-format=absolute --git-common-dir`, so every linked worktree shares it; 1409-65d5) exists and is non-empty (repo-local store helper), or
 - `GH_TOKEN` or `GITHUB_TOKEN` is set in the environment, or
 - `gh auth status` succeeds (reachable, unlocked keyring), or
 - `TILLANDSIAS_HOST_KIND=forge` is set AND the enclave git mirror is reachable
@@ -1243,8 +1243,16 @@ live tool, read the build line out of its answer, attest it:
 # 1. mcp__forge-plan__expert_capability   (through YOUR tool surface, not a shell)
 # 2. read its `server_build: forge-plan=<id> source=<path>` line
 scripts/check-mcp-live-build.sh attest forge-plan=<id> --source <path>
-scripts/check-mcp-live-build.sh check            # the joined verdict
+# 3. mcp__project-info__project_info     (1414-mjdw: the other long-lived server)
+# 4. read its JSON "server_build": "project-info=<id> source=<path>" field
+scripts/check-mcp-live-build.sh attest project-info=<id> --source <path>
+scripts/check-mcp-live-build.sh check            # the WORST attested server
+scripts/check-mcp-live-build.sh check project-info   # one server by name
 ```
+
+Each server keeps its own attestation line, so a current forge-plan never
+vouches for a stale project-info. A project-info answer with no
+`server_build` field predates 1414-mjdw: attest `project-info=unreported`.
 
 If the answer carries **no** `server_build:` line, that is the finding, not a
 reason to skip: the running server predates the emitter. Attest

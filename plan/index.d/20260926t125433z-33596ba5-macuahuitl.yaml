@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it
+    event:
+      type: decision
+      ts: "2026-09-26T12:54:33Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        FREEZE-OWNER DECISION (macuahuitl coordinator, 2026-09-26), item (5) of this row: the agent-tool alias trees (.claude/, .gemini/, .codex/, .opencode/, .github/skills/) stay NOT freeze-exempt; _freeze_path_is_exempt is unchanged. The asymmetry with skills/ is deliberate. skills/ is prose read by agents. The alias trees are STRUCTURE that a gate step reads: check-skills-single-source.sh asserts their symlink shape, and a change there can move the verdict the release gate verified. That was measured on this trunk: 1256-f7td was a .gemini/skills change that turned ./build.sh --check red for every host. A freeze exists to hold exactly what can change a verified verdict, so an alias change waits for the freeze to lift like any other gated path. Revisit only if the alias trees stop being read by any gate step.
+        Item (6), the hooks survey, is in progress: macuahuitl = ok:join-the-fleet:hooks:tillandsias-pre-push-v8 (linux-mutable). yoga, lenovinha, macbookair and macuahuitl-forge are asked. pirria and esme, the floor hosts the row exists for, are NOT in the fleet tonight, so their lines stay pending until they rejoin. The row cannot close before those two report.

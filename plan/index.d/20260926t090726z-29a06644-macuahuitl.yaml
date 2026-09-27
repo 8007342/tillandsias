@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: centicolon-r-is-printed-every-check-and-ratcheted-so-a-lost-satisfaction-is-refused-an-added-requirement-is-a-scope-change-and-a-vanished-obligation-needs-a-change-record
+    event:
+      type: decision
+      ts: "2026-09-26T09:07:26Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        OPERATOR RULING (the Tlatoāni, 2026-09-26, verbatim): "And yes, inspired in CentiPawns, when a piece is removed from the board a player loses a fixed amount of centipawns. When a new spec is added obligations in centipawns are added to the new target, but none of the existing obligations, met or unmet, have changed. And that follows our monotonic approach. This is expected and normal in software development lifecycle, and was present in the head of the Tlatoāni when thinking about the Tillandsias Methodology. Obsoleting a spec with tombstone trails is also not a regression, by design. For the active specs without ids, merely assign them new unique ids forwad, CRDT style ;)"
+        RATCHET SEMANTICS THIS FIXES, for 1395-ue3i (the advisory R line) and the grader: (1) ADDING a spec or requirement adds its obligations to the denominator (target) and changes NO existing obligation, met or unmet: reported as scope growth, never as regression. (2) OBSOLETING a spec WITH a tombstone trail (an openspec change or archive record) removes its obligations by design: not a regression. Only an obligation that disappears WITHOUT such a record is the regression the ratchet names. (3) The monotonic promise: no existing obligation's state moves DOWN (a lost satisfaction) unless the obligation itself was lawfully retired; the satisfied count never falls except through a recorded retirement. (4) Unkeyed active requirements (1396-35we) get NEW unique ids assigned forward, CRDT-style: never renumbered, never reused, never derived from position, so an id, once minted, names one requirement forever.

@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: measure-a-forge-cargo-builds-peak-rss-swap-and-pids-per-jobs-setting-and-a-tmpfs-spill-benchmark-zram-only-vs-zram-plus-disk-so-the-tier-budgets-are-numbers-not-formulas
+    event:
+      type: progress
+      ts: "2026-09-26T03:38:41Z"
+      host: yoga
+      summary: |
+        §7.2 SPILL + §7.3 NO-SWAP CONTROL, yoga (zram-only, 8 GiB zram with ~5.6 GiB
+        already used, swappiness 60), tillandsias-forge:v56.9.21.2, instrument
+        scripts/measure-forge-spill.sh (work/1378-7w2p). M = memory.max = 1 GiB (sized
+        to the ~2.6 GiB of free zram on this host), memory.swap.max = 2 GiB set
+        directly, W MiB of /dev/urandom (INCOMPRESSIBLE: zram's worst case; real
+        source trees spill cheaper) as 64 MiB files, then re-read in shuffled order.
+        Times measured INSIDE the container. ONE SAMPLE PER CELL.
+          W         tmpfs write  volume write  tmpfs read  volume read  tmpfs swap.peak
+          512 MiB     772 ms       2138 ms        36 ms       47 ms        0
+          1 GiB      1387 ms       1652 ms       150 ms       78 ms        5 MiB
+          2 GiB      3142 ms       4033 ms      1386 ms      385 ms     1031 MiB
+        (write includes urandom generation, equal on both backings; the volume's
+        512 MiB write being slower than its 1 GiB write is noise at n=1.)
+        CONTROL memory.swap.max = 0, tmpfs W = 2 GiB: oom_kill=2, rc=137 (the
+        pre-fix shape: a full tmpfs with no swap is OOM-killed at about M).
+        VERDICT ON THE DESIGN'S FALSIFIABLE CLAIM ("tmpfs + swap beats the disk
+        volume at 2M"): SPLIT. Writes: tmpfs ~22% faster. Shuffled READS: tmpfs
+        ~3.6x SLOWER (1386 vs 385 ms), the half that spilled comes back from zram.
+        Per the design's own rule, the HOT budget should be sized to stay RESIDENT
+        for read-heavy work, and the swap allowance is an OOM guard, not a tier.
+        Needs repeats (n=1), a fat host, and the disk-swapfile arm (1376-8zdz).
+        DISCARDED, and why: a first pass printed 4-16 ms for multi-GiB writes and
+        one negative time. $EPOCHREALTIME uses the LOCALE's decimal comma (fr_FR
+        here), so the timer arithmetic was fabricated; a second defect quantised
+        host-side times to the guard's 1 s poll. Both fixed before these numbers.
+  - packet_id: forge-launch-builders-replace-the-437-no-swap-ceiling-with-a-cgroup-memory-budget-so-a-full-tmpfs-spills-to-swap-and-a-cargo-build-fits
+    event:
+      type: note
+      ts: "2026-09-26T03:38:41Z"
+      host: yoga
+      summary: |
+        For the budget, from 1378-7w2p (§7.2 table on that row):
+        (1) SWAP MAPPING, measured with rootless podman/crun on yoga:
+            --memory=1g --memory-swap=1g -> memory.swap.max = 1 GiB (NOT zero)
+            --memory=1g --memory-swap=2g -> memory.swap.max = 2 GiB
+            --memory=1g --memory-swap=0  -> memory.swap.max = 0
+            crun writes --memory-swap to swap.max LITERALLY. Docker's reading
+            ("memory-swap equal to memory means no swap") does NOT hold here, so an
+            "equal ceiling = zero swap escape" assertion (the 437 shape) grants as
+            much swap as memory on these hosts. Emit swap.max explicitly, or pass
+            --memory-swap as the swap amount you mean.
+        (2) Spill: at W = 2M, tmpfs+swap writes ~22% faster than a disk volume but
+            shuffled reads are ~3.6x slower (n=1, incompressible data, zram). Size HOT
+            to stay resident; treat the allowance as an OOM guard.

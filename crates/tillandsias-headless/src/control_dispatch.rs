@@ -191,6 +191,7 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
             | VmStatusPush { .. }
             | LoginStatePush { .. }
             | CloudProjectsPush { .. }
+            | FlowStatePush { .. }
             | MetricsSnapshotReply { .. },
             _,
         ) => ResponseOnly,
@@ -449,6 +450,19 @@ mod tests {
                 },
                 "MetricsSnapshotReply",
             ),
+            (
+                ControlMessage::FlowStatePush {
+                    seq: 1,
+                    source: tillandsias_control_wire::FlowSource::Login {
+                        provider: "github".into(),
+                    },
+                    from_state: "auth.github.token-collected".into(),
+                    to_state: "auth.github.blocked".into(),
+                    reason: Some("persist(ca_bundle)".into()),
+                    ts_unix: 1721779200,
+                },
+                "FlowStatePush",
+            ),
         ]
     }
 
@@ -487,6 +501,7 @@ mod tests {
 | "VmStatusPush"
 | "LoginStatePush"
 | "CloudProjectsPush"
+| "FlowStatePush"
 | "MetricsSnapshotReply" => DispatchOutcome::ResponseOnly,
 _ => unreachable!("test fixture missing case for {name}"),
             };
@@ -532,6 +547,7 @@ _ => unreachable!("test fixture missing case for {name}"),
                 | "VmStatusPush"
                 | "LoginStatePush"
                 | "CloudProjectsPush"
+                | "FlowStatePush"
                 | "MetricsSnapshotReply" => DispatchOutcome::ResponseOnly,
                 _ => unreachable!("test fixture missing case for {name}"),
             };
@@ -629,6 +645,16 @@ _ => unreachable!("test fixture missing case for {name}"),
             ControlMessage::CloudProjectsPush {
                 seq: 1,
                 projects: vec![],
+            },
+            ControlMessage::FlowStatePush {
+                seq: 1,
+                source: tillandsias_control_wire::FlowSource::Login {
+                    provider: "github".into(),
+                },
+                from_state: "auth.github.token-collected".into(),
+                to_state: "auth.github.blocked".into(),
+                reason: Some("persist(ca_bundle)".into()),
+                ts_unix: 1721779200,
             },
         ];
         for msg in &resp {

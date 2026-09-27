@@ -148,6 +148,13 @@ landed=0; evicted=0; requeued=0; skipped=0
 
 say() { printf '%s\n' "$*"; }
 
+# ORDER 1375-2x4e: the queue JSON is read with `tillandsias-plan json get`, the jq
+# subset on the binary every gate host already has, not with jq. Resolved from
+# THIS script's directory: the fixture runs it against scratch repositories.
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/plan-binary-probe.sh" 2>/dev/null || true
+PLAN="$(resolve_plan_binary 2>/dev/null)" || { say "fail:land-queue:no-plan-binary — the queue is read with tillandsias-plan json get"; exit 1; }
+
 # pr_comment <number> <text> — record a verdict where the author will see it.
 # A failure to comment is NOT a failure to evict: the eviction already happened
 # and the queue must keep going, so this is advisory and says so.
@@ -214,14 +221,15 @@ if [ "$_qrc" -ne 0 ]; then
     rm -f "$_qjson"
     exit 1
 fi
-if ! jq -e 'type == "array"' < "$_qjson" >/dev/null 2>&1; then
+if ! "$PLAN" json get -e 'type == "array"' < "$_qjson" >/dev/null 2>&1; then
     say "fail:land-queue:queue-not-an-array — gh exited 0 with output that is not a PR list"
     rm -f "$_qjson"
     exit 1
 fi
 
-_cands="$(jq -r 'sort_by(.number) | .[] | select(.isDraft | not)
-                 | "\(.number)\t\(.headRefName)"' < "$_qjson")"
+# Two values per ready PR on alternating lines, paired by `paste - -` and
+# ordered by number: the subset has no sort_by or string interpolation.
+_cands="$("$PLAN" json get -r '.[] | select(.isDraft | not) | .number, .headRefName' < "$_qjson" | paste - - | sort -n)"
 rm -f "$_qjson"
 
 if [ -z "$_cands" ]; then

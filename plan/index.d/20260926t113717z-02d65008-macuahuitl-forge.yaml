@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: centicolon-grader-earns-positively-tested-only-from-an-enforced-reachable-requirement-keyed-litmus-step-with-a-recorded-green-run
+    event:
+      type: verification
+      ts: "2026-09-26T11:37:17Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t113717z
+      host: macuahuitl-forge
+      summary: |
+        LANDED on linux-next via relay commit 95a7af37e ("relay: land work/1395-88tp"), verified BY CONTENT on 2026-09-26 against real GitHub (git ls-remote/fetch https://github.com/8007342/tillandsias WITHOUT .git, which bypasses the forge insteadOf rewrite): linux-next a26be6262 contains 95a7af37e, work/1395-88tp tip 43e9b36bb and work/1395-n7qd tip ca7dda583.
+        GRADER: scripts/lua/centicolon-grade-static.lua (Cacheable), centicolon-grade-observed.lua (Observing), scripts/centicolon-grade.sh, the per-test record digest/regime/spec/spec_digest columns (run-litmus-test.sh + cycle-metrics.sh, ENVIRON for BSD awk), test-centicolon-grade.sh and gate step 490-1395-88tp.step present. Pre-fix fail:centicolon-grade:no-wrapper; post-fix ok:centicolon-grade:11 (arms A-E, Z, four mutation arms). SECOND REGIME: tlatoanis-macbook-air darwin ok:centicolon-grade:11 x3 at 43e9b36bb, including CARGO_TARGET_DIR/TILLANDSIAS_PLAN_BIN unset; darwin per-test records carry "regime":"darwin" with digests matching Linux.

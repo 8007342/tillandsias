@@ -20,7 +20,9 @@ set -uo pipefail
 # is why it is pinned rather than merely fixed.
 #
 # Everything runs against a sandboxed $HOME plus the two fixture seams
-# (TILLANDSIAS_UNINSTALL_FAKE_UNAME, TILLANDSIAS_UNINSTALL_INSTALL_DIR), so no
+# (TILLANDSIAS_UNINSTALL_FAKE_UNAME, TILLANDSIAS_UNINSTALL_INSTALL_DIR, and since
+# 1401-p3k7 TILLANDSIAS_UNINSTALL_APPS_DIR and _TRAY_PROC, without which the
+# absolute /Applications sweep and the tray stop hit the real Mac), so no
 # real path is touched and the macOS arm is exercised from any host.
 #
 # Exit 0 only when all six assertions pass. Falsifiability spot-checked by
@@ -61,6 +63,8 @@ run_uninstall() {
     _fake="Linux"; [ "$_os" = "darwin" ] && _fake="Darwin"
     mkdir -p "$_home/fixture-bin"
     HOME="$_home" \
+    TILLANDSIAS_UNINSTALL_APPS_DIR="$_home/Applications" \
+    TILLANDSIAS_UNINSTALL_TRAY_PROC="nonce-tray-1401" \
     TILLANDSIAS_UNINSTALL_FAKE_UNAME="$_fake" \
     TILLANDSIAS_UNINSTALL_INSTALL_DIR="$_home/fixture-bin" \
         bash "$UNINSTALL" "$@" 2>&1

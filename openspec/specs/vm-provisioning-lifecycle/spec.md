@@ -3,7 +3,9 @@
 
 ## Status
 
-proposed
+active
+
+Reconciled 2026-09-26 (1397-eppt): "proposed" dates from the 2026-05-23 design (7985b7177); the implementing orders drained 2026-07-18 (afdad5351, registry active), 34 code files trace it, bound to litmus:vm-launch-graceful-failure-shape.
 phase: 2
 
 ## Purpose

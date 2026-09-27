@@ -1,0 +1,321 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed from plan/issues/centicolon-enforceable-metric-design-2026-09-26.md
+# (macuahuitl, Fable agent, at the operator's direction, 2026-09-26).
+packets:
+  - packet_id: centicolon-extractor-is-a-cacheable-lua-predicate-over-spec-scenarios-so-the-obligation-denominator-is-a-pure-function-of-repo-bytes
+    order: 1395-n7qd
+    status: ready
+    kind: improvement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [centicolon, lua, predicate, openspec, no-build]
+    estimated_hours: 4
+    depends_on: []
+    owned_files:
+      - scripts/lua/centicolon-extract.lua
+      - scripts/test-centicolon-extract.sh
+    observed_by: macuahuitl
+    unscoreable: ""
+    verifiable_closure: |
+      scripts/test-centicolon-extract.sh runs `tillandsias-plan predicate
+      scripts/lua/centicolon-extract.lua` (class cacheable) over a hermetic
+      spec root holding three specs and asserts the JSON it emits (via
+      expert.log_info until 1384-bqhy's out.line exists) -- an active spec with
+      two requirements and three scenarios yields three obligations with ids
+      `cc:<req-id>:<sha256(title)[:8]>`; an obsolete spec yields zero and one
+      `excluded:obsolete`; a requirement heading with no req-id is REFUSED by
+      name, never counted; a spec directory absent from litmus-bindings.yaml
+      is reported as `unregistered`, never silently skipped. On the real
+      corpus the fixture asserts the digest of two consecutive runs is equal
+      and the obligation count is greater than zero. Pre-fix result: FAILS
+      (the predicate file does not exist; `predicate` exits 1 naming it). The
+      fixture is wired as a gate-steps.d step in the same commit (1325-ygq5).
+    title: |
+      the CentiColon denominator is 16 CI check ids in local-ci.sh and never the 670 requirements or 1,436 scenarios in openspec/specs, so a Cacheable Lua predicate extracts one obligation per `#### Scenario:` under a req-id'd requirement in an active spec, byte-identical across hosts
+    context: |
+      Measured 2026-09-26 on origin/linux-next 1047cb178 -- the signature
+      line local-ci.sh wrote the day before reads expected_total_cc 990,
+      actual_earned_cc 990, residual_cc 0, litmus_tests_run 0, while
+      1381-za6b was being reopened for three unmet criteria. The obligations
+      `score-checks` scores are check_weight's 16 gate ids; no spec obligation
+      has ever entered the denominator (977-3dee's backfill reached 2.6% at
+      ceiling traced for the same reason). Feasibility measured with the
+      shipped binary -- a 40-line script using fs.read, yaml.parse,
+      hash.sha256 and json.encode over gh-auth-script printed 7 requirements
+      and 19 scenarios, sha256 of stdout identical across three processes.
+      Unit, identity rule and status filter are in the design doc, section 3.
+      Status is read in both spellings the corpus uses (36 files carry
+      `status: <word>` on its own line, 143 carry the bare word under
+      `## Status`).
+    provenance: |
+      macuahuitl 2026-09-26, Fable research-and-design agent at the
+      operator's direction, from the design doc named in the header. Pickup
+      by macuahuitl-forge or lenovinha; never macuahuitl bare metal.
+
+  - packet_id: centicolon-grader-earns-positively-tested-only-from-an-enforced-reachable-requirement-keyed-litmus-step-with-a-recorded-green-run
+    order: 1395-88tp
+    status: ready
+    kind: improvement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [centicolon, lua, litmus, bindings, fail-loud]
+    estimated_hours: 8
+    depends_on:
+      - centicolon-extractor-is-a-cacheable-lua-predicate-over-spec-scenarios-so-the-obligation-denominator-is-a-pure-function-of-repo-bytes
+    owned_files:
+      - scripts/lua/centicolon-grade-static.lua
+      - scripts/lua/centicolon-grade-observed.lua
+      - scripts/test-centicolon-grade.sh
+      - scripts/run-litmus-test.sh
+    observed_by: macuahuitl
+    unscoreable: ""
+    verifiable_closure: |
+      scripts/test-centicolon-grade.sh builds a hermetic corpus (extractor
+      output plus litmus files, a bindings registry and a results stream) and
+      asserts, per obligation -- A, named by a `requirement:` key on a step
+      with an assert_* key, in a bound non-retired pre-build instant file,
+      with a green results record for that file's digest, is
+      positively_tested; B, named by an UNBOUND file, is traced with reason
+      inert:unbound; C, named by a `phase: retired` file, is traced with
+      inert:retired; D, named by a step with only expected_behavior, is
+      traced with unenforced; E, a `requirement:` key naming a req-id the
+      extractor did not emit, is REFUSED by name; zero resolved keys over a
+      non-empty litmus corpus is a refusal, never ok:0; MUTATION arm --
+      deleting A's results record moves A back to traced. The results stream
+      is one JSONL line per executed litmus test written by
+      run-litmus-test.sh with ts, host, regime, litmus name, status and the
+      sha256 of the litmus file plus its spec file. Pre-fix result: FAILS
+      (no grader, and the runner writes no per-test record -- check-logs.jsonl
+      carries one row per check id). Fixture wired as a gate step in the same
+      commit.
+    title: |
+      nothing binds below spec level (0 of 454 litmus files name a req-id) and no artifact records that a litmus test ran green on a tree, so a grader earns positively_tested only from an ENFORCED step naming the req-id in a REACHABLE file with a RECORDED green run, and everything else stays traced with a named reason
+    context: |
+      The lattice (obligation.rs, 977-56fd) and its ranking function exist;
+      what never existed is the input. The existing rules are reused, not
+      re-decided -- ENFORCED is census-litmus-step-enforcement.sh's KEY rule
+      (2,178 of 2,613 steps carry only expected_behavior today), REACHABLE is
+      1333-jpq5/1334-57at's rule (bound AND not retired, 66 of 247 enforced
+      steps inert), binding truth is test-litmus-binding-truth.sh's, the
+      mutation-arm shape is 1059-pb2j's guard. The `requirement:` key already
+      appears in two litmus files in the pre-976-suab dotted form; both
+      spellings are accepted and counted separately during migration.
+      Per-regime states -- a record counts for the regime of the host that
+      wrote it; the state used for R is the minimum over the regimes named by
+      the spec's gate step STEP_SECOND_REGIME lines, and regimes with no
+      record are printed as unmeasured, never satisfied. The static half is
+      Cacheable and memoised on the bytes read; the observed half reads the
+      results stream and is never cached. Coordination -- 902-5bf9 owns the
+      runner's dispatch seam; the per-test record is an append at the point
+      the runner already prints PASS/FAIL and must not touch that seam. On a
+      duplicate fix, hold.
+    provenance: |
+      macuahuitl 2026-09-26, Fable research-and-design agent. Design doc
+      section 4. Linux host -- lenovinha then yoga.
+
+  - packet_id: centicolon-r-is-printed-every-check-and-ratcheted-so-a-lost-satisfaction-is-refused-an-added-requirement-is-a-scope-change-and-a-vanished-obligation-needs-a-change-record
+    order: 1395-ue3i
+    status: ready
+    kind: improvement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [centicolon, gate, ratchet, deciders, fail-loud]
+    estimated_hours: 6
+    depends_on:
+      - centicolon-grader-earns-positively-tested-only-from-an-enforced-reachable-requirement-keyed-litmus-step-with-a-recorded-green-run
+    owned_files:
+      - scripts/check-centicolon-ratchet.sh
+      - scripts/test-centicolon-ratchet.sh
+      - scripts/portability/centicolon-floor.txt
+      - scripts/check-scorable-obligation-added.sh
+      - scripts/check-declared-closures-added.sh
+    observed_by: macuahuitl
+    unscoreable: ""
+    verifiable_closure: |
+      scripts/check-centicolon-ratchet.sh prints one line every --check of
+      the form ok:centicolon:R=<n> denominator=<d> declared=<a> traced=<b>
+      positively_tested=<c> negatively_tested=<e> inert=<i> unmeasured=<u>
+      excluded=<x> regime=<monotone|broken:<why>> floor=<f>, fed through
+      `tillandsias-plan score-checks` (one obligation per line at the
+      positively_tested bar) so there is ONE ranking function.
+      scripts/test-centicolon-ratchet.sh pins, against a hermetic base and
+      head -- R falls with the denominator unchanged, ok and the floor file
+      lowered; a new req-id raises both, regime=broken:scope-added:<n>, never
+      refused; a req-id vanishes with no openspec/changes record or tombstone
+      line, warn:centicolon-ratchet:scope-removed-unrecorded in phase 0 and
+      refused: under TILLANDSIAS_CENTICOLON_ENFORCE=1; a `requirement:` key
+      removed with the denominator unchanged, warn:centicolon-ratchet:lost=1
+      in phase 0 and refused: under the switch; a hand-edited floor file with
+      no lowered R in the same diff, refused; zero population, blocked:
+      never ok:0. check-scorable-obligation-added.sh accepts the fourth
+      scorable form `centicolon: <req-id>[, ...]` and
+      check-declared-closures-added.sh refuses one naming a req-id the
+      extractor does not emit. Pre-fix result: FAILS (no script; the two
+      ledger gates reject the new form as unscoreable/unresolvable). Wired as
+      a gate step with a STEP_SECOND_REGIME line recorded by a second host
+      before it enters --check.
+    title: |
+      R is computed by nobody, so the convergence guarantee has no number; print R with its denominator, histogram and regime on every --check, ratchet it like the jq and shell floors, and refuse (after the operator flips the switch) a rise caused by a lost satisfaction or a fall caused by an unrecorded deletion
+    context: |
+      Design doc section 5. Phase 0 is REPORT AND WARN and needs no approval
+      (bar_raise_governance -- reporting a number is not a finding class).
+      The flips from warn: to refused: are bar raises the operator approves
+      against the printed number, the 1325-ygq5 shape (WARN in migration,
+      refusal later ON A NUMBER). The 16 check ids score-checks scores today
+      keep printing as a gate-health line under a different name and stop
+      being reported as CentiColons; replacing expected_total_cc in the
+      release signature is the release-boundary bar raise and is NOT this
+      row. Goodhart moves and what catches each are tabled in section 5.5;
+      the one not caught mechanically (an assert that cannot fail) is named
+      residue, section 6. The verdict grammar is the house one so the
+      preflight door and the gate loop classify it through the same
+      classifier (_pf_run_guard today, verdict.classify after 1384-bqhy).
+    provenance: |
+      macuahuitl 2026-09-26, Fable research-and-design agent. Any host;
+      lenovinha first, macbookair records the second regime.
+
+  - packet_id: centicolon-velocity-is-computed-from-the-r-line-in-loop-status-records-on-trunk-so-v-c-is-a-number-and-below-minimum-is-a-report-not-a-hook
+    order: 1395-miwn
+    status: ready
+    kind: improvement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [centicolon, coordination, metrics, no-build]
+    estimated_hours: 3
+    depends_on:
+      - centicolon-r-is-printed-every-check-and-ratcheted-so-a-lost-satisfaction-is-refused-an-added-requirement-is-a-scope-change-and-a-vanished-obligation-needs-a-change-record
+    owned_files:
+      - scripts/cycle-metrics.sh
+      - scripts/centicolon-velocity.sh
+      - scripts/test-centicolon-velocity.sh
+    observed_by: macuahuitl
+    unscoreable: ""
+    verifiable_closure: |
+      cycle-metrics.sh emits one pinned line, centicolon: R=<n>
+      denominator=<d> regime=<m> tree=<digest> host=<h>, into the loop status
+      record, and scripts/centicolon-velocity.sh reads the last four records
+      for the same host on origin/linux-next and prints
+      centicolon-velocity: v_c=<obligations/hour> window=<n>
+      comparable=<yes|no:<why>>. scripts/test-centicolon-velocity.sh pins
+      over synthetic records -- four comparable records give the (R_t-3 -
+      R_t)/delta_t value to one decimal; a denominator change inside the
+      window gives comparable=no:denominator-changed and no velocity; three
+      records give window=3 and no velocity; V_c below V_min prints
+      note:centicolon-velocity:below-minimum and exits 0 (a report, never a
+      refusal). Pre-fix result: FAILS (cycle-metrics.sh has no centicolon
+      line; the velocity script does not exist).
+    title: |
+      the coordination skill defines V_c = (R_t-3 - R_t)/delta_t with V_min = 1 unit/hour and nobody computes either, so the R line lands in plan/loop_status.d on trunk and a velocity script reads it there; the alignment event stays a coordinator decision made against the printed number
+    context: |
+      Design doc section 5.3. The skill's R formula sums three different
+      units (weighted cc, unimplemented requirements, open issues); this row
+      reports R from the ratchet line and the ready-queue length beside it in
+      its own unit, and the event on the skill (methodology change, operator)
+      amends the formula afterwards. Records across a broken regime are not
+      comparable and say so, because centicolon_function's Regime is exactly
+      the qualifier math-foundations.yaml puts on monotonicity. Whether
+      V_min = 1 obligation/hour is a sensible floor for THIS R is decided by
+      the operator against the first four comparable records.
+    provenance: |
+      macuahuitl 2026-09-26, Fable research-and-design agent. Any host; yoga.
+
+  - packet_id: centicolon-pilot-grades-gh-auth-script-and-forge-hot-cold-split-with-requirement-keyed-litmus-so-the-1381-za6b-residue-is-printed-by-a-script
+    order: 1395-64r7
+    status: ready
+    kind: improvement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [centicolon, litmus, openspec, gh-auth, forge]
+    estimated_hours: 6
+    depends_on:
+      - centicolon-grader-earns-positively-tested-only-from-an-enforced-reachable-requirement-keyed-litmus-step-with-a-recorded-green-run
+    owned_files:
+      - openspec/litmus-tests/litmus-gh-auth-script-requirements.yaml
+      - openspec/litmus-tests/litmus-forge-hot-cold-split-requirements.yaml
+      - openspec/litmus-bindings.yaml
+    observed_by: macuahuitl
+    unscoreable: ""
+    verifiable_closure: |
+      The grader's JSON for gh-auth-script shows positively_tested >= 8 of 19
+      scenario obligations and lists both scenarios of req-id 7a82bc19
+      (Mobile QR Code display; Mobile authorization polling and persistence)
+      in the residual with reason no-binding; for forge-hot-cold-split it
+      shows positively_tested >= 8 of 20 and every scenario the spec's macOS
+      regime names as unmeasured:darwin until macbookair records a run. Both
+      litmus files are bound under the spec they declare, every
+      requirement-keyed step carries an assert key and a mutation arm that
+      writes (1059-pb2j's guard green), and the completion event pastes the
+      grader's output. Pre-fix result: FAILS -- measured 2026-09-26 with the
+      shipped binary, positively_tested is 0 of 19 and 0 of 20 because no
+      litmus step in the tree names a req-id.
+    title: |
+      pilot the extractor and grader on two specs so the expected numbers in the design become measured ones; gh-auth-script's 7a82bc19 (the 1381-za6b over-claim) must appear as printed residue, not as a reviewer's finding
+    context: |
+      Design doc section 8 has the per-requirement plan and the predicted
+      numbers (gh-auth-script R_spec 19 -> about 7; forge-hot-cold-split
+      20 -> 9-12). The existing shape tests (litmus:gh-auth-script-shape, 6
+      steps, 1 assert key; litmus:forge-hot-cold-split-shape, 2 steps) are
+      not rewritten -- the new files sit beside them, which is 902-5bf9's
+      coexistence rule. Where a scenario cannot be pinned without a running
+      forge or a real GitHub, the step is NOT written and the obligation
+      stays declared with its reason in the output; a step that names a
+      req-id and asserts a string unrelated to the scenario is the adequacy
+      residue the design names and the reviewer reads the assert beside the
+      count.
+    provenance: |
+      macuahuitl 2026-09-26, Fable research-and-design agent. Linux --
+      lenovinha then yoga; macbookair supplies the darwin records.
+
+events:
+  - packet_id: the-enforcement-census-counts-an-assert-in-a-litmus-nothing-runs-beside-one-that-can-actually-go-red-so-a-closure-expressed-as-an-enforced-count-overstates-by-a-quarter
+    event:
+      type: note
+      ts: "2026-09-26T08:02:55Z"
+      host: macuahuitl
+      summary: |-
+        CentiColon design (plan/issues/centicolon-enforceable-metric-design-2026-09-26.md) answers this row's open next_action question -- INERT gates nothing, and it never needs to. The grader (1395-88tp) consumes the REACHABLE/INERT split as the rung between traced and positively_tested, so every obligation an inert step names stays in R with reason inert:unbound or inert:retired and is printed on every --check. The figure gets a consumer without becoming a refusal.
+  - packet_id: a-test-added-in-either-organ-can-be-referenced-by-nothing-and-nothing-says-so-at-push-time-so-a-fixture-that-cannot-fail-a-gate-reads-identically-to-one-that-guards-something
+    event:
+      type: note
+      ts: "2026-09-26T08:02:55Z"
+      host: macuahuitl
+      summary: |-
+        The standing count this guard's warn: line carries becomes the inert=<n> term of the CentiColon R line (1395-ue3i) -- an orphan satisfies no obligation, so the obligations it names stay residual by construction. That is the number the WARN-then-refuse-on-a-number flip was waiting for; the flip itself is a bar raise the operator decides against it. See the design doc, section 2.
+  - packet_id: the-litmus-bindings-registry-names-spec-ids-and-resolves-none-so-a-binding-to-a-spec-that-does-not-exist-passes-every-gate
+    event:
+      type: note
+      ts: "2026-09-26T08:02:55Z"
+      host: macuahuitl
+      summary: |-
+        Requirement-level sibling filed as 1395-88tp -- a litmus `requirement:` key naming a req-id the extractor (1395-n7qd) does not emit is refused by name, and zero resolved keys over a non-empty corpus is a refusal, never ok:0. Same family, same direction of silence (the population can only shrink), one level down from spec_id. Measured 2026-09-26 -- 0 of 454 litmus files name a req-id, 2 carry the pre-976-suab dotted `requirement:` form nothing reads.
+  - packet_id: a-rust-hosted-lua-step-form-for-litmus-offered-beside-shell-not-replacing-it
+    event:
+      type: note
+      ts: "2026-09-26T08:02:55Z"
+      host: macuahuitl
+      summary: |-
+        CentiColon design asks the `steps:` form for one thing -- a per-step `requirement: <req-id>` key, read by the grader (1395-88tp) exactly as it reads the key on a `command:` step, and the adoption line grows a field, litmus-form: steps=<n> command=<n> rust_queries=<n> req-keyed=<n>. Requiring the key on NEW steps is the forcing function the rust_queries lesson says is missing, and it is a bar raise decided against that count, not by a date. Design doc sections 4.2 and 7.
+  - packet_id: implement-the-obligation-lattice-and-wire-the-scorer
+    event:
+      type: note
+      ts: "2026-09-26T08:02:55Z"
+      host: macuahuitl
+      summary: |-
+        The lattice now has a corpus-level obligation source designed for it -- one obligation per `#### Scenario:` under a req-id'd requirement in an active spec (1395-n7qd), graded on the seven states by 1395-88tp and fed to centicolon_function one line per obligation by 1395-ue3i, so 977-j6qu's one-ranking-function rule holds with real obligations. score-checks' 16 gate ids keep printing as gate health under another name; the 990/990 residual-0 line this host wrote on 2026-09-25 with litmus_tests_run 0 is the number the design replaces. plan/issues/centicolon-enforceable-metric-design-2026-09-26.md.
+  - packet_id: centicolon-enforcement-is-hard-not-requested
+    event:
+      type: note
+      ts: "2026-09-26T08:02:55Z"
+      host: macuahuitl
+      summary: |-
+        A fourth scorable form is proposed for check-scorable-obligation-added.sh under 1395-ue3i -- `centicolon: <req-id>[, ...]` naming the obligations a packet closes, resolved by check-declared-closures-added.sh against the extractor and, at closure, required by the grader to be at least positively_tested (warn: in phase 0, refused: after the operator's bar raise). This is the packet-side form that would have reported 1381-za6b's unmet criteria as printed residue rather than a reviewer's finding.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: enumerate-npus-writes-usable-false-and-engine-missing-as-literals-at-its-push-site-so-no-host-side-toolkit-can-ever-flip-an-npu-row-and-the-derivation-gpu-engine-already-performs-is-absent-on-the-npu-side
+    field: status
+    value: completed
+    ts: "2026-09-26T04:18:38Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: enumerate-npus-writes-usable-false-and-engine-missing-as-literals-at-its-push-site-so-no-host-side-toolkit-can-ever-flip-an-npu-row-and-the-derivation-gpu-engine-already-performs-is-absent-on-the-npu-side
+    event:
+      type: completed
+      ts: "2026-09-26T04:18:38Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: b38f71052
+  - packet_id: enumerate-npus-writes-usable-false-and-engine-missing-as-literals-at-its-push-site-so-no-host-side-toolkit-can-ever-flip-an-npu-row-and-the-derivation-gpu-engine-already-performs-is-absent-on-the-npu-side
+    event:
+      type: note
+      ts: "2026-09-26T04:18:38Z"
+      host: yolanda-windows
+      summary: |-
+        LANDED on origin/linux-next at b38f71052: derive_npu_usability decides the NPU verdict in run_probe from the engine list, at both former literal push sites (Linux PROBE-3 and native Windows PnP). Criteria 1-3 are met by the accel_probe tests: an npu-capable engine gives usable:true (red when the literal is reinstated); cpu/gpu engines only give engine-missing, derived from a reason-less record; no NPU hardware plus an npu engine still renders accel_npu=none. Two further tests cover a container-only engine and device-not-ok. accel_probe passes 93/93 on native Windows; the Linux target passes cargo check. Criterion 4 (yoga-silverblue): the capability row was re-filed from a headless binary built on a tree containing b38f71052, fragment plan/index.d/20260926t041318z-capability-row-yoga.yaml at bfe6c4c8c. Verified here: yaml loads, and the NPU reads device_class npu, driver amdxdna, usable false, unusable_reason engine-missing. Zero engines name npu, so engine-missing is the derivation's correct output, not a leftover literal.

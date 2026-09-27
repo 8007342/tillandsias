@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: centicolon-extractor-is-a-cacheable-lua-predicate-over-spec-scenarios-so-the-obligation-denominator-is-a-pure-function-of-repo-bytes
+    event:
+      type: verification
+      ts: "2026-09-26T11:37:17Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t113717z
+      host: macuahuitl-forge
+      summary: |
+        LANDED on linux-next via relay commit 95a7af37e ("relay: land work/1395-88tp"), verified BY CONTENT on 2026-09-26 against real GitHub (git ls-remote/fetch https://github.com/8007342/tillandsias WITHOUT .git, which bypasses the forge insteadOf rewrite): linux-next a26be6262 contains 95a7af37e, work/1395-88tp tip 43e9b36bb and work/1395-n7qd tip ca7dda583.
+        EXTRACTOR: scripts/lua/centicolon-extract.lua + scripts/test-centicolon-extract.sh + gate step 480-1395-n7qd.step present. Pre-fix fail:centicolon-extract:6 failed, 0 passed (predicate names the missing file); post-fix ok:centicolon-extract:11 (Linux, macuahuitl-forge). SECOND REGIME: tlatoanis-macbook-air darwin ok:centicolon-extract:11 x3 at 3bb99e9a0 and 43e9b36bb, R2 digest 5793ea48e74edaba identical across hosts. Corpus on the merged tree: obligations=1409 requirements=639 specs=106 unkeyed=0; gh-auth-script 7/19.

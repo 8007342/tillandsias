@@ -1,0 +1,26 @@
+packets:
+  - packet_id: windows-half-of-1415-89bs-tests-mutate-wsl-distro-and-localappdata-that-sibling-tests-read
+    order: 1417-t29c
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [rust, testing, windows]
+    estimated_hours: 1.5
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: deliverables are per-crate cargo unit tests and static guards; pinned as each site is converted.
+    title: |
+      split from 1415-89bs (coordinator ruling 2026-09-26): vm-layer/transport_windows.rs TILLANDSIAS_WSL_DISTRO and
+      windows-tray wsl_lifecycle.rs/notify_icon.rs LOCALAPPDATA (4 mutating tests, 5 readers) are set_var/remove_var'd
+      in tests with no env lock while sibling tests read them — the 1415-nvzz race
+    verifiable_closure: |
+      each site's parse is a pure *_from(Option<..>) the tests drive, production keeps its env read, and a static
+      no-test-mutates-<VAR> guard per variable fails when a set_var/remove_var is re-added (mutation control);
+      pre-fix result: FAILS (transport_windows.rs ~742-747; wsl_lifecycle.rs 2306/2347-2348/2728/2868; notify_icon.rs 4772).
+    context: |
+      Fix shape as landed for 1415-nvzz (8e695cbbb). Sweep evidence and exclusions live on 1415-89bs. Windows-only
+      code, so darwin cannot run these tests; pickup windows.
+    exit_criteria:
+      - 'no test mutates TILLANDSIAS_WSL_DISTRO or LOCALAPPDATA; guards with mutation controls; pre-fix result: FAILS'

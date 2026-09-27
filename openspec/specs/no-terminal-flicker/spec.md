@@ -13,6 +13,7 @@ active
 ## Requirements
 
 ### Requirement 1: Windows background process suppression
+<!-- req-id: 69e42981 -->
 
 On Windows, all background podman operations (container status checks, image pulls, deletions) MUST:
 1. Use `CREATE_NO_WINDOW` flag when spawning processes (suppresses console window flash)
@@ -26,6 +27,7 @@ On Windows, all background podman operations (container status checks, image pul
 ---
 
 ### Requirement 2: Windows interactive terminal preservation
+<!-- req-id: 3373353b -->
 
 On Windows, interactive podman operations (terminal shells, attach-here) MUST:
 1. Use raw `Command::new()` instead of `podman_cmd_sync()` to launch interactive processes
@@ -40,6 +42,7 @@ On Windows, interactive podman operations (terminal shells, attach-here) MUST:
 ---
 
 ### Requirement 3: Tray menu rebuilt only on state change
+<!-- req-id: 2e96014d -->
 
 The tray menu MUST be pre-built once at startup and then updated (not rebuilt) when state changes:
 1. All static menu items are created once (Quit, Settings, Version, etc.)
@@ -54,6 +57,7 @@ The tray menu MUST be pre-built once at startup and then updated (not rebuilt) w
 ---
 
 ### Requirement 4: Stage visibility lookup table
+<!-- req-id: 8b47329a -->
 
 Tray menu visibility MUST be driven by a static lookup table mapping `Stage` (Booting, Ready, NoAuth, Authed, NetIssue) to item visibility:
 
@@ -77,6 +81,7 @@ Tray menu visibility MUST be driven by a static lookup table mapping `Stage` (Bo
 ---
 
 ### Requirement 5: Menu label updates without rebuild
+<!-- req-id: 3595df58 -->
 
 When menu labels change (e.g., status text, building chip, project count), the update MUST:
 1. Call `set_text()` on the existing menu item handle (not recreate the item)
@@ -90,6 +95,7 @@ When menu labels change (e.g., status text, building chip, project count), the u
 ---
 
 ### Requirement 6: Project list rebuild guard
+<!-- req-id: 8789e1f1 -->
 
 The Projects submenu SHOULD only rebuild when:
 1. The set of local projects changes (e.g., a new project is added to ~/src)
@@ -107,6 +113,7 @@ Verify `AboutToShow` does not request an immediate submenu re-read, no
 ---
 
 ### Requirement 7: No periodic menu polling
+<!-- req-id: 6e63884d -->
 
 The tray MUST NOT:
 1. Poll the menu state on a timer
@@ -120,6 +127,7 @@ The tray MUST NOT:
 ---
 
 ### Requirement 8: macOS and Linux terminal consistency
+<!-- req-id: 3466862f -->
 
 On macOS and Linux, terminal launches SHOULD:
 1. Use platform-native terminal (Terminal.app on macOS, terminal emulator on Linux)

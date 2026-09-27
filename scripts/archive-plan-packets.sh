@@ -188,6 +188,11 @@ _archiver_cleanup() {
     # armed before SCRATCH is assigned on some paths and an unbound expansion
     # under `set -u` would turn a cleanup into a second failure.
     local _s="${SCRATCH:-$REPO_ROOT}"
+    # 1132-r4mt: SCRATCH is now this run's own mktemp dir; remove it whole.
+    # Guarded so the unassigned case can never become `rm -rf $REPO_ROOT`.
+    case "${SCRATCH:-}" in
+        */.archiver-check.*) rm -rf "$SCRATCH" 2>/dev/null || true; return 0 ;;
+    esac
     # AND IT MUST NOT BE ABLE TO FAIL (997-e4v2). Under `set -e` a failing
     # command in an EXIT trap rewrites the script's exit code to 1 — measured
     # by esme-windows in the VM with a genuine EACCES, across every ending form
@@ -242,6 +247,19 @@ _ruby_runnable() {
     _ruby_usable
 }
 
+# ORDER 560. Which worker does the sweep. The embedded Lua runtime
+# (`tillandsias-plan lua`) is the default wherever archive-plan-packets.lua is
+# present: it needs nothing but the plan binary this script already requires,
+# so a host or forge with no ruby (every Windows host, every forge image) can
+# run --check instead of exiting 3. TILLANDSIAS_ARCHIVER_BACKEND=ruby opts back
+# into the ruby worker; that is the only way ruby is reached now, and the
+# no-usable-ruby refusal below applies only on that path.
+if [ "${TILLANDSIAS_ARCHIVER_BACKEND:-}" = "ruby" ] || [ ! -f "$DIR/archive-plan-packets.lua" ]; then
+    _ap_backend=ruby
+else
+    _ap_backend=lua
+fi
+
 if [ "$1" == "--check" ]; then
     # ORDER 964-js34: per-phase profile, opt-in and zero-cost when off.
     _ap_t0=0; _ap_last=0
@@ -267,7 +285,7 @@ if [ "$1" == "--check" ]; then
     }
     _ap_phase start
     echo "Running in check mode..."
-    if ! _ruby_runnable; then
+    if [ "$_ap_backend" = "ruby" ] && ! _ruby_runnable; then
         # A STABLE TOKEN ON STDOUT, so a caller can tell THIS could-not-run from
         # the others without parsing prose. Only this cause is skip-eligible: a
         # stale plan binary or an unreadable fragment also exit 3 and must never
@@ -290,7 +308,23 @@ if [ "$1" == "--check" ]; then
     # is a native-FS directory, and the check drops from 62.3s to 5.3s doing
     # exactly the same work. It also stops the copy landing in the worktree,
     # which is the leak the cleanup trap above exists to survive.
-    SCRATCH="$(native_scratch_dir archiver-check "$REPO_ROOT")"
+    #
+    # 1132-r4mt: PER RUN, never a fixed path. On Linux the line above used to
+    # hand back $REPO_ROOT itself, so two concurrent --check runs (a stray gate
+    # beside a live one, 1141-vf9w) shared plan_tmp/, plan_tmp_bak/ and the
+    # generated .rb, and each run's cleanup deleted them under the other.
+    # Reproduced 3/3 on yoga 2026-09-25: rc=3 ruby-worker-failed /
+    # unreadable-fragment and a false rc=1 "Not idempotent", while the other
+    # run passed. A mktemp dir per run makes the two runs share nothing.
+    # The fallback is under target/, which the answerability copy prunes and
+    # git ignores, so a leaked dir can neither dirty the tree nor be copied.
+    _ap_base="$(native_scratch_dir archiver-check "$REPO_ROOT/target/archiver-check")"
+    mkdir -p "$_ap_base" 2>/dev/null || true
+    if ! SCRATCH="$(mktemp -d "$_ap_base/.archiver-check.XXXXXX")"; then
+        echo "could-not-run:archiver:no-scratch-dir (1132-r4mt)"
+        echo "Check COULD NOT RUN: cannot create a per-run scratch dir under $_ap_base."
+        exit 3
+    fi
     trap _archiver_cleanup EXIT INT TERM
     rm -rf "$SCRATCH"/plan_tmp "$SCRATCH"/plan_tmp_bak
     cp -a plan/ "$SCRATCH"/plan_tmp/
@@ -299,8 +333,29 @@ if [ "$1" == "--check" ]; then
     # The generated .rb reads and writes the COPY, so it needs the copy's real
     # location. `|` stays the delimiter because the replacement is a path and
     # contains no `|`; it is a directory name we chose, not user input.
-    sed "s|plan/|$SCRATCH/plan_tmp/|g" scripts/archive-plan-packets.rb > scripts/archive-plan-packets-check.rb
-    _ap_phase sed-rewrite-rb
+    #
+    # ORDER 560: only the ruby backend needs a rewritten copy. The Lua worker
+    # takes --index/--archive and derives index.d from the index path, so it is
+    # pointed at the same per-run copy by arguments instead.
+    if [ "$_ap_backend" = "ruby" ]; then
+        sed "s|plan/|$SCRATCH/plan_tmp/|g" scripts/archive-plan-packets.rb > "$SCRATCH"/archive-plan-packets-check.rb
+        _ap_phase sed-rewrite-rb
+    fi
+
+    # One sweep of the per-run copy with the selected worker (order 560).
+    _ap_sweep() {
+        if [ "$_ap_backend" = "lua" ]; then
+            # 1380-u7sq: the default SANDBOXED lua, rooted at this run's
+            # scratch copy, so the script can read and write that copy and
+            # nothing else. The plan binary is handed over, never guessed.
+            TILLANDSIAS_REPO_ROOT="$_ap_lua_root" "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua" \
+                --plan-bin "$PLAN_BIN" \
+                --index "$SCRATCH"/plan_tmp/index.yaml \
+                --archive "$SCRATCH"/plan_tmp/archive
+        else
+            _ruby "$SCRATCH"/archive-plan-packets-check.rb
+        fi
+    }
 
     # THE ACCEPTANCE ASSERTION (831-ezea). Everything below the idempotency
     # diff was already here and it proved the WRONG PROPERTY. An archiver that
@@ -360,7 +415,22 @@ if [ "$1" == "--check" ]; then
     fi
     # The .rb resolves the same binary; hand it the probed answer rather than
     # letting it re-derive one.
-    export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
+    # 1380-u7sq relay-fix: the Lua worker runs rooted in the scratch copy (or the
+# --index tree), so a RELATIVE plan-binary path such as ./target/release/...
+# resolves against the wrong tree there. Absolutize once, keeping native
+# Windows drive paths (C:/...) as they are.
+case "$PLAN_BIN" in
+    /*|[A-Za-z]:*) ;;
+    *) PLAN_BIN="$REPO_ROOT/${PLAN_BIN#./}" ;;
+esac
+export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
+    # 1380-u7sq: the Lua worker's fs root is the scratch copy. A native plan
+    # binary on Windows reads this variable itself, so it gets the mixed
+    # (C:/...) form, which MSYS does not reliably convert for it.
+    _ap_lua_root="$SCRATCH"
+    if command -v cygpath >/dev/null 2>&1; then
+        _ap_lua_root="$(cygpath -m "$SCRATCH")"
+    fi
     "$PLAN_BIN" --index "$SCRATCH"/plan_tmp/index.yaml ready > "$SCRATCH"/plan_tmp_ready_before.txt
     _ap_phase ready-before
 
@@ -397,18 +467,21 @@ if [ "$1" == "--check" ]; then
     _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_before.txt
     _ap_phase orphans-before
 
-    if ! _ruby scripts/archive-plan-packets-check.rb >/dev/null; then
+    if ! _ap_sweep >/dev/null; then
         # DISTINCT FROM no-usable-ruby, and the distinction is the point: that
         # one means the lane has no runnable interpreter and is forge-skippable;
-        # this one means a ruby WAS runnable and the worker still failed, which
-        # is never skippable.
-        echo "could-not-run:archiver:ruby-worker-failed (1132-r4mt)"
-        echo "Check COULD NOT RUN: the archiver's ruby worker failed to execute"
+        # this one means a worker WAS runnable and still failed, which is never
+        # skippable. The token names the backend that failed (order 560): a Lua
+        # failure used to be reported as a ruby one, which sends the reader to
+        # debug an interpreter that never ran.
+        echo "could-not-run:archiver:${_ap_backend}-worker-failed (1132-r4mt, 560)"
+        echo "Check COULD NOT RUN: the archiver's $_ap_backend worker failed to execute"
         echo "  (965-sxec). The ready set was never re-derived, so nothing here is"
-        echo "  a statement about it."
+        echo "  a statement about it. TILLANDSIAS_ARCHIVER_BACKEND=ruby selects the"
+        echo "  ruby worker where a usable ruby exists."
         exit 3
     fi
-    _ap_phase ruby-sweep
+    _ap_phase "${_ap_backend}-sweep"
 
     _orphans "$SCRATCH"/plan_tmp/index.yaml "$SCRATCH"/plan_tmp_orphans_after.txt
     _ap_phase orphans-after
@@ -433,13 +506,13 @@ if [ "$1" == "--check" ]; then
 
     cp -a "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/
     
-    if ! _ruby scripts/archive-plan-packets-check.rb >/dev/null; then
-        echo "could-not-run:archiver:ruby-worker-failed-idempotency-pass (1132-r4mt)"
-        echo "Check COULD NOT RUN: the archiver's ruby worker failed on the second"
+    if ! _ap_sweep >/dev/null; then
+        echo "could-not-run:archiver:${_ap_backend}-worker-failed-idempotency-pass (1132-r4mt, 560)"
+        echo "Check COULD NOT RUN: the archiver's $_ap_backend worker failed on the second"
         echo "  pass (965-sxec), so idempotency was never evaluated."
         exit 3
     fi
-    _ap_phase ruby-sweep
+    _ap_phase "${_ap_backend}-sweep"
     
     _ap_phase idempotency-diff
     if ! diff -qr "$SCRATCH"/plan_tmp/ "$SCRATCH"/plan_tmp_bak/ > /dev/null; then
@@ -498,10 +571,41 @@ if ! PLAN_BIN="$(resolve_plan_binary)"; then
     echo "  the base index alone — that silently eats reopened rows."
     exit 3
 fi
+# 1380-u7sq relay-fix: the Lua worker runs rooted in the scratch copy (or the
+# --index tree), so a RELATIVE plan-binary path such as ./target/release/...
+# resolves against the wrong tree there. Absolutize once, keeping native
+# Windows drive paths (C:/...) as they are.
+case "$PLAN_BIN" in
+    /*|[A-Za-z]:*) ;;
+    *) PLAN_BIN="$REPO_ROOT/${PLAN_BIN#./}" ;;
+esac
 export TILLANDSIAS_PLAN_BIN="$PLAN_BIN"
+# @trace order:1380-u7sq — the archiver runs in the DEFAULT sandboxed lua
+# environment (proc.run plus rooted fs verbs). The 1375-btuf `--unsandboxed`
+# opt-in and its feature probe are gone, and tests/lua_std.rs pins that no
+# caller of it remains. The fs root is the checkout, or, when the caller
+# names an --index, the tree that index lives in (the directory above its
+# plan/), so a sweep of another tree is confined to THAT tree.
+_ap_lua_root="$REPO_ROOT"
+_ap_prev=""
+for _ap_arg in "$@"; do
+    if [ "$_ap_prev" = "--index" ]; then
+        _ap_idx_dir="$(dirname "$_ap_arg")"
+        _ap_lua_root="$(cd "$_ap_idx_dir/.." 2>/dev/null && pwd)" || {
+            echo "could-not-run:archiver:index-tree-unreadable (1380-u7sq)"
+            echo "archive-plan-packets: --index $_ap_arg is not in a readable tree" >&2
+            exit 3
+        }
+    fi
+    _ap_prev="$_ap_arg"
+done
+if command -v cygpath >/dev/null 2>&1; then
+    _ap_lua_root="$(cygpath -m "$_ap_lua_root")"
+fi
 
-if [ -f "$DIR/archive-plan-packets.lua" ]; then
-    "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua" "$@"
+if [ "$_ap_backend" = "lua" ]; then
+    TILLANDSIAS_REPO_ROOT="$_ap_lua_root" "$PLAN_BIN" lua "$DIR/archive-plan-packets.lua" \
+        --plan-bin "$PLAN_BIN" "$@"
 else
     _ruby scripts/archive-plan-packets.rb
 fi

@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    field: next_action
+    value: |-
+      2026-09-26 yoga, 9th pre-build red for the tally: litmus:vault-audit-persistence-shape ("0 mounts target /vault/audit"). CAUSED BY A RELAY: 1200-ih38 (756e30a90, relayed in land33) added a #[cfg(test)] thread_local! override at vault_bootstrap.rs:138, and the pin defined "non-test code" as everything above the FIRST #[cfg(test)], which shrank to 137 lines. The property held; the heuristic broke. Neither the author (yoga) nor the relay ran litmus-covering-specs for the touched file. Reproduced by yoga on origin/linux-next in a scratch worktree: tillandsias-vault litmus FAIL on this test. FIX at d8d19b462 (macuahuitl, in land40: the pin stops at the #[cfg(test)] that opens `mod`; pre-fix 0, post-fix 1, negative control with a second mount 2). d8d19b462 did NOT resolve from yoga at the time of writing; verify it on origin/linux-next once land40 lands.
+
+      [2026-09-26T15:28:29Z yoga] 2026-09-26 yoga: VERIFIED d8d19b462 (the vault-audit-persistence-shape pin fix, 9th red) is an ancestor of origin/linux-next, landed under 31fe1ee3e with 10f1a4857. With 1405-3mrp (59ff474da) and 1406-9ctt (10f1a4857) also landed, every non-flake red in this sample now has a landed fix: 3 mine (1405-3mrp), 2 stale pins + 1 budget (1406-9ctt), 1 relay-caused (d8d19b462); the 2 flakes stand as recorded.
+    ts: "2026-09-26T15:28:29Z"
+    host: yoga
+
+events:
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    event:
+      type: progress
+      ts: "2026-09-26T15:28:29Z"
+      host: yoga
+      summary: |-
+        status '2026-09-26 yoga, 9th pre-build red for the tally: litmus:vault-audit-persistence-shape ("0 mounts target /vault/audit"). CAUSED BY A RELAY: 1200-ih38 (756e30a90, relayed in land33) added a #[cfg(test)] thread_local! override at vault_bootstrap.rs:138, and the pin defined "non-test code" as everything above the FIRST #[cfg(test)], which shrank to 137 lines. The property held; the heuristic broke. Neither the author (yoga) nor the relay ran litmus-covering-specs for the touched file. Reproduced by yoga on origin/linux-next in a scratch worktree: tillandsias-vault litmus FAIL on this test. FIX at d8d19b462 (macuahuitl, in land40: the pin stops at the #[cfg(test)] that opens `mod`; pre-fix 0, post-fix 1, negative control with a second mount 2). d8d19b462 did NOT resolve from yoga at the time of writing; verify it on origin/linux-next once land40 lands.
+        
+        [2026-09-26T15:28:29Z yoga] 2026-09-26 yoga: VERIFIED d8d19b462 (the vault-audit-persistence-shape pin fix, 9th red) is an ancestor of origin/linux-next, landed under 31fe1ee3e with 10f1a4857. With 1405-3mrp (59ff474da) and 1406-9ctt (10f1a4857) also landed, every non-flake red in this sample now has a landed fix: 3 mine (1405-3mrp), 2 stale pins + 1 budget (1406-9ctt), 1 relay-caused (d8d19b462); the 2 flakes stand as recorded.' (not terminal) with evidence_refs: d8d19b462
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    event:
+      type: note
+      ts: "2026-09-26T15:28:29Z"
+      host: yoga
+      summary: |-
+        d8d19b462 verified on trunk

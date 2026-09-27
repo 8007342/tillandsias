@@ -1,0 +1,319 @@
+# Filed 2026-09-27 from the operator's request (a user's clean MacBook failed
+# first provisioning after a curl install; "pretty installers all the way to the
+# QR login flow, on all platforms"), distilled from two read-only research
+# passes on origin/linux-next. PRETTY-INSTALLER DEPENDENCY ORDER: 1420-r2sn
+# (event type) and 1420-9vpk (renderer) land first; every other pretty-installer
+# row consumes them.
+packets:
+  - packet_id: macos-provisioning-failure-is-one-opaque-red-chip-with-no-persisted-log-so-a-user-in-the-wild-cannot-say-which-stage-failed
+    order: 1420-inak
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, provisioning, diagnostics, fail-loud]
+    estimated_hours: 4
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the deliverable is a persisted log plus stage-named chip; the fault-injection fixture lands with it.
+    title: |
+      a clean-Mac first provision that fails shows only "Provisioning error" / "failed to provision" — every run_start error (download/SHA, qcow2 expand or disk full, hdiutil, VZ start/entitlement, guest cloud-init via provision.state) feeds one chip, and nothing is written where a user can find it
+    verifiable_closure: |
+      each injected fault (download SHA mismatch, expand ENOSPC, hdiutil failure, VZ start error, guest provision.state phase failed) produces a DISTINCT chip text naming its stage, and the full error (for the guest: the provision.state line, rc and cmd) is persisted to a log file whose path the chip tooltip / "Open log" names; pre-fix result: FAILS (all five read the same chip text; no persisted log).
+    context: |
+      OPERATOR REPORT 2026-09-27: the curl installer on a user's clean MacBook installed the previous stable, the tray
+      launched, downloaded the ~600 MB Fedora image, then went red "failed to provision"; a retry did not help; NO LOGS
+      were obtainable. Research (read-only, origin/linux-next) ruled out the suspected QEMU dependency: qcow2->raw is
+      pure Rust since cadbd0e57 (2026-09-03), which is an ancestor of stable v56.9.25.2, v56.9.23.1 and v56.9.19.1, and
+      every host binary on the install/provision path is stock macOS. Ranked likely causes (inferred): guest cloud-init
+      failure after boot (Fedora mirror / dnf / GitHub releases fetch — first-boot only, so a retry cannot help), disk
+      space during the 250 GiB sparse expand, VZ/arch/OS incompatibility, truncated download. Without a stage-named
+      error and a persisted log the next field failure will be just as undiagnosable. Error sources: action_host.rs
+      ~1568-1595, ~2031, menu_state.rs:514, vz.rs provision.state phase failed (~868).
+    exit_criteria:
+      - 'five injected faults give five distinct stage-named chip texts; pre-fix result: FAILS'
+      - 'the full error is persisted to a user-findable log file named from the tray; pre-fix result: FAILS'
+  - packet_id: macos-first-provision-starts-a-600mb-download-and-a-250gib-sparse-expand-without-checking-free-space
+    order: 1420-299a
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, provisioning, preflight]
+    estimated_hours: 2
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: preflight unit test lands with it.
+    title: |
+      provisioning checks free space only late (swap sizing from df); a small volume fails mid-expand after the download instead of refusing up front with the number needed
+    verifiable_closure: |
+      with a free-space probe seam reporting less than the requirement, provisioning refuses BEFORE any download with a message stating required vs available GB; pre-fix result: FAILS (download proceeds, failure surfaces during expand).
+    context: |
+      Candidate cause #2 of the 2026-09-27 clean-Mac failure (see 1420-inak). vz.rs convert_qcow2_to_raw (~1531)
+      expands into a 250 GiB sparse rootfs.img.partial after a ~600 MB download; swap is sized from /bin/df.
+    exit_criteria:
+      - 'insufficient space refuses before download with required/available GB; pre-fix result: FAILS'
+  - packet_id: macos-provisioning-does-not-refuse-an-unsupported-cpu-or-macos-version-up-front
+    order: 1420-q2ba
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, provisioning, preflight]
+    estimated_hours: 2
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: preflight unit test lands with it.
+    title: |
+      the image manifest pins aarch64.qcow2 (vz.rs:422); an Intel Mac or a macOS too old for the Virtualization.framework features used would fail late and opaquely instead of refusing with a clear message
+    verifiable_closure: |
+      with arch/OS probe seams reporting x86_64 or an unsupported macOS version, the installer and the tray refuse before downloading, naming the requirement; pre-fix result: FAILS.
+    context: |
+      Candidate cause #3 of the 2026-09-27 clean-Mac failure (see 1420-inak). Also check install-macos.sh, which
+      should refuse before installing the app at all.
+    exit_criteria:
+      - 'unsupported arch/OS refuses before download with a named requirement; pre-fix result: FAILS'
+  - packet_id: nothing-guards-the-zero-host-dependency-promise-on-the-macos-install-and-provision-path
+    order: 1420-umka
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [macos, lint, zero-dependency]
+    estimated_hours: 2
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the deliverable is the lint; its litmus lands with it.
+    title: |
+      the zero-dependency promise (QEMU removed in cadbd0e57) has no guard: a new Command::new("qemu-img") or a bare-name non-stock binary on the macOS install/provision path would ship silently, masked on developer Macs that have Homebrew
+    verifiable_closure: |
+      a litmus lint over scripts/install-macos.sh and the macOS tray/vm-layer provisioning code refuses any external command that is not an absolute stock-macOS path (allowlist: /usr/bin, /bin, /usr/sbin, /sbin, /System); bare hdiutil becomes /usr/bin/hdiutil; mutation (adding Command::new("qemu-img")) turns it red; pre-fix result: FAILS (bare hdiutil).
+    context: |
+      Research 2026-09-27 verified no QEMU/non-stock dependency on trunk or stable v56.9.25.2 (by reading code and tag
+      ancestry, not by a clean-machine run). A developer Mac has /opt/homebrew on PATH, so a regression cannot be seen
+      there; the tray's GUI PATH is /usr/bin:/bin:/usr/sbin:/sbin. Only bare-name call found: hdiutil (vz.rs:772).
+    exit_criteria:
+      - 'lint red on an added non-stock command; hdiutil absolute; pre-fix result: FAILS'
+  - packet_id: install-and-provision-progress-is-free-text-strings-with-no-typed-progress-event-so-no-surface-can-draw-a-real-bar
+    order: 1420-r2sn
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [rust, control-wire, progress, installer-ux]
+    estimated_hours: 4
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: roundtrip unit tests land with it.
+    title: |
+      PRETTY INSTALLER 1/10 — add a typed ProgressEvent {task, parent, label, kind: Determinate{done,total,unit} | Indeterminate{activity} | Done | Failed{reason}, ts} and ControlMessage::ProgressPush to control-wire; today every surface passes prose (on_phase(&str), report_message(&str), ProvisionPhase::status_text)
+    verifiable_closure: |
+      cargo test -p tillandsias-control-wire progress_event_roundtrip passes, the wire-version test still passes, and ProvisionProgress gains a report_event(ProgressEvent) with a default adapter; pre-fix result: FAILS (no type).
+    context: |
+      Operator 2026-09-27: "pretty installers, all the way to the QR login flow, on all platforms ... make sure events
+      flow in all the necessary layers." Build on: ProvisionPhase/ProvisionProgress (host-shell/src/provisioning.rs:37-110),
+      fetch.rs on_progress(downloaded,total) (:264), BuildProgressEvent (core/src/event.rs:8-13), ImageBuildEvent
+      (logging/src/event_collector.rs:128), LoginStage (control-wire/src/auth_flow.rs:34), VmPhase (lib.rs:742),
+      FlowEventChannel (flow_event.rs:29). The aggregate is the join of grow-only per-task counters (the CRDT homage):
+      monotone, reaches 100% only when every part has. LANDS FIRST.
+    exit_criteria:
+      - 'ProgressEvent + ProgressPush with roundtrip tests; pre-fix result: FAILS'
+  - packet_id: there-is-no-shared-terminal-renderer-so-every-install-surface-prints-raw-or-fake-progress
+    order: 1420-9vpk
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [rust, terminal, progress, installer-ux]
+    estimated_hours: 6
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: golden-frame tests land with it.
+    title: |
+      PRETTY INSTALLER 2/10 — a tillandsias-progress-tty crate (indicatif + console, pure Rust per methodology event 026) rendering ProgressEvents as "tillandsia" bars: dark-green body with red/pink blush at the ends, truecolor/256/dumb tiers, NO_COLOR/CI/TERM=dumb/non-TTY degrade to one clean line per state change
+    verifiable_closure: |
+      golden tests: under TERM=dumb the output contains zero ESC bytes; under COLORTERM=truecolor the leading (tip) cell is #E8637A and the body uses the leaf ramp; a non-TTY sink gets exactly one line per state change; the aggregate bar never decreases and reaches 100% only when all child tasks are Done; pre-fix result: FAILS (no crate).
+    context: |
+      PALETTE (truecolor -> xterm-256): tip blush #E8637A->168, blush-mid #C44D63->131, leaf-light #9DBBA5->108, leaf
+      #4F8A5B->65, leaf-dark #2F6B45->29, leaf-deepest #1E4A32->22, track #3A3F3A->237, text #C9D3CB->251. Colour by
+      POSITION along the bar; the leading edge always blushes so the tip appears to grow. Honest randomness: one bar per
+      concurrent sub-task advancing at its real uneven rate; never animate fill without an event. Indeterminate steps get
+      a drifting blush "dew" pulse plus elapsed time and the last activity line. No ncurses (C dep, out of policy);
+      ratatui+crossterm reserved for the QR screen (1420-2pav). No terminal crate is in the workspace today.
+    exit_criteria:
+      - 'golden frames for dumb/256/truecolor, monotone aggregate; pre-fix result: FAILS'
+  - packet_id: headless-init-image-build-progress-is-a-fake-50-75-100-estimator
+    order: 1420-6brx
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, headless, podman, progress, installer-ux]
+    estimated_hours: 4
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: pins land with it.
+    title: |
+      PRETTY INSTALLER 3/10 — tillandsias --init maps podman output to Pulling->50%, Digest->75%, Commit->100% with a hand-rolled bar (headless main.rs:9513-9569); replace with real per-image events (parse STEP n/m, Pulling blob) rendered by 1420-9vpk
+    verifiable_closure: |
+      on a cold --init the event log shows at least one Determinate event with done<total per image before Done (no 50/75/100 jumps), and bringup_progress's banned-vocabulary test still passes; pre-fix result: FAILS.
+    context: |
+      Depends on 1420-r2sn and 1420-9vpk. BringUpProgress (bringup_progress.rs:53-100) already gates on
+      stdout.is_terminal(); podman children are captured, not inherited, so we own the stream.
+    exit_criteria:
+      - 'real per-image progress events on cold --init; pre-fix result: FAILS'
+  - packet_id: rootfs-and-cloud-image-download-progress-reaches-the-trays-only-as-a-formatted-percent-string
+    order: 1420-x6rz
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [rust, vm-layer, macos, windows, progress, installer-ux]
+    estimated_hours: 3
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: pins land with it.
+    title: |
+      PRETTY INSTALLER 4/10 — fetch.rs / vz.rs / wsl_lifecycle.rs know bytes done/total but fold them into prose ("Downloading Fedora Cloud image X/Y MB (%)"); emit Determinate{bytes} ProgressEvents instead, and have both trays render label+pct from the event
+    verifiable_closure: |
+      during the rootfs/cloud-image download the chip's percent is derived from ProgressEvents and report_message is no longer called with a formatted % string; pre-fix result: FAILS.
+    context: |
+      Depends on 1420-r2sn. Sites: vm-layer/src/fetch.rs:243-287, vz.rs ~462-480 and 1536-1560 (download + convert),
+      windows-tray wsl_lifecycle.rs:794-817. Windows half may be split to a windows row at pickup.
+    exit_criteria:
+      - 'tray download percent comes from typed events; pre-fix result: FAILS'
+  - packet_id: macos-tray-provision-cli-prints-json-lines-to-a-human-terminal
+    order: 1420-83vf
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [rust, macos, progress, installer-ux]
+    estimated_hours: 3
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: pins land with it.
+    title: |
+      PRETTY INSTALLER 5/10 — tillandsias-tray --provision (which install-macos.sh runs via --reset-state) prints {"phase":...} JSON lines to the operator's terminal (diagnose.rs:1359-1412); use the 1420-9vpk renderer on a TTY and keep JSON only under --json
+    verifiable_closure: |
+      --provision with stdout a TTY prints no {"phase": lines and draws the tillandsia bars; with --json it prints only JSON; piped without --json it prints plain lines; pre-fix result: FAILS.
+    context: |
+      Depends on 1420-r2sn, 1420-9vpk. Covers --reset-state/--reset-guest/--opencode status lines too
+      (diagnose.rs:1344-1360, 1527-1543, 2531-2558). install-macos.sh already provisions right after install via
+      --reset-state (install-macos.sh:267), so this IS the macOS install experience.
+    exit_criteria:
+      - 'TTY bars, --json JSON-only, piped plain lines; pre-fix result: FAILS'
+  - packet_id: windows-tray-provision-console-prints-raw-phase-lines
+    order: 1420-ev7i
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [rust, windows, progress, installer-ux]
+    estimated_hours: 3
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: pins land with it.
+    title: |
+      PRETTY INSTALLER 6/10 — windows-tray --provision/--reset-state run via cmd.exe /c print "[provision] phase: ..." lines (notify_icon.rs:1021-1118); render with 1420-9vpk, verifying VT enabling on legacy conhost
+    verifiable_closure: |
+      --provision in conhost shows a coloured tillandsia bar, and piped to a file emits plain lines with zero ESC bytes; pre-fix result: FAILS.
+    context: |
+      Depends on 1420-r2sn, 1420-9vpk. The tray is windows_subsystem="windows" (main.rs:20) and gets a console via
+      cmd.exe /c (notify_icon.rs:1001, 5601).
+    exit_criteria:
+      - 'conhost bar, piped plain; pre-fix result: FAILS'
+  - packet_id: the-github-login-qr-screen-is-hardcoded-white-on-black-with-no-activity-while-polling
+    order: 1420-2pav
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [rust, headless, login, terminal, installer-ux]
+    estimated_hours: 5
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: pins land with it.
+    title: |
+      PRETTY INSTALLER 7/10 — the QR login flow: render_terminal_qr hardcodes \x1b[47m\x1b[30m with no isatty/NO_COLOR check, then prints "Waiting for mobile authorization (polling GitHub)..." with no activity (headless main.rs:10596-10868); a ratatui screen in the tillandsia palette with the QR, the code in blush, a polling activity bar with the expires_in countdown, turning full green on grant; plain fallback off-TTY
+    verifiable_closure: |
+      the existing LITMUS_PODMAN_MODE path (main.rs:10838) renders the QR in the palette and exits before polling; with NO_COLOR or a non-TTY the QR and code print plainly with zero ESC bytes; pre-fix result: FAILS.
+    context: |
+      Depends on 1420-r2sn, 1420-9vpk. Keep the QR's high-contrast module pair (leaf-deepest on leaf-light). macOS and
+      Windows reach this screen through the guest (1420-4grt relays structured events; the raw sink stays only for
+      the QR bytes).
+    exit_criteria:
+      - 'palette QR screen with activity + expiry; plain fallback; pre-fix result: FAILS'
+  - packet_id: guest-side-install-and-login-output-reaches-the-host-as-raw-bytes-not-structured-progress
+    order: 1420-4grt
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [rust, vsock, macos, windows, progress, installer-ux]
+    estimated_hours: 5
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: pins land with it.
+    title: |
+      PRETTY INSTALLER 8/10 — the guest's --init / --github-login output is streamed raw over vsock and interleaved with "[github-login] ..." host lines (diagnose.rs:2098-2112, vsock_exec.rs:1231-1245); relay ProgressPush over vsock/HvSocket so the host renderer draws the guest's progress, keeping the raw sink only for the QR bytes
+    verifiable_closure: |
+      macOS --github-login stderr contains no interleaved "[github-login] guest output (" lines, only rendered structured events plus the QR; pre-fix result: FAILS.
+    context: |
+      Depends on 1420-r2sn, 1420-9vpk, 1420-2pav. Builds on the 1383-dkxi raw-output sink. Windows HvSocket half may be
+      split to a windows row at pickup.
+    exit_criteria:
+      - 'guest progress rendered host-side from structured events; pre-fix result: FAILS'
+  - packet_id: the-curl-and-powershell-installers-print-curl-meters-and-flickering-write-progress
+    order: 1420-jmp4
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [scripts, installer-ux, windows, linux]
+    estimated_hours: 2
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: pins land with it.
+    title: |
+      PRETTY INSTALLER 9/10 — install.sh runs curl -fL with no --progress-bar, so users see curl's raw 12-column meter (install.sh:245); install-windows.ps1 uses Invoke-WebRequest with no $ProgressPreference (:668,684) giving PS5's slow flickering bar; quiet both, palette Write-Progress in ps1, and hand off to the binary's renderer as early as possible
+    verifiable_closure: |
+      install.sh under bash -x shows curl --progress-bar (mirroring install-macos.sh:168); ps1 sets $ProgressPreference and uses palette Write-Progress; scripts/test-installers-print-pending-banner.sh still passes; pre-fix result: FAILS.
+    context: |
+      No dependency: can land first. install-macos.sh is already the best-behaved surface (curl --progress-bar).
+    exit_criteria:
+      - 'quiet curl + ps1 progress; pending-banner fixture green; pre-fix result: FAILS'
+  - packet_id: the-trays-show-provisioning-progress-only-as-a-37-char-status-chip
+    order: 1420-v3zt
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [macos, windows, tray, progress, installer-ux]
+    estimated_hours: 5
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: pins land with it.
+    title: |
+      PRETTY INSTALLER 10/10 — the GUI trays (no terminal) show first-launch provisioning only as a status chip (menu_state.rs:182) plus notifications; feed ProgressEvents into a native progress indicator (NSProgressIndicator / taskbar progress) in the tillandsia palette
+    verifiable_closure: |
+      during provisioning the tray's indicator updates at least 10 distinct percent values sourced from ProgressEvents; pre-fix result: FAILS.
+    context: |
+      Depends on 1420-r2sn and 1420-x6rz. Split per platform at pickup.
+    exit_criteria:
+      - 'native tray progress from events; pre-fix result: FAILS'

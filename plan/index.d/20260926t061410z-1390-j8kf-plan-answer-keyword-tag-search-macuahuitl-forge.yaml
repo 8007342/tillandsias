@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: plan-answer-refuses-every-keyword-or-tag-question-so-dedup-before-filing-cannot-go-through-the-expert-at-all
+    order: 1390-j8kf
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [mcp-first, forge-local-experts, plan-binary]
+    estimated_hours: 4
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixing commit adds a litmus asserting
+      plan_answer "tmpfs" cites 437 (slug and capability_tags carry it) and
+      plan_answer "update-convergence-dashboard" cites 1191-vrjf. FAILS pre-fix: both
+      answer "unsupported: no packet in the ledger matches any token".
+    title: |
+      plan_answer resolves only exact ids and slugs; "tmpfs" and "which packets mention update-convergence-dashboard" are refused although 437 carries tmpfs in its slug AND capability_tags and 1191-vrjf is literally about that script — so the dedup step methodology sends to the expert (next-order's "READ THESE BEFORE FILING") has no expert that can do it
+    context: |
+      MEASURED on macuahuitl-forge 2026-09-26, level-2 survey queries 11, 12,
+      14-19: every keyword/tag/content question -> unsupported "no packet in the
+      ledger matches any token"; only "forge-src-tmpfs-topology" (exact slug)
+      answered. Dedup fell back to git grep for all nine findings filed that day.
+    deliverable: |
+      A cited keyword search over live rows (slug, title, capability_tags,
+      owned_files; optionally context), ranked, with citations to the row
+      spans — refusing only when nothing matches.
+    provenance: |
+      Filed by macuahuitl-forge 2026-09-26 at the macuahuitl coordinator's level-3 dispatch.

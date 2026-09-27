@@ -1,0 +1,31 @@
+packets:
+  - packet_id: the-lua-fs-write-sandbox-compares-a-canonical-root-against-a-lexically-normalised-path-so-on-macos-every-var-folders-path-is-refused-and-every-mac-gate-is-red
+    order: 1411-b5fk
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [rust, macos, lua, sandbox, gate]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+    observed_by: tlatoanis-macbook-air
+    title: |
+      lua_predicate.rs resolve_write_path canonicalises the repository root (/var -> /private/var on macOS) but normalises an absolute request only lexically, so fs.mkdir/write/list/exists under a macOS temp dir are refused as "outside the repository root" and lua_std::the_archiver_sweeps_in_the_default_sandbox reds every macOS ./build.sh --check
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test lua_std the_archiver_sweeps_in_the_default_sandbox passes on macOS
+      (pre-fix: FAILS 3/3, deterministic), and a unit test writing through a symlinked alias of the root passes
+      on every OS while a symlink escaping the root is still refused.
+    context: |
+      MEASURED 2026-09-26 on tlatoanis-macbook-air: ./build.sh --check on trunk went red with
+      fail:test-baseline:ran=2601 new-red=1 first=lua_std::the_archiver_sweeps_in_the_default_sandbox.
+      Alone, 3/3 FAIL: "fs.mkdir: refused — path '/var/folders/…/T/.tmpXXXX/plan/archive' is outside the
+      repository root". Mechanism: the root is canonicalised (lua_predicate.rs:666, /private/var/…); an
+      absolute request is normalize_path'd, lexical only (/var/…), then starts_with(root) fails. On macOS
+      /var is a symlink to private/var. Linux /tmp is not a symlink, so Linux is green. The function
+      already canonicalises the nearest existing ancestor, but only AFTER the refusal.
+    exit_criteria:
+      - 'the containment test compares the request after resolving its nearest existing ancestor, so a symlinked prefix of the root is inside; pre-fix result: FAILS (the archiver test 3/3 on macOS)'
+      - a symlink that resolves OUTSIDE the root is still refused (the existing escape check keeps its teeth)

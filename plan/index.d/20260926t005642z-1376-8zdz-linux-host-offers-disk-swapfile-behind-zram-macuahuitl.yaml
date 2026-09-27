@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Timestamp READ FROM THE CLOCK (date -u), not composed — 1313-w78k.
+packets:
+  - packet_id: a-linux-host-with-only-zram-swap-is-offered-a-silverblue-safe-disk-swapfile-behind-zram-sized-to-its-tier-and-diagnose-reports-the-swap-shape
+    order: 1376-8zdz
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: linux
+    capability_tags: [linux, silverblue, swap, zram, btrfs, host-provisioning, operator-consent]
+    estimated_hours: 3
+    owned_files:
+      - scripts/offer-host-swap.sh
+      - cheatsheets/runtime/forge-memory-tmpfs-swap.md
+    observed_by: macuahuitl
+    title: |
+      a Linux host whose only swap is zram (every Fedora host in the fleet today) is OFFERED a Silverblue-safe disk swapfile behind zram, sized to its tier, by a script that reports and prints the commands and never writes root-owned state itself
+    verifiable_closure: |
+      bash scripts/offer-host-swap.sh --check prints exactly one verdict line:
+      ok:host-swap:disk=<GiB> zram=<GiB> target=<GiB> when an active non-zram swap
+      of at least the tier target is listed by swapon --show, or
+      refused:host-swap:disk=0 zram=<GiB> target=<GiB> followed on stderr by the
+      btrfs filesystem mkswapfile (fallocate/mkswap on older btrfs-progs) and
+      systemd .swap unit (pri=10, under /var/swap) commands and the free-space
+      check for /var. Tier target: 4 GiB + concurrent forges x swap allowance
+      (design doc table: floor 8, fat 16, coordinator 16). A fixture with a
+      fake swapon output covers both arms.
+      Pre-fix result: FAILS: the script does not exist; swapon --show on
+      macuahuitl lists only /dev/zram0 (8 GiB, pri 100), and the same is the
+      Fedora default on lenovinha and yoga.
+    context: |
+      Design: plan/issues/forge-memory-swap-architecture-design-2026-09-26.md
+      section 4.1. Why disk behind zram: zram pages stay in RAM at the
+      compression ratio (an incompressible probe saved nothing), so zram alone
+      is not capacity for a tmpfs that spills; Fedora's SwapOnZRAM change
+      documents zram and disk swap coexisting with zram favoured by priority.
+      Why /var: the persistent, writable btrfs subvolume shared by every
+      rpm-ostree deployment, never snapshotted by Silverblue; a swapfile's
+      subvolume cannot be snapshotted while active (btrfs docs). mkswapfile
+      sets NODATACOW, which also disables the zstd:1 mount compression on that
+      file. Consent: root and host state, so report-and-offer (the 1339-r9xv
+      discipline). Follow-on: the tray's --diagnose prints the same swap: line.
+      Suggested host: lenovinha (Silverblue), then yoga.

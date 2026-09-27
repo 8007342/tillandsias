@@ -227,9 +227,19 @@ while IFS= read -r f; do
     # logical line is in scope when ANY of its physical lines was added -- which
     # is also the more faithful reading of "added in this change".
     _added_f="$(mktemp "${TMPDIR:-/tmp}/sigpipe-added.XXXXXX")" || continue
-    git diff "$base_ref" -- "$f" 2>/dev/null | sed -n 's/^+//p' > "$_added_f"
+    # ORDER 1391-8ikx: an UNTRACKED file has no diff against the base; every
+    # line of it is added in this change.
+    if git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+        git diff "$base_ref" -- "$f" 2>/dev/null | sed -n 's/^+//p' > "$_added_f"
+    else
+        cat -- "$f" > "$_added_f"
+    fi
     # A diff of a deleted or renamed-away file adds nothing; skip without cost.
     if [ ! -s "$_added_f" ]; then rm -f "$_added_f"; continue; fi
+    # ORDER 1391-8ikx: `checked` counts the files EXAMINED, so ok:...:0 can only
+    # mean nothing was in scope. It used to move only on a violation, so every
+    # ok read 0 whether one file or fifty had been read.
+    checked=$((checked + 1))
 
     _logical=""      # the folded line being accumulated
     _touched=0       # 1 when one of its physical lines was added
@@ -274,7 +284,6 @@ while IFS= read -r f; do
             grep -qE "$PRODUCER_UNKNOWN_SIZE_RE" <<<"$producer" || continue
         fi
 
-        checked=$((checked + 1))
         violations=$((violations + 1))
         echo "REFUSED: $f — this change ADDS a verdict pipeline that SIGPIPE can decide:" >&2
         echo "         $(printf '%s' "$added" | sed 's/^[[:space:]]*//' | cut -c1-100)" >&2
@@ -285,7 +294,14 @@ while IFS= read -r f; do
     done < "$f"
     rm -f "$_added_f"
 done <<EOF
-$(git diff --name-only "$base_ref" 2>/dev/null)
+$(
+    # ORDER 1391-8ikx: the population is the change, INCLUDING untracked files.
+    # `git diff --name-only <base>` never lists an untracked file, so a
+    # brand-new script was invisible until staged and the gate answered ok
+    # over an empty population (measured twice on 2026-09-26).
+    { git diff --name-only "$base_ref" 2>/dev/null
+      git ls-files --others --exclude-standard 2>/dev/null; } | LC_ALL=C sort -u
+)
 EOF
 
 if [ "$violations" -gt 0 ]; then

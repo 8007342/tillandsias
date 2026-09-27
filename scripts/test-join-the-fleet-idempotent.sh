@@ -22,7 +22,7 @@
 # runs the real probes, because idempotence is a property of the whole walk.
 #
 # Grammar (one line on stdout last):
-#   ok:join-the-fleet-idempotent:6/6 | fail:join-the-fleet-idempotent:<n> arm(s)
+#   ok:join-the-fleet-idempotent:8/8 | fail:join-the-fleet-idempotent:<n> arm(s)
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -132,6 +132,41 @@ else
     good "no branch todo on a work ref"
 fi
 
+# ---- arms 7-8 (ORDER 1255-s4im: the hook git will RUN, not .git/hooks) -------
+# git runs hooks from core.hooksPath when it is set. The checker read
+# .git/hooks/pre-push unconditionally, which is wrong in BOTH directions.
+fake_hook() { mkdir -p "$1"; printf '#!/bin/sh\n# tillandsias-pre-push-v8\nexit 0\n' > "$1/pre-push"; }
+
+echo "arm 7 — MASKED: a hook in .git/hooks but core.hooksPath at an empty dir runs NO hook"
+# The 1255-s4im disclosure: commits made with core.hooksPath pointing at a
+# directory with no hooks are functionally --no-verify. A checker that read
+# .git/hooks said ok while nothing would have run.
+# PRE-FIX: FAILS (ok:join-the-fleet:hooks:tillandsias-pre-push-v8).
+fake_hook "$scratch/.git/hooks"
+mkdir -p "$W/empty-hooks"
+git -C "$scratch" config core.hooksPath "$W/empty-hooks"
+o7="$(JOIN_FLEET_ROOT="$scratch" JOIN_FLEET_PROBES=0 bash "$CHECKER" 2>&1)"
+if grep -q -e '^todo:join-the-fleet:hooks:scripts/install-hooks.sh$' <<<"$o7"; then
+    good "a redirected, empty hooks path is a todo, not ok"
+else
+    bad "arm7: core.hooksPath at an empty dir was not a todo: $(printf '%s\n' "$o7" | grep -e hooks | tr '\n' ' ')"
+fi
+
+echo "arm 8 — FORGE: the hook lives only in a shared core.hooksPath dir, and that is ok"
+# The negative control the row asks for: the forge installs hooks via a shared
+# core.hooksPath, so an empty .git/hooks there is correct, not a gap.
+# PRE-FIX: FAILS (a false todo).
+rm -f "$scratch/.git/hooks/pre-push"
+fake_hook "$W/shared-hooks"
+git -C "$scratch" config core.hooksPath "$W/shared-hooks"
+o8="$(JOIN_FLEET_ROOT="$scratch" JOIN_FLEET_PROBES=0 bash "$CHECKER" 2>&1)"
+if grep -q -e '^ok:join-the-fleet:hooks:tillandsias-pre-push-v8$' <<<"$o8"; then
+    good "a shared core.hooksPath with the hook is ok"
+else
+    bad "arm8: a shared core.hooksPath hook was not ok: $(printf '%s\n' "$o8" | grep -e hooks | tr '\n' ' ')"
+fi
+git -C "$scratch" config --unset core.hooksPath
+
 echo "arm 6 — AFFORDANCE: the skill's §3 block is byte-identical to what the pre-push hook prints"
 HOOK="$ROOT/scripts/hooks/pre-push-local-gate.sh"; SKILL="$ROOT/skills/join-the-fleet/SKILL.md"
 hook_lines="$(sed -n '/^work_lane_affordance() {$/,/^}$/p' "$HOOK" | sed -n 's/^    echo "  \(.*\)" >&2$/\1/p')"
@@ -143,7 +178,7 @@ else
 fi
 
 if [ "$fails" = 0 ]; then
-    echo "ok:join-the-fleet-idempotent:6/6"
+    echo "ok:join-the-fleet-idempotent:8/8"
     exit 0
 fi
 echo "fail:join-the-fleet-idempotent:$fails arm(s)"

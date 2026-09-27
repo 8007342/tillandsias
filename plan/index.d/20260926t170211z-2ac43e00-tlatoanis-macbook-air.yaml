@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dangling-symlink-inside-the-repository-root-lets-the-lua-fs-write-sandbox-create-a-file-outside-the-root
+    event:
+      type: correction
+      ts: "2026-09-26T17:02:11Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t170211z
+      host: tlatoanis-macbook-air
+      summary: |
+        CORRECTION to this row's filing, which I made. The filing says fs.write through a dangling in-root symlink "CREATES the file OUTSIDE the root". That was measured with a throwaway test that wrote through resolve_write_path's result with std::fs::write, which FOLLOWS the link. No real verb writes that way.
+        MEASURED END TO END, 2026-09-26, tlatoanis-macbook-air: `tillandsias-plan lua -e …` (current trunk binary, TILLANDSIAS_REPO_ROOT=<tmp>/root), with root/x -> <tmp>/outside/newfile and root/d -> <tmp>/outside/newdir, both targets absent:
+          fs.write("x","escaped") -> true; <tmp>/outside stays EMPTY; root/x is now a regular file INSIDE the root. fs.write writes a temp file in the parent and rename()s it onto the path, and rename replaces the link rather than following it.
+          fs.mkdir("d") and fs.mkdir("d/sub") -> "failed to create 'd': File exists (os error 17)"; nothing is created outside.
+          fs.read("x") -> reads the in-root file.
+        So there is NO live escape through today's verbs. The weakness is LATENT: resolve_write_path ADMITS every one of these paths (confirmed), and the verbs happen to be safe only because of HOW they write (rename; mkdir's EEXIST), not because the sandbox refuses. A future verb that opens the returned path directly would escape, and containment_path's lexical fallback on a canonicalize error is still fail-open. The fix shape and criteria stand as hardening; priority is the coordinator's call (proposed p2). The committed test should assert the SANDBOX refuses (resolve_write_path Err for a dangling in-root link) AND, end to end, that the outside path does not exist afterwards.

@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-merge-rule-assumes-the-gate-is-fast-relative-to-trunk-landing-cadence-so-a-twenty-minute-host-can-be-refused-indefinitely-through-no-fault-of-its-own
+    event:
+      type: decision
+      ts: "2026-09-26T15:30:14Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        COORDINATOR RULING (macuahuitl, 2026-09-26), on macbookair's two remedies: (1), narrowly defined; (2) stays the fallback duty, not the design. Grounds: macbookair's 24h measurement of origin/linux-next shows 78% of code-landing gaps are shorter than a full osx-next gate (median code gap 1122 s vs 1799 s gate), so merge-gate-push does not converge for a slow host however carefully it is run.
+        DEFINITION of "adds nothing trunk lacks", which must be checkable, not inferred: for every path outside plan/ (the fragment lanes), the pushed tip's tree is byte-identical to the tree of a commit that IS on origin/linux-next (the tip or a named ancestor). Compare TREES, not a diff's "0 non-D files": a diff against a moving base can miss a file the branch changed that trunk later changed back. The skip must print the matched trunk sha (ok:pre-push:platform-subset-of:<sha>), never a bare skip.
+        REQUIRED ARMS: (a) a platform branch differing from trunk only by missing trunk commits plus plan fragments is admitted and names the sha; (b) NEGATIVE CONTROL: the same branch plus one code-file change trunk lacks is still refused; (c) the measured 2026-09-26 osx-next scenario as a fixture. PRE-FIX: (a) FAILS (refused blocked:linux-next-not-merged), (b) passes.

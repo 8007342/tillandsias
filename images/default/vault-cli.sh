@@ -48,6 +48,7 @@ usage() {
 Usage: vault-cli read [-field=<key>] <path>
        vault-cli write <path> <field>=<value> [<field>=<value> ...]
        vault-cli write-stdin <path> <field>
+       vault-cli write-json <path>
        vault-cli health
 
 Examples:
@@ -205,19 +206,44 @@ cmd_write_stdin() {
     write_json "$path" "$json_body"
 }
 
+cmd_write_json() {
+    if [ $# -ne 1 ]; then
+        usage
+        exit 4
+    fi
+    path="$1"
+    # Order 1383-5hpk. The body is captured ONCE, then normalised by a single
+    # jq reading a here-document, not by an `if ! printf | jq` verdict
+    # pipeline. That shape read a malformed body as "has no data", wrapped it,
+    # failed again, and wrote an EMPTY body over the secret. Now a body that
+    # is not a JSON object is refused before anything is written, and the
+    # refusal never echoes the body (it carries a token).
+    json_body="$(cat)"
+    normalised="$(jq -c 'if type == "object" then (if has("data") then . else {data: .} end) else error("not an object") end' 2>/dev/null <<EOF
+$json_body
+EOF
+)" || normalised=""
+    if [ -z "$normalised" ]; then
+        echo "vault-cli: write-json: the body on stdin is not a JSON object; nothing was written" >&2
+        exit 4
+    fi
+    write_json "$path" "$normalised"
+}
+
 cmd_health() {
     curl --cacert "$VAULT_CACERT" -fsS "$VAULT_ADDR/v1/sys/health?sealedcode=200&uninitcode=200&standbyok=true" \
         || { echo "vault-cli: health probe failed" >&2; exit 2; }
 }
 
 case "${1:-}" in
-    read|write|write-stdin|health) require_cacert ;;
+    read|write|write-stdin|write-json|health) require_cacert ;;
 esac
 
 case "${1:-}" in
     read) shift; cmd_read "$@" ;;
     write) shift; cmd_write "$@" ;;
     write-stdin) shift; cmd_write_stdin "$@" ;;
+    write-json) shift; cmd_write_json "$@" ;;
     health) cmd_health ;;
     -h|--help|help|"") usage; exit 0 ;;
     *) echo "vault-cli: unknown subcommand: $1" >&2; usage; exit 4 ;;

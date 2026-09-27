@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-windows-installer-never-inspects-or-configures-wslconfig-so-a-users-first-build-experience-depends-on-undocumented-host-tuning-that-took-this-fleet-four-killed-gates-and-a-two-host-diff-to-discover
+    field: status
+    value: completed
+    ts: "2026-09-26T02:20:00Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: the-windows-installer-never-inspects-or-configures-wslconfig-so-a-users-first-build-experience-depends-on-undocumented-host-tuning-that-took-this-fleet-four-killed-gates-and-a-two-host-diff-to-discover
+    event:
+      type: completed
+      ts: "2026-09-26T02:20:00Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: 1694cf35b
+  - packet_id: the-windows-installer-never-inspects-or-configures-wslconfig-so-a-users-first-build-experience-depends-on-undocumented-host-tuning-that-took-this-fleet-four-killed-gates-and-a-two-host-diff-to-discover
+    event:
+      type: note
+      ts: "2026-09-26T02:20:00Z"
+      host: yolanda-windows
+      summary: |-
+        LANDED on origin/linux-next at 1694cf35b, verified by content: Get-WslConfigMerge, Get-WslSwapSizeGB, and the merge fixture's arm 7 are all on trunk. The installer adds only the ABSENT keys. [wsl2] gets swap sized by free disk (8 GB floor; 16 at 100+ GB free; 24 at 200+; a tier only if it leaves 20 GB free) and swapFile under %LocalAppData%\tillandsias. [experimental] gets sparseVhd=true and autoMemoryReclaim=gradual. Consent is [y/N], default no, or TILLANDSIAS_WSLCONFIG=apply|skip. Fixture test-installer-merges-wslconfig-swap-keys.sh RUNS the real functions: 9/9, and four sabotages red it. MEASURED LIVE on yolanda (operator-approved): WSL creates the swap vhdx at every VM boot and deletes it at wsl --shutdown (SwapTotal 8388608 kB at two boots, the file absent after each shutdown). The per-launch lifecycle therefore needs no tray delete logic. Effect: the v56.9.25.2 Windows smoke then ran with no host-memory reap, where two jobs were reaped the same day on the 2 GB default. Not measured: whether a vmIdleTimeout shutdown also deletes the file.

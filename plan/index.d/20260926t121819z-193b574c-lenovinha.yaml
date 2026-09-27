@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: sha256sum-versus-shasum-and-date-percent-n-are-the-two-portability-forks-after-jq-so-hash-sha256-and-time-now-verbs-on-the-plan-binary-answer-both-and-back-luas-hash-and-time-tables
+    field: status
+    value: in_progress
+    ts: "2026-09-26T12:18:19Z"
+    host: lenovinha
+
+events:
+  - packet_id: sha256sum-versus-shasum-and-date-percent-n-are-the-two-portability-forks-after-jq-so-hash-sha256-and-time-now-verbs-on-the-plan-binary-answer-both-and-back-luas-hash-and-time-tables
+    event:
+      type: progress
+      ts: "2026-09-26T12:18:19Z"
+      host: lenovinha
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: a7ab31c60
+  - packet_id: sha256sum-versus-shasum-and-date-percent-n-are-the-two-portability-forks-after-jq-so-hash-sha256-and-time-now-verbs-on-the-plan-binary-answer-both-and-back-luas-hash-and-time-tables
+    event:
+      type: note
+      ts: "2026-09-26T12:18:19Z"
+      host: lenovinha
+      summary: |-
+        handed by the coordinator on lenovinha's behalf: implemented locally on work/1375-8g5t @ a7ab31c60 (6/6 fixture, 349 crate tests); lenovinha's keyring is locked so it cannot push its own claim

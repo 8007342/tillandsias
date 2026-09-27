@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: diff-scoped-deciders-read-git-diff-against-a-base-which-omits-untracked-files-so-a-brand-new-script-is-invisible-until-it-is-staged
+    event:
+      type: finding
+      ts: "2026-09-26T14:24:10Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        TWO MORE INSTANCES, 2026-09-26, both caught only at relay by the macuahuitl coordinator's union preflight: (1) 1255-s4im (yolanda) and (2) 1385-h6uz (macbookair) each ADDED a fixture with a `printf ... | grep -q` verdict pipeline, and each author reported check-sigpipe-verdict-pipelines-added green. macbookair ran a three-outcome test on darwin against the pre-fix ref 23f8d1500 and got outcome (A): the decider WORKS on BSD (violation:sigpipe-verdict-added:1, rc=1). The green came from running the decider BEFORE `git commit` while the fixture was untracked; the check is diff-scoped against the base, saw nothing, and printed `ok:sigpipe-verdict-added:0 checked`, which read as a pass.
+        THE DEFECT UNDER THE PROCESS ERROR (a-guard-must-assert-its-population): a diff-scoped decider that examines ZERO lines on a change that adds files answers `ok:`. It should name what it did not look at: when the working tree carries untracked or unstaged files under its scope, print `could-not-run:…:untracked=<n>` (or examine them) instead of `ok:…:0 checked`. The same shape likely applies to every diff-scoped `*-added` decider (check-added-fragments-parse, check-scorable-obligation-added, check-added-test-is-referenced); sweep the siblings in the same fix. Exit criterion shape: with a new untracked fixture carrying a printf|grep -q verdict, the decider does NOT print ok:; PRE-FIX RESULT: FAILS (prints ok:…:0 checked), measured twice tonight.

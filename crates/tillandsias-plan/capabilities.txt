@@ -47,6 +47,10 @@ fragment-misplaced-definitions
 fragment-terminal-events
 fragments
 grade
+# ORDER 1375-8g5t: `hash sha256` and `time now`, the portable sha256 and clock.
+hash
+# ORDER 1375-rn9b: `json get` / `yaml get`, the jq subset on this binary.
+json
 # IF YOU ADD A SUBCOMMAND: add it here in the same commit. The dispatch and this
 #      include_str!, so the answer describes the sources that binary was
 # litmus:expert-capability-skew-honesty, which runs every token declared here
@@ -67,6 +71,7 @@ next-order
 parked-blocks
 pipeline
 plan-events
+predicate
 query
 # reader.
 ready
@@ -85,9 +90,11 @@ status
 # the litmus asserts the manifest covers the documented command surface too.
 # tillandsias-plan CAPABILITY MANIFEST — order 569
 # Two DIFFERENT readers need the same list, and they cannot both run Rust:
+time
 validate-yaml
 validator-surface-hash
 verify-answer
+yaml
 yaml-get
 yaml-json
 yaml-type

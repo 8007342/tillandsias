@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-dashboard-renderer-formats-percentages-through-bash-printf-under-the-callers-LC_NUMERIC-so-a-comma-decimal-locale-refuses-the-value-outright-and-accepts-the-ones-it-can-parse-with-a-comma-in-them
+    field: next_action
+    value: |-
+      Reproduce with LC_NUMERIC=fr_FR.UTF-8 on any host (no fr_FR host
+      required — the variable is enough), fix at the pct_display locus and
+      audit the awk neighbours, then write the two-locale byte-identity
+      guard. Do NOT fix by exporting a locale from the litmus step: that
+      makes the arm green and leaves the renderer wrong for its real callers.
+
+
+      [2026-09-26T20:14:49Z yoga] 2026-09-26 yoga, SIBLING SWEEP (class 1254-fdsu, printf/awk numeric output under a comma locale), BY SOURCE READING — no script was executed, because running every script a grep names is how packet 278 got claimed (never-execute-scripts-found-by-grep). Pattern: printf with %[.N]f/g/e in scripts/*.sh, images/*/*.sh, images/*/*/*.sh, comment lines excluded; plus `sort -g`. A regex census is an UPPER bound on shape and says nothing about files outside those globs.
+      RESULT: 9 real float-formatting sites in 6 scripts (+1 false positive: images/inference/entrypoint.sh:542 is `find -printf '%f'`, a filename; +1 is scripts/test-awk-float-lc-numeric.sh, a test of this class).
+        update-convergence-dashboard.sh:158  bash printf %.1f — UNPINNED -> this row's fix (export LC_ALL=C)
+        bench-inference-floor.sh (6 sites + sort -g)  pinned script-wide, `export LC_ALL=C` at :74 (macbookair measured the class there 2026-09-18)
+        select-work-batch.sh (4 sites)  pinned per call: `LC_ALL=C awk` at :779, :959, :992
+        freshness-inventory.sh:477  pinned per call: `LC_ALL=C awk`
+        bench-hot-path-placement.sh:90  awk %.1f%% — UNPINNED, NAMED NOT FIXED: it formats a `#   total=…MB … is N.N% of available` line that reads as human commentary. On Linux gawk prints a dot regardless of locale (no --use-lc-numeric); under macOS awk with a comma locale it would print a comma. If anything parses that line, it is the next one to fire.
+      So: 1 unpinned machine-read site (fixed here), 1 unpinned human-read site (named), 7 pinned.
+    ts: "2026-09-26T20:14:49Z"
+    host: yoga
+
+events:
+  - packet_id: the-dashboard-renderer-formats-percentages-through-bash-printf-under-the-callers-LC_NUMERIC-so-a-comma-decimal-locale-refuses-the-value-outright-and-accepts-the-ones-it-can-parse-with-a-comma-in-them
+    event:
+      type: progress
+      ts: "2026-09-26T20:14:49Z"
+      host: yoga
+      summary: |-
+        status 'Reproduce with LC_NUMERIC=fr_FR.UTF-8 on any host (no fr_FR host
+        required — the variable is enough), fix at the pct_display locus and
+        audit the awk neighbours, then write the two-locale byte-identity
+        guard. Do NOT fix by exporting a locale from the litmus step: that
+        makes the arm green and leaves the renderer wrong for its real callers.
+        
+        
+        [2026-09-26T20:14:49Z yoga] 2026-09-26 yoga, SIBLING SWEEP (class 1254-fdsu, printf/awk numeric output under a comma locale), BY SOURCE READING — no script was executed, because running every script a grep names is how packet 278 got claimed (never-execute-scripts-found-by-grep). Pattern: printf with %[.N]f/g/e in scripts/*.sh, images/*/*.sh, images/*/*/*.sh, comment lines excluded; plus `sort -g`. A regex census is an UPPER bound on shape and says nothing about files outside those globs.
+        RESULT: 9 real float-formatting sites in 6 scripts (+1 false positive: images/inference/entrypoint.sh:542 is `find -printf '%f'`, a filename; +1 is scripts/test-awk-float-lc-numeric.sh, a test of this class).
+          update-convergence-dashboard.sh:158  bash printf %.1f — UNPINNED -> this row's fix (export LC_ALL=C)
+          bench-inference-floor.sh (6 sites + sort -g)  pinned script-wide, `export LC_ALL=C` at :74 (macbookair measured the class there 2026-09-18)
+          select-work-batch.sh (4 sites)  pinned per call: `LC_ALL=C awk` at :779, :959, :992
+          freshness-inventory.sh:477  pinned per call: `LC_ALL=C awk`
+          bench-hot-path-placement.sh:90  awk %.1f%% — UNPINNED, NAMED NOT FIXED: it formats a `#   total=…MB … is N.N% of available` line that reads as human commentary. On Linux gawk prints a dot regardless of locale (no --use-lc-numeric); under macOS awk with a comma locale it would print a comma. If anything parses that line, it is the next one to fire.
+        So: 1 unpinned machine-read site (fixed here), 1 unpinned human-read site (named), 7 pinned.' (not terminal) with evidence_refs: 90620e2e3
+  - packet_id: the-dashboard-renderer-formats-percentages-through-bash-printf-under-the-callers-LC_NUMERIC-so-a-comma-decimal-locale-refuses-the-value-outright-and-accepts-the-ones-it-can-parse-with-a-comma-in-them
+    event:
+      type: note
+      ts: "2026-09-26T20:14:49Z"
+      host: yoga
+      summary: |-
+        sibling sweep for the locale class, by source

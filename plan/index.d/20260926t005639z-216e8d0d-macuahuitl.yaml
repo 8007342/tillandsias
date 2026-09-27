@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-src-tmpfs-topology
+    event:
+      type: decision
+      ts: "2026-09-26T00:56:39Z"
+      agent_id: linux-macuahuitl-claude-20260926t005639z
+      host: macuahuitl
+      summary: |
+        OPERATOR RULING (the Tlatoani, relayed 2026-09-26 through a coordinator session on macuahuitl; the ellipses are in the relayed text): "The memory findings are legit and deserve fixes and continuation. For the WSL and osx-VM can we make sure they're created with a generous SWAP partition? And for our linux-native forge, can we mount some artificial file-backed swap? Some of the main things of using SWAP is that this file is not synchronized/backed up as regular filesystem content so it pays less overhead on read/writes, which is the reason why we chose RAMdisk, we want quick file access for which we're handling durability outside of the filesystem so speed is more important than local long term persistence. If Podman allows us to mount and assign something as SWAP so it obeys some "high performance" filesystem behaving like transparent ramdisk extension, then we'll just use these SWAP mounts cleverly to partition our cheatsheets, specs, tools, and other mounts in the filesystem layer that makes sense for them. We're already dealing with mounting multiple filesystems to each container, let's see if we can provide them with a generous SWAP. This could likely be something like 8-16GB of ram, maybe more. Back in the day the suggestion was something like "2.25 times your ram size" … but we're likely going to hammer it hard so we can plan the size for it in advance. … research this memory issue and design the proper approach backed by best practices as recommended by industry standards, to match our use case, and document the necessary ./plan, specs, cheatsheets, etc."
+        DECIDED: Req 3 of forge-hot-cold-split (equal --memory and --memory-swap) is superseded by a swap-backed budget; the held work ref f623728c8 is NOT relayed as-is. Design: plan/issues/forge-memory-swap-architecture-design-2026-09-26.md; spec delta: openspec/changes/forge-swap-backed-memory-ceiling; cheatsheet: cheatsheets/runtime/forge-memory-tmpfs-swap.md.

@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-release-asset-integrity-verifies-that-a-bundle-file-exists-never-that-it-matches-its-asset-so-an-asset-truncated-after-signing-passes-and-publishes
+    order: 1407-6jr8
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [release, ci-release, cosign, integrity, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-release-asset-integrity.sh
+      - scripts/test-release-asset-integrity.sh
+      - .github/workflows/release.yml
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixing commit adds a byte-verification
+      arm to scripts/test-release-asset-integrity.sh in the same commit (1136-n8sh).
+      The closure is: in a staged dir where an asset's bytes changed AFTER its
+      .cosign.bundle was made (truncated to 0 bytes, bundle kept), the check REFUSES
+      and names the asset. PRE-FIX RESULT: FAILS — measured by macbookair on
+      2026-09-26 against the real v56.9.25.2 macOS set: truncating the tarball with
+      its bundle kept gave rc=0 `ok:release-asset-integrity:4 of 4 checked`.
+    title: |
+      check-release-asset-integrity.sh checks only that `<asset>.cosign.bundle` EXISTS (rules 1-3 are about names; it never calls cosign and never hashes), so an asset whose bytes changed after signing — truncated to zero, re-staged, swapped — passes and publishes; its name says integrity and it measures coverage
+    context: |
+      MEASURED by macbookair 2026-09-26 (bash 3.2.57, BSD) while validating
+      1406-9ctt's addition of this check to macos-release: real v56.9.25.2 set
+      passes 4/4; a dropped bundle refuses; an unsigned SHA256SUMS entry refuses;
+      a 0-byte tarball WITH its bundle passes rc=0. The script's header is explicit
+      that its job is coverage ("every asset verifiable by someone who downloaded
+      it"), so this is a missing check, not a broken one.
+      WHAT EACH REMEDY CATCHES — name it in the fix, do not over-claim:
+      (a) `cosign verify-blob --bundle <asset>.cosign.bundle <asset>` per signed
+          asset, and a sha256 check of manifested assets against their signed
+          SHA256SUMS*: catches bytes changed AFTER signing (re-staging, the
+          install-windows.ps1 ordering class, a truncated copy). The runner has
+          cosign; a host without it must print a NAMED skip, never a pass.
+      (b) NOT caught at stage time by any check: bytes truncated BEFORE signing,
+          because the signature then covers the bad bytes. Only the per-platform
+          install smokes catch that (a-cut-that-lost-a-platform-cannot-become-stable).
+      (c) Optional, post-upload: compare the published asset's digest to the
+          staged file's, which catches an upload truncated in transit.
+    deliverable: |
+      A verification mode (or a sibling script) that checks bytes against bundles
+      and signed manifests, wired before each upload in release.yml, with the
+      truncation arm above and a named skip where cosign is absent.
+    provenance: |
+      Filed by the macuahuitl coordinator 2026-09-26 from macbookair's darwin
+      control for 1406-9ctt (a).

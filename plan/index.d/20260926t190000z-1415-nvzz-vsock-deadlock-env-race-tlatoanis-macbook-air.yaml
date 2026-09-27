@@ -1,0 +1,63 @@
+packets:
+  - packet_id: a-vsock-exec-test-flips-the-deadlock-report-env-var-on-a-parallel-thread-so-a-sibling-test-sees-its-first-blocked-heartbeat-ignored-and-the-land-gate-goes-red
+    order: 1415-nvzz
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [rust, testing, vm-layer]
+    estimated_hours: 1
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the deliverable is a cargo unit test in vsock_exec.rs (deadlock_report_enabled_from);
+      a litmus pin lands with it if the coordinator wants one.
+    title: |
+      the_deadlock_report_can_be_disabled set_var/remove_var's TILLANDSIAS_VSOCK_EXEC_DEADLOCK_REPORT in-process, so
+      a_blocked_guest_is_reported_immediately_not_waited_out, running on a sibling thread, can read "0" for its first
+      blocked heartbeat, log it without acting, fail on the second, and count 2 "still waiting" events against an ==1
+    verifiable_closure: |
+      no test in tillandsias-vm-layer mutates TILLANDSIAS_VSOCK_EXEC_DEADLOCK_REPORT (grep set_var/remove_var on the
+      name returns 0 hits under #[cfg(test)]); the env-parsing contract is pinned through a pure
+      deadlock_report_enabled_from(Option<&str>); pre-fix result: FAILS (vsock_exec.rs ~2793 set_var/~2795 remove_var).
+    context: |
+      Cause of the land46 refusal recorded in plan/index.d/20260926t182219z-35719d74-macuahuitl.yaml (1242-4x53 tally:
+      vsock_exec.rs:2750 assert_eq!(still-waiting count, 1) got 2). SOURCE READ, not a repro: the PtyHeartbeat arm
+      (vsock_exec.rs ~1512-1560) returns Err on the first BlockedOnInput heartbeat when deadlock_report_enabled(), so
+      the product cannot double-process; a count of 2 requires the report to be DISABLED for heartbeat 1, which only
+      the env test's set_var("0") window produces. Product correct, assertion correct (keep ==1). Coordinator ruling:
+      pure-function split over a shared mutex (removes the global mutation; nothing can forget to take a lock).
+      Evidence form chosen: static — no test mutates the var — since the race is not deterministically reproducible.
+    exit_criteria:
+      - 'deadlock_report_enabled() delegates to deadlock_report_enabled_from(std::env::var(..).ok().as_deref()); the test asserts Some("0") -> false, None -> true, Some("1") -> true without touching process env; pre-fix result: FAILS'
+      - the ==1 assertion at the blocked-heartbeat test is unchanged
+      - vm-layer tests pass on darwin and cargo zigbuild --target x86_64-unknown-linux-musl --tests compiles
+  - packet_id: four-more-tests-mutate-process-env-that-sibling-tests-read-the-same-parallel-thread-race-as-1415-nvzz
+    order: 1415-89bs
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [rust, testing]
+    estimated_hours: 2
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: deliverables are per-crate cargo test seams; pinned as each site is converted.
+    title: |
+      workspace sweep for 1415-nvzz: unguarded (no env lock, no #[serial]) set_var/remove_var in tests on vars that
+      other code under test reads — plan/pipeline.rs TILLANDSIAS_SYNTH_BUDGET_MS, plan/groundtruth.rs
+      TILLANDSIAS_SPEC_INDEX_DIR (read by spec_index.rs:67), vm-layer/transport_windows.rs TILLANDSIAS_WSL_DISTRO,
+      windows-tray wsl_lifecycle.rs/notify_icon.rs LOCALAPPDATA (4 mutating tests, 5 readers)
+    verifiable_closure: |
+      each listed site either reads through a pure *_from(Option<..>) seam its test drives, or is serialised with the
+      crate's env lock; a grep for set_var/remove_var in #[cfg(test)] code without a lock guard lists none of them;
+      pre-fix result: FAILS (all four listed).
+    context: |
+      SWEEP 2026-09-26 (grep set_var|remove_var over crates/, then per-file lock/serial references, then readers of
+      each var). Excluded after reading: ca_path.rs/guest_bin_path.rs (comments about an already-fixed HOME race),
+      plan/main.rs:3968 (production, not a test), plan/tests/lua_proc.rs UNRELATED_1384 (unique name, no reader),
+      spec_index.rs TILLANDSIAS_SPEC_INDEX_CHECKOUT (only its own test reads it; re-check if another test calls
+      line 156's function). Files with an existing lock were not audited per call site.
+    exit_criteria:
+      - 'each of the four sites converted or serialised; pre-fix result: FAILS'

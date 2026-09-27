@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-github-app-device-login-keeps-a-test-branch-a-token-leak-and-an-unguarded-rotation-in-the-real-credential-path
+    event:
+      type: evidence
+      ts: "2026-09-26T05:11:52Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        LIVE EVIDENCE, macuahuitl 2026-09-26 ~05:15Z. Local build v56.9.26.1 = trunk + work/1383-5hpk (eaeb41f4f) + work/1376-8zdz. Vault reset empty first (tillandsias --reset-guest). The OPERATOR ran the device login: QR → phone → GitHub 2FA → account select → one-time code typed → App authorized → browser closed → projects listed remotely ("that was such a sweet login experience"). Then, from inside the operator-launched forge macuahuitl-forge: FIRST push proof FAILED, `remote: Permission to 8007342/tillandsias.git denied to 8007342` / 403, credential verdict `blocked:upstream-push-unauthorized` REASON=permission (the App was not installed on the repo; reads worked because the repo is public). The operator installed the App on all their repos, and the SECOND proof PASSED: check-credential-channel.sh `ok:forge-git-mirror` rc=0; salvage push rc=0 with `[relay] Atomic push to https://github.com/8007342/tillandsias.git succeeded` and `[pre-receive] Relay verified: upstream durably accepted the ref transaction` (proof ref deleted afterwards from the host; it pointed at ce2da1f57, an ancestor of main). CLOSURE IMPLICATION: a login closure needs a mirror WRITE proof, not "projects listed" (read-only works without an installation). Onboarding must tell users to INSTALL the App on their repos. Cosmetic finding routed to 1383-5hpk: the terminal shows two raw Vault KV-v2 write receipts (metadata only; write_json prints `.data`), which the operator found alarming.

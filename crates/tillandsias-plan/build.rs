@@ -25,6 +25,11 @@ fn main() {
     // and the binary starts lying about which code it is — which would be this
     // order's own defect wearing its fix's clothes.
     println!("cargo:rerun-if-changed={crate_dir}/src");
+    // `source-revision` hashes the whole crate dir, tests/ included, so the
+    // stamp must be recomputed when only tests/ change; otherwise a test-only
+    // merge leaves build-id != source-revision and the expert-capability skew
+    // line reads rebuild-required forever (no src change, so no rebuild).
+    println!("cargo:rerun-if-changed={crate_dir}/tests");
     println!("cargo:rerun-if-changed={crate_dir}/capabilities.txt");
     println!(
         "cargo:rustc-env=TILLANDSIAS_PLAN_REVISION={}",

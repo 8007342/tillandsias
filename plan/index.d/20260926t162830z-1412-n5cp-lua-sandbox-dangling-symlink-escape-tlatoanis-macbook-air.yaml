@@ -1,0 +1,34 @@
+packets:
+  - packet_id: a-dangling-symlink-inside-the-repository-root-lets-the-lua-fs-write-sandbox-create-a-file-outside-the-root
+    order: 1412-n5cp
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [rust, lua, sandbox, security]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+    observed_by: tlatoanis-macbook-air
+    title: |
+      a DANGLING symlink inside the repository root (root/x -> /outside/newfile, target absent) passes the Lua fs sandbox's containment check, and fs.write through it CREATES the file OUTSIDE the root; containment_path also falls back to the lexical path (fail-open) when canonicalize errors
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --lib: a test with an in-root dangling symlink to an outside path, where
+      resolve_write_path refuses fs.write through it. Pre-fix result: FAILS (admitted, and the outside file
+      is created: measured on trunk pre-1411 and on work/1411-b5fk d41186116).
+    context: |
+      MEASURED 2026-09-26 on tlatoanis-macbook-air with a throwaway test (not committed) calling
+      resolve_write_path(root, "<root>/x", "fs.write") where root/x -> <tmp>/outside/newfile (absent):
+        on origin/linux-next PRE-1411: Ok("<root>/x"), then fs::write through it -> outside/newfile exists: true
+        on work/1411-b5fk d41186116:    Ok("<root>/x"), then fs::write through it -> outside/newfile exists: true
+      Mechanism (read by the coordinator, then confirmed by running it): the existence probe uses exists(),
+      which FOLLOWS symlinks, so a dangling link reads as absent, becomes a tail NAME re-appended to the
+      canonical root, and passes containment. The later escape check canonicalises only the nearest EXISTING
+      ancestor (the root), so it also passes. Separately, containment_path falls back to the lexical path when
+      canonicalize errors, which is fail-open. 1411-b5fk does not introduce this; the old lexical check admitted it too.
+    exit_criteria:
+      - 'probe with symlink_metadata() so a dangling link is a probe point, not a tail name; an existing component that is a symlink whose target cannot be canonicalised is REFUSED; pre-fix result: FAILS (fs.write through an in-root dangling symlink to an outside path is admitted and creates the outside file)'
+      - containment_path returns Option (or Result) and every caller refuses on the unresolvable case, so there is no lexical fail-open fallback
+      - 'NEGATIVE CONTROL: the 1411-b5fk tests still pass (a symlinked alias of the root is inside; an existing escaping symlink is refused), and so does lua_std::the_archiver_sweeps_in_the_default_sandbox on macOS'

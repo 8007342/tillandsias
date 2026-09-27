@@ -75,7 +75,7 @@ critical_path:
     # about code, which is the class 752-pst5 was filed for. Third instance
     # tonight; the awk stops at the test module rather than pattern-matching
     # around it.
-    command: "n=$(awk '/^#\\[cfg\\(test\\)\\]/{exit} {print}' crates/tillandsias-headless/src/vault_bootstrap.rs | grep -c ':/vault/audit:'); [ \"$n\" = \"1\" ] && echo \"ok: single-audit-destination ($n)\" || { echo \"FAIL: $n mounts target /vault/audit in non-test code — a later one shadows the persisted mount\"; exit 1; }"
+    command: "n=$(awk '/^#\\[cfg\\(test\\)\\]/{getline nx; if (nx ~ /^mod /) exit; print; print nx; next} {print}' crates/tillandsias-headless/src/vault_bootstrap.rs | grep -c ':/vault/audit:'); [ \"$n\" = \"1\" ] && echo \"ok: single-audit-destination ($n)\" || { echo \"FAIL: $n mounts target /vault/audit in non-test code — a later one shadows the persisted mount\"; exit 1; }"
     timeout_ms: 3000
     expected_behavior: "ok: single-audit-destination"
 

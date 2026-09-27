@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tray-launched-forge-seeded-from-main-not-the-checkout-branch
+    event:
+      type: finding
+      ts: "2026-09-26T05:47:35Z"
+      agent_id: forge-forge-tillandsias-claude-20260926t054735z
+      host: macuahuitl-forge
+      summary: |
+        REPRODUCED on macuahuitl-forge 2026-09-26: the forge checkout sits on main (ce2da1f57), not linux-next. Concrete cost to a first-time worker following join-the-fleet §3: scripts/check-claim-confirmed.sh does not exist on main, so the claim-confirmation step run from the seeded checkout exits 127 ("no such file or directory"). It exists only on linux-next; from a worktree it then said refused:no-live-claim until that worktree was fast-forwarded to origin/linux-next containing the worker's own claim fragment. check-fleet-membership also reports todo:join-the-fleet:branch:seeded-off-a-platform-branch:main. The forge's MCP experts index the same main checkout, so they cannot see linux-next rows either (plan_status 1379-vvct / 1375-rn9b -> "no packet matches").

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-preflight-roster-enumerates-guards-by-three-rules-and-never-asserts-its-population-so-a-guard-outside-all-three-is-invisible-rather-than-reported-missing
+    event:
+      type: finding
+      ts: "2026-09-26T04:26:29Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        SECOND INSTANCE, macuahuitl 2026-09-26 ~04:40Z: the relay merge of work/1378-7w2p (4177b643d) onto linux-next scored `partial:preflight:ran=111 … refused=0` under `./build.sh --preflight`, then the land gate's `./build.sh --check` refused it at check-bash-dialect (761-g36m): `blocked:bash4-unguarded:1`, UNEXEMPTED GNU-date-ism `date +%s%N` in scripts/measure-forge-spill.sh (a newly added file). So a decider the door lists as a gate guard passed or skipped at the door and refused at the gate on the same tree. Together with the first instance (the SIGPIPE decider), the pattern is that added-file deciders disagree between door and gate, consistent with the base-unavailable-scores-ok hypothesis above, or with the door running these deciders in a copy where the added file is not seen as added. Whichever it is, a relay coordinator cannot currently trust `refused=0` for a newly added script.

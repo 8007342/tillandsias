@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-rejected-credential-delivery-drops-the-root-token-with-the-share-so-a-bad-share-costs-the-guest-a-good-token
+    order: 1403-4b5z
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [vault, rust, control-wire]
+    estimated_hours: 2
+    owned_files: [crates/tillandsias-headless/src/vault_bootstrap.rs]
+    observed_by: macuahuitl
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds its own test in vault_bootstrap.rs in the
+      same commit (1136-n8sh).
+    title: |
+      every Rejected path in set_in_vm_credentials returns before the root token is stored or persisted, so a delivery refused for its SHARE (malformed, since 1200-ih38; or a failed fallback write) also discards a perfectly good root token
+    verifiable_closure: |
+      A test in vault_bootstrap.rs: delivering a malformed share with a valid root token yields
+      Rejected for the share AND leaves the root token stored and written to
+      fallback_vault-root-token-v1. NEGATIVE CONTROL: a delivery with no root token writes none.
+      Pre-fix result: FAILS: the malformed-share rejection returns before the token is touched.
+    context: |
+      Found by the independent security review of 1200-ih38 (macuahuitl, 2026-09-26). The
+      pre-existing fallback-write Rejected paths (701-se6x/890-y72v) dropped the token too;
+      1200-ih38's malformed-share rejection added a third path with the same shape. Whether
+      the reply should then read Rejected (share) with the token adopted is a wire question for
+      the claimer to settle with the DeliverCredentialsOutcome docs.
+    events:
+      - type: filed
+        ts: "2026-09-26T11:20:17Z"
+        host: yoga
+        summary: Filed by yoga at the coordinator's request from the 1200-ih38 security review.
+events:
+  - packet_id: a-delivered-share-accepted-unverified-is-never-re-reported-once-the-live-unseal-proves-it-right-or-wrong
+    event:
+      type: note
+      ts: "2026-09-26T11:20:17Z"
+      host: yoga
+      summary: |
+        FROM THE 1200-ih38 REVIEW: 1200-ih38 no longer rejects a share that differs from the
+        guest's own unseal secret. That comparison is against a stand-in, and refusing skipped the
+        write that keeps the wipe predicate true. The reviewer's alternative belongs here: reject
+        only on LIVE evidence (the vault observed UNSEALED now with the own secret, 803-49re's own
+        evidence), and otherwise report unverified. Any such rejection must still leave
+        has_shamir_share_in_keyring true (write the own secret to the fallback file when that file
+        is missing or invalid), or it re-opens the wipe path.

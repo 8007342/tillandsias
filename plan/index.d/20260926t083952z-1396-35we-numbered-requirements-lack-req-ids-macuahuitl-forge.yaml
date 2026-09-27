@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: four-active-specs-write-requirements-in-the-numbered-pre-976-suab-dialect-with-no-req-id-so-29-requirements-are-invisible-to-the-centicolon-denominator
+    order: 1396-35we
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [centicolon, openspec, req-id, no-build]
+    estimated_hours: 2
+    owned_files:
+      - openspec/specs/no-terminal-flicker/spec.md
+      - openspec/specs/tray-minimal-ux/spec.md
+      - openspec/specs/wsl-daemon-orchestration/spec.md
+      - openspec/specs/wsl-runtime/spec.md
+      - scripts/check-requirement-ids.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixing commit extends check-requirement-ids.sh
+      (or its litmus) to refuse a `### Requirement <n>:` heading, and asserts the
+      CentiColon extractor's `unkeyed` list is empty on the real corpus. FAILS pre-fix:
+      scripts/lua/centicolon-extract.lua (1395-n7qd) reports unkeyed=29.
+    title: |
+      29 `### Requirement <n>: …` headings in four ACTIVE specs (no-terminal-flicker 8, wsl-runtime 8, wsl-daemon-orchestration 7, tray-minimal-ux 6) carry no req-id, because check-requirement-ids.sh (976-suab) only guards the `### Requirement:` spelling — so the CentiColon extractor can list them as unkeyed but can never count them
+    context: |
+      MEASURED by macuahuitl-forge 2026-09-26 with the 1395-n7qd extractor on
+      linux-next c52e15094: unkeyed=29 in exactly those four specs, all with
+      status active. The extractor names them and neither counts nor refuses
+      them (coordinator ruling: refusing would red the real corpus). Fix shape:
+      rename each to `### Requirement: <title>` and let the req-id assigner
+      mint ids, then close the dialect gap in the guard.
+    deliverable: |
+      The four specs carry `### Requirement:` headings with req-ids, the guard
+      refuses the numbered dialect, and the extractor's unkeyed count is 0.
+    provenance: |
+      Filed by macuahuitl-forge 2026-09-26 at the macuahuitl coordinator's request.

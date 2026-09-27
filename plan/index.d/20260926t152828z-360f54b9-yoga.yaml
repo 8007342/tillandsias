@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-release-asset-integrity-verifies-that-a-bundle-file-exists-never-that-it-matches-its-asset-so-an-asset-truncated-after-signing-passes-and-publishes
+    field: status
+    value: completed
+    ts: "2026-09-26T15:28:28Z"
+    host: yoga
+
+events:
+  - packet_id: check-release-asset-integrity-verifies-that-a-bundle-file-exists-never-that-it-matches-its-asset-so-an-asset-truncated-after-signing-passes-and-publishes
+    event:
+      type: completed
+      ts: "2026-09-26T15:28:28Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 10f1a4857 (relay: land work/1407-6jr8: 7fe6cac1e+03ffd06b2 byte checks, 367d1e756 release.yml cosign wiring); fixture ok:release-asset-integrity-fixture:11 on yoga and darwin (both hash regimes); cosign v3.0.5 15/15 on v56.9.25.2
+  - packet_id: check-release-asset-integrity-verifies-that-a-bundle-file-exists-never-that-it-matches-its-asset-so-an-asset-truncated-after-signing-passes-and-publishes
+    event:
+      type: note
+      ts: "2026-09-26T15:28:28Z"
+      host: yoga
+      summary: |-
+        landed; closes on the always-on manifest re-hash with the cosign arm wired in CI; gap: install-macos.sh is byte-checked only where the cosign arm is on; assumptions: workflow_dispatch SAN, Git Bash cosign.exe on windows-2025

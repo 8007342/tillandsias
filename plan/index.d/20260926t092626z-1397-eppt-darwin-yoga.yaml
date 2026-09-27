@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: twenty-one-specs-declare-a-status-the-litmus-bindings-registry-contradicts-so-seven-specs-the-registry-calls-obsolete-still-count-as-active-obligations
+    event:
+      type: progress
+      ts: "2026-09-26T09:26:26Z"
+      host: yoga
+      summary: |
+        SECOND REGIME, observed by macbookair (tlatoanis-macbook-air, 2026-09-26, GNU bash 3.2.57,
+        BSD awk/sed/grep, worktree of work/1397-eppt at 338395a66): check-spec-registry-status.sh
+        ok:spec-registry-status:141 undecided=1 rc=0, 3 of 3; the undecided pair printed as
+        tray-host-control-socket:spec=active:registry=obsolete. By-hand mutation controls on BSD:
+        cache-recovery-mechanism's status word flipped to obsolete -> rc=1 and
+        "mismatch:cache-recovery-mechanism:spec=obsolete:registry=active"; its ## Status section
+        deleted -> rc=1 and "...spec=<none>:registry=active". Both controls are now permanent in
+        scripts/test-spec-registry-status.sh (work/1397-eppt cef718c68), a hermetic fixture run
+        beside the check in build.sh --check: 4/4, and each of two check mutations (skip a missing
+        section; hide the undecided pair) turns exactly its own arm red.

@@ -1,12 +1,27 @@
 #!/usr/bin/env tillandsias-plan lua
 -- archive-plan-packets.lua — archive terminal plan packets into plan/archive/
 -- Replacement for scripts/archive-plan-packets.rb using the tillandsias-managed Lua runtime.
--- @trace order:398, order:1132-r4mt, spec:ci-release
+-- @trace order:398, order:1132-r4mt, order:1380-u7sq, spec:ci-release
+--
+-- ORDER 1380-u7sq: this script runs in the DEFAULT sandboxed `tillandsias-plan
+-- lua` environment. It no longer needs `--unsandboxed`:
+--   * processes go through proc.run{argv=...} (1384-aixy): no shell string,
+--     no quoting, no `2>/dev/null` hiding a failed query, and it runs the same
+--     on native Windows, where io.popen/os.execute went through cmd.exe and
+--     failed (measured by yolanda 2026-09-26: `mkdir -p` made a directory
+--     named "-p", and the fold query never ran);
+--   * files go through fs.read / fs.write / fs.mkdir / fs.list, rooted at the
+--     repository root. The --check path points TILLANDSIAS_REPO_ROOT at its
+--     per-run scratch copy, so the whole script is confined to that copy;
+--   * the plan binary comes ONLY from --plan-bin. The old hardcoded
+--     target/release/tillandsias-plan fallback was the 721-nyev shape (wrong
+--     under a redirected CARGO_TARGET_DIR, a stale ELF beside a live .exe),
+--     so a missing --plan-bin is a refusal, not a guess.
 
 local index_path = "plan/index.yaml"
 local archive_dir = "plan/archive"
+local plan_bin = nil
 
--- Parse CLI arguments
 local i = 1
 while i <= #arg do
   if arg[i] == "--index" and arg[i + 1] then
@@ -15,237 +30,211 @@ while i <= #arg do
   elseif arg[i] == "--archive" and arg[i + 1] then
     archive_dir = arg[i + 1]
     i = i + 2
+  elseif arg[i] == "--plan-bin" and arg[i + 1] then
+    plan_bin = arg[i + 1]
+    i = i + 2
   else
     i = i + 1
   end
 end
 
--- Ensure archive directory exists
-os.execute(string.format("mkdir -p %q", archive_dir))
+-- A refusal: the reason on stderr, then a non-zero exit through error().
+local function refuse(msg)
+  io.stderr:write("archive-plan-packets: " .. msg .. "\n")
+  error("archive-plan-packets: refused", 0)
+end
 
--- Resolve plan binary
-local plan_bin = os.getenv("TILLANDSIAS_PLAN_BIN")
 if not plan_bin or plan_bin == "" then
-  plan_bin = "target/release/tillandsias-plan"
+  refuse("no --plan-bin given. The archiver decides closure from the FOLD, so it needs the resolved plan binary (scripts/plan-binary-probe.sh); it will not guess a target/ path.")
 end
 
-local function run_cmd(cmd)
-  local handle = io.popen(cmd)
-  if not handle then return nil, -1 end
-  local output = handle:read("*a")
-  local success, exit_type, code = handle:close()
-  local rc = 0
-  if not success then
-    rc = (exit_type == "exit" and code) or 1
+-- Every line WITH its terminator, the same shape io.lines("L") gave.
+local function lines_keep(content)
+  local out = {}
+  for line in content:gmatch("[^\n]*\n") do
+    out[#out + 1] = line
   end
-  return output, rc
+  local tail = content:match("[^\n]*$")
+  if tail and tail ~= "" then
+    out[#out + 1] = tail
+  end
+  return out
 end
 
-local TERMINAL_STATUSES = {"completed", "done"}
-local terminal_ids = {}
-local id_aliases = {}
+local function plan(args)
+  local argv = {plan_bin}
+  for _, a in ipairs(args) do argv[#argv + 1] = a end
+  return proc.run{argv = argv, timeout_ms = 300000}
+end
 
-for _, st in ipairs(TERMINAL_STATUSES) do
-  local cmd = string.format("%s --index %q query --status %s --limit 0 2>/dev/null", plan_bin, index_path, st)
-  local out, rc = run_cmd(cmd)
-  if rc ~= 0 then
-    io.stderr:write(string.format("archive-plan-packets: could not read the fold via %s (--index %s, status %s). REFUSING to fall back to a base-index grep: that is the defect this replaced, and it silently archives reopened rows.\n", plan_bin, index_path, st))
-    os.exit(1)
-  end
+local function main()
+  fs.mkdir(archive_dir)
 
-  for line in out:gmatch("[^\r\n]+") do
-    local cols = {}
-    for col in line:gmatch("[^\t]+") do
-      table.insert(cols, col:match("^%s*(.-)%s*$"))
+  local TERMINAL_STATUSES = {"completed", "done"}
+  local terminal_ids = {}
+  local id_aliases = {}
+
+  for _, st in ipairs(TERMINAL_STATUSES) do
+    local r = plan{"--index", index_path, "query", "--status", st, "--limit", "0"}
+    if not r.ok then
+      refuse(string.format("could not read the fold via %s (--index %s, status %s; %s). REFUSING to fall back to a base-index grep: that is the defect this replaced, and it silently archives reopened rows.", plan_bin, index_path, st, r.status))
     end
-    local names = {}
-    if cols[1] and cols[1] ~= "" then table.insert(names, cols[1]) end
-    if cols[2] and cols[2] ~= "" then table.insert(names, cols[2]) end
-
-    for _, k in ipairs(names) do
-      terminal_ids[k] = true
-      id_aliases[k] = names
-    end
-  end
-end
-
--- Verify fold reports packets
-local all_cmd = string.format("%s --index %q query --limit 0 2>/dev/null", plan_bin, index_path)
-local all_ids, all_rc = run_cmd(all_cmd)
-if all_rc ~= 0 or not all_ids or all_ids:match("%S") == nil then
-  io.stderr:write(string.format("archive-plan-packets: the fold reports NO PACKETS AT ALL for %s. That is an unreadable ledger, not an empty one — refusing rather than archiving nothing and reporting success.\n", index_path))
-  os.exit(1)
-end
-
-if next(terminal_ids) == nil then
-  print("Archived 0 packets (no terminal rows remain — already archived).")
-  os.exit(0)
-end
-
--- A row still addressed by a live fragment is not archivable.
-local fragments_dir
-local idx_dir = index_path:match("^(.*)/[^/]+$")
-if idx_dir then
-  fragments_dir = idx_dir .. "/index.d"
-else
-  fragments_dir = "plan/index.d"
-end
-
-local frag_list_cmd = string.format("ls -1 %q/*.yaml 2>/dev/null", fragments_dir)
-local frag_files_out, _ = run_cmd(frag_list_cmd)
-local addressed_ids = {}
-
-if frag_files_out then
-  local frag_paths = {}
-  for f in frag_files_out:gmatch("[^\r\n]+") do
-    table.insert(frag_paths, f)
-  end
-  table.sort(frag_paths)
-
-  for _, frag in ipairs(frag_paths) do
-    local frag_cmd = string.format("%s fragment-event-packets %q 2>/dev/null", plan_bin, frag)
-    local out, rc = run_cmd(frag_cmd)
-    if rc ~= 0 then
-      io.stderr:write(string.format("archive-plan-packets: could not read %s — treating every terminal packet as addressed by it is not possible, so REFUSING the sweep rather than archiving rows whose events this fragment may still address.\n", frag))
-      os.exit(1)
-    end
-    for line in out:gmatch("[^\r\n]+") do
-      local k = line:match("^%s*(.-)%s*$")
-      if k and k ~= "" then
-        addressed_ids[k] = true
+    for line in r.stdout:gmatch("[^\r\n]+") do
+      local cols = {}
+      for col in line:gmatch("[^\t]+") do
+        table.insert(cols, col:match("^%s*(.-)%s*$"))
+      end
+      local names = {}
+      if cols[1] and cols[1] ~= "" then table.insert(names, cols[1]) end
+      if cols[2] and cols[2] ~= "" then table.insert(names, cols[2]) end
+      for _, k in ipairs(names) do
+        terminal_ids[k] = true
+        id_aliases[k] = names
       end
     end
   end
-end
 
--- Reject by EVERY name of an addressed packet
-for name, _ in pairs(addressed_ids) do
-  if id_aliases[name] then
-    for _, alias_name in ipairs(id_aliases[name]) do
-      terminal_ids[alias_name] = nil
-    end
+  local all = plan{"--index", index_path, "query", "--limit", "0"}
+  if not all.ok or all.stdout:match("%S") == nil then
+    refuse(string.format("the fold reports NO PACKETS AT ALL for %s. That is an unreadable ledger, not an empty one — refusing rather than archiving nothing and reporting success.", index_path))
   end
-  terminal_ids[name] = nil
-end
 
-local function file_exists(path)
-  local f = io.open(path, "r")
-  if f then
-    f:close()
-    return true
+  -- 1384-bp6t withdrew the global `next` (iteration order was per-process);
+  -- emptiness needs no order, so ask the canonical `pairs` for one key.
+  local any_terminal = false
+  for _ in pairs(terminal_ids) do any_terminal = true; break end
+  if not any_terminal then
+    print("Archived 0 packets (no terminal rows remain — already archived).")
+    return
   end
-  return false
-end
 
-local function packet_in_archive(content, id)
-  if not id then return false end
-  for l in content:gmatch("[^\r\n]+") do
-    local k, v = l:match("^    %- ([%w_]+):%s*(.-)%s*$")
-    if (k == "packet_id" or k == "id" or k == "order") and v then
-      local clean_v = v:gsub('^"(.-)"$', '%1'):gsub("^'(.-)'$", "%1"):match("^%s*(.-)%s*$")
-      if clean_v == id then
-        return true
+  -- A row still addressed by a live fragment is not archivable. An ABSENT
+  -- fragments directory means no fragments; an unreadable one raises in
+  -- fs.list rather than reading as empty (the old `ls ... 2>/dev/null` could
+  -- not tell those apart).
+  local idx_dir = index_path:match("^(.*)/[^/]+$")
+  local fragments_dir = idx_dir and (idx_dir .. "/index.d") or "plan/index.d"
+  local names = fs.list(fragments_dir)
+  local addressed_ids = {}
+  for _, name in ipairs(names) do
+    if name:match("%.yaml$") then
+      local frag = fragments_dir .. "/" .. name
+      local r = plan{"fragment-event-packets", frag}
+      if not r.ok then
+        refuse(string.format("could not read %s — treating every terminal packet as addressed by it is not possible, so REFUSING the sweep rather than archiving rows whose events this fragment may still address.", frag))
+      end
+      for line in r.stdout:gmatch("[^\r\n]+") do
+        local k = line:match("^%s*(.-)%s*$")
+        if k and k ~= "" then addressed_ids[k] = true end
       end
     end
   end
-  return false
-end
 
-local function flush_packet(lines, closed, date, id, active_lines, archive_directory)
-  if #lines == 0 then return 0 end
-  if closed then
-    local archive_file = string.format("%s/packets-%s.yaml", archive_directory, date)
-    if not file_exists(archive_file) then
-      local af = io.open(archive_file, "w")
-      if af then
-        af:write("plan_index:\n  steps:\n")
-        af:close()
+  -- Reject by EVERY name of an addressed packet.
+  for name, _ in pairs(addressed_ids) do
+    if id_aliases[name] then
+      for _, alias_name in ipairs(id_aliases[name]) do
+        terminal_ids[alias_name] = nil
       end
     end
+    terminal_ids[name] = nil
+  end
 
-    local existing_content = ""
-    local rf = io.open(archive_file, "r")
-    if rf then
-      existing_content = rf:read("*a")
-      rf:close()
+  local function packet_in_archive(content, id)
+    if not id then return false end
+    for l in content:gmatch("[^\r\n]+") do
+      local k, v = l:match("^    %- ([%w_]+):%s*(.-)%s*$")
+      if (k == "packet_id" or k == "id" or k == "order") and v then
+        local clean_v = v:gsub('^"(.-)"$', '%1'):gsub("^'(.-)'$", "%1"):match("^%s*(.-)%s*$")
+        if clean_v == id then return true end
+      end
     end
+    return false
+  end
 
-    if not packet_in_archive(existing_content, id) then
-      local af = io.open(archive_file, "a")
-      if af then
-        for _, l in ipairs(lines) do
-          af:write(l)
-        end
-        af:close()
+  -- Archive files are built in memory, one read each, and written once at the
+  -- end. The duplicate check sees packets appended earlier in THIS run, as
+  -- the old re-read of the file did.
+  local archives = {}
+  local archive_order = {}
+  local function archive_content(path)
+    if archives[path] == nil then
+      if fs.exists(path) then
+        archives[path] = fs.read(path)
+      else
+        archives[path] = "plan_index:\n  steps:\n"
+      end
+      archive_order[#archive_order + 1] = path
+    end
+    return archives[path]
+  end
+
+  local function flush_packet(lines, closed, date, id, active_lines)
+    if #lines == 0 then return 0 end
+    if closed then
+      local path = string.format("%s/packets-%s.yaml", archive_dir, date)
+      local content = archive_content(path)
+      if not packet_in_archive(content, id) then
+        archives[path] = content .. table.concat(lines)
         return 1
       end
+      return 0
     end
-    return 0
-  else
     for _, l in ipairs(lines) do
       table.insert(active_lines, l)
     end
     return 0
   end
-end
 
-local f_idx = io.open(index_path, "r")
-if not f_idx then
-  io.stderr:write("archive-plan-packets: cannot open " .. index_path .. "\n")
-  os.exit(1)
-end
-
-local active_lines = {}
-local current_packet_lines = {}
-local in_packet = false
-local closed = false
-local packet_date = "2026-05"
-local packet_id = nil
-local archived_count = 0
-
-for line in f_idx:lines("L") do
-  local key, raw_id = line:match("^    %- ([%w_]+):%s*(.-)%s*[\r\n]*$")
-  if (key == "packet_id" or key == "id" or key == "order") and raw_id then
-    archived_count = archived_count + flush_packet(current_packet_lines, closed, packet_date, packet_id, active_lines, archive_dir)
-
-    in_packet = true
-    current_packet_lines = {line}
-    closed = false
-    packet_date = "2026-05"
-    packet_id = raw_id:gsub('^"(.-)"$', '%1'):gsub("^'(.-)'$", "%1"):match("^%s*(.-)%s*$")
-    closed = (terminal_ids[packet_id] == true)
-  elseif in_packet then
-    if closed then
-      local ts_m = line:match("^[ \t]*ts:%s*\"?(%d%d%d%d%-%d%d)")
-      if ts_m then
-        packet_date = ts_m
-      end
-    end
-
-    if line:match("^[a-zA-Z]") and not line:match("^ ") then
-      archived_count = archived_count + flush_packet(current_packet_lines, closed, packet_date, packet_id, active_lines, archive_dir)
-      in_packet = false
-      current_packet_lines = {}
-      table.insert(active_lines, line)
-    else
-      table.insert(current_packet_lines, line)
-    end
-  else
-    table.insert(active_lines, line)
+  if not fs.exists(index_path) then
+    refuse("cannot open " .. index_path)
   end
-end
-f_idx:close()
+  local index_lines = lines_keep(fs.read(index_path))
 
-archived_count = archived_count + flush_packet(current_packet_lines, closed, packet_date, packet_id, active_lines, archive_dir)
+  local active_lines = {}
+  local current_packet_lines = {}
+  local in_packet = false
+  local closed = false
+  local packet_date = "2026-05"
+  local packet_id = nil
+  local archived_count = 0
 
-local out_idx = io.open(index_path, "w")
-if not out_idx then
-  io.stderr:write("archive-plan-packets: cannot write to " .. index_path .. "\n")
-  os.exit(1)
-end
-for _, l in ipairs(active_lines) do
-  out_idx:write(l)
-end
-out_idx:close()
+  for _, line in ipairs(index_lines) do
+    local key, raw_id = line:match("^    %- ([%w_]+):%s*(.-)%s*[\r\n]*$")
+    if (key == "packet_id" or key == "id" or key == "order") and raw_id then
+      archived_count = archived_count + flush_packet(current_packet_lines, closed, packet_date, packet_id, active_lines)
+      in_packet = true
+      current_packet_lines = {line}
+      packet_date = "2026-05"
+      packet_id = raw_id:gsub('^"(.-)"$', '%1'):gsub("^'(.-)'$", "%1"):match("^%s*(.-)%s*$")
+      closed = (terminal_ids[packet_id] == true)
+    elseif in_packet then
+      if closed then
+        local ts_m = line:match("^[ \t]*ts:%s*\"?(%d%d%d%d%-%d%d)")
+        if ts_m then packet_date = ts_m end
+      end
+      if line:match("^[a-zA-Z]") and not line:match("^ ") then
+        archived_count = archived_count + flush_packet(current_packet_lines, closed, packet_date, packet_id, active_lines)
+        in_packet = false
+        current_packet_lines = {}
+        table.insert(active_lines, line)
+      else
+        table.insert(current_packet_lines, line)
+      end
+    else
+      table.insert(active_lines, line)
+    end
+  end
+  archived_count = archived_count + flush_packet(current_packet_lines, closed, packet_date, packet_id, active_lines)
 
-print(string.format("Archived %d packets.", archived_count))
+  -- Archives FIRST, then the index: a failure between the two can duplicate
+  -- a packet into the archive but never loses one (fs.write is atomic per file).
+  for _, path in ipairs(archive_order) do
+    fs.write(path, archives[path])
+  end
+  fs.write(index_path, table.concat(active_lines))
+
+  print(string.format("Archived %d packets.", archived_count))
+end
+
+main()

@@ -152,6 +152,7 @@ pub struct Command {
     env_clear: bool,
     timeout: Option<Duration>,
     stdin: Option<Vec<u8>>,
+    group: bool,
 }
 
 impl Command {
@@ -171,6 +172,7 @@ impl Command {
             env_clear: false,
             timeout: None,
             stdin: None,
+            group: false,
         }
     }
 
@@ -214,6 +216,21 @@ impl Command {
         self
     }
 
+    /// Run the child as the leader of its own process group (Unix: setsid-style
+    /// `process_group(0)`, killed with `killpg`) or inside its own job object
+    /// (Windows: `TerminateJobObject`), so a DEADLINE kills everything the child
+    /// started, not only the child (order 1384-aixy; the 1132-r4mt and
+    /// 1305-udgs defect was a killed guard leaving its grandchildren running).
+    ///
+    /// Only the timeout path kills the group. A run that completes normally
+    /// leaves nothing to kill on Unix; on Windows the job is created with
+    /// KILL_ON_JOB_CLOSE, so anything still inside it when the run's handle is
+    /// dropped goes too.
+    pub fn group(mut self, on: bool) -> Self {
+        self.group = on;
+        self
+    }
+
     pub fn argv(&self) -> &[OsString] {
         &self.argv
     }
@@ -223,6 +240,7 @@ impl Command {
         let Some((program, rest)) = self.argv.split_first() else {
             return Err(ExecError::EmptyArgv);
         };
+        protect_parent_std_handles();
         let run = RunId::new();
 
         let mut cmd = tokio::process::Command::new(program);
@@ -244,11 +262,34 @@ impl Command {
         for (k, v) in &self.envs {
             cmd.env(k, v);
         }
+        #[cfg(unix)]
+        if self.group {
+            // pgid = the child's pid, so killpg(pid) reaches every descendant
+            // that did not leave the group itself.
+            cmd.process_group(0);
+        }
 
         let mut child = cmd.spawn().map_err(|source| ExecError::Spawn {
             argv: self.argv.clone(),
             source,
         })?;
+        // Windows: put the child in a fresh job object BEFORE awaiting anything.
+        // A descendant it starts from here on is in the job too. (A process
+        // started in the few instructions between spawn and assignment would
+        // escape; tokio exposes no suspended-spawn to close that window.)
+        #[cfg(windows)]
+        let job = if self.group {
+            Some(
+                win_job::JobObject::assign(&child).map_err(|source| ExecError::Io {
+                    argv: self.argv.clone(),
+                    source,
+                })?,
+            )
+        } else {
+            None
+        };
+        #[cfg(unix)]
+        let group_leader = if self.group { child.id() } else { None };
 
         // Take both pipes BEFORE awaiting anything, then drain them together.
         // Reading one to EOF and then the other is the deadlock this crate
@@ -333,6 +374,18 @@ impl Command {
                         // than an exit status the child never produced. A child
                         // that ignores SIGTERM is exactly why this is kill and
                         // not a polite terminate-and-hope.
+                        #[cfg(unix)]
+                        if let Some(pgid) = group_leader {
+                            // SAFETY: killpg is async-signal-safe and takes no
+                            // pointers; a stale pgid fails with ESRCH, harmless.
+                            unsafe {
+                                libc::killpg(pgid as libc::pid_t, libc::SIGKILL);
+                            }
+                        }
+                        #[cfg(windows)]
+                        if let Some(j) = &job {
+                            j.terminate();
+                        }
                         let _ = child.start_kill();
                         let _ = child.wait().await;
                         Ok(Output {
@@ -509,6 +562,7 @@ impl Command {
         let Some((program, rest)) = self.argv.split_first() else {
             return Err(ExecError::EmptyArgv);
         };
+        protect_parent_std_handles();
         let mut cmd = tokio::process::Command::new(program);
         cmd.args(rest)
             .stdin(Stdio::null())
@@ -533,5 +587,112 @@ impl Command {
             run: RunId::new(),
             argv: self.argv,
         })
+    }
+}
+
+/// A Windows job object that owns one child and everything it starts
+/// (order 1384-aixy). `terminate` kills the whole job on a deadline; dropping
+/// the handle kills whatever is still inside (KILL_ON_JOB_CLOSE), the Windows
+/// analogue of a process group that dies with its leader's supervisor.
+#[cfg(windows)]
+mod win_job {
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, TerminateJobObject,
+    };
+    use windows::core::PCWSTR;
+
+    pub struct JobObject(HANDLE);
+
+    // The handle is an owned kernel object used only through the calls below.
+    unsafe impl Send for JobObject {}
+    unsafe impl Sync for JobObject {}
+
+    impl JobObject {
+        pub fn assign(child: &tokio::process::Child) -> std::io::Result<Self> {
+            let raw = child
+                .raw_handle()
+                .ok_or_else(|| std::io::Error::other("child has no process handle"))?;
+            // SAFETY: plain Win32 calls on handles we own; every failure is
+            // turned into an io::Error and the job handle is closed on drop.
+            unsafe {
+                let job = JobObject(
+                    CreateJobObjectW(None, PCWSTR::null()).map_err(std::io::Error::other)?,
+                );
+                let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+                info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                SetInformationJobObject(
+                    job.0,
+                    JobObjectExtendedLimitInformation,
+                    &info as *const _ as *const core::ffi::c_void,
+                    std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                )
+                .map_err(std::io::Error::other)?;
+                AssignProcessToJobObject(job.0, HANDLE(raw)).map_err(std::io::Error::other)?;
+                Ok(job)
+            }
+        }
+
+        pub fn terminate(&self) {
+            // SAFETY: the handle is valid for the lifetime of self.
+            unsafe {
+                let _ = TerminateJobObject(self.0, 1);
+            }
+        }
+    }
+
+    impl Drop for JobObject {
+        fn drop(&mut self) {
+            // SAFETY: closing our own handle once; KILL_ON_JOB_CLOSE ends
+            // any process still in the job.
+            unsafe {
+                let _ = CloseHandle(self.0);
+            }
+        }
+    }
+}
+
+/// Clear the INHERIT flag on this process's own stdin/stdout/stderr, once,
+/// before the first spawn (order 1394-mdqj).
+///
+/// On Windows a child is created with handle inheritance on, so it inherits
+/// EVERY inheritable handle of this process, including this process's own
+/// stdout. When a caller pipes this process (`tillandsias-plan lua ... | grep`),
+/// that stdout IS the caller's pipe; a grandchild the child leaves behind then
+/// holds the caller's pipe open, and the reader sees no EOF until it exits.
+/// Measured on yolanda-windows: 30558 / 30421 ms piped against 745 / 723 ms
+/// redirected to a file, with the same binary.
+///
+/// Clearing the flag changes nothing a child is meant to get: every spawn here
+/// hands the child its own dedicated pipes (or null), and a Stdio::inherit
+/// elsewhere in the process is duplicated as inheritable by std itself. It is
+/// process-wide and idempotent; a no-op off Windows.
+fn protect_parent_std_handles() {
+    #[cfg(windows)]
+    {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            use windows::Win32::Foundation::{
+                HANDLE_FLAG_INHERIT, HANDLE_FLAGS, SetHandleInformation,
+            };
+            use windows::Win32::System::Console::{
+                GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+            };
+            for id in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+                // SAFETY: GetStdHandle returns this process's own handle (or
+                // null/invalid, which is skipped); SetHandleInformation only
+                // clears a flag on it.
+                unsafe {
+                    if let Ok(h) = GetStdHandle(id)
+                        && !h.is_invalid()
+                        && !h.0.is_null()
+                    {
+                        let _ = SetHandleInformation(h, HANDLE_FLAG_INHERIT.0, HANDLE_FLAGS(0));
+                    }
+                }
+            }
+        });
     }
 }

@@ -1,0 +1,15 @@
+# Gate step 1385-h6uz — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS: the prompted opencode lane announces each tool call when it
+# STARTS. `opencode run` prints a call only on completion (default format and
+# --format json alike; measured 2026-09-26 on opencode 1.18.30 and, in the
+# forge, 1.18.32), so the v56.9.25.2 macOS smoke lane ran three hours silent
+# inside one call. The follower echoes opencode's own "evaluated permission"
+# log line, written at call start, and says so loudly when that log is absent.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the opencode tool-start follower (1385-h6uz)"
+STEP_SCRIPT="scripts/test-opencode-tool-start-follower.sh"
+STEP_ERROR="the prompted opencode lane no longer announces tool calls at start (1385-h6uz)"
+STEP_OK="opencode tool-start follower announces calls at start and fails loud without a log"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:opencode-tool-start-follower:7/7"

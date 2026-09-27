@@ -474,7 +474,7 @@ unstamped=$((total - stamped))
 # denominator ride the line, plus a cycle-over-cycle delta from the per-host
 # cache (target/ is untracked; first run reports delta=unknown).
 if [[ $total -gt 0 ]]; then
-    pct="$(awk -v s="$stamped" -v t="$total" 'BEGIN { printf "%.1f", (s * 100.0) / t }')"
+    pct="$(LC_ALL=C awk -v s="$stamped" -v t="$total" 'BEGIN { printf "%.1f", (s * 100.0) / t }')"
 else
     pct="0.0"
 fi

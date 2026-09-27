@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: progress
+      ts: "2026-09-25T23:36:54Z"
+      agent_id: linux-lenovinha-claude-20260925t233654z
+      host: lenovinha
+      summary: |
+        Criterion 3 residual (b) fixed on work/776-jcf3 (a9fbad930), PR #181, awaiting the landing queue. With TILLANDSIAS_FORGE_HOST_MOUNT=1, a --cloud launch still took the host-mount branch in both the opencode and agent lanes: podman read the bare project name as a named volume, and the gitdir facade ran git -C against the launcher CWD. forge_host_mount_granted() now grants the opt-in only with a real checkout. Verification: build.sh --check rc=0, and 734 passed under tray,listen-vsock. Remaining: 3(a) seed-branch selection for cloud launches (observed linux-next on lenovinha despite the warning), 3(c) the cloud argv test and count, 3(d) the cutover plan with the operator's yes, criterion 2 runbook, the Windows half of criterion 1, criterion 4 (operator-only).
