@@ -1506,6 +1506,25 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
             );
         }
     }
+    // ORDER 1437-khnx. The tier-routing scalars, projected so the selector
+    // (1437-vdz5) can read them — the must_ship lesson above: a field a
+    // consumer reads must be HERE or it is writable and unreadable. Read via
+    // tier_field, so the notes-line shape of today's rows projects the same.
+    // An absent implementer_tier projects as opus (operator ruling
+    // 2026-09-27, "No size tags get Opus"), with implementer_tier_source
+    // saying whether it was stated (field|notes) or defaulted.
+    if let Some(size) = tillandsias_plan::tier_field(packet, "size") {
+        obj.insert("size".to_string(), serde_json::Value::String(size));
+    }
+    let (tier, tier_source) = tillandsias_plan::implementer_tier(packet);
+    obj.insert(
+        "implementer_tier".to_string(),
+        serde_json::Value::String(tier),
+    );
+    obj.insert(
+        "implementer_tier_source".to_string(),
+        serde_json::Value::String(tier_source.to_string()),
+    );
     // ORDER 706-ddw6. Project active lease information directly.
     if let Some(packet_id) = packet.get("packet_id").and_then(serde_yaml::Value::as_str) {
         if let Some(lease) = inspect_lease(packet_id) {
@@ -6041,6 +6060,20 @@ fn main() {
             for s in ledger.validate_against_schema(&schema) {
                 eprintln!("advisory (schema drift): {s}");
             }
+            // ORDER 1437-khnx — unlike general schema drift, an out-of-vocabulary
+            // tier scalar is REFUSED under --strict-fragments: it would route no
+            // packet, and the selector could not tell it from an untagged row.
+            let tier_violations = ledger.tier_vocabulary_violations();
+            for v in &tier_violations {
+                eprintln!("refused:tier-vocabulary: {v}");
+            }
+            if strict_fragments && !tier_violations.is_empty() {
+                eprintln!(
+                    "refusing (--strict-fragments): {} tier field(s) outside the vocabulary (1437-khnx)",
+                    tier_violations.len()
+                );
+                std::process::exit(1);
+            }
             // 686-7qcm — the invisible-block report. A dependent waiting on a
             // PARKED packet (implemented / needs_clarification / blocked /
             // failed) is otherwise silently stuck: `ready` skips it and
@@ -8230,6 +8263,12 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             // this order owns. The refusal names the field and the paths that
             // CAN edit a list, so the caller is redirected rather than merely
             // blocked.
+            // ORDER 1437-khnx — a tier scalar outside its vocabulary would be
+            // written, projected and then silently match no tier filter.
+            if let Some(reason) = tillandsias_plan::tier_vocabulary_refusal(&field, &value) {
+                eprintln!("refused:set-field:tier-vocabulary — {pid}.{reason} (1437-khnx)");
+                std::process::exit(2);
+            }
             if field_is_list(packet, &field) {
                 eprintln!(
                     "refused:set-field:list-valued-field — {pid}.{field} is a LIST, and set-field writes scalars only (1184-tj2q)."
@@ -10981,6 +11020,35 @@ mod tests {
         let proj = query_json_projection(&val);
         assert!(proj.get("lease").is_some());
         assert_eq!(proj["lease"], serde_json::Value::Null);
+    }
+
+    /// ORDER 1437-khnx: both tier scalars reach the projection, from the
+    /// top-level field or, for rows filed before it, from a notes line; a
+    /// top-level scalar beats the note, and an out-of-vocabulary note is prose.
+    #[test]
+    fn projection_carries_size_and_implementer_tier() {
+        let proj = |raw: &str| query_json_projection(&serde_yaml::from_str(raw).unwrap());
+        let top = proj("packet_id: a\norder: 1\nsize: S\nimplementer_tier: haiku\n");
+        assert_eq!(top["size"], "S");
+        assert_eq!(top["implementer_tier"], "haiku");
+        let noted = proj(
+            "packet_id: b\norder: 2\nnotes: |\n  size: S\n  implementer_tier: haiku\n  prose\n",
+        );
+        assert_eq!(noted["size"], "S");
+        assert_eq!(noted["implementer_tier"], "haiku");
+        let both = proj(
+            "packet_id: c\norder: 3\nimplementer_tier: opus\nnotes: |\n  implementer_tier: haiku\n",
+        );
+        assert_eq!(both["implementer_tier"], "opus");
+        let prose = proj("packet_id: d\norder: 4\nnotes: |\n  size: XL\n");
+        assert!(prose.get("size").is_none());
+        // Operator ruling 2026-09-27: "No size tags get Opus."
+        let untagged = proj("packet_id: e\norder: 5\n");
+        assert_eq!(untagged["implementer_tier"], "opus");
+        assert_eq!(untagged["implementer_tier_source"], "default");
+        assert!(untagged.get("size").is_none());
+        assert_eq!(top["implementer_tier_source"], "field");
+        assert_eq!(noted["implementer_tier_source"], "notes");
     }
 
     #[test]
