@@ -59,6 +59,25 @@ case "$r" in
     (*) ok "TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN=1 proceeds past the check" ;;
 esac
 
+# 3b. NON-EXECUTING modes are not gated: --parse-only and --list never run a
+#     step. The first cut refused them, and test-litmus-item-opener-refused.sh
+#     ARM 3 (a mutant runner copy doing --parse-only from a $TMP root) went red
+#     in land57. No opt-out here: the modes must pass on their own.
+po="$(cd "$ROOT" && env TILLANDSIAS_PLAN_BIN="$T/absent" CARGO_TARGET_DIR="$T/no-target" \
+      bash "$RUNNER" --parse-only openspec/litmus-tests/litmus-litmus-no-plan-binary-refusal.yaml 2>&1)"
+case "$po" in
+    (*blocked:litmus-no-plan-binary*|*blocked:litmus-plan-binary-unrunnable*)
+        bad "--parse-only was gated on a plan binary it never uses" ;;
+    (*) ok "--parse-only runs without a plan binary" ;;
+esac
+ls="$(cd "$ROOT" && env TILLANDSIAS_PLAN_BIN="$T/absent" CARGO_TARGET_DIR="$T/no-target" \
+      bash "$RUNNER" --list 2>&1)"
+case "$ls" in
+    (*blocked:litmus-no-plan-binary*|*blocked:litmus-plan-binary-unrunnable*)
+        bad "--list was gated on a plan binary it never uses" ;;
+    (*) ok "--list runs without a plan binary" ;;
+esac
+
 # 4. A runnable binary is admitted untouched (skipped, named, if this host has
 #    none — the arm cannot be judged without one).
 . "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true

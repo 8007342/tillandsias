@@ -312,8 +312,13 @@ fi
 # ./build.sh --check builds the binary in preflight and never reaches this.
 # Opt-out, for a caller KNOWINGLY running binary-free:
 # TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN=1 (the pre-1419 behaviour).
-if [[ "${TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN:-}" != "1" ]]; then
-    _litmus_nobin=""
+# ONLY ON PATHS THAT EXECUTE TESTS: --parse-only and --list never run a step,
+# so they must not be gated on a binary they do not use. It first ran at top
+# level and refused test-litmus-item-opener-refused.sh ARM 3, whose mutant copy
+# of this runner does --parse-only from a $TMP root with no binary (land57).
+_litmus_require_plan_binary() {
+    [[ "${TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN:-}" != "1" ]] || return 0
+    local _litmus_nobin=""
     if [[ -z "$LITMUS_PLAN_BIN" ]]; then
         _litmus_nobin="blocked:litmus-no-plan-binary"
     elif [[ "$_litmus_caps_rc" -ne 0 ]]; then
@@ -330,7 +335,7 @@ if [[ "${TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN:-}" != "1" ]]; then
         } >&2
         exit 2
     fi
-fi
+}
 # _yaml_jq <file> <jq-filter> — the first tier. Returns non-zero (and prints
 # nothing) when the tier is unavailable or the file does not load, so callers
 # fall through to the next tier. A `blocked:` verdict from yaml-json lands on
@@ -2814,6 +2819,9 @@ main() {
         list_all_tests
         exit 0
     fi
+
+    # 1419-zydw: from here on tests EXECUTE, so a runnable plan binary is required.
+    _litmus_require_plan_binary
 
     log_info "Timeout per test: ${TIMEOUT_SECONDS}s"
     log_info "Phase filter: ${FILTER_PHASE}"
