@@ -126,7 +126,12 @@ fn apply_status_text_main_thread(
     let mtm = unsafe { MainThreadMarker::new_unchecked() };
     let label = NSString::from_str(text);
     if let Some(handle) = status_menu_item.lock().unwrap().as_ref() {
-        unsafe { handle.0.setTitle(&label) };
+        // 1420-v3zt: an attributed title (the progress bar) outranks the plain
+        // one, so clear it or the row would freeze on the last bar.
+        unsafe {
+            handle.0.setAttributedTitle(None);
+            handle.0.setTitle(&label);
+        }
     }
     if let Some(handle) = status_item.lock().unwrap().as_ref()
         && let Some(button) = unsafe { handle.0.button(mtm) }
@@ -140,6 +145,74 @@ fn apply_status_text_main_thread(
             text
         ));
         unsafe { button.setToolTip(Some(&tooltip)) };
+    }
+}
+
+/// 1420-v3zt: paint `segments` (see `provision_progress::menu_bar_segments`)
+/// beside the menu-bar icon and, followed by `label`, as the status row. An
+/// empty `segments` clears the menu-bar title (the icon stands alone again);
+/// the row is then left to the next `set_status_text`. Main thread only.
+fn apply_menu_bar_progress_main_thread(
+    segments: &[crate::provision_progress::BarSegment],
+    label: &str,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+) {
+    use objc2::runtime::AnyObject;
+    use objc2_app_kit::{NSColor, NSForegroundColorAttributeName};
+    use objc2_foundation::{NSAttributedString, NSDictionary, NSMutableAttributedString, NSString};
+    let mtm = unsafe { MainThreadMarker::new_unchecked() };
+    let build = |prefix: &str, suffix: &str| {
+        let out = NSMutableAttributedString::from_nsstring(&NSString::from_str(prefix));
+        let mut out = out;
+        for seg in segments {
+            let text = NSString::from_str(&seg.text);
+            let piece = match seg.rgb {
+                Some((r, g, b)) => {
+                    let colour = unsafe {
+                        NSColor::colorWithSRGBRed_green_blue_alpha(
+                            f64::from(r) / 255.0,
+                            f64::from(g) / 255.0,
+                            f64::from(b) / 255.0,
+                            1.0,
+                        )
+                    };
+                    let colour: objc2::rc::Retained<AnyObject> =
+                        unsafe { objc2::rc::Retained::cast(colour) };
+                    let attrs = NSDictionary::from_vec(
+                        &[unsafe { NSForegroundColorAttributeName }],
+                        vec![colour],
+                    );
+                    unsafe { NSAttributedString::new_with_attributes(&text, &attrs) }
+                }
+                None => NSAttributedString::from_nsstring(&text),
+            };
+            unsafe { out.appendAttributedString(&piece) };
+        }
+        unsafe {
+            out.appendAttributedString(&NSAttributedString::from_nsstring(&NSString::from_str(
+                suffix,
+            )))
+        };
+        out
+    };
+    if let Some(handle) = status_item.lock().unwrap().as_ref()
+        && let Some(button) = unsafe { handle.0.button(mtm) }
+    {
+        if segments.is_empty() {
+            unsafe { button.setTitle(&NSString::from_str("")) };
+        } else {
+            unsafe { button.setAttributedTitle(&build(" ", "")) };
+        }
+    }
+    if !segments.is_empty()
+        && let Some(handle) = status_menu_item.lock().unwrap().as_ref()
+    {
+        unsafe {
+            handle
+                .0
+                .setAttributedTitle(Some(&build("", &format!("  {label}"))))
+        };
     }
 }
 
@@ -1545,6 +1618,8 @@ async fn run_start(
     image_root: PathBuf,
     vm_slot: Arc<Mutex<Option<Arc<VzRuntime>>>>,
     on_phase: &(dyn Fn(&str) + Send + Sync),
+    // 1420-v3zt: typed first-provision progress, painted as the menu-bar bar.
+    on_progress: &(dyn Fn(&tillandsias_control_wire::ProgressEvent) + Send + Sync),
 ) -> Result<(), String> {
     match stage_embedded_guest_binary() {
         Ok(Some(dest)) => {
@@ -1646,11 +1721,9 @@ async fn run_start(
         vz.fetch_fedora_cloud_image(
             &manifest,
             on_phase,
-            &|ev: tillandsias_control_wire::ProgressEvent| {
-                if let Some(f) = ev.kind.fraction() {
-                    on_phase(&format!("{} {}%", ev.label, (f * 100.0).floor() as u32));
-                }
-            },
+            // 1420-v3zt: the bar (menu bar + status row) is painted from the
+            // event itself; the plain chip no longer carries the percent.
+            &|ev: tillandsias_control_wire::ProgressEvent| on_progress(&ev),
         )
         .await
         .map_err(|e| {
@@ -2099,8 +2172,51 @@ impl TrayActionHost {
             });
         });
 
+        // 1420-v3zt: typed download/expand events -> palette bar beside the
+        // icon and in the status row, repainted once per whole percent.
+        let bar_status_item = status_item_slot.clone();
+        let bar_status_menu_item = status_menu_item_slot.clone();
+        let bar_gate = Arc::new(Mutex::new(crate::provision_progress::PercentGate::default()));
+        let on_progress: Box<dyn Fn(&tillandsias_control_wire::ProgressEvent) + Send + Sync> =
+            Box::new(move |ev| {
+                let segments = match ev.kind {
+                    tillandsias_control_wire::ProgressKind::Done
+                    | tillandsias_control_wire::ProgressKind::Failed { .. } => Vec::new(),
+                    ref kind => match kind.fraction() {
+                        Some(f) if bar_gate.lock().unwrap().changed(&ev.task, f) => {
+                            crate::provision_progress::menu_bar_segments(f, 10)
+                        }
+                        _ => return,
+                    },
+                };
+                let label = ev.label.clone();
+                let status_item = bar_status_item.clone();
+                let status_menu_item = bar_status_menu_item.clone();
+                dispatch_to_main_thread(move || {
+                    apply_menu_bar_progress_main_thread(
+                        &segments,
+                        &label,
+                        &status_item,
+                        &status_menu_item,
+                    );
+                });
+            });
+        let bar_clear_item = status_item_slot.clone();
+        let bar_clear_menu_item = status_menu_item_slot.clone();
+
         runtime.spawn(async move {
-            let result = run_start(image_root, vm_slot.clone(), on_phase.as_ref()).await;
+            let result = run_start(
+                image_root,
+                vm_slot.clone(),
+                on_phase.as_ref(),
+                on_progress.as_ref(),
+            )
+            .await;
+            // 1420-v3zt: whatever the outcome, the icon stands alone again; the
+            // chip below carries the result.
+            dispatch_to_main_thread(move || {
+                apply_menu_bar_progress_main_thread(&[], "", &bar_clear_item, &bar_clear_menu_item);
+            });
 
             // On success, snapshot the Arc<VzRuntime> for the poller
             // BEFORE handing ownership to the dispatch closure. On
@@ -4647,7 +4763,7 @@ mod tests {
     async fn run_start_full_e2e() {
         let tmp = tempfile::tempdir().unwrap();
         let vm_slot = Arc::new(Mutex::new(None));
-        let result = run_start(tmp.path().to_path_buf(), vm_slot.clone(), &|_| {}).await;
+        let result = run_start(tmp.path().to_path_buf(), vm_slot.clone(), &|_| {}, &|_| {}).await;
         match result {
             Err(err) => {
                 assert!(
