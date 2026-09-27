@@ -43,7 +43,6 @@ while [ $# -gt 0 ]; do
         *) echo "could-not-run:stranded-plan-writes:unknown-argument:$1"; exit 3 ;;
     esac
 done
-command -v jq >/dev/null 2>&1 || { echo "could-not-run:stranded-plan-writes:no-jq"; exit 3; }
 # shellcheck source=scripts/plan-binary-probe.sh
 . "$ROOT/scripts/plan-binary-probe.sh"
 PLAN_BIN="$(resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
@@ -74,11 +73,18 @@ awk '
 while IFS=$'\t' read -r ref frag; do
     [ -n "$ref" ] && [ -n "$frag" ] || continue
     git show "$REMOTE/$ref:$frag" > "$work/frag.yaml" 2>/dev/null || continue
-    "$PLAN_BIN" yaml-json "$work/frag.yaml" 2>/dev/null \
-        | jq -r --arg ref "$ref" --arg frag "$frag" '
-            [(.status // []), (.fields // [])] | add
-            | .[] | select(.field == "status" and (.packet_id // "") != "")
-            | [.packet_id, (.value | tostring), $frag, $ref] | @tsv' 2>/dev/null >> "$work/writes"
+    "$PLAN_BIN" yaml-json "$work/frag.yaml" > "$work/frag.json" 2>/dev/null || continue
+    # The plan binary's own reader, not jq (1375-tsfu ratchet: trunk moves jq
+    # call sites to `tillandsias-plan json get`). Its subset has no @tsv, add,
+    # join or string building, so it emits one compact ["id","value"] per
+    # write and awk adds the columns; ids and status values are plain tokens.
+    if ! "$PLAN_BIN" json get -c \
+            '((.status // [])[], (.fields // [])[]) | select(.field == "status" and (.packet_id // "") != "") | [.packet_id, (.value | tostring)]' \
+            "$work/frag.json" > "$work/pairs.json" 2>/dev/null; then
+        echo "could-not-run:stranded-plan-writes:json-get-refused:$frag"; exit 3
+    fi
+    awk -F'"' -v frag="$frag" -v ref="$ref" 'NF >= 5 { print $2 "\t" $4 "\t" frag "\t" ref }' \
+        "$work/pairs.json" >> "$work/writes"
 done < "$work/pairs"
 
 # Trunk's ledger, once, into a scratch tree the fragments are folded into.
