@@ -31,11 +31,23 @@ elif [ "$recs" != "$steps" ]; then
 else
     ok "one record per executed step ($steps)"
 fi
-if command -v jq >/dev/null 2>&1 && [ -f "$log" ]; then
-    if jq -e 'has("test") and has("step") and has("budget_ms") and has("duration_ms") and has("exit") and (.duration_ms >= 0)' "$log" >/dev/null 2>&1; then
-        ok "every record is valid JSON with test/step/budget_ms/duration_ms/exit"
+# Every record, not the last one: `-e` decides on the LAST value only, so a
+# malformed record anywhere but the end passed the earlier `jq -e` form.
+# Instead print each record that FAILS the shape and require none. Read with
+# the plan binary's json get, not jq (1375-tsfu ratchet).
+. "$ROOT/scripts/plan-binary-probe.sh"
+PB="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null)" || PB=""
+case "$PB" in ./*) PB="$ROOT/${PB#./}" ;; esac
+if [ -z "$PB" ]; then
+    bad "premise: no plan binary to validate the records with"
+elif [ -f "$log" ]; then
+    badrecs="$("$PB" json get -c 'select((has("test") and has("step") and has("budget_ms") and has("duration_ms") and has("exit") and (.duration_ms >= 0)) | not)' "$log" 2>&1)"; jrc=$?
+    if [ "$jrc" -ne 0 ]; then
+        bad "json get could not read the records (rc=$jrc): $(head -c 120 <<<"$badrecs")"
+    elif [ -n "$badrecs" ]; then
+        bad "a record lacks a field or has a negative duration: $(head -1 <<<"$badrecs")"
     else
-        bad "a record is not valid JSON or lacks a field: $(head -1 "$log")"
+        ok "every record (not just the last) is valid JSON with test/step/budget_ms/duration_ms/exit"
     fi
 fi
 
