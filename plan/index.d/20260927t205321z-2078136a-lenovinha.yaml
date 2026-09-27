@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-forge-hot-src-tmpfs-budget-lands-on-its-256m-floor-while-the-tillandsias-git-dir-is-167m-so-a-working-forge-fills-it-and-git-dies-mid-write
+    field: status
+    value: in_progress
+    ts: "2026-09-27T20:53:21Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-forge-hot-src-tmpfs-budget-lands-on-its-256m-floor-while-the-tillandsias-git-dir-is-167m-so-a-working-forge-fills-it-and-git-dies-mid-write
+    event:
+      type: note
+      ts: "2026-09-27T20:53:21Z"
+      host: lenovinha
+      summary: |-
+        claimed for cycle 2026-09-27T20:53:19Z by linux-lenovinha-claude-20260927t205321z
