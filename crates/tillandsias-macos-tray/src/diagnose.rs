@@ -1357,30 +1357,44 @@ pub fn reset_guest_main() -> i32 {
 }
 
 pub fn provision_main() -> i32 {
+    // 1420-83vf: machine output only when asked for.
+    let json = std::env::args().any(|a| a == "--json");
     if let Err(err) = stage_embedded_guest_binary() {
-        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        if json {
+            eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        } else {
+            eprintln!("Provisioning failed: stage guest binary: {err}");
+        }
         return 1;
     }
     let image_root = image_root();
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root);
 
     if vz.is_provisioned() {
-        println!(
-            "{{\"status\":\"already_provisioned\",\"path\":\"{}\"}}",
-            vz.rootfs_image_path().display()
-        );
+        if json {
+            println!(
+                "{{\"status\":\"already_provisioned\",\"path\":\"{}\"}}",
+                vz.rootfs_image_path().display()
+            );
+        } else {
+            println!("Already provisioned: {}", vz.rootfs_image_path().display());
+        }
         return 0;
     }
 
     let manifest = match tillandsias_vm_layer::recipe::Manifest::from_toml(BUNDLED_MANIFEST_TOML) {
         Ok(m) => m,
         Err(e) => {
-            let escaped =
-                serde_json::to_string(&e.to_string()).unwrap_or_else(|_| format!("\"{e}\""));
-            println!(
-                "{{\"error\":\"manifest parse: {}\",\"detail\":{}}}",
-                e, escaped
-            );
+            if json {
+                let escaped =
+                    serde_json::to_string(&e.to_string()).unwrap_or_else(|_| format!("\"{e}\""));
+                println!(
+                    "{{\"error\":\"manifest parse: {}\",\"detail\":{}}}",
+                    e, escaped
+                );
+            } else {
+                eprintln!("Provisioning failed: bundled manifest parse: {e}");
+            }
             return 1;
         }
     };
@@ -1388,10 +1402,24 @@ pub fn provision_main() -> i32 {
     let rt = match tokio::runtime::Runtime::new() {
         Ok(r) => r,
         Err(e) => {
-            println!("{{\"error\":\"tokio runtime: {e}\"}}");
+            if json {
+                println!("{{\"error\":\"tokio runtime: {e}\"}}");
+            } else {
+                eprintln!("Provisioning failed: async runtime: {e}");
+            }
             return 1;
         }
     };
+
+    // 1420-83vf: JSON lines are for machines. `--json` keeps them exactly as
+    // before; otherwise progress goes through the tillandsia renderer on
+    // stderr — bars on a terminal, one clean line per state change on a pipe,
+    // `TERM=dumb`, `NO_COLOR` or CI — and stdout carries one plain result line.
+    // This is also what `--reset-state` (the curl installer's reprovision)
+    // shows the person running the installer.
+    if !json {
+        return provision_rendered(vz, manifest, rt);
+    }
 
     let on_phase = |phase: &str| {
         let escaped = serde_json::to_string(phase).unwrap_or_else(|_| format!("\"{}\"", phase));
@@ -1409,6 +1437,74 @@ pub fn provision_main() -> i32 {
         Err(e) => {
             let escaped = serde_json::to_string(&e).unwrap_or_else(|_| format!("\"{}\"", e));
             println!("{{\"error\":{}}}", escaped);
+            1
+        }
+    }
+}
+
+/// ORDER 1420-83vf. The human-facing arm of `--provision`: the image fetch
+/// runs as a task and reports phases over a channel, and THIS thread feeds
+/// them to the tillandsia renderer (a `Box<dyn Sink>` is not `Sync`, while
+/// vm-layer's phase callback must be). The sink picks itself from the
+/// environment: bars on a terminal; one plain line per state change on a pipe,
+/// `TERM=dumb`, `NO_COLOR` or CI. stdout gets one plain result line.
+fn provision_rendered(
+    vz: tillandsias_vm_layer::vz::VzRuntime,
+    manifest: tillandsias_vm_layer::recipe::Manifest,
+    rt: tokio::runtime::Runtime,
+) -> i32 {
+    use tillandsias_progress_tty::{EnvView, TaskState, Tier, sink_for};
+
+    let vz = std::sync::Arc::new(vz);
+    let env = EnvView::from_process();
+    // Bars leave the cursor on their last line; end it before the result so
+    // "Provisioned: …" does not run on after the bar. Plain mode is line-based.
+    let drew_bars = Tier::detect(&env) != Tier::Plain;
+    let mut sink = sink_for(&env, 40);
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    let fetch_vz = vz.clone();
+    let task = rt.spawn(async move {
+        let on_phase = move |phase: &str| {
+            let _ = tx.send(phase.to_string());
+        };
+        fetch_vz
+            .fetch_fedora_cloud_image(&manifest, &on_phase)
+            .await
+    });
+    // The channel closes when the task drops its sender, i.e. when the fetch
+    // is over, however it ended.
+    for phase in rx {
+        if let Some((task_name, state)) = crate::provision_progress::phase_to_task(&phase) {
+            // A finished download is implied by the expansion starting.
+            if task_name == crate::provision_progress::TASK_EXPAND {
+                let _ = sink.update(crate::provision_progress::TASK_DOWNLOAD, TaskState::Done);
+            }
+            let _ = sink.update(task_name, state);
+        }
+    }
+    let result = match rt.block_on(task) {
+        Ok(r) => r,
+        Err(e) => Err(format!("provisioning task failed: {e}")),
+    };
+    match result {
+        Ok(()) => {
+            let _ = sink.finish();
+            if drew_bars {
+                eprintln!();
+            }
+            println!("Provisioned: {}", vz.rootfs_image_path().display());
+            0
+        }
+        Err(e) => {
+            let _ = sink.update(
+                crate::provision_progress::TASK_EXPAND,
+                TaskState::Failed { reason: e.clone() },
+            );
+            let _ = sink.finish();
+            if drew_bars {
+                eprintln!();
+            }
+            eprintln!("Provisioning failed: {e}");
             1
         }
     }

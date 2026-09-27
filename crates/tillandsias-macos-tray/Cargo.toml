@@ -12,6 +12,8 @@ name = "tillandsias-tray"
 path = "src/main.rs"
 
 [dependencies]
+# 1420-83vf: the tillandsia progress renderer for --provision / --reset-state.
+tillandsias-progress-tty = { path = "../tillandsias-progress-tty" }
 sha2.workspace = true
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
 tillandsias-core = { path = "../tillandsias-core" }

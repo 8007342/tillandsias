@@ -3468,6 +3468,7 @@ dependencies = [
  "tillandsias-control-wire",
  "tillandsias-core",
  "tillandsias-host-shell",
+ "tillandsias-progress-tty",
  "tillandsias-secure-channel",
  "tillandsias-vm-layer",
  "tokio",

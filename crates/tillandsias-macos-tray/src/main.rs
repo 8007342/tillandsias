@@ -48,6 +48,9 @@ mod menu_disabled_v2;
 // 1420-inak: pure, ungated (no crate:: / unix), so its tests run on every host.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod provision_error;
+// 1420-83vf: pure (no crate:: / unix), so its tests run on every host.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod provision_progress;
 mod terminal_attach;
 
 /// The `--version` / `-V` line: release version, git SHA and build time from
