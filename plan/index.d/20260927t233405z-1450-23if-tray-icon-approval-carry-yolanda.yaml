@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-tray-icon-loses-its-show-on-taskbar-approval-whenever-it-runs-from-a-new-path-so-the-operator-must-re-approve-it
+    order: 1450-23if
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, tray, installer, ux, registry]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-windows-tray/src/tray_registry.rs
+      - crates/tillandsias-windows-tray/src/notify_icon.rs
+      - scripts/install-windows.ps1
+      - openspec/specs/windows-native-tray/spec.md
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the carry decision is a pure function in tray_registry.rs,
+      pinned by unit tests in the same commit; the live half is an operator-visible icon.
+    title: |
+      the Windows tray icon's "show on the taskbar" approval is tied to the executable PATH, so a tray at a new path (a pruned-and-recreated entry, a moved install, a dev or portable build) comes up hidden in the overflow and the operator must approve it again
+    verifiable_closure: |
+      When the running tray's NotifyIconSettings entry is not promoted and another Tillandsias tray
+      entry was (live, or pruned by the installer or the startup reconcile), the tray promotes its
+      own entry once, right after registering its icon; an entry the operator later demotes stays
+      demoted (carried at most once). Pure decision pinned by unit tests; live: a tray copied to a
+      NEW path shows on the taskbar without a click. Pre-fix result: FAILS, measured on yolanda
+      2026-09-27: a tray at a fresh path registered unpromoted (icon in the overflow).
+    context: |
+      OPERATOR, 2026-09-27: "Updates with new version number require new approvals to display at
+      the tray :( investigate the uniqueness requirement and simplify the name, or the provided id,
+      until version updates do not require new tray visibility authorization." Then: "yes file the
+      work packet and specs, and implement it."
+      MEASURED ON YOLANDA 2026-09-27, so the fix targets the real key:
+        - HKCU\Control Panel\NotifyIconSettings keys an entry on the executable PATH (+ uID=1).
+          The same key survived three different binaries at one path, and a real version change
+          (56.9.27.2 -> 56.9.25.2 -> 56.9.27.2), both run directly and through two real
+          install-windows.ps1 updates; IsPromoted stayed 1 throughout. Renaming the exe or changing
+          the uID would NOT help: the version is not part of the identity, and a new name/uID is
+          itself a new entry needing one more approval.
+        - A NEW PATH gets a fresh, unpromoted entry (the icon sits in the overflow).
+        - Setting IsPromoted=1 on a LIVE entry moves the icon onto the taskbar within 6 s, and it
+          stays after a relaunch. So the tray can carry the approval right after NIM_ADD, when
+          Windows has just created the entry.
+      Where the re-approval came from is therefore a path change or an entry that was deleted and
+      recreated (the installer prunes stale-path entries at install; uninstall/purge removes all;
+      the tray's own 663-64xi reconcile prunes entries whose target is gone). Both prune paths
+      discard a promotion that should carry.
+      DESIGN: (1) tray_registry::should_carry_promotion, a pure decision; (2) the installer's
+      install-time prune and the tray's startup prune record a marker
+      (HKCU\Software\Tillandsias, TrayIconPromoted=1) when the entry they remove was promoted;
+      (3) after registering its icon the tray waits for its entry, and if the decision says so
+      sets IsPromoted=1 plus a TillandsiasPromotionCarried=1 value so it never re-promotes an entry
+      the operator later hid. Uninstall and purge do not write the marker (intent is removal).
+    events:
+      - type: filed
+        ts: "2026-09-27T23:34:04Z"
+        host: yolanda
+        summary: Filed by yolanda on the operator's direction, 2026-09-27.
