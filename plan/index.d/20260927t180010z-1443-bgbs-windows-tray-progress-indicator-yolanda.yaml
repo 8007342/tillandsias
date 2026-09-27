@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-tray-shows-first-provision-progress-only-as-text-in-the-status-chip-with-no-icon-or-menu-progress-indicator
+    order: 1443-bgbs
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, tray, progress, installer-ux, rust]
+    estimated_hours: 5
+    parent: 1420-v3zt
+    owned_files:
+      - crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+      - crates/tillandsias-windows-tray/src/notify_icon.rs
+      - crates/tillandsias-windows-tray/src/tray_phase_icon.rs
+      - crates/tillandsias-windows-tray/src/provision_console.rs
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-measured: pins land with it (portable unit tests for the event mapping,
+      the palette strip and the per-percent repaint gate).
+    title: |
+      WINDOWS HALF OF 1420-v3zt: the Windows tray shows first-provision progress only as chip text; the rootfs download reports its bytes as prose, and nothing paints a tray-icon progress strip or a menu progress row
+    verifiable_closure: |
+      During a first provision the Windows tray's icon strip and menu progress row update at
+      least 10 distinct percent values sourced from typed ProgressEvents (the rootfs
+      download's bytes), repainted once per whole percent, cleared on Done/Failed. Pre-fix
+      result: FAILS: wsl_lifecycle.rs:836 folds the byte counts into report_message prose
+      ("Downloading Fedora rootfs {mb} / {total_mb} MB ({pct}%)") and TrayProgress has no
+      report_event override.
+    context: |
+      Filed at the coordinator's request as the Windows child of 1420-v3zt, whose macOS slice is
+      work/1420-v3zt e9290b18a (menu-bar bar + status row from x6rz's typed events). Operator's
+      ruling on the parent: "MenuBarIcon + MenuBar ... is enough" outside a first curl install;
+      the Windows mirror is the notification-area icon plus the tray menu.
+      TWO PARTS. (A) The x6rz step for Windows: macOS vm-layer (vz.rs) emits typed
+      ProgressEvents, but Windows provisioning never calls report_event; the rootfs download
+      callback at wsl_lifecycle.rs:824-840 still formats bytes into prose, exactly the shape
+      x6rz removed on macOS. It becomes a Determinate { Bytes } event through report_event.
+      (B) TrayProgress overrides report_event: a leaf-ramp/blush-tip/track strip drawn onto the
+      tray icon (tray_phase_icon.rs already builds the HICON from pixels) and a menu status row,
+      both repainted once per whole percent (mirroring macOS's PercentGate), cleared on
+      Done/Failed.
+      USER-VISIBLE WORDS FOR OPERATOR APPROVAL (spec:tray-ux): the menu row reads
+      "<event label>  <bar> <n>%", where the bar is the U+25B0/U+25B1 glyphs macOS uses and the
+      label is vm-layer's own ("Download Fedora rootfs"). No other new words are planned; any
+      that appear are added here before landing.
+      Live closure: an operator-approved cold provision on a Windows host (the next Windows
+      smoke). Guest ProgressPush events (1439-p853) can drive the same indicator later.
+    events:
+      - type: filed
+        ts: "2026-09-27T18:00:11Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request as the Windows child of 1420-v3zt.

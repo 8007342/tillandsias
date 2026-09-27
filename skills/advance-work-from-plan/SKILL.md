@@ -124,8 +124,7 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     merge (§6) still applies; this is the earlier one.
 1b. **Snapshot the startup boundary NOW — before any guard that writes.**
     Right after the pull and the branch guard, before the credential guard,
-    the daily-maintenance body, the capability-row republish, the opsx sync,
-    or any edit:
+    the daily-maintenance body, the capability-row republish, or any edit:
     ```bash
     boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
     scripts/meta-orchestration-worktree-guard.sh snapshot "$boundary_dir"
@@ -275,10 +274,14 @@ Budgets: autonomous/pairing forge sessions = adaptive 4 packets (configurable 3-
 
 Tier (trims 2026-09-27, umbrella 1437-62g8): a session STATES the model tier
 it runs at, `--tier <haiku|sonnet|opus>` or `TILLANDSIAS_MODEL_TIER`
-(1437-vdz5). A haiku caller's pool is exactly the rows whose
-`implementer_tier` is haiku and it refuses `refused:no-tier-work:model-tier=haiku`
-rather than draining the general queue; a sonnet caller takes sonnet plus
-untagged rows; an opus caller takes everything but haiku unless `--tier-any`.
+(1437-vdz5). The tier is a FLOOR and an UNTAGGED row is opus (operator
+2026-09-27: "No size tags get Opus"): a haiku caller's pool is exactly the
+rows whose `implementer_tier` is haiku and it refuses
+`refused:no-tier-work:model-tier=haiku` rather than draining the general
+queue; a sonnet caller takes sonnet rows, then haiku, never untagged; an opus
+caller takes opus and untagged rows first, then sonnet, then haiku.
+`--tier-any` is for an orchestrator picking for its delegates
+(`/haiku-orchestrate`, 1443-hbgt).
 Until 1437-khnx projects the field, the tier is two lines inside the packet's
 `notes:` (`size: S|M|L`, `implementer_tier: …`) and the selector cannot see
 it — read them by eye. A cheaper packet runs in-session through

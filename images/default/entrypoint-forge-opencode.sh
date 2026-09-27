@@ -117,15 +117,13 @@ export_project_env
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
-# ── OpenSpec init (every launch, silent) ────────────────────
-# Always run to ensure /opsx commands are available, even if the project
-# was cloned without openspec config. Idempotent — no-ops if already set up.
-if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
-    if ! OS_OUTPUT=$("$OS_BIN" init --tools opencode </dev/null 2>&1); then
-        echo "[entrypoint] WARNING: OpenSpec init failed — /opsx commands may not work" >&2
-        echo "[entrypoint] $OS_OUTPUT" >&2
-    fi
-fi
+# ── OpenSpec init (only when absent, silent) ────────────────
+# Never rewrites a committed /opsx set: a launch must not modify tracked
+# files (order 1422-w3p8; see openspec_init_if_absent in lib-common.sh).
+# The CLI is the project's pinned version when openspec/cli-version exists
+# (order 1441-myz3; see ensure_openspec_pinned).
+ensure_openspec_pinned "$PROJECT_DIR"
+openspec_init_if_absent "$PROJECT_DIR" opencode
 
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme

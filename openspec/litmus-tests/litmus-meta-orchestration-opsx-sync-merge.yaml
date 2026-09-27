@@ -3,11 +3,13 @@ name: litmus:meta-orchestration-opsx-sync-merge
 spec: meta-orchestration
 phase: pre-build
 description: >
-  Pin the order-540 generated-opsx sync-merge path: a checkout whose only
-  status-visible dirt is the deterministic 22-path opsx/openspec regeneration
-  from the installed openspec CLI must be MERGED as a chore(opsx): sync commit
-  and the startup boundary re-anchored, not refused as a dirty-start blocker.
-  Any non-opsx dirt still fails closed byte-identically. See
+  Pin how a cycle treats launch-generated opsx dirt (order 1440-w8g8, reversing
+  order 540's sync-merge): a checkout whose only status-visible dirt is the
+  deterministic 22-path opsx/openspec regeneration from the openspec CLI reads
+  launch-dirt:opsx-only (exit 5), a REFUSAL; the cycle commits nothing and the
+  dirt is preserved; no skill, script, methodology or image file tells an agent
+  to commit it. Any non-opsx dirt still fails closed byte-identically. The name
+  is kept because litmus-bindings.yaml binds it. See
   plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md.
 severity: critical
 size: instant
@@ -30,19 +32,19 @@ critical_path:
     timeout_ms: 1000
     expected_behavior: "ok: syntax"
 
-  - step: "detector verdict branches (opsx-only / non-opsx / clean-tree)"
+  - step: "detector verdict branches (launch-dirt / non-opsx / clean-tree)"
     command: "scripts/test-check-opsx-generated-dirt.sh"
     timeout_ms: 10000
     expected_behavior: "PASS: check-opsx-generated-dirt branches 1-3 proven"
 
-  - step: "opsx sync-merge flows through the real guard without refusing"
+  - step: "launch opsx dirt is refused through the real guard, never committed"
     # 90s, sized for the SLOWEST host: the fixture's git-heavy scenario chain
     # PASSES on windows in ~18s standalone (measured 2026-08-16) but the old
     # 10s budget was priced on linux. Same treatment as 770-f6u4; see
     # plan/issues/windows-red-meta-orchestration-litmus-2026-08-16.md.
     command: "scripts/test-meta-orchestration-opsx-sync-merge.sh"
     timeout_ms: 90000
-    expected_behavior: "PASS: order-540 opsx sync-merge exit criteria (a)-(d)"
+    expected_behavior: "PASS: 1440-w8g8 launch opsx dirt refused, never committed (a)-(d)"
 
   - step: "ordinary dirty-start fixture stays byte-identical fail-closed"
     # 90s: same fixture as dirty-tree-safety's step above, same 9.4s windows
@@ -55,15 +57,14 @@ critical_path:
 observability:
   traces:
     - "@trace spec:meta-orchestration"
-  expected_log: "order-540 opsx sync-merge exit criteria (a)-(d)"
+  expected_log: "1440-w8g8 launch opsx dirt refused, never committed (a)-(d)"
   log_fields:
     spec: "meta-orchestration"
     test: "meta-orchestration-opsx-sync-merge"
-    artifact: "scripts/check-opsx-generated-dirt.sh + guard re-snapshot + skill wiring"
+    artifact: "scripts/check-opsx-generated-dirt.sh refusal + skill wiring"
 
 rollback:
   on_failure: >
-    Restore the startup boundary, keep non-opsx dirt outside the worktree, and
-    refuse the cycle exactly as before when the detector does not prove the
-    dirty set is the generated opsx set.
+    Refuse the cycle on any startup dirt (launch-dirt or non-opsx) and
+    preserve its bytes; never commit launch-generated opsx files.
   command: "scripts/test-meta-orchestration-dirty-tree-safety.sh"

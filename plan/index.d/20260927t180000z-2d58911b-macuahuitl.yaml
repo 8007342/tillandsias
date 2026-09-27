@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-owned-podman-config-files-explicit-on-every-invocation-and-winning-over-system-defaults
+    event:
+      type: note
+      ts: "2026-09-27T18:00:00Z"
+      agent_id: linux-macuahuitl-claude-20260927t180000z
+      host: macuahuitl
+      summary: |-
+        PATH AMENDMENT 2026-09-27 (1438-pk9j, one-folder ruling): the owned podman files live at ~/.tillandsias/config/containers/{containers.conf,registries.conf,storage.conf} (TILLANDSIAS_HOME/config/containers), not ~/.config/tillandsias/containers. Resolve the directory through tillandsias_core::home::config_dir() from 1438-pk9j; if this row lands first, use the same path spelling and let 1438-pk9j take over the resolver. Scope, size and tier unchanged (L, opus).

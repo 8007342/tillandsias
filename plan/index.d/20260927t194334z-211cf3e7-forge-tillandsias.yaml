@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-project-records-no-openspec-cli-version-so-every-forge-launch-installs-latest-into-the-prefix-its-own-init-uses-and-nothing-ever-deliberately-moves-the-generated-set-forward
+    field: status
+    value: completed
+    ts: "2026-09-27T19:43:34Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: the-project-records-no-openspec-cli-version-so-every-forge-launch-installs-latest-into-the-prefix-its-own-init-uses-and-nothing-ever-deliberately-moves-the-generated-set-forward
+    event:
+      type: completed
+      ts: "2026-09-27T19:43:34Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: 49c2d548c
+  - packet_id: the-project-records-no-openspec-cli-version-so-every-forge-launch-installs-latest-into-the-prefix-its-own-init-uses-and-nothing-ever-deliberately-moves-the-generated-set-forward
+    event:
+      type: note
+      ts: "2026-09-27T19:43:34Z"
+      host: forge-tillandsias
+      summary: |-
+        landed on origin/linux-next at 49c2d548c (land75, real 1325 s gate; coordinator macuahuitl-fedora), verified from the forge mirror: contains work/1441-myz3 f0a6e4255; openspec/cli-version=1.13.2, ensure_openspec_pinned, scripts/openspec-pin.sh, coordinator duty 6, re-level made by the step (drift ok 44). Task 4.4 (fresh forge at the pin, empty porcelain) pending with the coordinator's host check.

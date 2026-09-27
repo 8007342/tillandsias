@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: session-tokens-from-the-harness-transcript-replaces-the-always-zero-main-ctx
+    field: status
+    value: ready
+    ts: "2026-09-27T17:47:34Z"
+    host: macos
+
+events:
+  - packet_id: session-tokens-from-the-harness-transcript-replaces-the-always-zero-main-ctx
+    event:
+      type: note
+      ts: "2026-09-27T17:47:34Z"
+      host: macos
+      summary: |-
+        released at cycle end: implementation on work/1437-3pj7 2834d3dd5 awaiting relay; close on landing

@@ -43,8 +43,17 @@ LOG="$W/tokens.jsonl"
 
 emit() { TILLANDSIAS_TOKENS_LOG="$LOG" bash "$CM" --emit-tokens "$@" 2>/dev/null; }
 report() {
+    # ORDER 1437-gbwi: --no-repo-scan alone still left the reporting path
+    # invoking the groundtruth grader every call (the expert_accuracy: line,
+    # order 786-kjke) — MEASURED here at ~6.5s per call, none of it a repo
+    # scan and none of it read by any arm below (every arm greps tokens:,
+    # token_recur: or token_max:). cycle-metrics.sh already ships the knob
+    # for exactly this case (order 1105-h8vr's SKIP_GRADE, added for "a
+    # fixture that asks only about the mcp: line"): it degrades only the
+    # expert_accuracy: line to `skipped source=...`, which no arm here reads.
     TILLANDSIAS_TOKENS_LOG="$LOG" TILLANDSIAS_TIMING_LOG="$W/timing.jsonl" \
-        bash "$CM" 2>/dev/null
+        TILLANDSIAS_CYCLE_METRICS_SKIP_GRADE=1 \
+        bash "$CM" --no-repo-scan 2>/dev/null
 }
 
 # ── 1. source=absent BEFORE any record. The row asks for this explicitly: a

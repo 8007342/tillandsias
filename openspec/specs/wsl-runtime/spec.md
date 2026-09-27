@@ -151,10 +151,11 @@ the distro; neither can be pointed elsewhere. Ownership therefore means:
 
 1. The canonical Tillandsias WSL settings (swap, swapFile, sparseVhd,
    autoMemoryReclaim, and any later key) MUST live in ONE Tillandsias-owned
-   file under the Tillandsias config directory
-   (`%LOCALAPPDATA%\tillandsias\config\wslconfig.toml` or the path the
-   implementer names in the fixture), which is operator data and survives
-   reset.
+   file under the Tillandsias config directory,
+   `%USERPROFILE%\.tillandsias\config\wslconfig.toml` (`TILLANDSIAS_HOME/config`,
+   per `host-state-lifecycle`; AMENDED 2026-09-27, 1438-pk9j, from the
+   `%LOCALAPPDATA%` path the 1437-8c6p text named), which is operator data
+   and survives both the SOFT and the HARD reset.
 2. The installer and the tray MUST merge those settings into
    `%USERPROFILE%\.wslconfig` inside a marked block
    (`# >>> tillandsias >>>` … `# <<< tillandsias <<<`), idempotently: a second

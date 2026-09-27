@@ -343,3 +343,53 @@ skips the workspace tests.
 - T3: unmeasured today (messages are not logged); 600 bytes ≈ 150 tokens
   against observed multi-paragraph heads-ups of ~600–900 tokens, received at
   the main tier. T5 is what turns this into a number.
+
+## Rulings 2026-09-27 (operator, relayed by the coordinator)
+
+Applied through the plan binary (`set-field --append`/`--replace` with the
+ruling as `--reason`, `append-event`), never by editing a landed fragment.
+
+1. **Untagged packets are Opus** ("No size tags get Opus"). The tier is a
+   FLOOR: a caller at T takes rows with floor at or below T, at-tier first.
+   Sonnet takes sonnet then haiku, never untagged. Amended 1437-khnx
+   (projection never defaults; absent stays absent), 1437-vdz5 (six arms,
+   `tier_fallback=<n>`), `model_tier_routing.selection`, and the skill text.
+2. **All-day Haiku orchestrator.** Two packets: `1443-qwpj`
+   `scripts/verify-closure.sh <order>` runs the packet's own closure command
+   (the scorable grammar guarantees one exists) and compares the PRINTED
+   output to the criterion — `ok:closure`/`unmet:closure:expected=…
+   measured=…`/`unscoreable:closure`; a delegate's "met" is never an input
+   (the 1437-gbwi misreport: 76 s then 70 s against "under 20 s"). `1443-hbgt`
+   `/haiku-orchestrate`: launched as `./repeat --model haiku --prompt "Use
+   the /haiku-orchestrate skill"` (needs 1437-m5yx); drains the selector with
+   `--tier-any`, claims, delegates one sub-agent per packet at the packet's
+   tier (untagged → opus), branches on verify-closure's one line (ok →
+   completion with the verify line as evidence; unmet → one re-delegation
+   with the measured line, then blocked; unscoreable → note). Never-list:
+   implement code, judge from a report, push to a platform branch or main,
+   edit methodology/specs/hooks/gate-steps, re-tier, run its own gate,
+   over-budget messages, accept an unrunnable closure. Canonical:
+   `model_tier_routing.orchestrator_session`.
+3. **Integration layers.** Confirmed deferral; classification to be
+   revisited per BRANCH layer. Table in `methodology/ci.yaml` →
+   `integration_layers`: work-ref push = deciders + touched fixtures (no
+   cargo, no litmus); relay land = change-class tier of `--check` (deciders,
+   fixtures, memoised workspace tests, feature-gated pass) + `--relay-scope`'s
+   run set (yoga's 1437-yfuh, consumed not re-derived); daily cut =
+   everything, every size and phase, memo OFF; stable = per-platform smokes.
+   Packets `1443-b85g` (classifier + `run-litmus-test.sh --layer`, L/opus)
+   and `1443-2ef7` (census of size/phase misclassification, S/haiku).
+4. **Memoisation.** Epoch = the release cut, not 24 h: the VERSION file's
+   content is in every key (every cut bumps and back-merges it), no clock,
+   marker or age is consulted (a `grep -c` arm pins that); keys are pure
+   content hashes (the plan binary enters by `build-id` output, not
+   size+mtime); only steps in `scripts/memo-classified-expensive.txt` are
+   memoised (instant litmus never); the cut runs with the memo off. Amended
+   1437-jm2d (8 arms), 1437-v3gb (5 arms, `version_digest`), 1437-cxt9
+   (3 arms). The 24 h forced-run marker is withdrawn from all three.
+5. **On hold pending the operator's "why".** 1437-arjg (message budget)
+   → `blocked` event and status; the statusline fallback in 1437-3pj7 → note
+   event, the transcript source proceeds. The size_budget text stays written,
+   unenforced.
+6. **Land tool.** Redesigned in Lua by a separate design; 1437-664a notes it
+   may be superseded and is written as callable phases. Not redesigned here.

@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: covering-litmus-memo-skips-a-spec-that-passed-on-identical-bytes-and-inputs
+    field: context
+    value: |-
+      T4 of the 2026-09-27 trims, the memo tier. The timing log already
+      names the bytes a litmus ran against (digest of the litmus file,
+      spec_digest of the spec) but not the inputs it read, so a record is a
+      bound rather than a memo (agent-observability.yaml
+      skippable_candidates.honest_limit names this exact next rung). Adding
+      inputs_digest (sha256 over the declared preconditions' workspace paths,
+      by git blob id plus working-tree diff) makes exact repeats measurable.
+      Fails are never skipped so a standing red keeps being seen until fixed.
+
+
+      [2026-09-27T17:57:34Z macuahuitl] RULING 2026-09-27 (operator, via the coordinator): memoise between
+      releases (the epoch is the cut, not 24 h), pure content hashes only,
+      memoise only classified-expensive tests, and a cut runs everything fresh.
+      Applied: the record gains version_digest (sha256 of the VERSION file's
+      content), the memo compares digest, spec_digest, inputs_digest and
+      version_digest and nothing else; size instant is never memoised; the cut's
+      check:litmus-pre-build runs with the memo disabled. The 24 h window in the
+      first design is withdrawn.
+    ts: "2026-09-27T17:57:34Z"
+    host: macuahuitl
+
+events:
+  - packet_id: covering-litmus-memo-skips-a-spec-that-passed-on-identical-bytes-and-inputs
+    event:
+      type: note
+      ts: "2026-09-27T17:57:34Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-09-27 relayed by the coordinator (efficiency trims 1437-62g8)
