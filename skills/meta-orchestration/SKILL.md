@@ -1967,6 +1967,36 @@ Only `linux_mutable` performs global coordination:
    evidence is current, and no release is already in flight.
 5. After a release succeeds, ensure the plan records the new latest release so
    immutable Linux hosts know to run curl-install e2e.
+6. **Move the project's openspec CLI forward deliberately (order 1441-myz3)**.
+   `openspec/cli-version` is the project's ONE openspec version. Forges install
+   exactly it (`ensure_openspec_pinned`, lib-common.sh) and never refresh it to
+   @latest, so a fresh forge's /opsx sets match the committed ones and launch
+   leaves the checkout clean. Keeping the pin current is the coordinator's
+   job, once per cycle and cheap when nothing is due. Run it on a CLEAN tree
+   based on `origin/linux-next` (a `work/<order>` ref or the coordinator's
+   own checkout), with npm on PATH (host or `tillandsias-builder`):
+   ```bash
+   scripts/openspec-pin.sh check    # ok:openspec-pin-current:<v> | due:openspec-bump:<pin>-><latest> | unknown:…
+   scripts/openspec-pin.sh bump     # only on due: (or `bump --to <v>` to re-level at the current pin)
+   scripts/openspec-pin.sh drift    # must print ok:openspec-generated-matches-pin before committing
+   ```
+   `bump` installs the new version into a version-keyed cache, runs
+   `openspec update --force` with an ISOLATED openspec config (the profile is
+   derived from the committed workflows, never from the machine running it),
+   writes the pin, and never commits. On `bumped:openspec:<old>-><new>:<n>-paths`,
+   commit everything it changed as ONE change, subject
+   `chore(openspec): bump CLI <old> -> <new>`, and land it like any work ref.
+   On `review:openspec-bump:…`, stop and read stderr. It names either
+   generated files that still disagree with the pin, or a superseded copy the
+   CLI left behind instead of overwriting (1.13.2: "Left 11 files in .codex/
+   that differ from the copy in .agents/"). Remove only the copy the CLI names
+   as superseded, re-run `drift` to ok, and commit that removal in the SAME
+   change. Paths outside the generated surface mean something unexpected
+   happened: do not commit, and file a packet. `unknown:` (registry
+   unreachable) waits for the next cycle. Changing the workflow profile is a
+   separate decision; it is never a side effect of a bump. This is the only
+   sanctioned way the generated /opsx sets move. Launch-generated dirt is
+   refused (step 4 of Start Of Cycle), never committed.
 
 ## Cycle Metrics (report before the handoff)
 
