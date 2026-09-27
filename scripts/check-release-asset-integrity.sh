@@ -136,6 +136,18 @@ done
 #        RELEASE_VERIFY_COSIGN_ISSUER=<issuer>  (default: GitHub Actions OIDC)
 #      Unset, or cosign absent, is a NAMED skip on stderr, never a silent pass.
 mismatched=()
+# 1425-8wir: cosign refusals are NOT byte evidence. They get their own list and
+# carry cosign's own reason; only the sha256 arm (which measures bytes) may say
+# "the bytes changed". v56.9.27.1: all 5 Windows assets refused seconds after
+# the same job signed them, their sha256 matched, and the reason was discarded.
+cosign_refused=()
+cosign_reason=()
+# First two non-empty lines of cosign's stderr, one line, bounded.
+_cosign_reason() {
+    local r
+    r="$(awk 'NF { printf "%s%s", (n++ ? " | " : ""), $0; if (n == 2) exit }' <<< "$1")"
+    printf '%s\n' "${r:0:400}"
+}
 if [ -z "$TAG" ]; then
     if command -v sha256sum >/dev/null 2>&1; then _sha() { sha256sum "$1" | awk '{print $1}'; }
     else _sha() { shasum -a 256 "$1" | awk '{print $1}'; }
@@ -163,11 +175,12 @@ if [ -z "$TAG" ]; then
                 --certificate-oidc-issuer "$issuer" "$DIR/$a" 2>&1 >/dev/null)" && continue
             case "$cerr" in
                 *"bundle does not contain cert"*)
-                    cosign verify-blob --new-bundle-format --bundle "$DIR/$b" \
+                cerr="$(cosign verify-blob --new-bundle-format --bundle "$DIR/$b" \
                         --certificate-identity-regexp "$RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP" \
-                        --certificate-oidc-issuer "$issuer" "$DIR/$a" >/dev/null 2>&1 && continue ;;
+                        --certificate-oidc-issuer "$issuer" "$DIR/$a" 2>&1 >/dev/null)" && continue ;;
             esac
-            mismatched+=("$a (cosign verify-blob against $b)")
+            cosign_refused+=("$a (cosign verify-blob against $b)")
+            cosign_reason+=("$(_cosign_reason "$cerr")")
         done
     elif [ -z "${RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP:-}" ]; then
         echo "  skip:cosign-verify-blob:no RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP (bundles checked for presence only)" >&2
@@ -178,6 +191,9 @@ else
     echo "  skip:byte-checks:--tag mode has the manifests, not the assets" >&2
 fi
 for v in ${mismatched[@]+"${mismatched[@]}"}; do
+    violations+=("$v")
+done
+for v in ${cosign_refused[@]+"${cosign_refused[@]}"}; do
     violations+=("$v")
 done
 
@@ -204,6 +220,16 @@ if [ "${#violations[@]}" -gt 0 ]; then
         echo "  The bytes changed after the manifest line or signature was written." >&2
         echo "  Re-stage the artifact from the build output, then regenerate and re-sign" >&2
         echo "  the manifest. Do NOT edit the manifest or re-sign to match these bytes." >&2
+    fi
+    if [ "${#cosign_refused[@]}" -gt 0 ]; then
+        i=0
+        for v in "${cosign_refused[@]}"; do
+            echo "  $v: cosign verify-blob REFUSED — cosign says: ${cosign_reason[$i]:-<no stderr>}" >&2
+            i=$((i + 1))
+        done
+        echo "  This is cosign's verdict on the signature, identity or invocation, not a" >&2
+        echo "  byte measurement: the sha256 arm above is the one that checks bytes. Read" >&2
+        echo "  cosign's reason before re-staging anything." >&2
     fi
     exit 1
 fi
