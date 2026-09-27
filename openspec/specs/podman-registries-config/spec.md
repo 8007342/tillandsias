@@ -112,7 +112,8 @@ The user runtime SHALL NOT depend on `scripts/setup-podman-registries.sh`
 having copied a file into `~/.config/containers/`. The registries policy this
 spec describes (no unqualified-search registries, `short-name-mode = "enforcing"`
 or the equivalent that never prompts) SHALL be written by the runtime to
-`<config>/containers/registries.conf` and selected explicitly on every podman
+`<config>/containers/registries.conf` (`<config>` = `~/.tillandsias/config`,
+`host-state-lifecycle`) and selected explicitly on every podman
 invocation, per `podman-idiomatic-patterns` "Tillandsias-owned podman
 configuration is explicit on every invocation". The developer copy stays a
 developer convenience for the checkout's own `podman` use.

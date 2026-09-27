@@ -1,0 +1,95 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: everything-tillandsias-owns-on-a-host-lives-under-tillandsias-home-and-a-first-launch-migrates-the-legacy-roots
+    order: 1438-pk9j
+    parent_order: 1437-8c6p
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [layout, migration, cache, config, core, linux, tillandsias-home]
+    estimated_hours: 10
+    owned_files:
+      - crates/tillandsias-core/src/home.rs
+      - crates/tillandsias-core/src/cache_root.rs
+      - crates/tillandsias-core/src/config.rs
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - crates/tillandsias-podman/src/cache_semantics.rs
+      - scripts/test-tillandsias-home-layout.sh
+      - openspec/litmus-tests/litmus-tillandsias-home-layout.yaml
+    title: |
+      One root: every Tillandsias-owned file lives under ~/.tillandsias/ ({config,downloads,vault,cache,state,vm}) resolved through one TILLANDSIAS_HOME-honouring resolver in tillandsias-core; XDG, ~/Library and %LOCALAPPDATA% roots become legacy inputs that a first launch migrates once (rename or copy-verify-delete, idempotent, converges from any mixed state)
+    context: |
+      Spec: host-state-lifecycle "Everything Tillandsias owns on a host lives under
+      ~/.tillandsias/, and a first launch migrates the legacy roots there" (all four
+      scenarios); cache-recovery-mechanism "Cache Directory Lifecycle and Paths" (superseded XDG
+      text); environment-runtime "Global and per-project configuration" (config.toml moves);
+      inference-container (models at downloads/models). Operator ruling 2026-09-27, verbatim:
+      "keep all our configs and downloaded files in ~/.tillandsias/ for a user to easily find
+      them, snoop around, and wipe them afterwards"; and "the ephemeral/idempotent approach
+      should take care transparently of launching correctly from any state."
+
+      Today (audit in plan/issues/operator-directives-reset-survivors-and-harness-bypass-2026-09-27.md):
+      three resolvers disagree — init_cache_dir (XDG or ~/.cache, with a writable probe),
+      tillandsias_core::cache_root::cache_root (XDG or ~/.cache or temp), tillandsias_core::
+      config::cache_dir (dirs::cache_dir: ~/.cache, ~/Library/Caches, %LOCALAPPDATA%) — plus
+      data_dir/config_dir/state_dir; the Windows tray uses %LOCALAPPDATA%\tillandsias\{cache,wsl,
+      state,logs}; the macOS tray uses ~/Library/Application Support/tillandsias and
+      ~/Library/Caches/tillandsias.
+
+      Do, Linux + core (platform trays are slices of 1437-av8u and 1437-3iux, which depend on
+      this row): (1) tillandsias_core::home: home() honours TILLANDSIAS_HOME, defaults to
+      ~/.tillandsias (%USERPROFILE%\.tillandsias on Windows, /root/.tillandsias in a guest);
+      typed accessors config_dir(), downloads_dir(), vault_dir(), cache_dir(), state_dir(),
+      vm_dir(); every existing resolver becomes a thin call into it (init_cache_dir ->
+      cache_dir(); cache_root -> cache_dir(); models -> downloads_dir()/models; vault-data ->
+      vault_dir()/data; vault-audit -> vault_dir()/audit; config.toml -> config_dir()/config.toml;
+      runtime assets -> cache_dir()/runtime/<ver>; logs -> state_dir()/logs); (2) migrate():
+      for each legacy root that exists, move each KNOWN child to its home by the table in the
+      spec (rename on one filesystem, copy-verify-delete otherwise), leave an existing
+      destination alone and remove the legacy copy only when byte-identical (else keep as
+      <name>.legacy-<ts> and print it), remove the emptied legacy root, print one line per
+      moved child, run before anything else on every launch, idempotent — a second run moves
+      nothing and prints nothing; the Vault store moves as bytes (no re-init) and the keyring
+      share is untouched; (3) unit tests in core for the resolver and for migrate() over a
+      fixture tree (fresh, legacy, mixed/interrupted, second run); (4) fixture
+      scripts/test-tillandsias-home-layout.sh: hermetic TILLANDSIAS_HOME + a seeded legacy
+      ~/.cache/tillandsias under a temp HOME; run the binary's migration entry (a --diagnose
+      is enough to trigger it); assert the layout, the digests, the emptied legacy root, and
+      that a second run is silent; negative arm: nothing written outside TILLANDSIAS_HOME;
+      bind as litmus:tillandsias-home-layout; (5) update the paths in the cheatsheets that
+      name ~/.cache/tillandsias (grep) and in announce_reset_plan's preserved list.
+
+      Consumers filed against this row: 1437-jdgg (manifest at downloads/manifest.json),
+      1437-evzi (uninstall removes the root or prompts), 1437-2pix (config/containers/),
+      1437-6ghz (config/wslconfig.toml), 1437-av8u and 1437-3iux (platform migration slices).
+    exit_criteria:
+      - 'scripts/test-tillandsias-home-layout.sh fresh arm: after a hermetic --init nothing exists under the legacy roots and ~/.tillandsias/{config,downloads,vault,cache,state} exist (pre-fix result: FAILS — every legacy root is written today)'
+      - 'legacy arm: a seeded ~/.cache/tillandsias with vault-data, models and packages is migrated to vault/data, downloads/models and cache/packages with equal digests and the legacy root is removed (pre-fix result: FAILS — no migration exists)'
+      - 'second-run arm: a second launch moves nothing and prints no migration line (pre-fix result: FAILS)'
+      - 'mixed arm: an interrupted migration (half moved) converges without prompting and names any .legacy-<ts> copy (pre-fix result: FAILS)'
+      - 'seam arm: with TILLANDSIAS_HOME=/tmp/x every path the command touched is under /tmp/x (pre-fix result: FAILS — XDG and ~/.cache are consulted)'
+      - 'cargo test -p tillandsias-core home:: passes (pre-fix result: FAILS — module absent)'
+    verifiable_closure: |
+      bash scripts/test-tillandsias-home-layout.sh exits 0 with all five arms and cargo test -p tillandsias-core home passes; pre-fix: both FAIL.
+    depends_on: []
+    notes: |
+      size: L  implementer_tier: opus
+      Cross-crate (core + headless + podman), it moves the Vault store's bytes and it is the
+      seam every destructive fixture will rely on — a resolver that answers a real home under a
+      fixture is the 1401-p3k7 incident again. Do not run the migration against your own real
+      home while developing; use TILLANDSIAS_HOME and a temp HOME. macOS and Windows migration
+      (~/Library/*, %LOCALAPPDATA%, %APPDATA%) is delivered by 1437-av8u and 1437-3iux on top of
+      this resolver; keep the legacy-root table in core so they add rows, not copies.
+    next_action: 'write tillandsias_core::home with the resolver and the legacy-root table, then make init_cache_dir and cache_root call it and run the fresh arm to see what still lands outside the root'
+    provenance: |
+      Filed by macuahuitl (linux-macuahuitl-claude-20260927t180000z), 2026-09-27, from the operator's answer to open question 3 of 1437-8c6p; amendment order for the same-day rulings.
+    events:
+      - type: filed
+        ts: "2026-09-27T18:00:00Z"
+        agent_id: "linux-macuahuitl-claude-20260927t180000z"
+        host: macuahuitl
+        summary: |-
+          The single root and its migration: the operator answered "one folder" and the layout, resolver and first-launch migration are this row.

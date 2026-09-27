@@ -7,19 +7,18 @@ status: active
 
 ### Requirement: Global and per-project configuration
 <!-- req-id: 8856aa41 -->
-The configuration system MUST support a two-level hierarchy: global defaults at a platform-specific path and per-project overrides at `<project>/.tillandsias/config.toml`.
+The configuration system MUST support a two-level hierarchy: global defaults at `~/.tillandsias/config/config.toml` and per-project overrides at `<project>/.tillandsias/config.toml`. SUPERSEDED 2026-09-27 (order 1438-pk9j; operator ruling: "keep all our configs and downloaded files in ~/.tillandsias/"): the three platform-specific global paths below are now the LEGACY locations that `host-state-lifecycle`'s first-launch migration moves to the single root; they are no longer read in place.
 
-#### Scenario: Platform-specific config paths
-- **WHEN** the application runs on macOS
-- **THEN** the global config MUST be located at `~/Library/Application Support/tillandsias/config.toml`
+#### Scenario: Global config lives under the single root on every platform
+- **WHEN** the application runs on Linux, macOS or Windows
+- **THEN** the global config MUST be located at `TILLANDSIAS_HOME/config/config.toml` (`~/.tillandsias/config/config.toml`; `%USERPROFILE%\.tillandsias\config\config.toml` on Windows)
+- **AND** the platform-specific paths below MUST NOT be read in place
+- Pre-fix result: FAILS — `config_dir()` resolves the platform paths below
 
-#### Scenario: Platform-specific config paths (Windows)
-- **WHEN** the application runs on Windows
-- **THEN** the global config MUST be located at `%APPDATA%\tillandsias\config.toml`
-
-#### Scenario: Platform-specific config paths (Linux)
-- **WHEN** the application runs on Linux
-- **THEN** the global config MUST be located at `~/.config/tillandsias/config.toml`
+#### Scenario: Legacy platform config paths are migrated once
+- **WHEN** `~/.config/tillandsias/config.toml` (Linux), `~/Library/Application Support/tillandsias/config.toml` (macOS) or `%APPDATA%\tillandsias\config.toml` (Windows) exists on first launch
+- **THEN** it MUST be moved to `~/.tillandsias/config/config.toml`, byte-identical
+- **AND** the legacy file MUST be gone afterwards, and a second launch MUST move nothing
 
 ### Requirement: User-facing files must be verbose and non-technical
 <!-- req-id: 475bf3b0 -->
@@ -44,21 +43,22 @@ The uninstall script MUST:
 - Report what was cleaned after deletion
 - Confirm that project files were NOT touched
 - Support `--wipe` for cache and container image removal. REFINED 2026-09-27
-  (order 1437-8c6p, `host-state-lifecycle`): `--wipe` is now the DEFAULT and
-  is accepted as a no-op; the manual uninstall is the one path that removes
-  the Vault store, the download cache and the models, and it removes every
-  entry of the download manifest. The accountability obligations above are
-  unchanged; the scope of "all Tillandsias artifacts" is defined by
-  `host-state-lifecycle`.
+  (orders 1437-8c6p and 1438-pk9j, `host-state-lifecycle`): the uninstall
+  leaves ZERO traces outside `~/.tillandsias/`, and asks `[y/N]` before
+  removing that folder too; `--wipe` is accepted as an alias of
+  `--remove-home`. The accountability obligations above are unchanged; the
+  scope of "all Tillandsias artifacts", the prompt, the non-interactive
+  default and the leftover notice are defined by `host-state-lifecycle`.
 
-#### Scenario: Uninstall removes what the manifest and the survivor set name
+#### Scenario: Uninstall delegates to the binary and honours the one prompt
 - **WHEN** `scripts/uninstall.sh` runs and the installed binary is present
 - **THEN** it SHALL delegate to `tillandsias --uninstall` (`host-state-lifecycle`)
-- **AND** the printed removal list SHALL include the Vault store, the model
-  directory and every download-manifest entry
+- **AND** the printed removal list SHALL include every registration, keyring
+  entry and podman object, and `~/.tillandsias/` only when the operator
+  answered y or passed `--remove-home` / `--wipe`
 - **AND** `TILLANDSIAS_RESET_KEEP_MODELS` SHALL have no effect.
-- Pre-fix result: FAILS — the script keeps the cache without `--wipe` and
-  keeps models under the variable.
+- Pre-fix result: FAILS — the script keeps the cache without `--wipe`,
+  keeps models under the variable, and never touches keyring entries.
 
 ### Requirement: Desktop user-session runtime
 <!-- req-id: 71258bd9 -->
