@@ -1,0 +1,27 @@
+packets:
+  - packet_id: every-tray-quit-ends-in-a-force-stop-because-the-guest-never-shuts-itself-down-cleanly
+    order: 1430-rnpd
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [guest, shutdown, filesystem-safety, macos, windows, vm-layer]
+    estimated_hours: 4
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the live arm (a tray quit against a provisioned VM) is the pin; its log grammar lands with the fix.
+    title: |
+      the guest never performs its own clean shutdown when the host stops it: on macOS it ignores VZ requestStop for the full 60 s drain and every tray quit ends in stopWithCompletionHandler (a force-stop); on Windows WslRuntime::stop ignores its drain timeout and runs  immediately. Either way the guest disk is cut off, not unmounted — a filesystem-safety issue, not just latency
+    verifiable_closure: |
+      a tray quit against a provisioned VM logs the GUEST's own clean shutdown before the force-stop deadline, and the force-stop path is NOT taken (macOS: no "drain_timeout (60s) expired; force-stop dispatched"; Windows: the distro stops through the guest rather than by an immediate ); pre-fix result: FAILS on every quit measured (macOS, 2026-09-27: 3 of 3 live quits on work/1426-cb6g logged "VzRuntime::stop: drain_timeout (60s) expired; force-stop dispatched").
+    context: |
+      Measured on the 1426-cb6g live arms (tlatoanis-macbook-air, signed dist bundle, provisioned Fedora 44 guest).
+      macOS: vm-layer vz.rs VzRuntime::stop calls requestStopWithError (the guest-visible power request), polls state for
+      drain_timeout, then force-stops; the guest never left the running state in 60 s. Windows (read from code, not
+      measured): vm-layer wsl.rs WslRuntime::stop takes  and immediately runs ; the tray's
+      Quit logs "wire-level drain not yet wired on vsock; falling back to wsl --terminate". The mechanism is left to the fixer
+      (e.g. ACPI power-button handling in the guest image, or a guest-side VmShutdownRequest handler — the host already
+      sends one and gets no reply, see 1426-cb6g). Coordinator ruling 2026-09-27: file it; it is cross-platform in shape.
+    exit_criteria:
+      - 'a tray quit logs the guest''s clean shutdown and does not take the force-stop path, on macOS and on Windows; pre-fix result: FAILS'
