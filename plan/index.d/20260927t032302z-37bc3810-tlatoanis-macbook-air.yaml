@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-virtualization-framework-guest-boots-with-no-swap-so-the-vm-gets-a-dedicated-sparse-time-machine-excluded-swap-image-plus-guest-zram-and-the-balloon-is-never-inflated-under-a-running-forge
+    event:
+      type: progress
+      ts: "2026-09-27T03:23:02Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t032302z
+      host: tlatoanis-macbook-air
+      summary: |
+        LIVE ARM, MEASURED on the v56.9.27.1 macOS smoke (tlatoanis-macbook-air, macOS 27.0 Apple Silicon, 2026-09-27, operator-approved re-provision); 1377-hcnv code ba00e2452 is an ancestor of v56.9.27.1. Every criterion in the verifiable_closure's live arm holds:
+        - guest (tray --exec-guest): /proc/swaps lists /dev/vdb 25165820 KiB (24 GiB, >= 8 GiB) at priority 10 — found by virtio serial tillandsias-swap — and /dev/zram0 2 GiB at priority 100 (lzo-rle); free shows 25 GiB swap.
+        - host: "<app support>/tillandsias/vm-swap.img" beside rootfs.img; tmutil isexcluded prints [Excluded] (com_apple_backup_excludeItem xattr); apparent 25769803776 bytes, du -h 4.0K (sparse, well under 1 GiB).
+        - per-launch lifecycle: absent after the graceful stop (--exec-guest). EXCEPTION filed separately as 1426-cb6g: a SIGTERM'd tray skips the stop path and the file survives.
+        Evidence: target/smoke-e2e/03c-1377-guest.txt, 03c-1377-host-swap.txt, 03c-1377-after-stop.txt; report plan/issues/smoke-e2e-findings-v56.9.27.1-2026-09-27-macos-tlatoanis-macbook-air.md. Pre-smoke state (v56.9.25.2): no vm-swap.img existed (00-pre-state.txt).

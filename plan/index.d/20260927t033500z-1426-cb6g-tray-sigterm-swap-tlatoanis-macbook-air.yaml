@@ -1,0 +1,25 @@
+packets:
+  - packet_id: a-sigtermed-macos-tray-skips-the-vm-stop-path-and-leaves-the-per-launch-swap-image-behind
+    order: 1426-cb6g
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, tray, lifecycle, vm-layer]
+    estimated_hours: 2
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: a signal-handler test lands with it.
+    title: |
+      the macOS tray has no SIGTERM handler, so `pkill -TERM` (install-macos.sh's own stop escalation) ends it without running vz.rs stop()/Drop and vm-swap.img (1377-hcnv, meant to be per-launch) survives; the graceful stop path does remove it
+    verifiable_closure: |
+      after `pkill -TERM -x tillandsias-tray` with a running VM, vm-swap.img is absent once the VM has stopped, matching the graceful path; pre-fix result: FAILS (measured on the v56.9.27.1 smoke: the file survives SIGTERM, is removed by --exec-guest's stop).
+    context: |
+      v56.9.27.1 macOS smoke, 2026-09-27: plan/issues/smoke-e2e-findings-v56.9.27.1-2026-09-27-macos-tlatoanis-macbook-air.md,
+      evidence target/smoke-e2e/03c-1377-after-stop.txt. Deletion sites: vz.rs stop() (~2924) and Drop (~76).
+      Relaunch recreates the image fresh (vz.rs ~2663), so the leftover is 4 KiB allocated; the concern is that a
+      SIGTERM skipping the VM stop path may skip more than swap cleanup. Related: 1244-9dx3 (the installer's
+      osascript quit does not stop a running tray, so every reinstall reaches SIGTERM).
+    exit_criteria:
+      - 'SIGTERM runs the graceful stop path; vm-swap.img removed; pre-fix result: FAILS'
