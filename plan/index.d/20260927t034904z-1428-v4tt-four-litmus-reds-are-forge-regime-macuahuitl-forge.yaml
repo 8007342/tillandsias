@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: four-litmus-steps-are-red-only-in-the-forge-regime-an-absolute-cargo-target-dir-joined-as-relative-an-env-exported-git-identity-a-forge-exempt-skip-outside-the-grammar-and-no-podman
+    order: 1428-v4tt
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, forge, regime, fixture]
+    estimated_hours: 2
+    owned_files:
+      - openspec/litmus-tests/litmus-plan-only-push-lane-shape.yaml
+      - openspec/litmus-tests/litmus-committable-branch-guard-shape.yaml
+      - openspec/litmus-tests/litmus-build-cache-sweep-trigger.yaml
+      - openspec/litmus-tests/litmus-e2e-eligibility-probe-shape.yaml
+    title: |
+      four litmus tests are red ONLY in the forge regime, each for a forge-specific reason diagnosed here, none of them hooksPath or the mirror origin: plan-only-push-lane-shape (step 2/12), committable-branch-guard-shape (step 4/7), build-cache-sweep-trigger (step 1/15), e2e-eligibility-probe-shape (ENV-FAIL, podman)
+    context: |
+      REGIME: forge (macuahuitl-forge, image b09adefe522a, 2026-09-27). Absolute
+      CARGO_TARGET_DIR=/home/forge/.cache/tillandsias-project/cargo/target, no
+      ./target; GIT_AUTHOR_NAME/EMAIL and GIT_COMMITTER_NAME/EMAIL exported in
+      the environment; global core.hooksPath set; origin is the enclave mirror;
+      no podman. Each red was reproduced IDENTICALLY on a clean origin/linux-next
+      worktree in the forge, so none is caused by a change under test.
+      BARE-METAL COMPARISON: methodology-accountability was MEASURED GREEN on
+      bare-metal macuahuitl ~03:40Z in land61's covering litmus on the union
+      (coordinator), so plan-only-push-lane-shape is forge-only. The
+      meta-orchestration set is UNMEASURED on bare metal.
+      DIAGNOSIS, each by running the failing step's own command:
+      1. litmus:plan-only-push-lane-shape STEP 2/12 ("ACCEPT: a fragments-only
+         push passes the lane…"). The step builds
+         TILLANDSIAS_PLAN_BIN="$root/${_mfp#./}", which is right only for a
+         relative ./target path. In a forge mf_plan_binary answers an ABSOLUTE
+         path, so the step exports
+         /home/forge/src/tillandsias//home/forge/.cache/…/tillandsias-plan (DOES
+         NOT EXIST); the hook's plan-only lane then fails closed ("no runnable
+         tillandsias-plan resolved … full gate required") and refuses for the
+         stamp. Same class as 1401-x76w / 84f37ff24. It is the only litmus with
+         this join (grep -F '${_mfp#./}').
+      2. litmus:committable-branch-guard-shape STEP 4/7 ("a checkout with NO git
+         identity fails closed with blocked:no-git-identity"). The fixture blanks
+         GIT_CONFIG_GLOBAL/GIT_CONFIG_SYSTEM and sets user.useConfigOnly, but the
+         forge EXPORTS GIT_AUTHOR_*/GIT_COMMITTER_*, and git takes identity from
+         the environment, so the check answers ok:branch-linux-next (FAIL rc=0).
+         MEASURED: the same step with those four variables unset passes
+         ("ok: no-identity-fails-closed").
+      3. litmus:build-cache-sweep-trigger STEP 1/15 ("Req: the gate exists, is
+         executable, and emits its pinned verdict grammar"). In a forge
+         scripts/check-build-cache-sweep.sh answers skip:forge-exempt, which the
+         step's grep grammar (^(ok:build-cache-sweep-not-due|due:build-cache-sweep):bytes=…)
+         does not admit. The skip is correct behaviour; the litmus lacks it.
+      4. litmus:e2e-eligibility-probe-shape: [ENV-FAIL] "'podman ps' FAILED
+         IMMEDIATELY with exit 1 … tillandsias-podman: podman is not on PATH".
+         A forge has no podman; the step needs it.
+      NOTE for readers of the runner log: each "[FAIL] spec=… test=X" summary is
+      printed BEFORE the next test's step lines, so a step line under it belongs
+      to the NEXT test (the filer mis-mapped two of these at first).
+    exit_criteria:
+      - 'in the forge regime, run-litmus-test.sh methodology-accountability and meta-orchestration (--phase pre-build) report none of the four as FAIL: each either passes or is a NAMED skip for its regime reason (pre-fix: FAILS, all four red on a clean trunk worktree in a forge)'
+      - 'bare metal is unchanged: the four still pass where they passed (pre-fix: methodology-accountability green on macuahuitl; meta-orchestration unmeasured, so measure it)'
+    verifiable_closure: |
+      in a forge: scripts/run-litmus-test.sh methodology-accountability --phase pre-build --size instant
+      and scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size all
+      print no "[FAIL]" for plan-only-push-lane-shape, committable-branch-guard-shape,
+      build-cache-sweep-trigger or e2e-eligibility-probe-shape; pre-fix: FAILS (all four).
+    unscoreable: |
+      the fix shape per test is the fixer's (absolutise the join; env -u the
+      four identity variables in the fixture; admit skip:forge-exempt in the
+      grammar or skip the step in a forge; a named podman skip), and whether
+      skipping a step in a forge hides a real regression there is a judgement
+      each arm must state.
+    events:
+      - type: filed
+        ts: "2026-09-27T03:49:04Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t034904z"
+        host: macuahuitl-forge
+        summary: |-
+          Four forge-regime litmus reds, each diagnosed by running its failing step:
+          absolute-path join, env-exported git identity, forge-exempt skip outside
+          the grammar, no podman.
