@@ -192,6 +192,7 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
             | LoginStatePush { .. }
             | CloudProjectsPush { .. }
             | FlowStatePush { .. }
+            | ProgressPush { .. }
             | MetricsSnapshotReply { .. },
             _,
         ) => ResponseOnly,
@@ -463,6 +464,19 @@ mod tests {
                 },
                 "FlowStatePush",
             ),
+            (
+                ControlMessage::ProgressPush {
+                    seq: 1,
+                    event: tillandsias_control_wire::ProgressEvent {
+                        task: "provision".into(),
+                        parent: None,
+                        label: "Provisioning".into(),
+                        kind: tillandsias_control_wire::ProgressKind::Done,
+                        ts_unix_ms: 0,
+                    },
+                },
+                "ProgressPush",
+            ),
         ]
     }
 
@@ -502,6 +516,7 @@ mod tests {
 | "LoginStatePush"
 | "CloudProjectsPush"
 | "FlowStatePush"
+| "ProgressPush"
 | "MetricsSnapshotReply" => DispatchOutcome::ResponseOnly,
 _ => unreachable!("test fixture missing case for {name}"),
             };
@@ -548,6 +563,7 @@ _ => unreachable!("test fixture missing case for {name}"),
                 | "LoginStatePush"
                 | "CloudProjectsPush"
                 | "FlowStatePush"
+                | "ProgressPush"
                 | "MetricsSnapshotReply" => DispatchOutcome::ResponseOnly,
                 _ => unreachable!("test fixture missing case for {name}"),
             };
@@ -655,6 +671,16 @@ _ => unreachable!("test fixture missing case for {name}"),
                 to_state: "auth.github.blocked".into(),
                 reason: Some("persist(ca_bundle)".into()),
                 ts_unix: 1721779200,
+            },
+            ControlMessage::ProgressPush {
+                seq: 1,
+                event: tillandsias_control_wire::ProgressEvent {
+                    task: "provision".into(),
+                    parent: None,
+                    label: "Provisioning".into(),
+                    kind: tillandsias_control_wire::ProgressKind::Done,
+                    ts_unix_ms: 0,
+                },
             },
         ];
         for msg in &resp {
