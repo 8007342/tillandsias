@@ -1,0 +1,25 @@
+packets:
+  - packet_id: the-release-integrity-gate-reports-a-cosign-verify-blob-refusal-as-changed-bytes-and-discards-cosigns-reason
+    order: 1425-8wir
+    status: in_progress
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [release, cosign, signing, fail-loud]
+    estimated_hours: 1
+    observed_by: macuahuitl
+    unscoreable: |
+      unpinnable-until-measured: pinned by scripts/test-release-asset-integrity.sh scenario 9, which lands with it.
+    title: |
+      check-release-asset-integrity.sh (1407-6jr8) puts cosign verify-blob refusals in the same list as sha256 mismatches, throws cosign's stderr (cerr) away, and tells the reader "the bytes changed ... Re-stage the artifact" — on v56.9.27.1 it refused all 5 Windows assets that way while their sha256 matched
+    verifiable_closure: |
+      scripts/test-release-asset-integrity.sh scenario 9: a fake cosign failing with an identity-mismatch message yields a violation carrying that message and NOT "bytes do not match" / "bytes changed" / "Re-stage"; the v2 retry path reports the retry's own reason; pre-fix result: FAILS (9a, 9b, 9c).
+    context: |
+      Release run 36287645166, job 108537791656 (v56.9.27.1, 2026-09-27): violation:release-asset-integrity:5 on the
+      Windows set, seconds after the same job signed them; the SHA256SUMS byte check passed on the same bytes; Linux
+      with the same cosign v3.0.5 and identity env passed 8/8. The Windows assets are unpublished, so the cut cannot
+      promote, and the log did not say why. Narrow fix only; the Windows root cause (suspect: MSYS argument
+      conversion) is being reproduced by yolanda and may be folded into this ref.
+    exit_criteria:
+      - 'cosign refusals carry cosign''s reason and no re-stage remedy; pre-fix result: FAILS'

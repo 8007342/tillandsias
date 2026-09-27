@@ -203,7 +203,7 @@ fn notify_provisioning_failed(reason: &str) {
         "display notification \"{escaped}\" with title \"Tillandsias\" \
          subtitle \"Provisioning error\""
     );
-    let mut command = std::process::Command::new("osascript");
+    let mut command = std::process::Command::new("/usr/bin/osascript");
     command.arg("-e").arg(&body);
     spawn_and_reap(command, "notification");
 }
@@ -225,7 +225,7 @@ fn notify_crash_loop(reason: &str) {
         "display notification \"{escaped}\" with title \"Tillandsias\" \
          subtitle \"Guest crash-loop\""
     );
-    let mut command = std::process::Command::new("osascript");
+    let mut command = std::process::Command::new("/usr/bin/osascript");
     command.arg("-e").arg(&body);
     spawn_and_reap(command, "crash-loop notification");
 }
@@ -1703,7 +1703,7 @@ impl TrayActionHost {
                 if let Some(home) = std::env::var_os("HOME") {
                     let log_dir = std::path::PathBuf::from(home).join("Library/Logs/Tillandsias");
                     let _ = std::fs::create_dir_all(&log_dir);
-                    let mut command = std::process::Command::new("open");
+                    let mut command = std::process::Command::new("/usr/bin/open");
                     command.arg(&log_dir);
                     spawn_and_reap(command, "open log directory");
                 }

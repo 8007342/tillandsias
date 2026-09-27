@@ -42,7 +42,9 @@
 #   frozen:<branch>:by=<host>:since=<epoch>:age=<n>s     status: frozen
 #   refused:freeze:usage:<detail>             bad arguments
 #   refused:freeze:no-such-branch:<branch>    the branch does not exist on the remote
-#   refused:freeze:unreachable:<detail>       the remote could not be queried
+#   refused:freeze:unreachable:<detail>       the remote could not be queried, fetched
+#                                             from or pushed to; <detail> carries
+#                                             git's own refusal lines (1422-fvce)
 set -euo pipefail
 
 NS="refs/tillandsias/freeze"
@@ -102,6 +104,17 @@ _t() {
     else "$@"; fi
 }
 
+# git's own words on one line (1422-fvce). A push runs the pre-push hook, whose
+# chatter precedes git's refusal, so keep the lines git refuses WITH — remote:,
+# " ! ", error:, fatal:, and any refused/declined/rejected line — and fall back
+# to the last three non-empty lines when none match.
+_git_reason() {
+    local why
+    why="$(printf '%s\n' "$1" | awk 'NF && (/^(remote:|error:|fatal:| ! )/ || /refused|declined|rejected/)')"
+    [ -n "$why" ] || why="$(printf '%s\n' "$1" | awk 'NF' | tail -3)"
+    printf '%s' "$why" | tr '\n' ' ' | sed 's/  */ /g; s/ $//'
+}
+
 _markers() { # -> "<sha>\t<ref>" lines, empty when not frozen
     _t 10 git ls-remote "$REMOTE" "$NS/$BRANCH/*" 2>/dev/null || return 1
 }
@@ -131,8 +144,20 @@ case "$CMD" in
         [ "$rc" -eq 0 ] || { echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; exit 1; }
         [ -n "$tip" ] || { echo "refused:freeze:no-such-branch:$BRANCH"; exit 1; }
         ref="$NS/$BRANCH/$(_host)/$(date -u +%s)"
-        if ! _t 30 git push --quiet "$REMOTE" "$tip:$ref" 2>/dev/null; then
-            echo "refused:freeze:unreachable:could not push the marker to $REMOTE"; exit 1
+        # 1422-fvce: the tip comes from ls-remote, so when the branch moved since
+        # this clone last fetched, the object is not local and `git push` cannot
+        # send it. Fetch it first. And keep git's stderr: discarding it turned
+        # every push failure into a bare "could not push", a STOP in the release
+        # runbook that named nothing.
+        if ! git cat-file -e "$tip^{commit}" 2>/dev/null; then
+            rc=0; err="$(_t 30 git fetch --quiet "$REMOTE" "refs/heads/$BRANCH" 2>&1)" || rc=$?
+            if [ "$rc" -ne 0 ] || ! git cat-file -e "$tip^{commit}" 2>/dev/null; then
+                echo "refused:freeze:unreachable:could not fetch $BRANCH@${tip:0:12} from $REMOTE: $(_git_reason "$err")"; exit 1
+            fi
+        fi
+        rc=0; err="$(_t 30 git push --quiet "$REMOTE" "$tip:$ref" 2>&1)" || rc=$?
+        if [ "$rc" -ne 0 ]; then
+            echo "refused:freeze:unreachable:could not push the marker to $REMOTE: $(_git_reason "$err")"; exit 1
         fi
         [ -n "$REASON" ] && echo "freeze reason: $REASON" >&2
         echo "the branch is frozen for CODE pushes; plan-only pushes stay admitted" >&2

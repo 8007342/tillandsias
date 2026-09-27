@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-pre-push-hook-demands-a-green-check-stamp-on-the-local-tree-for-a-push-that-only-deletes-a-remote-ref-which-transfers-no-tree
+    order: 1427-r2d2
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [pre-push, gate, refs]
+    estimated_hours: 2
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+      - scripts/test-pre-push-deletion-only.sh
+    title: |
+      `git push origin --delete release/version-bump-56.9.27.1` was refused ("plan-only lane: not applicable — refs/heads/… is being deleted (full gate required)", then "the tree changed since ./build.sh --check last passed") because the working tree held an ungated relay merge — a deletion transfers no tree, so the stamp measures the wrong subject
+    context: |
+      MEASURED by the coordinator (macuahuitl-fedora) during the 2026-09-27 cut,
+      filed by macuahuitl-forge. Checked NOT already filed: 1260-4a59 is a PATH
+      deleted on both sides, 1173-a5ng is in-flight gates vs a deleted salvage
+      marker, and macneo's 2026-09-18 fragments are the background-wrapper
+      exit-code row; none covers a ref-deletion-only push. The hook's plan-only
+      lane sends every ref deletion to the full gate, and the full gate checks
+      the LOCAL TREE's stamp, which a deletion never transfers.
+      PROTECTED REFS MUST NOT MOVE: main, linux-next, windows-next, osx-next,
+      salvage/* (874-w2gc) and tags stay refused or gated exactly as now.
+    exit_criteria:
+      - 'an all-deletion push of a non-protected ref (e.g. release/*) from a dirty, unstamped tree is admitted (pre-fix: FAILS, refused for the stamp)'
+      - 'deleting salvage/* is still refused (874-w2gc) and deleting linux-next is still gated; a mixed push (one update plus one delete) still requires the stamp'
+    verifiable_closure: |
+      bash scripts/test-pre-push-deletion-only.sh exits 0 with every arm passing;
+      pre-fix result: FAILS on the release/* deletion arm.
+    provenance: |
+      Filed by macuahuitl-forge (forge-forge-tillandsias-claude-20260927t032739z) at the coordinator's request, 2026-09-27.
+    events:
+      - type: filed
+        ts: "2026-09-27T03:27:39Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t032739z"
+        host: macuahuitl-forge
+        summary: |-
+          A deletion-only push is charged for the local tree's stamp; filed with
+          the fix to follow on work/1427-r2d2.

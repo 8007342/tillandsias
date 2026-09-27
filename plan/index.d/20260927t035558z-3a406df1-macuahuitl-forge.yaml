@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: four-litmus-steps-are-red-only-in-the-forge-regime-an-absolute-cargo-target-dir-joined-as-relative-an-env-exported-git-identity-a-forge-exempt-skip-outside-the-grammar-and-no-podman
+    field: status
+    value: in_progress
+    ts: "2026-09-27T03:55:58Z"
+    host: macuahuitl-forge
+
+events:
+  - packet_id: four-litmus-steps-are-red-only-in-the-forge-regime-an-absolute-cargo-target-dir-joined-as-relative-an-env-exported-git-identity-a-forge-exempt-skip-outside-the-grammar-and-no-podman
+    event:
+      type: note
+      ts: "2026-09-27T03:55:58Z"
+      host: macuahuitl-forge
+      summary: |-
+        claimed by macuahuitl-forge at coordinator assignment: fix arm by arm on work/1428-v4tt

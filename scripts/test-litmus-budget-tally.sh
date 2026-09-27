@@ -32,6 +32,18 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# 1427-utmy: since 1419-zydw the runner refuses (blocked:litmus-no-plan-binary)
+# when no runnable plan binary resolves, and this fixture's scratch PROJECT_ROOT
+# resolves none on a host without CARGO_TARGET_DIR (every Mac gate went red).
+# Hand the runner THIS checkout's binary. No binary on the host is a NAMED skip,
+# never the opt-out, which would hide a real miss.
+. "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+_PLAN_BIN="$( cd "$ROOT" && resolve_plan_binary 2>/dev/null || true )"
+case "$_PLAN_BIN" in /*) ;; ?*) _PLAN_BIN="$ROOT/$_PLAN_BIN" ;; esac
+if [ -z "$_PLAN_BIN" ]; then
+    echo "skip:litmus-budget-tally:no-runnable-plan-binary (1427-utmy)"
+    exit 0
+fi
 
 # THE PROBE'S NAME IS ASSEMBLED, NOT WRITTEN OUT, and that is not evasion.
 # ORDER 721-77yu refuses any file containing a `litmus:<name>` token that no
@@ -113,6 +125,7 @@ _run() {  # echoes rc on the first line, then the output
            TILLANDSIAS_CYCLE_FLOW_LOG="$1/metrics/tillandsias-cycle-flow.jsonl" \
            TILLANDSIAS_EXPERT_USAGE_LOG="$1/metrics/forge-expert-usage.jsonl" \
            TILLANDSIAS_EXPERT_HEALTH_LOG="$1/metrics/forge-expert-health.jsonl" \
+           TILLANDSIAS_PLAN_BIN="$_PLAN_BIN" \
            bash "$1/scripts/run-litmus-test.sh" "$_PROBE_SPEC" --phase pre-build --size all >"$1/out.txt" 2>&1; echo "rc=$?" )
     cat "$1/out.txt"
 }

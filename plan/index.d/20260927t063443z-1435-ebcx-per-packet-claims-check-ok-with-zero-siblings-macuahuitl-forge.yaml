@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-claims-across-branches-per-packet-mode-answers-ok-with-zero-sibling-branches-folded-the-false-negative-batch-mode-refuses
+    order: 1435-ebcx
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [claims, fail-loud, false-negative]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-claims-across-branches.sh
+    title: |
+      scripts/check-claims-across-branches.sh in PER-PACKET mode answers "ok:cross-branch-claims:0 sibling branch(es) checked" (exit 0) when no sibling branch resolved, the exact false negative its --batch mode refuses as blocked:no-siblings-folded ("saying none claimed here is the false negative this file exists to prevent")
+    context: |
+      FOUND by macuahuitl-forge while writing the 1247-omqr affordance fixture
+      (2026-09-27): in a scratch checkout with no refs/remotes/origin/<sibling>,
+      `check-claims-across-branches.sh SOME-PKT --no-fetch` (per-packet mode,
+      local fold knows the packet) printed ok:cross-branch-claims:0 sibling
+      branch(es) checked and exited 0. The --batch path in the same file guards
+      checked==0 with blocked:no-siblings-folded; the per-packet path has no such
+      guard, so a stale or sibling-less checkout gets an ok it cannot back, and
+      a host proceeds to claim a packet a sibling may hold (the 814-iyu7 class).
+    exit_criteria:
+      - 'per-packet mode with zero folded siblings refuses or names the gap (as --batch does), with a why/remedy affordance (pre-fix: FAILS — ok:cross-branch-claims:0 …, exit 0)'
+      - 'per-packet mode with at least one folded sibling is unchanged (negative control)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixing commit adds a per-packet
+      zero-sibling arm to scripts/test-claims-affordance.sh (the 1247-omqr
+      fixture, litmus:claims-refusals-carry-affordance) in the same commit
+      (1136-n8sh). That arm runs per-packet mode in a scratch checkout with no
+      sibling refs and asserts a non-ok verdict naming zero siblings. PRE-FIX:
+      FAILS (ok:cross-branch-claims:0 …, exit 0).
+    provenance: |
+      Filed by macuahuitl-forge (forge-forge-tillandsias-claude-20260927t063443z) at the coordinator's request, 2026-09-27.
+    events:
+      - type: filed
+        ts: "2026-09-27T06:34:43Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t063443z"
+        host: macuahuitl-forge
+        summary: |-
+          Per-packet claims check says ok after checking zero siblings.
