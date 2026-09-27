@@ -792,11 +792,19 @@ pub(crate) fn init_tracing() {
 /// is logged at ERROR so it also lands in the Windows Event Log.
 /// @trace spec:windows-event-logging
 fn write_failure_diagnostics_bundle(reason: &str) -> Option<std::path::PathBuf> {
-    let dir = log_dir();
-    let _ = std::fs::create_dir_all(&dir);
+    write_failure_diagnostics_bundle_in(&log_dir(), reason)
+}
+
+/// The writer, with the log directory passed in (order 1417-t29c) so its test
+/// uses a temp dir instead of redirecting LOCALAPPDATA for the whole process.
+fn write_failure_diagnostics_bundle_in(
+    dir: &std::path::Path,
+    reason: &str,
+) -> Option<std::path::PathBuf> {
+    let _ = std::fs::create_dir_all(dir);
     let path = dir.join("launch-failure-diagnostics.json");
     let report = collect_report();
-    let log_tail: Vec<String> = std::fs::read_to_string(log_file_path())
+    let log_tail: Vec<String> = std::fs::read_to_string(dir.join("tray.log"))
         .map(|c| {
             let lines: Vec<&str> = c.lines().collect();
             lines
@@ -4769,11 +4777,8 @@ mod tests {
     #[test]
     fn failure_bundle_writes_redacted_json() {
         let tmp = tempfile::tempdir().expect("tempdir");
-        // SAFETY: single-process test env mutation, as sibling tests do.
-        unsafe {
-            std::env::set_var("LOCALAPPDATA", tmp.path());
-        }
-        let path = write_failure_diagnostics_bundle(
+        let path = write_failure_diagnostics_bundle_in(
+            tmp.path(),
             "start failed; token ghp_16C7e42F292c6912E7710c838347Ae178B4a leaked",
         )
         .expect("bundle should be written");
@@ -4784,6 +4789,24 @@ mod tests {
         assert!(json["reason"].as_str().unwrap().contains("[REDACTED]"));
         assert!(!content.contains("ghp_16C7"), "no raw token in the bundle");
         assert!(json["diagnose"]["version"].is_string(), "diagnose embedded");
+    }
+
+    /// ORDER 1417-t29c. No code in this file may mutate LOCALAPPDATA: the
+    /// bundle test used to redirect it for the whole process while sibling
+    /// tests resolved log and state paths under it. Static, because the race
+    /// cannot be reproduced on demand; the needles are assembled at runtime
+    /// so this test does not match itself.
+    #[test]
+    fn no_test_mutates_localappdata() {
+        let src = include_str!("notify_icon.rs");
+        for verb in ["set_var", "remove_var"] {
+            let needle = format!("{verb}(\"{}\"", "LOCALAPPDATA");
+            assert!(
+                !src.contains(&needle),
+                "{needle} found: a test mutating this env races every sibling \
+                 test that resolves a path under it"
+            );
+        }
     }
 
     /// Order 154 slices 2+3: with the headless push sources landed (orders

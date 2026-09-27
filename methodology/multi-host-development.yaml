@@ -574,6 +574,26 @@ multi_host_development:
         pushes when blocked by the main guard is intaken under this
         procedure (adopt/rename to salvage/<host>/..., triage, selective
         merge into osx-next or linux-next, archive+delete).
+    stranded_plan_write_triage: >
+      ASK THE FOLD, NEVER REASON FROM TIMESTAMPS (order 1232-av4p). A plan
+      fragment that exists only on a salvage/* or work/* ref is triaged with
+      scripts/check-stranded-plan-writes.sh, which folds it into a scratch copy
+      of trunk's ledger with the plan binary and says would-change or
+      superseded. The status fold is RANK-AWARE, not (ts, host) LWW:
+      status_entry_wins (crates/tillandsias-plan/src/fragments.rs) treats
+      implemented<completed<verified<done as a monotone ladder, so a rung
+      arriving over a WORKING state (ready/pending/in_progress/blocked) wins
+      REGARDLESS OF ITS TIMESTAMP, a lower rung loses, and only a `falsified`
+      event in the same fragment moves a row back down; plain LWW decides only
+      working-vs-working, equal rungs, and the lateral terminals
+      obsoleted/failed. CONSEQUENCE: relaying ANY stale implemented/completed
+      fragment flips its row UP, however old — so a ref's closure writes are
+      never relayed as-is; the row is re-verified against trunk and closed on
+      trunk evidence (1425-t9v9). MEASURED 2026-09-27 on 914-ahsy: a ref's
+      `implemented` at 2026-09-25T06:29:09Z folded over trunk's `ready` at
+      2026-09-26T03:27:03Z — the older write WON — while a triage reasoning
+      "older write loses" (1430-9227, since corrected at 802617d5e) said it
+      would lose.
     forge_branch_inheritance: >
       A forge-hosted agent inherits the branch its lane's mirror was seeded
       from — the host checkout's checked-out branch at launch; the container

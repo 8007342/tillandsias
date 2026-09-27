@@ -295,9 +295,17 @@ pub fn wire_path(can_query_hcs: bool) -> WirePath {
 /// Distro the stdio bridge targets. `TILLANDSIAS_WSL_DISTRO` overrides the
 /// canonical [`crate::wsl::DEFAULT_WSL_DISTRO`] for tests/ops.
 pub fn wsl_distro_name() -> String {
-    std::env::var("TILLANDSIAS_WSL_DISTRO")
-        .ok()
+    wsl_distro_name_from(std::env::var("TILLANDSIAS_WSL_DISTRO").ok().as_deref())
+}
+
+/// The parse, separated from the env read (order 1417-t29c, the 1415-nvzz
+/// shape) so tests pin it WITHOUT mutating process env. The test used to
+/// set_var/remove_var the variable in-process while sibling tests on other
+/// threads resolved the distro through [`wsl_distro_name`].
+fn wsl_distro_name_from(value: Option<&str>) -> String {
+    value
         .filter(|v| !v.trim().is_empty())
+        .map(str::to_string)
         .unwrap_or_else(|| crate::wsl::DEFAULT_WSL_DISTRO.to_string())
 }
 
@@ -734,17 +742,36 @@ mod tests {
     }
 
     /// Default distro resolves to the canonical const; the env seam wins
-    /// when set. One test for both directions so parallel test threads
-    /// never race on the process-global env var.
+    /// when set. Driven through the parse, so no process env is touched
+    /// (order 1417-t29c).
     #[test]
     fn wsl_distro_name_default_and_env_override() {
-        // Default (var unset in the test environment).
-        unsafe { std::env::remove_var("TILLANDSIAS_WSL_DISTRO") };
-        assert_eq!(wsl_distro_name(), crate::wsl::DEFAULT_WSL_DISTRO);
-        // Env seam overrides.
-        unsafe { std::env::set_var("TILLANDSIAS_WSL_DISTRO", "tillandsias-test") };
-        assert_eq!(wsl_distro_name(), "tillandsias-test");
-        unsafe { std::env::remove_var("TILLANDSIAS_WSL_DISTRO") };
+        assert_eq!(wsl_distro_name_from(None), crate::wsl::DEFAULT_WSL_DISTRO);
+        assert_eq!(
+            wsl_distro_name_from(Some("  ")),
+            crate::wsl::DEFAULT_WSL_DISTRO
+        );
+        assert_eq!(
+            wsl_distro_name_from(Some("tillandsias-test")),
+            "tillandsias-test"
+        );
+    }
+
+    /// ORDER 1417-t29c. The race cannot be reproduced on demand, so the
+    /// evidence is static: no code in this file may mutate the distro env var,
+    /// because tests on other threads resolve it. The needles are assembled
+    /// at runtime so this test does not match itself.
+    #[test]
+    fn no_test_mutates_the_wsl_distro_env() {
+        let src = include_str!("transport_windows.rs");
+        for verb in ["set_var", "remove_var"] {
+            let needle = format!("{verb}(\"{}\"", "TILLANDSIAS_WSL_DISTRO");
+            assert!(
+                !src.contains(&needle),
+                "{needle} found: a test mutating this env races every sibling \
+                 test that resolves the distro"
+            );
+        }
     }
 
     #[test]

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: fleet-heartbeat-detects-a-blocker-only-from-a-plan-issues-markdown-status-line-so-a-host-that-files-its-blocker-as-a-ledger-packet-reads-as-wedged-and-the-classifier-loses-information-the-ledger-still-had
+    event:
+      type: note
+      ts: "2026-09-16T22:56:08Z"
+      agent_id: forge-tillandsias-opencode-20260916t214000z
+      host: forge
+      summary: |-
+        FORGE-RED FOLLOW-UP (cycle 2026-09-16, 920-cluster gate): scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh scored 7/11 inside a forge, failing arms 1/3/4/8 with SILENT. NOT the packet's logic and NOT the 920-cluster diff: the fixture's scaffold committed with git config user.name probe, but an ambient GIT_AUTHOR_NAME/EMAIL overrides repo config, and a forge exports both — MEASURED here, the scaffold commit landed as Tlatoani <bulloncito@gmail.com>, so last_commit_epoch's git log --author=probe returned empty and the host read SILENT. Another 704-zcgi shape: the fixture assumed a clean git env it cannot assume in the session that runs it. FIX: pin GIT_AUTHOR_NAME/EMAIL and GIT_COMMITTER_NAME/EMAIL to probe inline on the scaffold commit. MEASURED post-fix: ok:fleet-heartbeat-ledger-blocker:11, rc=0.

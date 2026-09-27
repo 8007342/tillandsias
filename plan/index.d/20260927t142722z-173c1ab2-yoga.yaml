@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: exec-guest-shell-has-no-home-breaking-tools-that-require-it
+    field: next_action
+    value: '2026-09-27 yoga, re-verified at 18d97f6f2: criterion 3 MET — child_env seeds HOME and XDG_RUNTIME_DIR from one uid, pinned by child_env_seeds_xdg_runtime_dir_from_the_same_uid (1 passed under tray,listen-vsock; FAILS with the seed removed; NOTE it selects ZERO tests without --features listen-vsock). MISSING: criteria 1 and 2 are guest measurements (--exec-guest ''echo $HOME'' non-empty; a HOME-reading CLI such as ollama does not panic) — not run. Stays ready.'
+    ts: "2026-09-27T14:27:22Z"
+    host: yoga
+
+events:
+  - packet_id: exec-guest-shell-has-no-home-breaking-tools-that-require-it
+    event:
+      type: progress
+      ts: "2026-09-27T14:27:22Z"
+      host: yoga
+      summary: |-
+        status '2026-09-27 yoga, re-verified at 18d97f6f2: criterion 3 MET — child_env seeds HOME and XDG_RUNTIME_DIR from one uid, pinned by child_env_seeds_xdg_runtime_dir_from_the_same_uid (1 passed under tray,listen-vsock; FAILS with the seed removed; NOTE it selects ZERO tests without --features listen-vsock). MISSING: criteria 1 and 2 are guest measurements (--exec-guest 'echo $HOME' non-empty; a HOME-reading CLI such as ollama does not panic) — not run. Stays ready.' (not terminal) with evidence_refs: 18d97f6f2
+  - packet_id: exec-guest-shell-has-no-home-breaking-tools-that-require-it
+    event:
+      type: note
+      ts: "2026-09-27T14:27:22Z"
+      host: yoga
+      summary: |-
+        re-verified against trunk after the 1425-t9v9 relay

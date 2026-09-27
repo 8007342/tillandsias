@@ -151,6 +151,7 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:land-refusals-carry-affordance
   - litmus:cosign-arrives-verified
   - litmus:scorable-obligation-splitter
   - litmus:added-test-is-referenced-shape
@@ -672,6 +673,7 @@ specs:
   - litmus:join-the-fleet-idempotent
   - litmus:claims-fleet-visible
   - litmus:release-freeze-holds-code
+  - litmus:pre-push-deletion-only
   - litmus:expire-claims-reads-the-status-write
   - litmus:a-claim-names-a-workstation
   - litmus:fragment-keys-are-read
@@ -709,6 +711,7 @@ specs:
 - spec_id: meta-orchestration
   status: active
   litmus_tests:
+  - litmus:claims-refusals-carry-affordance
   - litmus:forge-expert-base-guard-shape
   - litmus:e2e-eligibility-probe-shape
   - litmus:credential-channel-check-shape

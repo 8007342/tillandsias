@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: progress
+      ts: "2026-09-27T15:02:18Z"
+      agent_id: linux-lenovinha-claude-20260927t145331z
+      host: lenovinha
+      summary: |
+        Slice 3 on salvage/lenovinha/20260927-472-ca-flow-emission at 196c3c0cb (based on work/1420-4grt 121873cdd and slice 2 092a2a25c). ensure_ca_bundle emits a DependencyNode{ca_bundle} FlowStatePush on a generation change: minted, rotated or lost, using the research state set absent / current:<gen>. The vsock server now answers Subscribe{FlowState} (never wired before) and forwards through flow_sink. Covers exit criterion 4 (emission). Tests: flow_sink 2/2, a handshake test showing a rotation reaches a subscriber, headless 792 passed, clippy rc=0 in three feature sets, preflight ran=120 refused=0. REMAINING: defer-until-trusted for forge consumers (criterion 2), restart-on-rotation fan-out for long-running forges (criterion 3), the node catalog/FSM litmus (criterion 1), the drift guardrail (criterion 5). The split-trust TLS failure is still read-from-code.

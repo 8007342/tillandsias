@@ -12,6 +12,8 @@ name = "tillandsias-tray"
 path = "src/main.rs"
 
 [dependencies]
+# 1420-83vf: the tillandsia progress renderer for --provision / --reset-state.
+tillandsias-progress-tty = { path = "../tillandsias-progress-tty" }
 sha2.workspace = true
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
 tillandsias-core = { path = "../tillandsias-core" }
@@ -28,6 +30,8 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# 1420-inak: dup2 for the GUI-mode tray log (src/tray_log.rs). Already in the lock.
+libc = "0.2"
 objc2 = "0.5"
 objc2-app-kit = { version = "0.2", features = [
     "NSApplication",

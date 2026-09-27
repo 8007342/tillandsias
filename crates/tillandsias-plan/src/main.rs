@@ -6107,6 +6107,21 @@ fn main() {
                     emit(&format!("dropped-entry: {}: {gap}", path.display()));
                 }
             }
+            // ORDER 920-eqjr. A fragment the fold can read NOTHING from is the
+            // fourth authoring failure mode the ledger README warns about, and
+            // the only one with no reporter: `malformed:` names files that do
+            // not PARSE, `dropped-entry:` names entries the fold DROPPED, and a
+            // freestyle fragment (no packets/events/fields/status/capabilities
+            // channel at all) is invisible to both while every gate answers ok.
+            // Two Antigravity prose findings were lost this way (refiled
+            // canonically after the osx-next merge surfaced them). Same posture
+            // as `malformed:` — named always, refused only by a caller that
+            // opted into a partial-corpus refusal — because the same 699-dycj
+            // rationale applies: build.sh runs this on every host.
+            let inert = tillandsias_plan::fragments::inert_fragments(&index);
+            for path in &inert {
+                emit(&format!("inert-fragment: {}", path.display()));
+            }
             if !report.violations.is_empty() && !skipped.is_empty() {
                 // WHY THIS CAVEAT IS NOT DECORATION: a `depends_on` whose
                 // target is DEFINED in the unreadable fragment reports here as
@@ -8092,6 +8107,25 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 eprintln!("error: resolved packet has no packet_id");
                 std::process::exit(1);
             };
+
+            // ORDER 1431-k6s7 — the write-side twin of append-event's 896-f8ti.
+            // `resolve()` falls through to the ARCHIVE last, which is right for
+            // reads and wrong for a write: a set-field on an archived order
+            // printed ok: and filed a fragment the live fold drops ("dropped-entry
+            // … NO SUCH PACKET"), caught only by the release preflight as
+            // plan-ledger-incomplete (yoga: `set-field 606-um5s next_action
+            // --append …`). Refuse before any write, naming it archived, with its
+            // own remedy — the reference is right; the target is finished. No
+            // archived-reopen path exists, so this removes nothing that worked.
+            if ledger.is_archived(&pid) {
+                eprintln!(
+                    "error: {target} resolves to {pid}, which is ARCHIVED (completed work, in \
+                     plan/archive/) — REFUSED before any write. A field set here lands in a \
+                     fragment no reader folds. Your reference is not a typo; the target is \
+                     finished. If this work is genuinely continuing, file a new packet citing {pid}."
+                );
+                std::process::exit(1);
+            }
 
             // ORDER 1201-hsf9 — A CLAIM MUST NAME A WORKSTATION.
             //

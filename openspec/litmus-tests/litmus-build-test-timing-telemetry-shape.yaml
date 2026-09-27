@@ -151,6 +151,11 @@ critical_path:
     timeout_ms: 30000
     expected_behavior: "ok:slowest-span-marker-fixture:3"
 
+  - step: "1233-jqp4: the litmus runner records one duration per EXECUTED STEP (budgets are per step; per-test totals only bound them)"
+    command: "bash scripts/test-litmus-step-timing.sh 2>&1 | tail -1"
+    success_pattern: "^ok:litmus-step-timing:[0-9]+ arms$"
+    timeout_ms: 120000
+
 observability:
   traces:
     - "@trace spec:methodology-accountability"

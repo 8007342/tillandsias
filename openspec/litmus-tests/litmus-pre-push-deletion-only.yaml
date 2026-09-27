@@ -1,0 +1,36 @@
+# @trace spec:methodology-accountability, order:1427-r2d2
+name: litmus:pre-push-deletion-only
+spec: methodology-accountability
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  A push that only DELETES remote refs transfers no tree, so the pre-push hook
+  must not refuse it for the local tree's gate stamp. MEASURED 2026-09-27: a
+  mid-cut `git push origin --delete release/version-bump-56.9.27.1` was refused
+  because the working tree held an ungated relay merge the push never carried.
+  The exemption is narrow: protected refs (main, linux-next, windows-next,
+  osx-next, tags, salvage/* under 874-w2gc) stay refused or gated exactly as
+  before, and a mixed update+delete push still demands the stamp.
+
+preconditions:
+  - workspace contains scripts/hooks/pre-push-local-gate.sh
+  - workspace contains scripts/test-pre-push-deletion-only.sh
+
+critical_path:
+  - step: "release/* deletion from a dirty unstamped tree is admitted; salvage/* deletion refused; mixed push and linux-next deletion still gated"
+    command: "bash scripts/test-pre-push-deletion-only.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "PASS: pre-push-deletion-only 4/4 (1427-r2d2)"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "a deletion-only push of unprotected refs is not charged for the local tree's stamp"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "pre-push-deletion-only"
+
+failure_modes:
+  - "the deletion exemption widens to protected refs or to mixed pushes"
+  - "a deletion-only push is again sent to the full gate"

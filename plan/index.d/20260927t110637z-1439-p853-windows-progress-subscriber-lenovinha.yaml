@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Split from 1420-4grt at release (coordinator routing 2026-09-27): the
+# Windows HvSocket half of relaying guest progress, claimable on its own.
+packets:
+  - packet_id: windows-tray-does-not-subscribe-to-guest-progress-over-hvsocket-so-guest-install-progress-never-renders-on-windows
+    order: 1439-p853
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [rust, hvsocket, windows, progress, installer-ux]
+    estimated_hours: 3
+    observed_by: lenovinha
+    unscoreable: |
+      unpinnable-until-measured: pins land with it (a Windows tray unit test over the Subscribe built from server_caps).
+    title: |
+      PRETTY INSTALLER 8b/10 (split from 1420-4grt) — the Windows tray's push-stream Subscribe (notify_icon.rs reader loop) never asks for SubscriptionTopic::Progress, so the guest's ProgressPush (advertised as progress.push@v1 since 1420-4grt) never reaches the Windows renderer
+    verifiable_closure: |
+      against a guest advertising progress.push@v1, the Windows tray builds its Subscribe through tillandsias_control_wire::subscription_topics and renders received ProgressPush events through 1420-9vpk; against a guest WITHOUT the capability its Subscribe is byte-identical to today's; pre-fix result: FAILS (Progress is never subscribed).
+    context: |
+      Guest and wire half landed or queued as work/1420-4grt 121873cdd: the vsock server pushes ProgressPush only to
+      Progress subscribers and advertises CAP_PROGRESS_PUSH_V1; subscription_topics(base, server_caps) is the one place a
+      host derives its topic list. THE OPT-IN RULE IS NOT OPTIONAL (measured in 1420-r2sn): the Windows reader loop
+      treats any next_envelope Err as "push stream dropped; resubscribing", and an old guest fails a whole Subscribe
+      naming an unknown topic, so Progress must be requested only after the capability is seen. Pairs with 1420-ev7i
+      (yolanda). The child-process bridge (1420-4grt open item 1) is a separate prerequisite for --provision progress
+      that runs as a guest child process; image builds in the server process already publish.
+    exit_criteria:
+      - 'Subscribe built via subscription_topics, Progress only on the cap; pre-fix result: FAILS'
+      - 'received ProgressPush rendered via 1420-9vpk on the Windows console; pre-fix result: FAILS'
+    events:
+      - type: filed
+        ts: "2026-09-27T11:06:37Z"
+        agent_id: "linux-lenovinha-claude-20260927t110637z"
+        host: lenovinha
+        summary: |-
+          Split from 1420-4grt at claim release, on the coordinator's routing (the HvSocket half goes to yolanda
+          alongside 1420-ev7i).

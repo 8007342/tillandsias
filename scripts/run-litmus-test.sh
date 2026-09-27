@@ -96,6 +96,27 @@ if [[ -f "$(dirname "${BASH_SOURCE[0]}")/timing-log.sh" ]]; then
     . "$(dirname "${BASH_SOURCE[0]}")/timing-log.sh" 2>/dev/null || true
 fi
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+# ORDER 1233-jqp4. PER-STEP durations, which the per-TEST records above cannot
+# give: a budget is set per STEP, and a test's total only bounds its steps from
+# above, so 17 tests on yoga could not be settled without this. One JSON line per
+# executed step, appended to its OWN file — NOT the per-test timing stream,
+# whose rows the CentiColon grader and the release-tier freshness check key on,
+# so adding rows there would be an interface change for every consumer.
+# Best-effort like every timing side-channel here: a failed write changes
+# nothing, and a stubbed clock (timing_now_ms answering 0) writes NO record
+# rather than a fabricated duration.
+_lt_step_record() { # <test_file> <step_index> <budget_ms> <t0_ms> <exit_code>
+    local _t0="${4:-0}" _now _log
+    case "$_t0" in ''|0|*[!0-9]*) return 0 ;; esac
+    _now="$(timing_now_ms 2>/dev/null)" || return 0
+    case "$_now" in ''|0|*[!0-9]*) return 0 ;; esac
+    _log="${LITMUS_STEP_TIMING_LOG:-${PROJECT_ROOT:-.}/.cache/metrics/litmus-step-timing.jsonl}"
+    mkdir -p "$(dirname "$_log")" 2>/dev/null || return 0
+    printf '{"ts":"%s","test":"%s","step":%d,"budget_ms":%d,"duration_ms":%d,"exit":%d}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$1" .yaml)" "$2" "${3:-0}" \
+        "$(( _now - _t0 ))" "${5:-0}" >>"$_log" 2>/dev/null || true
+    return 0
+}
 # ORDER 1252-znbn. Overridable alongside LITMUS_TESTS_DIR below, with the same
 # unchanged default. The two are a PAIR — bindings name the tests, the directory
 # holds them — so overriding one without the other gives a fixture half a seam
@@ -1731,6 +1752,7 @@ run_litmus_test_file() {
         # 956-llei: stall counter + wall clock at launch, diffed at kill time.
         local _lt_psi0 _lt_t0
         _lt_psi0="$(_lt_cpu_stall_us)"; _lt_t0="$(date +%s)"
+        local _lt_t0_ms; _lt_t0_ms="$(timing_now_ms 2>/dev/null || echo 0)"
         # 956-llei: stdin is /dev/null, ALWAYS. The per-spec test loop feeds
         # its bound test names through a here-string on stdin, and a step that
         # reads stdin (a fixture with `read`, `cat`, an interactive-capable
@@ -1765,6 +1787,7 @@ run_litmus_test_file() {
         LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>&1 || exit_code=$?
         step_output="$(cat "$step_capture")"
         rm -f "$step_capture"
+        _lt_step_record "$test_file" "$step_index" "$step_timeout_ms" "$_lt_t0_ms" "$exit_code"
         combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"
 
         if [[ $exit_code -eq 124 ]]; then

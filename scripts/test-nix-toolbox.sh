@@ -348,9 +348,36 @@ EOF14
         || failures+=("run on the toolbox rung must execute INSIDE the toolbox against the rung store, got: $o14 — 799-nx4r")
 fi
 
+# 16/17. THE STORE SUBCOMMANDS REACH THE TOOLBOX RUNG (1421-3pd6). With host
+#     nix shadowed and nix reachable ONLY through the fake `toolbox run` (arm
+#     14's construction, whose fakes are reused), `gc` used to answer
+#     blocked:nix-store-gc:nix-unusable because _store_nix called the host
+#     binary; measured on yoga 2026-09-27. It must now get past the store ping.
+#     NEGATIVE CONTROL (17): no host nix and NO toolbox still refuses with
+#     nix-unusable — routing must not invent a store.
+if [ -n "$TMPROOT" ] && [ -n "${B14H:-}" ]; then
+    # PREMISE: the store must EXIST, or gc answers skip:nix-store:no-store
+    # before the ping and both arms pass or fail for a reason they do not test.
+    mkdir -p "$TMPROOT/s16/nix/store" "$TMPROOT/s17/nix/store"
+    o16="$(env PATH="$B14H:/usr/bin:/bin" HOME="$TMPROOT/h16" \
+             TILLANDSIAS_NIX_CHROOT_STORE="$TMPROOT/s16" \
+             bash "$SCRIPT" gc 2>&1 | tail -1)"
+    case "$o16" in
+        blocked:nix-store-gc:nix-unusable|skip:nix-store:no-store|"")
+            failures+=("gc on a toolbox-only host must reach the rung's store, got: ${o16:-<nothing>} — 1421-3pd6") ;;
+    esac
+    B17="$TMPROOT/bin17"; mkdir -p "$B17"
+    printf '#!/usr/bin/env bash\nexit 127\n' > "$B17/nix"; chmod +x "$B17/nix"
+    o17="$(env PATH="$B17:/usr/bin:/bin" HOME="$TMPROOT/h17" \
+             TILLANDSIAS_NIX_CHROOT_STORE="$TMPROOT/s17" \
+             bash "$SCRIPT" gc 2>&1 | tail -1)"
+    [ "$o17" = "blocked:nix-store-gc:nix-unusable" ] \
+        || failures+=("gc with no nix and no toolbox must still refuse nix-unusable, got: $o17")
+fi
+
 if [ "${#failures[@]}" -gt 0 ]; then
     printf 'FAIL: %s\n' "${failures[@]}" >&2
     echo "nix-toolbox: FAIL ${#failures[@]} scenario(s)"
     exit 1
 fi
-echo "PASS: nix-toolbox fixture 15/15 (grammar, exit-code agreement, idempotence, store-probe-not-pure-eval, nix-args usable, store-path override, delete-and-rebuild, pinned-survives-gc, gc-refuses-when-deps-unresolved, capability-grammar, capability-never-creates, toolbox-only-nix-is-capable, callers-off-host-binary, run-reaches-rung-store x2) rung=${out#ok:nix-toolbox:}"
+echo "PASS: nix-toolbox fixture 17/17 (grammar, exit-code agreement, idempotence, store-probe-not-pure-eval, nix-args usable, store-path override, delete-and-rebuild, pinned-survives-gc, gc-refuses-when-deps-unresolved, capability-grammar, capability-never-creates, toolbox-only-nix-is-capable, callers-off-host-binary, run-reaches-rung-store x2, store-subcommands-reach-toolbox + negative control) rung=${out#ok:nix-toolbox:}"

@@ -211,42 +211,194 @@ fi
 # The positive statement of the fix. Cases that cannot run are skipped, named,
 # counted, and the denominator still includes them so a skip cannot quietly
 # shrink the bar.
+#
+# ORDER 1229-2862 CRITERION 4 — WHY THE ARM SELECTION LIVES IN A FUNCTION. The
+# discrimination this step has to make is "this host HAS an index and some cases
+# FAILED" versus "the skip accounting is wrong", and the two produce the SAME
+# result line: both carry skipped=0, and only the exit code and the fail count
+# separate them. Before this, a genuine red on an index-bearing host fell through
+# every arm into the else — measured on macuahuitl 2026-09-16, total=5 pass=3
+# fail=2 rc=1, printing "absent-index skip is not properly accounted" and pointing
+# the reader at accounting that was correct, instead of at the two cases that had
+# actually failed. One red wearing two names, the second of them aimed at
+# innocent code. A forge has no index and takes the skip arm, so the bug is
+# invisible on exactly the hosts most likely to re-introduce it; scenario 7b
+# below pins the classification with no index at all.
+gt_field() { # <result-line> <key>  -> the value, or empty when the key is absent
+    printf '%s' "$1" | sed -n "s/.* $2=\([0-9]*\).*/\1/p"
+}
+
+# Echoes exactly one verdict for one spec-rung1 run:
+#   skipped       an accounted capability gap: every case SKIPped, named, rc=0
+#   graded-clean  an index graded it, and nothing is red or uncertified
+#   graded-stale  an index graded it, some cases STALE and named, rc=0
+#   graded-red    an index graded it and some cases FAILED, rc=1
+#   no-result     grade printed no result line at all (a HARNESS ERROR)
+#   unaccounted   the line and the exit code disagree, or a gap went unnamed
+classify_spec_run() { # <result-line> <rc> [full-output]
+    local line="$1" rc="$2" full="${3:-}"
+    local total pass fail stale skip
+    [ -n "$line" ] || { printf 'no-result'; return; }
+    total="$(gt_field "$line" total)"
+    pass="$(gt_field "$line" pass)"
+    fail="$(gt_field "$line" fail)"
+    stale="$(gt_field "$line" stale)"
+    skip="$(gt_field "$line" skipped)"
+    if [ -z "$total" ] || [ -z "$pass" ] || [ -z "$fail" ] \
+       || [ -z "$stale" ] || [ -z "$skip" ]; then
+        printf 'unaccounted'
+        return
+    fi
+    # A red is a red whatever else the run did, so this is checked FIRST. A
+    # skipped case alongside a real failure must not demote the failure, or the
+    # fail-open shape scenario 9 exists to catch walks back in through the door
+    # this arm opens. The skips still have to be NAMED, because they shrink what
+    # the run certifies.
+    if [ "$fail" -gt 0 ]; then
+        if [ "$rc" -ne 1 ]; then
+            printf 'unaccounted'
+            return
+        fi
+        if [ "$skip" -gt 0 ] \
+           && { ! grep -q 'skipped_engines=' <<<"$line" \
+                || ! grep -qE '^SKIP  .*\[' <<<"$full"; }; then
+            printf 'unaccounted'
+            return
+        fi
+        printf 'graded-red'
+        return
+    fi
+    # A stale case is a case this run did not certify, and 1229-2862 gave STALE
+    # the same accounting treatment as a skip for exactly that reason. Without
+    # this arm a stale run is announced below as "graded rather than skipped" —
+    # true, and silent about the two cases it certified nothing about.
+    if [ "$stale" -gt 0 ]; then
+        if [ "$rc" -eq 0 ] \
+           && grep -q 'stale_engines=' <<<"$line" \
+           && grep -qE '^STALE .*NOT VALID in this checkout' <<<"$full"; then
+            printf 'graded-stale'
+        else
+            printf 'unaccounted'
+        fi
+        return
+    fi
+    if [ "$skip" -gt 0 ]; then
+        if [ "$rc" -eq 0 ] && [ "$total" -eq "$skip" ] \
+           && grep -q 'skipped_engines=' <<<"$line" \
+           && grep -qE '^SKIP  .*\[' <<<"$full"; then
+            printf 'skipped'
+        else
+            printf 'unaccounted'
+        fi
+        return
+    fi
+    if [ "$rc" -eq 0 ] && [ "$total" -gt 0 ]; then
+        printf 'graded-clean'
+    else
+        printf 'unaccounted'
+    fi
+}
+
 sp="$("$PLAN" grade --root "$ROOT" "$ROOT/openspec/litmus-tests/groundtruth/spec-rung1.yaml" 2>/dev/null)"
 sp_rc=0
 TILLANDSIAS_SPEC_INDEX_DIR="" "$PLAN" grade --root "$ROOT" \
     "$ROOT/openspec/litmus-tests/groundtruth/spec-rung1.yaml" >/dev/null 2>&1 || sp_rc=$?
 sp_line="$(printf '%s' "$sp" | grep '^groundtruth-result:' | tail -1)"
-sp_total="$(printf '%s' "$sp_line" | sed -n 's/.*total=\([0-9]*\).*/\1/p')"
-sp_skip="$(printf '%s' "$sp_line" | sed -n 's/.*skipped=\([0-9]*\).*/\1/p')"
-if [ "${sp_skip:-0}" -gt 0 ] \
-   && printf '%s' "$sp_line" | grep -q 'skipped_engines=spec.answer' \
-   && printf '%s' "$sp" | grep -q '^SKIP  .*\[spec.answer\]' \
-   && [ "${sp_total:-0}" -eq "${sp_skip:-0}" ] \
-   && [ "$sp_rc" -eq 0 ]; then
-    ok "an absent index SKIPS loudly, counted in the denominator (rc=0, $sp_line)"
-elif [ -n "$sp_line" ] && [ "$sp_rc" -eq 0 ] && [ "${sp_total:-0}" -gt 0 ] \
-     && [ "${sp_skip:-0}" -eq 0 ]; then
-    ok "this host HAS an index — spec.answer graded rather than skipped ($sp_line)"
-elif [ -z "$sp_line" ]; then
-    # ORDER 888-miiy, found from the WITH-ENDPOINT side, which is the only side
-    # that reaches this branch. `sp_skip` is sed'd out of the result line, so
-    # when grade dies with a HARNESS ERROR and prints no result line at all,
-    # sp_skip is EMPTY, ${sp_skip:-0} is 0, and the old condition read that as
-    # "0 skipped, therefore graded" — the arm announced "this host HAS an index"
-    # while nothing had been graded and nothing had been indexed. `sp_rc` was
-    # captured two lines above and never consulted on that path.
-    #
-    # That is THIS PACKET'S OWN DEFECT, one level in: a harness error rendered
-    # as a graded result. The fix for the release gate was written correctly and
-    # the arm verifying it carried the same conflation, where no endpoint-less
-    # host could ever see it, because every such host takes the skip branch
-    # above and returns before reaching here.
-    #
-    # An absence and a zero are not the same measurement. This branch is the
-    # difference.
-    bad "grade produced NO result line (rc=$sp_rc) — a HARNESS ERROR, not a graded run with nothing skipped"
-else
-    bad "absent-index skip is not properly accounted: rc=$sp_rc line=$sp_line"
+case "$(classify_spec_run "$sp_line" "$sp_rc" "$sp")" in
+    skipped)
+        ok "an absent index SKIPS loudly, counted in the denominator (rc=0, $sp_line)"
+        ;;
+    graded-clean)
+        ok "this host HAS an index — spec.answer graded rather than skipped ($sp_line)"
+        ;;
+    graded-stale)
+        ok "this host HAS an index and named every STALE case ($sp_line)"
+        ;;
+    graded-red)
+        # THE ARM THAT WAS MISSING. The accounting is fine and the run is RED:
+        # name the cases, because a reader sent to the skip accounting for a
+        # real red reads three lines of correct code before finding nothing.
+        # `-m 3` rather than an early-exiting downstream consumer: `head` would
+        # SIGPIPE this grep, and the reader of this line is a person deciding
+        # whether the reds are real. Bounded at the producer instead.
+        bad "spec.answer GRADED and FAILED — the skip accounting is fine: $sp_line; first reds: $(grep -m 3 '^FAIL  ' <<<"$sp" | tr '\n' ' ')"
+        ;;
+    no-result)
+        # ORDER 888-miiy, found from the WITH-ENDPOINT side, which is the only
+        # side that reaches this branch. `sp_skip` is sed'd out of the result
+        # line, so when grade dies with a HARNESS ERROR and prints no result
+        # line at all, sp_skip is EMPTY, ${sp_skip:-0} is 0, and the old
+        # condition read that as "0 skipped, therefore graded" — the arm
+        # announced "this host HAS an index" while nothing had been graded and
+        # nothing had been indexed. `sp_rc` was captured two lines above and
+        # never consulted on that path.
+        #
+        # That is THIS PACKET'S OWN DEFECT, one level in: a harness error
+        # rendered as a graded result. The fix for the release gate was written
+        # correctly and the arm verifying it carried the same conflation, where
+        # no endpoint-less host could ever see it, because every such host takes
+        # the skip branch above and returns before reaching here.
+        #
+        # An absence and a zero are not the same measurement. This branch is the
+        # difference.
+        bad "grade produced NO result line (rc=$sp_rc) — a HARNESS ERROR, not a graded run with nothing skipped"
+        ;;
+    *)
+        bad "absent-index skip is not properly accounted: rc=$sp_rc line=$sp_line"
+        ;;
+esac
+
+# --- 7b. the arm selection is PINNED, because no host can observe it ----------
+# ORDER 1229-2862 criterion 4. Every input below is a RESULT LINE, never a
+# grade run, so this costs no index, no embedding endpoint, and no plan binary
+# beyond the one step 7 already needed. That is the point: the defect 7b pins is
+# a mis-dispatch that only an index-bearing host can produce, so a regression in
+# it would otherwise be invisible to every forge — including the one whose
+# checkout would reintroduce it.
+#
+# The five `unaccounted` rows plus the `no-result` row are the load-bearing half.
+# A new arm that accepted anything with a plausible result line would pass the
+# first three rows and turn the fixture into the blanket amnesty criterion 4
+# exists to prevent.
+gt_cases=0
+gt_bad=0
+gt_pin() { # <result-line> <rc> <full-output> <expected-verdict>
+    local got
+    got="$(classify_spec_run "$1" "$2" "$3")"
+    gt_cases=$((gt_cases + 1))
+    if [ "$got" = "$4" ]; then
+        ok "arm selection: $1 rc=$2 -> $got"
+    else
+        bad "arm selection: $1 rc=$2 -> $got (want $4)"
+        gt_bad=$((gt_bad + 1))
+    fi
+}
+# The measured macuahuitl shape: an index that graded, two cases genuinely wrong.
+gt_pin "groundtruth-result: sets=1 total=5 pass=3 fail=2 stale=0 skipped=0 elapsed_ms=4" 1 "" graded-red
+# A red that reports success is not a measurement, and must not read as one.
+gt_pin "groundtruth-result: sets=1 total=5 pass=3 fail=2 stale=0 skipped=0 elapsed_ms=4" 0 "" unaccounted
+# A real red alongside accounted skips is still a real red (fail-open guard).
+gt_pin "groundtruth-result: sets=2 total=7 pass=4 fail=1 stale=0 skipped=2 skipped_engines=spec.answer elapsed_ms=4" 1 \
+    "SKIP  c  [spec.answer]  NOT GRADED on this host: no index" graded-red
+# ...and the same run with its skips UNNAMED is not a measurement.
+gt_pin "groundtruth-result: sets=2 total=7 pass=4 fail=1 stale=0 skipped=2 elapsed_ms=4" 1 "" unaccounted
+# The three arms that already existed, pinned so a refactor cannot move them.
+gt_pin "groundtruth-result: sets=1 total=5 pass=0 fail=0 stale=0 skipped=5 skipped_engines=spec.answer elapsed_ms=4" 0 \
+    "SKIP  c  [spec.answer]  NOT GRADED on this host: no index" skipped
+gt_pin "groundtruth-result: sets=1 total=5 pass=5 fail=0 stale=0 skipped=0 elapsed_ms=4" 0 "" graded-clean
+gt_pin "groundtruth-result: sets=1 total=5 pass=3 fail=0 stale=2 skipped=0 stale_engines=spec.answer elapsed_ms=4" 0 \
+    "STALE c  [spec.answer]  NOT VALID in this checkout: the index is behind the code" graded-stale
+# NEGATIVE CONTROLS: an unnamed gap, an uncounted skip, an empty line, and a
+# truncated line are all `unaccounted`/`no-result`, never a pass.
+gt_pin "groundtruth-result: sets=1 total=5 pass=0 fail=0 stale=0 skipped=5 elapsed_ms=4" 0 \
+    "SKIP  c  [spec.answer]  NOT GRADED on this host: no index" unaccounted
+gt_pin "groundtruth-result: sets=1 total=5 pass=0 fail=0 stale=0 skipped=2 elapsed_ms=4" 0 \
+    "SKIP  c  [spec.answer]  NOT GRADED on this host: no index" unaccounted
+gt_pin "groundtruth-result: sets=1 total=5 pass=0 fail=0 stale=0 skipped=0 elapsed_ms=4" 2 "" unaccounted
+gt_pin "groundtruth-result: sets=1 total=5 pass=3 fail=2 elapsed_ms=4" 1 "" unaccounted
+gt_pin "" 2 "" no-result
+if [ "$gt_cases" -eq 12 ] && [ "$gt_bad" -eq 0 ]; then
+    ok "arm selection pinned over $gt_cases synthetic runs (no index required)"
 fi
 
 # --- 8. NEGATIVE CONTROL: a STALE index is a HARNESS ERROR, never a skip ------

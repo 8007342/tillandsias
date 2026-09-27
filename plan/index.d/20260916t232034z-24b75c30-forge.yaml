@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claim-records-its-holder-as-a-platform-by-default-so-two-hosts-on-one-platform-are-indistinguishable-exactly-when-a-sweep-needs-to-name-one
+    event:
+      type: note
+      ts: "2026-09-16T23:20:34Z"
+      agent_id: forge-tillandsias-opencode-20260916t214000z
+      host: forge
+      summary: |-
+        FORGE-RED FOLLOW-UP (cycle 2026-09-16, 920-cluster gate): scripts/test-a-claim-names-a-workstation.sh scores 4/6 inside a forge; arms 1 and 2 fail because the refusal does NOT fire. This is NOT a regression — the guard is working as designed. MEASURED: with no --host, the claim writes host:forge (the resolved workstation), and the guard only fires when the host WOULD be the compiled platform, so a resolved machine correctly suppresses it. Both the installed binary and a freshly built one behave identically, so this is independent of the 920-cluster diff (which never touches set-field or host resolution). The fixture arm 1 assumes NO workstation resolves, which holds on a bare CI host but not in a forge, which resolves one. NEEDED (not done here): make arm 1 hermetic by forcing the unresolvable-host condition (e.g. clearing TILLANDSIAS_WORKSTATION and any node-name/agent identity the resolver reads) so it tests the refusal rather than the resolver, or skip-by-name when a workstation resolves and say so.

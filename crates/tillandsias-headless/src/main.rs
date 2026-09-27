@@ -71,6 +71,7 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+mod image_build_progress;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
@@ -1081,6 +1082,7 @@ fn main() {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
+            print_status_check_verdict();
             println!("status-check completed");
         }
         if !opencode {
@@ -1106,6 +1108,7 @@ fn main() {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
+        print_status_check_verdict();
         println!("status-check completed");
         return;
     }
@@ -8106,6 +8109,41 @@ fn build_opencode_forge_args(
              back to UPSTREAM'S DEFAULT BRANCH (typically `main`)."
         );
     }
+    // ORDER 505 (mirrored from build_forge_agent_run_args_with_vault for the
+    // OpenCode lane — 920-c3af): mount only the per-lane MCP tool socket
+    // directory ($XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>) so the
+    // in-forge socat bridge (config-overlay/mcp/host-browser.sh) reaches this
+    // lane's dedicated listener. Read-only — connect() needs no filesystem
+    // write. Attribution is derived directly from which listener accepted the
+    // connection, kernel/filesystem-enforced; /proc/<pid>/environ is untrusted.
+    // The OpenCode builder previously skipped this block entirely, so every
+    // OpenCode lane launched with no route to the host control socket.
+    let raw_instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok();
+    let mcp_dir = mcp_socket_host_dir(project_name, raw_instance.as_deref());
+    if std::fs::create_dir_all(&mcp_dir).is_ok() {
+        // START THE LANE LISTENER TOO — not just the mount (mirrors the legacy
+        // tray path and the live vault builder). A mounted, env-var'd, EMPTY
+        // socket dir still leaves the in-forge host-browser bridge dead on
+        // connect; cfg-gated with the module: the listener implementation lives
+        // in tray/mod.rs, so a no-tray build cannot bind one — same
+        // pre-existing limitation as the vault builder's block.
+        #[cfg(feature = "tray")]
+        {
+            let _ = tray::start_mcp_socket_server_for_lane(
+                project_name,
+                raw_instance.as_deref().unwrap_or("default"),
+            );
+        }
+        args.extend([
+            "--mount".into(),
+            format!(
+                "type=bind,source={},target=/run/host/tillandsias-mcp,readonly=true",
+                mcp_dir.display()
+            ),
+            "--env".into(),
+            "TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock".into(),
+        ]);
+    }
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect and safe.directory, bind-mounted
     // read-only. Replaces the empty tmpfs approach — the file is owned by
@@ -8860,18 +8898,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     // hit its first vault build mid-login and every login re-invoked podman
     // build. Login stays a pure runtime operation when init has run;
     // build_vault_image keeps a fail-soft on-demand fallback.
-    let images = [
-        "proxy",
-        "git",
-        "vault",
-        "inference",
-        "router",
-        "chromium-core",
-        "chromium-framework",
-        "forge-base",
-        "forge",
-        "web",
-    ];
+    let images = INIT_IMAGES;
 
     // @trace spec:forge-staleness, spec:forge-cache-dual
     // VERSION changes only move aliases. Content identity comes from the exact
@@ -9510,8 +9537,10 @@ pub(crate) fn build_image_with_logging(
     // Process stdout to catch layer pull progress
     use std::io::BufRead;
 
-    let mut progress_percent = 0;
-    let mut last_reported = 0;
+    // Order 1420-6brx: progress comes from podman's own STEP n/m and COMMIT
+    // lines as typed ProgressEvents, not from keyword-triggered 50/75/100.
+    let mut progress = image_build_progress::ImageBuildProgress::new(image_name);
+    let mut last_reported: Option<usize> = None;
 
     if let Some(stdout_reader) = stdout {
         let buf_reader = std::io::BufReader::new(stdout_reader);
@@ -9526,29 +9555,22 @@ pub(crate) fn build_image_with_logging(
                 let _ = writeln!(f, "{}", line);
             }
 
-            // @trace gap:ON-005 — parse podman progress indicators
-            // Look for "Pulling" and percentage indicators to compute progress
-            if line.contains("Pulling") || line.contains("Digest:") || line.contains("Loaded image")
-            {
-                // Estimate progress based on visible output
-                if line.contains("Pulling") && progress_percent < 50 {
-                    progress_percent = 50;
-                } else if line.contains("Digest:") && progress_percent < 75 {
-                    progress_percent = 75;
-                } else if line.contains("Loaded image") || line.contains("Commit") {
-                    progress_percent = 100;
+            // @trace gap:ON-005, order:1420-6brx — real per-step progress
+            if let Some(event) = progress.observe(&line) {
+                if let Some(ref log) = log_handle
+                    && let Ok(mut f) = log.lock()
+                {
+                    let _ = writeln!(f, "{}", image_build_progress::event_log_line(&event));
                 }
-
-                // Emit progress update if it changed significantly
-                if progress_percent > last_reported + 10 || progress_percent == 100 {
+                // The user-facing line keeps its approved format; only the
+                // number is now real. Printed once per whole-ten change.
+                let percent = progress.percent();
+                if last_reported.is_none_or(|last| percent / 10 > last / 10) {
                     println!(
-                        "Pulling image {} [{}{}] {}%",
-                        image_name,
-                        "█".repeat(progress_percent / 10),
-                        "░".repeat(10 - (progress_percent / 10)),
-                        progress_percent
+                        "{}",
+                        image_build_progress::legacy_bar_line(image_name, percent)
                     );
-                    last_reported = progress_percent;
+                    last_reported = Some(percent);
                 }
             }
         }
@@ -9561,14 +9583,24 @@ pub(crate) fn build_image_with_logging(
     // Wait for the stderr thread to finish logging
     let _ = stderr_thread.join();
 
-    if status.success() {
-        if progress_percent < 100 {
-            println!("Pulling image {} [{}] 100%", image_name, "█".repeat(10));
+    let result = if status.success() {
+        if last_reported != Some(100) {
+            println!("{}", image_build_progress::legacy_bar_line(image_name, 100));
         }
         Ok(())
     } else {
         Err(format!("Build exited with status {}", status))
+    };
+    if let Some(ref log) = log_handle
+        && let Ok(mut f) = log.lock()
+    {
+        let _ = writeln!(
+            f,
+            "{}",
+            image_build_progress::event_log_line(&progress.finish(&result))
+        );
     }
+    result
 }
 
 fn podman_build_argv(
@@ -9623,19 +9655,35 @@ fn podman_build_argv(
     Ok(argv)
 }
 
+/// ORDER 1438-zqtn. THE images `--init` builds, in build order. One list for
+/// the build loop AND the debug-log cleanup: the cleanup used to keep its own
+/// hand-written copy, which omitted `vault` and `web`, so every `--debug`
+/// init — and every curl install, since install.sh runs `--reset-state
+/// --debug` — left /tmp/tillandsias-init-vault.log behind (measured on yoga
+/// 2026-09-27, mode 644).
+const INIT_IMAGES: [&str; 10] = [
+    "proxy",
+    "git",
+    "vault",
+    "inference",
+    "router",
+    "chromium-core",
+    "chromium-framework",
+    "forge-base",
+    "forge",
+    "web",
+];
+
 fn cleanup_init_logs() {
-    for image in &[
-        "proxy",
-        "git",
-        "inference",
-        "router",
-        "chromium-core",
-        "chromium-framework",
-        "forge-base",
-        "forge",
-    ] {
-        let log_path = PathBuf::from(format!("/tmp/tillandsias-init-{}.log", image));
-        let _ = fs::remove_file(&log_path);
+    cleanup_init_logs_in(Path::new("/tmp"), &INIT_IMAGES);
+}
+
+/// Remove `<dir>/tillandsias-init-<image>.log` for each image. Split out so a
+/// test can point it at a scratch directory; `init_log_file` names the same
+/// path shape under /tmp.
+fn cleanup_init_logs_in(dir: &Path, images: &[&str]) {
+    for image in images {
+        let _ = fs::remove_file(dir.join(format!("tillandsias-init-{}.log", image)));
     }
 }
 
@@ -10323,6 +10371,46 @@ fn run_sync_project(project: &str, branch: &str, debug: bool) -> Result<(), Stri
     }
 }
 
+/// ORDER 1437-dypk. What a status-check TOLERATED, so the verdict can say so.
+///
+/// The status-check lane deliberately tolerates a down Vault (its mirror is a
+/// throwaway bare repo) and says so in WARNING prose. But it then printed
+/// "status-check completed" and exited 0 either way, so a smoke or an operator
+/// reading the rc and the last line saw a pass over a mirror running with no
+/// credential (measured on yoga 2026-09-27). Each tolerance site records a
+/// short reason here, and the verdict line names them machine-readably. The
+/// "status-check completed" line itself is unchanged: its consumers match it
+/// as a substring, and the exit code stays 0 — the fake-podman litmus runs
+/// have no live Vault, and a degraded run is still a completed run.
+static STATUS_CHECK_DEGRADED: std::sync::Mutex<Vec<&'static str>> =
+    std::sync::Mutex::new(Vec::new());
+
+fn status_check_note_degraded(reason: &'static str) {
+    if let Ok(mut v) = STATUS_CHECK_DEGRADED.lock()
+        && !v.contains(&reason)
+    {
+        v.push(reason);
+    }
+}
+
+/// `status-check:ok`, or `status-check:degraded:<reason>[,<reason>...]` in the
+/// order the tolerances fired. One line, printed before "status-check completed".
+fn status_check_verdict_line(reasons: &[&str]) -> String {
+    if reasons.is_empty() {
+        "status-check:ok".to_string()
+    } else {
+        format!("status-check:degraded:{}", reasons.join(","))
+    }
+}
+
+fn print_status_check_verdict() {
+    let reasons = STATUS_CHECK_DEGRADED
+        .lock()
+        .map(|v| v.clone())
+        .unwrap_or_default();
+    println!("{}", status_check_verdict_line(&reasons));
+}
+
 fn run_status_check(debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --status-check")?;
     report_runtime_lane("--status-check", debug);
@@ -10409,6 +10497,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                 eprintln!(
                     "[tillandsias] WARNING: status-check mirror service-identity provisioning skipped: {e}"
                 );
+                status_check_note_degraded("mirror-identity-unprovisioned");
                 None
             }
         };
@@ -10420,6 +10509,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                 eprintln!(
                     "[tillandsias] WARNING: status-check mirror launching credential-less: {e}"
                 );
+                status_check_note_degraded("mirror-credential-less");
                 None
             }
         };
@@ -10591,26 +10681,82 @@ fn podman_command() -> tillandsias_podman::SyncPodmanCommand {
 /// GitHub App Client ID for Tillandsias (Owned by: @8007342, App ID: 5081125).
 pub const GITHUB_APP_CLIENT_ID: &str = "Iv23liddVkg9ME6OB1K1";
 
-/// Render a terminal QR code with blocky characters.
+/// The colour tier for the QR login screen (order 1420-2pav).
 ///
-/// Uses `qrcode::render::unicode::Dense1x2` wrapped in ANSI styling
-/// (white background `\x1b[47m`, black foreground `\x1b[30m`) so that
-/// the QR code renders as crisp black modules on a white square
-/// with high contrast across both light and dark terminal emulators.
-pub fn render_terminal_qr(url: &str) -> Result<String, String> {
+/// The QR and the code go to STDOUT, so the terminal test is on stdout, not
+/// on stderr as `EnvView::from_process` assumes for progress bars. Everything
+/// else (`NO_COLOR`, `CI`, `TERM=dumb`, `COLORTERM`) is the renderer's own rule.
+fn qr_tier() -> tillandsias_progress_tty::Tier {
+    use std::io::IsTerminal;
+    let mut env = tillandsias_progress_tty::EnvView::from_process();
+    env.is_tty = std::io::stdout().is_terminal();
+    tillandsias_progress_tty::Tier::detect(&env)
+}
+
+/// SGR for foreground `fg` on background `bg`, in the given tier; empty for Plain.
+fn qr_sgr(
+    tier: tillandsias_progress_tty::Tier,
+    fg: tillandsias_progress_tty::palette::Colour,
+    bg: Option<tillandsias_progress_tty::palette::Colour>,
+) -> String {
+    use tillandsias_progress_tty::Tier;
+    match (tier, bg) {
+        (Tier::Plain, _) => String::new(),
+        (Tier::TrueColor, None) => format!("\x1b[38;2;{};{};{}m", fg.rgb.0, fg.rgb.1, fg.rgb.2),
+        (Tier::TrueColor, Some(b)) => format!(
+            "\x1b[38;2;{};{};{};48;2;{};{};{}m",
+            fg.rgb.0, fg.rgb.1, fg.rgb.2, b.rgb.0, b.rgb.1, b.rgb.2
+        ),
+        (Tier::Ansi256, None) => format!("\x1b[38;5;{}m", fg.xterm256),
+        (Tier::Ansi256, Some(b)) => format!("\x1b[38;5;{};48;5;{}m", fg.xterm256, b.xterm256),
+    }
+}
+
+/// Render a terminal QR code with blocky characters, in the given tier.
+///
+/// Order 1420-2pav: the modules are the tillandsia palette's high-contrast
+/// pair, leaf-deepest on leaf-light (the row's own constraint), instead of a
+/// hardcoded white-on-black. In the Plain tier (`NO_COLOR`, `CI`, `TERM=dumb`,
+/// or stdout not a terminal) the output carries ZERO escape bytes: the Unicode
+/// blocks with their quiet zone, nothing else.
+pub fn render_terminal_qr_in(
+    url: &str,
+    tier: tillandsias_progress_tty::Tier,
+) -> Result<String, String> {
     use qrcode::QrCode;
     use qrcode::render::unicode::Dense1x2;
+    use tillandsias_progress_tty::palette::{LEAF_DEEPEST, LEAF_LIGHT};
 
     let code = QrCode::new(url.as_bytes()).map_err(|e| format!("QR encoding failed: {e}"))?;
     let raw = code.render::<Dense1x2>().quiet_zone(true).build();
 
+    let open = qr_sgr(tier, LEAF_DEEPEST, Some(LEAF_LIGHT));
+    let close = if open.is_empty() { "" } else { "\x1b[0m" };
     let mut out = String::new();
     for line in raw.lines() {
-        out.push_str("\x1b[47m\x1b[30m  ");
+        out.push_str(&open);
+        out.push_str("  ");
         out.push_str(line);
-        out.push_str("  \x1b[0m\n");
+        out.push_str("  ");
+        out.push_str(close);
+        out.push('\n');
     }
     Ok(out)
+}
+
+/// [`render_terminal_qr_in`] at the tier this process's stdout supports.
+pub fn render_terminal_qr(url: &str) -> Result<String, String> {
+    render_terminal_qr_in(url, qr_tier())
+}
+
+/// The one-time code, in blush on a colour tier and plain otherwise.
+fn styled_user_code(code: &str, tier: tillandsias_progress_tty::Tier) -> String {
+    let open = qr_sgr(tier, tillandsias_progress_tty::palette::TIP_BLUSH, None);
+    if open.is_empty() {
+        code.to_string()
+    } else {
+        format!("{open}{code}\x1b[0m")
+    }
 }
 
 /// `--refresh-github-token` spends the single-use refresh token, so it is an
@@ -10827,13 +10973,17 @@ fn run_github_device_login(container: &str, debug: bool) -> Result<(), String> {
     let dc = parse_device_code_response(&output)?;
 
     let mobile_url = format!("{}?user_code={}", dc.verification_uri, dc.user_code);
-    let qr_code_str = render_terminal_qr(&mobile_url)?;
+    let tier = qr_tier();
+    let qr_code_str = render_terminal_qr_in(&mobile_url, tier)?;
 
     println!("\nScan this QR code with your mobile phone to complete GitHub login:\n");
     print!("{qr_code_str}");
     println!();
     println!("  Or in any browser, visit: {}", dc.verification_uri);
-    println!("  Enter one-time code:      {}\n", dc.user_code);
+    println!(
+        "  Enter one-time code:      {}\n",
+        styled_user_code(&dc.user_code, tier)
+    );
 
     // The litmus switch (an ENVIRONMENT flag, never the reply's content) stops
     // here: it proves the request and the QR, and cannot reach the poll, an
@@ -20822,6 +20972,50 @@ mod tests {
             status.contains("WARNING: status-check mirror launching credential-less"),
             "status-check tolerance must be loud, not debug-gated"
         );
+        // ORDER 1437-dypk, extending this pin ON PURPOSE: loud prose was not
+        // enough — the run still printed "completed" and exited 0. Each
+        // tolerance must also record a machine-readable degraded reason that
+        // the verdict line names.
+        assert!(
+            status.contains("status_check_note_degraded(\"mirror-credential-less\")")
+                && status.contains("status_check_note_degraded(\"mirror-identity-unprovisioned\")"),
+            "each status-check tolerance must record its degraded reason for the verdict (1437-dypk)"
+        );
+    }
+
+    /// ORDER 1437-dypk. The verdict line is machine-readable and names every
+    /// tolerated degradation; with none it says ok. The NEGATIVE CONTROL is the
+    /// empty case: a clean run must not read as degraded.
+    #[test]
+    fn status_check_verdict_names_each_degraded_reason_or_says_ok() {
+        assert_eq!(status_check_verdict_line(&[]), "status-check:ok");
+        assert_eq!(
+            status_check_verdict_line(&["mirror-identity-unprovisioned", "mirror-credential-less"]),
+            "status-check:degraded:mirror-identity-unprovisioned,mirror-credential-less"
+        );
+        // Both "status-check completed" sites print the verdict first.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let completed = source
+            .matches("println!(\"status-check completed\");")
+            .count();
+        let paired = source
+            .matches(
+                "print_status_check_verdict();\n            println!(\"status-check completed\");",
+            )
+            .count()
+            + source
+                .matches(
+                    "print_status_check_verdict();\n        println!(\"status-check completed\");",
+                )
+                .count();
+        assert!(
+            completed >= 2,
+            "premise: both completion sites exist ({completed})"
+        );
+        assert_eq!(
+            paired, completed,
+            "every completion line is preceded by the verdict line"
+        );
     }
 
     #[test]
@@ -23544,17 +23738,89 @@ mod tests {
         assert_eq!(GITHUB_APP_CLIENT_ID, "Iv23liddVkg9ME6OB1K1");
     }
 
+    const QR_URL: &str = "https://github.com/login/device?user_code=ABCD-1234";
+
+    /// Order 1420-2pav: on a truecolor terminal the modules are leaf-deepest
+    /// (#1E4A32) on leaf-light (#9DBBA5), and every line resets.
     #[test]
-    fn terminal_qr_renderer_produces_high_contrast_ansi_blocks() {
-        let qr = render_terminal_qr("https://github.com/login/device?user_code=ABCD-1234")
+    fn terminal_qr_uses_the_palette_pair_on_truecolor() {
+        let qr = render_terminal_qr_in(QR_URL, tillandsias_progress_tty::Tier::TrueColor)
             .expect("QR code rendering must succeed");
-        assert!(!qr.is_empty(), "QR code must not be empty");
-        assert!(
-            qr.contains("\x1b[47m\x1b[30m"),
-            "QR code must use ANSI white bg / black fg for contrast"
-        );
-        assert!(qr.contains("\x1b[0m"), "QR code must reset ANSI formatting");
         assert!(qr.lines().count() >= 10, "QR code must have multiple lines");
+        for line in qr.lines() {
+            assert!(
+                line.starts_with("\x1b[38;2;30;74;50;48;2;157;187;165m"),
+                "{line:?}"
+            );
+            assert!(line.ends_with("\x1b[0m"), "{line:?}");
+        }
+        assert!(
+            !qr.contains("\x1b[47m"),
+            "the hardcoded white-on-black is gone"
+        );
+    }
+
+    #[test]
+    fn terminal_qr_uses_the_palette_pair_on_256_colours() {
+        let qr = render_terminal_qr_in(QR_URL, tillandsias_progress_tty::Tier::Ansi256).unwrap();
+        assert!(qr.lines().all(|l| l.starts_with("\x1b[38;5;22;48;5;108m")));
+    }
+
+    /// The closure's plain arm: NO_COLOR / non-TTY means zero ESC bytes in the
+    /// QR AND the code, with the same QR modules as the coloured tiers.
+    #[test]
+    fn terminal_qr_and_code_are_escape_free_when_plain() {
+        use tillandsias_progress_tty::Tier;
+        let plain = render_terminal_qr_in(QR_URL, Tier::Plain).unwrap();
+        assert!(!plain.contains('\x1b'), "plain QR must carry no ESC byte");
+        let code = styled_user_code("ABCD-1234", Tier::Plain);
+        assert_eq!(code, "ABCD-1234");
+        let coloured = render_terminal_qr_in(QR_URL, Tier::TrueColor).unwrap();
+        let stripped: String = coloured
+            .lines()
+            .map(|l| {
+                let body = l.split_once('m').map(|(_, b)| b).unwrap_or(l);
+                format!("{}\n", body.trim_end_matches("\x1b[0m"))
+            })
+            .collect();
+        assert_eq!(
+            stripped, plain,
+            "the tiers differ only in styling, never in modules"
+        );
+    }
+
+    #[test]
+    fn user_code_is_blush_on_a_colour_tier() {
+        assert_eq!(
+            styled_user_code("ABCD-1234", tillandsias_progress_tty::Tier::TrueColor),
+            "\x1b[38;2;232;99;122mABCD-1234\x1b[0m"
+        );
+    }
+
+    /// The tier decision itself: NO_COLOR and a non-TTY each force Plain.
+    #[test]
+    fn qr_tier_rule_is_plain_on_no_color_or_non_tty() {
+        use tillandsias_progress_tty::{EnvView, Tier};
+        let tty = EnvView {
+            term: Some("xterm-256color".into()),
+            is_tty: true,
+            ..EnvView::default()
+        };
+        assert_eq!(Tier::detect(&tty), Tier::Ansi256);
+        assert_eq!(
+            Tier::detect(&EnvView {
+                no_color: Some(String::new()),
+                ..tty.clone()
+            }),
+            Tier::Plain
+        );
+        assert_eq!(
+            Tier::detect(&EnvView {
+                is_tty: false,
+                ..tty
+            }),
+            Tier::Plain
+        );
     }
 
     #[test]
@@ -28835,8 +29101,12 @@ esac
             init_window.contains("PodmanClient::new()"),
             "run_init must use PodmanClient"
         );
+        // ORDER 1438-zqtn, CHANGED ON PURPOSE: the image list moved out of
+        // run_init into INIT_IMAGES (shared with the debug-log cleanup), so
+        // the property "init builds web" is asserted on the list run_init
+        // actually walks, not on a literal's position in its source.
         assert!(
-            init_window.contains("\"web\""),
+            init_window.contains("INIT_IMAGES") && INIT_IMAGES.contains(&"web"),
             "run_init must include the web image"
         );
         assert!(
@@ -30369,6 +30639,45 @@ esac
         );
     }
 
+    /// ORDER 1438-zqtn. The debug-log cleanup covers EVERY image init builds
+    /// (the list it walks is the build list itself), and removes nothing else.
+    #[test]
+    fn cleanup_init_logs_covers_every_init_image_and_nothing_else() {
+        let dir = std::env::temp_dir().join(format!("zqtn-cleanup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        for image in INIT_IMAGES {
+            std::fs::write(dir.join(format!("tillandsias-init-{image}.log")), "x").expect("write");
+        }
+        // NEGATIVE CONTROL: a file that is not an init log survives.
+        let bystander = dir.join("tillandsias-other.log");
+        std::fs::write(&bystander, "keep").expect("write");
+        assert!(
+            INIT_IMAGES.contains(&"vault") && INIT_IMAGES.contains(&"web"),
+            "premise: the images the old list missed are built"
+        );
+        cleanup_init_logs_in(&dir, &INIT_IMAGES);
+        for image in INIT_IMAGES {
+            assert!(
+                !dir.join(format!("tillandsias-init-{image}.log")).exists(),
+                "init log for {image} was left behind"
+            );
+        }
+        assert!(
+            bystander.exists(),
+            "the cleanup must not remove a non-init file"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        // The shipped cleanup walks the build list, not a copy of it.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn cleanup_init_logs()");
+        assert!(
+            window.contains("&INIT_IMAGES"),
+            "cleanup_init_logs must walk INIT_IMAGES"
+        );
+        let init = source_window(source, "let images = INIT_IMAGES;");
+        assert!(!init.is_empty(), "the init build loop must use INIT_IMAGES");
+    }
+
     #[test]
     fn init_logs_none_in_non_debug_mode() {
         // Test that init_log_file returns None in non-debug mode.
@@ -30451,60 +30760,10 @@ esac
         assert!(!is_optional_image("web"));
     }
 
-    #[test]
-    fn progress_output_format_is_valid() {
-        // @trace gap:ON-005 — validate progress output format
-        // Test that progress output lines are well-formed and show percentage
-        // Format: "Pulling image <name> [████░░░░░░] <percent>%"
-
-        let test_cases = vec![
-            (0, 0), // percent -> filled blocks
-            (10, 1),
-            (25, 2),
-            (50, 5),
-            (75, 7),
-            (100, 10),
-        ];
-
-        for (percent, expected_filled) in test_cases {
-            // Build the progress line as the code would
-            let bar_filled = "█".repeat(percent / 10);
-            let bar_empty = "░".repeat(10 - (percent / 10));
-            let line = format!(
-                "Pulling image {} [{}{}] {}%",
-                "forge", bar_filled, bar_empty, percent
-            );
-
-            // Validate it contains required parts
-            assert!(
-                line.contains("Pulling image"),
-                "Must contain 'Pulling image'"
-            );
-            assert!(line.contains("["), "Must contain progress bar opening");
-            assert!(line.contains("]"), "Must contain progress bar closing");
-            assert!(line.contains("%"), "Must contain percentage sign");
-            assert!(
-                line.contains(&percent.to_string()),
-                "Must contain percentage value"
-            );
-
-            // Verify bar has correct number of filled characters
-            let bar_start = line.find('[').unwrap();
-            let bar_end = line.find(']').unwrap();
-            let bar_content = &line[bar_start + 1..bar_end];
-            let filled_count = bar_content.chars().filter(|&c| c == '█').count();
-            let empty_count = bar_content.chars().filter(|&c| c == '░').count();
-            assert_eq!(
-                filled_count, expected_filled,
-                "Progress bar filled count should match"
-            );
-            assert_eq!(
-                filled_count + empty_count,
-                10,
-                "Progress bar should have 10 total characters"
-            );
-        }
-    }
+    // progress_output_format_is_valid was retired by order 1420-6brx: it
+    // asserted a format string it built itself, so it pinned nothing about
+    // the emitter. image_build_progress::tests::legacy_line_keeps_its_format
+    // and a_real_build_yields_determinate_events_before_done replace it.
 
     #[test]
     fn image_build_argv_uses_docker_format_for_healthchecks() {
@@ -30779,6 +31038,49 @@ esac
         assert!(
             !args_str.contains("control.sock"),
             "forge spec must NEVER mount control.sock; args: {args_str}"
+        );
+    }
+
+    /// 920-c3af: an OpenCode lane's argv comes from `build_opencode_forge_args`,
+    /// NOT from `build_forge_agent_run_args_with_vault`. The order-505 coverage
+    /// above only exercised the vault builder, so the OpenCode lane could (and
+    /// did) silently launch without the control-socket route and every
+    /// host-browser/publish_local tool stayed invisible in the lane.
+    ///
+    /// @trace plan/issues/sibling-container-diagnosis
+    #[test]
+    fn opencode_lane_builder_mounts_only_per_lane_mcp_dir() {
+        let _env = env_lock();
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            Some(&PathBuf::from("/tmp/project")),
+            None,
+            "alpha",
+            None,
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+
+        let args_str = args.join(" ");
+
+        // Mounts /run/host/tillandsias-mcp (read-only) and sets the socket env.
+        assert!(
+            args_str.contains("/run/host/tillandsias-mcp")
+                && args_str
+                    .contains("TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock"),
+            "OpenCode lane argv must bind-mount the per-lane MCP socket dir and set \
+             TILLANDSIAS_CONTROL_SOCKET; args: {args_str}"
+        );
+
+        // Must NOT mount control.sock
+        assert!(
+            !args_str.contains("control.sock"),
+            "OpenCode lane argv must NEVER mount control.sock; args: {args_str}"
         );
     }
 

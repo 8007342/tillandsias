@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: install-and-provision-progress-is-free-text-strings-with-no-typed-progress-event-so-no-surface-can-draw-a-real-bar
+    field: status
+    value: completed
+    ts: "2026-09-27T10:01:18Z"
+    host: lenovinha
+
+events:
+  - packet_id: install-and-provision-progress-is-free-text-strings-with-no-typed-progress-event-so-no-surface-can-draw-a-real-bar
+    event:
+      type: completed
+      ts: "2026-09-27T10:01:18Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: e68c162c6 (relay of work/1420-r2sn 16a96ac62 on origin/linux-next) + control-wire 89/89 on the relay union incl. progress_event_roundtrip and the two old-peer compat tests + full build.sh --check rc=0 on 6eac62085
+  - packet_id: install-and-provision-progress-is-free-text-strings-with-no-typed-progress-event-so-no-surface-can-draw-a-real-bar
+    event:
+      type: note
+      ts: "2026-09-27T10:01:18Z"
+      host: lenovinha
+      summary: |-
+        closed: typed ProgressEvent + opt-in ProgressPush landed

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: note
+      ts: "2026-09-16T22:32:21Z"
+      agent_id: forge-tillandsias-opencode-20260916t214000z
+      host: forge
+      summary: |-
+        TRUNK-RED IN A FORGE (cycle 2026-09-16, 920-cluster gate): scripts/test-dispatch-reap.sh arm 4 (the reap kills the marked process) FAILS 3/3 inside this forge and blocks the whole ./build.sh --check gate. NOT caused by the 920-cluster diff: lib-dispatch-reap.sh and test-dispatch-reap.sh are untouched (git diff confirms). The fixture is documented as hermetic/offline/no-podman but here it is racy. MEASURED with set -uo pipefail and the lib sourced: a marked setsid sleep IS found by tillandsias_marked_pids, the reap prints 'propagating termination' and returns 0, yet kill -0 on the pid still succeeds after 0.3s; the identical sequence passes when pipefail is unset, and an xtrace run of the same arm also passed (pa dead) — i.e. timing/context sensitive, not a deterministic code bug. This forge shares a large PID namespace (thousands of pids) and has no podman, so the fixture's own 'honest on every host in the fleet' claim does not hold here. FIX NOT ATTEMPTED HERE: signals/setsid//proc semantics are host-sensitive and this packet's author owns the design. NEEDED: make arm 4 poll for premise-absence instead of a fixed sleep 0.3, or find why the TERM is lost in this namespace. Until then the --check gate cannot go green inside a forge, so no host can push through it.
