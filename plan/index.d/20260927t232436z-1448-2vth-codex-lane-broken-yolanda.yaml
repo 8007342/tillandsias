@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-codex-forge-lane-has-been-broken-for-a-while-per-the-operator-and-no-row-tracks-it
+    order: 1448-2vth
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, codex, agents, lane]
+    estimated_hours: 3
+    owned_files:
+      - images/default/entrypoint-forge-codex.sh
+      - images/default/codex-safe-state.sh
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-measured: the failure has not been captured yet; the first deliverable is
+      the failure message and the step it happens at, and the pin follows from that.
+    title: |
+      the Codex forge lane has been broken "for a lil' while" (operator, 2026-09-27) and no live row tracks it; the failure is not yet captured
+    verifiable_closure: |
+      A Codex forge launched the way the operator launches it reaches a usable Codex prompt in the
+      checked-out project, on a Linux host and on a Windows host, and the lane has a regression pin
+      for the captured failure. Pre-fix result: FAILS per the operator; the exact failure is the
+      first measurement this row owes.
+    context: |
+      OPERATOR REPORT, 2026-09-27 (to yolanda): "Codex lane has been boken for a lil' while."
+      The coordinator confirmed no live row covers it (the only Codex hit is 132,
+      agent-login-flows, pending).
+      MEASURED SO FAR: nothing about the failure itself. yolanda's tray.log holds no Codex launch
+      at all, so this Windows host has no failure message to report, and starting a Codex agent
+      session to produce one is operator spend, not a peer's call. The first step belongs on a host
+      that can launch a Codex forge with the operator's go: capture the failure message, the step
+      it happens at (image build, entrypoint, codex-oauth-session, codex itself), and the host.
+      Related: folder trust for Codex is missing entirely (1447-nmq3). That would PROMPT, not
+      break, so it is probably not this defect, but check it first.
+    events:
+      - type: filed
+        ts: "2026-09-27T23:24:35Z"
+        host: yolanda
+        summary: Filed by yolanda from the operator's report, at the coordinator's request.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: install-hooks-writes-the-repo-guards-into-a-global-core-hookspath-so-a-second-clone-inside-a-forge-recreates-the-2026-09-01-collateral-that-breaks-every-scratch-repo-test
+    field: status
+    value: completed
+    ts: "2026-09-27T19:43:34Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: install-hooks-writes-the-repo-guards-into-a-global-core-hookspath-so-a-second-clone-inside-a-forge-recreates-the-2026-09-01-collateral-that-breaks-every-scratch-repo-test
+    event:
+      type: completed
+      ts: "2026-09-27T19:43:34Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: 49c2d548c
+  - packet_id: install-hooks-writes-the-repo-guards-into-a-global-core-hookspath-so-a-second-clone-inside-a-forge-recreates-the-2026-09-01-collateral-that-breaks-every-scratch-repo-test
+    event:
+      type: note
+      ts: "2026-09-27T19:43:34Z"
+      host: forge-tillandsias
+      summary: |-
+        landed on origin/linux-next at 49c2d548c (land75, real 1325 s gate; coordinator macuahuitl-fedora), verified from the forge mirror: contains work/1442-wyf9 2334bd9f0; install-hooks.sh refuses a global core.hooksPath.

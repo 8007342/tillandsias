@@ -29,6 +29,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 pub mod answer;
+/// ORDER 801-g9nn — the commit-DAG plumbing behind a citation's `commit` and
+/// the envelope's `caller_relation`. Derives `same | behind | ahead | diverged`
+/// honestly and refuses to synthesise a total order git cannot give.
+pub mod branch_discipline;
 /// ORDER 920-pxg6 — the OpenAI-compatible loopback front-end over
 /// `pipeline::run_grounded`. One grounded pipeline, two front-ends.
 pub mod expert_serve;
@@ -40,9 +44,6 @@ pub mod experts_probe;
 /// which required exactly this and which the monolithic index file never was.
 pub mod forgotten;
 pub mod fragments;
-/// ORDER 801-g9nn — the commit-DAG plumbing behind a citation's `commit` and
-/// the envelope's `caller_relation`. Derives `same | behind | ahead | diverged`
-/// honestly and refuses to synthesise a total order git cannot give.
 pub mod gitref;
 /// ORDER 394d — the committed ground-truth query set and its grader.
 pub mod groundtruth;
@@ -79,6 +80,7 @@ pub mod obligation_props;
 pub mod pipeline;
 /// ORDER 706-f7mq — modular semantic explanation and fallback for documentation & plan corpora.
 pub mod semantic_expert;
+pub mod session_tokens;
 /// ORDER 547 — network-free RAG index over the whole-spec corpus (chunking,
 /// cosine retrieval, verifiable envelope construction). Embedding and synthesis
 /// happen outside the crate; see `spec.rs`.
@@ -206,6 +208,50 @@ pub struct FieldSource {
 
 pub fn str_field<'a>(packet: &'a Value, key: &str) -> Option<&'a str> {
     packet.get(key).and_then(Value::as_str)
+}
+
+/// ORDER 1437-khnx — the two tier-routing scalars and their vocabularies.
+/// `size` is the implementation size, `implementer_tier` the model tier a
+/// packet is written for; both are read by the selector's tier routing
+/// (1437-vdz5), never by a refusal.
+pub const TIER_FIELDS: [(&str, &[&str]); 2] = [
+    ("size", &["S", "M", "L"]),
+    ("implementer_tier", &["haiku", "sonnet", "opus"]),
+];
+
+/// ORDER 1437-khnx — a tier field's value: the top-level scalar when present,
+/// else a `<field>: <value>` line inside `notes:` whose value is in the
+/// vocabulary. The fallback exists for the rows filed on 2026-09-27 before the
+/// scalars did; a top-level scalar always wins, so a `set-field` correction
+/// overrides the note. Only an in-vocabulary note is read — a note that says
+/// `size: XL` is prose, not a field.
+pub fn tier_field(packet: &Value, field: &str) -> Option<String> {
+    if let Some(v) = packet.get(field) {
+        return match v {
+            Value::String(s) => Some(s.clone()),
+            other => serde_yaml::to_string(other)
+                .ok()
+                .map(|s| s.trim().to_string()),
+        };
+    }
+    let vocab = TIER_FIELDS.iter().find(|(f, _)| *f == field)?.1;
+    let prefix = format!("{field}:");
+    str_field(packet, "notes")?.lines().find_map(|line| {
+        let value = line.trim().strip_prefix(&prefix)?.trim();
+        vocab.contains(&value).then(|| value.to_string())
+    })
+}
+
+/// ORDER 1437-khnx — `Some(reason)` when `value` is outside `field`'s
+/// vocabulary; `None` for an in-vocabulary value or a field that has none.
+pub fn tier_vocabulary_refusal(field: &str, value: &str) -> Option<String> {
+    let vocab = TIER_FIELDS.iter().find(|(f, _)| *f == field)?.1;
+    (!vocab.contains(&value)).then(|| {
+        format!(
+            "{field}={value:?} is not in the vocabulary ({})",
+            vocab.join("|")
+        )
+    })
 }
 
 pub fn str_list(packet: &Value, key: &str) -> Vec<String> {
@@ -1255,6 +1301,29 @@ impl Ledger {
 
     /// Schema-as-data validation: field rules come from the checkout, not
     /// the binary. Unknown packet fields are NEVER violations (open-world).
+    /// ORDER 1437-khnx — every top-level tier scalar outside its vocabulary,
+    /// as `<id>: <reason>`. `check` reports these and `--strict-fragments`
+    /// refuses them; notes lines are prose and never reach this.
+    pub fn tier_vocabulary_violations(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for p in &self.packets {
+            for (field, _) in TIER_FIELDS {
+                if let Some(v) = p.get(field) {
+                    let value = match v {
+                        Value::String(s) => s.clone(),
+                        other => serde_yaml::to_string(other)
+                            .map(|s| s.trim().to_string())
+                            .unwrap_or_default(),
+                    };
+                    if let Some(reason) = tier_vocabulary_refusal(field, &value) {
+                        out.push(format!("{}: {reason}", self.id_of(p)));
+                    }
+                }
+            }
+        }
+        out
+    }
+
     pub fn validate_against_schema(&self, schema: &Schema) -> Vec<String> {
         let mut violations = Vec::new();
         for p in &self.packets {

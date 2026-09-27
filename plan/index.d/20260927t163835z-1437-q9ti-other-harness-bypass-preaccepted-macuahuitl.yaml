@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: codex-antigravity-opencode-forge-bypass-pre-accepted-measured-and-forge-gated
+    order: 1437-q9ti
+    parent_order: 1437-8c6p
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, codex, antigravity, opencode, harness, permissions, entrypoint]
+    estimated_hours: 4
+    owned_files:
+      - images/default/entrypoint-forge-codex.sh
+      - images/default/entrypoint-forge-antigravity.sh
+      - images/default/entrypoint-forge-opencode.sh
+      - images/default/lib-common.sh
+      - images/default/config-overlay/opencode/config.json
+      - scripts/test-forge-harness-bypass-preaccepted.sh
+    title: |
+      Codex, Antigravity and OpenCode forges start with their bypass pre-accepted and MEASURED on the installed binaries (first screen or first JSON event is not a consent prompt); OpenCode's `"permission": "allow"` becomes forge-gated like the flags
+    context: |
+      Spec: default-image "Forge harness permission bypass is pre-accepted at launch, never
+      prompted", scenario "Every harness, empty HOME, no dialog".
+
+      Today: Codex passes --dangerously-bypass-approvals-and-sandbox (forge-gated, TUI and exec
+      paths); Antigravity passes --dangerously-skip-permissions (forge-gated); OpenCode passes
+      --auto on `opencode run` and relies on "permission": "allow" copied by
+      apply_opencode_config_overlay regardless of TILLANDSIAS_HOST_KIND. Whether Codex or
+      Antigravity show a confirmation for their flag on an empty HOME is UNMEASURED; the fixture
+      is the measurement, and a green pre-fix arm for those two is a positive control, not a
+      defect.
+
+      Do: (1) fixture scripts/test-forge-harness-bypass-preaccepted.sh with one arm per harness:
+      empty HOME/CODEX_HOME, HOST_KIND=forge, run the harness's non-interactive form with a
+      trivial prompt under a timeout and assert the first output is not a consent question
+      (Codex: `codex exec --json` first event is thread.started; Antigravity: agy's documented
+      non-interactive form; OpenCode: `opencode run --auto --format json` first event); a named
+      skip when the binary is absent on the host running the fixture (the forge image has them;
+      bare hosts may not); (2) gate the OpenCode overlay's permission value on HOST_KIND=forge —
+      either apply_opencode_config_overlay strips the key when not in a forge, or the overlay
+      ships without it and the entrypoint merges it in a forge; negative arm asserts the key is
+      absent from the effective config when HOST_KIND is unset; (3) if a harness DOES prompt on
+      its flag, seed whatever consent record it reads (as 1437-y2wu does for Claude) and record
+      the key in the fixture header.
+    exit_criteria:
+      - 'OpenCode negative arm: with HOST_KIND unset the effective config carries no permission: allow (pre-fix result: FAILS — the overlay copy applies it unconditionally)'
+      - 'Codex, Antigravity, OpenCode forge arms: first output is not a consent prompt (pre-fix result: UNMEASURED — the arms are the measurement; a pre-fix green is the positive control and is recorded as such)'
+      - 'each arm prints a named skip, never a pass, when its binary is absent (pre-fix result: FAILS — no fixture exists)'
+    verifiable_closure: |
+      bash scripts/test-forge-harness-bypass-preaccepted.sh exits 0 inside a forge image (all arms pass or named-skip); pre-fix: the OpenCode gating arm FAILS.
+    depends_on: []
+    notes: |
+      size: M  implementer_tier: sonnet
+      No credentials touched. The measurement arms must run where the binaries exist (a forge
+      or a host with them installed); a bare host gets named skips — a skip is not a pass, say
+      which arms ran in the closure event.
+    next_action: 'write the per-harness measurement fixture first (it is the instrument), then gate the OpenCode permission key on HOST_KIND=forge and watch that arm go red-to-green'
+    provenance: |
+      Filed by macuahuitl (linux-macuahuitl-claude-20260927t163835z), 2026-09-27, under umbrella 1437-8c6p.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:38:35Z"
+        agent_id: "linux-macuahuitl-claude-20260927t163835z"
+        host: macuahuitl
+        summary: |-
+          The other three harnesses: measure the bypass on the real binary, gate OpenCode's config value on forge.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-enclave-git-mirror-enforces-the-seeded-branch-discipline-at-pre-receive-refuses-the-protected-default-branch-with-the-seeded-message-and-publishes-refs-tillandsias-discipline-digest-epoch-so-a-client-can-read-the-enforced-level-without-pushing
+    field: title
+    value: 'THE MIRROR ANSWERS WITH THE LEVEL OF DISCIPLINE ACTIVELY ENFORCED: images/git/pre-receive-hook.sh reads .tillandsias/branch-discipline.yaml from the integration branch''s tree (level 0 advised when absent — nothing refused), applies each rule at ITS enforcement and only where the seed and the derived level (1446-664f) agree, rejects an update to refs/heads/<default_branch> under an enforced rule with the seed''s message before relaying, warns or rejects a ref outside the grammar per the rule, and publish-discipline.sh keeps exactly one refs/tillandsias/discipline/<level>/<enforcement>/<derived>/<digest>/<epoch> ref pointing at the seed blob on every reconcile tick — so git ls-remote origin ''refs/tillandsias/discipline/*'' reads the level, the enforcement, the derived level and the digest without pushing (the probe-push namespace was dropped by operator ruling 5, 2026-09-27)'
+    ts: "2026-09-27T20:29:26Z"
+    host: linux
+
+events:
+  - packet_id: the-enclave-git-mirror-enforces-the-seeded-branch-discipline-at-pre-receive-refuses-the-protected-default-branch-with-the-seeded-message-and-publishes-refs-tillandsias-discipline-digest-epoch-so-a-client-can-read-the-enforced-level-without-pushing
+    event:
+      type: note
+      ts: "2026-09-27T20:29:26Z"
+      host: linux
+      summary: |-
+        operator rulings 4/5 2026-09-27: probe namespace dropped, derived level published

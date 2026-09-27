@@ -1,0 +1,39 @@
+# Branch discipline seed for this project (order 1443-w79y).
+#
+# The machine-readable projection of methodology/multi-host-development.yaml
+# (branch_inventory, branch_namespaces, work_ref_lane). The methodology stays
+# canonical; this file is what the runtime, the mirror and the land tool READ,
+# so the branch model stops being three constants in three places.
+#
+# Two axes, operator ruling 2026-09-22 (1363-xp2v):
+#   level        0 bare (free pushes to the default branch), 1 integration
+#                branch + pull requests, 2 work refs into the integration
+#                branch. Forward-only: a seed below a published level is refused.
+#   enforcement  per rule: advised | warn | enforced (ratchets per rule).
+# A project with NO seed is level 0 advised and nothing is ever refused.
+#
+# Read it with: tillandsias-plan discipline show [--json]
+version: 1
+level: 2
+enforcement:
+  # main advances only through a pull request from linux-next.
+  default_branch: enforced
+  # work_ref_lane is a migration, not yet an enforcement (operator 2026-09-20).
+  ref_grammar: warn
+default_branch: main
+integration:
+  linux: linux-next
+  forge: linux-next
+  windows: windows-next
+  macos: osx-next
+work_ref: "work/[0-9]{3,4}-[a-z0-9]{4}"
+salvage_ref: "salvage/<host>/<yyyymmdd>-<slug>"
+plan_only_lane:
+  # The plan fast lane scripts/gate-stamp.sh exempts (930-i6x4).
+  paths:
+    - "plan/index.d/*.yaml"
+    - "plan/loop_status.d/*.md"
+    - "plan/mo-full-attestations.d/*.md"
+freeze_namespace: "refs/tillandsias/freeze/<branch>/<host>/<epoch>"
+messages:
+  default_branch_denied: "push to {default} denied: this project uses branch {integration} for integration and {work_ref} for work; switch to the corresponding branch and rebase to remote"

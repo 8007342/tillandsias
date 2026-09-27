@@ -126,7 +126,12 @@ fn apply_status_text_main_thread(
     let mtm = unsafe { MainThreadMarker::new_unchecked() };
     let label = NSString::from_str(text);
     if let Some(handle) = status_menu_item.lock().unwrap().as_ref() {
-        unsafe { handle.0.setTitle(&label) };
+        // 1420-v3zt: an attributed title (the progress bar) outranks the plain
+        // one, so clear it or the row would freeze on the last bar.
+        unsafe {
+            handle.0.setAttributedTitle(None);
+            handle.0.setTitle(&label);
+        }
     }
     if let Some(handle) = status_item.lock().unwrap().as_ref()
         && let Some(button) = unsafe { handle.0.button(mtm) }
@@ -140,6 +145,74 @@ fn apply_status_text_main_thread(
             text
         ));
         unsafe { button.setToolTip(Some(&tooltip)) };
+    }
+}
+
+/// 1420-v3zt: paint `segments` (see `provision_progress::menu_bar_segments`)
+/// beside the menu-bar icon and, followed by `label`, as the status row. An
+/// empty `segments` clears the menu-bar title (the icon stands alone again);
+/// the row is then left to the next `set_status_text`. Main thread only.
+fn apply_menu_bar_progress_main_thread(
+    segments: &[crate::provision_progress::BarSegment],
+    label: &str,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+) {
+    use objc2::runtime::AnyObject;
+    use objc2_app_kit::{NSColor, NSForegroundColorAttributeName};
+    use objc2_foundation::{NSAttributedString, NSDictionary, NSMutableAttributedString, NSString};
+    let mtm = unsafe { MainThreadMarker::new_unchecked() };
+    let build = |prefix: &str, suffix: &str| {
+        let out = NSMutableAttributedString::from_nsstring(&NSString::from_str(prefix));
+        let mut out = out;
+        for seg in segments {
+            let text = NSString::from_str(&seg.text);
+            let piece = match seg.rgb {
+                Some((r, g, b)) => {
+                    let colour = unsafe {
+                        NSColor::colorWithSRGBRed_green_blue_alpha(
+                            f64::from(r) / 255.0,
+                            f64::from(g) / 255.0,
+                            f64::from(b) / 255.0,
+                            1.0,
+                        )
+                    };
+                    let colour: objc2::rc::Retained<AnyObject> =
+                        unsafe { objc2::rc::Retained::cast(colour) };
+                    let attrs = NSDictionary::from_vec(
+                        &[unsafe { NSForegroundColorAttributeName }],
+                        vec![colour],
+                    );
+                    unsafe { NSAttributedString::new_with_attributes(&text, &attrs) }
+                }
+                None => NSAttributedString::from_nsstring(&text),
+            };
+            unsafe { out.appendAttributedString(&piece) };
+        }
+        unsafe {
+            out.appendAttributedString(&NSAttributedString::from_nsstring(&NSString::from_str(
+                suffix,
+            )))
+        };
+        out
+    };
+    if let Some(handle) = status_item.lock().unwrap().as_ref()
+        && let Some(button) = unsafe { handle.0.button(mtm) }
+    {
+        if segments.is_empty() {
+            unsafe { button.setTitle(&NSString::from_str("")) };
+        } else {
+            unsafe { button.setAttributedTitle(&build(" ", "")) };
+        }
+    }
+    if !segments.is_empty()
+        && let Some(handle) = status_menu_item.lock().unwrap().as_ref()
+    {
+        unsafe {
+            handle
+                .0
+                .setAttributedTitle(Some(&build("", &format!("  {label}"))))
+        };
     }
 }
 
@@ -1545,6 +1618,8 @@ async fn run_start(
     image_root: PathBuf,
     vm_slot: Arc<Mutex<Option<Arc<VzRuntime>>>>,
     on_phase: &(dyn Fn(&str) + Send + Sync),
+    // 1420-v3zt: typed first-provision progress, painted as the menu-bar bar.
+    on_progress: &(dyn Fn(&tillandsias_control_wire::ProgressEvent) + Send + Sync),
 ) -> Result<(), String> {
     match stage_embedded_guest_binary() {
         Ok(Some(dest)) => {
@@ -1641,24 +1716,32 @@ async fn run_start(
                     &format!("bundled manifest parse: {e}"),
                 )
             })?;
-        vz.fetch_fedora_cloud_image(&manifest, on_phase)
-            .await
-            .map_err(|e| {
-                // NO LONGER TELLS THE OPERATOR TO INSTALL QEMU (980-xcaf).
-                // That advice could never have worked from a GUI launch: the
-                // tray's PATH is /usr/bin:/bin:/usr/sbin:/sbin, so a
-                // Homebrew-installed qemu-img was never reachable, and the
-                // operator who followed it hit the identical failure and
-                // reasonably concluded the install had not taken. Conversion
-                // is in-process now, so any failure here is ours.
-                format!(
-                    "Fedora Cloud image fetch failed: {e}\n\n\
+        // 1420-x6rz: the chip's percent comes from the typed event's own
+        // fraction, not from a formatted string vm-layer used to build.
+        vz.fetch_fedora_cloud_image(
+            &manifest,
+            on_phase,
+            // 1420-v3zt: the bar (menu bar + status row) is painted from the
+            // event itself; the plain chip no longer carries the percent.
+            &|ev: tillandsias_control_wire::ProgressEvent| on_progress(&ev),
+        )
+        .await
+        .map_err(|e| {
+            // NO LONGER TELLS THE OPERATOR TO INSTALL QEMU (980-xcaf).
+            // That advice could never have worked from a GUI launch: the
+            // tray's PATH is /usr/bin:/bin:/usr/sbin:/sbin, so a
+            // Homebrew-installed qemu-img was never reachable, and the
+            // operator who followed it hit the identical failure and
+            // reasonably concluded the install had not taken. Conversion
+            // is in-process now, so any failure here is ours.
+            format!(
+                "Fedora Cloud image fetch failed: {e}\n\n\
                      This is a download or disk-space problem, not a missing \
                      tool — image conversion no longer needs anything \
                      installed on the host. Check connectivity and free space, \
                      then retry Start VM."
-                )
-            })?;
+            )
+        })?;
         eprintln!("[tillandsias-tray] Start VM: Fedora Cloud image ready");
     }
 
@@ -2089,8 +2172,51 @@ impl TrayActionHost {
             });
         });
 
+        // 1420-v3zt: typed download/expand events -> palette bar beside the
+        // icon and in the status row, repainted once per whole percent.
+        let bar_status_item = status_item_slot.clone();
+        let bar_status_menu_item = status_menu_item_slot.clone();
+        let bar_gate = Arc::new(Mutex::new(crate::provision_progress::PercentGate::default()));
+        let on_progress: Box<dyn Fn(&tillandsias_control_wire::ProgressEvent) + Send + Sync> =
+            Box::new(move |ev| {
+                let segments = match ev.kind {
+                    tillandsias_control_wire::ProgressKind::Done
+                    | tillandsias_control_wire::ProgressKind::Failed { .. } => Vec::new(),
+                    ref kind => match kind.fraction() {
+                        Some(f) if bar_gate.lock().unwrap().changed(&ev.task, f) => {
+                            crate::provision_progress::menu_bar_segments(f, 10)
+                        }
+                        _ => return,
+                    },
+                };
+                let label = ev.label.clone();
+                let status_item = bar_status_item.clone();
+                let status_menu_item = bar_status_menu_item.clone();
+                dispatch_to_main_thread(move || {
+                    apply_menu_bar_progress_main_thread(
+                        &segments,
+                        &label,
+                        &status_item,
+                        &status_menu_item,
+                    );
+                });
+            });
+        let bar_clear_item = status_item_slot.clone();
+        let bar_clear_menu_item = status_menu_item_slot.clone();
+
         runtime.spawn(async move {
-            let result = run_start(image_root, vm_slot.clone(), on_phase.as_ref()).await;
+            let result = run_start(
+                image_root,
+                vm_slot.clone(),
+                on_phase.as_ref(),
+                on_progress.as_ref(),
+            )
+            .await;
+            // 1420-v3zt: whatever the outcome, the icon stands alone again; the
+            // chip below carries the result.
+            dispatch_to_main_thread(move || {
+                apply_menu_bar_progress_main_thread(&[], "", &bar_clear_item, &bar_clear_menu_item);
+            });
 
             // On success, snapshot the Arc<VzRuntime> for the poller
             // BEFORE handing ownership to the dispatch closure. On
@@ -2450,6 +2576,51 @@ fn push_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
         tillandsias_control_wire::SubscriptionTopic::LoginState,
         tillandsias_control_wire::SubscriptionTopic::CloudProjects,
     ]
+}
+
+/// 1420-4grt: throttles guest `ProgressPush` events into tray.log lines —
+/// one per task per whole-ten-percent step, plus every terminal or
+/// indeterminate transition, so a 500-step build writes ~10 lines, not 500.
+#[derive(Default)]
+struct ProgressLog {
+    last_decile: std::collections::HashMap<String, u8>,
+}
+
+impl ProgressLog {
+    fn observe(&mut self, ev: &tillandsias_control_wire::ProgressEvent) -> Option<String> {
+        use tillandsias_control_wire::ProgressKind;
+        match &ev.kind {
+            ProgressKind::Done => {
+                self.last_decile.remove(&ev.task);
+                Some(format!("progress {}: done", ev.label))
+            }
+            ProgressKind::Failed { reason } => {
+                self.last_decile.remove(&ev.task);
+                Some(format!("progress {}: FAILED — {reason}", ev.label))
+            }
+            kind => match kind.fraction() {
+                Some(f) => {
+                    let decile = (f * 10.0).floor() as u8;
+                    if self.last_decile.get(&ev.task) == Some(&decile) {
+                        return None;
+                    }
+                    self.last_decile.insert(ev.task.clone(), decile);
+                    Some(format!(
+                        "progress {}: {}%",
+                        ev.label,
+                        u32::from(decile) * 10
+                    ))
+                }
+                None => {
+                    if self.last_decile.contains_key(&ev.task) {
+                        return None;
+                    }
+                    self.last_decile.insert(ev.task.clone(), u8::MAX);
+                    Some(format!("progress {}: working", ev.label))
+                }
+            },
+        }
+    }
 }
 
 /// Map a `GithubLoginStatusReply`/`LoginStatePush` payload to the menu's
@@ -2955,8 +3126,13 @@ async fn run_push_listener(
             let sub = ControlEnvelope {
                 wire_version: WIRE_VERSION,
                 seq: client.allocate_seq(),
+                // 1420-4grt: Progress is added ONLY when this guest advertised
+                // CAP_PROGRESS_PUSH_V1; an old guest never sees the topic.
                 body: ControlMessage::Subscribe {
-                    topics: push_subscribe_topics(),
+                    topics: tillandsias_control_wire::subscription_topics(
+                        &push_subscribe_topics(),
+                        client.server_caps(),
+                    ),
                 },
             };
             let reply = client
@@ -3034,6 +3210,7 @@ async fn run_push_listener(
             continue;
         }
 
+        let mut progress_log = ProgressLog::default();
         loop {
             match client.next_envelope().await {
                 Ok(env) => match env.body {
@@ -3143,6 +3320,14 @@ async fn run_push_listener(
                                 &status_menu_item,
                                 &self_handle,
                             );
+                        }
+                    }
+                    // 1420-4grt: guest image-build progress. Logged (tray.log)
+                    // at whole-ten-percent steps per task; the menu bar/menu
+                    // rendering of the same events is 1420-v3zt.
+                    ControlMessage::ProgressPush { event, .. } => {
+                        if let Some(line) = progress_log.observe(&event) {
+                            eprintln!("[tillandsias-tray] {line}");
                         }
                     }
                     other => {
@@ -3793,6 +3978,51 @@ mod tests {
                 tillandsias_control_wire::SubscriptionTopic::LoginState,
                 tillandsias_control_wire::SubscriptionTopic::CloudProjects,
             ]
+        );
+    }
+
+    /// 1420-4grt: Progress rides the subscription only for a capable guest.
+    #[test]
+    fn progress_topic_is_opt_in_by_guest_capability() {
+        use tillandsias_control_wire::{
+            CAP_PROGRESS_PUSH_V1, SubscriptionTopic, subscription_topics,
+        };
+        assert_eq!(
+            subscription_topics(&push_subscribe_topics(), &[]),
+            push_subscribe_topics()
+        );
+        let with = subscription_topics(
+            &push_subscribe_topics(),
+            &[CAP_PROGRESS_PUSH_V1.to_string()],
+        );
+        assert_eq!(with.last(), Some(&SubscriptionTopic::Progress));
+    }
+
+    /// 1420-4grt: one tray.log line per whole-ten-percent step, not per event.
+    #[test]
+    fn progress_log_throttles_to_deciles() {
+        use tillandsias_control_wire::{ProgressEvent, ProgressKind, ProgressUnit};
+        let ev = |kind| ProgressEvent {
+            task: "image/forge".into(),
+            parent: None,
+            label: "Build forge image".into(),
+            kind,
+            ts_unix_ms: 0,
+        };
+        let step = |done| ProgressKind::Determinate {
+            done,
+            total: Some(100),
+            unit: ProgressUnit::Steps,
+        };
+        let mut log = ProgressLog::default();
+        let lines: Vec<_> = (0..=100)
+            .filter_map(|d| log.observe(&ev(step(d))))
+            .collect();
+        assert_eq!(lines.len(), 11, "{lines:?}");
+        assert_eq!(lines[3], "progress Build forge image: 30%");
+        assert_eq!(
+            log.observe(&ev(ProgressKind::Done)).as_deref(),
+            Some("progress Build forge image: done")
         );
     }
 
@@ -4637,7 +4867,7 @@ mod tests {
     async fn run_start_full_e2e() {
         let tmp = tempfile::tempdir().unwrap();
         let vm_slot = Arc::new(Mutex::new(None));
-        let result = run_start(tmp.path().to_path_buf(), vm_slot.clone(), &|_| {}).await;
+        let result = run_start(tmp.path().to_path_buf(), vm_slot.clone(), &|_| {}, &|_| {}).await;
         match result {
             Err(err) => {
                 assert!(

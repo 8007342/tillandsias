@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
 # @trace spec:tillandsias-vault
 # claude-approvals-vault — restore/harvest the operator's one-time interactive
-# approvals (workspace trust, bypass-permissions consent, onboarding/theme)
-# for claude forge sessions, the same rail provider-oauth-vault rides for the
-# OAuth document (operator directive 2026-08-31: "prompt the first time —
-# those are valid prompts — then save the verified approval in the vault,
-# just like the auth tokens; one approval on the first launch is acceptable,
-# as long as it's not on every launch").
+# approvals (workspace trust, onboarding/theme) for claude forge sessions,
+# the same rail provider-oauth-vault rides for the OAuth document (operator
+# directive 2026-08-31: "prompt the first time — those are valid prompts —
+# then save the verified approval in the vault, just like the auth tokens;
+# one approval on the first launch is acceptable, as long as it's not on
+# every launch").
+#
+# The bypass-permissions consent (bypassPermissionsModeAccepted) is no
+# longer made durable by this file (order 1437-y2wu, operator directive
+# 2026-09-27: pre-accept it, for all projects, for all harnesses). It is
+# SEEDED at launch by lib-common.sh::seed_claude_bypass_consent, forge-gated,
+# before restore_approvals below ever runs — so a Vault wipe cannot bring the
+# dialog back. This file still extracts/restores that key when present (a
+# harmless no-op once the seed has already set it — restore's deep-merge
+# gives the live config priority), but nothing depends on it doing so.
 #
 #   restore  vault -> deep-merge the approval keys into ~/.claude.json
 #            (additive; a fresh prompt-and-approve always wins over vault)

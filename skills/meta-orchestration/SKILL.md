@@ -124,10 +124,36 @@ low-end hosts made the CPU bottlenecks visible. Until the counter in
   refuters or fan-out.
 - **Refuters.** At most one per verdict, one tier below the verdict's author.
   Prefer one agent with a schema over N parallel ones when the items are cheap.
+- **Packets carry their tier too (trims 2026-09-27, umbrella 1437-62g8).**
+  Every filed packet declares `size: S|M|L` and `implementer_tier:
+  haiku|sonnet|opus` (as scalars once 1437-khnx lands; as two lines inside
+  `notes:` until then). S = mechanical, fully specified → haiku; M = a few
+  files, clear design → sonnet; L = cross-cutting, judgment, or
+  gate-integrity-sensitive → opus. Anything that changes what the land gate
+  or the pre-push hook refuses is at least sonnet, opus if it could let a
+  red tree land. An UNTAGGED row is opus (operator 2026-09-27: "No size
+  tags get Opus") and the tier is a floor. A session states its tier to the
+  selector (`scripts/select-work-batch.sh <role> --tier <t>`, 1437-vdz5)
+  and runs a cheaper packet through `scripts/claude-delegate.sh implement
+  <order>` (1437-yjf6) or a dedicated `./repeat --model haiku` session
+  (1437-m5yx); the host session keeps verify and commit. A host may also
+  run an all-day Haiku ORCHESTRATOR (`/haiku-orchestrate`, 1443-hbgt) that
+  delegates by tier and accepts only a closure it measured with
+  `scripts/verify-closure.sh` (1443-qwpj) — never a delegate's "met".
+  Canonical: `methodology/distributed-work.yaml` →
+  `cycle_batch_triage.model_tier_routing`.
+- **Messages to peers: budget ON HOLD** (operator question pending,
+  2026-09-27; 1437-arjg blocked). The shape in
+  `distributed-work.yaml` → `sibling_heads_up_protocol.size_budget` stays
+  written and is not enforced until the operator answers.
 - **Never delegate a read an expert answers.** `plan_status`, `plan_answer`,
   `methodology_ask` and the project-info tools cost nothing next to an agent.
-- **Report it, and LOG it.** `scripts/cycle-metrics.sh --emit-tokens` now
-  exists (1119-6wn6), so the attestation is recorded rather than only typed:
+- **Report it, and LOG it — from the instrument.** `scripts/cycle-metrics.sh
+  --emit-tokens` exists (1119-6wn6); with `--from-transcript` (1437-3pj7) it
+  reads this session's own harness transcript and fills `main_ctx`,
+  `main_ctx_cumulative`, `subagent_tokens`, `agents` and `by_model` itself,
+  or records `source=absent`. Hand-passed numbers remain accepted for a
+  harness with no transcript. The typed form was:
 
   ```
   scripts/cycle-metrics.sh --emit-tokens host=<h> cycle=<id> \
@@ -344,8 +370,8 @@ needs to know the copy does not exist before deciding what to do with the
 directory.
 
 **AN OPERATOR LICENCE CAN GO STALE, AND A CLEAN TREE IS HOW YOU KNOW.** When a
-prompt authorises you to land dirt — order 833-fpe7's `resumable:` verdict,
-order 540's opsx merge, or an operator sentence naming specific work to review
+prompt authorises you to land dirt — order 833-fpe7's `resumable:` verdict
+or an operator sentence naming specific work to review
 and land — CHECK THAT THE DIRT IS STILL THERE before acting on it. If
 `git status --porcelain --untracked-files=all` is empty, the premise of the
 licence is gone: answer **"the premise is gone"**, say what the licence expected
@@ -868,33 +894,31 @@ filing — not the prompt.
    2026-08-24 a fresh clone is exactly what took it. The salvage cannot touch
    the worktree — temporary index and plumbing only — so it is safe to run on
    dirt you have just been forbidden to alter, and it must run BEFORE the two
-   detectors below: whether the dirt turns out to be `ok:opsx-only` or
-   `resumable:` changes what you may LAND, never whether a copy should exist.
-4. **Generated opsx sync merge (deterministic, order 540)**: before refusing on
-   startup dirt, run the deterministic detector:
+   detectors below: whether the dirt turns out to be `resumable:` changes what
+   you may LAND, never whether a copy should exist.
+4. **Launch-generated opsx dirt is a refusal (deterministic, order 1440-w8g8)**:
+   before refusing on startup dirt, name WHICH dirt it is:
    ```bash
    scripts/check-opsx-generated-dirt.sh
    ```
-   It prints exactly one line matching `^(ok:opsx-only|ok:clean-tree|non-opsx:.*)$`
-   and exits `0` only when every status-visible dirty path is exactly the
-   22-path opsx/openspec generated set (`.opencode/commands/opsx-*.md` +
-   `.opencode/skills/openspec-*/SKILL.md`) — the launch-generated artifact from
-   the installed openspec CLI (see
-   `plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md`). On
-   `ok:opsx-only`, the dirt is INTENDED versioned project content, not operator
-   work: commit it as its own sync change on the canonical branch before worker
-   drain, then re-anchor the startup boundary:
-   ```bash
-   git add .opencode/commands/opsx-*.md .opencode/skills/openspec-*/
-   git commit -m "chore(opsx): sync generated openspec commands and skills"
-   scripts/meta-orchestration-worktree-guard.sh re-snapshot "$boundary_dir"
-   ```
-   A `non-opsx:` verdict means real sibling/operator dirt — fall through to the
-   dirty-start refusal exactly as written; never commit, discard, or clean it.
-   An `ok:clean-tree` verdict means there is nothing to merge. The checker is a
-   falsifiable machine decision; do not substitute prose judgment for it.
+   It prints exactly one line matching
+   `^(ok:clean-tree|launch-dirt:opsx-only|non-opsx:.*)$`. `launch-dirt:opsx-only`
+   (exit 5) means every dirty path is the opsx/openspec command/skill set the
+   openspec CLI generates — a forge launch rewrote tracked files, which
+   1422-w3p8 made impossible. That is a REGRESSION to report, not content to
+   land: refuse the cycle exactly as for any dirty start (salvage first, as
+   above), name 1422-w3p8 and the verdict line in the handoff, and do not
+   commit, discard, restore or clean the dirt. Order 540 (2026-07-31) used to
+   commit it as a `chore(opsx)` sync; the operator reversed that on
+   2026-09-27 (the dirt "should not exist"), and 64cceb25d is what the old
+   step produced. Moving the generated set to a new openspec version is a
+   deliberate `openspec update` + commit under its own packet, never a cycle's
+   reaction to dirt. `non-opsx:` (exit 3) is real sibling/operator dirt: fall
+   through to 4b, then to the dirty-start refusal. `ok:clean-tree` (exit 4)
+   means there is nothing to name. The checker is a falsifiable machine
+   decision; do not substitute prose judgment for it.
 4b. **Resumable claim dirt (deterministic, order 833-fpe7)**: when the dirt is
-   NOT the opsx set, run the second detector before refusing:
+   `non-opsx:`, run the second detector before refusing:
    ```bash
    scripts/check-resumable-claim-dirt.sh
    ```
@@ -912,7 +936,7 @@ filing — not the prompt.
    `resumable:` is a licence to REVIEW AND LAND, never to auto-commit: read
    the diff against each named order's packet, land what implements it as its
    own commit(s) citing the orders, then re-anchor with the guard's
-   `re-snapshot` — the same sequence order 540 sanctions. Whether an edit
+   `re-snapshot` (scripts/meta-orchestration-worktree-guard.sh). Whether an edit
    IMPLEMENTS the packet beside it is the agent's judgment; the detector only
    removes the deadlock. Any `unattributable:` verdict falls through to the
    dirty-start refusal exactly as written. Pinned by
@@ -1969,6 +1993,36 @@ Only `linux_mutable` performs global coordination:
    evidence is current, and no release is already in flight.
 5. After a release succeeds, ensure the plan records the new latest release so
    immutable Linux hosts know to run curl-install e2e.
+6. **Move the project's openspec CLI forward deliberately (order 1441-myz3)**.
+   `openspec/cli-version` is the project's ONE openspec version. Forges install
+   exactly it (`ensure_openspec_pinned`, lib-common.sh) and never refresh it to
+   @latest, so a fresh forge's /opsx sets match the committed ones and launch
+   leaves the checkout clean. Keeping the pin current is the coordinator's
+   job, once per cycle and cheap when nothing is due. Run it on a CLEAN tree
+   based on `origin/linux-next` (a `work/<order>` ref or the coordinator's
+   own checkout), with npm on PATH (host or `tillandsias-builder`):
+   ```bash
+   scripts/openspec-pin.sh check    # ok:openspec-pin-current:<v> | due:openspec-bump:<pin>-><latest> | unknown:…
+   scripts/openspec-pin.sh bump     # only on due: (or `bump --to <v>` to re-level at the current pin)
+   scripts/openspec-pin.sh drift    # must print ok:openspec-generated-matches-pin before committing
+   ```
+   `bump` installs the new version into a version-keyed cache, runs
+   `openspec update --force` with an ISOLATED openspec config (the profile is
+   derived from the committed workflows, never from the machine running it),
+   writes the pin, and never commits. On `bumped:openspec:<old>-><new>:<n>-paths`,
+   commit everything it changed as ONE change, subject
+   `chore(openspec): bump CLI <old> -> <new>`, and land it like any work ref.
+   On `review:openspec-bump:…`, stop and read stderr. It names either
+   generated files that still disagree with the pin, or a superseded copy the
+   CLI left behind instead of overwriting (1.13.2: "Left 11 files in .codex/
+   that differ from the copy in .agents/"). Remove only the copy the CLI names
+   as superseded, re-run `drift` to ok, and commit that removal in the SAME
+   change. Paths outside the generated surface mean something unexpected
+   happened: do not commit, and file a packet. `unknown:` (registry
+   unreachable) waits for the next cycle. Changing the workflow profile is a
+   separate decision; it is never a side effect of a bump. This is the only
+   sanctioned way the generated /opsx sets move. Launch-generated dirt is
+   refused (step 4 of Start Of Cycle), never committed.
 
 ## Cycle Metrics (report before the handoff)
 

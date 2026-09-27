@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: progress
+      ts: "2026-09-27T16:35:20Z"
+      agent_id: linux-lenovinha-claude-20260927t163519z
+      host: lenovinha
+      summary: |
+        Slice 2 LANDED in 864aa666f (land70: salvage 472 slice 2 092a2a25c): the CaBundle->Proxy generation edge; an unlabelled proxy is treated as stale. Slice 3 (196c3c0cb, emission) relays next. The split-trust TLS failure is still read-from-code.

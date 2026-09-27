@@ -36,6 +36,8 @@ declared-closures
 declared-closures-check
 decompose
 dependencies-of
+# discipline: order 1443-w79y — branch-discipline seed (show|target|check-ref).
+discipline
 expert-serve
 experts-probe
 expire-claims
@@ -79,6 +81,8 @@ ready
 # relaunch" sets can never drift apart the way a hardcoded list in the wrapper
 score-checks
 select-rows
+# session-tokens: order 1437-3pj7 — billed tokens from the harness transcript.
+session-tokens
 set-field
 source-revision
 spec-envelope

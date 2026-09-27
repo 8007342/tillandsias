@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: rootfs-and-cloud-image-download-progress-reaches-the-trays-only-as-a-formatted-percent-string
+    field: status
+    value: in_progress
+    ts: "2026-09-27T16:08:52Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: rootfs-and-cloud-image-download-progress-reaches-the-trays-only-as-a-formatted-percent-string
+    event:
+      type: note
+      ts: "2026-09-27T16:08:52Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        claimed per coordinator 2026-09-27; host-side vm-layer/tray only (r2sn types on trunk e68c162c6; 4grt guest broadcast not landed)

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: census-litmus-layer-misclassification-specs-whose-size-or-phase-disagrees-with-what-they-run
+    field: status
+    value: in_progress
+    ts: "2026-09-27T20:35:43Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: census-litmus-layer-misclassification-specs-whose-size-or-phase-disagrees-with-what-they-run
+    event:
+      type: falsified
+      ts: "2026-09-27T20:35:43Z"
+      host: forge-tillandsias
+      summary: |-
+        falsified 'completed' claim; evidence: erroneously closed before landing on origin/linux-next; work is only on unmerged work/1443-2ef7, per join-the-fleet closure discipline (close only after merge lands on trunk) — status set to 'in_progress', new attempt epoch

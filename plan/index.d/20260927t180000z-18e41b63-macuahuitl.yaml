@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-vault-store-and-download-cache-are-host-persistent-across-reset
+    field: title
+    value: 'macOS: --reset-state is a SOFT reset (VM and Fedora guest kept, headless binary injected, containers wiped and re-initialised inside the guest, Vault store and downloads kept, Keychain share kept); --reset-guest stays the HARD reset (guest wiped, store and share cleared, announced); install-macos.sh runs SOFT for updates and HARD only on request; macOS legacy roots migrate to ~/.tillandsias'
+    ts: "2026-09-27T18:00:00Z"
+    host: macuahuitl
+
+events:
+  - packet_id: macos-vault-store-and-download-cache-are-host-persistent-across-reset
+    event:
+      type: note
+      ts: "2026-09-27T18:00:00Z"
+      host: macuahuitl
+      summary: |-
+        operator SOFT/HARD ruling 2026-09-27 (1438-pk9j); the dropped line is my own 1437-8c6p title, superseded

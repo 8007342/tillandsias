@@ -1,0 +1,28 @@
+packets:
+  - packet_id: the-curl-installer-terminal-goes-quiet-after-open-a-while-the-tray-initializes-the-vm-so-the-first-install-shows-no-progress-for-its-longest-phase
+    order: 1435-97u4
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, installer, progress, installer-ux]
+    estimated_hours: 6
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the live arm (a curl install on a TTY) is the pin; its fixture lands with it.
+    title: |
+      PRETTY INSTALLER (operator ruling 2026-09-27): on a FIRST install from curl, the already-open terminal must keep showing the tillandsia progress bars through the initialization that happens AFTER install (the tray's VM boot and the guest's first-boot provisioning), until Ready or a named failure; after an update or a desktop launch the menu-bar icon + menu (1420-v3zt) are enough
+    verifiable_closure: |
+      a curl install of the macOS tray on a TTY renders tillandsia bars for the post-`open -a` initialization (VM boot, guest provisioning) in the installer's terminal and exits only on Ready (rc 0) or a stage-named failure (rc != 0); piped / non-TTY it prints plain lines; an update over an already-provisioned install does not attach; pre-fix result: FAILS (the installer prints "Tray started" after `open -a` and exits while initialization is still running, with no progress in the terminal).
+    context: |
+      Operator's words (asked with previews while scoping 1420-v3zt): "MenuBarIcon + MenuBar, plus on first install from curl,
+      using the already open terminal we want the same progress colorful bars forwarded to the host, when initialization
+      happens after install we want to see the pretty graphs on the terminal. Otherwise (like after an update, or a desktop
+      launch) MenuBarIcon+MenuBar is enough". The install-time re-provision (--reset-state) already renders bars since
+      1420-83vf; the GAP is everything after `open -a` hands off to the tray. Needs: a host-local progress feed the tray
+      publishes (its typed ProgressEvents plus the guest's, via 1420-4grt), and an installer step that follows it with the
+      1420-9vpk renderer (e.g. a tray CLI verb) on first install only. Depends on 1420-x6rz, 1420-v3zt, 1420-4grt.
+    exit_criteria:
+      - 'first curl install on a TTY shows bars until Ready or a named failure; pre-fix result: FAILS'
+      - 'update and desktop launch do not attach to the terminal'

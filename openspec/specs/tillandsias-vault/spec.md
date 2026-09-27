@@ -34,8 +34,23 @@ Cross-references:
 - **Invariants**: [tillandsias-vault.invariant.vault-listener-boundary-scoped, tillandsias-vault.invariant.vault-storage-persistent]
 
 The `tillandsias-vault` container SHALL run with hostname/network alias `vault`
-and persistent storage at `/vault/data`, backed by the podman volume
-`tillandsias-vault-data`. Vault SHALL listen on `0.0.0.0:8200` inside its
+and persistent storage at `/vault/data`, backed by a HOST DIRECTORY bind mount
+(`file` storage backend) that lives OUTSIDE anything a SOFT reset destroys.
+On native Linux that directory is `~/.tillandsias/vault/data`
+(`TILLANDSIAS_HOME/vault/data`; the legacy `<cache>/vault-data` is migrated
+there once, `host-state-lifecycle`), mounted `.../vault/data:/vault/data:U`.
+In the macOS and Windows guest regimes the directory is
+`/root/.tillandsias/vault/data` INSIDE the guest: a SOFT reset keeps the guest
+and therefore the store; a HARD reset (`--reset-guest`) destroys the guest
+and the store with it and clears the share, and says so first. AMENDED
+2026-09-27 (1438-pk9j): the 1437-8c6p text required a host-persistent store
+for guest regimes; the operator's SOFT/HARD ruling makes the guest itself the
+persistent thing, so an evacuate-or-share mechanism is no longer required
+for the Vault store. CORRECTED 2026-09-27 (order 1437-8c6p): this requirement previously
+named a podman NAMED VOLUME `tillandsias-vault-data`; no such volume has ever
+existed in the launcher (`launch_vault_container` binds the directory), and
+the wrong name cost the store its survival analysis — a named volume dies in
+`podman system reset`, a host directory does not. Vault SHALL listen on `0.0.0.0:8200` inside its
 container/network namespace using a leaf certificate signed by the enclave CA.
 The leaf certificate SHALL cover `vault`, `localhost`, and `127.0.0.1`, and its
 private key SHALL enter the container only through a Podman secret. An in-VM
@@ -53,8 +68,8 @@ external host network.
 #### Scenario: Default bootstrap starts Vault
 - **WHEN** `tillandsias --init` runs
 - **THEN** the launcher SHALL build or reuse the `tillandsias-vault` image
-- **AND** the launcher SHALL start `tillandsias-vault` with
-  `tillandsias-vault-data:/vault/data`
+- **AND** the launcher SHALL start `tillandsias-vault` with the host directory
+  bound at `/vault/data` (`~/.tillandsias/vault/data:/vault/data:U` on Linux)
 - **AND** Vault SHALL be reachable by the in-VM headless and enclave peers at
   `https://vault:8200`
 - **AND** the in-VM Vault launch SHALL have no host port mapping
@@ -66,8 +81,24 @@ external host network.
 #### Scenario: Vault data survives restart
 - **WHEN** Tillandsias stops and starts again
 - **THEN** secrets written before the stop SHALL be readable after restart
-- **AND** the `tillandsias-vault-data` volume SHALL remain mounted at
-  `/vault/data`.
+- **AND** the same host directory SHALL be mounted at `/vault/data`.
+
+#### Scenario: Guest regimes keep the store through a SOFT reset
+- **WHEN** the macOS or Windows tray runs `--reset-state` (SOFT,
+  `host-state-lifecycle`)
+- **THEN** the guest disk SHALL NOT be recreated and
+  `/root/.tillandsias/vault/data` inside it SHALL keep its content digest
+- **AND** the freshly created Vault container in the reset guest SHALL unseal
+  with the host-delivered share and read the pre-reset secrets.
+- Pre-fix result: FAILS on both platforms — today's `--reset-state` destroys
+  the guest disk on both (`wipe_provisioned_artifacts`, `wsl --unregister`).
+
+#### Scenario: A HARD reset takes the store and the share together
+- **WHEN** the macOS or Windows tray runs `--reset-guest` (HARD)
+- **THEN** the announcement SHALL say the store and its share are being
+  removed
+- **AND** after provisioning, Vault SHALL be freshly initialised and no stale
+  share SHALL be delivered to the new guest (the 803-49re shape).
 
 #### Scenario: Non-loopback exposure is forbidden
 - **WHEN** container launch arguments are inspected
@@ -371,6 +402,163 @@ Vault Agent lifecycle verbs.
   curl argv
 - **AND** the stored value SHALL still be verified by a Vault read-back.
 
+### Requirement: The Vault store and its unseal material survive every destructive reset; only uninstall removes them
+<!-- req-id: ede84d89 -->
+
+A SOFT reset (`--reset-state` on every platform, `--reset-guest` on Linux,
+an installer's update reset, `podman system reset --force`, an image wipe)
+SHALL leave the Vault store directory and the host-held unseal material
+(`vault-shamir-share-v1`, `vault-root-token-v1` in the platform keychain)
+exactly as they were. After the reset, a FRESHLY BUILT image and a FRESHLY
+CREATED container over the preserved store SHALL take the subsequent-boot
+path of the entrypoint, unseal with the preserved share, and every KV secret
+written before the reset SHALL be readable. The only code paths permitted to
+delete the store or the unseal material are the uninstall and the HARD reset
+of a guest regime (`host-state-lifecycle`); `clear_host_vault_credentials`
+and its macOS and Windows siblings SHALL be called from those two paths only,
+never from a SOFT reset body.
+
+AMENDED 2026-09-27 (1438-pk9j), operator ruling verbatim: "the presence of an
+unlocking keyring should be a requirement to survive the vault store." The
+share SHALL live ONLY in an unlocking keyring (Secret Service with the login
+keyring unlocked, macOS Keychain, Windows Credential Manager; a guest receives
+it from the host keyring over the control channel each boot). There is NO
+persisted fallback share file: where the keyring is unavailable the share
+stays in process memory or on tmpfs for the life of the process and is gone
+with it, so that host's store does not survive a reset — and the reset says
+so before destroying anything, rather than preserving a store nothing can
+open. This confirms 1118-fqfk's direction (fallback share never on
+persistent disk) and reverses the 1437-8c6p text that preserved
+`fallback_vault-shamir-share-v1` across resets.
+
+Operator directive 2026-09-27, verbatim: "we want to KEEP THE CREDENTIALS,
+likely just the VAULT'S STORE, since a newly created vault using the unlock
+key still present in the session's keyring should still be able to unlock and
+read the credentials." This SUPERSEDES, for the credential subject only, the
+2026-09-13 choice recorded under order 900-z3kv ("the documented reset clears
+the host-held share, the host starts with no credentials") and its Windows
+sibling 804-ckst; it also changes the premise of open packet 1118-fqfk, which
+asked `--reset-guest` to wipe the fallback share. The measured cost of the
+old choice: `scripts/install.sh` runs `--reset-state` on every install
+(1286-4437), so every install since 2026-09-20 has thrown away the operator's
+Claude, Codex, Antigravity and GitHub sign-ins and prompted for them again.
+
+The partial-init guard (`launch_vault_container`: a store present with no
+32-byte share anywhere is wiped and re-initialised) stays, because an
+unreadable store preserves nothing; what changes is that no reset may be the
+thing that removed the share.
+
+@trace spec:tillandsias-vault, spec:host-state-lifecycle
+
+#### Scenario: Fresh Vault over the preserved store reads the old credentials
+- **WHEN** the operator signs in (`--github-login`, `--claude-login`,
+  `--codex-login`, `--agy-login`), then runs any destructive reset, then
+  `--init`
+- **THEN** the Vault image SHALL be rebuilt and the container recreated
+- **AND** the entrypoint SHALL log `subsequent boot: using unseal key from
+  secret` and SHALL NOT run `operator init`
+- **AND** `secret/github/token`, `secret/claude/oauth`, `secret/codex/oauth`
+  and `secret/antigravity/oauth` SHALL return the pre-reset documents
+- **AND** the next forge launch of each harness SHALL restore its document
+  and SHALL NOT prompt for sign-in.
+- Pre-fix result: FAILS on Linux (`run_reset_state` clears the share and the
+  store), on macOS (`run_reset_state` clears the Keychain items and the store
+  dies with `rootfs.img`) and on Windows (`reset_state_once` clears
+  Credential Manager and the store dies with the distro). Applies to SOFT
+  resets; a HARD reset is expected to lose the store and is not this scenario.
+
+#### Scenario: Image and container wipe without a reset flag
+- **WHEN** every `tillandsias-*` image and container is removed by hand
+  (`podman rmi`, `podman rm`, `podman system reset --force`) and Tillandsias
+  is launched again
+- **THEN** the outcome SHALL be identical to the scenario above, because the
+  store is a host directory and the share is in the keychain
+- **AND** this is already true on Linux today (positive control:
+  `scripts/probe-credential-cold-state.sh` names it CREDENTIAL-WARM).
+
+#### Scenario: Uninstall and HARD reset are the only paths that clear
+- **WHEN** `--uninstall` runs, or `--reset-guest` runs on a guest regime
+- **THEN** both keychain entries SHALL be removed (uninstall also removes the
+  store and audit directories; HARD removes them with the guest)
+- **AND** uninstall SHALL remove the store and the entries UNCONDITIONALLY,
+  before and regardless of its `[y/N]` question about the rest of
+  `~/.tillandsias/` (operator ruling 2026-09-27, verbatim: "Let's wipe the
+  unrecoverable vault store during uninstall, together with the host keyring
+  entry. That's what an 'UNINSTALL' means for a user."); a kept folder never
+  holds a Vault store
+- **AND** a source-shape fixture SHALL prove that no SOFT reset body on any
+  platform calls a credential clearer (grep `run_reset_state`,
+  `run_reset_guest` on Linux, the macOS `run_reset_state`, and the Windows
+  SOFT body for `clear_host_vault_credentials`, `clear_guest_vault_credentials`,
+  `CLEARED_CREDENTIALS`: zero call sites; the HARD bodies and uninstall are
+  the allowed population and are named in the fixture).
+- Pre-fix result: FAILS — all three `--reset-state` bodies call one.
+
+#### Scenario: No unlocking keyring, no persisted share, no survival
+- **WHEN** the platform keyring is unavailable or locked when the share is
+  captured or delivered
+- **THEN** no file under `TILLANDSIAS_HOME` or any legacy root SHALL contain
+  the share after the process exits (`fallback_vault-shamir-share-v1` and
+  `fallback_vault-root-token-v1` SHALL NOT be written to persistent disk)
+- **AND** a SOFT reset on a host whose keyring ANSWERS and holds no share
+  SHALL print `reset: no unlocking keyring holds vault-shamir-share-v1 — the
+  Vault store cannot survive this reset and will be re-initialised at next
+  init` (`Absent:REINIT-AT-INIT`) before destroying anything
+- **AND** a SOFT reset on a host whose keyring is UNREACHABLE SHALL instead
+  keep the store and print the `Unverified:KEEP` line (AMENDED 2026-09-27,
+  1443-bs9z, operator: "Unverified:KEEP is ok for a soft reset"); the three
+  dispositions and the HARD-reset open question are in `host-state-lifecycle`
+- **AND** the next init SHALL decide: unseal if the share is then reachable,
+  else re-initialise Vault through the partial-init guard with its own loud
+  line.
+- Pre-fix result: FAILS — `keychain_set_blocking` writes the two
+  `fallback_*` files at mode 0600 into the cache directory whenever the
+  keyring call fails or times out.
+
+### Requirement: Every harness credential document has a Vault home and is restored without a prompt
+<!-- req-id: 3f67b06a -->
+
+Each coding harness the forge can launch SHALL have exactly one Vault KV path
+for its opaque credential document, one harvest path that captures the
+document after the operator's first sign-in and after every rotation, and one
+restore step in its forge entrypoint that runs before the harness starts.
+The set today: Claude (`secret/claude/oauth`), Codex (`secret/codex/oauth`),
+Antigravity (`secret/antigravity/oauth`), the GitHub token (`secret/github/token`,
+consumed by the git mirror, never by the forge). OpenCode SHALL join the set:
+its own auth store (`auth.json` under its data directory, whatever providers
+it holds after `opencode auth login`) SHALL be harvested to
+`secret/opencode/auth` and restored at launch, alongside the existing
+API-key adaptation of `secret/gemini/api-key`. Operator directive 2026-09-27:
+"Codex, Antigravity and OpenCode Go credentials must likewise be saved
+transparently and survive Vault/container/image wipes and recreation."
+
+@trace spec:tillandsias-vault, spec:default-image
+
+#### Scenario: One sign-in per harness, ever
+- **WHEN** the operator signs into a harness once, on any launch path
+- **THEN** its document SHALL be in Vault before that session ends
+- **AND** every later launch — including after any destructive reset — SHALL
+  restore it and start the harness signed in.
+
+#### Scenario: OpenCode's own auth store round-trips
+- **WHEN** `opencode auth login` completes inside a forge or a login container
+- **THEN** the resulting auth store SHALL be harvested to `secret/opencode/auth`
+- **AND** the next OpenCode forge launch SHALL restore it before `opencode`
+  starts
+- **AND** the restored file SHALL never appear in launcher argv, logs or
+  fixtures.
+- Pre-fix result: FAILS — OpenCode has no Vault document; only the Gemini API
+  key is adapted through `prepare_opencode_vault_auth`.
+
+#### Scenario: A harness with no document prompts once and is harvested
+- **WHEN** a harness launches with no document in Vault and no API key
+- **THEN** the harness's own sign-in prompt MAY appear (this is the one valid
+  prompt)
+- **AND** the harvest watcher SHALL capture the document within its poll
+  interval of the sign-in completing
+- **AND** the permission-bypass consent is NOT part of this document and SHALL
+  NOT prompt (see `default-image`).
+
 ## Invariants
 
 ### Invariant: Vault listener is boundary-scoped
@@ -380,7 +568,7 @@ Vault Agent lifecycle verbs.
 
 ### Invariant: Vault storage is persistent
 - **ID**: tillandsias-vault.invariant.vault-storage-persistent
-- **Expression**: `podman_volume tillandsias-vault-data EXISTS AND is_mounted_at /vault/data`
+- **Expression**: `host_directory vault_store EXISTS AND is_mounted_at /vault/data AND vault_store NOT_UNDER podman_storage AND (soft_reset PRESERVES vault_store IFF share IN unlocking_keyring) AND fallback_share_file NEVER_ON persistent_disk`
 - **Measurable**: true
 
 ### Invariant: No passphrase prompt ever

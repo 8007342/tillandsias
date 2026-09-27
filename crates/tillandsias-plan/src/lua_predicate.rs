@@ -105,11 +105,14 @@ fn shell_result_to_lua(lua: &Lua, out: tillandsias_exec::Output) -> LuaResult<Lu
     t.set("stdout", String::from_utf8_lossy(&out.stdout).to_string())?;
     t.set("stderr", String::from_utf8_lossy(&out.stderr).to_string())?;
     t.set("run_id", out.run.as_str().to_string())?;
+    t.set("truncated", out.truncated)?;
+    t.set("dropped", out.dropped)?;
     match out.completion {
         tillandsias_exec::Completion::Exited(code) => {
             t.set("status", "exited")?;
             t.set("code", code)?;
-            t.set("ok", code == 0)?;
+            // Same rule as proc.run: a clipped capture is not ok (1443-esm5).
+            t.set("ok", code == 0 && !out.truncated)?;
         }
         tillandsias_exec::Completion::Signaled(sig) => {
             t.set("status", "signaled")?;
@@ -131,7 +134,15 @@ fn shell_result_to_lua(lua: &Lua, out: tillandsias_exec::Output) -> LuaResult<Lu
 /// Fields `proc.run{...}` accepts (design section 4.1). Anything else is a
 /// programmer error and RAISES: `timeout` misspelt for `timeout_ms` must not
 /// silently become "no deadline" (order 1384-aixy).
-pub const PROC_RUN_FIELDS: &[&str] = &["argv", "cwd", "env", "stdin", "timeout_ms", "group"];
+pub const PROC_RUN_FIELDS: &[&str] = &[
+    "argv",
+    "cwd",
+    "env",
+    "stdin",
+    "timeout_ms",
+    "group",
+    "capture_bytes",
+];
 
 /// The default deadline, 300 s, per the design. `timeout_ms = 0` means NO
 /// deadline and has to be written out.
@@ -362,6 +373,19 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
     };
     cmd = cmd.group(group);
 
+    // Per-fd capture cap (order 1443-esm5). Unset keeps the executor's default
+    // (tillandsias_exec::DEFAULT_CAPTURE_BYTES); a clipped capture comes back
+    // with truncated = true and ok = false, never as a whole one.
+    match spec.get::<LuaValue>("capture_bytes")? {
+        LuaValue::Nil => {}
+        LuaValue::Integer(i) if i > 0 => cmd = cmd.capture_bytes(i as usize),
+        other => {
+            return Err(err(format!(
+                "capture_bytes must be a positive integer, not {other:?}"
+            )));
+        }
+    }
+
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -389,11 +413,15 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
             t.set("run_id", out.run.as_str().to_string())?;
             t.set("stdout", lua.create_string(&out.stdout)?)?;
             t.set("stderr", lua.create_string(&out.stderr)?)?;
+            t.set("truncated", out.truncated)?;
+            t.set("dropped", out.dropped)?;
             match out.completion {
                 tillandsias_exec::Completion::Exited(code) => {
                     t.set("status", "exited")?;
                     t.set("code", code)?;
-                    t.set("ok", code == 0)?;
+                    // A clean exit with a CLIPPED capture is not ok: the caller
+                    // would be judging output it does not have (1443-esm5).
+                    t.set("ok", code == 0 && !out.truncated)?;
                 }
                 tillandsias_exec::Completion::Signaled(sig) => {
                     t.set("status", "signaled")?;

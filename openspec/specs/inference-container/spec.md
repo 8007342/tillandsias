@@ -27,7 +27,7 @@ The system SHALL run an inference container with ollama on the enclave network. 
 
 ### Requirement: Shared model cache
 <!-- req-id: d4397d01 -->
-Models SHALL be stored in a HOST DIRECTORY (a bind mount, NOT a named Podman volume) at `~/.cache/tillandsias/models/`, mounted into the inference container at `/home/ollama/.ollama/models/`.
+Models SHALL be stored in a HOST DIRECTORY (a bind mount, NOT a named Podman volume) at `~/.tillandsias/downloads/models/` (`TILLANDSIAS_HOME/downloads/models`; the legacy `~/.cache/tillandsias/models/` is migrated there once — 2026-09-27, order 1438-pk9j, `host-state-lifecycle`), mounted into the inference container at `/home/ollama/.ollama/models/`.
 
 The distinction is the entire answer to whether `podman system reset` destroys the cache: it does not, because the reset clears Podman's own storage and named volumes and never touches an arbitrary host path. Calling this a "volume" cost an agent a wrong assertion to the operator (803-su4n, secondary finding); the mount is `-v "$HOME/.cache/tillandsias/models:/home/ollama/.ollama/models:rw"` in `scripts/orchestrate-enclave.sh`.
 
@@ -36,6 +36,13 @@ The distinction is the entire answer to whether `podman system reset` destroys t
 #### Scenario: Model persists across restarts
 - **WHEN** the inference container is stopped and restarted
 - **THEN** previously downloaded models SHALL be available immediately
+
+#### Scenario: Models survive every destructive reset on every platform; only uninstall removes them
+- **WHEN** `--reset-state` (SOFT) or, on Linux, `--reset-guest` runs (2026-09-27, `host-state-lifecycle`); on macOS and Windows a HARD `--reset-guest` also keeps them because they are host-side
+- **THEN** every downloaded model and the self-installed engine under the model directory SHALL still be present afterwards, with no keep-models variable required
+- **AND** on macOS and Windows the model directory SHALL therefore live on the host side at `~/.tillandsias/downloads/models` (`%USERPROFILE%\.tillandsias\downloads\models`), shared into the guest at `/root/.tillandsias/downloads/models` (macOS: the existing virtiofs model-cache share, re-pointed; Windows: the share 1437-3iux measures), never only inside the guest disk
+- **AND** `tillandsias --uninstall` SHALL remove the model directory and SHALL say so before doing it
+- Pre-fix result: FAILS on macOS `--reset-state` (removed unless `TILLANDSIAS_RESET_KEEP_MODELS=1`) and on Windows (models live inside the distro VHDX, 1182-2vaz); passes on Linux (positive control, pinned by `reset_guest_wipe_paths_exclude_model_cache`).
 
 ### Requirement: Inference container lifecycle
 <!-- req-id: d4afa160 -->

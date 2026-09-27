@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-binary-projects-size-and-implementer-tier-scalars
+    event:
+      type: progress
+      ts: "2026-09-27T18:07:42Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t180742z
+      host: macos
+      summary: |
+        SUPERSEDES the opus-default part of the previous event. Per the designer's correction (work/1437-rulings 9577328f1), the projection now NEVER defaults: size and implementer_tier appear only when a row states them, as a top-level scalar or a notes line. The operator's "No size tags get Opus" belongs to the selector (1437-vdz5). implementer_tier_source was removed with the default. work/1437-khnx is now at 9324cdc98 (fix 85492a4cb, merged over origin/linux-next). Re-measured on darwin with the gate env unset: 456 passed and 0 failed suites in the crate; clippy clean; ok:packet-tier-fields:4/4 (arm 1 now pins that an untagged row projects neither key); the live ledger projects a tier on 20 of 1221 rows; check --strict-fragments rc=0; all 9 deciders ok, including check-plan-binary-current; litmus-covering 5 specs ok; no gate stamp present afterwards. Please relay 9324cdc98.

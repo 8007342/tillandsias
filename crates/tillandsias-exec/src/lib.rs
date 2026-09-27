@@ -106,6 +106,13 @@ pub struct Output {
     pub run: RunId,
     /// argv as executed, for a refusal that can name what it ran.
     pub argv: Vec<OsString>,
+    /// True when either fd wrote past the capture cap (`Command::capture_bytes`)
+    /// and bytes were discarded. The cap is REPORTED, never silently applied: a
+    /// clipped capture that looks whole is the `| tail -1` defect in another
+    /// form (1252-fg9e, order 1443-esm5).
+    pub truncated: bool,
+    /// How many bytes were discarded past the cap, stdout and stderr together.
+    pub dropped: u64,
 }
 
 impl Output {
@@ -153,6 +160,38 @@ pub struct Command {
     timeout: Option<Duration>,
     stdin: Option<Vec<u8>>,
     group: bool,
+    capture_bytes: usize,
+}
+
+/// The per-fd capture cap when a caller sets none: 8 MiB, large enough that no
+/// live caller's output changes, small enough that a runaway child cannot hold
+/// the parent's memory hostage (order 1443-esm5).
+pub const DEFAULT_CAPTURE_BYTES: usize = 8 * 1024 * 1024;
+
+/// Read `r` to EOF, keeping at most `cap` bytes and COUNTING the rest.
+///
+/// It keeps READING past the cap. Stopping would leave the child blocked on a
+/// full pipe, which is the deadlock this crate exists to make unconstructible.
+/// So bytes past the cap are consumed and discarded, and their count is
+/// returned so the caller can report it.
+async fn read_bounded<R>(r: &mut R, cap: usize) -> std::io::Result<(Vec<u8>, u64)>
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    use tokio::io::AsyncReadExt;
+    let mut kept = Vec::new();
+    let mut dropped: u64 = 0;
+    let mut buf = vec![0u8; 64 * 1024];
+    loop {
+        let n = r.read(&mut buf).await?;
+        if n == 0 {
+            break;
+        }
+        let take = cap.saturating_sub(kept.len()).min(n);
+        kept.extend_from_slice(&buf[..take]);
+        dropped += (n - take) as u64;
+    }
+    Ok((kept, dropped))
 }
 
 impl Command {
@@ -173,7 +212,17 @@ impl Command {
             timeout: None,
             stdin: None,
             group: false,
+            capture_bytes: DEFAULT_CAPTURE_BYTES,
         }
+    }
+
+    /// Keep at most `n` bytes of EACH of stdout and stderr. The child keeps
+    /// being drained past the cap, so it never blocks on a full pipe. The run's
+    /// `Output` then says `truncated: true` and how many bytes were `dropped`.
+    /// Defaults to `DEFAULT_CAPTURE_BYTES`.
+    pub fn capture_bytes(mut self, n: usize) -> Self {
+        self.capture_bytes = n;
+        self
     }
 
     pub fn arg<S: AsRef<OsStr>>(mut self, a: S) -> Self {
@@ -298,12 +347,10 @@ impl Command {
         let mut err_pipe = child.stderr.take().expect("stderr piped above");
         let in_pipe = child.stdin.take();
         let to_write = self.stdin.clone();
+        let cap = self.capture_bytes;
 
         let drain = async {
-            use tokio::io::AsyncReadExt;
             use tokio::io::AsyncWriteExt;
-            let mut o = Vec::new();
-            let mut e = Vec::new();
             // THREE fds, all moving at once. The write is a peer of the reads,
             // not a prelude to them: sequencing it first deadlocks on any child
             // that answers before it has finished reading.
@@ -315,12 +362,12 @@ impl Command {
                 Ok::<(), std::io::Error>(())
             };
             let (ro, re, rw) = tokio::join!(
-                out_pipe.read_to_end(&mut o),
-                err_pipe.read_to_end(&mut e),
+                read_bounded(&mut out_pipe, cap),
+                read_bounded(&mut err_pipe, cap),
                 feed
             );
-            ro?;
-            re?;
+            let (o, dropped_o) = ro?;
+            let (e, dropped_e) = re?;
             // A child that exits before consuming stdin gives us EPIPE here.
             // That is NOT an error of ours -- `head -1` legitimately does it --
             // so it is swallowed rather than turned into a spawn failure.
@@ -329,7 +376,7 @@ impl Command {
                 Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {}
                 Err(err) => return Err(err),
             }
-            Ok::<(Vec<u8>, Vec<u8>), std::io::Error>((o, e))
+            Ok::<(Vec<u8>, Vec<u8>, u64), std::io::Error>((o, e, dropped_o + dropped_e))
         };
 
         let io_err = |source| ExecError::Io {
@@ -342,7 +389,7 @@ impl Command {
                 // Drain and wait CONCURRENTLY. Waiting first would deadlock for
                 // the same reason draining serially does.
                 let (drained, status) = tokio::join!(drain, child.wait());
-                let (stdout, stderr) = drained.map_err(io_err)?;
+                let (stdout, stderr, dropped) = drained.map_err(io_err)?;
                 let status = status.map_err(io_err)?;
                 Ok(Output {
                     completion: completion_of(status),
@@ -350,6 +397,8 @@ impl Command {
                     stderr,
                     run,
                     argv: self.argv,
+                    truncated: dropped > 0,
+                    dropped,
                 })
             }
             Some(d) => {
@@ -360,13 +409,15 @@ impl Command {
                 };
                 match tokio::time::timeout(d, both).await {
                     Ok(joined) => {
-                        let ((stdout, stderr), status) = joined.map_err(io_err)?;
+                        let ((stdout, stderr, dropped), status) = joined.map_err(io_err)?;
                         Ok(Output {
                             completion: completion_of(status),
                             stdout,
                             stderr,
                             run,
                             argv: self.argv,
+                            truncated: dropped > 0,
+                            dropped,
                         })
                     }
                     Err(_elapsed) => {
@@ -399,6 +450,11 @@ impl Command {
                             stderr: Vec::new(),
                             run,
                             argv: self.argv,
+                            // Nothing was clipped by the CAP; the whole capture
+                            // was discarded by the deadline, which `completion`
+                            // already says.
+                            truncated: false,
+                            dropped: 0,
                         })
                     }
                 }

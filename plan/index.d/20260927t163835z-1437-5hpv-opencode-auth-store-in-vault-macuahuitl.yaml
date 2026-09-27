@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: opencode-auth-store-has-a-vault-home-harvested-and-restored-like-the-other-harnesses
+    order: 1437-5hpv
+    parent_order: 1437-8c6p
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [vault, credentials, opencode, forge, entrypoint]
+    estimated_hours: 5
+    owned_files:
+      - images/default/provider-oauth-vault.sh
+      - images/default/entrypoint-forge-opencode.sh
+      - images/default/lib-common.sh
+      - images/vault/policies/opencode-forge.hcl
+      - crates/tillandsias-vault-client/src/policy.rs
+      - scripts/test-opencode-vault-auth-content.sh
+      - scripts/test-opencode-auth-store-roundtrip.sh
+    title: |
+      OpenCode's own auth store (`auth.json` under its data directory, whatever providers `opencode auth login` put there) is harvested to `secret/opencode/auth` and restored before `opencode` starts, alongside the existing Gemini API-key adaptation; a login path exists to seed it once
+    context: |
+      Spec: tillandsias-vault "Every harness credential document has a Vault home and is restored
+      without a prompt", scenario "OpenCode's own auth store round-trips". Operator: "Codex,
+      Antigravity and OpenCode Go credentials must likewise be saved transparently and survive
+      Vault/container/image wipes."
+
+      Today: OpenCode has NO Vault document; prepare_opencode_vault_auth adapts only
+      secret/gemini/api-key into OPENCODE_AUTH_CONTENT ({google:{type:api,key}}), and
+      opencode_remove_stale_auth_file deletes any auth.json (the no-file contract of default-image
+      "OpenCode consumes Vault authentication without credential files"). A provider the operator
+      signs into with `opencode auth login` (Anthropic, OpenAI, or its Zen/Go account) is lost at
+      container teardown. Claude, Codex and Antigravity each have a provider-oauth-vault /
+      codex-oauth-vault document, a device-auth login path and a rotation watcher.
+
+      Do: (1) add provider `opencode` to provider-oauth-vault.sh: document path
+      secret/opencode/auth, field credentials_b64, source file OpenCode's auth.json (XDG data dir
+      inside the forge); (2) reconcile with the no-file contract: restore the document as
+      OPENCODE_AUTH_CONTENT merged over the Gemini adaptation when OpenCode honours the env
+      contract for multiple providers (measure with opencode_auth_contract_ok's probe), else
+      materialise auth.json at 0600 and extend opencode_remove_stale_auth_file to tolerate the
+      restored file — say which in the fixture header and update the default-image no-file
+      scenario if the second path is taken; (3) harvest: a watcher on the auth file (the
+      codex-oauth-session pattern) while the session lives, final harvest at exit; (4) login path:
+      `tillandsias <project> --opencode` with a one-time `opencode auth login` inside the forge is
+      enough if the watcher harvests it — no new host flag unless the device-auth pattern is
+      needed; (5) policy opencode-forge.hcl gains read on secret/opencode/auth and the forge's
+      harvest write (mirror claude-forge.hcl's shape); (6) fixture
+      scripts/test-opencode-auth-store-roundtrip.sh: seeded vault stub, harvest then restore,
+      assert byte equality and that the document never appears in argv or the lifecycle log;
+      keep scripts/test-opencode-vault-auth-content.sh green.
+    exit_criteria:
+      - 'scripts/test-opencode-auth-store-roundtrip.sh: a seeded auth store harvested to the vault stub and restored on the next launch is byte-identical and absent from argv and logs (pre-fix result: FAILS — no opencode provider exists in provider-oauth-vault.sh)'
+      - 'scripts/test-opencode-vault-auth-content.sh stays green (pre-fix result: passes — positive control)'
+      - 'a live forge: opencode auth login once, teardown, relaunch after a Vault-image and container wipe, provider still authenticated with no prompt, noted in the closure event (pre-fix result: FAILS — the store is lost at teardown)'
+    verifiable_closure: |
+      bash scripts/test-opencode-auth-store-roundtrip.sh exits 0 and bash scripts/test-opencode-vault-auth-content.sh exits 0; pre-fix: the first FAILS.
+    depends_on: []
+    notes: |
+      size: M  implementer_tier: opus
+      Touches credentials — opus by the umbrella's rule even though the change is a few files.
+      The Gemini API-key path must keep working unchanged; the new document is additive.
+      "OpenCode Go" in the operator's words is read as OpenCode's own account/provider store; if
+      it names something else, ask before widening.
+    next_action: 'probe whether OPENCODE_AUTH_CONTENT accepts a multi-provider document (opencode_auth_contract_ok pattern), then add the opencode provider to provider-oauth-vault.sh and write the round-trip fixture'
+    provenance: |
+      Filed by macuahuitl (linux-macuahuitl-claude-20260927t163835z), 2026-09-27, under umbrella 1437-8c6p.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:38:35Z"
+        agent_id: "linux-macuahuitl-claude-20260927t163835z"
+        host: macuahuitl
+        summary: |-
+          OpenCode joins the harnesses whose sign-in is vaulted once and restored every launch.

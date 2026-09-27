@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: wire-version-refusal-is-untested-on-both-sides
+    field: notes
+    value: |-
+      NOT a defect in the collapse or the bump, and it did not block
+      54a9471a1's land — shipping that change un-bumped was the dangerous
+      option. Filed separately rather than bolted onto a landing commit, per
+      macuahuitl 2026-09-04.
+
+      Related: 1029-5wvd. Version 4 is RESERVED for 890-y72v's
+      DeliverCredentialsReply discriminator under the stowaway rule; current
+      is 3, and nothing has bumped to it.
+
+
+      [2026-09-27T21:10:33Z yoga-silverblue] yoga-silverblue 2026-09-27, verifiable_closure MEASURED on trunk 131fbedd2 in tillandsias-builder. Tests (both on trunk) - host-shell handshake_refuses_a_server_advertising_a_different_wire_version (d8889f590, this order) and headless vsock_server::tests::server_refuses_a_client_advertising_a_different_wire_version (cfa791d41, 1201-t6ms). GREEN - cargo test -p tillandsias-host-shell handshake_refuses_a_server -> 1 passed; cargo test -p tillandsias-headless --features tray,listen-vsock --bins server_refuses_a_client -> 1 passed. MUTATION - vsock_server.rs:921 and vsock_client.rs:182 each rewritten "if false && ... != WIRE_VERSION" in one tree -> BOTH RED (server panicked at vsock_server.rs:2325, client at vsock_client.rs:800); tree restored, git diff empty. So deleting all ten refusal branches turns the gate red, which is the closure as written. TWO DEVIATIONS, stated rather than folded in - (1) the headless test is a unit test in the binary target, not in tests/vsock_listener_e2e.rs as the closure text names; the property is the same. (2) FOOTGUN measured - the headless test runs ONLY with --features listen-vsock AND in the tillandsias binary target; every other target reports 0 passed for this filter, and --bin tillandsias-headless (a name that does not exist) prints nothing at all. RESIDUAL - 8 of 10 sites still have no refusal test - macos-tray pty_vsock_bridge, vm-layer vsock_exec x5, router-sidecar main.rs, windows-tray hvsocket.rs; the deliverable's stricter wording ("deleting one turns the gate red") is not met for those.
+    ts: "2026-09-27T21:10:33Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: wire-version-refusal-is-untested-on-both-sides
+    event:
+      type: progress
+      ts: "2026-09-27T21:10:33Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'NOT a defect in the collapse or the bump, and it did not block
+        54a9471a1's land — shipping that change un-bumped was the dangerous
+        option. Filed separately rather than bolted onto a landing commit, per
+        macuahuitl 2026-09-04.
+        
+        Related: 1029-5wvd. Version 4 is RESERVED for 890-y72v's
+        DeliverCredentialsReply discriminator under the stowaway rule; current
+        is 3, and nothing has bumped to it.
+        
+        
+        [2026-09-27T21:10:33Z yoga-silverblue] yoga-silverblue 2026-09-27, verifiable_closure MEASURED on trunk 131fbedd2 in tillandsias-builder. Tests (both on trunk) - host-shell handshake_refuses_a_server_advertising_a_different_wire_version (d8889f590, this order) and headless vsock_server::tests::server_refuses_a_client_advertising_a_different_wire_version (cfa791d41, 1201-t6ms). GREEN - cargo test -p tillandsias-host-shell handshake_refuses_a_server -> 1 passed; cargo test -p tillandsias-headless --features tray,listen-vsock --bins server_refuses_a_client -> 1 passed. MUTATION - vsock_server.rs:921 and vsock_client.rs:182 each rewritten "if false && ... != WIRE_VERSION" in one tree -> BOTH RED (server panicked at vsock_server.rs:2325, client at vsock_client.rs:800); tree restored, git diff empty. So deleting all ten refusal branches turns the gate red, which is the closure as written. TWO DEVIATIONS, stated rather than folded in - (1) the headless test is a unit test in the binary target, not in tests/vsock_listener_e2e.rs as the closure text names; the property is the same. (2) FOOTGUN measured - the headless test runs ONLY with --features listen-vsock AND in the tillandsias binary target; every other target reports 0 passed for this filter, and --bin tillandsias-headless (a name that does not exist) prints nothing at all. RESIDUAL - 8 of 10 sites still have no refusal test - macos-tray pty_vsock_bridge, vm-layer vsock_exec x5, router-sidecar main.rs, windows-tray hvsocket.rs; the deliverable's stricter wording ("deleting one turns the gate red") is not met for those.' (not terminal) with evidence_refs: cfa791d41
+  - packet_id: wire-version-refusal-is-untested-on-both-sides
+    event:
+      type: note
+      ts: "2026-09-27T21:10:33Z"
+      host: yoga-silverblue
+      summary: |-
+        closure measured with mutation

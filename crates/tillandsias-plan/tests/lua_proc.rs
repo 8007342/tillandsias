@@ -276,3 +276,44 @@ fn a_piped_caller_is_not_held_by_a_leaked_grandchild() {
         "the caller's pipe stayed open {eof_after:?}: a leaked grandchild holds it"
     );
 }
+
+/// ORDER 1443-esm5, the proc.run arm: a capture clipped by `capture_bytes` is
+/// NOT ok, even on a clean exit. The child writes 3 MiB under a 1 MiB cap, so
+/// the result must say exited/0 AND ok=false, truncated=true, dropped=2 MiB,
+/// and a Lua caller cannot read the clipped capture as a whole one.
+/// PRE-FIX: FAILS — proc.run raised "unknown field 'capture_bytes'".
+#[test]
+fn capture_bytes_a_clipped_capture_is_not_ok() {
+    if !bash_available() {
+        eprintln!("skip:lua_proc:capture_bytes:no-bash");
+        return;
+    }
+    let (status, code, ok, truncated, dropped, len): (String, i64, bool, bool, i64, i64) =
+        observing(
+            r#"local r = proc.run{argv = {"head", "-c", "3145728", "/dev/zero"},
+                                  capture_bytes = 1048576, timeout_ms = 60000}
+               return r.status, r.code, r.ok, r.truncated, r.dropped, #r.stdout"#,
+        )
+        .unwrap();
+    assert_eq!(
+        (status.as_str(), code, ok, truncated, dropped, len),
+        ("exited", 0, false, true, 2 * 1_048_576, 1_048_576)
+    );
+
+    // NEGATIVE CONTROL: 100 bytes under the same cap is whole and ok.
+    let (ok, truncated, dropped): (bool, bool, i64) = observing(
+        r#"local r = proc.run{argv = {"head", "-c", "100", "/dev/zero"}, capture_bytes = 1048576}
+           return r.ok, r.truncated, r.dropped"#,
+    )
+    .unwrap();
+    assert_eq!((ok, truncated, dropped), (true, false, 0));
+
+    // A cap that is not a positive integer is a programmer error and RAISES.
+    let err = observing::<mlua::Value>(r#"return proc.run{argv = {"true"}, capture_bytes = 0}"#)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("capture_bytes must be a positive integer"),
+        "{err}"
+    );
+}

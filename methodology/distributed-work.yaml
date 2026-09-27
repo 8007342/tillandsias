@@ -1739,6 +1739,93 @@ distributed_work:
       prevent, while hiding the coverage gap behind a plausible selection. It is
       demoted whenever any real epic is eligible, and always reported on the
       triage line so the gap is fixed rather than absorbed.
+    model_tier_routing:
+      authority: >
+        Operator-approved trim T1, 2026-09-27 (umbrella 1437-62g8; design in
+        plan/issues/efficiency-trims-design-2026-09-27.md). Small or
+        mechanical packets go to Haiku, medium ones to Sonnet, judgment or
+        security work to Opus. This section is the rule; 1437-khnx,
+        1437-vdz5, 1437-m5yx, 1437-yjf6 and 1437-cr8u are the mechanism.
+      fields: >
+        Two SCALAR packet fields, `size: S|M|L` and `implementer_tier:
+        haiku|sonnet|opus`, assigned by the FILER. Scalars because set-field
+        refuses list-valued fields (1184-tj2q) and a field the projection
+        does not carry is writable but unreadable (1218-25z3). Until the
+        projection lands, both are written as two lines inside `notes:` in
+        exactly that spelling, and the projection reads that shape as a
+        fallback so no row is re-filed.
+      rubric: >
+        S = mechanical and fully specified (a case arm, a flag passthrough,
+        a lint with a stated grammar) -> haiku. M = a few files with a clear
+        design -> sonnet. L = cross-cutting, judgment, or
+        gate-integrity-sensitive -> opus. Anything that changes what the
+        land gate or the pre-push hook REFUSES is at least sonnet, and opus
+        when a wrong change could let a red tree land. Credential, Vault and
+        security surfaces are opus. Size is the filer's estimate of
+        judgment, not of hours; estimated_hours stays what it is.
+      selection: >
+        A session STATES its tier (`select-work-batch.sh <role> --tier <t>`
+        or TILLANDSIAS_MODEL_TIER); nothing is inferred from a model name.
+        OPERATOR RULING 2026-09-27: "No size tags get Opus" — an UNTAGGED
+        row's tier is opus. implementer_tier is a FLOOR: a caller at tier T
+        takes rows whose floor is at or below T, ranked AT-tier first so a
+        bigger model drains smaller work only when its own tier is empty.
+        So a haiku caller's pool is exactly the haiku rows (same shape as
+        the low-end tier gate) and an empty pool refuses
+        `refused:no-tier-work:model-tier=haiku`, never the general queue; a
+        sonnet caller takes sonnet rows, then haiku rows, never untagged or
+        opus; an opus caller takes opus and untagged rows, then sonnet, then
+        haiku. `--tier-any` is the orchestrator's view (everything, for
+        delegation). The batch: line prints tier=<t> tier_fallback=<n>.
+        `next` honours the same filter so plan_next and the selector agree.
+        (The first design said "sonnet takes untagged"; withdrawn by the
+        ruling.)
+      orchestrator_session: >
+        OPERATOR RULING 2026-09-27: "We can try hosts running Haiku
+        sessions all day and then have them delegate work to larger
+        agents. Haikus for simple orchestration." A host may run an all-day
+        HAIKU ORCHESTRATOR (skills/haiku-orchestrate, 1443-hbgt), launched
+        as `./repeat --model haiku --prompt "Use the /haiku-orchestrate
+        skill"` (1437-m5yx). It drains the selector with --tier-any,
+        claims, delegates each packet to ONE sub-agent at the packet's
+        implementer_tier (sonnet or opus; an untagged row gets opus), and
+        ACCEPTS ONLY A MEASURED CLOSURE: it runs
+        `scripts/verify-closure.sh <order>` (1443-qwpj), which executes the
+        packet's own verifiable_closure command and compares the printed
+        output to the criterion, and branches on that one line — ok:
+        completion with the verify line as evidence; unmet: one
+        re-delegation with the measured line pasted, then a blocked event;
+        unscoreable: a note, never an acceptance. The delegate's report is
+        not an input to acceptance. MEASURED 2026-09-27: a Haiku
+        implementer reported 1437-gbwi's criterion met while its own
+        numbers read 76 s then 70 s against "under 20 s"; self-report is
+        an instrument, and an unverified "verified" is a green gate that
+        ran no tests. THE ORCHESTRATOR NEVER: implements or edits code
+        under a packet; judges a closure from a report; pushes to a
+        platform branch or main (work/<order> only — the relay lane
+        lands); edits methodology/, openspec/specs/, scripts/hooks/,
+        scripts/gate-steps.d/ or any file that decides what a gate runs;
+        re-tiers a packet (a disagreement is a set-field --reason for the
+        coordinator); runs ./build.sh --check as its own gate; sends a
+        peer message over the budget; or accepts work whose closure it
+        could not run. Its sub-agent budget is the meta-orchestration
+        rule, recorded through --emit-tokens --from-transcript.
+      execution: >
+        A haiku packet is run in-session by the host through
+        `scripts/claude-delegate.sh implement <order>` (edits bounded to the
+        packet's owned_files, no commit; the host verifies with the
+        packet's closure, commits, and hands off on work/<order> as today),
+        or by a dedicated `./repeat --model haiku` session once the claude
+        arm passes the flag (1437-m5yx), or in a forge after 689-jxb2. A
+        haiku implementer never lands; landing stays on the relay lane with
+        its gate. The sub-agent tiering in skills/meta-orchestration
+        ("Sub-agent and token budget") is unchanged and is the same rubric
+        applied to sub-agents.
+      correction: >
+        A claimer that disagrees with a tier writes `set-field <order>
+        implementer_tier <t> --reason <why>`; a silent re-tier is a
+        routing defect. Adoption is reported by
+        scripts/check-packet-tier-declared.sh (advisory until measured).
 
   worker_agent_protocol:
     purpose: >
@@ -2304,6 +2391,31 @@ distributed_work:
       mechanical, and the honest expectation is that THIS SECTION ALONE WILL BE
       HONOURED INCONSISTENTLY until a check surfaces the overlap without being
       asked. That check is worth filing rather than assuming.
+    size_budget:
+      authority: >
+        Operator-approved trim T3, 2026-09-27 (umbrella 1437-62g8). A
+        message costs the RECEIVER's main-tier context every time it is
+        read, and observed heads-ups had grown to several paragraphs. This
+        budget exists to cut the tokens each message costs the receiver.
+      rule: >
+        A cross-session message (SendMessage over Remote Control, or any
+        peer channel) is at most 600 bytes and 8 lines. Line 1 is the
+        verdict: `<KIND>:<subject>:<one clause>` with KIND one of HEADS-UP,
+        ACK, LANDED, BLOCKED, ASK, FYI. Every further line starts with `- `
+        and carries at least one ref — a SHA of 7+ hex, an order token, a
+        work/<order> ref, or a path. Anything that does not fit is a ledger
+        event or a plan/issues note, and the message cites it by order or
+        path. A message with no ref on an evidence line is an opinion, and
+        the receiver cannot check it without asking.
+      lint: >
+        scripts/check-peer-message-shape.sh reads the draft on stdin and
+        prints ok:peer-message:<bytes>b/<lines>l or
+        violation:peer-message:<reason> (1437-arjg). Fixture-free by design:
+        no gate step, no litmus; the sender runs it before sending. A
+        budget enforced only on the sender's honour is a suggestion
+        (the_honest_caveat above), so the lint is the forcing function and
+        the receiver may answer an over-budget message with one line:
+        `ACK:over-budget:cite the ledger`.
     consumers:
       - "skills/meta-orchestration/SKILL.md (Start Of Cycle 5a — AFTER the merge; note .claude/skills is a SYMLINK to this path, cite the real one)"
       - "skills/coordinate-multihost-work/SKILL.md"

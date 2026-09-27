@@ -11,8 +11,15 @@ preconditions:
   - workspace contains images/default/Containerfile
   - workspace contains images/default/entrypoint-forge-claude.sh
   - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains scripts/test-claude-forge-bypass-preaccepted.sh
 
 critical_path:
+  - step: "order 1437-y2wu: bypass-permissions consent pre-accepted, forge-gated, additive (6 fixture arms, incl. entrypoint wiring order)"
+    command: "bash scripts/test-claude-forge-bypass-preaccepted.sh"
+    timeout_ms: 60000
+    success_pattern: "PASS: claude forge bypass-permissions consent pre-accepted"
+    failure_pattern: "FAIL:"
+
   - step: "forge image installs Claude TUI and terminfo runtime"
     command: "grep -E 'ca-certificates ncurses ncurses-term' images/default/Containerfile.base"
     timeout_ms: 3000

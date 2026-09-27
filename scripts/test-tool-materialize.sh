@@ -364,7 +364,14 @@ else
     #    2026-08-28 was 22x (2306 ms vs 51520 ms over a 200-line log), so 4x
     #    fails only if the mechanism has genuinely stopped working, not because
     #    a host is slow or the container was cold.
-    if [ "$_HAVE_GNU_DATE" -eq 0 ]; then
+    #
+    # ORDER 1437-bigs. TILLANDSIAS_TOOL_MATERIALIZE_STUB_OUTPUT is a fixture-only
+    # seam for the negative control in test-tool-materialize-litmus-surfaces-arm.sh:
+    # when set, override the margin arm output with garbage so the wrapper fixture
+    # can verify its guards still fire.
+    if [ -n "${TILLANDSIAS_TOOL_MATERIALIZE_STUB_OUTPUT-}" ]; then
+        echo "$TILLANDSIAS_TOOL_MATERIALIZE_STUB_OUTPUT"
+    elif [ "$_HAVE_GNU_DATE" -eq 0 ]; then
         skip "arm 7 needs GNU date (+%s%N) to time the runs — BSD date prints a literal N and would compare garbage"
     elif [ "$_mat_ms" -le 0 ] || [ "$_pc_ms" -le 0 ]; then
         skip "arm 7 could not time the runs"

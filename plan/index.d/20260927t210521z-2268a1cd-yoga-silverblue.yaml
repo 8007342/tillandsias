@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-forge-hot-src-tmpfs-budget-lands-on-its-256m-floor-while-the-tillandsias-git-dir-is-167m-so-a-working-forge-fills-it-and-git-dies-mid-write
+    field: notes
+    value: yoga-silverblue 2026-09-27, independent reproduction on a second rootless host (linux-immutable). After a SOFT --reset-state, a clone-only forge launch of tillandsias failed with "sha1 file /home/forge/src/tillandsias/.git/index.lock write error. Out of diskspace" (clone succeeded, checkout failed); host /var/home had 238G free. Measured the reader's inputs - the mirror volume dir is drwx------ owned by subuid 524288, so host git cannot enter it, and the repository is at _data/tillandsias, not _data; inside podman unshare, git count-objects on _data/tillandsias answers size-pack 167.79 MiB (expected budget about 671 MiB at the default 4x inflation, versus the 256 MiB floor the launch got). The checkout is 75 MiB from git archive HEAD. Same root cause as dcb16387f's note; yoga's fleet-membership mirror todo stays open until this lands.
+    ts: "2026-09-27T21:05:21Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: the-forge-hot-src-tmpfs-budget-lands-on-its-256m-floor-while-the-tillandsias-git-dir-is-167m-so-a-working-forge-fills-it-and-git-dies-mid-write
+    event:
+      type: progress
+      ts: "2026-09-27T21:05:21Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'yoga-silverblue 2026-09-27, independent reproduction on a second rootless host (linux-immutable). After a SOFT --reset-state, a clone-only forge launch of tillandsias failed with "sha1 file /home/forge/src/tillandsias/.git/index.lock write error. Out of diskspace" (clone succeeded, checkout failed); host /var/home had 238G free. Measured the reader's inputs - the mirror volume dir is drwx------ owned by subuid 524288, so host git cannot enter it, and the repository is at _data/tillandsias, not _data; inside podman unshare, git count-objects on _data/tillandsias answers size-pack 167.79 MiB (expected budget about 671 MiB at the default 4x inflation, versus the 256 MiB floor the launch got). The checkout is 75 MiB from git archive HEAD. Same root cause as dcb16387f's note; yoga's fleet-membership mirror todo stays open until this lands.' (not terminal) with evidence_refs: dcb16387f
+  - packet_id: the-forge-hot-src-tmpfs-budget-lands-on-its-256m-floor-while-the-tillandsias-git-dir-is-167m-so-a-working-forge-fills-it-and-git-dies-mid-write
+    event:
+      type: note
+      ts: "2026-09-27T21:05:21Z"
+      host: yoga-silverblue
+      summary: |-
+        second-host reproduction

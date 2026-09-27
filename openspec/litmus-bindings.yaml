@@ -152,6 +152,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:land-refusals-carry-affordance
+  - litmus:decider-retirement-shape
   - litmus:cosign-arrives-verified
   - litmus:scorable-obligation-splitter
   - litmus:added-test-is-referenced-shape
@@ -170,6 +171,7 @@ specs:
   # only because a binding names it; without this line the land-verdict fixture
   # would be a file rather than a gate.
   - litmus:land-verdict-through-a-pipe
+  - litmus:covering-relay-scope-shape
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
   - litmus:smoke-release-channel-shape
@@ -725,6 +727,7 @@ specs:
   - litmus:smoke-lock-fd-isolation-shape
   - litmus:meta-orchestration-dirty-tree-safety
   - litmus:meta-orchestration-opsx-sync-merge
+  - litmus:openspec-cli-pin-shape
   - litmus:build-cache-sweep-trigger
   - litmus:issue-citation-convention
   - litmus:long-running-view-agreement
@@ -1258,3 +1261,18 @@ specs:
   - litmus:expert-serve-endpoint-shape
   coverage_ratio: 100
   last_verified: '2026-08-28'
+- spec_id: command-runtime
+  status: draft
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-09-27'
+- spec_id: command-policies
+  status: draft
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-09-27'
+- spec_id: branch-discipline
+  status: draft
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-09-27'

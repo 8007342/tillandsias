@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: token-instrument-fixture-renders-the-tokens-line-without-the-repo-scan
+    field: status
+    value: completed
+    ts: "2026-09-27T19:42:27Z"
+    host: macuahuitl
+
+events:
+  - packet_id: token-instrument-fixture-renders-the-tokens-line-without-the-repo-scan
+    event:
+      type: completed
+      ts: "2026-09-27T19:42:27Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 49c2d548c
+  - packet_id: token-instrument-fixture-renders-the-tokens-line-without-the-repo-scan
+    event:
+      type: note
+      ts: "2026-09-27T19:42:27Z"
+      host: macuahuitl
+      summary: |-
+        landed at 49c2d548c; gate step 2960 ms under the 20000 ms criterion; fixture 76.7s to 3.0s

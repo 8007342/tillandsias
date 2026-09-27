@@ -88,6 +88,12 @@ fi
 # in the same document. The overlay merge preserves every non-MCP field.
 apply_claude_config_overlay
 seed_claude_first_run_defaults
+# @trace spec:default-image, order:1437-y2wu
+# Pre-accept the bypass-permissions dialog (forge-gated inside the function
+# itself). Must run BEFORE the approvals restore below so the live config
+# already carries the consent and a stale/absent vault doc can never bring
+# the dialog back.
+seed_claude_bypass_consent
 # Operator-approved interactive dialogs, restored from vault (2026-08-31):
 # first-ever launch prompts once — those are valid prompts — the watcher
 # below harvests the approval, and every later forge launch restores it.
@@ -110,15 +116,13 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # Export discovery env vars: TILLANDSIAS_PROJECT_PATH, TILLANDSIAS_PROJECT_GENUS
 export_project_env
 
-# ── OpenSpec init (every launch, silent) ────────────────────
-# Always run to ensure /opsx commands are available, even if the project
-# was cloned without openspec config. Idempotent — no-ops if already set up.
-if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
-    if ! OS_OUTPUT=$("$OS_BIN" init --tools claude </dev/null 2>&1); then
-        echo "[entrypoint] WARNING: OpenSpec init failed — /opsx commands may not work" >&2
-        echo "[entrypoint] $OS_OUTPUT" >&2
-    fi
-fi
+# ── OpenSpec init (only when absent, silent) ────────────────
+# Never rewrites a committed /opsx set: a launch must not modify tracked
+# files (order 1422-w3p8; see openspec_init_if_absent in lib-common.sh).
+# The CLI is the project's pinned version when openspec/cli-version exists
+# (order 1441-myz3; see ensure_openspec_pinned).
+ensure_openspec_pinned "$PROJECT_DIR"
+openspec_init_if_absent "$PROJECT_DIR" claude
 
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme

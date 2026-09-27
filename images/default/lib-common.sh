@@ -2695,6 +2695,15 @@ ensure_forge_harnesses() {
             "@fission-ai/openspec") bin=openspec ;;
             "@openai/codex") bin=codex ;;
         esac
+        # A project that pins its openspec CLI (openspec/cli-version) owns the
+        # version: ensure_openspec_pinned installs exactly that pin in the
+        # foreground and records it here. Refreshing it to @latest behind the
+        # launch's back is the collision that made every forge start dirty
+        # (order 1441-myz3).
+        if [ "$bin" = openspec ] && [ -s "$(openspec_pin_marker)" ]; then
+            trace_lifecycle "harness" "openspec pinned by the project ($(cat "$(openspec_pin_marker)" 2>/dev/null)); not refreshing @latest"
+            continue
+        fi
         # stdout MUST be muted too: this function is backgrounded by the agent
         # entrypoints and shares the TTY with a live TUI — npm's "added N
         # packages" stdout lands mid-frame and corrupts the agent's display
@@ -3293,6 +3302,119 @@ require_openspec() {
     return 0
 }
 
+# Where the forge remembers the project's pinned openspec version, on the
+# persistent per-project cache, so the backgrounded ensure_forge_harnesses —
+# which starts before the project is cloned and cannot read the pin — knows to
+# leave openspec alone (order 1441-myz3).
+openspec_pin_marker() {
+    printf '%s\n' "$HOME/.cache/tillandsias-project/openspec-pin"
+}
+
+# ensure_openspec_pinned <project_dir> — make the ONE openspec on PATH the
+# version the project records in openspec/cli-version (order 1441-myz3).
+#
+# Before this, the forge held whatever npm published last: ensure_forge_harnesses
+# ran `npm install -g @fission-ai/openspec@latest` in the background into the
+# same prefix the foreground `openspec init` used, and nothing recorded which
+# version generated the committed /opsx sets — so every openspec release first
+# appeared as launch dirt. The pin moves only through the coordinator's
+# deliberate bump (scripts/openspec-pin.sh bump; skills/meta-orchestration).
+#
+# One prefix, one writer policy: the pinned version is installed into the same
+# global npm prefix every shell rc puts first on PATH (a side prefix would lose
+# to it in interactive shells), under the same npm-update lock the background
+# refresher holds, and the marker stops that refresher from moving it again.
+# Unpinned projects are untouched. Fail-soft: on any failure the launch keeps
+# the installed openspec, and openspec_init_if_absent still keeps tracked files
+# unwritten.
+ensure_openspec_pinned() {
+    local dir="${1:-}" pin have lock waited=0
+    [ -n "$dir" ] && [ -r "$dir/openspec/cli-version" ] || return 0
+    pin="$(tr -d ' \t\r\n' <"$dir/openspec/cli-version" 2>/dev/null)"
+    case "$pin" in
+        ''|*[!0-9.]*|.*|*.|*..*)
+            echo "[entrypoint] WARNING: openspec/cli-version is not a version ('$pin') — keeping the installed openspec" >&2
+            return 0 ;;
+    esac
+    mkdir -p "$HOME/.cache/tillandsias-project" 2>/dev/null || true
+    printf '%s\n' "$pin" >"$(openspec_pin_marker)" 2>/dev/null || true
+    if [ -n "${OS_BIN:-}" ] && [ -x "$OS_BIN" ]; then
+        have="$("$OS_BIN" --version 2>/dev/null | tail -n 1)"
+        if [ "$have" = "$pin" ]; then
+            trace_lifecycle "openspec" "pinned $pin already installed"
+            return 0
+        fi
+    fi
+    lock="$HOME/.cache/tillandsias-project/npm-update.lock"
+    while ! mkdir "$lock" 2>/dev/null; do
+        if [ "$waited" -ge 120 ]; then
+            trace_lifecycle "openspec" "npm-update lock still held after ${waited}s — installing the pin anyway"
+            lock=""
+            break
+        fi
+        sleep 2
+        waited=$((waited + 2))
+    done
+    if npm install -g --no-audit --no-fund "@fission-ai/openspec@$pin" >/dev/null 2>&1; then
+        OS_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/openspec"
+        have="$("$OS_BIN" --version 2>/dev/null | tail -n 1)"
+    else
+        have=""
+    fi
+    [ -n "$lock" ] && rm -rf "$lock"
+    if [ "$have" = "$pin" ]; then
+        trace_lifecycle "openspec" "installed pinned $pin"
+    else
+        echo "[entrypoint] WARNING: could not install openspec $pin (project pin) — /opsx commands run on '${have:-unknown}'" >&2
+        trace_lifecycle "openspec" "pinned install of $pin FAILED (have '${have:-none}')"
+    fi
+    return 0
+}
+
+# openspec_init_if_absent <project_dir> [tool] — give a checkout its /opsx
+# commands WITHOUT touching tracked files (order 1422-w3p8).
+#
+# `openspec init --tools <t>` REWRITES <t>'s command/skill set whenever it is
+# already on disk, with whatever templates the installed CLI carries — and the
+# forge refreshes that CLI to @latest at every launch. So the first launch after
+# any openspec release rewrote ~18-22 tracked files and the forge started dirty
+# (operator ruling 2026-09-27: that dirt "should not exist"; reverses order
+# 540's commit-the-sync decision). Measured in a scratch repo with CLI 1.13.2:
+# init for a tool whose set is ABSENT only CREATES files and leaves other tools'
+# sets and an existing openspec/ alone; a bare `init` refreshes EVERY configured
+# tool. Hence: run init only when there is nothing of that tool's set to
+# rewrite. Moving the generated set to a new CLI version is a deliberate
+# `openspec update` + commit, never a side effect of launching.
+openspec_init_if_absent() {
+    local dir="${1:-}" tool="${2:-}" out
+    [ -n "$dir" ] && [ -n "${OS_BIN:-}" ] && [ -x "$OS_BIN" ] || return 0
+    case "$tool" in
+        claude)
+            if compgen -G "$dir/.claude/commands/opsx/*.md" >/dev/null \
+                || compgen -G "$dir/.claude/skills/openspec-*/SKILL.md" >/dev/null; then
+                trace_lifecycle "openspec" "init skipped: claude opsx set present (1422-w3p8)"
+                return 0
+            fi ;;
+        opencode)
+            if compgen -G "$dir/.opencode/commands/opsx-*.md" >/dev/null \
+                || compgen -G "$dir/.opencode/skills/openspec-*/SKILL.md" >/dev/null; then
+                trace_lifecycle "openspec" "init skipped: opencode opsx set present (1422-w3p8)"
+                return 0
+            fi ;;
+        "")
+            # bare init refreshes every tool already configured in the tree
+            if [ -d "$dir/openspec" ]; then
+                trace_lifecycle "openspec" "init skipped: openspec/ present (1422-w3p8)"
+                return 0
+            fi ;;
+    esac
+    if ! out=$(cd "$dir" && "$OS_BIN" init ${tool:+--tools "$tool"} </dev/null 2>&1); then
+        echo "[entrypoint] WARNING: OpenSpec init failed — /opsx commands may not work" >&2
+        echo "[entrypoint] $out" >&2
+    fi
+    return 0
+}
+
 require_codex() {
     CX_BIN="$(_require_harness codex "@openai/codex" codex)"
     return 0
@@ -3451,6 +3573,74 @@ seed_claude_first_run_defaults() {
     chmod 600 "$tmp"
     mv -f "$tmp" "$user_cfg"
     trace_lifecycle "config" "claude first-run defaults seeded (onboarding, theme)"
+}
+
+# @trace spec:default-image, order:1437-y2wu
+# Pre-accept the "Bypass Permissions mode" dialog. Operator directive
+# 2026-09-27, verbatim: "we want to skip that bypass permissions
+# confirmation, and pre-accept it ... for all projects, for all harnesses."
+# This SUPERSEDES the bypass half of the 2026-08-31 "prompt once, then vault
+# it" directive (claude-approvals-vault.sh keeps that job for workspace
+# trust, theme and onboarding, which remain valid one-time prompts): a fresh
+# image, a fresh container, or a Vault wipe must never show the dialog, and
+# pre-acceptance has to come from a launch-time SEED — not from a value only
+# a previous session's watcher happened to harvest into Vault.
+#
+# Two consent records, because it is unverified which one the installed
+# Claude Code actually reads (open question 5, plan/issues/
+# operator-directives-reset-survivors-and-harness-bypass-2026-09-27.md): the
+# seed writes BOTH.
+#   - bypassPermissionsModeAccepted: true in ~/.claude.json (the same
+#     document claude-approvals-vault.sh restores/harvests)
+#   - skipDangerousModePermissionPrompt: true in ~/.claude/settings.json
+#     (measured on the operator's own host as the key that suppresses the
+#     dialog there)
+#
+# FORGE-GATED, exactly like --dangerously-skip-permissions itself (the forge
+# is the sandbox that makes the bypass acceptable — cap-drop=ALL, no-new-
+# privileges, enclave-only egress, credential quarantine; a non-forge
+# invocation keeps Claude's stock permission posture and this function
+# writes nothing at all, touching neither file).
+#
+# Idempotent and additive, like seed_claude_first_run_defaults above: only an
+# ABSENT key is seeded, so an existing explicit value (including an explicit
+# `false` a config already carries) is never overwritten, and a config
+# restored from Vault afterward cannot revoke what this seed wrote (vault
+# restore's `$v * .` gives the live config priority — see
+# claude-approvals-vault.sh::restore_approvals).
+seed_claude_bypass_consent() {
+    [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] || return 0
+
+    local user_cfg="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
+    local settings_cfg="${CLAUDE_SETTINGS_FILE:-$HOME/.claude/settings.json}"
+    local tmp
+
+    # `has()`, never `// true`: jq's alternative operator treats an existing
+    # explicit `false` as absent (its LHS is falsy) and would flip it back to
+    # `true`, exactly the overwrite the additive contract forbids.
+    mkdir -p "$(dirname "$user_cfg")"
+    tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$user_cfg" ] && jq -e 'type == "object"' "$user_cfg" >/dev/null 2>&1; then
+        jq '. + {bypassPermissionsModeAccepted: (if has("bypassPermissionsModeAccepted") then .bypassPermissionsModeAccepted else true end)}' \
+            "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        printf '{"bypassPermissionsModeAccepted": true}\n' >"$tmp"
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$user_cfg"
+
+    mkdir -p "$(dirname "$settings_cfg")"
+    tmp="$(mktemp "${settings_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$settings_cfg" ] && jq -e 'type == "object"' "$settings_cfg" >/dev/null 2>&1; then
+        jq '. + {skipDangerousModePermissionPrompt: (if has("skipDangerousModePermissionPrompt") then .skipDangerousModePermissionPrompt else true end)}' \
+            "$settings_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        printf '{"skipDangerousModePermissionPrompt": true}\n' >"$tmp"
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$settings_cfg"
+
+    trace_lifecycle "config" "claude bypass-permissions consent seeded (forge)"
 }
 
 # Pre-trust the forge project folder (2026-08-31, minted-session blocker #2:

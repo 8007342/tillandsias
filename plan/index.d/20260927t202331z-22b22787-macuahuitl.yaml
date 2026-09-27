@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-vault-store-and-download-cache-are-host-persistent-across-reset
+    event:
+      type: note
+      ts: "2026-09-27T20:23:31Z"
+      agent_id: linux-macuahuitl-claude-20260927t190000z
+      host: macuahuitl
+      summary: |-
+        AMENDED 2026-09-27 (1443-bs9z), operator verbatim: "Forges should keep pre-authorizing SOFT RESET always. HARD RESET should require explicit approval each time." Adds to this row: (1) --reset-state (SOFT) runs with no prompt and no approval variable, ever; (2) --reset-guest (HARD) asks on a TTY for the literal word HARD (`HARD reset destroys the guest, its Vault store and every sign-in. Type HARD to continue:`) and refuses anything else; without a TTY it proceeds only when TILLANDSIAS_HARD_RESET_APPROVED=1 is on THAT invocation (or --approve-hard-reset), else refuses with `reset: HARD requires per-run approval (TILLANDSIAS_HARD_RESET_APPROVED=1 or --approve-hard-reset)` and exit 1 before touching anything; TILLANDSIAS_INSTALL_RESET=hard selects the kind and does NOT approve it; the approval is never read from a file or a previous run; (3) the forge-launch argv builder strips TILLANDSIAS_HARD_RESET_APPROVED from the container environment (fixture arm: set on host, absent in the container's /proc/1/environ); (4) HARD with the keyring UNREACHABLE is an OPEN QUESTION in the spec — until ruled, refuse with `reset: HARD refused — keyring unreachable, share cannot be cleared (open question, host-state-lifecycle)`; (5) the installer's hard path passes the approval question through and never sets the variable itself. New fixture arms: TTY HARD prompt accepts only HARD; no-TTY without the variable refuses (pre-fix: FAILS — today's --reset-guest destroys with no approval); no-TTY with the variable proceeds; forge strips the variable. Spec: host-state-lifecycle "SOFT reset is pre-authorised everywhere, HARD asks every time". Size and tier unchanged (L, opus).

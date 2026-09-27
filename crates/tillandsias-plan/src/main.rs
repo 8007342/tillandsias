@@ -67,6 +67,7 @@ fn capability_tokens() -> Vec<&'static str> {
 /// order exists to surface.
 const DISPATCH_ARMS: &[&str] = &[
     "set-field",
+    "session-tokens",
     "append-event",
     "answer",
     "arrival-routing-check",
@@ -87,6 +88,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "declared-closures-check",
     "dependencies-of",
     "decompose",
+    "discipline",
     "expert-serve",
     "expire-claims",
     "plan-events",
@@ -419,6 +421,17 @@ const USAGE: &str = concat!(
     "                                     then answer it. Unrouted questions are unsupported.\n",
     "           methodology-index [--root D]\n",
     "                                     every indexed path with its file:line (the query surface)\n",
+    "           session-tokens [--since <utc>] [--transcript <path>]\n",
+    "                                     ORDER 1437-3pj7. This session's BILLED tokens from the harness\n",
+    "                                     transcript (message.usage, deduplicated by message.id), plus the\n",
+    "                                     sub-agent totals; source=absent or absent:schema-drift:<field>\n",
+    "                                     with zeros when it cannot measure. Never a guess.\n",
+    "           discipline show [--json] | target --platform <p> | check-ref <ref>  [--root D] [--seed F]\n",
+    "                                     ORDER 1443-w79y. The branch-discipline seed\n",
+    "                                     (.tillandsias/branch-discipline.yaml): level, per-rule\n",
+    "                                     enforcement, integration branch per platform, ref grammar.\n",
+    "                                     No seed = level 0 advised: nothing is refused. check-ref exits\n",
+    "                                     1 only when an ENFORCED rule refuses the ref.\n",
     "           metrics-log-path <basename> [repo-root]\n",
     "                                     ORDER 1125-92xa. Where THIS BINARY would put a metrics log:\n",
     "                                     <checkout>/.cache/metrics/<basename>, falling back to /tmp when\n",
@@ -1504,6 +1517,19 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
                 key.to_string(),
                 serde_json::to_value(value).unwrap_or(serde_json::Value::Null),
             );
+        }
+    }
+    // ORDER 1437-khnx. The tier-routing scalars, projected so the selector
+    // (1437-vdz5) can read them — the must_ship lesson above: a field a
+    // consumer reads must be HERE or it is writable and unreadable. Read via
+    // tier_field, so the notes-line shape of today's rows projects the same.
+    // NEVER DEFAULTED HERE (designer correction 2026-09-27): an untagged row
+    // stays absent, so a reader can tell a filed opus from an unfiled row.
+    // The operator's "No size tags get Opus" is applied by the selector
+    // (1437-vdz5), which is the only place a missing tier means anything.
+    for (field, _) in tillandsias_plan::TIER_FIELDS {
+        if let Some(value) = tillandsias_plan::tier_field(packet, field) {
+            obj.insert(field.to_string(), serde_json::Value::String(value));
         }
     }
     // ORDER 706-ddw6. Project active lease information directly.
@@ -4331,6 +4357,118 @@ fn run_predicate_cli(args: &[String]) {
     }
 }
 
+/// ORDER 1443-w79y — `discipline show [--json] | target --platform <p> |
+/// check-ref <ref>`, each accepting `--root <dir>` and `--seed <path>`.
+/// Every answer names its source, level and the rule's enforcement. Exit 0
+/// on every answer except a check-ref the seed REFUSES (exit 1); 2 on usage.
+fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
+    use tillandsias_plan::branch_discipline as bd;
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan discipline show [--json] | target --platform <linux|forge|windows|macos> | check-ref <ref>   [--root <dir>] [--seed <path>]"
+        );
+        std::process::exit(2);
+    };
+    let mut root: Option<PathBuf> = None;
+    let mut seed: Option<PathBuf> = None;
+    let mut platform: Option<String> = None;
+    let mut json = false;
+    let mut positional: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--root" | "--seed" | "--platform" => {
+                let Some(v) = args.get(i + 1) else { usage() };
+                match args[i].as_str() {
+                    "--root" => root = Some(PathBuf::from(v)),
+                    "--seed" => seed = Some(PathBuf::from(v)),
+                    _ => platform = Some(v.clone()),
+                }
+                i += 2;
+            }
+            "--json" => {
+                json = true;
+                i += 1;
+            }
+            other if other.starts_with("--") => usage(),
+            other => {
+                positional.push(other.to_string());
+                i += 1;
+            }
+        }
+    }
+    let root = root
+        .or_else(|| {
+            index
+                .and_then(|ix| ix.parent().and_then(Path::parent))
+                .map(|p| {
+                    if p.as_os_str().is_empty() {
+                        PathBuf::from(".")
+                    } else {
+                        p.to_path_buf()
+                    }
+                })
+        })
+        .or_else(|| {
+            std::env::current_dir()
+                .ok()
+                .and_then(|cwd| bd::find_root(&cwd))
+        })
+        .unwrap_or_else(|| PathBuf::from("."));
+    let d = bd::load(&root, seed.as_deref());
+    if let Some(r) = &d.refusal {
+        // The refusal is named on stderr and the answer comes from the floor,
+        // so a malformed seed never refuses anyone's push.
+        eprintln!(
+            "{r} ({}); answering from the built-in default",
+            d.seed_path
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default()
+        );
+    }
+    match positional.first().map(String::as_str) {
+        Some("show") if positional.len() == 1 => {
+            if json {
+                println!("{}", d.to_json());
+            } else {
+                println!("discipline: {}", d.provenance(None));
+                println!("default_branch: {}", d.default_branch);
+                for (p, b) in &d.integration {
+                    println!("integration.{p}: {b}");
+                }
+                for (r, e) in &d.enforcement {
+                    println!("enforcement.{r}: {e}");
+                }
+                println!("work_ref: {}", d.work_ref.as_deref().unwrap_or("-"));
+                println!("salvage_ref: {}", d.salvage_ref.as_deref().unwrap_or("-"));
+                println!("digest: {}", d.digest.as_deref().unwrap_or("-"));
+            }
+            std::process::exit(0);
+        }
+        Some("target") if positional.len() == 1 => {
+            let Some(p) = platform.filter(|p| bd::PLATFORMS.contains(&p.as_str())) else {
+                usage()
+            };
+            println!("{} {}", d.target(&p), d.provenance(None));
+            std::process::exit(0);
+        }
+        Some("check-ref") if positional.len() == 2 => {
+            let a = bd::check_ref(&d, &positional[1]);
+            println!("{}", a.verdict);
+            if let Some(w) = &a.why {
+                println!("why: {w}");
+            }
+            if let Some(r) = &a.remedy {
+                println!("remedy: {r}");
+            }
+            println!("{}", d.provenance(a.rule));
+            std::process::exit(if a.refused { 1 } else { 0 });
+        }
+        _ => usage(),
+    }
+}
+
 fn main() {
     let start_time = std::time::Instant::now();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -4375,6 +4513,54 @@ fn main() {
     // Optional second argument is the repo root, mirroring the shell rule's
     // second parameter, so the fixture can ask about a root that is NOT the cwd
     // (that is how the outside-a-checkout negative control is driven).
+    // ORDER 1437-3pj7 — a session's billed token spend from its transcript.
+    // Early: it reads the harness transcript, never the ledger.
+    if args[0] == "session-tokens" {
+        let mut since = std::env::var("TILLANDSIAS_CYCLE_START_TS")
+            .ok()
+            .filter(|s| !s.is_empty());
+        let mut transcript: Option<PathBuf> = None;
+        let mut i = 1;
+        while i < args.len() {
+            match (args[i].as_str(), args.get(i + 1)) {
+                ("--since", Some(v)) => since = Some(v.clone()),
+                ("--transcript", Some(v)) => transcript = Some(PathBuf::from(v)),
+                _ => {
+                    eprintln!(
+                        "usage: tillandsias-plan session-tokens [--since <utc>] [--transcript <path>]"
+                    );
+                    std::process::exit(2);
+                }
+            }
+            i += 2;
+        }
+        let config = std::env::var("CLAUDE_CONFIG_DIR")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .map(|h| PathBuf::from(h).join(".claude"))
+            })
+            .unwrap_or_default();
+        let session = std::env::var("CLAUDE_CODE_SESSION_ID").ok();
+        let path = tillandsias_plan::session_tokens::resolve_transcript(
+            transcript.as_deref(),
+            session.as_deref(),
+            &config,
+        );
+        let answer = tillandsias_plan::session_tokens::measure(path.as_deref(), since.as_deref());
+        println!("{}", answer.line());
+        std::process::exit(0);
+    }
+    // ORDER 1443-w79y — branch discipline. Early, beside metrics-log-path: it
+    // reads the seed and the git dir, never the ledger, so it answers on a
+    // checkout whose ledger is broken. Root: --root, else the --index's
+    // checkout, else the nearest ancestor of the cwd holding .git.
+    if args[0] == "discipline" {
+        run_discipline(&args[1..], index_explicit.then_some(index.as_path()));
+    }
     if args[0] == "metrics-log-path" {
         let base = args.get(1).map(String::as_str).unwrap_or("");
         if base.is_empty() {
@@ -6040,6 +6226,20 @@ fn main() {
             }
             for s in ledger.validate_against_schema(&schema) {
                 eprintln!("advisory (schema drift): {s}");
+            }
+            // ORDER 1437-khnx — unlike general schema drift, an out-of-vocabulary
+            // tier scalar is REFUSED under --strict-fragments: it would route no
+            // packet, and the selector could not tell it from an untagged row.
+            let tier_violations = ledger.tier_vocabulary_violations();
+            for v in &tier_violations {
+                eprintln!("refused:tier-vocabulary: {v}");
+            }
+            if strict_fragments && !tier_violations.is_empty() {
+                eprintln!(
+                    "refusing (--strict-fragments): {} tier field(s) outside the vocabulary (1437-khnx)",
+                    tier_violations.len()
+                );
+                std::process::exit(1);
             }
             // 686-7qcm — the invisible-block report. A dependent waiting on a
             // PARKED packet (implemented / needs_clarification / blocked /
@@ -8230,6 +8430,12 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             // this order owns. The refusal names the field and the paths that
             // CAN edit a list, so the caller is redirected rather than merely
             // blocked.
+            // ORDER 1437-khnx — a tier scalar outside its vocabulary would be
+            // written, projected and then silently match no tier filter.
+            if let Some(reason) = tillandsias_plan::tier_vocabulary_refusal(&field, &value) {
+                eprintln!("refused:set-field:tier-vocabulary — {pid}.{reason} (1437-khnx)");
+                std::process::exit(2);
+            }
             if field_is_list(packet, &field) {
                 eprintln!(
                     "refused:set-field:list-valued-field — {pid}.{field} is a LIST, and set-field writes scalars only (1184-tj2q)."
@@ -10981,6 +11187,33 @@ mod tests {
         let proj = query_json_projection(&val);
         assert!(proj.get("lease").is_some());
         assert_eq!(proj["lease"], serde_json::Value::Null);
+    }
+
+    /// ORDER 1437-khnx: both tier scalars reach the projection, from the
+    /// top-level field or, for rows filed before it, from a notes line; a
+    /// top-level scalar beats the note, and an out-of-vocabulary note is prose.
+    #[test]
+    fn projection_carries_size_and_implementer_tier() {
+        let proj = |raw: &str| query_json_projection(&serde_yaml::from_str(raw).unwrap());
+        let top = proj("packet_id: a\norder: 1\nsize: S\nimplementer_tier: haiku\n");
+        assert_eq!(top["size"], "S");
+        assert_eq!(top["implementer_tier"], "haiku");
+        let noted = proj(
+            "packet_id: b\norder: 2\nnotes: |\n  size: S\n  implementer_tier: haiku\n  prose\n",
+        );
+        assert_eq!(noted["size"], "S");
+        assert_eq!(noted["implementer_tier"], "haiku");
+        let both = proj(
+            "packet_id: c\norder: 3\nimplementer_tier: opus\nnotes: |\n  implementer_tier: haiku\n",
+        );
+        assert_eq!(both["implementer_tier"], "opus");
+        let prose = proj("packet_id: d\norder: 4\nnotes: |\n  size: XL\n");
+        assert!(prose.get("size").is_none());
+        // Untagged stays ABSENT: the untagged=opus rule is the selector's
+        // (1437-vdz5), never the projection's.
+        let untagged = proj("packet_id: e\norder: 5\n");
+        assert!(untagged.get("implementer_tier").is_none());
+        assert!(untagged.get("size").is_none());
     }
 
     #[test]

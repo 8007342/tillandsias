@@ -323,3 +323,65 @@ github_actions_budget:
     Run the local gate before every push. Do not add a workflow to catch what a
     local gate should have caught. If a check genuinely cannot run locally, that
     is a finding to file, not a reason to spend cloud minutes.
+
+# ── Integration-layer test classification (operator ruling 2026-09-27) ──────
+# "Let's defer e2e and other integration tests to their corresponding
+# integration layers", with the classification of which integration tests
+# run at each branch layer to be revisited. Umbrella 1437-62g8; mechanism
+# 1443-b85g; the relay layer's litmus set is 1437-yfuh's --relay-scope run
+# set, consumed here, never re-derived. Design note:
+# plan/issues/efficiency-trims-design-2026-09-27.md.
+integration_layers:
+  principle: >
+    A test runs at the FIRST layer that can run it cheaply enough to keep the
+    layer's cadence, and at every later layer that integrates more. The layers
+    are the BRANCH layers, not a new object: a work/<order> ref, a relay land
+    on linux-next, the daily cut to main, and the stable promotion. A spec the
+    classifier cannot place goes to the cut (fails closed, never dropped).
+    Memoisation (1437-jm2d, 1437-v3gb, 1437-cxt9) applies below the cut only;
+    a cut runs everything fresh.
+  test_classes:
+    decider: "whole-tree scripts/check-*.sh judged by rc; seconds"
+    fixture: "scripts/test-*.sh named by the diff or naming a touched script; seconds to minutes"
+    crate_unit: "cargo test --workspace and the feature-gated tray,listen-vsock pass; minutes (memoised by content hash, classified-expensive)"
+    litmus_pre_build_cheap: "phase pre-build, size instant or quick, bound; seconds each"
+    litmus_pre_build_long: "phase pre-build, size long or large, bound; minutes each"
+    litmus_integration: "phase post-build, runtime or integration, or size e2e; needs a forge, a guest or an install"
+    smoke: "curl-install and per-platform smokes of a published tag"
+  layers:
+    work_ref:
+      when: "every push of work/<order> (pre-push hook, seconds)"
+      runs: "decider; fixture (touched)"
+      never: "crate_unit; any litmus"
+      note: >
+        The worker runs scripts/relay-preflight.sh on its own ref before the
+        PR leaves draft — that is the relay layer applied early, by choice,
+        not the hook's job.
+    relay:
+      when: "a relay land on linux-next (the land gate, minutes)"
+      runs: >
+        the change-class tier of ./build.sh --check (light|scoped|full:
+        decider, fixture, crate_unit); litmus_pre_build_cheap from the
+        covering set (declared matches and instant/quick command matches,
+        exactly litmus-covering-specs.sh --relay-scope's run set)
+      defers_to_cut: "litmus_pre_build_long (deferred:size); litmus_integration (deferred:phase); the over-cap tail (deferred:cap)"
+      printed_as: "deferred:layer:cut:<spec> so a deferred spec is named where it was deferred"
+    cut:
+      when: "the daily cut to main (--ci-full, about an hour; autonomous per operator 2026-09-26)"
+      runs: "every bound pre-build spec of every size; post-build; runtime; integration; e2e; install — memo OFF on every step (TILLANDSIAS_FORCE_CHECK=1 and the litmus memo disabled)"
+      never: "a memo hit of any class"
+    stable:
+      when: "promotion of a daily tag to stable"
+      runs: "smoke, per platform, for the exact tag (unchanged by this section)"
+  mechanism: >
+    scripts/integration-layer-tests.sh <work-ref|relay|cut> [--diff <base>]
+    prints the set for a layer, one line per item, deterministic (two runs
+    on one diff are byte-identical); scripts/run-litmus-test.sh --layer <l>
+    runs exactly that set and prints "Layer-scoped: deferred to cut" for the
+    rest. scripts/census-litmus-layer-classification.sh (1443-2ef7) names
+    specs whose declared size or phase disagrees with what their commands
+    run, because this table routes on those two fields.
+  revisit: >
+    The table is the operator's to revise. A row proposing a cell change
+    cites the measurement (the recur: line for the layer's cost, the cut's
+    red that the earlier layer would have caught) and names the cell.

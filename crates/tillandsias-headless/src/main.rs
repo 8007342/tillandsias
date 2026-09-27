@@ -71,7 +71,10 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+mod device_poll_view;
+mod flow_sink;
 mod image_build_progress;
+mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
@@ -3305,6 +3308,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     }
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
+    // Order 472 slice 3: the generation before any refresh, so a mint or a
+    // rotation below is announced as a transition rather than inferred later.
+    let generation_before = ca_generation(&certs_dir);
     std::fs::create_dir_all(&certs_dir)
         .map_err(|e| format!("Failed to create CA directory: {e}"))?;
 
@@ -3457,6 +3463,20 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         let _ = enforce_ca_key_mode(&key);
     }
 
+    if let Some((from, to, reason)) = flow_sink::ca_transition(
+        generation_before.as_deref(),
+        ca_generation(&certs_dir).as_deref(),
+    ) {
+        flow_sink::emit(
+            tillandsias_control_wire::FlowSource::DependencyNode {
+                node: flow_sink::CA_BUNDLE_NODE.to_string(),
+            },
+            from,
+            to,
+            Some(reason.to_string()),
+        );
+    }
+
     Ok(certs_dir)
 }
 
@@ -3606,7 +3626,7 @@ pub(crate) const PROXY_CA_KEY_SECRET: &str = "tillandsias-ca-key";
 pub(crate) const PROXY_CA_KEY_SECRET_OPTS: &str = "uid=1000,gid=1000,mode=0400";
 
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
-    vec![
+    let mut args: Vec<String> = vec![
         "--detach".into(),
         // Order 387: a crashed/exited container holding the name must not
         // block relaunch with exit-125; --replace atomically removes it
@@ -3635,8 +3655,92 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
         // 0600. The public cert above stays a bind mount on purpose.
         "--secret".into(),
         format!("{PROXY_CA_KEY_SECRET},{PROXY_CA_KEY_SECRET_OPTS}"),
-        image.into(),
-    ]
+    ];
+    // Order 472: record WHICH CA this proxy was started with, so a running
+    // proxy can be compared against the certificate on disk after a rotation.
+    if let Some(generation) = ca_generation(certs_dir) {
+        args.push("--label".into());
+        args.push(format!("{PROXY_CA_GENERATION_LABEL}={generation}"));
+    }
+    args.push(image.into());
+    args
+}
+
+/// Label on the proxy container naming the CA generation it signs with (order 472).
+const PROXY_CA_GENERATION_LABEL: &str = "tillandsias.ca-generation";
+
+/// The CA generation: the first 16 hex digits of the SHA-256 of the published
+/// `intermediate.crt`. A rotation publishes a new certificate by rename, so the
+/// generation changes exactly when the certificate does. `None` when the file
+/// cannot be read.
+fn ca_generation(certs_dir: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let bytes = std::fs::read(certs_dir.join("intermediate.crt")).ok()?;
+    let hex = format!("{:x}", Sha256::digest(&bytes));
+    Some(hex[..16].to_string())
+}
+
+/// Whether a RUNNING proxy still signs with the CA consumers are given.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ProxyCaCheck {
+    /// The running proxy's generation matches the certificate on disk.
+    Current,
+    /// It does not, or the proxy predates the label: it must be replaced
+    /// before any consumer that mounts the on-disk certificate starts.
+    Stale {
+        running: Option<String>,
+        on_disk: String,
+    },
+    /// Nothing to compare against (the certificate or the container could not
+    /// be read). Keep the serving proxy rather than restart on a guess.
+    Unknown,
+}
+
+/// The pure decision behind [`ensure_proxy_running`]'s early return (order 472).
+///
+/// THE DEFECT IT CLOSES. A forge launch first satisfies CaBundle, which
+/// rotates the CA after 25 days and publishes a new certificate, and then
+/// satisfies Proxy, which used to return early whenever the proxy was
+/// running. The new forge mounted and trusted ONLY the rotated certificate,
+/// while the running proxy kept signing bumped leaves with the key it was
+/// started with (the key reaches it as a podman secret at launch), so every
+/// bumped TLS connection from the fresh forge failed verification.
+///
+/// A proxy with NO label predates this check. It is treated as stale: its
+/// generation is unknowable, and a single replacement on upgrade is cheaper
+/// than a split-trust window nobody can see.
+fn proxy_ca_check(
+    running_label: Result<Option<String>, ()>,
+    on_disk: Option<String>,
+) -> ProxyCaCheck {
+    match (running_label, on_disk) {
+        (_, None) | (Err(()), _) => ProxyCaCheck::Unknown,
+        (Ok(Some(r)), Some(d)) if r == d => ProxyCaCheck::Current,
+        (Ok(running), Some(on_disk)) => ProxyCaCheck::Stale { running, on_disk },
+    }
+}
+
+/// The running proxy's generation label: `Ok(None)` when it has none, `Err`
+/// when the container could not be inspected.
+fn running_proxy_ca_generation() -> Result<Option<String>, ()> {
+    let out = podman_cmd_sync()
+        .args([
+            "container",
+            "inspect",
+            "--format",
+            &format!("{{{{index .Config.Labels \"{PROXY_CA_GENERATION_LABEL}\"}}}}"),
+            "tillandsias-proxy",
+        ])
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|_| ())?;
+    if !out.status.success() {
+        return Err(());
+    }
+    let value = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    Ok(match value.as_str() {
+        "" | "<no value>" => None,
+        _ => Some(value),
+    })
 }
 
 /// Refresh the `tillandsias-ca-key` podman secret from the CA bundle.
@@ -3693,10 +3797,30 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
         // Best-effort: an unreadable or absent key is not a reason to refuse
         // a proxy that is already serving.
         let _ = enforce_ca_key_mode(&PathBuf::from(ca_dir()).join("intermediate.key"));
-        if debug {
-            eprintln!("[tillandsias] enclave proxy already running");
+        // Order 472: "running" is not "current". A proxy started before the
+        // last CA rotation signs with a key no new consumer trusts.
+        match proxy_ca_check(
+            running_proxy_ca_generation(),
+            ca_generation(&PathBuf::from(ca_dir())),
+        ) {
+            ProxyCaCheck::Stale { running, on_disk } => {
+                // LOUD, on both streams (767-nkkq: launchers capture different
+                // ones): a proxy restart interrupts in-flight downloads.
+                let line = format!(
+                    "[tillandsias] proxy CA is stale (running {}, on disk {on_disk}); replacing the proxy",
+                    running.as_deref().unwrap_or("unlabelled")
+                );
+                println!("{line}");
+                eprintln!("{line}");
+                // Fall through: the launch below uses --replace.
+            }
+            ProxyCaCheck::Current | ProxyCaCheck::Unknown => {
+                if debug {
+                    eprintln!("[tillandsias] enclave proxy already running");
+                }
+                return Ok(());
+            }
         }
-        return Ok(());
     }
     // Remove any stopped/exited container from a prior run so that `podman run
     // --name tillandsias-proxy` does not fail with "name already in use".
@@ -9562,6 +9686,7 @@ pub(crate) fn build_image_with_logging(
                 {
                     let _ = writeln!(f, "{}", image_build_progress::event_log_line(&event));
                 }
+                progress_sink::publish(event);
                 // The user-facing line keeps its approved format; only the
                 // number is now real. Printed once per whole-ten change.
                 let percent = progress.percent();
@@ -9591,15 +9716,13 @@ pub(crate) fn build_image_with_logging(
     } else {
         Err(format!("Build exited with status {}", status))
     };
+    let finished = progress.finish(&result);
     if let Some(ref log) = log_handle
         && let Ok(mut f) = log.lock()
     {
-        let _ = writeln!(
-            f,
-            "{}",
-            image_build_progress::event_log_line(&progress.finish(&result))
-        );
+        let _ = writeln!(f, "{}", image_build_progress::event_log_line(&finished));
     }
+    progress_sink::publish(finished);
     result
 }
 
@@ -9868,12 +9991,16 @@ fn reset_guest_network_scope(names: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// Host-side directories the reset deletes under the init cache dir. ONLY
-/// `vault-data` (the vault storage backend) — never `models` (the inference
-/// model cache, explicitly out of the ephemeral doctrine's scope) and never
-/// the cache dir itself.
-fn reset_guest_wipe_paths(cache_dir: &Path) -> Vec<PathBuf> {
-    vec![cache_dir.join("vault-data")]
+/// Host-side directories the reset deletes under the init cache dir: NONE.
+///
+/// Order 1437-qza3 (host-state-lifecycle): everything under the cache dir is
+/// operator data. This used to return `vault-data`, which was the worst
+/// combination: the store died while the keyring share survived, so the next
+/// launch re-initialised Vault and overwrote the share. The function stays,
+/// empty, so a future derived path has one obvious home and the test below
+/// keeps pinning what must never appear in it.
+fn reset_guest_wipe_paths(_cache_dir: &Path) -> Vec<PathBuf> {
+    Vec::new()
 }
 
 /// Enumerate podman object names via `--format {{.Names}}`/`{{.Name}}`.
@@ -9947,22 +10074,25 @@ fn run_reset_state(_debug: bool) -> Result<(), String> {
 /// this flag is the stronger sibling, not a redefinition.
 #[cfg(target_os = "linux")]
 fn run_reset_state(debug: bool) -> Result<(), String> {
-    announce_reset_plan(
-        &[
-            "every Tillandsias podman container, volume, secret and network",
-            "ALL podman images on this host (podman system reset --force)",
-            "the host keychain entries vault-shamir-share-v1 and vault-root-token-v1",
-            "the host fallback files fallback_vault-shamir-share-v1 and fallback_vault-root-token-v1",
-            "<cache>/tillandsias/vault-data (the Vault store)",
-        ],
-        &[
-            "installation-uuid-v1 in the keychain — the INSTALLATION anchor; the \
-             in-guest Vault derives its master key from it, so clearing it would \
-             make the next vault underivable rather than re-initialised (803-49re)",
-            "the installed tillandsias binary itself",
-            "~/.cache/tillandsias/models (the podman reset does not reach it)",
-        ],
+    // Order 1437-qza3. Operator directive 2026-09-27 (host-state-lifecycle): a
+    // reset destroys DERIVED state; the Vault store and its unseal share are
+    // operator data. Operator ruling the same day: "the presence of an
+    // unlocking keyring should be a requirement to survive the vault store."
+    // So the store survives when the keychain holds the share, and a
+    // keyring-less host's store and fallback files are cleared, loudly. This
+    // supersedes 900-z3kv option (a) and the premise of 1118-fqfk.
+    let disposition = vault_bootstrap::reset_vault_disposition(
+        vault_bootstrap::probe_keyring_share(),
+        vault_bootstrap::fallback_share_present(),
     );
+    let (destroyed, preserved) = reset_state_plan(disposition);
+    announce_reset_plan(&destroyed, &preserved);
+    if std::env::var_os("TILLANDSIAS_RESET_KEEP_MODELS").is_some() {
+        eprintln!(
+            "[tillandsias] TILLANDSIAS_RESET_KEEP_MODELS is ignored: a reset always \
+             preserves models and every other operator download (spec: host-state-lifecycle)"
+        );
+    }
 
     // ONE affordance, and it already existed: `--reset-guest` has honoured
     // TILLANDSIAS_DESTRUCTIVE_RESET_OK since it was written, and the smoke
@@ -9975,9 +10105,6 @@ fn run_reset_state(debug: bool) -> Result<(), String> {
         return run_init(debug, false);
     }
 
-    // ORDER: podman reset FIRST, then the host credentials. Not arbitrary —
-    // clearing vault-data needs `podman unshare`, which needs a working podman,
-    // and the smoke's §2 has run this order since 900-z3kv.
     // THROUGH THE SHARED LAYER. The first draft built the process command
     // directly and `tests::idiomatic_podman_launch_paths_do_not_bypass_shared_layer`
     // caught it: "headless runtime must not construct podman commands directly".
@@ -9994,23 +10121,98 @@ fn run_reset_state(debug: bool) -> Result<(), String> {
     run_podman_command(reset_cmd, debug)
         .map_err(|e| format!("podman system reset --force failed: {e}"))?;
 
-    let (cleared, failed) = vault_bootstrap::clear_host_vault_credentials(debug);
-    eprintln!("[tillandsias] --reset-state: cleared {}", cleared.join(" "));
-    if !failed.is_empty() {
-        // REFUSE, do not warn. 1284-jf86 is the row about a clearer that
-        // printed "the room is NOT cold" and exited 0; a reset that cannot
-        // clear the credentials has not produced the state the caller asked
-        // for, and reprovisioning on top of it would recover the old share.
-        return Err(format!(
-            "--reset-state could not clear: {} — the local state is NOT reset, so \
-             reprovisioning now would recover the old Vault share. Nothing further \
-             was attempted.",
-            failed.join(" ")
-        ));
-    }
+    // AFTER the podman reset: clearing vault-data may need `podman unshare`.
+    reset_vault_store_per_disposition(disposition)?;
 
     eprintln!("[tillandsias] --reset-state: local state reset \u{2713} — reprovisioning ...");
     run_init(debug, false)
+}
+
+/// Act on the reset's Vault disposition (order 1437-qza3). NEVER touches the
+/// keychain entries: those belong to uninstall alone.
+#[cfg(target_os = "linux")]
+fn reset_vault_store_per_disposition(
+    disposition: vault_bootstrap::ResetVaultDisposition,
+) -> Result<(), String> {
+    use vault_bootstrap::ResetVaultDisposition as D;
+    match disposition {
+        D::Keep => Ok(()),
+        D::KeepUnverified => {
+            eprintln!(
+                "[tillandsias] the keyring could not be read and no fallback share exists, so \
+                 the unseal share can only be in a keyring that is locked right now; the Vault \
+                 store is KEPT. Unlock the keyring before the next launch so it can be unsealed."
+            );
+            Ok(())
+        }
+        D::ClearKeyringless => {
+            eprintln!(
+                "[tillandsias] NO KEYRING HOLDS THE UNSEAL SHARE on this host, so the Vault \
+                 store does not survive a reset: clearing it now. Every stored sign-in is \
+                 lost; sign in again after the reset. A host with an unlocking keyring keeps \
+                 its sign-ins across resets."
+            );
+            let (cleared, failed) = vault_bootstrap::clear_vault_store_and_fallbacks();
+            eprintln!("[tillandsias] --reset-state: cleared {}", cleared.join(" "));
+            if failed.is_empty() {
+                Ok(())
+            } else {
+                // REFUSE, do not warn (1284-jf86): a half-cleared store with
+                // no share is exactly the partial-init state.
+                Err(format!(
+                    "--reset-state could not clear the keyring-less Vault store: {}. \
+                     Nothing further was attempted.",
+                    failed.join(" ")
+                ))
+            }
+        }
+    }
+}
+
+/// The two announced sets for a Linux `--reset-state`, per disposition
+/// (order 1437-qza3). Pure, so each branch's wording is tested directly.
+#[cfg(target_os = "linux")]
+fn reset_state_plan(
+    disposition: vault_bootstrap::ResetVaultDisposition,
+) -> (Vec<&'static str>, Vec<&'static str>) {
+    use vault_bootstrap::ResetVaultDisposition as D;
+    let mut destroyed = vec![
+        "every Tillandsias podman container, volume, secret and network",
+        "ALL podman images on this host (podman system reset --force)",
+        "the build and provision markers under <cache>/tillandsias",
+    ];
+    let mut preserved = vec![
+        "installation-uuid-v1 in the keychain — the INSTALLATION anchor; the in-guest \
+         Vault derives its master key from it (803-49re)",
+        "<cache>/tillandsias/models and every other download in the cache",
+        "the installed tillandsias binary itself",
+    ];
+    match disposition {
+        D::Keep | D::KeepUnverified => {
+            preserved.insert(
+                0,
+                "<cache>/tillandsias/vault-data (the Vault store) and \
+                 <cache>/tillandsias/vault-audit — your sign-ins survive the reset",
+            );
+            preserved.insert(
+                1,
+                "the keyring entries vault-shamir-share-v1 and vault-root-token-v1 — a \
+                 freshly built Vault unseals the preserved store with them",
+            );
+        }
+        D::ClearKeyringless => {
+            destroyed.push(
+                "<cache>/tillandsias/vault-data (the Vault store) — NO KEYRING holds the \
+                 unseal share on this host, so the store does not survive a reset",
+            );
+            destroyed.push(
+                "the fallback files fallback_vault-shamir-share-v1 and \
+                 fallback_vault-root-token-v1",
+            );
+            preserved.insert(0, "<cache>/tillandsias/vault-audit");
+        }
+    }
+    (destroyed, preserved)
 }
 
 fn run_reset_guest(debug: bool) -> Result<(), String> {
@@ -10021,9 +10223,13 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
                 .to_string(),
         );
     }
+    // Order 1437-qza3: this line used to promise the Vault and the cached
+    // credentials were discarded. Whether they survive now depends on the
+    // keyring (see reset_vault_store_per_disposition, which says which), so
+    // this line claims neither.
     eprintln!(
-        "[tillandsias] EPHEMERAL RESET: this discards the local guest (containers, vault, \
-         cached credentials). Everything lives in the cloud \u{2014} you'll re-authenticate once."
+        "[tillandsias] EPHEMERAL RESET: this discards the local guest (containers, volumes, \
+         secrets, networks)."
     );
 
     // 1. Containers (vault, proxy, git services, forges, web) — force-remove
@@ -10086,6 +10292,14 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
         }
     }
 
+    // Order 1437-qza3: the same keyring rule as --reset-state. The store
+    // survives only where a keychain holds the share.
+    #[cfg(all(target_os = "linux", feature = "vault"))]
+    reset_vault_store_per_disposition(vault_bootstrap::reset_vault_disposition(
+        vault_bootstrap::probe_keyring_share(),
+        vault_bootstrap::fallback_share_present(),
+    ))?;
+
     eprintln!("[tillandsias] guest substrate wiped \u{2014} re-initializing from scratch\u{2026}");
 
     // 6. Reprovision through the exact same first-provision path `--init`
@@ -10102,10 +10316,8 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
         eprintln!("[tillandsias] vault feature not compiled; reset finished without Vault");
     }
 
-    eprintln!(
-        "[tillandsias] guest reset complete \u{2713} \u{2014} re-authenticate with \
-         --github-login (or the tray's GitHub Login) to restore cloud access."
-    );
+    // Order 1437-qza3: no re-login claim either way; the disposition line said it.
+    eprintln!("[tillandsias] guest reset complete \u{2713}");
     Ok(())
 }
 
@@ -11002,9 +11214,33 @@ fn run_github_device_login(container: &str, debug: bool) -> Result<(), String> {
             "[tillandsias] running: podman exec --interactive {container} /bin/bash -s (poll script on stdin)"
         );
     }
+    // Order 1420-2pav: the poll's stdout drives a live activity line (time
+    // left on the code) instead of a row of dots; plain tiers pass through.
+    let view = std::sync::Arc::new(std::sync::Mutex::new(
+        device_poll_view::DevicePollView::new(tier, dc.expires_in),
+    ));
+    let feed_view = std::sync::Arc::clone(&view);
+    let started = std::time::Instant::now();
     let status = poll_cmd
-        .status_bounded_with_stdin(script.as_bytes(), device_poll_budget(dc.expires_in))
+        .status_bounded_with_stdin_streaming(
+            script.as_bytes(),
+            device_poll_budget(dc.expires_in),
+            move |chunk| {
+                use std::io::Write;
+                let bytes = feed_view
+                    .lock()
+                    .map(|mut v| v.feed(chunk, started.elapsed().as_secs()))
+                    .unwrap_or_else(|_| chunk.to_vec());
+                let mut out = std::io::stdout().lock();
+                let _ = out.write_all(&bytes);
+                let _ = out.flush();
+            },
+        )
         .map_err(|e| format!("GitHub device authorization failed: {e}"))?;
+    if let Ok(mut v) = view.lock() {
+        use std::io::Write;
+        let _ = std::io::stdout().write_all(&v.finish());
+    }
     if !status.success() {
         return Err(format!(
             "GitHub device authorization failed: poll exited with {status}"
@@ -16487,42 +16723,61 @@ fn forge_hot_src_tmpfs(project_name: &str) -> String {
     format!("/home/forge/src:size={budget}m,mode=0777")
 }
 
-/// The project mirror's `size-pack` in KiB, or 0 when it cannot be read.
+/// The project mirror's object store in KiB (packs PLUS loose objects), or 0
+/// when it cannot be read.
 ///
 /// 0 is not a guess dressed as a measurement: `compute_hot_budget` clamps it UP
 /// to `HOT_PATH_BUDGET_FLOOR_MB`, which is exactly the spec's "Empty mirror
 /// returns floor (256 MB)" scenario. A fresh project has no mirror yet, and
-/// fail-closing a launch on an unreadable pack size would break the first
-/// launch of every project to protect a number that only tunes a cap.
+/// fail-closing a launch on an unreadable size would break the first launch of
+/// every project to protect a number that only tunes a cap.
 ///
-/// @trace order:997-e4v2
+/// ORDER 1445-7u63 — THIS PROBE HAD RETURNED 0 ON EVERY ROOTLESS HOST, for
+/// three independent reasons, so every forge got the 256M floor however big
+/// its repository was (lenovinha 2026-09-27: a 167M `.git` in a 256M tmpfs,
+/// filled to 100%, git died mid-write; macuahuitl-forge the day before):
+///   1. It read the named volume's host mountpoint as the invoking user, but a
+///      rootless mirror volume is owned by a subuid: "Permission denied".
+///   2. It ran `git -C <mountpoint>`, the volume ROOT (mounted at /srv/git),
+///      while the repository is `/srv/git/<project>`, one level down.
+///   3. It passed `-H`, whose "165.47 MiB" is not the KiB integer the parser
+///      reads.
+///
+/// Asking the MIRROR CONTAINER fixes all three: it owns the files, it knows the
+/// in-container path, and it has git, which the VM guest's host OS does not.
+/// The size now includes loose objects (`parse_repo_size_kb`).
+///
+/// @trace order:997-e4v2, order:1445-7u63
 /// @trace spec:forge-hot-cold-split (Requirement: Per-launch project source
-///   budget — step 1, the mirror's `git count-objects -v -H`)
+///   budget — step 1, the mirror's `git count-objects -v`)
 fn forge_mirror_pack_size_kb(project_name: &str) -> u64 {
-    let mut inspect = podman_command();
-    inspect.args([
-        "volume",
-        "inspect",
-        &format!("tillandsias-mirror-{project_name}"),
-        "--format",
-        "{{.Mountpoint}}",
-    ]);
-    let Ok(mountpoint) = podman_command_output(inspect, false) else {
-        return 0;
-    };
-    if mountpoint.is_empty() {
-        return 0;
+    let mut probe = podman_command();
+    probe.args(mirror_repo_size_probe_args(project_name));
+    match podman_command_output(probe, false) {
+        Ok(out) => tillandsias_core::config::parse_repo_size_kb(&out),
+        Err(e) => {
+            eprintln!(
+                "[tillandsias] forge source budget: could not measure the {project_name} mirror \
+                 ({e}); using the floor"
+            );
+            0
+        }
     }
-    let Ok(output) = Command::new("git")
-        .args(["-C", &mountpoint, "count-objects", "-v", "-H"])
-        .output()
-    else {
-        return 0;
-    };
-    if !output.status.success() {
-        return 0;
-    }
-    tillandsias_core::config::parse_size_pack_kb(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// The podman argv for [`forge_mirror_pack_size_kb`]: `count-objects -v`
+/// (KiB, no `-H`) inside the project's mirror container, on the repository
+/// path, not the volume root.
+fn mirror_repo_size_probe_args(project_name: &str) -> Vec<String> {
+    vec![
+        "exec".into(),
+        format!("tillandsias-git-{project_name}"),
+        "git".into(),
+        "-C".into(),
+        format!("/srv/git/{project_name}"),
+        "count-objects".into(),
+        "-v".into(),
+    ]
 }
 
 /// In-container mount point of the DURABLE spec-index tier (order 801-a2by).
@@ -17627,6 +17882,16 @@ fn maybe_spawn_vsock_listener(
         // `graceful_shutdown_async` doesn't need a signature change.
         // @trace spec:vsock-transport, spec:vm-provisioning-lifecycle
         let state = vsock_server::VmStateHandle::new();
+        // Order 1420-4grt: route this process's typed progress events (image
+        // builds) to the connections subscribed to Progress.
+        let progress_state = state.clone();
+        progress_sink::install(move |event| progress_state.publish_progress(event));
+        // Order 472 slice 3: dependency-node transitions (the CA bundle first)
+        // reach connections subscribed to FlowState.
+        let flow_state = state.clone();
+        flow_sink::install(move |source, from, to, reason| {
+            flow_state.publish_flow(source, from, to, reason)
+        });
 
         // Advancer: flip Starting → Ready once /run/podman/podman.sock
         // appears, or Starting → Failed after 60s. Cheap filesystem
@@ -18281,8 +18546,8 @@ async fn run_headless_async(
 
     // @trace spec:tillandsias-vault — revoke per-container AppRole tokens
     // before exit so vault audit reflects clean shutdown. The Vault
-    // container itself is preserved across tray restarts (data lives on the
-    // `tillandsias-vault-data` named volume).
+    // container itself is preserved across tray restarts (data lives in the
+    // `<cache>/vault-data` host directory).
     #[cfg(feature = "vault")]
     {
         vault_bootstrap::revoke_pending_container_tokens(false).await;
@@ -23322,6 +23587,79 @@ mod tests {
         assert_eq!(next_shutdown_poll_delay_ms(250), 500);
         assert_eq!(next_shutdown_poll_delay_ms(500), SHUTDOWN_POLL_CAP_MS);
         assert_eq!(next_shutdown_poll_delay_ms(u64::MAX), SHUTDOWN_POLL_CAP_MS);
+    }
+
+    // ---- order 472: the CaBundle -> Proxy generation edge -------------------
+
+    #[test]
+    fn proxy_args_label_the_ca_generation_and_keep_the_image_last() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("intermediate.crt"), "CERT-A").unwrap();
+        let args = build_proxy_run_args(dir.path(), "tillandsias-proxy:v1");
+        let gen_a = ca_generation(dir.path()).unwrap();
+        assert_eq!(gen_a.len(), 16);
+        assert!(has_arg(
+            &args,
+            &format!("{PROXY_CA_GENERATION_LABEL}={gen_a}")
+        ));
+        assert_eq!(
+            args.last().map(String::as_str),
+            Some("tillandsias-proxy:v1")
+        );
+        // A rotation publishes different bytes, so the generation moves.
+        std::fs::write(dir.path().join("intermediate.crt"), "CERT-B").unwrap();
+        assert_ne!(ca_generation(dir.path()).unwrap(), gen_a);
+    }
+
+    #[test]
+    fn a_proxy_started_before_a_rotation_is_stale() {
+        assert_eq!(
+            proxy_ca_check(Ok(Some("aaaa".into())), Some("bbbb".into())),
+            ProxyCaCheck::Stale {
+                running: Some("aaaa".into()),
+                on_disk: "bbbb".into()
+            }
+        );
+        assert_eq!(
+            proxy_ca_check(Ok(Some("aaaa".into())), Some("aaaa".into())),
+            ProxyCaCheck::Current
+        );
+    }
+
+    #[test]
+    fn an_unlabelled_proxy_is_stale_and_an_unreadable_one_is_kept() {
+        assert!(matches!(
+            proxy_ca_check(Ok(None), Some("bbbb".into())),
+            ProxyCaCheck::Stale { running: None, .. }
+        ));
+        assert_eq!(
+            proxy_ca_check(Err(()), Some("bbbb".into())),
+            ProxyCaCheck::Unknown
+        );
+        assert_eq!(
+            proxy_ca_check(Ok(Some("aaaa".into())), None),
+            ProxyCaCheck::Unknown
+        );
+    }
+
+    /// The pre-fix defect was an unconditional early return for a running
+    /// proxy. This pins that the check sits between the running test and the
+    /// return, so deleting it fails here rather than in a user's forge.
+    #[test]
+    fn ensure_proxy_running_checks_the_ca_generation_before_returning_early() {
+        let body = source_window(
+            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
+            "fn ensure_proxy_running(",
+        );
+        let running = body
+            .find("container_running(\"tillandsias-proxy\")")
+            .expect("the running test");
+        let check = body.find("proxy_ca_check(").expect("the generation check");
+        let early = body.find("return Ok(());").expect("the early return");
+        assert!(
+            running < check && check < early,
+            "check must gate the early return"
+        );
     }
 
     #[test]
@@ -29023,6 +29361,36 @@ esac
     /// caught this — only a test that reaches the LAUNCH PATH can.
     ///
     /// @trace order:997-e4v2, spec:forge-hot-cold-split
+    /// Order 1445-7u63: the size probe asks the MIRROR CONTAINER, on the
+    /// REPOSITORY path, in KiB. Each clause pins one of the three defects that
+    /// made the pre-fix probe return 0 on every rootless host: reading the
+    /// subuid-owned volume as the host user, measuring the volume root instead
+    /// of `/srv/git/<project>`, and `-H` output the KiB parser cannot read.
+    #[test]
+    fn mirror_size_probe_execs_in_the_mirror_on_the_repo_path_in_kib() {
+        let args = mirror_repo_size_probe_args("tillandsias");
+        assert_eq!(
+            args,
+            [
+                "exec",
+                "tillandsias-git-tillandsias",
+                "git",
+                "-C",
+                "/srv/git/tillandsias",
+                "count-objects",
+                "-v"
+            ]
+        );
+        assert!(
+            !args.iter().any(|a| a == "-H"),
+            "human-readable sizes are not KiB"
+        );
+        assert!(
+            !args.iter().any(|a| a == "volume" || a == "inspect"),
+            "the host cannot read a rootless volume's mountpoint"
+        );
+    }
+
     #[test]
     fn forge_src_is_a_hot_tmpfs_sized_by_compute_hot_budget() {
         let spec = forge_hot_src_tmpfs("a-project-with-no-mirror-on-this-host");
@@ -31296,11 +31664,93 @@ esac
     /// storage dir and NEVER the inference model cache (the operator's
     /// ephemeral doctrine covers the guest+vault, not the downloaded
     /// models) nor the cache dir itself (build-state, images metadata).
+    /// Order 1437-qza3, criterion 4, KEYRING BRANCH: with the share in the
+    /// keychain the store, the audit log, the models and the keyring entries
+    /// are announced as preserved and none as destroyed.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn reset_plan_with_a_keyring_preserves_the_store_and_the_share() {
+        use vault_bootstrap::ResetVaultDisposition as D;
+        for d in [D::Keep, D::KeepUnverified] {
+            let (destroyed, preserved) = reset_state_plan(d);
+            let (destroyed, preserved) = (destroyed.join("\n"), preserved.join("\n"));
+            for kept in [
+                "vault-data",
+                "vault-audit",
+                "models",
+                "vault-shamir-share-v1",
+                "vault-root-token-v1",
+            ] {
+                assert!(preserved.contains(kept), "{d:?}: {kept} must be preserved");
+                assert!(
+                    !destroyed.contains(kept),
+                    "{d:?}: {kept} must not be destroyed"
+                );
+            }
+        }
+    }
+
+    /// Order 1437-qza3, KEYRING-LESS BRANCH (operator ruling 2026-09-27): the
+    /// store and the fallback files are announced as destroyed, with the
+    /// reason; models and the audit log are still preserved.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn reset_plan_without_a_keyring_destroys_the_store_and_says_why() {
+        let (destroyed, preserved) =
+            reset_state_plan(vault_bootstrap::ResetVaultDisposition::ClearKeyringless);
+        let (destroyed, preserved) = (destroyed.join("\n"), preserved.join("\n"));
+        assert!(destroyed.contains("vault-data"), "{destroyed}");
+        assert!(
+            destroyed.contains("NO KEYRING"),
+            "the reason is named: {destroyed}"
+        );
+        assert!(
+            destroyed.contains("fallback_vault-shamir-share-v1"),
+            "{destroyed}"
+        );
+        assert!(!preserved.contains("vault-data"), "{preserved}");
+        assert!(preserved.contains("models") && preserved.contains("vault-audit"));
+    }
+
+    /// Both reset bodies route through the keyring disposition, and neither
+    /// calls the keychain clearer, which is uninstall's alone.
+    #[test]
+    fn reset_bodies_decide_by_keyring_and_never_clear_the_keychain() {
+        let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        for opener in [
+            "fn run_reset_state(debug: bool)",
+            "fn run_reset_guest(debug: bool)",
+        ] {
+            let start = src.find(opener).expect(opener);
+            let body = &src[start..start + src[start..].find("\n}\n").expect("end")];
+            assert!(
+                body.contains("reset_vault_disposition("),
+                "{opener} must decide by keyring"
+            );
+            assert!(
+                !body.contains(&["clear_host", "_vault_credentials("].concat()),
+                "{opener} must not clear the keychain"
+            );
+        }
+    }
+
     #[test]
     fn reset_guest_wipe_paths_exclude_model_cache() {
         let cache_dir = Path::new("/home/u/.cache/tillandsias");
         let paths = reset_guest_wipe_paths(cache_dir);
-        assert_eq!(paths, vec![cache_dir.join("vault-data")]);
+        // Order 1437-qza3: the Vault store and its audit log are operator data.
+        for kept in ["vault-data", "vault-audit"] {
+            let kept = cache_dir.join(kept);
+            assert!(
+                !paths.iter().any(|p| *p == kept || kept.starts_with(p)),
+                "{} must never be in the reset wipe set: {paths:?}",
+                kept.display()
+            );
+        }
+        assert!(
+            paths.is_empty(),
+            "nothing under the cache dir is derived state: {paths:?}"
+        );
         let models = cache_dir.join("models");
         assert!(
             !paths.iter().any(|p| *p == models || models.starts_with(p)),

@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: select-work-batch-and-next-honour-a-model-tier
+    field: context
+    value: |-
+      T1 of the 2026-09-27 trims. The selector already routes by executor
+      class for the low-end floor (HOST_TIER, TIER_TAGS,
+      refused:no-tier-work in scripts/select-work-batch.sh) and pins it with
+      litmus:capability-routing-shape; this is the same shape keyed on the
+      implementer_tier scalar 1437-khnx projects. Rule: a haiku caller's pool
+      is exactly the haiku rows; a sonnet caller takes sonnet plus untagged;
+      an opus caller takes everything but haiku unless --tier-any. The caller
+      STATES its tier (env TILLANDSIAS_MODEL_TIER or --tier); nothing is
+      inferred from a model name. Canonical rule:
+      methodology/distributed-work.yaml -> cycle_batch_triage.model_tier_routing.
+
+
+      [2026-09-27T17:57:34Z macuahuitl] RULING 2026-09-27 (operator, via the coordinator): "No size tags get Opus."
+      This replaces the first design's "sonnet takes sonnet plus untagged".
+      implementer_tier is a FLOOR: a caller at tier T takes rows whose floor is
+      at or below T, ranked AT-tier first so a bigger model drains smaller work
+      only when its own tier is empty; an untagged row's floor is opus. Haiku
+      callers therefore take haiku rows only (a floor of haiku is the only floor
+      at or below haiku) and refuse on an empty pool. The batch: line prints
+      tier=<t> and tier_fallback=<n>. Canonical rule:
+      methodology/distributed-work.yaml -> cycle_batch_triage.model_tier_routing.
+    ts: "2026-09-27T17:57:34Z"
+    host: macuahuitl
+
+events:
+  - packet_id: select-work-batch-and-next-honour-a-model-tier
+    event:
+      type: note
+      ts: "2026-09-27T17:57:34Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-09-27 relayed by the coordinator (efficiency trims 1437-62g8)

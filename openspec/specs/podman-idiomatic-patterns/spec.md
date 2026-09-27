@@ -267,6 +267,69 @@ short next-step hint before redacted argv details.
 - **AND** the error body SHALL include a one-line cause, a `next:` hint, and
   a redacted `podman run` argv
 
+### Requirement: Tillandsias-owned podman configuration is explicit on every invocation and wins over system defaults
+<!-- req-id: 93980732 -->
+- **ID**: podman-idiomatic-patterns.config.owned-and-explicit@v1
+- **Modality**: MUST
+- **Measurable**: true
+
+Every podman invocation Tillandsias makes (`podman_command()` in the headless
+crate, the `tillandsias-podman` wrapper, the guest-side launchers, and every
+script under `scripts/` that runs podman on the runtime's behalf) SHALL point
+podman at Tillandsias-OWNED configuration files under the Tillandsias config
+directory — `<config>/containers/containers.conf`, `<config>/containers/registries.conf`
+and, where the isolated graphroot is in use, `<config>/containers/storage.conf`
+(`<config>` is `~/.tillandsias/config` on every platform — `TILLANDSIAS_HOME/config`,
+per `host-state-lifecycle`; AMENDED 2026-09-27, 1438-pk9j, from the
+`~/.config/tillandsias` the 1437-8c6p text named) — through podman's own environment contract (`CONTAINERS_CONF`,
+`CONTAINERS_REGISTRIES_CONF`, `CONTAINERS_STORAGE_CONF`, or the override
+variant, whichever the implementer proves gives Tillandsias's values
+precedence). A key Tillandsias sets in its own file SHALL take effect even
+when `/etc/containers/*.conf`, `/usr/share/containers/*.conf` or the user's
+`~/.config/containers/*.conf` sets the same key to a different value. The
+runtime SHALL NOT edit the user's `~/.config/containers/containers.conf` in
+place: the pasta IPv4-only option, the loopback-stub `dns_servers` entry and
+the proxy-environment cleanup that `--init` writes there today SHALL move
+into the owned file. The owned files are operator data
+(`host-state-lifecycle`): a reset regenerates their content but never removes
+the directory; uninstall removes them and, for a legacy install that edited
+the user's file, reverts only the Tillandsias-marked lines.
+
+Operator directive 2026-09-27: "we might want to store there our .wslconfig,
+.podmanconfigs, etc, and have them all always explicitly use our config over
+the system defaults."
+
+@trace spec:podman-idiomatic-patterns, spec:podman-registries-config, spec:host-state-lifecycle
+
+#### Scenario: A conflicting user default is not honoured
+- **WHEN** the user's `~/.config/containers/containers.conf` sets
+  `[network] pasta_options = ["--ipv6-only"]` (or any value Tillandsias's file
+  contradicts) and Tillandsias runs `podman info --format '{{.Host.NetworkBackendInfo}}'`
+  (or an equivalent probe of the effective config) through `podman_command()`
+- **THEN** the effective value SHALL be the one from
+  `<config>/containers/containers.conf`
+- **AND** the user's file SHALL be byte-identical before and after `--init`.
+- Pre-fix result: FAILS — `--init` edits the user's file in place
+  (`ensure_pasta_options_ipv4_only`, `ensure_containers_conf_dns_servers`,
+  `ensure_containers_conf_no_proxy_env`) and sets no config environment
+  variable, so the user's other keys and the system defaults are what podman
+  reads.
+
+#### Scenario: Every invocation carries the contract
+- **WHEN** the podman argv builders and the scripts that run podman are
+  enumerated by a source-shape fixture
+- **THEN** each SHALL either go through `podman_command()` / the wrapper or
+  set the same environment variables itself
+- **AND** the fixture SHALL print the invocation sites that do neither, so a
+  new bare `podman` call is named.
+
+#### Scenario: Registries file is owned too
+- **WHEN** Tillandsias resolves an unqualified image name
+- **THEN** the short-name policy SHALL come from `<config>/containers/registries.conf`
+- **AND** the developer copy that `scripts/setup-podman-registries.sh` places
+  in `~/.config/containers/registries.conf` SHALL no longer be required for
+  the user runtime (it remains a developer convenience).
+
 ## Invariants
 
 ### Invariant: No poll loop for container state

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-per-project-branch-discipline-seed-tillandsias-branch-discipline-yaml-read-by-a-discipline-verb-and-an-mcp-tool-so-the-integration-branch-the-work-ref-grammar-and-the-protected-default-branch-are-data-a-tool-asks-for-never-a-constant-it-hardcodes
+    field: status
+    value: in_progress
+    ts: "2026-09-27T19:43:08Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: a-per-project-branch-discipline-seed-tillandsias-branch-discipline-yaml-read-by-a-discipline-verb-and-an-mcp-tool-so-the-integration-branch-the-work-ref-grammar-and-the-protected-default-branch-are-data-a-tool-asks-for-never-a-constant-it-hardcodes
+    event:
+      type: note
+      ts: "2026-09-27T19:43:08Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        claimed by macos-tlatoanis-macbook-air-claude-20260927t194306z on coordinator routing

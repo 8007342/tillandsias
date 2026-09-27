@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-tray-provision-console-prints-raw-phase-lines
+    event:
+      type: finding
+      ts: "2026-09-27T23:25:33Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        SMOKE, yolanda 2026-09-27, operator-authorized; local build of work/1439-p853 (contains ev7i) with a staged musl headless. PIPED (the installer's shape): --reset-state > file on a real first provision, rc=0 in 83 s. 0 ESC bytes; every line the tray itself writes is ASCII (phases as renderer lines, "state wiped - reprovisioning from scratch...", "RESULT: VM Ready - control wire up +"). PASS for the piped half of the closure. RESIDUAL: 69 non-ASCII bytes remain, all U+2192 arrows in guest subprocess output passed straight through (systemd "Created symlink '...' -> '...'"), so PowerShell 5.1 still garbles THOSE lines. Minor: pre-registration prints six "pending" lines up front. MEASURED LIMIT, CONHOST COLOURS UNREACHABLE: the tray is windows_subsystem="windows" and deliberately never attaches a console (AttachConsole(ATTACH_PARENT_PROCESS) was tried and reverted because it bypassed PowerShell pipe capture; main.rs note). So --provision-once typed in conhost prints NOTHING (screenshot: only the prompt), and the TTY tier never runs. The coloured-bar half of this closure needs a console decision first: attach the parent console only when stderr is not already redirected. Not closed.
