@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-side-install-and-login-output-reaches-the-host-as-raw-bytes-not-structured-progress
+    event:
+      type: progress
+      ts: "2026-09-27T11:05:41Z"
+      agent_id: linux-lenovinha-claude-20260927t110540z
+      host: lenovinha
+      summary: |
+        Guest/wire slice on work/1420-4grt at 121873cdd (awaiting relay): the vsock server publishes ProgressPush to Progress subscribers only and advertises CAP_PROGRESS_PUSH_V1; control-wire::subscription_topics derives a host's Subscribe list (Progress only on the cap); progress_sink routes in-process image-build events. Tests: control-wire 90/90, 2 guest handshake tests (opt-in both ways), progress_sink 1/1, clippy rc=0 in three feature sets, preflight ran=120 refused=0. OPEN: (1) a bridge from guest child-process --init/--github-login output to publish_progress; (2) the macOS host rendering and subscribing via subscription_topics, keeping the raw sink for QR bytes only (the closure, measured on macOS); (3) the Windows HvSocket half.
