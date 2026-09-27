@@ -199,7 +199,10 @@ mod tests {
         let v = DevicePollView::new(Tier::TrueColor, 900);
         let line = v.activity(123);
         let visible = strip_sgr(&line);
-        assert!(visible.ends_with("12:57"), "900s - 123s = 777s = 12:57: {visible:?}");
+        assert!(
+            visible.ends_with("12:57"),
+            "900s - 123s = 777s = 12:57: {visible:?}"
+        );
         assert!(!visible.chars().any(char::is_alphabetic), "{visible:?}");
     }
 
