@@ -38,6 +38,9 @@ PLAN="$_validator"
 # jq is still needed by the forge-plan MCP server that arm 6 drives.
 command -v jq >/dev/null 2>&1 || { echo "skip:branch-discipline-verb:no-jq-for-the-mcp-server"; exit 0; }
 jget() { "$PLAN" json get "$@"; }
+# First line of a captured value, by parameter expansion: no pipeline, so no
+# SIGPIPE can decide a verdict under pipefail (check-sigpipe-verdict-pipelines-added).
+first() { printf '%s' "${1%%$'\n'*}"; }
 command -v git >/dev/null 2>&1 || { echo "skip:branch-discipline-verb:no-git"; exit 0; }
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
@@ -64,12 +67,12 @@ feat_out="$(dis check-ref refs/heads/feature-x --root "$ROOT" 2>&1)"; feat_rc=$?
 sed 's/ref_grammar: warn/ref_grammar: enforced/' "$SEED" > "$W/strict.yaml"
 strict_out="$(dis check-ref refs/heads/feature-x --root "$ROOT" --seed "$W/strict.yaml" 2>&1)"; strict_rc=$?
 arm2=1
-[ "$main_rc" -eq 1 ] && [ "$(printf '%s\n' "$main_out" | sed -n 1p)" = "refused:discipline:default-branch-protected:enforced" ] || arm2=0
-printf '%s\n' "$main_out" | grep -q '^why: ' || arm2=0
-printf '%s\n' "$main_out" | grep -q '^remedy: push to main denied: this project uses branch linux-next|osx-next|windows-next for integration and work/' || arm2=0
-[ "$work_rc" -eq 0 ] && [ "$(printf '%s\n' "$work_out" | sed -n 1p)" = "ok:discipline:work-ref" ] || arm2=0
-[ "$feat_rc" -eq 0 ] && [ "$(printf '%s\n' "$feat_out" | sed -n 1p)" = "warn:discipline:ref-outside-grammar" ] || arm2=0
-[ "$strict_rc" -eq 1 ] && [ "$(printf '%s\n' "$strict_out" | sed -n 1p)" = "refused:discipline:ref-outside-grammar:enforced" ] || arm2=0
+[ "$main_rc" -eq 1 ] && [ "$(first "$main_out")" = "refused:discipline:default-branch-protected:enforced" ] || arm2=0
+grep -q '^why: ' <<<"$main_out" || arm2=0
+grep -q '^remedy: push to main denied: this project uses branch linux-next|osx-next|windows-next for integration and work/' <<<"$main_out" || arm2=0
+[ "$work_rc" -eq 0 ] && [ "$(first "$work_out")" = "ok:discipline:work-ref" ] || arm2=0
+[ "$feat_rc" -eq 0 ] && [ "$(first "$feat_out")" = "warn:discipline:ref-outside-grammar" ] || arm2=0
+[ "$strict_rc" -eq 1 ] && [ "$(first "$strict_out")" = "refused:discipline:ref-outside-grammar:enforced" ] || arm2=0
 if [ "$arm2" = 1 ]; then
     ok "arm 2: main refused (enforced, seeded remedy), work ref ok, feature-x warn here and refused under an enforced seed"
 else
@@ -81,8 +84,8 @@ BARE="$W/bare"; mkdir -p "$BARE"
 git -C "$BARE" -c init.defaultBranch=main init -q
 bare_main="$(dis check-ref refs/heads/main --root "$BARE" 2>&1)"; bare_rc=$?
 bare_other="$(dis check-ref refs/heads/anything-at-all --root "$BARE" 2>&1)"; other_rc=$?
-if [ "$bare_rc" -eq 0 ] && [ "$(printf '%s\n' "$bare_main" | sed -n 1p)" = "ok:discipline:default-branch:level=0" ] \
-   && printf '%s\n' "$bare_main" | grep -q '^source=default level=0 enforcement=advised$' \
+if [ "$bare_rc" -eq 0 ] && [ "$(first "$bare_main")" = "ok:discipline:default-branch:level=0" ] \
+   && grep -q '^source=default level=0 enforcement=advised$' <<<"$bare_main" \
    && [ "$other_rc" -eq 0 ]; then
     ok "arm 3: no seed -> ok:discipline:default-branch:level=0, source=default level=0 enforcement=advised, nothing refused"
 else
@@ -131,9 +134,9 @@ mcp_out="$(printf '%s\n' \
     '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
     '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"discipline_show","arguments":{}}}' \
     | TILLANDSIAS_PLAN_BIN="$PLAN" TILLANDSIAS_PLAN_INDEX="$ROOT/plan/index.yaml" bash "$MCP" 2>/dev/null)"
+tool_names="$(printf '%s\n' "$mcp_out" | jget -r 'select(.id == 2) | .result.tools[].name' 2>/dev/null)"
 listed=false
-printf '%s\n' "$mcp_out" | jget -r 'select(.id == 2) | .result.tools[].name' 2>/dev/null \
-    | grep -qx 'discipline_show' && listed=true
+grep -qx 'discipline_show' <<<"$tool_names" && listed=true
 # Both sides come from the same serializer, so the bytes are compared as-is.
 via_mcp="$(printf '%s\n' "$mcp_out" | jget -r 'select(.id == 3) | .result.content[0].text' 2>/dev/null)"
 via_verb="$(dis show --json --root "$ROOT" 2>/dev/null)"
