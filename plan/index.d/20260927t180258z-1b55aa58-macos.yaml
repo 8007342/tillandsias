@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-binary-projects-size-and-implementer-tier-scalars
+    event:
+      type: progress
+      ts: "2026-09-27T18:02:58Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t180258z
+      host: macos
+      summary: |
+        Implementation complete on work/1437-khnx at b82920c6e (feature commit 5b1de5bd0, merged over origin/linux-next). query --json projects size and implementer_tier, from the top-level scalar or else a notes line; a top-level value or set-field correction wins. Built to the operator ruling of 2026-09-27 ("No size tags get Opus"): an untagged row projects implementer_tier=opus, and a new implementer_tier_source (field|notes|default) keeps a defaulted opus distinguishable from a stated one. Unknown vocabulary is refused by set-field (refused:set-field:tier-vocabulary) and by check --strict-fragments (refused:tier-vocabulary, exit 1). Evidence (darwin, TILLANDSIAS_PLAN_BIN and CARGO_TARGET_DIR unset): cargo test projection_carries_size_and_implementer_tier 1 passed; tillandsias-plan crate 456 passed, 0 failed suites; clippy -D warnings clean; musl zigbuild --tests ok; scripts/test-packet-tier-fields.sh ok:packet-tier-fields:4/4, and 0/4 against the pre-fix binary (the control); the live ledger passes check --strict-fragments; 20 of today's rows project via the notes fallback. Validator surface rebuilt, check-plan-binary-current ok. All 9 deciders ok; allocator no-collision (gate step 272); litmus-covering 5 specs ok. status/next text output unchanged: the projection is the consumer surface, since changing a tab-separated line would break its parsers. Please relay; close after landing.
