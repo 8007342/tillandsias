@@ -264,7 +264,8 @@ rm -rf "$XT"/xbranch.* 2>/dev/null
 #     and its verdict is the one arm 2 reads.
 out="$(cd "$ROOT" && TMPDIR="$XT" TILLANDSIAS_PLAN_BIN="$W/free/tillandsias-plan" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
 _left="$(find "$XT" -maxdepth 1 -name 'xbranch.*' | grep -c .)"
-if [ "$rc" -eq 0 ] && [ "$_left" -eq 0 ] && printf '%s' "$out" | grep -q '^ok:cross-branch-claims:'; then
+case "$out" in ok:cross-branch-claims:*) _okv=1 ;; *) _okv=0 ;; esac
+if [ "$rc" -eq 0 ] && [ "$_left" -eq 0 ] && [ "$_okv" -eq 1 ]; then
     ok "a normal run leaves no extract and still reads ok"
 else
     bad "a normal run changed" "rc=$rc left=$_left out=[$out]"
