@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: download-manifest-in-tillandsias-core-records-every-fetched-artefact-under-the-cache-root
+    order: 1437-jdgg
+    parent_order: 1437-8c6p
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [cache, downloads, manifest, core, linux, uninstall]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-core/src/downloads.rs
+      - crates/tillandsias-core/src/lib.rs
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/runtime_assets.rs
+      - crates/tillandsias-headless/src/image_builder.rs
+      - scripts/test-download-manifest-coverage.sh
+      - openspec/litmus-tests/litmus-download-manifest-coverage.yaml
+    title: |
+      `<cache>/downloads.manifest.json` written through one `tillandsias_core::downloads` recorder at every host download site (runtime asset bundles, prebuilt tools, host Chromium, nix store paths, the package cache root, the model directory root); `--diagnose` lists it; a coverage fixture names every large uncovered file under the cache root
+    context: |
+      Spec: host-state-lifecycle "Every download is recorded in one manifest under the cache
+      root" (all four scenarios). Operator: "we'll need a manifest in our download cache to make
+      sure we remove everything we download".
+
+      Today: no manifest. Closest records: InitBuildState (init-build-state.json, built images
+      only), runtime/<ver>/manifest.json (embedded assets), the model directory's .preloaded and
+      .tools/.engine-set markers. Linux cache root contents (audit): models/, vault-data/,
+      vault-audit/, packages/, forge-projects/<project>/..., forge-gitconfig/, chromium,
+      recipe-cache, logs/, metrics-archive/, capabilities.json, init-build-state.json,
+      cache_version; data dir: runtime/<ver>/, nix-store, nix-cache, podman/.
+
+      Do: (1) tillandsias_core::downloads: Manifest {entries: Vec<Entry>}, Entry {path (absolute),
+      kind (file|directory-root), source (URL or producer name), size or digest when known,
+      recorded_at}; record(entry) replaces an existing entry for the same path; load() tolerates
+      a corrupt file by renaming it downloads.manifest.json.corrupt-<ts> and starting fresh;
+      diagnose_section() renders every entry with exists:true|false; (2) call record() at every
+      Linux host download site: runtime_assets extraction root, ensure_forge_prebuilt_tools'
+      host-side cache when the host fetches it, the host Chromium launcher's download, nix-store
+      population, and once each for the models root and the packages root by the code that
+      creates the bind mount; (3) `tillandsias --diagnose` gains a `downloads:` section;
+      (4) fixture scripts/test-download-manifest-coverage.sh: under a hermetic HOME after --init
+      (or over a recorded fixture tree when no init is possible — name which), every regular file
+      > 1 MiB under the cache root is covered by an entry (itself or an ancestor directory-root)
+      and every uncovered path is printed; (5) macOS and Windows download sites (rootfs
+      tarball/qcow2, the staged headless binary) are recorded by 1437-av8u and 1437-3iux
+      calling the same recorder — say so in the module doc so those packets do not re-invent
+      it; the recorder must build on all three targets.
+    exit_criteria:
+      - 'after a hermetic --init on Linux, scripts/test-download-manifest-coverage.sh reports zero uncovered files > 1 MiB under the cache root (pre-fix result: FAILS — no manifest exists, every file is uncovered)'
+      - 'cargo test -p tillandsias-core downloads:: covers record/replace, corrupt-file recovery and the directory-root ancestor rule (pre-fix result: FAILS — module absent)'
+      - 'tillandsias --diagnose prints a downloads: section with one line per entry and exists:true|false (pre-fix result: FAILS — no such section)'
+      - 'a reset does not edit the manifest: the coverage fixture asserts the manifest digest is unchanged across --reset-guest in its live arm, or a unit test pins that reset code does not import the recorder (pre-fix result: passes vacuously — must stay green)'
+    verifiable_closure: |
+      cargo test -p tillandsias-core downloads passes and bash scripts/test-download-manifest-coverage.sh exits 0 on a Linux host after --init; pre-fix: both FAIL.
+    depends_on: []
+    notes: |
+      size: L  implementer_tier: opus
+      Cross-crate (core + headless, consumed by both trays) and it defines the surface uninstall
+      deletes from — a recorder that records the wrong path deletes the wrong path later, so the
+      path discipline (absolute, canonicalised, under a Tillandsias root) is the security-relevant
+      part. The 1 MiB coverage floor is the spec's; lower it if a real download is smaller.
+    next_action: 'write tillandsias_core::downloads with its unit tests, then wire record() at the runtime_assets extraction and the models-root mount creation and run the coverage fixture to see what is still uncovered'
+    provenance: |
+      Filed by macuahuitl (linux-macuahuitl-claude-20260927t163835z), 2026-09-27, under umbrella 1437-8c6p.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:38:35Z"
+        agent_id: "linux-macuahuitl-claude-20260927t163835z"
+        host: macuahuitl
+        summary: |-
+          The download manifest: one recorder, every host download site, a coverage fixture that names what is missed.

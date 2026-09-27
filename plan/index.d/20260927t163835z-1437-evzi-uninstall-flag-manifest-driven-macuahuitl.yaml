@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: tillandsias-uninstall-flag-on-every-binary-removes-everything-manifest-driven
+    order: 1437-evzi
+    parent_order: 1437-8c6p
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [uninstall, cache, vault, credentials, keyring, linux, macos, windows]
+    estimated_hours: 10
+    owned_files:
+      - crates/tillandsias-core/src/uninstall.rs
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-macos-tray/src/main.rs
+      - crates/tillandsias-windows-tray/src/main.rs
+      - scripts/uninstall.sh
+      - scripts/install-windows.ps1
+      - scripts/test-uninstall-removes-everything.sh
+      - scripts/test-uninstall-keeps-models.sh
+      - openspec/litmus-tests/litmus-uninstall-keeps-models.yaml
+      - openspec/litmus-tests/litmus-uninstall-removes-everything.yaml
+    title: |
+      `tillandsias --uninstall` / `tillandsias-tray --uninstall` exist on all three binaries and are the ONLY path that removes operator data: print the full list, stop everything, destroy the derived set, remove every manifest entry, the Vault store, the models, every keyring entry including the install anchor, revert merged system files; `scripts/uninstall.sh` and `-Uninstall/-Purge` delegate to it; keep-models fixtures retired
+    context: |
+      Spec: host-state-lifecycle "Manual uninstall removes everything, manifest-driven" (all four
+      scenarios); environment-runtime "Accountable uninstall" (accountability unchanged, --wipe
+      is the default); tillandsias-vault "Uninstall is the only path that clears".
+
+      Today: no --uninstall flag on any binary. scripts/uninstall.sh removes the binary, libs,
+      ~/.local/share/tillandsias, ~/.config/tillandsias, ~/.local/state/tillandsias, PATH blocks,
+      desktop entries; keeps the cache unless --wipe (a hardcoded ~/.cache path, not XDG-aware);
+      keeps models under TILLANDSIAS_RESET_KEEP_MODELS; never touches keyring entries, podman
+      containers/volumes/secrets/networks or the non-forge images. install-windows.ps1 -Purge
+      unregisters the distro, removes cache/logs/wsl, calls Clear-TillandsiasVaultHostCredentials,
+      leaves state\, wsl-swap.vhdx, wsl-build and the .wslconfig keys it added. macOS
+      uninstall.sh preserves the VM directory unless --wipe.
+
+      Do: (1) tillandsias_core::uninstall: plan() builds the ordered removal list from the
+      platform's derived set, the download manifest (or "manifest absent" — print it), the
+      operator-data roots host-state-lifecycle names, the keyring entries INCLUDING
+      installation-uuid-v1 / tillandsias-vm-uuid, the binary and launcher registrations, and
+      the marked blocks of merged system files; execute() prints the list, stops the tray or
+      headless process and every tillandsias-* container, removes in order, reverts (never
+      deletes) merged files, reports; (2) --uninstall on headless, macOS tray, Windows tray
+      dispatching to it (macOS/Windows: require_no_live_tray first, like reset); (3)
+      clear_host_vault_credentials and the two tray siblings are called from here and nowhere
+      else (1437-qza3's source-shape arm pins it); (4) scripts/uninstall.sh: delegate to the
+      binary when present, fall back to its own list and print that it did; --wipe accepted as a
+      no-op; keep-models variable ignored; (5) install-windows.ps1 -Uninstall and -Purge:
+      delegate likewise; (6) retire scripts/test-uninstall-keeps-models.sh and
+      litmus-uninstall-keeps-models.yaml with a one-line note citing 2026-09-27 (they pin the
+      superseded contract); keep test-uninstall-preserves-vm (macOS VM dir) only if the spec
+      still preserves it — it does not: uninstall removes the VM dir too; retire with the note;
+      (7) fixture scripts/test-uninstall-removes-everything.sh: hermetic HOME with a seeded
+      manifest, store, models and a marked .wslconfig-style file; after --uninstall none of the
+      listed paths exist, the merged file keeps only its user lines, a decoy project tree is
+      untouched (reuse the 1401-p3k7 seam: every absolute path is seamed, fail closed).
+    exit_criteria:
+      - 'scripts/test-uninstall-removes-everything.sh: after --uninstall no manifest path, no store, no models, no manifest remain and the decoy project tree is untouched (pre-fix result: FAILS — no --uninstall flag exists)'
+      - 'the merged-file arm: only the marked block is removed and the user lines are byte-identical (pre-fix result: FAILS — no un-merge exists)'
+      - 'the absent-manifest arm prints uninstall: manifest absent — removed known roots only and still removes the roots (pre-fix result: FAILS)'
+      - 'scripts/test-reset-state-contract.sh clearer-free arm stays green with the clearers now called from uninstall only (pre-fix result: n/a until 1437-qza3 lands; must be green after)'
+      - 'the keep-models fixtures and litmus tests are retired with a dated note, and litmus-bindings no longer names them (pre-fix result: FAILS — they are bound and green on the superseded behaviour)'
+    verifiable_closure: |
+      bash scripts/test-uninstall-removes-everything.sh exits 0 with all arms; cargo test -p tillandsias-core uninstall passes; pre-fix: both FAIL.
+    depends_on:
+      - download-manifest-in-tillandsias-core-records-every-fetched-artefact-under-the-cache-root
+      - linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    notes: |
+      size: L  implementer_tier: opus
+      Destructive deletion of credentials and operator data across three platforms — opus.
+      1401-p3k7's lesson applies verbatim: a faked HOME does not sandbox an absolute path; seam
+      every root and fail closed when a seam is missing. Never run the real --uninstall on the
+      host you are developing on. The macOS and Windows dispatch may be landed by a platform
+      host as a follow-up slice if the linux implementer cannot build them; say so in the
+      closure event and file the slice.
+    next_action: 'write tillandsias_core::uninstall plan()/execute() with seamed roots and its unit tests, wire --uninstall on the headless binary, then the fixture; platform trays follow'
+    provenance: |
+      Filed by macuahuitl (linux-macuahuitl-claude-20260927t163835z), 2026-09-27, under umbrella 1437-8c6p.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:38:35Z"
+        agent_id: "linux-macuahuitl-claude-20260927t163835z"
+        host: macuahuitl
+        summary: |-
+          The one path that removes operator data: a real --uninstall, manifest-driven, on every binary.

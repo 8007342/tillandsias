@@ -1,0 +1,70 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: claude-forge-launches-with-bypass-permissions-consent-pre-accepted-never-prompting
+    order: 1437-y2wu
+    parent_order: 1437-8c6p
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, claude, harness, permissions, entrypoint]
+    estimated_hours: 3
+    owned_files:
+      - images/default/lib-common.sh
+      - images/default/entrypoint-forge-claude.sh
+      - images/default/claude-approvals-vault.sh
+      - scripts/test-claude-forge-bypass-preaccepted.sh
+      - openspec/litmus-tests/litmus-claude-launch-stability-shape.yaml
+    title: |
+      Claude forge: seed `bypassPermissionsModeAccepted: true` in `~/.claude.json` and `skipDangerousModePermissionPrompt: true` in `~/.claude/settings.json` at launch when TILLANDSIAS_HOST_KIND=forge, so the "Bypass Permissions mode" dialog never appears — on a fresh image, after a Vault wipe, with no approvals document
+    context: |
+      Spec: default-image "Forge harness permission bypass is pre-accepted at launch, never
+      prompted" (supersedes the 2026-08-31 "prompt once, then vault it" directive for the bypass
+      consent only; claude-approvals-vault keeps workspace trust, theme and onboarding).
+
+      Today: entrypoint-forge-claude.sh passes --dangerously-skip-permissions (forge-gated) but
+      seed_claude_first_run_defaults seeds only hasCompletedOnboarding and theme; the consent
+      exists only when a previous session's watcher harvested bypassPermissionsModeAccepted into
+      secret/claude/approvals, so the first launch after a Vault wipe prompts. On the operator's
+      own host the dialog is suppressed by skipDangerousModePermissionPrompt: true in
+      ~/.claude/settings.json (user level). 1419-e2sm records the same symptom on a CLI relaunch
+      and asked whether the operator wants the consent manual; answered 2026-09-27: pre-accept.
+
+      Do: (1) extend seed_claude_first_run_defaults (or add seed_claude_bypass_consent called
+      right after it) to write both keys, additively (never overwrite an existing value), ONLY
+      when TILLANDSIAS_HOST_KIND=forge; ~/.claude/settings.json may not exist — create it as
+      {"skipDangerousModePermissionPrompt": true} with mode 0600, or deep-merge; (2) verify
+      against the installed claude which key the dialog reads and record the answer in the
+      fixture header (open question 5 in the plan/issues file) — the seed writes both either
+      way; (3) the ordering apply_claude_config_overlay -> seed -> approvals restore must keep
+      both keys (all three are additive merges; assert it); (4) fixture
+      scripts/test-claude-forge-bypass-preaccepted.sh: source lib-common.sh under a temp HOME,
+      run the seed with HOST_KIND=forge and assert both keys; negative arm HOST_KIND unset asserts
+      neither key is written; a third arm runs the seed over a config that already carries
+      bypassPermissionsModeAccepted: false and asserts it is left alone; bind it in
+      litmus-claude-launch-stability-shape.yaml; (5) update the header comment of
+      claude-approvals-vault.sh to say the bypass consent is seeded, not vaulted.
+    exit_criteria:
+      - 'scripts/test-claude-forge-bypass-preaccepted.sh: forge arm finds both keys after the seed (pre-fix result: FAILS — neither key is written)'
+      - 'non-forge arm finds neither key (pre-fix result: passes — positive control)'
+      - 'an existing explicit false is not overwritten (pre-fix result: passes vacuously — the seed does not touch the key; must stay green after)'
+      - 'a live Claude forge launched from a fresh image with secret/claude/approvals deleted reaches the prompt with no bypass dialog, observed once by a human or a pty capture and noted in the closure event (pre-fix result: FAILS — the dialog appears)'
+    verifiable_closure: |
+      bash scripts/test-claude-forge-bypass-preaccepted.sh exits 0 with all three arms; pre-fix: the forge arm FAILS.
+    depends_on: []
+    notes: |
+      size: M  implementer_tier: sonnet
+      No credentials are touched (the approvals document holds booleans and paths only); a few
+      files with a clear design. Keep the seed gated on TILLANDSIAS_HOST_KIND=forge exactly like
+      the flag. Do not remove claude-approvals-vault.sh — it still carries project trust.
+    next_action: 'add the two-key seed to seed_claude_first_run_defaults gated on HOST_KIND=forge, then write the three-arm fixture and watch the forge arm go red-to-green'
+    provenance: |
+      Filed by macuahuitl (linux-macuahuitl-claude-20260927t163835z), 2026-09-27, under umbrella 1437-8c6p. Supersedes the bypass half of 1419-e2sm.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:38:35Z"
+        agent_id: "linux-macuahuitl-claude-20260927t163835z"
+        host: macuahuitl
+        summary: |-
+          Claude bypass consent becomes a launch-time seed, not a remembered approval.
