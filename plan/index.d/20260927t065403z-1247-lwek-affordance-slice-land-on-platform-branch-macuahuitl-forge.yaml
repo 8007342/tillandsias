@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-2-every-refused-land-verdict-of-land-on-platform-branch-says-why-and-what-clears-it
+    order: 1247-lwek
+    parent_order: 1247-amcu
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [affordance, refusal, landing, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+      - scripts/test-land-affordance.sh
+    title: |
+      1247-amcu slice 2 — FAMILY: every refused:land:* verdict of scripts/land-on-platform-branch.sh (dirty-worktree, merge-conflict, rebase-and-merge-conflict, not-integrated, trunk-merge-conflict, gate-step-prefix, gate-failed, gate-oom-killed, push-emitted-nothing, auth-failed, push-failed, push-failed-origin-unmoved, attempts-exhausted) carries a why: and a remedy: line
+    context: |
+      Slice 2 (macuahuitl-forge, 2026-09-27, at the coordinator's pick): the
+      landing tool is read by every landing host on every refusal. Same shape as
+      slice 1 (1247-omqr): the verdict token and its line stay byte-identical;
+      an _afford-style "  why: <rule>" and "  remedy: <what clears it>" pair is
+      added beside each of the 13 sites, naming the rule and how to find the
+      local answer, never a hardcoded branch (1247-amcu criterion 4; the script's
+      own branch argument is the local answer).
+    exit_criteria:
+      - 'every refused:land:* site emits a why: and a remedy: line beside its unchanged verdict line (pre-fix: FAILS on every site)'
+      - 'NEGATIVE CONTROL (1247-amcu criterion 5): for the refusals a fixture can induce hermetically, the stated remedy is EXECUTED and clears the refusal'
+      - 'the ten existing land fixtures stay green (their text assertions are an interface)'
+    verifiable_closure: |
+      bash scripts/test-land-affordance.sh exits 0 with every arm passing; pre-fix: FAILS.
+    provenance: |
+      Filed by macuahuitl-forge (forge-forge-tillandsias-claude-20260927t065403z) at the coordinator's request, 2026-09-27.
+    events:
+      - type: filed
+        ts: "2026-09-27T06:54:03Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t065403z"
+        host: macuahuitl-forge
+        summary: |-
+          Second 1247-amcu slice: the refused:land:* family of the landing tool.
