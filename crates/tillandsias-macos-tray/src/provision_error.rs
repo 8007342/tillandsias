@@ -11,7 +11,7 @@
 //! This module turns each into a DISTINCT, stage-named line. It is pure string
 //! logic with no macOS dependency, so its tests run on every host.
 
-use tillandsias_vm_layer::vz::{FETCH_STAGE_DOWNLOAD, FETCH_STAGE_EXPAND};
+use tillandsias_vm_layer::vz::{FETCH_STAGE_DOWNLOAD, FETCH_STAGE_EXPAND, FETCH_STAGE_SPACE};
 
 /// The first-provision stages a user-visible failure can be attributed to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,6 +20,8 @@ pub enum Stage {
     GuestBinary,
     /// Downloading or SHA-256-verifying the Fedora Cloud image.
     ImageDownload,
+    /// The pre-download free-space check refused (1420-299a).
+    DiskSpace,
     /// Expanding the qcow2 into rootfs.img (where a full disk surfaces).
     ImageExpand,
     /// Any other image-setup step (manifest, mkdir).
@@ -36,6 +38,7 @@ impl Stage {
         match self {
             Stage::GuestBinary => "Guest binary setup failed",
             Stage::ImageDownload => "Image download failed",
+            Stage::DiskSpace => "Not enough disk space",
             Stage::ImageExpand => "Disk image setup failed",
             Stage::ImageSetup => "Image setup failed",
             Stage::VmStart => "VM failed to start",
@@ -48,7 +51,8 @@ impl Stage {
         match self {
             Stage::GuestBinary => "reinstall Tillandsias",
             Stage::ImageDownload => "check the network connection, then Retry",
-            Stage::ImageExpand => "free disk space (the image needs about 2 GB real), then Retry",
+            Stage::DiskSpace => "free up disk space, then Retry",
+            Stage::ImageExpand => "free up disk space, then Retry",
             Stage::ImageSetup => "reinstall Tillandsias",
             Stage::VmStart => "quit other virtual machines, then Retry",
             Stage::GuestProvisioning => {
@@ -63,6 +67,8 @@ impl Stage {
 pub fn classify_fetch_error(msg: &str) -> Stage {
     if msg.starts_with(FETCH_STAGE_DOWNLOAD) {
         Stage::ImageDownload
+    } else if msg.starts_with(FETCH_STAGE_SPACE) {
+        Stage::DiskSpace
     } else if msg.starts_with(FETCH_STAGE_EXPAND) {
         Stage::ImageExpand
     } else {
@@ -131,7 +137,7 @@ mod tests {
         }
         assert!(download.starts_with("Image download failed:"), "{download}");
         assert!(
-            expand.starts_with("Disk image setup failed:") && expand.contains("free disk space"),
+            expand.starts_with("Disk image setup failed:") && expand.contains("free up disk space"),
             "{expand}"
         );
         assert!(
@@ -150,6 +156,22 @@ mod tests {
 
     /// Anything the fetch returns without a stage prefix is still NAMED, never
     /// misattributed to download or expand.
+    /// Union of 1420-inak and 1420-299a: the pre-download space refusal is
+    /// its OWN stage, never "Image setup failed … reinstall Tillandsias".
+    #[test]
+    fn the_space_refusal_is_named_as_disk_space_with_the_right_hint() {
+        let msg = format!(
+            "{FETCH_STAGE_SPACE}not enough free disk space for first provisioning: need 4.3 GB, have 1.1 GB free"
+        );
+        assert_eq!(classify_fetch_error(&msg), Stage::DiskSpace);
+        let t = failure_text(classify_fetch_error(&msg), &msg);
+        assert!(
+            t.starts_with("Not enough disk space:") && t.contains("free up disk space"),
+            "{t}"
+        );
+        assert!(!t.contains("reinstall"), "{t}");
+    }
+
     #[test]
     fn an_unprefixed_fetch_error_is_image_setup_not_a_guess() {
         assert_eq!(

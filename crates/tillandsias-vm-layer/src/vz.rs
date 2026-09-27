@@ -230,6 +230,8 @@ fn explain_start_failure(err: &str, nvram: Option<&Path>) -> String {
 pub const FETCH_STAGE_DOWNLOAD: &str = "download/verify Fedora Cloud image: ";
 /// See [`FETCH_STAGE_DOWNLOAD`].
 pub const FETCH_STAGE_EXPAND: &str = "expand Fedora Cloud image to rootfs.img: ";
+/// See [`FETCH_STAGE_DOWNLOAD`]. The pre-download free-space check (1420-299a).
+pub const FETCH_STAGE_SPACE: &str = "check free space for the Fedora Cloud image: ";
 
 impl VzRuntime {
     /// Construct a runtime handle. Does NOT touch the host yet.
@@ -452,7 +454,7 @@ impl VzRuntime {
             if let Some(refusal) =
                 boot::first_provision_space_refusal(boot::free_bytes_at(probe_at), probe_at)
             {
-                return Err(refusal);
+                return Err(format!("{FETCH_STAGE_SPACE}{refusal}"));
             }
         }
 
