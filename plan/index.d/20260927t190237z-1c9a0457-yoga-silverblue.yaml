@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    field: notes
+    value: yoga-silverblue 2026-09-27, MEASURED toward the placement decision - can a LINUX relay host lint the macOS tray natively-equivalently? Replayed the incident tree d44909353 in the tillandsias-builder toolbox after rustup target add aarch64-apple-darwin, running cargo clippy -p tillandsias-macos-tray --all-targets --target aarch64-apple-darwin -- -D warnings. Result rc=101 BEFORE reaching the tray crate - ring v0.17.14's build script needs a Darwin-capable C compiler (the toolbox gcc rejects -arch and -mmacosx-version-min; the toolbox has neither clang nor zig). So the Rust side is not the obstacle; one C dependency is. Untested next step, for whoever decides - clang or zig in the builder toolbox as CC_aarch64_apple_darwin, then replay d44909353 and require clippy::useless_format to fire. If it does, the relay host itself can carry the lint and criterion 3's accountable host is the relayer; if not, the obligation stays with the macOS author.
+    ts: "2026-09-27T19:02:37Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    event:
+      type: progress
+      ts: "2026-09-27T19:02:37Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'yoga-silverblue 2026-09-27, MEASURED toward the placement decision - can a LINUX relay host lint the macOS tray natively-equivalently? Replayed the incident tree d44909353 in the tillandsias-builder toolbox after rustup target add aarch64-apple-darwin, running cargo clippy -p tillandsias-macos-tray --all-targets --target aarch64-apple-darwin -- -D warnings. Result rc=101 BEFORE reaching the tray crate - ring v0.17.14's build script needs a Darwin-capable C compiler (the toolbox gcc rejects -arch and -mmacosx-version-min; the toolbox has neither clang nor zig). So the Rust side is not the obstacle; one C dependency is. Untested next step, for whoever decides - clang or zig in the builder toolbox as CC_aarch64_apple_darwin, then replay d44909353 and require clippy::useless_format to fire. If it does, the relay host itself can carry the lint and criterion 3's accountable host is the relayer; if not, the obligation stays with the macOS author.' (not terminal) with evidence_refs: d44909353
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    event:
+      type: note
+      ts: "2026-09-27T19:02:37Z"
+      host: yoga-silverblue
+      summary: |-
+        cross-target clippy from Linux measured
