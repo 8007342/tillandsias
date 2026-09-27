@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-tray-quit-ends-in-a-force-stop-because-the-guest-never-shuts-itself-down-cleanly
+    event:
+      type: finding
+      ts: "2026-09-27T23:25:37Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        SECOND MEASUREMENT, yolanda 2026-09-27, operator clicked Quit with the VM Ready (dev tray, same guest recipe). Same shape as the first: 15:09:52.74 "Received shutdown signal", 15:09:56.22 "Graceful shutdown completed" (3.5 s), then NOTHING logged for 6.5 s, 15:10:02.74 WSL "systemctl poweroff did not terminate the instance in 10000 ms, calling reboot(RB_POWER_OFF)", and on the next start journald reports both journals "corrupted or uncleanly shut down". Reproducible: the headless drains cleanly, and the rest of poweroff overruns WSL's 10 s budget every Quit.
