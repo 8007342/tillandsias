@@ -3293,6 +3293,50 @@ require_openspec() {
     return 0
 }
 
+# openspec_init_if_absent <project_dir> [tool] — give a checkout its /opsx
+# commands WITHOUT touching tracked files (order 1422-w3p8).
+#
+# `openspec init --tools <t>` REWRITES <t>'s command/skill set whenever it is
+# already on disk, with whatever templates the installed CLI carries — and the
+# forge refreshes that CLI to @latest at every launch. So the first launch after
+# any openspec release rewrote ~18-22 tracked files and the forge started dirty
+# (operator ruling 2026-09-27: that dirt "should not exist"; reverses order
+# 540's commit-the-sync decision). Measured in a scratch repo with CLI 1.13.2:
+# init for a tool whose set is ABSENT only CREATES files and leaves other tools'
+# sets and an existing openspec/ alone; a bare `init` refreshes EVERY configured
+# tool. Hence: run init only when there is nothing of that tool's set to
+# rewrite. Moving the generated set to a new CLI version is a deliberate
+# `openspec update` + commit, never a side effect of launching.
+openspec_init_if_absent() {
+    local dir="${1:-}" tool="${2:-}" out
+    [ -n "$dir" ] && [ -n "${OS_BIN:-}" ] && [ -x "$OS_BIN" ] || return 0
+    case "$tool" in
+        claude)
+            if compgen -G "$dir/.claude/commands/opsx/*.md" >/dev/null \
+                || compgen -G "$dir/.claude/skills/openspec-*/SKILL.md" >/dev/null; then
+                trace_lifecycle "openspec" "init skipped: claude opsx set present (1422-w3p8)"
+                return 0
+            fi ;;
+        opencode)
+            if compgen -G "$dir/.opencode/commands/opsx-*.md" >/dev/null \
+                || compgen -G "$dir/.opencode/skills/openspec-*/SKILL.md" >/dev/null; then
+                trace_lifecycle "openspec" "init skipped: opencode opsx set present (1422-w3p8)"
+                return 0
+            fi ;;
+        "")
+            # bare init refreshes every tool already configured in the tree
+            if [ -d "$dir/openspec" ]; then
+                trace_lifecycle "openspec" "init skipped: openspec/ present (1422-w3p8)"
+                return 0
+            fi ;;
+    esac
+    if ! out=$(cd "$dir" && "$OS_BIN" init ${tool:+--tools "$tool"} </dev/null 2>&1); then
+        echo "[entrypoint] WARNING: OpenSpec init failed — /opsx commands may not work" >&2
+        echo "[entrypoint] $out" >&2
+    fi
+    return 0
+}
+
 require_codex() {
     CX_BIN="$(_require_harness codex "@openai/codex" codex)"
     return 0

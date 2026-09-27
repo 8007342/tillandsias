@@ -26,7 +26,7 @@ critical_path:
     expected_behavior: "methodology index present"
 
   - step: "verify the launcher still bootstraps OpenSpec and /startup"
-    command: "mf_literal images/default/entrypoint-forge-opencode.sh apply_opencode_config_overlay && mf_literal images/default/entrypoint-forge-opencode.sh 'init --tools opencode' && mf_literal images/default/entrypoint-forge-opencode.sh 'run /startup' && echo 'opencode bootstrap present'"
+    command: "mf_literal images/default/entrypoint-forge-opencode.sh apply_opencode_config_overlay && mf_literal images/default/entrypoint-forge-opencode.sh 'openspec_init_if_absent \"$PROJECT_DIR\" opencode' && mf_literal images/default/entrypoint-forge-opencode.sh 'run /startup' && echo 'opencode bootstrap present'"
     timeout_ms: 10000
     expected_behavior: "opencode bootstrap present"
 
