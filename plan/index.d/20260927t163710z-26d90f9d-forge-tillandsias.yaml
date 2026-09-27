@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-opsx-dirt-checker-calls-launch-generated-opsx-dirt-ok-and-meta-orchestration-tells-agents-to-commit-it-so-the-reversed-order-540-decision-keeps-re-landing-regenerated-sets-on-trunk
+    field: status
+    value: in_progress
+    ts: "2026-09-27T16:37:10Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: the-opsx-dirt-checker-calls-launch-generated-opsx-dirt-ok-and-meta-orchestration-tells-agents-to-commit-it-so-the-reversed-order-540-decision-keeps-re-landing-regenerated-sets-on-trunk
+    event:
+      type: note
+      ts: "2026-09-27T16:37:10Z"
+      host: forge-tillandsias
+      summary: |-
+        claimed by macuahuitl-forge on coordinator assignment; work ref work/1440-w8g8 based on work/1422-w3p8
