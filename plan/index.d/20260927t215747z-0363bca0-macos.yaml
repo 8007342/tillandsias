@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: pre-push-main-branch-affordance-is-the-first-hook-ported-to-lua-on-the-sandboxed-lua-cli-with-a-stub-that-fails-closed-without-a-binary-and-a-remedy-read-from-the-discipline-seed-instead-of-a-hardcoded-branch
+    field: status
+    value: completed
+    ts: "2026-09-27T21:57:47Z"
+    host: macos
+
+events:
+  - packet_id: pre-push-main-branch-affordance-is-the-first-hook-ported-to-lua-on-the-sandboxed-lua-cli-with-a-stub-that-fails-closed-without-a-binary-and-a-remedy-read-from-the-discipline-seed-instead-of-a-hardcoded-branch
+    event:
+      type: completed
+      ts: "2026-09-27T21:57:47Z"
+      host: macos
+      summary: |-
+        status 'completed' with evidence_refs: landed on origin/linux-next at 9e0a6a8ce (land77, 1244 s gate); at that SHA: scripts/test-pre-push-main-branch-affordance.sh ok:main-branch-affordance-fixture:5/5 rc=0 (darwin, bash 3.2)
+  - packet_id: pre-push-main-branch-affordance-is-the-first-hook-ported-to-lua-on-the-sandboxed-lua-cli-with-a-stub-that-fails-closed-without-a-binary-and-a-remedy-read-from-the-discipline-seed-instead-of-a-hardcoded-branch
+    event:
+      type: note
+      ts: "2026-09-27T21:57:47Z"
+      host: macos
+      summary: |-
+        closure measured at the landed SHA
