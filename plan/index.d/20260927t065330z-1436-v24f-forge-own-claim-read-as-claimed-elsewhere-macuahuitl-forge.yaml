@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-forges-own-claim-reads-back-as-claimed-elsewhere-because-the-claim-host-and-the-names-the-own-claim-check-compares-never-agree-in-a-forge
+    order: 1436-v24f
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [identity, claims, forge, fleet]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-claims-across-branches.sh
+      - scripts/agent-identity.sh
+    title: |
+      in a forge, check-claims-across-branches.sh reads the forge's OWN claim as claimed-elsewhere, telling the agent to stand down from its own work (or a peer to treat it as foreign): the --host the forge claims under and every name _is_me compares disagree, and hostname is not even installed
+    context: |
+      MEASURED in macuahuitl-forge (image b09adefe522a), 2026-09-27: after
+      claiming 1435-ebcx with `set-field … --host macuahuitl-forge`
+      (ok:claim-confirmed:1435-ebcx:macuahuitl-forge@2026-09-27T06:43:26Z),
+      `scripts/check-claims-across-branches.sh 1435-ebcx` from the same forge
+      answered claimed-elsewhere:1435-ebcx:linux-next, not own-claim-reflected
+      (1104-w9np).
+      THE IDENTITIES, all measured in that forge:
+        - claim host used (the name the coordinator and fleet address it by): macuahuitl-forge
+        - scripts/agent-identity.sh node-name: forge-tillandsias (= uname -n)
+        - scripts/agent-identity.sh id claude (756-hn3a): forge-forge-tillandsias-claude-<ts>
+        - join-the-fleet's session name (check-fleet-membership.sh): forge-tillandsias-tillandsias-forge
+        - what _is_me compares: hostname -s (EMPTY: the forge has no hostname
+          binary), TILLANDSIAS_WORKSTATION (unset), TILLANDSIAS_HOST_KIND
+          (forge), uname -s (linux)
+      None of the four names the forge could claim under equals anything _is_me
+      checks, and the one that comes closest (the node name) is unreachable
+      because hostname is missing. Earlier forge claims on the ledger use
+      "forge-tillandsias", "forge" and "macuahuitl-forge" (58/24/44 fragments at
+      the time of 1401-bcd7), so the fleet has no single convention either.
+      Fleet session naming (join-the-fleet §0) says <host>-<project>-forge.
+    exit_criteria:
+      - 'a claim made by a forge, under the name the fleet addresses it by, is recognised as its OWN by check-claims-across-branches.sh run in that forge (own-claim-reflected, not claimed-elsewhere) (pre-fix: FAILS — the 1435-ebcx measurement above)'
+      - 'a claim by a DIFFERENT host is still claimed-elsewhere (negative control: widening _is_me must not swallow a peer claim)'
+    unscoreable: |
+      which name is canonical for a forge (the fleet address, the node name,
+      the session name, or an agent-identity field) is itself the question this
+      row asks, and the fixer must settle it (with the coordinator) before a
+      fixture can pin it; the mechanism is left to the fixer.
+    provenance: |
+      Filed by macuahuitl-forge (forge-forge-tillandsias-claude-20260927t065330z) at the coordinator's request, 2026-09-27.
+    events:
+      - type: filed
+        ts: "2026-09-27T06:53:30Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t065330z"
+        host: macuahuitl-forge
+        summary: |-
+          A forge's own claim read back as claimed-elsewhere; four candidate names, none matched.

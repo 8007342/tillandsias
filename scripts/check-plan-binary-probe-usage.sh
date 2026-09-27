@@ -238,16 +238,25 @@ if [ -d "$LITMUS_DIR" ]; then
         bad_cmd=0
         while IFS= read -r _cmd; do
             [ -n "$_cmd" ] || continue
-            printf '%s' "$_cmd" \
-                | grep -qE '(^|[^/$[:alnum:]_])\.?/?target/(release|debug)/tillandsias-plan' \
-                || continue   # sigpipe-ok: safe pipeline
+            # HERESTRINGS, NOT `printf | grep -q`, on all three tests in this
+            # loop and the one below (1130-qk7d's mechanism, second instance).
+            # Under pipefail, grep -q exits on its first match and the printf
+            # still writing a large block takes SIGPIPE, so the pipeline reads
+            # 141 and the file silently changes class. MEASURED 2026-09-27 on
+            # macuahuitl during the v56.9.27.2 --ci-full: 15 runs gave litmus
+            # 11/12/13 eligible, flipping litmus-fragment-status-loss-
+            # attribution-shape (10 KB of commands) and litmus-cycle-batch-
+            # triage-shape (17 KB, whose early mf_plan_binary match made the
+            # MAJORITY answer the wrong one). The old notes called these "safe".
+            grep -qE '(^|[^/$[:alnum:]_])\.?/?target/(release|debug)/tillandsias-plan' <<<"$_cmd" \
+                || continue   # sigpipe-ok: herestring, no upstream writer
             hardcoded=1
             # mf_plan_binary ONLY on this surface. The header above states it is
             # the compliant form here (the bash -c child has already sourced
             # litmus-stdlib.sh), and accepting a probe FILENAME instead let a
             # `cp scripts/plan-binary-probe.sh` inside a fixture-building command
             # confer compliance on the step that hardcoded the path beside it.
-            printf '%s' "$_cmd" | grep -q 'mf_plan_binary' || bad_cmd=1  # sigpipe-ok: safe pipeline
+            grep -q 'mf_plan_binary' <<<"$_cmd" || bad_cmd=1  # sigpipe-ok: herestring, no upstream writer
         done <<< "$cmds"
         # SAME CORRECTION ON THIS SURFACE (1060-428m). `grep -q "$PROBE_REL" "$f"`
         # read the whole YAML, so a probe mention in a description, a comment or
@@ -263,7 +272,7 @@ if [ -d "$LITMUS_DIR" ]; then
         # real population is how a surface hides.
         compliant=0
         if [ "$hardcoded" -eq 0 ]; then
-            printf '%s' "$cmds" | grep -q 'mf_plan_binary' && compliant=1
+            grep -q 'mf_plan_binary' <<<"$cmds" && compliant=1  # sigpipe-ok: herestring, no upstream writer
         elif [ "$bad_cmd" -eq 0 ]; then
             compliant=1
         fi

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-github-login-qr-screen-is-hardcoded-white-on-black-with-no-activity-while-polling
+    event:
+      type: progress
+      ts: "2026-09-27T07:00:41Z"
+      agent_id: linux-lenovinha-claude-20260927t065321z
+      host: lenovinha
+      summary: |
+        Linux slice on work/1420-2pav at 394f814eb (based on work/1420-r2sn): palette QR (leaf-deepest on leaf-light), one-time code in blush, zero-ESC plain fallback on NO_COLOR/CI/TERM=dumb/non-TTY stdout, and the gh-auth-script spec updated. No user-visible wording changed. Tests: 5 new, 17 github-login, clippy rc=0, preflight ran=119 refused=0. OPEN: (a) polling activity bar, expires_in countdown and green-on-grant (needs the poll child's output piped; will add wording for operator approval); (b) live LITMUS_PODMAN_MODE arm unmeasured; (c) cross-platform path waits on 1420-4grt.
