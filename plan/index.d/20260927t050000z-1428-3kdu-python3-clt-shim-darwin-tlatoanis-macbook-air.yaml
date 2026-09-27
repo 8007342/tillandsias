@@ -1,0 +1,23 @@
+packets:
+  - packet_id: the-podman-preflight-diagnosis-fixture-requires-python3-which-on-a-stock-mac-is-the-xcode-clt-shim
+    order: 1428-3kdu
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [litmus, fixtures, macos, darwin-regime]
+    estimated_hours: 1
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the fixture itself is the pin; its darwin arm lands with the fix.
+    title: |
+      DARWIN-REGIME FINDING: scripts/test-litmus-podman-preflight-diagnosis.sh fails on macOS with "could not create the AF_UNIX fixture socket (python3 required)" — /usr/bin/python3 on a Mac without Xcode Command Line Tools is the CLT SHIM (it links libxcselect and would pop an install dialog), not an interpreter
+    verifiable_closure: |
+      on a Mac where /usr/bin/python3 is the CLT shim, the fixture either PASSES (creating the AF_UNIX socket without python3, e.g. with a stock tool) or emits a NAMED skip naming the missing capability — never a FAIL and never a hidden pass; pre-fix result: FAILS (measured 2026-09-27, tlatoanis-macbook-air, macOS 27.0; identical with the pre-1419 runner, so not 1419/1427 fallout).
+    context: |
+      Found in the darwin-regime sweep of all 27 runner-invoking fixtures for 1427-utmy. Shim detection method
+      (positive control): /usr/bin/grep -q xcselect <binary> flags /usr/bin/git and /usr/bin/python3 as shims on this
+      host. Coordinator ruling 2026-09-27: file as a darwin-regime finding; exit is pass or named skip on a shim-only Mac.
+    exit_criteria:
+      - 'pass or named skip on a Mac with only the python3 shim; pre-fix result: FAILS'
