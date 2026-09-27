@@ -1,0 +1,25 @@
+packets:
+  - packet_id: two-fixtures-that-copy-scripts-into-a-scratch-root-go-red-on-every-mac-gate-since-the-litmus-runner-refuses-with-no-plan-binary
+    order: 1427-utmy
+    status: in_progress
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, fixtures, macos, regression]
+    estimated_hours: 1
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the two fixtures ARE the pins; this restores them.
+    title: |
+      REGRESSION FROM 1419-zydw: test-gate-step-metrics-isolation.sh arm 3 and test-litmus-budget-tally.sh run run-litmus-test.sh from a scratch copy of scripts/, where no plan binary resolves on a host without CARGO_TARGET_DIR, so the runner refuses (blocked:litmus-no-plan-binary) and both fixtures go red on the Mac gate
+    verifiable_closure: |
+      in the Mac gate regime (TILLANDSIAS_PLAN_BIN and CARGO_TARGET_DIR unset) test-gate-step-metrics-isolation.sh gives ok:step-metrics-isolation:4 and test-litmus-budget-tally.sh ok:litmus-budget-tally:7, by handing the scratch runner the checkout's own resolved binary; with no binary on the host each is a NAMED skip, not the opt-out; pre-fix result: FAILS (violation:step-metrics-isolation:1; fail:litmus-budget-tally 4/3).
+    context: |
+      Found by the macOS gate for the v56.9.27.1 smoke report, 2026-09-27 (tlatoanis-macbook-air). The coordinator's
+      pre-land sweep ran all 27 runner-invoking fixtures green on Linux, where CARGO_TARGET_DIR makes a binary resolve
+      even from a scratch root; on darwin nothing resolves there. Sweep of all 27 in the darwin gate regime after the
+      fix: only these two were 1419 fallout; test-litmus-podman-preflight-diagnosis.sh fails identically with the
+      pre-1419 runner (python3 = Xcode CLT shim on this host), i.e. pre-existing and unrelated.
+    exit_criteria:
+      - 'both fixtures green in the darwin gate regime; named skip without a binary; pre-fix result: FAILS'

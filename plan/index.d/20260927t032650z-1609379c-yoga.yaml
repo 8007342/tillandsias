@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: salvage-920-cluster-forge-20260916-232039-holds-eight-rows-marked-implemented-that-trunk-still-offers-as-ready-relay-it-hunk-by-hunk
+    field: status
+    value: in_progress
+    ts: "2026-09-27T03:26:50Z"
+    host: yoga
+
+events:
+  - packet_id: salvage-920-cluster-forge-20260916-232039-holds-eight-rows-marked-implemented-that-trunk-still-offers-as-ready-relay-it-hunk-by-hunk
+    event:
+      type: note
+      ts: "2026-09-27T03:26:50Z"
+      host: yoga
+      summary: |-
+        claimed 2026-09-27 by yoga-silverblue at the coordinator's direction: hunk-level relay of fdafd13d5 on work/1425-t9v9
