@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-linux-clean-room-reset-does-not-reach-the-host-keychain
+    event:
+      type: note
+      ts: "2026-09-27T07:48:52Z"
+      agent_id: linux-macuahuitl-claude-20260927t074852z
+      host: macuahuitl
+      summary: |-
+        FLAKE UNDER GATE LOAD (macuahuitl, 2026-09-27 ~05:30Z, land62 attempt 1): the credential-cold-state-probe fixture's determinism arm failed "consecutive runs disagreed: credential-state:could-not-run credential-state:warm" inside ./build.sh --check. Re-run idle: 6/6 pass (9 passed, 0 failed each). gnome-keyring-daemon did NOT crash (both daemons alive, no abort in the user journal), so the could-not-run was a slow busctl answer under gate load, which the probe reports honestly and the arm reads as a race. The relaunched land passed attempt 1. Recorded as an instance, not a new row; a recurrence would justify distinguishing a timed-out bus from a disagreeing verdict in the arm.
