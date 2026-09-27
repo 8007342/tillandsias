@@ -15,7 +15,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PB="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null)" || PB=""
 case "$PB" in ./*) PB="$ROOT/${PB#./}" ;; esac
 [ -n "$PB" ] || { echo "could-not-run:stranded-plan-writes-fixture:no-plan-binary"; exit 3; }
-command -v jq >/dev/null 2>&1 || { echo "skip:stranded-plan-writes-fixture:no-jq"; exit 0; }
 work="$(mktemp -d "${TMPDIR:-/tmp}/stranded-fixture.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 pass=0; fail=0
