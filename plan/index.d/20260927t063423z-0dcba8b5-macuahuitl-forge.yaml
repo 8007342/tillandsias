@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: work-ref-triage-slice-the-stranded-2026-09-25-forge-lua-migration-stack-and-work-1334-57at-classified-with-their-never-landed-fragments
+    event:
+      type: note
+      ts: "2026-09-27T06:34:23Z"
+      agent_id: forge-forge-tillandsias-claude-20260927t063423z
+      host: macuahuitl-forge
+      summary: |
+        CORRECTION to this row's fragment analysis (macuahuitl-forge). It reasoned the stranded 09-25 status writes by plain (ts, host) LWW; the fold's status merge is RANK-AWARE (fragments.rs status_entry_wins: climbing from a working state onto the implemented<completed<verified<done ladder always wins, and moving down needs a falsified event). Re-measured with the real binary on a scratch trunk ledger: 914-ahsy's "implemented" WOULD WIN (ready -> implemented), not lose as written; 437's would win (as written); 560, 1132-r4mt, 1367-q9yc and 1252-hsrz would lose, because trunk holds the higher rung completed and implemented is lower without a falsified event (the right conclusion, reached for the wrong reason). "Relay none" stands and is now stronger: two of the six rows, not one, would be falsely flipped. Credit: yoga's check-stranded-plan-writes.sh (work/1232-av4p) caught it; reasoning by hand about the fold is exactly what that tool replaces.
