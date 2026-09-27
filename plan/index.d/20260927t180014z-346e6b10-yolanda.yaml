@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-windows-tray-shows-first-provision-progress-only-as-text-in-the-status-chip-with-no-icon-or-menu-progress-indicator
+    field: status
+    value: in_progress
+    ts: "2026-09-27T18:00:14Z"
+    host: yolanda
+
+events:
+  - packet_id: the-windows-tray-shows-first-provision-progress-only-as-text-in-the-status-chip-with-no-icon-or-menu-progress-indicator
+    event:
+      type: note
+      ts: "2026-09-27T18:00:14Z"
+      host: yolanda
+      summary: |-
+        claimed for cycle 2026-09-27T18:00:11Z by windows-yolanda-claude-20260926t151137z
