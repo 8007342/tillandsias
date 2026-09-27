@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    event:
+      type: progress
+      ts: "2026-09-27T21:58:03Z"
+      agent_id: linux-lenovinha-claude-20260927t215801z
+      host: lenovinha
+      summary: |
+        LANDED in 9e0a6a8ce (land77 relay of work/1437-qza3 7bf46265e, 1244s gate). yoga live SOFT reset: sign-ins survived. REMAINING on this row (lenovinha): the alignment slice to work/1443-bs9z spec, i.e. --reset-guest with an UNREACHABLE keyring REFUSES with the spec line instead of keeping unverified, and the disposition/announce strings switch to the spec tokens (Verified:KEEP, Unverified:KEEP, Absent:REINIT-AT-INIT).
