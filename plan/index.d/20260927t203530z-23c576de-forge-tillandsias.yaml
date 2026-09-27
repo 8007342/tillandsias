@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: census-litmus-layer-misclassification-specs-whose-size-or-phase-disagrees-with-what-they-run
+    field: status
+    value: completed
+    ts: "2026-09-27T20:35:30Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: census-litmus-layer-misclassification-specs-whose-size-or-phase-disagrees-with-what-they-run
+    event:
+      type: completed
+      ts: "2026-09-27T20:35:30Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: work/1443-2ef7
+  - packet_id: census-litmus-layer-misclassification-specs-whose-size-or-phase-disagrees-with-what-they-run
+    event:
+      type: note
+      ts: "2026-09-27T20:35:30Z"
+      host: forge-tillandsias
+      summary: |-
+        Added scripts/census-litmus-layer-classification.sh (--self-test: ok:litmus-layer-census-self-test:3/3, exit 0). Live run over openspec/litmus-tests: census:litmus-layer:specs=462 misclassified=10 — misclassified:litmus-forge-standalone-runtime-shape:size=instant:runs=run-forge-standalone.sh, misclassified:litmus-forge-standalone-runtime-shape:phase=pre-build:runs=run-forge-standalone.sh, misclassified:litmus-forge-standalone-traceability:size=instant:runs=run-forge-standalone.sh, misclassified:litmus-forge-standalone-traceability:phase=pre-build:runs=run-forge-standalone.sh, misclassified:litmus-guest-vsock-loopback-ordered-before-readiness-probe:phase=pre-build:runs=vm-layer, misclassified:litmus-macos-tray-architectural-invariants:phase=pre-build:runs=vm-layer, misclassified:litmus-post-merge-litmus-pass-shape:size=instant:runs=build.sh --ci-full, misclassified:litmus-vm-launch-graceful-failure-shape:phase=pre-build:runs=vm-layer, misclassified:litmus-vsock-exec-heartbeat:phase=pre-build:runs=vm-layer, misclassified:litmus-wsl-platform-preflight-shape:phase=pre-build:runs=vm-layer
