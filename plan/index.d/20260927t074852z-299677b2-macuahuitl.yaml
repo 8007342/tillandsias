@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-tool-materialization-s-arms-step-pipes-the-fixture-through-tail-1-so-a-red-prints-only-tool-materialize-fail-and-the-failing-arm-and-its-regime-are-discarded
+    event:
+      type: note
+      ts: "2026-09-27T07:48:52Z"
+      agent_id: linux-macuahuitl-claude-20260927t074852z
+      host: macuahuitl
+      summary: |-
+        FLAKE UNDER GATE LOAD (macuahuitl, 2026-09-27 07:30Z, land63 attempt 1): the gate refused on "ARM 0: the subject fixture is RED on this host with nothing injected" (scripts/test-tool-materialize.sh inside the 1269-gfdi guard); the real.out temp file was already cleaned up. Re-run immediately after, load average 1.5: 3/3 ok:tool-materialize:all; the relaunched land passed attempt 1. ARM 0 went red WITHOUT a skip:tool-materialize-margin regime line, so either the regime probe read the host as quiet while the gate itself loaded it, or the red had another cause the vanished real.out would have named. Next time: keep real.out on failure.

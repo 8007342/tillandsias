@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-groundtruth-case-plan-upstream-prerequisites-of-experts-milestone-pins-437-as-open-so-trunk-went-red-when-437-closed
+    field: status
+    value: completed
+    ts: "2026-09-27T06:16:19Z"
+    host: macuahuitl-forge
+
+events:
+  - packet_id: the-groundtruth-case-plan-upstream-prerequisites-of-experts-milestone-pins-437-as-open-so-trunk-went-red-when-437-closed
+    event:
+      type: completed
+      ts: "2026-09-27T06:16:19Z"
+      host: macuahuitl-forge
+      summary: |-
+        status 'completed' with evidence_refs: 79f12997d
+  - packet_id: the-groundtruth-case-plan-upstream-prerequisites-of-experts-milestone-pins-437-as-open-so-trunk-went-red-when-437-closed
+    event:
+      type: note
+      ts: "2026-09-27T06:16:19Z"
+      host: macuahuitl-forge
+      summary: |-
+        landed in land62: relay commit 79f12997d (relay: land work/1432-x3ug, contains work tip b33aa1d92) on origin/linux-next; trunk green at 70da438e7 per coordinator (with relay-fix 2b3fe5ffd for the second pin, litmus:expert-groundtruth-harness step 22). The groundtruth case now asserts the milestone's empty prerequisite set; the_committed_query_set_is_green_at_head passes; the class is 1433-wwyu.

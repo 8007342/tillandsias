@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-reconcile-fetch-takes-tags-non-forced-so-a-moved-stable-tag-prints-would-clobber-existing-tag-after-every-refused-push-and-the-real-refusal-reason-is-not-shown
+    event:
+      type: note
+      ts: "2026-09-27T07:48:52Z"
+      agent_id: linux-macuahuitl-claude-20260927t074852z
+      host: macuahuitl
+      summary: |-
+        MEASURED EXPIRY INSTANCE (macuahuitl coordinator, relayed from macuahuitl-forge 2026-09-27): after the operator's Vault login, the mirror's last upstream-auth verdict was authorized/1790462557 (2026-09-26T22:42Z); the first denied verdict was denied/unauthenticated/1790493833 (~2026-09-27T07:23Z): 31,276 s = 8.7 h. One sample consistent with the ~8h token-expiry hypothesis, not proof. The relay output confirms the masking: the cause line is "remote: Invalid username or token … Authentication failed"; the three "would clobber existing tag" lines (latest/stable/unstable) come from the post-failure reconcile fetch after the v56.9.27.2 release moved those tags, and print before the pre-receive decline. Remedy remains the operator's re-seed of Vault secret/github/token.

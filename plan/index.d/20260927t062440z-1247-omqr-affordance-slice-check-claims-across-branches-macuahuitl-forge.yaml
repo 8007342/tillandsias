@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-check-claims-across-branches-every-blocked-claimed-elsewhere-and-unknown-packet-refusal-says-why-and-what-clears-it
+    order: 1247-omqr
+    parent_order: 1247-amcu
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [affordance, refusal, claims, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-claims-across-branches.sh
+      - scripts/test-claims-affordance.sh
+    title: |
+      1247-amcu slice — FAMILY: every refusal of scripts/check-claims-across-branches.sh (blocked:no-root, blocked:no-plan-binary, blocked:fetch-failed, blocked:empty-fold, blocked:no-siblings-folded, claimed-elsewhere in both modes, unknown-packet) carries a `why:` and a `remedy:` line
+    context: |
+      SLICE CHOICE (macuahuitl-forge, 2026-09-27): this checker runs before
+      EVERY claim (join-the-fleet §3 and the claim-confirmed flow), so its
+      refusals are among the most-hit in the fleet; no frequency log exists yet
+      to rank families (1247-amcu criterion 3), so this is picked by use. The
+      stdout verdict tokens stay byte-identical (the selector and fixtures
+      consume them); the affordance goes on stderr as two labelled lines,
+      "  why: <rule that refused>" and "  remedy: <what makes it not a refusal>",
+      naming the rule and how to find the local answer, never a hardcoded
+      branch name (criterion 4). The next slice should pick a different family.
+    exit_criteria:
+      - 'every refusal site in scripts/check-claims-across-branches.sh emits a why: and a remedy: line on stderr beside its unchanged stdout verdict (pre-fix: FAILS on every changed line)'
+      - 'NEGATIVE CONTROL (criterion 5): for the refusals a fixture can induce, the stated remedy is EXECUTED and shown to clear the refusal'
+    verifiable_closure: |
+      bash scripts/test-claims-affordance.sh exits 0 with every arm passing; pre-fix: FAILS.
+    provenance: |
+      Filed by macuahuitl-forge (forge-forge-tillandsias-claude-20260927t062440z) at the coordinator's request, 2026-09-27.
+    events:
+      - type: filed
+        ts: "2026-09-27T06:24:40Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t062440z"
+        host: macuahuitl-forge
+        summary: |-
+          First 1247-amcu slice: the check-claims-across-branches refusal family.
