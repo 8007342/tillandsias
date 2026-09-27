@@ -43,8 +43,16 @@ ATTEMPTS="${2:-4}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
+# ORDER 1247-lwek (1247-amcu slice 2). Every refused:land:* verdict below is
+# followed by "  why: <the rule that refused>" and "  remedy: <what clears it>"
+# on stderr. The verdict lines themselves are unchanged. Remedies name this
+# run's own branch and trunk ($BRANCH/$TRUNK), never a hardcoded branch.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 if ! git diff --quiet || ! git diff --cached --quiet; then
     echo "refused:land:dirty-worktree — commit or stash first" >&2
+    _afford "the working tree or index has uncommitted changes, and landing gates and pushes a committed tree only" \
+        "commit or stash them (git status lists them), or hand an ungated tree off with scripts/salvage-dirty-worktree.sh <slug>; then re-run"
     exit 1
 fi
 
@@ -72,6 +80,8 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         else
             git merge --abort >/dev/null 2>&1
             echo "refused:land:merge-conflict — resolve by hand" >&2
+            _afford "merging origin/$BRANCH into this HEAD conflicted, and the tool never resolves content for you (the merge was aborted; the tree is as it was)" \
+                "git merge origin/$BRANCH, resolve the files git status names, commit, then re-run"
             exit 2
         fi
     else
@@ -85,11 +95,18 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             else
                 git merge --abort >/dev/null 2>&1
                 echo "refused:land:rebase-and-merge-conflict — resolve by hand" >&2
+                _afford "rebasing onto origin/$BRANCH conflicted and the merge fallback conflicted too (both were aborted)" \
+                    "git merge origin/$BRANCH, resolve the files git status names, commit, then re-run"
                 exit 2
             fi
         fi
     fi
-    [ "$_integrated" -eq 1 ] || { echo "refused:land:not-integrated" >&2; exit 2; }
+    if [ "$_integrated" -ne 1 ]; then
+        echo "refused:land:not-integrated" >&2
+        _afford "neither rebase nor merge left this HEAD containing origin/$BRANCH" \
+            "compare git log --oneline HEAD..origin/$BRANCH with origin/$BRANCH..HEAD, integrate by hand, then re-run"
+        exit 2
+    fi
 
     # ORDER 1064-r8fv: MERGE TRUNK TOO, or this tool cannot land on a platform
     # branch AT ALL.
@@ -123,6 +140,8 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             if ! git merge --no-edit "origin/$TRUNK" >/dev/null 2>&1; then
                 git merge --abort >/dev/null 2>&1
                 echo "refused:land:trunk-merge-conflict — resolve origin/$TRUNK by hand" >&2
+                _afford "the merge of origin/$TRUNK that every non-trunk push must carry (pull_merge_cadence.pre_push_gate) conflicted, and was aborted" \
+                    "git merge origin/$TRUNK, resolve the files git status names, commit, then re-run"
                 exit 2
             fi
         fi
@@ -154,6 +173,8 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         esac
         if [ "$_alloc_rc" -ne 0 ]; then
             echo "refused:land:gate-step-prefix — $(printf '%s\n' "$_alloc_out" | grep -m1 '^refused:' || printf '%s\n' "$_alloc_out" | tail -1)" >&2
+            _afford "scripts/allocate-gate-step-prefix.sh could not keep this push's new gate step at a free prefix" \
+                "renumber the step by hand into a free prefix (scripts/gate-steps.d/README.md), commit, then re-run"
             exit 8
         fi
     fi
@@ -321,6 +342,8 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
                 "$_gate_log" 2>/dev/null | cut -c1-200)"
         fi
         echo "refused:land:gate-failed — the gate refused; its output is at $_gate_log" >&2
+        _afford "./build.sh --check refused this tree; the first failing line follows and the full log is at $_gate_log" \
+            "fix what that line names on this tree, commit, then re-run the land (re-running an unchanged tree fails the same way)"
         if [ -n "$_first_fail" ]; then
             echo "  first failing line: $_first_fail" >&2
             [ -n "$_fallback_note" ] && echo "$_fallback_note" >&2
@@ -340,6 +363,8 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             _oom_out="$(bash "$ROOT/scripts/check-oom-postmortem.sh" --since -60min 2>&1)"; _oom_rc=$?
             case "$_oom_rc" in
                 1) echo "refused:land:gate-oom-killed — the gate produced no verdict (exit $_gate_rc) and the kernel records an OOM kill (1176-fn2p)" >&2
+                   _afford "the kernel killed the gate for memory, so it never reached a verdict on this tree" \
+                       "free memory or lower build parallelism and re-run, or push the work to work/<order> for a larger host to gate"
                    printf '%s\n' "$_oom_out" | sed 's/^/  /' >&2
                    echo "  This host did not fail the gate; it could not run it. Free memory or hand the work off — re-running will cost another attempt for the same reason." >&2 ;;
                 0) echo "  (no violation/refusal line matched, and the kernel records NO OOM kill: the gate died for some other reason — read the log)" >&2 ;;
@@ -544,6 +569,8 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         # cannot pin and a reader would file a bug about. The elapsed is still
         # reported, on the line below, where varying is harmless.
         echo "refused:land:push-emitted-nothing:$_push_timeout" >&2
+        _afford "git push printed nothing within the ${_push_timeout}s bound, most often a credential helper waiting on a prompt nobody sees" \
+            "run the credential-helper checks listed below, fix the helper, then re-run; the commit is safe locally"
         {
             echo "  git push produced NO output and hit the ${_push_timeout}s bound (elapsed ${_elapsed}s)."
             echo "  Nothing was pushed. The commit is safe locally; nothing was lost."
@@ -587,6 +614,8 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         # carry its remedy: an error read mid-incident should say what to do.
         if grep -qiE "authentication failed|invalid username or token|could not read Username|Permission denied \(publickey\)" "$_plog"; then
             echo "refused:land:auth-failed — git cannot authenticate to origin." >&2
+            _afford "origin rejected git's credential for this push" \
+                "run scripts/check-credential-channel.sh and follow its remedy (the operator seeds tokens; never re-auth on their behalf), then re-run"
             sed -n '1,3p' "$_plog" >&2
             # ORDER 1366-d5v2. A store helper with a RELATIVE --file= resolves
             # against the working directory, and in a linked worktree .git is a
@@ -647,6 +676,8 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             # that host did, twice, before measuring the race. Say which
             # retrying is futile, and name the step the tool already performs.
             echo "refused:land:push-failed — retrying THIS PUSH cannot help (not a lost race); merge trunk and re-gate:" >&2
+            _afford "origin refused the push for a reason a retry cannot change: it was not a lost race" \
+                "merge the ref the refusal below names (for a mandated merge that is origin/$TRUNK), re-gate, then re-run"
             sed -n '1,6p' "$_plog" >&2
             # MEASURE THE REF THE REFUSAL NAMES, NOT THE BRANCH BEING PUSHED
             # (macneo-macos, 2026-09-16). This block used to print
@@ -713,6 +744,8 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # matters, and the push's own words are the diagnosis.
     if [ -n "$_origin_after" ] && git merge-base --is-ancestor "origin/$BRANCH" HEAD 2>/dev/null; then
         echo "refused:land:push-failed-origin-unmoved:${_origin_after:0:9} — the push did not land (rc=$rc) and origin/$BRANCH holds nothing this HEAD lacks, so this was not a lost race" >&2
+        _afford "the push did not land and origin/$BRANCH did not move, so this was not a race and retrying will not help" \
+            "read the push output that follows for the refusal, fix what it names, then re-run"
         [ -s "$_plog" ] && sed -n '1,8p' "$_plog" >&2
         rm -f "$_plog"; exit 6
     fi
@@ -721,6 +754,8 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
 done
 
 echo "refused:land:attempts-exhausted:$ATTEMPTS — origin is moving faster than this host gates" >&2
+_afford "origin/$BRANCH moved during every one of $ATTEMPTS attempts, so each gate validated a base that was already stale" \
+    "stop racing: push the work to work/<order> and let the landing queue integrate it (see the lane printed below)"
 # ORDER 1315-4a7j. THE AFFORDANCE, because this refusal is the one a host hits
 # when it has done nothing wrong. Measured on yoga 2026-09-20: ten gate cycles
 # across two slices, FIVE lost purely to re-gating an UNCHANGED tree after
