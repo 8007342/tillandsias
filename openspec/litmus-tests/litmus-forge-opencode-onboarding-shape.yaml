@@ -30,6 +30,11 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "opencode bootstrap present"
 
+  - step: "verify a forge launch's openspec init leaves the checkout clean (1422-w3p8)"
+    command: "bash scripts/test-forge-launch-openspec-init-clean.sh"
+    timeout_ms: 20000
+    expected_behavior: "ok:forge-launch-openspec-init-clean"
+
   - step: "verify supplied prompts run through supported OpenCode run mode"
     command: "bash scripts/test-opencode-entrypoint-prompt.sh"
     timeout_ms: 10000
