@@ -1,0 +1,13 @@
+# Gate step 1443-w79y — data, not code (order 1072-b7eq).
+#
+# The branch-discipline seed and the verb every discipline consumer reads
+# (the land tool 1443-z3vb, the mirror, the hooks). Pins: per-platform
+# targets, check-ref at each rule's enforcement, the absolute level-0 floor,
+# the published digest, refusal of bad seeds, and the MCP tool.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the branch-discipline seed and verb (1443-w79y)"
+STEP_SCRIPT="scripts/test-branch-discipline-verb.sh"
+STEP_ERROR="the discipline verb stopped answering from the seed, refused a level-0 project, lost the seeded message or digest, accepted a bad seed, or the MCP tool diverged (1443-w79y) — see the verdict line above"
+STEP_OK="Branch discipline verb passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:branch-discipline-verb:6/6"

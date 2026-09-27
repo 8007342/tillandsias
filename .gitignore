@@ -90,8 +90,12 @@ cheatsheet-sources/
 # build-proxy log above.
 build-git.log
 
-# Local runtime configuration (per-machine)
-/.tillandsias/
+# Local runtime configuration (per-machine). The CONTENTS are ignored, not the
+# directory, so the one tracked file below can be re-included — git cannot
+# re-include a file whose parent directory is excluded.
+/.tillandsias/*
+# ORDER 1443-w79y: the branch-discipline seed is project data, not local state.
+!/.tillandsias/branch-discipline.yaml
 
 # Session-local cron scheduler runtime state (not source)
 .claude/scheduled_tasks.lock

@@ -8,6 +8,18 @@ multi_host_development:
     stable, zero-drift runtime enclave. `plan/` remains the durable inter-agent
     ledger for long-running work, failures, restarts, and idempotent recovery.
 
+  branch_discipline_seed:
+    file: .tillandsias/branch-discipline.yaml
+    rule: >
+      ORDER 1443-w79y. The seed is the MACHINE-READABLE PROJECTION of
+      branch_inventory and branch_namespaces below, not a second statement of
+      them: this prose stays canonical, and the seed is what the runtime
+      (`tillandsias-plan discipline show|target|check-ref`, forge-plan
+      `discipline_show`), the git mirror and the land tool READ, so the branch
+      model stops being a constant each tool hardcodes. A change to the branch
+      model changes both, in one commit. A project with no seed is level 0
+      advised and nothing refuses its pushes (operator ruling 2026-09-22,
+      1363-xp2v).
   branch_inventory:
     rule: >
       THE REMOTE CARRIES EXACTLY FOUR BRANCHES. Anything else is debris from a
