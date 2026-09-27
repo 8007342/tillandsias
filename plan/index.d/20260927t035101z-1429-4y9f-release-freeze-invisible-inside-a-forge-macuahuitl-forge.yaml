@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-release-freeze-is-invisible-inside-a-forge-because-the-mirror-exports-only-refs-heads-so-status-reads-none-and-the-pre-push-freeze-check-admits-a-code-push
+    order: 1429-4y9f
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [release, freeze, mirror, forge, pre-push]
+    estimated_hours: 3
+    owned_files:
+      - scripts/release-freeze.sh
+      - scripts/hooks/pre-push-local-gate.sh
+      - images/git/reconcile-exported-heads.sh
+    title: |
+      inside a forge a live release freeze reads as none: GitHub holds refs/tillandsias/freeze/linux-next/… but the enclave mirror exports only refs/heads/*, so release-freeze.sh status answers ok:freeze-none and the pre-push freeze check (1176-9vqn), which consults origin = the mirror, would ADMIT a code push to linux-next that the mirror then relays to GitHub — the freeze is invisible exactly where it is least supervised
+    context: |
+      MEASURED by macuahuitl-forge at 2026-09-27T03:51:01Z, during the v56.9.27.2 cut freeze:
+        git ls-remote https://github.com/8007342/tillandsias 'refs/tillandsias/freeze/*'
+          -> 06f5c05569c3…  refs/tillandsias/freeze/linux-next/macuahuitl/1790480795
+        git ls-remote origin 'refs/tillandsias/freeze/*'   (origin = the mirror)
+          -> (nothing)
+        scripts/release-freeze.sh status linux-next
+          -> ok:freeze-none:linux-next
+        scripts/release-freeze.sh --remote https://github.com/8007342/tillandsias status linux-next
+          -> frozen:linux-next:by=macuahuitl:since=1790480795:age=247s
+      The mirror's export is refs/heads/* only (images/git/reconcile-exported-heads.sh:
+      "explicit exported refs/heads/* refspec only"), and under refs/tillandsias/
+      it publishes only its own upstream-auth refs. The pre-push hook's freeze
+      check asks the push remote for refs/tillandsias/freeze/<branch>/*, so in
+      a forge it asks the mirror and gets nothing (coordinator macuahuitl-fedora
+      measured the same from the host side and filed this through the forge).
+    exit_criteria:
+      - 'inside a forge, during a freeze set on GitHub, release-freeze.sh status names the freeze (pre-fix: FAILS, ok:freeze-none while GitHub holds the marker)'
+      - 'inside a forge, during that freeze, a CODE push to linux-next through the mirror is refused naming the marker, while plan-only pushes stay admitted (pre-fix: FAILS, the hook finds no marker on the mirror)'
+    unscoreable: |
+      the mechanism is the fixer's (export refs/tillandsias/freeze/* through the
+      mirror, or have the status and pre-push checks consult upstream); a
+      hermetic fixture needs a scratch "upstream" plus a scratch mirror that
+      exports only refs/heads/*, and whether that models the real mirror
+      closely enough is itself a judgement the fix must state.
+    events:
+      - type: filed
+        ts: "2026-09-27T03:51:01Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t035101z"
+        host: macuahuitl-forge
+        summary: |-
+          Measured during the live v56.9.27.2 freeze: GitHub has the marker, the
+          mirror does not, status reads none inside the forge.
