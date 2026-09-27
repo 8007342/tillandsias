@@ -16635,6 +16635,7 @@ fn forge_hot_src_tmpfs(project_name: &str) -> String {
 ///      while the repository is `/srv/git/<project>`, one level down.
 ///   3. It passed `-H`, whose "165.47 MiB" is not the KiB integer the parser
 ///      reads.
+///
 /// Asking the MIRROR CONTAINER fixes all three: it owns the files, it knows the
 /// in-container path, and it has git, which the VM guest's host OS does not.
 /// The size now includes loose objects (`parse_repo_size_kb`).
