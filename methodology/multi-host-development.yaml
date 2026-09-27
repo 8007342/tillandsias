@@ -696,6 +696,56 @@ multi_host_development:
       - "Spec, methodology, and plan conflicts block until explicitly reconciled."
       - "Platform crate conflicts stay on the owning platform branch unless a shared API contract changed."
       - "Never resolve conflicts by deleting another host's plan notes; tombstone, supersede, or merge by stable ID."
+    relay_preflight:
+      authority: >
+        Operator-approved trims T2 and T4, 2026-09-27 (umbrella 1437-62g8;
+        design in plan/issues/efficiency-trims-design-2026-09-27.md). The
+        relay lane hand-typed ~15 commands per pass and ran EVERY covering
+        litmus spec (37-52 per relay, ~30 min) on 2026-09-27; one omitted
+        decider cost a 20-minute gate on 2026-09-21.
+      one_command: >
+        `scripts/relay-preflight.sh <ref>...` (1437-664a) is the relay
+        preflight: merge the refs in the order given onto a scratch
+        relay/<utc> branch from origin/linux-next, run
+        scripts/cycle-preflight.sh, the deciders (check-bash-dialect,
+        check-sigpipe-verdict-pipelines-added, check-plan-binary-probe-usage,
+        check-litmus-pin-claims, check-script-exec-bits,
+        check-added-fragments-parse, check-scorable-obligation-added,
+        check-gate-step-regimes, check-added-test-is-referenced,
+        check-jq-callsite-ratchet, preflight-fixtures-default-target,
+        check-issue-citation-convention, plus tillandsias-plan check
+        --strict-fragments and tillandsias-policy plan-orders when fragments
+        are added), `cargo fmt --check` when Rust is touched, every touched
+        scripts/test-*.sh and every fixture whose bytes name a touched
+        script, `cargo test -p` for each touched crate (plus the
+        tray,listen-vsock serial pass when tray/ is touched), and the scoped
+        covering litmus. ONE stdout line: ok:relay-preflight:<sha>:... or
+        refused:relay-preflight:<phase>:<item>; per-item lines on stderr.
+        `--plan` prints the selection without running and must be
+        byte-identical across two runs on the same merged SHA. The script
+        never pushes; scripts/land-on-platform-branch.sh lands. Until it
+        lands, the hand-typed list in skills/join-the-fleet section 3 is
+        the sequence, and check-issue-citation-convention is part of it.
+      scoped_covering_litmus: >
+        Per relay, `litmus-covering-specs.sh --relay-scope origin/linux-next`
+        (1437-yfuh) partitions the covering set deterministically: RUN every
+        bound spec with a DECLARED match on a touched path and every bound
+        command-mention match of size instant or quick; DEFER, by name and
+        reason, command-mention matches of size long, large or e2e
+        (deferred:size), non-pre-build phases (deferred:phase), specs past a
+        cap of 15 ordered declared-first then by name (deferred:cap), and a
+        spec whose litmus bytes, spec bytes and declared inputs all match a
+        status=pass record from this host within 24 h (deferred:memo,
+        1437-v3gb; a fail NEVER memoises). `--all-covering` restores the
+        full set. What this keeps: the deciders stay unconditional and
+        whole-tree (stale pins), declared coverage over touched fixtures
+        stays (the swallowed && and the duplicated ground-truth pin were
+        found there). What covers the deferred set: the daily cut's
+        check:litmus-pre-build and --ci-full, which are autonomous
+        (operator 2026-09-26). ./build.sh --check runs no litmus (748-tkjx),
+        so this scoped run is the only pre-build litmus a change sees
+        before the cut; the partition is a gate-integrity decision and its
+        rows are tiered opus.
     pre_push_gate:
       rule: >
         NON-linux-next branches (windows-next, osx-next, any shared non-trunk

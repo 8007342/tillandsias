@@ -453,6 +453,44 @@ agent_observability_protocol:
             host's recur: total for that step then FALL? If a candidate was
             skipped and its total did not fall, the bound was not a proxy
             for anything and the line is retired or re-derived.
+      main_ctx_source:
+        authority: >
+          Operator-approved trim T5, 2026-09-27 (umbrella 1437-62g8; rows
+          1437-3pj7 and 1437-3ynw). The tokens log held 19 rows, all from
+          one host, main_ctx=0 on every row since 2026-09-14, because
+          --emit-tokens writes what the caller passes and the caller never
+          had a number. The main-loop spend of the always-on sessions,
+          almost certainly the bulk, was invisible.
+        source: >
+          The harness transcript, ~/.claude/projects/<cwd-slug>/<session>.jsonl,
+          carries message.usage (input_tokens, cache_creation_input_tokens,
+          cache_read_input_tokens, output_tokens) on each assistant record
+          with timestamp, sessionId and cwd; sub-agent transcripts sit under
+          <session>/subagents/; the session id is CLAUDE_CODE_SESSION_ID.
+          scripts/session-tokens.sh sums them; `cycle-metrics.sh
+          --emit-tokens --from-transcript` records them. main_ctx is the
+          per-cycle sum of the four fields over the main transcript, a
+          BILLED-token figure, and is named so at every surface: it is not
+          a context size and not a proxy for one. `context: transcript_mb`
+          above remains the growth proxy; the two answer different
+          questions and are never substituted for each other.
+        honest_limit: >
+          The transcript format is documented as internal and
+          version-dependent. The reader asserts the four field names and
+          answers source=absent:schema-drift:<field> with zeros when one is
+          missing, so a format change reads as a missing instrument rather
+          than as a zero spend. A harness with no transcript (opencode,
+          codex, a forge whose HOME lacks the directory) records
+          source=absent. The statusline JSON (context_window.*,
+          cost.total_cost_usd) is session-cumulative and reaches only a
+          statusLine command; it is the fallback, not the source.
+        every_host: >
+          Every session on every host and in every forge records its own
+          row at cycle end; a host whose last five rows are all main_ctx=0
+          while a transcript exists is running the old attestation
+          (scripts/check-tokens-log-has-main-ctx.sh, advisory). The
+          per-checkout log stays local; the handoff's tokens: line is the
+          cross-host channel and must be rendered from the log.
       candidate_remedies_NOT_ADOPTED:
         rule: >
           /compact, /clear, and sub-agent delegation are CANDIDATES. None is

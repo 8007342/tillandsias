@@ -422,6 +422,20 @@ Windows salvage snapshot has no exec bit (1321-2ixp); the relay lane fixes the
 mode in a fixup commit before the gate, so a `test -x` red never reaches the
 release tier from that path again.
 
+The relay lane's preflight is ONE command once 1437-664a lands:
+`scripts/relay-preflight.sh work/<a> work/<b> …` (merge onto `relay/<utc>`,
+cycle-preflight, the full decider list, `cargo fmt --check`, touched
+fixtures, touched crates' tests, and the SCOPED covering litmus from
+`litmus-covering-specs.sh --relay-scope origin/linux-next`, 1437-yfuh),
+printing one verdict line; `--plan` prints the selection without running
+and must be byte-identical across two runs. Running every covering spec is
+the `--all-covering` opt-in, not the default: declared matches and
+instant/quick command matches run per relay; long, e2e, non-pre-build and
+over-cap specs are named as deferred and run in the daily cut's
+`check:litmus-pre-build`. Until it lands, the hand-typed sequence in
+`join-the-fleet` §3 stands. Canonical:
+`methodology/multi-host-development.yaml` → `pull_merge_cadence.relay_preflight`.
+
 ## Integration And Runtime Executor
 
 Run this before ending the loop whenever `origin/windows-next` or `origin/osx-next` is not an ancestor of `origin/linux-next`, or whenever the latest integrated code has not yet been exercised by the full runtime litmus.

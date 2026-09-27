@@ -1739,6 +1739,56 @@ distributed_work:
       prevent, while hiding the coverage gap behind a plausible selection. It is
       demoted whenever any real epic is eligible, and always reported on the
       triage line so the gap is fixed rather than absorbed.
+    model_tier_routing:
+      authority: >
+        Operator-approved trim T1, 2026-09-27 (umbrella 1437-62g8; design in
+        plan/issues/efficiency-trims-design-2026-09-27.md). Small or
+        mechanical packets go to Haiku, medium ones to Sonnet, judgment or
+        security work to Opus. This section is the rule; 1437-khnx,
+        1437-vdz5, 1437-m5yx, 1437-yjf6 and 1437-cr8u are the mechanism.
+      fields: >
+        Two SCALAR packet fields, `size: S|M|L` and `implementer_tier:
+        haiku|sonnet|opus`, assigned by the FILER. Scalars because set-field
+        refuses list-valued fields (1184-tj2q) and a field the projection
+        does not carry is writable but unreadable (1218-25z3). Until the
+        projection lands, both are written as two lines inside `notes:` in
+        exactly that spelling, and the projection reads that shape as a
+        fallback so no row is re-filed.
+      rubric: >
+        S = mechanical and fully specified (a case arm, a flag passthrough,
+        a lint with a stated grammar) -> haiku. M = a few files with a clear
+        design -> sonnet. L = cross-cutting, judgment, or
+        gate-integrity-sensitive -> opus. Anything that changes what the
+        land gate or the pre-push hook REFUSES is at least sonnet, and opus
+        when a wrong change could let a red tree land. Credential, Vault and
+        security surfaces are opus. Size is the filer's estimate of
+        judgment, not of hours; estimated_hours stays what it is.
+      selection: >
+        A session STATES its tier (`select-work-batch.sh <role> --tier <t>`
+        or TILLANDSIAS_MODEL_TIER); nothing is inferred from a model name.
+        Same shape as the low-end tier gate: a haiku caller's pool is
+        EXACTLY the haiku rows and an empty pool refuses
+        `refused:no-tier-work:model-tier=haiku`, never the general queue; a
+        sonnet caller takes sonnet plus untagged rows; an opus caller takes
+        everything but haiku unless --tier-any. The batch: line prints
+        tier=<t>. `next` honours the same filter so plan_next and the
+        selector agree.
+      execution: >
+        A haiku packet is run in-session by the host through
+        `scripts/claude-delegate.sh implement <order>` (edits bounded to the
+        packet's owned_files, no commit; the host verifies with the
+        packet's closure, commits, and hands off on work/<order> as today),
+        or by a dedicated `./repeat --model haiku` session once the claude
+        arm passes the flag (1437-m5yx), or in a forge after 689-jxb2. A
+        haiku implementer never lands; landing stays on the relay lane with
+        its gate. The sub-agent tiering in skills/meta-orchestration
+        ("Sub-agent and token budget") is unchanged and is the same rubric
+        applied to sub-agents.
+      correction: >
+        A claimer that disagrees with a tier writes `set-field <order>
+        implementer_tier <t> --reason <why>`; a silent re-tier is a
+        routing defect. Adoption is reported by
+        scripts/check-packet-tier-declared.sh (advisory until measured).
 
   worker_agent_protocol:
     purpose: >
@@ -2304,6 +2354,31 @@ distributed_work:
       mechanical, and the honest expectation is that THIS SECTION ALONE WILL BE
       HONOURED INCONSISTENTLY until a check surfaces the overlap without being
       asked. That check is worth filing rather than assuming.
+    size_budget:
+      authority: >
+        Operator-approved trim T3, 2026-09-27 (umbrella 1437-62g8). A
+        message costs the RECEIVER's main-tier context every time it is
+        read, and observed heads-ups had grown to several paragraphs. This
+        budget exists to cut the tokens each message costs the receiver.
+      rule: >
+        A cross-session message (SendMessage over Remote Control, or any
+        peer channel) is at most 600 bytes and 8 lines. Line 1 is the
+        verdict: `<KIND>:<subject>:<one clause>` with KIND one of HEADS-UP,
+        ACK, LANDED, BLOCKED, ASK, FYI. Every further line starts with `- `
+        and carries at least one ref — a SHA of 7+ hex, an order token, a
+        work/<order> ref, or a path. Anything that does not fit is a ledger
+        event or a plan/issues note, and the message cites it by order or
+        path. A message with no ref on an evidence line is an opinion, and
+        the receiver cannot check it without asking.
+      lint: >
+        scripts/check-peer-message-shape.sh reads the draft on stdin and
+        prints ok:peer-message:<bytes>b/<lines>l or
+        violation:peer-message:<reason> (1437-arjg). Fixture-free by design:
+        no gate step, no litmus; the sender runs it before sending. A
+        budget enforced only on the sender's honour is a suggestion
+        (the_honest_caveat above), so the lint is the forcing function and
+        the receiver may answer an over-budget message with one line:
+        `ACK:over-budget:cite the ledger`.
     consumers:
       - "skills/meta-orchestration/SKILL.md (Start Of Cycle 5a — AFTER the merge; note .claude/skills is a SYMLINK to this path, cite the real one)"
       - "skills/coordinate-multihost-work/SKILL.md"
