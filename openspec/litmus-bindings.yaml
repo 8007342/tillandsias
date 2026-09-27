@@ -170,6 +170,7 @@ specs:
   # only because a binding names it; without this line the land-verdict fixture
   # would be a file rather than a gate.
   - litmus:land-verdict-through-a-pipe
+  - litmus:covering-relay-scope-shape
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
   - litmus:smoke-release-channel-shape

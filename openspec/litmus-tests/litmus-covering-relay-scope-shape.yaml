@@ -1,0 +1,34 @@
+# @trace order:1437-yfuh
+#
+# Pins `litmus-covering-specs.sh --relay-scope <base>`: the run/deferred split a
+# relay uses in place of running every covering spec (T4 of
+# plan/issues/efficiency-trims-design-2026-09-27.md). Six synthetic arms pin
+# the rules; two real-corpus arms pin that the 2026-09-27 relay catches
+# (f18dc0d74 for 1428-v4tt, 562e6281a for 1432-x3ug) are still selected.
+name: litmus:covering-relay-scope-shape
+spec: ci-release
+phase: pre-build
+description: >
+  Declared matches run at any size, command matches run only at instant/quick,
+  non-pre-build tests defer by phase, unbound tests never appear, an edited
+  litmus file selects its own spec, an untouched path answers empty and silent,
+  the run set caps at 15 declared-first with --all-covering lifting it, output
+  is byte-identical across runs, and both 2026-09-27 relay catches stay caught.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/litmus-covering-specs.sh
+  - workspace contains scripts/test-litmus-covering-relay-scope.sh
+  - shell utilities (bash, awk, sort, mktemp) are available in PATH
+
+critical_path:
+  - step: "the fixture and the tool parse, and the fixture carries its exec bit"
+    command: "bash -n scripts/litmus-covering-specs.sh && bash -n scripts/test-litmus-covering-relay-scope.sh && test -x scripts/test-litmus-covering-relay-scope.sh && echo 'ok: relay-scope-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: relay-scope-parses"
+
+  - step: "six rule arms and two catch arms, exit 0"
+    command: "out=$(bash scripts/test-litmus-covering-relay-scope.sh); rc=$?; case \"$out\" in (*'ok:covering-relay-scope:6/6'*'ok:covering-relay-scope-catches:2/2'*) [ \"$rc\" = 0 ] && echo 'ok: relay-scope 6/6 catches 2/2' ;; (*) printf '%s\\n' \"$out\"; exit 1 ;; esac"
+    timeout_ms: 60000
+    expected_behavior: "ok: relay-scope 6/6 catches 2/2"
