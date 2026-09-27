@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: release-freeze-set-pushes-origins-branch-tip-sha-read-by-ls-remote-which-fails-when-that-object-is-not-local-and-reports-it-as-origin-unreachable
+    order: 1422-fvce
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [release, freeze, fail-loud, git]
+    estimated_hours: 1
+    owned_files:
+      - scripts/release-freeze.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixing commit adds a fixture arm in
+      the same commit (1136-n8sh): with the remote's branch tip AHEAD of the local
+      clone (an object the local repo lacks), `release-freeze.sh set` succeeds
+      (it fetches, or pushes an object it has) and never prints "unreachable" for
+      a reachable origin. PRE-FIX RESULT: FAILS — measured on the v56.9.27.1 cut.
+    title: |
+      `release-freeze.sh set` reads origin's current branch tip with ls-remote and pushes THAT sha as the marker; when trunk moved since the last fetch the object is not local, `git push` fails, and the script's 2>/dev/null turns it into "refused:freeze:unreachable:could not push the marker to origin" — a false STOP in the release runbook against a reachable origin
+    context: |
+      MEASURED on macuahuitl 2026-09-27T01:05Z, cutting v56.9.27.1: `set` refused
+      "unreachable". A manual push of HEAD to the same freeze namespace succeeded
+      in 1.7 s (not a timeout; the pre-push hook exempts the namespace by
+      design). bash -x showed the pushed sha 45f5beeb… was origin's linux-next tip
+      from ls-remote, which the local clone did not have (a peer's plan push had
+      landed since the last fetch). After `git fetch origin`, `set` succeeded:
+      ok:freeze-set:refs/tillandsias/freeze/linux-next/macuahuitl/1790471167.
+      The runbook says a refused:freeze:unreachable is a STOP ("an unreachable
+      origin means the cut cannot publish either"), so the false verdict would
+      halt a cut. Fix: fetch the branch before pushing its tip (or push a local
+      sha), and stop discarding the push's stderr so the real refusal is named.
+    deliverable: |
+      The fetch-or-local-sha fix, the push's error surfaced, and the fixture arm.
+    provenance: |
+      Filed by the macuahuitl coordinator during the v56.9.27.1 cut.
