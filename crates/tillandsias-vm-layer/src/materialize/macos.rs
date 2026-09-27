@@ -96,7 +96,7 @@ pub fn tar_to_vfr_img(tar: &Path, out_img: &Path, script: &Path) -> Result<(), C
         return Err(ConvertError::TarMissing(tar.to_path_buf()));
     }
 
-    let output = Command::new("bash")
+    let output = Command::new("/bin/bash")
         .arg(script)
         .arg(tar)
         .arg(out_img)

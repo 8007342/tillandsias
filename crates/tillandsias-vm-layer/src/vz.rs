@@ -769,7 +769,7 @@ local-hostname: tillandsias-vm
             let _ = std::fs::remove_file(dest);
         }
 
-        let output = std::process::Command::new("hdiutil")
+        let output = std::process::Command::new("/usr/bin/hdiutil")
             .arg("makehybrid")
             .arg("-o")
             .arg(dest)
@@ -3504,9 +3504,11 @@ mod tests {
     #[test]
     fn provisioning_never_spawns_a_binary_absent_from_the_minimal_path() {
         let source = include_str!("vz.rs");
-        // Ships with macOS and resolves under the minimal PATH. Verified on
-        // this host rather than assumed; anything added here must be too.
-        const RESOLVES_BARE: &[&str] = &["hdiutil"];
+        // 1420-umka: EMPTY on purpose. A bare name resolves through whatever
+        // PATH the process inherited, and `--provision` from a shell inherits
+        // Homebrew's; only an absolute stock path means the same binary on
+        // every launch. hdiutil, the last bare name, is /usr/bin/hdiutil now.
+        const RESOLVES_BARE: &[&str] = &[];
         const MINIMAL_PATH_DIRS: &[&str] = &["/usr/bin/", "/bin/", "/usr/sbin/", "/sbin/"];
 
         // Concatenated so this scan cannot match its own source.

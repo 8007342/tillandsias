@@ -77,7 +77,7 @@ const SECURITY_CALL_BUDGET: Duration = Duration::from_secs(10);
 /// error — kilobytes below any pipe limit — so it does not arise here. It
 /// would if this helper were reused for a chatty command.
 fn security_bounded(args: &[&str]) -> std::io::Result<std::process::Output> {
-    spawn_bounded("security", args, SECURITY_CALL_BUDGET)
+    spawn_bounded("/usr/bin/security", args, SECURITY_CALL_BUDGET)
 }
 
 /// The bounded spawn itself, with the program and budget as parameters so a
