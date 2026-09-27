@@ -185,6 +185,16 @@ Say so rather than editing. Canonical rule:
   corrected at all — and a cycle came one step from filing that as a structural
   defect of the ledger (642-fedr). The register was always field-generic; only
   the prose and the channel name were wrong.
+- **`size` and `implementer_tier` are top-level scalars** (1437-khnx):
+  `size: S|M|L`, `implementer_tier: haiku|sonnet|opus`. `query --json`
+  projects both for the selector's tier routing. Rows filed before the
+  scalars existed carry them as lines inside `notes:`, and those project the
+  same until corrected; a top-level value always wins. A row that states no
+  tier projects no key: the projection never defaults. The operator's
+  "No size tags get Opus" (2026-09-27) is applied by the selector (1437-vdz5). Correct one with
+  `set-field <order> implementer_tier <tier>`. Any other spelling is refused
+  by `set-field` and by `check --strict-fragments`, because it would route no
+  packet and could not be told from an untagged row.
 - **Never hand-author the `fields:`/`status:` channel.** Use `tillandsias-plan set-field`.
   Re-declaring a packet under `packets:` to change it is a G-Set no-op that looks
   exactly like success — see the table above.
