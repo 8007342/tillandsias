@@ -14,12 +14,7 @@ preconditions:
   - workspace contains scripts/test-claude-forge-bypass-preaccepted.sh
 
 critical_path:
-  - step: "order 1437-y2wu: claude forge entrypoint calls the bypass-consent seed"
-    command: "grep -Fq 'seed_claude_bypass_consent' images/default/entrypoint-forge-claude.sh && grep -Fq 'seed_claude_bypass_consent()' images/default/lib-common.sh && echo 'ok: bypass consent seed wired'"
-    timeout_ms: 3000
-    expected_behavior: "ok: bypass consent seed wired"
-
-  - step: "order 1437-y2wu: bypass-permissions consent pre-accepted, forge-gated, additive (4 fixture arms)"
+  - step: "order 1437-y2wu: bypass-permissions consent pre-accepted, forge-gated, additive (6 fixture arms, incl. entrypoint wiring order)"
     command: "bash scripts/test-claude-forge-bypass-preaccepted.sh"
     timeout_ms: 60000
     success_pattern: "PASS: claude forge bypass-permissions consent pre-accepted"
