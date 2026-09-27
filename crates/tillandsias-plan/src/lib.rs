@@ -79,6 +79,7 @@ pub mod obligation_props;
 pub mod pipeline;
 /// ORDER 706-f7mq — modular semantic explanation and fallback for documentation & plan corpora.
 pub mod semantic_expert;
+pub mod session_tokens;
 /// ORDER 547 — network-free RAG index over the whole-spec corpus (chunking,
 /// cosine retrieval, verifiable envelope construction). Embedding and synthesis
 /// happen outside the crate; see `spec.rs`.
