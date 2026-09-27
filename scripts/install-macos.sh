@@ -194,15 +194,34 @@ DEST="$INSTALL_DIR/Tillandsias.app"
 # ── stop running tray + back up existing ─────────────────────────────────
 if pgrep -x tillandsias-tray >/dev/null 2>&1; then
     say "stopping running tillandsias-tray"
-    osascript -e 'tell application "tillandsias-tray" to quit' 2>/dev/null || true
-    # Give it 5s to quit cleanly, then SIGTERM, then SIGKILL.
-    for _ in 1 2 3 4 5; do
-        pgrep -x tillandsias-tray >/dev/null 2>&1 || break
-        sleep 1
-    done
-    pkill -TERM -x tillandsias-tray 2>/dev/null || true
-    sleep 1
-    pkill -KILL -x tillandsias-tray 2>/dev/null || true
+    # 1244-9dx3 + 1426-cb6g: every step below now DRAINS the VM (the tray routes
+    # the quit Apple event and SIGTERM into the menu Quit's drain, which stops
+    # the VM and removes the per-launch vm-swap.img). Address the app by its
+    # BUNDLE ID: AppleScript resolves bundle names, and `tell application
+    # "tillandsias-tray"` (the executable name) never reached a running tray —
+    # measured on the v56.9.27.1 smoke, it stayed alive for 30 s. Each wait
+    # covers a full drain (measured live: 76 s = a 10 s in-VM request bound +
+    # 60 s VZ requestStop + force-stop); SIGKILL is the last resort only.
+    # osascript prints "User cancelled (-128)" here by design: the tray cancels
+    # AppKit's immediate terminate and exits itself once the VM has stopped.
+    osascript -e 'tell application id "com.tlatoani.tillandsias.tray" to quit' 2>/dev/null || true
+    _tray_wait() { # seconds
+        _w=0
+        while [ "$_w" -lt "$1" ]; do
+            pgrep -x tillandsias-tray >/dev/null 2>&1 || return 0
+            sleep 1; _w=$((_w + 1))
+        done
+        return 1
+    }
+    if ! _tray_wait 100; then
+        say "tray still running after the quit request; sending SIGTERM (drains the VM)"
+        pkill -TERM -x tillandsias-tray 2>/dev/null || true
+        if ! _tray_wait 100; then
+            say "WARNING: tray did not stop after SIGTERM; sending SIGKILL (the VM is not drained)"
+            pkill -KILL -x tillandsias-tray 2>/dev/null || true
+            sleep 1
+        fi
+    fi
 fi
 
 # ── extract BESIDE the destination, then swap ────────────────────────────

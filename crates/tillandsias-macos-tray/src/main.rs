@@ -18,6 +18,8 @@
 #[cfg(target_os = "macos")]
 mod action_host;
 #[cfg(target_os = "macos")]
+mod app_delegate;
+#[cfg(target_os = "macos")]
 mod diagnose;
 #[cfg(target_os = "macos")]
 mod guest_binary;
