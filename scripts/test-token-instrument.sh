@@ -44,7 +44,7 @@ LOG="$W/tokens.jsonl"
 emit() { TILLANDSIAS_TOKENS_LOG="$LOG" bash "$CM" --emit-tokens "$@" 2>/dev/null; }
 report() {
     TILLANDSIAS_TOKENS_LOG="$LOG" TILLANDSIAS_TIMING_LOG="$W/timing.jsonl" \
-        bash "$CM" 2>/dev/null
+        bash "$CM" --no-repo-scan 2>/dev/null
 }
 
 # ── 1. source=absent BEFORE any record. The row asks for this explicitly: a
