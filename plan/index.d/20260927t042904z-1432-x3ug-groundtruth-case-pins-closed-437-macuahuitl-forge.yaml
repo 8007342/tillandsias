@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-groundtruth-case-plan-upstream-prerequisites-of-experts-milestone-pins-437-as-open-so-trunk-went-red-when-437-closed
+    order: 1432-x3ug
+    status: ready
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [groundtruth, experts, trunk-red]
+    estimated_hours: 1
+    owned_files:
+      - openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml
+    title: |
+      TRUNK RED: cargo test -p tillandsias-plan --lib the_committed_query_set_is_green_at_head fails on origin/linux-next since 9ee8ce57c closed 437 — case plan-upstream-prerequisites-of-experts-milestone pinned 437 (forge-src-tmpfs-topology) as the milestone's open upstream prerequisite, and the query now correctly returns none
+    context: |
+      MEASURED by macuahuitl-forge 2026-09-27 on a CLEAN origin/linux-next
+      worktree: "ground truth is RED: plan-upstream-prerequisites-of-experts-milestone:
+      confidence: expected Exact, got Unsupported | citations: expected at least 1,
+      got 0 | no citation satisfies {… order=437, packet_id=forge-src-tmpfs-topology …}".
+      Current truth: tillandsias-plan answer "what blocks forge-local-experts-milestone"
+      -> confidence unsupported, "direct unsatisfied prerequisites blocking
+      'forge-local-experts-milestone' — the deterministic query returned no rows".
+      437 was the only open upstream prerequisite. Coordinator ruling: fix the
+      case to the new truth; do not revert the closure (437 is complete).
+    exit_criteria:
+      - 'the_committed_query_set_is_green_at_head passes on trunk with the case asserting the new truth (pre-fix: FAILS on origin/linux-next since 9ee8ce57c)'
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --lib the_committed_query_set_is_green_at_head exits 0 on the landed tree; pre-fix: FAILS.
+    provenance: |
+      Filed by macuahuitl-forge (forge-forge-tillandsias-claude-20260927t042904z), whose 437 closure caused it, 2026-09-27.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: work-ref-triage-slice-the-stranded-2026-09-25-forge-lua-migration-stack-and-work-1334-57at-classified-with-their-never-landed-fragments
+    field: status
+    value: completed
+    ts: "2026-09-27T03:54:54Z"
+    host: macuahuitl-forge
+
+events:
+  - packet_id: work-ref-triage-slice-the-stranded-2026-09-25-forge-lua-migration-stack-and-work-1334-57at-classified-with-their-never-landed-fragments
+    event:
+      type: completed
+      ts: "2026-09-27T03:54:54Z"
+      host: macuahuitl-forge
+      summary: |-
+        status 'completed' with evidence_refs: 9ee8ce57c
+  - packet_id: work-ref-triage-slice-the-stranded-2026-09-25-forge-lua-migration-stack-and-work-1334-57at-classified-with-their-never-landed-fragments
+    event:
+      type: note
+      ts: "2026-09-27T03:54:54Z"
+      host: macuahuitl-forge
+      summary: |-
+        triage delivered and dispositioned by coordinator ruling (macuahuitl-fedora, 2026-09-27): all five verdicts accepted. 437 closed on trunk evidence (6995e3a26) with its --memory-swap criterion superseded by 1375-xxzj; 1334-57at noted relay-worthy but conflicting, for the owner (esme) to merge trunk and re-gate; 914-ahsy noted that its stranded ref is dead and the row stays ready; the 18 stranded 09-25 fragments are NOT relayed. Those three ledger writes landed at 9ee8ce57c. Ref deletions (the four-ref stack) stay pending per-ref owner OKs.

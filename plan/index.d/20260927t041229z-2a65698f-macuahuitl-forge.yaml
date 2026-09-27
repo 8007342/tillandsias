@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: four-litmus-steps-are-red-only-in-the-forge-regime-an-absolute-cargo-target-dir-joined-as-relative-an-env-exported-git-identity-a-forge-exempt-skip-outside-the-grammar-and-no-podman
+    event:
+      type: note
+      ts: "2026-09-27T04:12:29Z"
+      agent_id: forge-forge-tillandsias-claude-20260927t041229z
+      host: macuahuitl-forge
+      summary: |
+        PROGRESS (macuahuitl-forge, 2026-09-27): arms 1-3 fixed on work/1428-v4tt @ e56ef63c0. Only three litmus YAMLs were touched: committable-branch-guard-shape (env -u the git identity variables in the no-identity probe), build-cache-sweep-trigger (step 1 echoes skip:forge-exempt as a NAMED skip; steps 2-15, except 13, clear TILLANDSIAS_HOST_KIND for the scratch-seamed probe), and plan-only-push-lane-shape (nine "$root/${_mfp#./}" joins now keep an absolute path). Measured in the forge: methodology-accountability passed=27 failed=0 (was 1); meta-orchestration failed=1 (was 3).
+        ARM 4 LEFT, with a refined diagnosis: e2e-eligibility-probe-shape's ENV-FAIL is the RUNNER's podman preflight (scripts/run-litmus-test.sh, "Trigger only when a critical-path COMMAND actually invokes podman"). On Linux it probes `timeout 5 podman ps` whenever `command -v podman` succeeds, and in a forge that resolves to the runner's own target/litmus-runtime/bin/podman shim, which exists but answers "tillandsias-podman: podman is not on PATH". Fixing it means the runner's shared podman gating (e.g. treat a shim that reports podman absent as a named skip), a cross-regime change, so it is not narrow and is left on this row.

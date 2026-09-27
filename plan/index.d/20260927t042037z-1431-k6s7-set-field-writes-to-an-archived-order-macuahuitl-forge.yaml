@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: set-field-resolves-an-order-that-exists-only-in-the-archive-prints-ok-and-writes-a-fragment-the-live-fold-drops
+    order: 1431-k6s7
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan-binary, ledger, archive]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      `tillandsias-plan set-field <order> …` on an order that exists ONLY in plan/archive/ resolves it through Ledger::resolve's archive fallback, prints ok:, and writes a fragment the live fold then drops ("dropped-entry … NO SUCH PACKET") — only the release preflight catches it, as plan-ledger-incomplete
+    context: |
+      REPRO (yoga, relayed by the coordinator 2026-09-27): `set-field 606-um5s
+      next_action --append …`, where 606-um5s lives only in
+      plan/archive/packets-2026-08.yaml (`status 606-um5s` -> "completed …
+      ARCHIVED"). Ledger::resolve consults the archive LAST on purpose, correct
+      for reads, and its own doc says writers must ask is_archived. append-event
+      already does (896-f8ti, measured 2026-08-26 with 624-q4jj); set-field, the
+      other writer on the same resolver, does not. No archived-reopen path
+      exists anywhere in the plan binary or scripts, so a refusal removes nothing
+      that works: a fragment for an archived id is dropped by every fold.
+    exit_criteria:
+      - 'set-field on an order that resolves only to an ARCHIVED packet is refused with a verdict naming it archived, and writes no fragment (pre-fix: FAILS, it prints ok: and writes one)'
+      - 'set-field on a live order still writes, and an unknown order is still refused as before'
+    verifiable_closure: |
+      cargo test -p tillandsias-plan set_field_refuses_an_archived_order passes (arms:
+      archived refused with no fragment written; live still writes; unknown still
+      refused); pre-fix: FAILS on the archived arm.
+    provenance: |
+      Found by yoga; filed by macuahuitl-forge (forge-forge-tillandsias-claude-20260927t042037z) at the coordinator's request, 2026-09-27.
+    events:
+      - type: filed
+        ts: "2026-09-27T04:20:37Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t042037z"
+        host: macuahuitl-forge
+        summary: |-
+          set-field lacks append-event's 896-f8ti archived-target refusal.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-macos-tray-path-that-calls-vzruntime-stop-from-a-tokio-worker-traps-in-dispatch-assert-queue
+    event:
+      type: note
+      ts: "2026-09-27T04:28:45Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t042845z
+      host: tlatoanis-macbook-air
+      summary: |
+        MEASURED REACHABILITY (2026-09-27, before any fix, per the coordinator's "measure it first"): the two remaining tray paths that call VzRuntime::stop from a tokio worker are NOT reachable in the shipped tray. (1) stopVm: ("Stop VM") — no NSMenuItem sets its action to that selector; the method exists, nothing sends it. (2) the "Reset guest" drain — its menu leaf was REMOVED by operator order 2026-07-22 (menu_state.rs RESET_GUEST doc); the capability survives only as the --reset-guest CLI verb, which runs stop() from the CLI's main thread (the shape that works, as --exec-guest does). So both are LATENT traps in dead menu code, not live crashes; the Quit path, the one users reach, is fixed on work/1426-cb6g. Not live-measured: triggering either would need UI automation plus, for Reset guest, a destructive guest wipe. Recommended fix: delete the dead stopVm: selector, and route any future menu-driven stop through the main-thread stop that 1426-cb6g introduced (or make VzRuntime::stop hop to the VM queue itself). Priority lowered to p3.

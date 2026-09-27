@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    field: status
+    value: completed
+    ts: "2026-09-27T04:21:11Z"
+    host: yoga
+
+events:
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: completed
+      ts: "2026-09-27T04:21:11Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: cbe66b561 (delete(1217-54vw): remove the login-time push probe, on origin/linux-next) + operator ruling plan/index.d/20260918t193636z-1217-54vw-operator-ruling-macuahuitl.yaml (2026-09-18T19:36:36Z, 'NEITHER resolution A NOR B': login validates 'can this token list repos?', push is tested at forge launch, a read-only token is not an error)
+  - packet_id: the-759-vceg-push-probe-verifies-one-repository-and-seeds-a-credential-used-for-all-of-them-so-its-guarantee-is-narrower-than-its-text
+    event:
+      type: note
+      ts: "2026-09-27T04:21:11Z"
+      host: yoga
+      summary: |-
+        closed as DECIDED BY OPERATOR: (1) the overclaim is gone — login no longer claims anything about push (deleted, not narrowed); (2) the negative control is CARRIED to 1264-s4id, the forge-launch capability report, which owns the verdict texts; (3) the mismatch test has no subject once login makes no push claim; (4) the decision (09-18T19:36Z) precedes the code (cbe66b561, 09-19T00:00Z). Coordinator's interim (c) ruling withdrawn by macuahuitl-fedora 2026-09-27.
