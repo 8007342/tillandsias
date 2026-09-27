@@ -1,0 +1,113 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# T5 main-loop tokens on every host: two packets. Design: plan/issues/efficiency-trims-design-2026-09-27.md
+packets:
+  - packet_id: session-tokens-from-the-harness-transcript-replaces-the-always-zero-main-ctx
+    order: 1437-3pj7
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [metrics, tokens, observability, bash]
+    estimated_hours: 5
+    depends_on: []
+    owned_files: [scripts/session-tokens.sh, scripts/cycle-metrics.sh, scripts/test-session-tokens.sh, methodology/agent-observability.yaml]
+    verifiable_closure: |
+      bash scripts/test-session-tokens.sh prints ok:session-tokens:5/5 and
+      exits 0, where, over a scratch transcript directory shaped like
+      ~/.claude/projects/<slug>/<session>.jsonl with a subagents/ child dir:
+      arm 1: scripts/session-tokens.sh --transcript <path> --since <utc>
+      prints main_ctx=<n> equal to the sum of input_tokens,
+      cache_creation_input_tokens, cache_read_input_tokens and output_tokens
+      over the assistant records at or after --since, and
+      main_ctx_cumulative=<n> over all of them; arm 2: subagent_tokens,
+      agents and by_model are summed from subagents/*.jsonl by their model
+      field; arm 3: scripts/cycle-metrics.sh --emit-tokens --from-transcript
+      cycle=c1 label=l with TILLANDSIAS_TOKENS_LOG pointed at a scratch log
+      writes one record whose main_ctx is non-zero and equals arm 1's value;
+      arm 4 NEGATIVE CONTROL: with no transcript resolvable the record
+      carries main_ctx=0 and the line says source=absent, never a guess; arm
+      5 NEGATIVE CONTROL: a transcript whose usage object lacks one of the
+      four fields yields source=absent:schema-drift:<field> and zeros.
+      PRE-FIX RESULT: FAILS — scripts/session-tokens.sh does not exist and
+      --from-transcript is not an --emit-tokens option; every row in the
+      fleet's token log since 2026-09-14 carries main_ctx=0.
+    title: |
+      `scripts/session-tokens.sh` derives main_ctx, main_ctx_cumulative and the sub-agent totals from the session's own harness transcript; `--emit-tokens --from-transcript` records them, on every host and in forges
+    context: |
+      T5 of the 2026-09-27 trims. The token log has 19 rows, all from one
+      host, main_ctx=0 on every row since 2026-09-14, because --emit-tokens
+      writes only what the caller passes and the caller never had a number.
+      The harness exposes one: the transcript at
+      ~/.claude/projects/<cwd-slug>/<session>.jsonl carries message.usage on
+      each assistant record with timestamp, sessionId and cwd; sub-agent
+      transcripts sit under <session>/subagents/; the session id is in
+      CLAUDE_CODE_SESSION_ID. That format is documented as internal and
+      version-dependent, so the script asserts the field names it reads and
+      answers schema-drift rather than zero when one is missing (a proxy
+      reported as a measurement is the defect agent-observability.yaml
+      proxy_discipline exists to prevent). main_ctx is a BILLED-token sum
+      and is named so at every surface, never a context-size proxy. Hosts
+      on opencode or codex, and a forge whose HOME lacks the directory,
+      record source=absent. Windows: the path is $HOME/.claude/projects
+      under Git Bash; state the regime in the record when it differs.
+    next_action: >
+      Write session-tokens.sh (jq over the transcript; resolve the path from
+      --transcript, else CLAUDE_CODE_SESSION_ID plus the cwd slug; --since
+      from TILLANDSIAS_CYCLE_START_TS); add --from-transcript to
+      --emit-tokens so it fills main_ctx, main_ctx_cumulative,
+      subagent_tokens, agents and by_model and adds a source field to the
+      record; amend agent-observability.yaml context_cost_metrics with a
+      main_ctx_source subsection; fixture over a scratch transcript.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Two scripts, a fixture and a methodology paragraph; the field set and
+      the fallback grammar are specified.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session after
+      reading this session's own transcript usage fields and the Claude Code
+      statusline, headless and hooks documentation.
+
+  - packet_id: check-tokens-log-has-main-ctx-fleet-adoption-lint
+    order: 1437-3ynw
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [metrics, tokens, lint, bash]
+    estimated_hours: 1
+    depends_on: [session-tokens-from-the-harness-transcript-replaces-the-always-zero-main-ctx]
+    owned_files: [scripts/check-tokens-log-has-main-ctx.sh, skills/join-the-fleet/SKILL.md]
+    verifiable_closure: |
+      bash scripts/check-tokens-log-has-main-ctx.sh --self-test prints
+      ok:tokens-log-main-ctx-self-test:3/3 and exits 0, where arm 1: a
+      scratch tokens log whose last five rows all carry main_ctx=0 while a
+      transcript path is resolvable prints
+      advisory:tokens-log-main-ctx-zero:5/5 and exits 0; arm 2: a log with
+      a non-zero main_ctx in the last five prints
+      ok:tokens-log-main-ctx:<n>/5; arm 3 NEGATIVE CONTROL: with no
+      transcript resolvable the zeros are expected and it prints
+      ok:tokens-log-main-ctx:no-transcript. PRE-FIX RESULT: FAILS — the
+      script does not exist; the coordinator's live log would answer
+      advisory:tokens-log-main-ctx-zero:5/5 today.
+    title: |
+      `check-tokens-log-has-main-ctx.sh`: a host whose last five token rows are all main_ctx=0 while a transcript exists is running the old attestation, not the instrument
+    context: |
+      T5 of the 2026-09-27 trims, the adoption check. An instrument that
+      exists but is not called reads exactly like one that measured zero
+      (activation is proved by what ran). Advisory; the join-the-fleet
+      handoff rule points at it.
+    next_action: >
+      Write the checker with --self-test; add one line to
+      skills/join-the-fleet/SKILL.md section 4 naming it beside the tokens:
+      line rule.
+    notes: |
+      size: S
+      implementer_tier: haiku
+      Mechanical; three arms over a scratch log.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session.

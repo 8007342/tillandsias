@@ -1,0 +1,130 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-gate-stamp-memoization-fixture-mints-a-pass-token-and-writes-a-full-scope-stamp-into-the-real-checkouts-git-dir-so-a-pre-build-litmus-run-leaves-an-unearned-green-stamp-that-land-adopts-and-pre-push-accepts
+    order: 1442-22d2
+    status: ready
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [gate-integrity, gate-stamp, litmus, land, pre-push, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-gate-stamp-memoization.sh
+      - openspec/litmus-tests/litmus-release-gates-run-locally.yaml
+    title: |
+      GATE INTEGRITY: scripts/test-gate-stamp-memoization.sh (litmus:release-gates-run-locally, spec methodology-accountability) mints a pass token into the REAL checkout's git dir through its issue_root_pass_token helper and then runs `gate-stamp.sh write --scope full --dispatch check` there, three times, the last one unconditionally at exit — so any `run-litmus-test.sh methodology-accountability --phase pre-build` leaves a fresh full-scope stamp for a tree no gate passed, which land-on-platform-branch.sh adopts, the pre-push hook accepts and `./build.sh --check` memoizes green in one second
+    context: |
+      OBSERVED (macuahuitl coordinator, 2026-09-27). Four relay lands took the
+      land tool's adoption path (1174-u5wp) on stamps no gate earned. Around each
+      one, .cache/metrics/tillandsias-timing.jsonl in the real checkout shows a
+      build-check-memoized record (exit 0, about 470 ms), about 2m17s of silence,
+      a build-check record with exit 1 at about 820 ms, and a stamp reading
+      scope full, stamped one second later. The four instances end at 09:59, 10:27,
+      12:01 and 14:03 UTC. A real gate takes about 1,050,000 ms (the two honest
+      lands that day). Each instance lines up with the END of a
+      litmus:release-gates-run-locally record (spec methodology-accountability,
+      about 150 s, exit 0) finishing 5-6 s after the stamp, at 09:59:05,
+      10:27:13, 12:01:59 and 14:03:20.
+
+      THE WRITER. scripts/test-gate-stamp-memoization.sh, WIRING layer. Its
+      helper issue_root_pass_token computes the digest of ROOT (the checkout the
+      fixture lives in, not a scratch repo) and writes
+      `$(git -C "$ROOT" rev-parse --absolute-git-dir)/tillandsias-gate-pass-token`,
+      standing in for the green build.sh that 940-f77j made the only token
+      minter. It then runs `bash "$ROOT/scripts/gate-stamp.sh" write --scope full
+      --dispatch check` against the real git dir at three sites: case 11 (setup
+      for the memo-hit arm), case 14 (setup for the red-gate arm) and the
+      trailing block commented "Leave the checkout's stamp matching reality",
+      which runs whether or not any stamp existed before the fixture started.
+      That trailing write is the stamp the land tool adopted. The timing records
+      map onto the fixture's cases one to one. Case 11 is the memoized
+      build.sh --check with exit 0. Cases 12 and 13 are the forced and combined
+      runs, bounded by 90 s and 40 s, which is the 2m17s gap. Case 14 is the red
+      gate with deliberately broken formatting, the exit-1 build-check at about
+      820 ms. The final mint and write follow one second later.
+
+      REPRODUCED (macuahuitl, 2026-09-27, fresh `git worktree` at main 52e3bc32e;
+      the fixture, gate-stamp.sh and the adoption and verify paths are unchanged
+      on origin/linux-next 9bd8aa87c). The worktree had no target/ directory and
+      had never run a gate. `bash scripts/gate-stamp.sh verify` printed
+      stale:never-run. `bash scripts/test-gate-stamp-memoization.sh` printed
+      ok:gate-stamp-memoization-fixture:14 (rc 0, about 140 s). Afterwards
+      `bash scripts/gate-stamp.sh verify` printed ok:gate-fresh with rc 0,
+      `bash scripts/gate-stamp.sh scope` printed full, and
+      `TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --check` exited 0 in about
+      one second, printing "ok:gate-fresh (stamped ...)" and "unchanged since
+      that passing gate; nothing re-run". No build.sh --check passed at any point.
+      Nothing host-specific is needed: bash, git, a Rust toolchain for the
+      stamp's toolchain field, and the checkout itself. No podman, vault or
+      plan binary.
+
+      EXPOSURE. Everything that trusts `gate-stamp.sh verify` is exposed the same
+      way. (a) land-on-platform-branch.sh adopts when verify is ok:gate-fresh
+      and scope is full (1174-u5wp). (b) scripts/hooks/pre-push-local-gate.sh
+      section 2 takes the ok:gate-fresh branch into enforce_stamp_scope, which a
+      full scope satisfies, so a bare `git push` after the fixture passes the
+      local gate. (c) The build.sh --check memo (765-tkq2) turns the forged stamp
+      into a one-second green for every later caller. (d) Inferred, not
+      measured: the --ci-full litmus lane runs this fixture against the real
+      root mid-gate. A ci-full that goes red after that point exits before
+      _write_gate_stamp, but the fixture's check-dispatch full stamp is already
+      on disk, so a red release gate can leave a fresh check stamp behind.
+
+      NAMED SHAPE: a fixture standing in for the authority it tests. The file's
+      own header says the DECISION layer uses a throwaway repo so it "cannot
+      touch the real checkout's stamp", but the WIRING layer restores "reality"
+      by minting the credential that 940-f77j made build.sh-only.
+    exit_criteria:
+      - 'after `bash scripts/test-gate-stamp-memoization.sh` (and after `scripts/run-litmus-test.sh methodology-accountability --phase pre-build`) in a checkout whose gate stamp was absent or stale beforehand, `bash scripts/gate-stamp.sh verify` does NOT print ok:gate-fresh, and no tillandsias-gate-pass-token is left in that checkout''s git dir, unless a real ./build.sh --check passed in between (pre-fix: FAILS; reproduced 2026-09-27 on a fresh worktree, where verify went from stale:never-run to ok:gate-fresh with scope full)'
+      - 'a checkout that held a genuinely earned fresh stamp before the fixture still holds a byte-identical stamp afterwards, so running the fixture never destroys real gate state either'
+      - 'the fixture still exercises the real build.sh memo wiring (the memo-hit, override-bypass, combined-dispatch and red-gate-writes-no-stamp arms) and still prints ok:gate-stamp-memoization-fixture:<N> with N at least 14, so the fix does not delete the WIRING layer'
+    verifiable_closure: |
+      bash scripts/test-gate-stamp-memoization.sh; bash scripts/gate-stamp.sh verify
+      That pair, run in a scratch worktree of the landed tree whose stamp and
+      token were removed first, must print ok:gate-stamp-memoization-fixture:<N>
+      (N >= 14) and then anything EXCEPT ok:gate-fresh. The full sequence
+      (git worktree add <dir> <landed-sha>, then cd <dir>):
+        G="$(git rev-parse --absolute-git-dir)"; rm -f "$G/tillandsias-gate-stamp" "$G/tillandsias-gate-pass-token"
+        bash scripts/gate-stamp.sh verify            # expect stale:never-run
+        bash scripts/test-gate-stamp-memoization.sh  # expect ok:gate-stamp-memoization-fixture:<N>, N >= 14
+        bash scripts/gate-stamp.sh verify            # PASS iff this is NOT ok:gate-fresh
+        test ! -e "$G/tillandsias-gate-pass-token"   # PASS iff no stray token
+      Pre-fix, the third command prints ok:gate-fresh (rc 0), so the closure FAILS
+      on the unfixed code. Also run scripts/run-litmus-test.sh
+      methodology-accountability --phase pre-build in the same worktree and
+      re-run the verify: it must not be ok:gate-fresh.
+    deliverable: |
+      scripts/test-gate-stamp-memoization.sh changed so its WIRING layer can
+      neither leave nor rely on a real-checkout stamp that no gate earned.
+      Candidate shapes, for the implementer to choose and justify: run the
+      wiring cases in a throwaway `git worktree add` of HEAD, so ROOT's git dir
+      is never written; or snapshot the real git dir's stamp and token bytes
+      before case 11 and restore them exactly on EXIT (delete them if they were
+      absent), and never mint a token outside a scratch repo. The fixture gains
+      an arm that asserts the real checkout's stamp and token are byte-identical
+      (or absent) before and after the whole fixture. Separately, and as its own
+      reviewed decision, consider whether the land tool's adoption should
+      require provenance that only build.sh can produce. That is a follow-up
+      row, not this one.
+    notes: |
+      size: S. One fixture with three root-write sites and the one helper
+      that mints the token; the litmus step is unchanged unless its expected
+      count moves.
+      implementer_tier: opus. A gate-integrity change; the review has to
+      check that the memo wiring is still really exercised and not stubbed.
+      Do NOT fix it by deleting cases 11 and 14 (third exit criterion).
+      Until this lands, coordinators should treat an adopted stamp as unearned
+      whenever the methodology-accountability pre-build litmus ran in that
+      checkout after the last green build.sh --check. Run the gate, or
+      TILLANDSIAS_FORCE_CHECK=1, before any relay land that follows a litmus pass.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:14:51Z"
+        agent_id: "linux-macuahuitl-claude-20260927t171451z"
+        host: macuahuitl
+        summary: |-
+          Filed by a coordinator-dispatched gate-integrity investigation on
+          macuahuitl after four relay lands adopted unearned stamps; the writer
+          was reproduced in an isolated worktree before filing.

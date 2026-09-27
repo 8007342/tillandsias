@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-opsx-dirt-checker-calls-launch-generated-opsx-dirt-ok-and-meta-orchestration-tells-agents-to-commit-it-so-the-reversed-order-540-decision-keeps-re-landing-regenerated-sets-on-trunk
+    order: 1440-w8g8
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [forge, openspec, clean-start, meta-orchestration, verdict-interface]
+    estimated_hours: 3
+    depends_on: [a-forge-launch-runs-openspec-init-against-the-checkout-with-an-unpinned-latest-cli-so-every-openspec-release-rewrites-tracked-files-and-the-forge-starts-dirty]
+    owned_files:
+      - scripts/check-opsx-generated-dirt.sh
+      - scripts/test-check-opsx-generated-dirt.sh
+      - scripts/test-meta-orchestration-opsx-sync-merge.sh
+      - openspec/litmus-tests/litmus-meta-orchestration-opsx-sync-merge.yaml
+      - scripts/meta-orchestration-worktree-guard.sh
+      - skills/meta-orchestration/SKILL.md
+    title: |
+      scripts/check-opsx-generated-dirt.sh answers ok:opsx-only (exit 0) for launch-generated opsx dirt and skills/meta-orchestration/SKILL.md step 4 tells the agent to commit it as "chore(opsx): sync ..." — the stale order-540 INSTRUCTION behind 64cceb25d, which the operator's 2026-09-27 ruling reverses
+    context: |
+      Split from 1422-w3p8 (the entrypoint fix, work/1422-w3p8 @ bfbad0349,
+      which makes a launch stop producing this dirt). The operator ruled
+      2026-09-27 that launch dirt "should not exist"; order 540's 2026-07-31
+      decision ("the opsx sync is INTENDED, committable, and a NORMAL part of
+      meta-orchestration") is REVERSED. Two surfaces still encode 540:
+      the checker's ok:opsx-only verdict (exit 0) and meta-orchestration
+      SKILL.md step 4 ("Generated opsx sync merge"), which commits the set.
+      64cceb25d (2026-09-27 13:26Z, OpenCode) followed that step and landed a
+      regenerated .opencode set on trunk, leaving .opencode at generatedBy
+      1.13.2 and .claude at 1.13.1.
+      The verdict string is an interface. Live consumers (git grep of
+      opsx-only / check-opsx-generated-dirt / chore(opsx) outside plan/):
+      skills/meta-orchestration/SKILL.md (step 3 prose + step 4),
+      scripts/test-check-opsx-generated-dirt.sh, scripts/test-meta-orchestration-opsx-sync-merge.sh,
+      openspec/litmus-tests/litmus-meta-orchestration-opsx-sync-merge.yaml (+ its
+      litmus-bindings.yaml entry), scripts/meta-orchestration-worktree-guard.sh:224
+      (re-snapshot comment). Prose-only mentions: check-resumable-claim-dirt.sh,
+      check-skill-canonicalization.sh, test-vault-shutdown-forwards-sigterm.sh,
+      skills/HARNESS-SCOPED.txt, skills/advance-work-from-plan/SKILL.md:127.
+      Coordinator (macuahuitl-fedora) direction 2026-09-27: base on
+      work/1422-w3p8; rename the verdict so launch dirt is a refusal; remove
+      the commit-the-sync step; update all consumers in the same change.
+    exit_criteria:
+      - 'no skill or script tells an agent to commit launch-generated opsx files (pre-fix: FAILS, skills/meta-orchestration/SKILL.md step 4 runs git commit -m "chore(opsx): sync generated openspec commands and skills")'
+      - 'scripts/check-opsx-generated-dirt.sh refuses launch dirt: it prints launch-dirt:opsx-only with a non-zero exit, never ok: (pre-fix: FAILS, it prints ok:opsx-only exit 0)'
+      - 'every live consumer of the old verdict is updated in the same change, listed with the reason each is handled'
+    verifiable_closure: |
+      litmus:meta-orchestration-opsx-sync-merge passes on trunk with its fixtures
+      asserting launch-dirt:opsx-only (non-zero) from scripts/check-opsx-generated-dirt.sh
+      on a tree dirty only in the generated opsx set, and asserting that
+      skills/meta-orchestration/SKILL.md contains no "chore(opsx): sync" commit step.
+    deliverable: |
+      The checker reports launch-generated opsx dirt as a refusal-class verdict;
+      meta-orchestration refuses it (after salvage) instead of committing it;
+      fixtures and the litmus pin the new behaviour.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:37:10Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t163026z"
+        host: forge-tillandsias
+        summary: |-
+          Filed by macuahuitl-forge on the coordinator's direction (macuahuitl-fedora,
+          2026-09-27) as the follow-up surfaced by 1422-w3p8.

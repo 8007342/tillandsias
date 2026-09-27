@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: tillandsias-owned-podman-config-files-explicit-on-every-invocation-and-winning-over-system-defaults
+    order: 1437-2pix
+    parent_order: 1437-8c6p
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [podman, config, containers-conf, registries-conf, linux, init]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-podman/src/lib.rs
+      - crates/tillandsias-core/src/config.rs
+      - scripts/test-podman-owned-config-precedence.sh
+      - scripts/check-podman-invocations-carry-owned-config.sh
+      - openspec/litmus-tests/litmus-podman-owned-config.yaml
+    title: |
+      Tillandsias writes `<config>/containers/{containers.conf,registries.conf[,storage.conf]}` and points EVERY podman invocation at them through podman's own environment contract, so a key we set wins over `/etc/containers`, `/usr/share/containers` and the user's `~/.config/containers`; `--init` stops editing the user's containers.conf in place
+    context: |
+      Spec: podman-idiomatic-patterns "Tillandsias-owned podman configuration is explicit on
+      every invocation and wins over system defaults"; podman-registries-config "The user runtime
+      reads a Tillandsias-owned registries.conf". Operator: "have them all always explicitly use
+      our config over the system defaults".
+
+      Today: --init edits the user's ~/.config/containers/containers.conf in place
+      (get_user_containers_conf; ensure_pasta_options_ipv4_only from
+      auto_detect_and_configure_ipv6_workaround; ensure_containers_conf_dns_servers from
+      auto_detect_and_configure_dns; ensure_containers_conf_no_proxy_env), sets no CONTAINERS_*
+      variable, writes no registries.conf (only scripts/setup-podman-registries.sh's developer
+      copy). The tillandsias-podman wrapper (configure_podman_environment_with_transport) sets
+      CONTAINERS_STORAGE_CONF only under the TILLANDSIAS_PODMAN_* isolation variables.
+
+      Do: (1) decide and PROVE the precedence mechanism: CONTAINERS_CONF replaces the whole
+      chain (system and user files ignored), CONTAINERS_CONF_OVERRIDE loads last on top of the
+      chain — measure both with a conflicting user key and pick the one whose effective value is
+      ours while still inheriting keys we do not set (the spec asks only that our key wins; state
+      which you chose and why in the fixture header); (2) generate the owned files under
+      config_dir()/containers on every --init from the same detection logic (pasta ipv4-only,
+      loopback-stub dns_servers, no proxy env), leaving the user's file untouched; migrate a
+      legacy install by removing only the lines the old code wrote (mark them or match them
+      exactly) and say so; (3) podman_command() and the wrapper export the chosen variables on
+      every invocation; scripts under scripts/ that run podman on the runtime's behalf source one
+      helper that exports the same; (4) fixture scripts/test-podman-owned-config-precedence.sh:
+      hermetic HOME with a user containers.conf carrying a conflicting pasta_options value; run
+      the runtime's podman invocation and read the effective config (`podman info` or
+      `podman system info --format`); assert ours wins and the user file is byte-identical
+      before and after --init; (5) source-shape guard
+      scripts/check-podman-invocations-carry-owned-config.sh: enumerate podman argv builders and
+      scripts running podman; each goes through the helper or exports the variables; print the
+      sites that do neither (a named population, not a count).
+    exit_criteria:
+      - 'scripts/test-podman-owned-config-precedence.sh: with a conflicting user key the effective value is ours and the user file is byte-identical across --init (pre-fix result: FAILS — the user file is edited in place and no variable is set)'
+      - 'scripts/check-podman-invocations-carry-owned-config.sh prints zero uncovered sites and its population is > 0 (pre-fix result: FAILS — every site is uncovered)'
+      - 'the enclave still comes up on a Fedora host with a loopback-stub resolv.conf and on a host without one (the dns_servers and pasta logic moved, not lost): scripts/local-ci.sh --phase runtime green (pre-fix result: passes — positive control, must stay green)'
+    verifiable_closure: |
+      bash scripts/test-podman-owned-config-precedence.sh exits 0 and bash scripts/check-podman-invocations-carry-owned-config.sh exits 0 with a non-empty population; pre-fix: both FAIL.
+    depends_on: []
+    notes: |
+      size: L  implementer_tier: opus
+      Cross-crate (headless + podman + core) and it changes the network configuration every
+      container launch depends on (pasta, DNS); a wrong precedence choice takes the enclave
+      down on half the fleet. The uninstall side (remove the owned files, revert legacy edits)
+      is 1437-evzi's; this packet only has to leave the legacy lines identifiable.
+    next_action: 'measure CONTAINERS_CONF versus CONTAINERS_CONF_OVERRIDE with a conflicting user pasta_options key and write the result into the fixture header before touching --init'
+    provenance: |
+      Filed by macuahuitl (linux-macuahuitl-claude-20260927t163835z), 2026-09-27, under umbrella 1437-8c6p.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:38:35Z"
+        agent_id: "linux-macuahuitl-claude-20260927t163835z"
+        host: macuahuitl
+        summary: |-
+          Own the podman configs: generate ours, point every invocation at them, stop editing the user's file.

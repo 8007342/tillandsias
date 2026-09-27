@@ -986,6 +986,50 @@ impl SyncPodmanCommand {
         }
         wait_for_exit(&mut child, budget, None)
     }
+
+    /// [`Self::status_bounded_with_stdin`] with stdout PIPED to `on_stdout`
+    /// chunk by chunk as it arrives, instead of inherited (order 1420-2pav: the
+    /// device-login poll's output is turned into a live activity line). stderr
+    /// stays inherited so errors still reach the terminal unchanged.
+    ///
+    /// The reader thread is joined only after a normal exit. On a timeout it is
+    /// abandoned, for the reason `wait_bounded` gives: a grandchild can hold
+    /// the pipe open after the child is killed, and joining would reintroduce
+    /// the hang the budget exists to prevent.
+    pub fn status_bounded_with_stdin_streaming(
+        &mut self,
+        input: &[u8],
+        budget: std::time::Duration,
+        mut on_stdout: impl FnMut(&[u8]) + Send + 'static,
+    ) -> std::io::Result<std::process::ExitStatus> {
+        use std::io::{Read, Write};
+        self.inner.stdin(std::process::Stdio::piped());
+        self.inner.stdout(std::process::Stdio::piped());
+        let mut child = self.inner.spawn()?;
+        let mut stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| std::io::Error::other("podman stdout pipe unavailable"))?;
+        let reader = std::thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            loop {
+                match stdout.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => on_stdout(&buf[..n]),
+                }
+            }
+        });
+        {
+            let mut stdin = child
+                .stdin
+                .take()
+                .ok_or_else(|| std::io::Error::other("podman stdin pipe unavailable"))?;
+            stdin.write_all(input)?;
+        }
+        let status = wait_for_exit(&mut child, budget, None)?;
+        let _ = reader.join();
+        Ok(status)
+    }
 }
 
 /// Park until `child` exits or the deadline expires, then kill and reap it.

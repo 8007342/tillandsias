@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: under-the-work-ref-lane-the-pre-push-hook-prints-a-terminal-line-claiming-the-gate-is-current-for-a-tree-it-warned-about-and-did-not-enforce
+    event:
+      type: note
+      ts: "2026-09-27T17:34:14Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        SECOND AND THIRD SOURCE, 2026-09-27. yolanda-windows pushed work/1401-x76w, work/1415-my8j, work/1417-t29c, work/1420-jmp4 and work/1434-vm7g; each ended "✓ local gate: preflight clean, ./build.sh --check current for this tree", while this checkout's stamp dated from 2026-09-20 and gate-stamp.sh verify read stale:tree-changed-since-gate (no pass token). I relayed that line to the coordinator as "the hook reports the local gate clean" on all five: the line did exactly the damage this row describes. The coordinator's gate-stamp investigator saw the same on its own work-ref push. The coordinator asked for a row and 1352-qbrd already covers the unconditional-trailer half, so this is evidence here instead of a third filing. Coordinator's framing for the fix: for an all-work-ref push the closing line states what it actually checked (the deciders) and never claims ./build.sh --check current. It is a VERDICT-STRING change, i.e. an interface change: grep the consumers of that line first (scripts/hooks/pre-push-local-gate.sh:2082 is the only emitter in tracked code today).

@@ -195,11 +195,145 @@ else
     bad "fresh stamp must still memoize; got rc=$rc [$v]"
 fi
 
+# 10b. ORDER 1442-22d2: a stamp a fixture BORROWED is nobody's evidence. With a
+#      fixture snapshot directory in the git dir, the same fresh stamp is refused
+#      by verify, scope and memo-check, except to a caller carrying that
+#      snapshot's owner token. An ownerless leftover (a SIGKILLed run) is refused
+#      to everyone. Removing the directory makes the stamp fresh again, so the
+#      refusal is about the snapshot, not the stamp.
+_snap="$(git -C "$TDIR/repo" rev-parse --absolute-git-dir)/tillandsias-gate-fixture-snapshot"
+mkdir -p "$_snap"
+printf 'owner-10b\n' > "$_snap/owner"
+_b_verify="$( cd "$TDIR/repo" && env -u TILLANDSIAS_GATE_FIXTURE_OWNER bash scripts/gate-stamp.sh verify 2>&1)"
+_b_scope="$(  cd "$TDIR/repo" && env -u TILLANDSIAS_GATE_FIXTURE_OWNER bash scripts/gate-stamp.sh scope 2>&1)"
+_b_memo="$(   cd "$TDIR/repo" && env -u TILLANDSIAS_GATE_FIXTURE_OWNER bash scripts/gate-stamp.sh memo-check check 2>&1)"
+_b_owner="$(  cd "$TDIR/repo" && TILLANDSIAS_GATE_FIXTURE_OWNER=owner-10b bash scripts/gate-stamp.sh verify 2>&1)"
+rm -f "$_snap/owner"
+_b_orphan="$( cd "$TDIR/repo" && TILLANDSIAS_GATE_FIXTURE_OWNER= bash scripts/gate-stamp.sh verify 2>&1)"
+rm -rf "$_snap"
+_b_after="$(  cd "$TDIR/repo" && bash scripts/gate-stamp.sh verify 2>&1)"
+if [ "$_b_verify" = "stale:fixture-borrowed-stamp" ] && [ "$_b_scope" = "stale:fixture-borrowed-stamp" ] &&
+    [ "$_b_memo" = "stale:fixture-borrowed-stamp" ] && [ "$_b_owner" = "ok:gate-fresh" ] &&
+    [ "$_b_orphan" = "stale:fixture-borrowed-stamp" ] && [ "$_b_after" = "ok:gate-fresh" ]; then
+    ok "a fixture-borrowed stamp is refused to every caller but the fixture's own"
+else
+    bad "borrowed stamp: verify=[$_b_verify] scope=[$_b_scope] memo=[$_b_memo] owner=[$_b_owner] orphan=[$_b_orphan] after=[$_b_after]"
+fi
+
 # ── WIRING layer (the real build.sh in this checkout) ────────────────────────
 # Bounded: a run that must NOT memoize is stopped once it has demonstrably
 # entered real work. The branch is decided in the first second.
 started_real_work() { grep -q 'Checking Rust formatting' "$1"; }
 took_memo()         { grep -q 'ok:gate-fresh (stamped' "$1"; }
+
+# ── THE REAL CHECKOUT'S GATE STATE IS BORROWED, NEVER KEPT (order 1442-22d2) ──
+# The wiring cases need a fresh full-scope stamp in THIS checkout's git dir,
+# because what they test is the real build.sh reading it. So they mint one,
+# and the fixture used to leave it there: its last block re-stamped "to match
+# reality" on every run. After one pass, `gate-stamp.sh verify` said
+# ok:gate-fresh for a tree no gate had examined, and the land tool, the pre-push
+# hook and build.sh's memo all accepted it. Four relay lands on 2026-09-27
+# adopted such a stamp and ran no gate.
+#
+# Every tillandsias-* gate file in the git dir is now snapshotted before the
+# first wiring write and restored byte-for-byte (including "was absent") on
+# every exit: pass, fail, INT, TERM or HUP. An earned stamp passes through
+# untouched and a missing one stays missing. The snapshot lives IN the git dir,
+# so a run killed with SIGKILL (the only exit no trap sees) is repaired at the
+# start of the next run instead of lingering. The long build.sh children run in
+# the background and are waited on, because bash defers a TERM trap until a
+# FOREGROUND child exits, and the litmus runner's TERM-then-KILL would
+# otherwise land KILL first.
+ROOT_GIT_DIR="$(git -C "$ROOT" rev-parse --absolute-git-dir)"
+GATE_SNAPSHOT="$ROOT_GIT_DIR/tillandsias-gate-fixture-snapshot"
+ROOT_GATE_FILES=(
+    tillandsias-gate-stamp
+    tillandsias-gate-stamp-manifest
+    tillandsias-gate-pass-token
+    tillandsias-litmus-diff-scoped
+    tillandsias-tracked-baseline
+)
+VICTIM="crates/tillandsias-vault-client/src/error.rs"
+VICTIM_DIRTY=0
+CHILD=""
+
+# apply: put the snapshot's bytes (or absence) back, keeping the snapshot.
+apply_root_gate_snapshot() {
+    [ -d "$GATE_SNAPSHOT" ] || return 0
+    local f
+    for f in "${ROOT_GATE_FILES[@]}"; do
+        if [ -e "$GATE_SNAPSHOT/$f.absent" ]; then
+            rm -f "$ROOT_GIT_DIR/$f"
+        elif [ -e "$GATE_SNAPSHOT/$f" ]; then
+            cp -p "$GATE_SNAPSHOT/$f" "$ROOT_GIT_DIR/$f"
+        fi
+    done
+}
+# restore: apply, then drop the snapshot, which ends the borrowed-stamp refusal.
+restore_root_gate_state() {
+    [ -d "$GATE_SNAPSHOT" ] || return 0
+    apply_root_gate_snapshot
+    rm -rf "$GATE_SNAPSHOT"
+}
+
+snapshot_root_gate_state() {
+    local f tmp="$GATE_SNAPSHOT.tmp.$$"
+    rm -rf "$tmp"
+    mkdir -p "$tmp" || return 1
+    # gate-stamp.sh refuses the stamp in place to anyone without this token
+    # while the snapshot exists (refuse_borrowed_stamp).
+    printf '%s\n' "$GATE_FIXTURE_OWNER" >"$tmp/owner" || return 1
+    for f in "${ROOT_GATE_FILES[@]}"; do
+        if [ -e "$ROOT_GIT_DIR/$f" ]; then
+            cp -p "$ROOT_GIT_DIR/$f" "$tmp/$f" || return 1
+        else
+            : >"$tmp/$f.absent"
+        fi
+    done
+    mv "$tmp" "$GATE_SNAPSHOT"
+}
+
+wiring_cleanup() {
+    # Restore BEFORE waiting on anything: if the child is slow to die, a KILL
+    # arriving during the wait must find the checkout already restored.
+    [ -n "$CHILD" ] && kill -TERM "$CHILD" 2>/dev/null
+    if [ "$VICTIM_DIRTY" = 1 ] && [ -f "$TDIR/victim.orig" ]; then
+        cp -p "$TDIR/victim.orig" "$ROOT/$VICTIM"
+        VICTIM_DIRTY=0
+    fi
+    apply_root_gate_snapshot
+    if [ -n "$CHILD" ]; then
+        wait "$CHILD" 2>/dev/null
+        CHILD=""
+    fi
+    # Again after the child is gone: one finishing a green gate as it died may
+    # have stamped between the first apply and its exit.
+    restore_root_gate_state
+}
+
+# run_child <log> <command...>: background + wait, so a signal is handled NOW.
+run_child() {
+    local log="$1" rc
+    shift
+    "$@" >"$log" 2>&1 &
+    CHILD=$!
+    wait "$CHILD"
+    rc=$?
+    CHILD=""
+    return "$rc"
+}
+
+if [ -d "$GATE_SNAPSHOT" ]; then
+    echo "note: a previous run was killed before restoring this checkout's gate state; restoring it now" >&2
+    restore_root_gate_state
+fi
+GATE_FIXTURE_OWNER="memo-fixture-$$-$(date +%s)-$RANDOM"
+export TILLANDSIAS_GATE_FIXTURE_OWNER="$GATE_FIXTURE_OWNER"
+snapshot_root_gate_state || { echo "FAIL: could not snapshot the checkout's gate state; refusing to mint into it" >&2; exit 1; }
+trap 'wiring_cleanup; rm -rf "$TDIR"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 # 940-f77j applies to the real checkout's writes too: without a token the
 # setup writes below silently refuse, no stamp lands, and case 11 falls
@@ -233,7 +367,7 @@ bash "$ROOT/scripts/gate-stamp.sh" write --scope full --dispatch check >/dev/nul
 # construct the environment it asserts about, scoring a correct behaviour as a
 # failure. The variable is cleared for this child only; case 12 still sets it
 # deliberately, which is the whole point of the pair.
-TILLANDSIAS_FORCE_CHECK= TILLANDSIAS_SKIP_VERSION_BUMP=1 "$ROOT/build.sh" --check > "$TDIR/hit.log" 2>&1
+run_child "$TDIR/hit.log" env TILLANDSIAS_FORCE_CHECK= TILLANDSIAS_SKIP_VERSION_BUMP=1 "$ROOT/build.sh" --check
 hit_rc=$?
 if [ "$hit_rc" -eq 0 ] && took_memo "$TDIR/hit.log" && ! started_real_work "$TDIR/hit.log" &&
     grep -q 'TILLANDSIAS_FORCE_CHECK=1 to re-run' "$TDIR/hit.log"; then
@@ -248,7 +382,7 @@ fi
 #     toolbox, and that entry alone can eat the whole bound before the
 #     formatting check ever prints — so a timeout kill (124) while the memo
 #     was NOT taken counts as real work, and only an instant memo exit fails.
-TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1 timeout 90 "$ROOT/build.sh" --check > "$TDIR/force.log" 2>&1
+run_child "$TDIR/force.log" env TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1 timeout 90 "$ROOT/build.sh" --check
 force_rc=$?
 if ! took_memo "$TDIR/force.log" && { started_real_work "$TDIR/force.log" || [ "$force_rc" -eq 124 ]; }; then
     ok "TILLANDSIAS_FORCE_CHECK=1 bypasses the memo and runs the gate"
@@ -266,7 +400,7 @@ fi
 #     first time). What must be true is that the memo was not taken and the
 #     process was doing real work when the bound hit — an instant exit 0 is
 #     the failure being excluded.
-TILLANDSIAS_SKIP_VERSION_BUMP=1 timeout 40 "$ROOT/build.sh" --check --install > "$TDIR/combined.log" 2>&1
+run_child "$TDIR/combined.log" env TILLANDSIAS_SKIP_VERSION_BUMP=1 timeout 40 "$ROOT/build.sh" --check --install
 combined_rc=$?
 if ! took_memo "$TDIR/combined.log" && [ "$combined_rc" -eq 124 ]; then
     ok "a combined dispatch (--check --install) never memoizes and does real work"
@@ -283,15 +417,17 @@ fi
 #     first attempt at this case produced a GREEN gate and a false failure —
 #     which is itself the lesson: an injected defect that the checker cannot
 #     see proves nothing. Appending to an already-compiled file is seen.
-STAMP_PATH="$(git -C "$ROOT" rev-parse --absolute-git-dir)/tillandsias-gate-stamp"
-VICTIM="crates/tillandsias-vault-client/src/error.rs"
+STAMP_PATH="$ROOT_GIT_DIR/tillandsias-gate-stamp"
 issue_root_pass_token
 bash "$ROOT/scripts/gate-stamp.sh" write --scope full --dispatch check >/dev/null 2>&1
 before="$("${PORTABLE_SHA256[@]}" "$STAMP_PATH" | cut -d' ' -f1)"
+cp -p "$ROOT/$VICTIM" "$TDIR/victim.orig"
+VICTIM_DIRTY=1
 printf 'pub fn   memo_fixture_badfmt( )->u8{1}\n' >> "$ROOT/$VICTIM"
-TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1 timeout 300 "$ROOT/build.sh" --check > "$TDIR/red.log" 2>&1
+run_child "$TDIR/red.log" env TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1 timeout 300 "$ROOT/build.sh" --check
 red_rc=$?
-git -C "$ROOT" checkout -- "$VICTIM"
+cp -p "$TDIR/victim.orig" "$ROOT/$VICTIM"
+VICTIM_DIRTY=0
 after="$("${PORTABLE_SHA256[@]}" "$STAMP_PATH" | cut -d' ' -f1)"
 if [ "$red_rc" -ne 0 ] && [ "$before" = "$after" ]; then
     ok "a RED gate writes no stamp, so nothing can memoize it as green"
@@ -300,9 +436,10 @@ else
     tail -3 "$TDIR/red.log" >&2
 fi
 
-# Leave the checkout's stamp matching reality: the tree changed during case 14.
-issue_root_pass_token
-bash "$ROOT/scripts/gate-stamp.sh" write --scope full --dispatch check >/dev/null 2>&1
+# No re-stamp here. This block used to mint a fresh full-scope stamp "to match
+# reality", which left an unearned ok:gate-fresh behind on every run (order
+# 1442-22d2). The EXIT trap restores the checkout's gate state exactly as the
+# fixture found it; only a real green gate earns a stamp.
 
 if [ "$fail" -eq 0 ]; then
     echo "ok:gate-stamp-memoization-fixture:$pass"

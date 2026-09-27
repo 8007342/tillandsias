@@ -37,6 +37,13 @@ The distinction is the entire answer to whether `podman system reset` destroys t
 - **WHEN** the inference container is stopped and restarted
 - **THEN** previously downloaded models SHALL be available immediately
 
+#### Scenario: Models survive every destructive reset on every platform; only uninstall removes them
+- **WHEN** `--reset-state` or `--reset-guest` runs on Linux, macOS or Windows (2026-09-27, `host-state-lifecycle`)
+- **THEN** every downloaded model and the self-installed engine under the model directory SHALL still be present afterwards, with no keep-models variable required
+- **AND** on macOS and Windows the model directory SHALL therefore live on the host side (`~/Library/Caches/tillandsias/models`; `%LOCALAPPDATA%\tillandsias\cache\models` or the host share the Windows packet names), never only inside the guest disk
+- **AND** `tillandsias --uninstall` SHALL remove the model directory and SHALL say so before doing it
+- Pre-fix result: FAILS on macOS `--reset-state` (removed unless `TILLANDSIAS_RESET_KEEP_MODELS=1`) and on Windows (models live inside the distro VHDX, 1182-2vaz); passes on Linux (positive control, pinned by `reset_guest_wipe_paths_exclude_model_cache`).
+
 ### Requirement: Inference container lifecycle
 <!-- req-id: d4afa160 -->
 The inference container SHALL be started on-demand and shared across all projects. It SHALL be stopped on app exit.

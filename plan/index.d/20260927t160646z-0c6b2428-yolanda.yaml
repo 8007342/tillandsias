@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: resolve-plan-binary-treats-a-drive-letter-cargo-target-dir-as-relative-and-prefixes-it-with-dot-slash
+    field: status
+    value: completed
+    ts: "2026-09-27T16:06:46Z"
+    host: yolanda
+
+events:
+  - packet_id: resolve-plan-binary-treats-a-drive-letter-cargo-target-dir-as-relative-and-prefixes-it-with-dot-slash
+    event:
+      type: completed
+      ts: "2026-09-27T16:06:46Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: b60198ceb ok:plan-binary-probe-fixture:8/8

@@ -211,7 +211,7 @@ critical_path:
   - step: "gate-stamp memoization decides correctly and fails closed (765-tkq2)"
     command: "bash scripts/test-gate-stamp-memoization.sh 2>&1 | tail -1"
     timeout_ms: 900000
-    expected_behavior: "ok:gate-stamp-memoization-fixture:14"
+    expected_behavior: "ok:gate-stamp-memoization-fixture:15"
 
 failure_modes:
   - "a validation is deleted from release.yml and never lands locally, trading cost for coverage"
