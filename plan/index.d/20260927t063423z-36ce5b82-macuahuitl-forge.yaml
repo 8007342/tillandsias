@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: jq-loop-callers-need-restructuring-not-dispatch-conversion
+    event:
+      type: note
+      ts: "2026-09-27T06:34:23Z"
+      agent_id: forge-forge-tillandsias-claude-20260927t063423z
+      host: macuahuitl-forge
+      summary: |
+        CORRECTION to macuahuitl-forge's note of 2026-09-27T03:54Z on this row, which said the stranded ref's 09-25 "implemented" write "would lose to trunk's 09-26T03:27Z status write anyway". THAT WAS WRONG. The fold's status merge is RANK-AWARE, not plain LWW (fragments.rs status_entry_wins, 686-7qcm/650-dq6u): a write that climbs from a working state (ready) onto the closure ladder (implemented<completed<verified<done) ALWAYS wins, whatever its timestamp. MEASURED with the real binary: a scratch copy of trunk's plan/ plus the ref's three fragments folds 914-ahsy from ready to IMPLEMENTED (plan-events 19 -> 23), agreeing with yoga's check-stranded-plan-writes.sh WOULD-CHANGE. The facts: the ref's latest status write is value=implemented ts=2026-09-25T06:29:09Z host=forge-tillandsias (20260925t062909z-1df79081); trunk's winning status write is value=ready ts=2026-09-26T03:27:03Z host=linux (20260926t032703z-086a26cd), after lenovinha in_progress at 00:16:59Z. So relaying the ref's fragments would be HARMFUL (a false "implemented"), not merely dangling. The verdict is unchanged: the ref is dead and none of its fragments may be relayed.
