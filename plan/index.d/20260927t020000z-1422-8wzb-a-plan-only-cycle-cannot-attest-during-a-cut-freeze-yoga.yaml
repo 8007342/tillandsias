@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Filed by yoga at macuahuitl's request (2026-09-27), from its own finalize
+# during the v56.9.27.1 cut freeze.
+packets:
+  - packet_id: during-a-cut-freeze-a-plan-only-cycle-cannot-attest-because-finalizes-land-path-pushes-a-union-debt-head-the-freeze-reads-as-code
+    order: 1422-8wzb
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [attestation, freeze, finalize, land, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - scripts/finalize-cycle.sh
+      - scripts/land-on-platform-branch.sh
+    related: [1176-9vqn, 1110-4v4h]
+    unscoreable: "unpinnable-until-the-guard-exists: the closure is a fixture that runs finalize's land path against a scratch remote carrying a live freeze ref, twice: (a) outgoing diff vs origin EMPTY or plan-only -> the cycle attests (MO-FULL: COMPLETE); (b) outgoing diff carrying real code -> still refused by the freeze. Pre-fix result: (a) FAILS — measured on yoga 2026-09-27 (below). NEGATIVE CONTROL is (b): a fix that lets (a) through by weakening the freeze would turn (b) green too."
+    title: |
+      during a cut freeze (1176-9vqn), a PLAN-ONLY cycle cannot attest: finalize's land path integrates, gates and pushes a head it says "carries un-gated union debt", and the freeze guard refuses that push as code — although the branch was 0 ahead of origin and the cycle's only work was already on trunk
+    context: |
+      MEASURED on yoga 2026-09-27 ~01:3xZ, during the v56.9.27.1 cut freeze
+      (refs/tillandsias/freeze/linux-next/macuahuitl/1790471167). The cycle's
+      only work was a plan filing (1421-3pd6), already on origin as 6aa53e618
+      through the plan-only lane BEFORE finalize ran. `scripts/finalize-cycle.sh
+      linux-next`:
+
+        land: attempt 1/4 — fetch + integrate onto origin/linux-next
+        land: head carries un-gated union debt (1 record(s)); the gate below is mandatory (1056-5344)
+        land: attempt 1 — push
+        ✗ pre-push refused: 'linux-next' is FROZEN and this push carries code (order 1176-9vqn)
+        refused:finalize:work-land-failed — the marker is NOT emitted
+        rc=6
+
+      Immediately after: `git status --branch` -> "linux-next...origin/linux-next
+      [behind 1]", `git log origin/linux-next..HEAD` EMPTY. Nothing of the
+      cycle's was unpushed, so there was nothing to land; the push that the
+      freeze refused was land's own integration product.
+
+      CONSEQUENCE: every worker cycle during a freeze is landed-but-unattested
+      even when it did exactly what a freeze asks (plan-only work, pushed
+      through the admitted lane), and the fleet heartbeat reads a host that
+      commits without attesting as WEDGED — so a freeze makes the obedient
+      hosts look broken.
+
+      DIRECTION (not a mandate): when the work head is already contained in
+      origin (1110-4v4h's remote_contains), land has nothing to push and should
+      say so and proceed to record; or the freeze guard should classify by the
+      OUTGOING DIFF against origin rather than by the presence of a push. The
+      freeze must keep refusing a push that carries code.
