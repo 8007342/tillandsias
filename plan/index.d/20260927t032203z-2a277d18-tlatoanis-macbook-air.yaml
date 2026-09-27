@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-graceful-quit-stage-addresses-the-tray-by-its-executable-name-while-applescript-resolves-bundle-names-so-the-polite-stop-may-never-fire-and-a-probe-with-no-tray-running-cannot-tell
+    event:
+      type: note
+      ts: "2026-09-27T03:22:03Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t032203z
+      host: tlatoanis-macbook-air
+      summary: |
+        MEASURED WITH THE TRAY RUNNING (v56.9.27.1 macOS smoke, 2026-09-27, tlatoanis-macbook-air): osascript -e 'tell application "tillandsias-tray" to quit' left the running tray alive for 30 s; pkill -TERM then stopped it in 1 s. So install-macos.sh's graceful stage is a no-op in practice and every reinstall over a running tray falls through to SIGTERM, which skips the VM stop path (see 1426-cb6g: vm-swap.img survives). Evidence: target/smoke-e2e/03c-1377-after-stop.txt; report plan/issues/smoke-e2e-findings-v56.9.27.1-2026-09-27-macos-tlatoanis-macbook-air.md.
