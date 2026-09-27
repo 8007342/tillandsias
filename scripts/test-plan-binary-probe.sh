@@ -144,8 +144,34 @@ case "$got" in
         fail=1 ;;
 esac
 
+# ── CASES 7-8 (1415-my8j): a DRIVE-LETTER CARGO_TARGET_DIR is absolute ──────
+# cygpath -m spells a directory C:/..., the form Windows tools emit. The probe
+# tested only a leading /, rewrote it to ./C:/... and resolved nothing from
+# any cwd. PRE-FIX RESULT: FAILS both cases on MSYS (measured, yolanda
+# 2026-09-26). Only MSYS can spell such a path, so elsewhere these skip by name.
+n=6
+if command -v cygpath >/dev/null 2>&1; then
+    n=8
+    _stub "$tmp/drive/target/release/tillandsias-plan"
+    dl="$(cygpath -m "$tmp/drive/target")"
+    got="$(_probe_in / "$dl")"
+    case "$got" in
+        *"/drive/target/release/tillandsias-plan") echo "ok case7: a drive-letter CARGO_TARGET_DIR resolves from / (1415-my8j)" ;;
+        *) echo "FAIL case7: CARGO_TARGET_DIR=$dl resolved '$got' from / (the 1415-my8j bug)"; fail=1 ;;
+    esac
+    _stub "$tmp/drive/target/debug/tillandsias-tray"
+    got="$( cd / && CARGO_TARGET_DIR="$dl" PATH="/usr/bin:/bin" bash -c \
+        ". '$PROBE'; resolve_target_binary tillandsias-tray debug /nonexistent-root" 2>/dev/null )"
+    case "$got" in
+        *"/drive/target/debug/tillandsias-tray") echo "ok case8: resolve_target_binary keeps a drive-letter CARGO_TARGET_DIR absolute (1415-my8j)" ;;
+        *) echo "FAIL case8: resolve_target_binary rooted CARGO_TARGET_DIR=$dl under the root, got '$got' (the 1415-my8j bug)"; fail=1 ;;
+    esac
+else
+    echo "skip case7-8: no cygpath, so no drive-letter spelling to test (1415-my8j is MSYS-only)"
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo "FAIL: plan-binary-probe fixture"
     exit 1
 fi
-echo "PASS: plan-binary-probe fixture (orders 783-jdeh, 1142-wn2k) 6/6"
+echo "PASS: plan-binary-probe fixture (orders 783-jdeh, 1142-wn2k, 1415-my8j) $n/$n"
