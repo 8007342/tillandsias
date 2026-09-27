@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: debug-init-leaves-tmp-tillandsias-init-vault-log-world-readable-because-cleanup-init-logs-omits-vault
+    field: status
+    value: in_progress
+    ts: "2026-09-27T11:01:46Z"
+    host: yoga
+
+events:
+  - packet_id: debug-init-leaves-tmp-tillandsias-init-vault-log-world-readable-because-cleanup-init-logs-omits-vault
+    event:
+      type: note
+      ts: "2026-09-27T11:01:46Z"
+      host: yoga
+      summary: |-
+        claimed 2026-09-27 by yoga-silverblue (its filer)
