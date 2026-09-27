@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: containers-conf-dns-servers-guard-is-presence-not-content
+    field: status
+    value: completed
+    ts: "2026-09-27T14:27:20Z"
+    host: yoga
+
+events:
+  - packet_id: containers-conf-dns-servers-guard-is-presence-not-content
+    event:
+      type: completed
+      ts: "2026-09-27T14:27:20Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: trunk main.rs ~:8625 (in v56.9.27.2): MEASURED live on yoga in the v56.9.27.2 install's --init (08:30Z): 'containers.conf already sets dns_servers — LEFT UNCHANGED, not converged (926-3vs6). Detected upstreams were [...]; edit ~/.config/containers/containers.conf by hand if ...' and the hand-set dns_servers = [1.1.1.1, 8.8.8.8] was indeed left unchanged — criterion 1 (unchanged WITH a message saying it declined and why), 2 (message at the outcome), 3 (negative control: a hand-set value not silently replaced)
+  - packet_id: containers-conf-dns-servers-guard-is-presence-not-content
+    event:
+      type: note
+      ts: "2026-09-27T14:27:20Z"
+      host: yoga
+      summary: |-
+        met on trunk by the shipped init; measured in the 27.2 smoke

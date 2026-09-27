@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: ledger-fold-silently-ignores-inert-fragments
+    field: status
+    value: completed
+    ts: "2026-09-27T14:27:19Z"
+    host: yoga
+
+events:
+  - packet_id: ledger-fold-silently-ignores-inert-fragments
+    event:
+      type: completed
+      ts: "2026-09-27T14:27:19Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 18d97f6f2 (land69, work/1425-t9v9 896f872d9): tillandsias-plan check names a channel-less fragment 'inert-fragment: <path>', distinct from 'malformed: <path>'; measured 2026-09-27 on a scratch ledger with a trunk-built binary: inert probe flagged, malformed flagged malformed:, a comment+valid-empty-channel fragment NOT flagged (negative control). Live ledger: 0 inert (the Antigravity fragment the row names, 20260826t124700z-776-jcf3-unadvanceable.yaml, is not in plan/index.d — that clause is satisfied vacuously, stated as such)
+  - packet_id: ledger-fold-silently-ignores-inert-fragments
+    event:
+      type: note
+      ts: "2026-09-27T14:27:19Z"
+      host: yoga
+      summary: |-
+        relayed via 1425-t9v9 and measured against its criteria on trunk

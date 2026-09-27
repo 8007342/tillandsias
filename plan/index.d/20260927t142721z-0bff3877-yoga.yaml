@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lane-listeners-and-publish-local-hardcode-home-src
+    field: next_action
+    value: '2026-09-27 yoga, re-verified at 18d97f6f2: criterion 1''s CODE is in trunk (tray discover_projects -> local_projects::host_project_root) but ''the tray lists the sibling project'' is NOT MEASURED; criterion 2 is plausibly covered by 920-c3af''s relay (the OpenCode builder now starts the lane listener) but not measured at a launch; criterion 3 (publish_local_service refuses with an actionable message naming the searched root and the env var) has NO code in the relay — it was not on the salvage ref. Stays ready: 3 unimplemented, 1-2 unmeasured.'
+    ts: "2026-09-27T14:27:21Z"
+    host: yoga
+
+events:
+  - packet_id: lane-listeners-and-publish-local-hardcode-home-src
+    event:
+      type: progress
+      ts: "2026-09-27T14:27:21Z"
+      host: yoga
+      summary: |-
+        status '2026-09-27 yoga, re-verified at 18d97f6f2: criterion 1's CODE is in trunk (tray discover_projects -> local_projects::host_project_root) but 'the tray lists the sibling project' is NOT MEASURED; criterion 2 is plausibly covered by 920-c3af's relay (the OpenCode builder now starts the lane listener) but not measured at a launch; criterion 3 (publish_local_service refuses with an actionable message naming the searched root and the env var) has NO code in the relay — it was not on the salvage ref. Stays ready: 3 unimplemented, 1-2 unmeasured.' (not terminal) with evidence_refs: 18d97f6f2
+  - packet_id: lane-listeners-and-publish-local-hardcode-home-src
+    event:
+      type: note
+      ts: "2026-09-27T14:27:21Z"
+      host: yoga
+      summary: |-
+        re-verified against trunk after the 1425-t9v9 relay
