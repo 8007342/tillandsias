@@ -71,6 +71,7 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+mod device_poll_view;
 mod image_build_progress;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
@@ -10967,9 +10968,33 @@ fn run_github_device_login(container: &str, debug: bool) -> Result<(), String> {
             "[tillandsias] running: podman exec --interactive {container} /bin/bash -s (poll script on stdin)"
         );
     }
+    // Order 1420-2pav: the poll's stdout drives a live activity line (time
+    // left on the code) instead of a row of dots; plain tiers pass through.
+    let view = std::sync::Arc::new(std::sync::Mutex::new(
+        device_poll_view::DevicePollView::new(tier, dc.expires_in),
+    ));
+    let feed_view = std::sync::Arc::clone(&view);
+    let started = std::time::Instant::now();
     let status = poll_cmd
-        .status_bounded_with_stdin(script.as_bytes(), device_poll_budget(dc.expires_in))
+        .status_bounded_with_stdin_streaming(
+            script.as_bytes(),
+            device_poll_budget(dc.expires_in),
+            move |chunk| {
+                use std::io::Write;
+                let bytes = feed_view
+                    .lock()
+                    .map(|mut v| v.feed(chunk, started.elapsed().as_secs()))
+                    .unwrap_or_else(|_| chunk.to_vec());
+                let mut out = std::io::stdout().lock();
+                let _ = out.write_all(&bytes);
+                let _ = out.flush();
+            },
+        )
         .map_err(|e| format!("GitHub device authorization failed: {e}"))?;
+    if let Ok(mut v) = view.lock() {
+        use std::io::Write;
+        let _ = std::io::stdout().write_all(&v.finish());
+    }
     if !status.success() {
         return Err(format!(
             "GitHub device authorization failed: poll exited with {status}"
