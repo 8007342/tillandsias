@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-forge-brew-shim-reports-an-on-demand-install-failure-as-attestation-verification-while-the-real-cause-is-portable-ruby-failing-to-load-delegate-so-the-verdict-names-the-wrong-cause
+    order: 1451-3ndq
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, brew, fail-loud, diagnostics]
+    estimated_hours: 2
+    owned_files:
+      - images/default/brew-shim-exec.sh
+    title: |
+      in a forge, the userspace brew shim cannot install tmux: Homebrew's Portable Ruby 3.4.4 dies with "cannot load such file -- delegate", and the shim then prints "brew install tmux failed (attestation verification is REQUIRED and may be the cause — that is by design)", a verdict that names the wrong cause
+    context: |
+      MEASURED (macuahuitl-forge, 2026-09-27 ~23:30Z, while probing agy for 1447-nmq3):
+      invoking `tmux` through /home/forge/.local/share/tillandsias/brew-shims/tmux ->
+      /usr/local/bin/tillandsias-brew-shim-exec -> `timeout 150 brew install --formula tmux`
+      printed, in order:
+        tillandsias: bootstrapping userspace Homebrew (4.5.8) for on-demand tools...
+        ==> Pouring portable-ruby-3.4.4.x86_64_linux.bottle.tar.gz
+        Error: cannot load such file -- delegate
+          .../vendor/portable-ruby/3.4.4/lib/ruby/3.4.0/rubygems/core_ext/kernel_require.rb:37
+          .../Library/Homebrew/lazy_object.rb:4
+        tillandsias: brew install tmux failed (attestation verification is REQUIRED and may be the cause — that is by design).
+        tillandsias: 'tmux' is not installed.
+      So brew itself cannot start (its Ruby cannot load the `delegate` stdlib), and the
+      shim's failure message attributes it to attestation, a misattributed verdict: an
+      operator reading it would chase the attestation policy, which played no part.
+      Two defects: (1) the forge's Portable Ruby is broken (unknown whether the bottle,
+      the cache at ~/.cache/tillandsias-project/brew-cache, or the environment); (2) the
+      shim's message asserts a cause it did not observe.
+    exit_criteria:
+      - 'the shim names the failure it observed: when brew itself fails before any attestation step (e.g. a Ruby load error), the message says so and carries the first error line; the attestation wording appears only when attestation actually refused (pre-fix: FAILS, the attestation sentence prints for a Ruby load error)'
+      - 'an on-demand `tmux` (or any brew-shimmed tool) installs in a fresh forge (pre-fix: FAILS, Portable Ruby cannot load delegate)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: a fixture that feeds the shim a brew that fails
+      with a Ruby LoadError and asserts the verdict names it lands with the fix.
+    events:
+      - type: filed
+        ts: "2026-09-27T23:55:23Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t163026z"
+        host: forge-tillandsias
+        summary: |-
+          Filed by macuahuitl-forge on the coordinator's direction; measured
+          while probing agy for 1447-nmq3.
