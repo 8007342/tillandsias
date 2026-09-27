@@ -456,7 +456,13 @@ sure we remove everything we download, likely just contained in our
 Operator ruling 2026-09-27, verbatim: "--uninstall should be the preferred
 way to remove, and should leave ZERO TRACES. Prompt on uninstall if
 ~/.tillandsias should also be removed, [y/N], and show some clear large text
-'this is the only leftover, safe to delete …'". The anchors go too.
+'this is the only leftover, safe to delete …'". The anchors go too. Second
+ruling, same day, verbatim: "Let's wipe the unrecoverable vault store during
+uninstall, together with the host keyring entry. That's what an 'UNINSTALL'
+means for a user." So `~/.tillandsias/vault/` is ALWAYS removed by uninstall,
+with the keyring share and root token, whatever the answer to the prompt; the
+prompt and the notice cover only what stays useful without credentials:
+`config/`, `downloads/` (with the manifest), `cache/`, `state/`.
 
 `tillandsias --uninstall` (Linux headless binary), `tillandsias-tray
 --uninstall` (macOS) and `tillandsias-tray.exe --uninstall` (Windows) SHALL
@@ -479,27 +485,33 @@ list only when it is not, printing that they did. Uninstall SHALL:
    knows, if any still exists;
 2. stop the running tray or headless process and every `tillandsias-*`
    container first;
-3. remove everything in (1) — this is the ZERO-TRACES set, and it is removed
-   unconditionally; a merged system file is reverted, never deleted;
-4. then ask ONE question about `~/.tillandsias/`:
-   `Also remove ~/.tillandsias (your Vault store, downloads and configs)? [y/N]`
-   — default N. Non-interactive (no TTY, or `--yes` absent): N without
-   waiting. `--remove-home` answers y without asking; `--keep-home` answers N
-   without asking. On y, remove the whole root, and on a guest regime that
-   includes `vm/` (already gone with the HARD set) and the guest-resident
-   store inside it;
+3. remove everything in (1) PLUS `~/.tillandsias/vault/` (the store and the
+   audit log; on a guest regime the guest-resident store went with the HARD
+   set) — this is the ZERO-TRACES set, and it is removed unconditionally,
+   before any question is asked; a merged system file is reverted, never
+   deleted. The listing in (1) SHALL name the Vault store and the keyring
+   entries so the operator sees, before the deletion, that the credentials
+   are going;
+4. then ask ONE question about what is left of `~/.tillandsias/`:
+   `Also remove ~/.tillandsias (downloaded models, Tillandsias configs and caches)? [y/N]`
+   — default N. Non-interactive (no TTY): N without waiting. `--remove-home`
+   answers y without asking; `--keep-home` answers N without asking. On y,
+   remove the whole root (on a guest regime `vm/` is already gone with the
+   HARD set);
 5. on N, print the large notice, verbatim shape:
    ```
    ==========================================================================
      THIS IS THE ONLY LEFTOVER — SAFE TO DELETE
      ~/.tillandsias   (<size>, <n> files)
-     It holds your Vault store, downloaded models and Tillandsias configs.
-     Nothing else of Tillandsias remains on this machine. Its Vault store
-     can no longer be unlocked (the key left with the keyring entries), so
-     keeping it only serves inspection.  Delete it with:  rm -rf ~/.tillandsias
+     It holds your downloaded models, Tillandsias configs and caches —
+     no credentials: the Vault store and its key were removed with the
+     uninstall. Nothing else of Tillandsias remains on this machine.
+     Delete it with:  rm -rf ~/.tillandsias
    ==========================================================================
    ```
-   sized to the terminal, and a one-line form when there is no TTY;
+   sized to the terminal, and a one-line form when there is no TTY. The
+   notice MUST NOT say or imply that the kept folder holds recoverable
+   credentials;
 6. report what was removed and confirm that project working trees were not
    touched.
 
@@ -512,19 +524,31 @@ requirement, each with a one-line note citing 2026-09-27.
 
 @trace spec:host-state-lifecycle, spec:environment-runtime, spec:tillandsias-vault
 
-#### Scenario: Uninstall with N leaves exactly one folder
+#### Scenario: Uninstall with N leaves exactly one folder, and it holds no credentials
 - **WHEN** `tillandsias --uninstall` runs on a host with a Vault store,
   downloaded models, a manifest with N entries, and the operator answers N
   (or there is no TTY)
 - **THEN** the binary, every launcher registration, every keyring entry under
-  service `tillandsias`, every `tillandsias-*` podman object, the Tillandsias
-  block of every merged file and the service-account stack SHALL be gone
+  service `tillandsias` (share, root token, anchor), every `tillandsias-*`
+  podman object, the Tillandsias block of every merged file and the
+  service-account stack SHALL be gone
+- **AND** `~/.tillandsias/vault/` SHALL NOT exist
 - **AND** `~/.tillandsias/` SHALL be the only Tillandsias path left on the
-  host, with its contents byte-identical
-- **AND** the large notice SHALL have been printed.
+  host, with `config/`, `downloads/`, `cache/` and `state/` byte-identical
+- **AND** the large notice SHALL have been printed and SHALL NOT mention
+  recoverable credentials.
 - Pre-fix result: FAILS — no `--uninstall` flag exists on any binary;
   `scripts/uninstall.sh` never touches keyring entries or podman objects and
   `-Purge` leaves the `.wslconfig` keys.
+
+#### Scenario: The Vault store goes whatever the answer
+- **WHEN** uninstall runs and the operator answers N, y, or nothing (no TTY)
+- **THEN** in every case `~/.tillandsias/vault/` and the keyring share and
+  root token SHALL be gone before the prompt is even shown
+- **AND** the pre-deletion listing SHALL have named them
+- **AND** a fixture arm per answer SHALL assert it (three arms, same
+  outcome for the store).
+- Pre-fix result: FAILS — nothing removes the store or the keyring entries.
 
 #### Scenario: Uninstall with y removes the folder too
 - **WHEN** the operator answers y, or passes `--remove-home`
@@ -533,11 +557,12 @@ requirement, each with a one-line note citing 2026-09-27.
 - **AND** no notice about a leftover SHALL be printed.
 - Pre-fix result: FAILS.
 
-#### Scenario: Non-interactive defaults to keeping the folder
+#### Scenario: Non-interactive defaults to keeping the useful folder
 - **WHEN** uninstall runs with stdin not a TTY and neither `--remove-home`
   nor `--keep-home`
-- **THEN** it SHALL NOT block on the prompt, SHALL keep `~/.tillandsias/`,
-  and SHALL print the one-line form of the notice.
+- **THEN** it SHALL NOT block on the prompt, SHALL keep
+  `~/.tillandsias/{config,downloads,cache,state}`, SHALL still have removed
+  `vault/`, and SHALL print the one-line form of the notice.
 - Pre-fix result: FAILS.
 
 #### Scenario: Uninstall without a manifest still removes the known roots
@@ -580,8 +605,9 @@ Bind to tests in `openspec/litmus-bindings.yaml` as the packets under
 - `litmus:download-manifest-coverage` — every large file under `downloads/`
   is covered by an entry; none outside it.
 - `litmus:uninstall-removes-everything` — after uninstall with N exactly one
-  folder remains; with y nothing; merged files reverted; project trees
-  untouched.
+  folder remains and its `vault/` is gone; with y nothing; the store and the
+  keyring entries go under every answer; merged files reverted; project
+  trees untouched.
 
 ## Observability
 

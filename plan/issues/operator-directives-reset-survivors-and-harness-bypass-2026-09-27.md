@@ -155,9 +155,11 @@ supersedes 900-z3kv's option (a) for the credential subject only. Stated in
    removed, [y/N], and show some clear large text 'this is the only leftover,
    safe to delete …'". Anchors and `/var/lib/tillandsias` go. Non-interactive
    defaults to N; `--remove-home` / `--keep-home`; the notice shape is in the
-   spec. 1437-evzi re-scoped by event and re-titled. Stated interpretation to
-   flag: on N the keyring entries are still removed (zero traces outside the
-   folder), so the leftover Vault store cannot be unlocked again — the notice
-   says so; if the operator wants a reinstall to recover credentials from a
-   kept folder, the share must stay with it and the spec needs one more line.
+   spec. 1437-evzi re-scoped by event and re-titled. The flagged
+   interpretation (a kept folder with an unlockable store) was RULED the same
+   day, verbatim: "Let's wipe the unrecoverable vault store during uninstall,
+   together with the host keyring entry. That's what an 'UNINSTALL' means for
+   a user." So `vault/` and the keyring entries go under every answer; the
+   prompt and the notice cover only `config/ downloads/ cache/ state/`, and
+   the notice must not imply recoverable credentials.
 5. Consent key: measured by 1437-y2wu's live arm; unchanged.

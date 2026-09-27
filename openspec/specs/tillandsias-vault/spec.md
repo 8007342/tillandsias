@@ -480,6 +480,12 @@ thing that removed the share.
 - **WHEN** `--uninstall` runs, or `--reset-guest` runs on a guest regime
 - **THEN** both keychain entries SHALL be removed (uninstall also removes the
   store and audit directories; HARD removes them with the guest)
+- **AND** uninstall SHALL remove the store and the entries UNCONDITIONALLY,
+  before and regardless of its `[y/N]` question about the rest of
+  `~/.tillandsias/` (operator ruling 2026-09-27, verbatim: "Let's wipe the
+  unrecoverable vault store during uninstall, together with the host keyring
+  entry. That's what an 'UNINSTALL' means for a user."); a kept folder never
+  holds a Vault store
 - **AND** a source-shape fixture SHALL prove that no SOFT reset body on any
   platform calls a credential clearer (grep `run_reset_state`,
   `run_reset_guest` on Linux, the macOS `run_reset_state`, and the Windows
