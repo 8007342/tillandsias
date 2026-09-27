@@ -709,6 +709,7 @@ specs:
 - spec_id: meta-orchestration
   status: active
   litmus_tests:
+  - litmus:claims-refusals-carry-affordance
   - litmus:forge-expert-base-guard-shape
   - litmus:e2e-eligibility-probe-shape
   - litmus:credential-channel-check-shape

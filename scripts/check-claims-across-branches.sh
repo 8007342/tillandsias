@@ -57,7 +57,17 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT" || { echo "blocked:no-root"; exit 2; }
+
+# ORDER 1247-omqr (a 1247-amcu slice). Every refusal below says WHY it refused
+# and WHAT would make it not a refusal, on stderr, as two labelled lines. The
+# stdout verdict tokens are unchanged: the selector and the fixtures consume
+# them. A remedy names the rule and how to find the local answer, never a
+# hardcoded branch name (1247-amcu criterion 4).
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+cd "$ROOT" || {
+    _afford "the checkout root derived from this script's own path cannot be entered, so no sibling ledger can be folded" \
+        "run the copy inside a readable checkout (scripts/check-claims-across-branches.sh from its repo root); never read this as unclaimed"
+    echo "blocked:no-root"; exit 2; }
 
 # ── --batch: FOLD ONCE PER RUN, NOT ONCE PER CANDIDATE (order 1034-whsp) ────
 #
@@ -107,6 +117,8 @@ PLAN_BIN="$(resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
 case "$PLAN_BIN" in ./*) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
 if [ -z "$PLAN_BIN" ]; then
     echo "blocked:no-plan-binary — cannot fold a sibling branch's ledger, so this says NOTHING about who holds a packet or any packet; build with ./build.sh (never read this as unclaimed)" >&2
+    _afford "no runnable tillandsias-plan resolved (scripts/plan-binary-probe.sh), and folding a sibling's ledger needs one" \
+        "build it (./build.sh, or cargo build --release -p tillandsias-plan), or point TILLANDSIAS_PLAN_BIN at a runnable binary, then re-run"
     echo "blocked:no-plan-binary"
     exit 2
 fi
@@ -196,6 +208,8 @@ if [ "$NO_FETCH" = 0 ]; then
         # A fetch failure must not read as "nobody else holds it" — that is the
         # false-negative this check exists to prevent, and it would be silent.
         echo "blocked:fetch-failed — cannot see sibling branches, so this says NOTHING about who holds ${PACKET:-these packets}" >&2
+        _afford "git fetch of the sibling platform branches from origin failed, so their claims cannot be seen" \
+            "check the remote with git remote -v and git ls-remote origin, then re-run; to decide on the last-fetched refs instead (possibly stale), re-run with --no-fetch"
         echo "blocked:fetch-failed"
         exit 2
     }
@@ -229,6 +243,8 @@ if [ "$BATCH" = 1 ]; then
                 # The fold produced no ready set at all: treat as unusable
                 # rather than as "everything is claimed".
                 echo "blocked:empty-fold:$b" >&2
+                _afford "the plan binary folded origin/$b's ledger into an empty ready set, which cannot be told apart from everything being claimed, so that branch is skipped" \
+                    "check the binary can read that ledger: git archive origin/$b plan/index.yaml plan/index.d | tar -t, then tillandsias-plan --index <extract>/plan/index.yaml ready any"
                 rm -rf "$tmp"; tmp=""
                 continue
             fi
@@ -243,6 +259,8 @@ $id
                 st="$("$PLAN_BIN" --index "$tmp/plan/index.yaml" status "$id" 2>/dev/null | awk '{print $2}')"
                 if [ "$st" = in_progress ]; then
                     echo "claimed-elsewhere:$id:$b"
+                    _afford "origin/$b holds $id in_progress, and your fold has not seen that claim yet" \
+                        "do not implement $id; pick the next candidate. Arbitration is by claim timestamp: scripts/check-claim-confirmed.sh $id --host <you> says whose claim is earlier"
                     hits=$((hits + 1))
                 fi
             done
@@ -253,6 +271,8 @@ $id
         # No sibling could be folded. Saying "none claimed" here is the false
         # negative this file exists to prevent.
         echo "blocked:no-siblings-folded" >&2
+        _afford "no sibling platform branch resolved as origin/<branch> (other than the current one), so nothing was compared" \
+            "fetch the sibling branches (git fetch origin), confirm they resolve with git branch -r, then re-run"
         echo "blocked:no-siblings-folded"
         exit 2
     fi
@@ -329,6 +349,8 @@ if [ -n "$found" ]; then
     echo "  A sibling branch holds this packet in_progress and your fold has not seen it yet." >&2
     echo "  It is NOT yours to implement. Arbitration is by claim TIMESTAMP, not push order:" >&2
     echo "  if yours is earlier you continue; if theirs is earlier you release and reroute." >&2
+    _afford "a sibling branch holds $PACKET in_progress under another host's claim" \
+        "run scripts/check-claim-confirmed.sh $PACKET --host <you>: if it confirms your claim is earlier, continue; if it answers refused:claim-lost, release with set-field $PACKET status ready and take another packet"
     exit 1
 fi
 # The local fold counts as existence too: a packet this host just filed is real
@@ -340,6 +362,8 @@ if [ "$seen_anywhere" -eq 0 ]; then
     echo "  No branch and no local fold knows this packet. That is NOT the same" >&2
     echo "  as unclaimed: an ok here would send you to claim something that does" >&2
     echo "  not exist, or that its author has not pushed yet." >&2
+    _afford "no sibling branch and no local fold knows $PACKET" \
+        "check the reference with tillandsias-plan status $PACKET after git pull; if its author has not pushed yet, wait for the push; otherwise correct the id or order"
     echo "unknown-packet:$PACKET:$checked sibling branch(es) checked"
     exit 2
 fi
