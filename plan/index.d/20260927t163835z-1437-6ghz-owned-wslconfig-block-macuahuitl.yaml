@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: tillandsias-owned-wslconfig-block-idempotent-merge-and-un-merge
+    order: 1437-6ghz
+    parent_order: 1437-8c6p
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [wsl, wslconfig, config, windows, installer]
+    estimated_hours: 4
+    owned_files:
+      - scripts/install-windows.ps1
+      - scripts/test-installer-merges-wslconfig-swap-keys.sh
+      - crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+      - docs/cheatsheets/runtime/wsl/wslconfig-tunables.md
+    title: |
+      Windows: the canonical WSL settings live in one Tillandsias-owned file under the config directory; `Get-WslConfigMerge` writes them into `%USERPROFILE%\.wslconfig` inside a marked block, idempotently, never touching user keys; an un-merge removes exactly the block; `/etc/wsl.conf` in the distro is provisioned from our template
+    context: |
+      Spec: wsl-runtime "Requirement 9: Tillandsias owns its WSL configuration and its block of
+      .wslconfig". Operator: "store there our .wslconfig, .podmanconfigs, etc".
+
+      Today (1339-r9xv): Get-WslConfigMerge is pure and adds the missing keys swap, swapFile,
+      sparseVhd, autoMemoryReclaim with consent (interactive [y/N] or TILLANDSIAS_WSLCONFIG=apply),
+      backs up to .wslconfig.tillandsias-bak, then wsl --shutdown. There is no marked block, no
+      canonical file of ours, no un-merge; -Purge leaves the keys. WSL reads only
+      %USERPROFILE%\.wslconfig and the distro's /etc/wsl.conf, so "use ours" means owning our
+      block and our /etc/wsl.conf.
+
+      Do: (1) canonical file %LOCALAPPDATA%\tillandsias\config\wslconfig.toml (or the path you
+      name in the fixture) holding the keys and values; the installer reads it; (2)
+      Get-WslConfigMerge writes inside `# >>> tillandsias >>>` … `# <<< tillandsias <<<`; a
+      second run is a no-op; a changed canonical value rewrites the block only; a user key
+      outside the block is never moved or rewritten; existing consent flow unchanged; (3)
+      Remove-WslConfigBlock (pure, same file) removes exactly the block and never deletes the
+      file — 1437-evzi's uninstall calls it; (4) /etc/wsl.conf is written into the distro from
+      our template on every provision (systemd=true plus whatever provisioning already needs);
+      (5) extend scripts/test-installer-merges-wslconfig-swap-keys.sh with arms (a) idempotent
+      second merge, (b) user key survives a changed canonical value, (c) un-merge leaves only
+      the user lines and the [wsl2] header; the fixture runs the real PowerShell functions
+      through pwsh when present and prints a named skip otherwise (as today).
+    exit_criteria:
+      - 'arm (b): a user memory=8GB line outside the block is byte-identical after a merge with a changed canonical swap size (pre-fix result: FAILS — no block; the merge appends keys and has no notion of ownership)'
+      - 'arm (c): Remove-WslConfigBlock leaves only the user lines and the header (pre-fix result: FAILS — no such function)'
+      - 'arm (a): the second merge output equals the first (pre-fix result: passes — positive control)'
+      - 'the distro /etc/wsl.conf after provision matches our template (pre-fix result: UNMEASURED — the fixture arm is the measurement)'
+    verifiable_closure: |
+      bash scripts/test-installer-merges-wslconfig-swap-keys.sh exits 0 with arms (a) (b) (c) on a host with pwsh; pre-fix: (b) and (c) FAIL.
+    depends_on: []
+    notes: |
+      size: M  implementer_tier: sonnet
+      A few files with a clear design; the merge is already pure and fixture-driven. The
+      un-merge is consumed by 1437-evzi — export it from the same script so uninstall does not
+      grow a second copy (803-49re's lesson).
+    next_action: 'add the marked-block writer to Get-WslConfigMerge and arm (b) to the fixture; watch (b) go red-to-green, then write Remove-WslConfigBlock and arm (c)'
+    provenance: |
+      Filed by macuahuitl (linux-macuahuitl-claude-20260927t163835z), 2026-09-27, under umbrella 1437-8c6p.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:38:35Z"
+        agent_id: "linux-macuahuitl-claude-20260927t163835z"
+        host: macuahuitl
+        summary: |-
+          Own our block of .wslconfig and our /etc/wsl.conf; idempotent merge, exact un-merge.
