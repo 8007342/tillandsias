@@ -7,6 +7,7 @@
 # Tools:
 #   plan_check        — integrity + schema validation
 #   plan_status       — one packet's status line
+#   discipline_show   — the branch-discipline seed as JSON (order 1443-w79y)
 #   plan_ready        — ready packets for a pickup role
 #   plan_blocked_by   — packets directly blocked by a given packet
 #   plan_blocked_on   — a packet's direct unsatisfied prerequisites
@@ -1231,6 +1232,7 @@ while IFS= read -r line; do
 [
                 {"name":"plan_check","description":"Run integrity + schema validation on the plan ledger (shell: tillandsias-plan check)","inputSchema":{"type":"object","properties":{}}},
                 {"name":"plan_status","description":"Get the status line of a packet by id or order number","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
+                {"name":"discipline_show","description":"BRANCH DISCIPLINE (order 1443-w79y). The project's branch-discipline seed (.tillandsias/branch-discipline.yaml) as JSON: level (0 bare, 1 integration branch + PRs, 2 work refs), per-rule enforcement (advised|warn|enforced), default_branch, integration branch per platform, work_ref and salvage grammar, and the seed's sha256 digest. source=default level=0 means the project has no seed and nothing is refused.","inputSchema":{"type":"object","properties":{}}},
                 {"name":"plan_ready","description":"List ready packets, optionally filtered by pickup role","inputSchema":{"type":"object","properties":{"role":{"type":"string"}}}},
                 {"name":"plan_blocked_by","description":"List packets directly blocked by a given packet","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
                 {"name":"plan_blocked_on","description":"List a packet's direct unsatisfied depends_on prerequisites. This is the upstream inverse of plan_blocked_by; completed, obsoleted, and archived prerequisites are omitted.","inputSchema":{"type":"object","properties":{"reference":{"type":"string","minLength":1}},"required":["reference"],"additionalProperties":false}},
@@ -1266,6 +1268,11 @@ TOOLS_JSON
                 "plan_status")
                     ref=$(echo "$args" | jq -r '.reference')
                     result=$(plan_query "status" "$ref")
+                    ;;
+                "discipline_show")
+                    # Order 1443-w79y. Same JSON as `discipline show --json`;
+                    # the root is the checkout of the resolved plan index.
+                    result=$(plan_query "discipline" "show" "--json")
                     ;;
                 "plan_ready")
                     role=$(echo "$args" | jq -r '.role // ""')

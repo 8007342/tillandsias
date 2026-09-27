@@ -36,6 +36,8 @@ declared-closures
 declared-closures-check
 decompose
 dependencies-of
+# discipline: order 1443-w79y — branch-discipline seed (show|target|check-ref).
+discipline
 expert-serve
 experts-probe
 expire-claims
