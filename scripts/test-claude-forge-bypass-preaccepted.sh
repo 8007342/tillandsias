@@ -165,8 +165,29 @@ has_key "$SET" skipDangerousModePermissionPrompt \
     && fail "arm non-forge-existing: skipDangerousModePermissionPrompt appeared in $SET"
 rm -rf "$WORK"
 
+# ── Arm 5: the approvals restore cannot undo the seed ───────────────────────
+# (folded in from lenovinha's independent implementation of this row.) The
+# entrypoint runs the seed BEFORE `claude-approvals-vault restore`, and the
+# restore merges VAULT UNDER LOCAL (`$v * .`), so a vault document carrying an
+# older `false` fills gaps only and cannot revoke the seeded `true`. Pinned on
+# the real script rather than re-enacted in jq, which would add a jq call site
+# the 1375 ratchet forbids.
+AV="$ROOT/images/default/claude-approvals-vault.sh"
+if grep -q 'jq --argjson v "$doc"' "$AV" && grep -qF '($v * .)' "$AV"; then :; else
+    fail "arm restore-merge: $AV no longer merges vault-under-local (\$v * .) — a vault false could now undo the seed"
+fi
+
+# ── Arm 6: entrypoint order first-run seed < bypass seed < restore ──────────
+EP="$ROOT/images/default/entrypoint-forge-claude.sh"
+s1="$(grep -n '^seed_claude_first_run_defaults$' "$EP" | head -1 | cut -d: -f1)"
+s2="$(grep -n '^seed_claude_bypass_consent$' "$EP" | head -1 | cut -d: -f1)"
+s3="$(grep -n 'claude-approvals-vault restore' "$EP" | head -1 | cut -d: -f1)"
+if [ -n "$s1" ] && [ -n "$s2" ] && [ -n "$s3" ] && [ "$s1" -lt "$s2" ] && [ "$s2" -lt "$s3" ]; then :; else
+    fail "arm entrypoint-order: first-run=$s1 bypass=$s2 restore=$s3 (need first-run < bypass < restore)"
+fi
+
 if [ "$fails" -gt 0 ]; then
     echo "FAIL: $fails assertion(s) failed" >&2
     exit 1
 fi
-echo "PASS: claude forge bypass-permissions consent pre-accepted (4 arms, 6 assertions grouped)"
+echo "PASS: claude forge bypass-permissions consent pre-accepted (6 arms)"
