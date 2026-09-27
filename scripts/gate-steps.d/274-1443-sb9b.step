@@ -1,0 +1,12 @@
+# Gate step 1443-sb9b — data, not code (order 1072-b7eq).
+#
+# The first hook ported to Lua: the main-branch pre-push affordance reads the
+# discipline seed, keeps its verdict grammar, never refuses a level-0 project,
+# and its stub fails CLOSED with no runnable binary or no discipline answer.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the Lua main-branch pre-push affordance (1443-sb9b)"
+STEP_SCRIPT="scripts/test-pre-push-main-branch-affordance.sh"
+STEP_ERROR="the main-branch affordance stopped reading the seed, refused a level-0 project, or stopped failing closed (1443-sb9b) — see the verdict line above"
+STEP_OK="Main-branch affordance passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:main-branch-affordance-fixture:5/5"
