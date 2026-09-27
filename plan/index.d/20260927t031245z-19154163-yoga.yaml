@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: there-is-no-shared-terminal-renderer-so-every-install-surface-prints-raw-or-fake-progress
+    field: status
+    value: completed
+    ts: "2026-09-27T03:12:45Z"
+    host: yoga
+
+events:
+  - packet_id: there-is-no-shared-terminal-renderer-so-every-install-surface-prints-raw-or-fake-progress
+    event:
+      type: completed
+      ts: "2026-09-27T03:12:45Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 225a31a73 (trunk; relay merge 7e22fbca3 'relay: land work/1420-9vpk'; feature commit 15e0ae9ac an ancestor): crate tillandsias-progress-tty — Tier::detect (truecolor/256/PLAIN for non-TTY, NO_COLOR, CI, TERM=dumb/unset), position-coloured tillandsia bars (tip #E8637A / xterm 168, blush-mid behind, body on the leaf ramp), PlainSink one line per task STATE change with zero ESC bytes, monotone aggregate capped below 100% until all Done. tests/golden.rs 6/6 covering every clause of the verifiable closure; 4 mutation controls each caught by its own test; ./build.sh --check rc=0 (2208 s, cold) on cd34dbf66; relay: covering litmus 8 specs 0 red, Cargo.lock litmus, fmt, deciders green (macuahuitl)
+  - packet_id: there-is-no-shared-terminal-renderer-so-every-install-surface-prints-raw-or-fake-progress
+    event:
+      type: note
+      ts: "2026-09-27T03:12:45Z"
+      host: yoga
+      summary: |-
+        landed on origin/linux-next, verified ancestors; renderer takes its own TaskState, 1420-r2sn's ProgressEvent meets it through an adapter
