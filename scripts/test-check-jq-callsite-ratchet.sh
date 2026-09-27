@@ -22,7 +22,10 @@ bad() { printf 'FAIL: %s\n' "$1"; fail=$((fail + 1)); }
 
 # shellcheck source=scripts/plan-binary-probe.sh
 . "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
-PLAN="$(resolve_plan_binary 2>/dev/null)" || { echo "skip:jq-callsite-ratchet:no-plan-binary"; exit 3; }
+# Resolve from THIS checkout and absolutise before any cd (84f37ff24): the
+# caller's cwd/regime must not decide whether a binary is found.
+PLAN="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null)" || { echo "skip:jq-callsite-ratchet:no-plan-binary"; exit 3; }
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
 caps="$("$PLAN" capabilities 2>/dev/null)"
 case "
 $caps
