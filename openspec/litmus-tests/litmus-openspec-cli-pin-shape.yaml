@@ -33,10 +33,11 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok:openspec-generated-matches-pin:"
 
-  - step: "the coordinator step is wired in meta-orchestration"
-    command: "grep -Fq 'scripts/openspec-pin.sh check' skills/meta-orchestration/SKILL.md && grep -Fq 'scripts/openspec-pin.sh bump' skills/meta-orchestration/SKILL.md && echo 'ok: coordinator step wired'"
-    timeout_ms: 2000
-    expected_behavior: "ok: coordinator step wired"
+  # Behavioural, not a source grep (634-39ik): run the tool and judge its OUTPUT.
+  - step: "the pin tool reads the recorded version back as a valid pin"
+    command: "p=\"$(scripts/openspec-pin.sh pin)\" && case \"$p\" in ''|*[!0-9.]*) echo \"bad pin: $p\"; exit 1 ;; esac && [ \"$p\" = \"$(tr -d ' \\t\\r\\n' < openspec/cli-version)\" ] && echo \"ok: pin $p\""
+    timeout_ms: 5000
+    expected_behavior: "ok: pin "
 
 observability:
   traces:
