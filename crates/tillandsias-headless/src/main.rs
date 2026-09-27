@@ -72,6 +72,7 @@ use serde::{Deserialize, Serialize};
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
 mod image_build_progress;
+mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
@@ -9562,6 +9563,7 @@ pub(crate) fn build_image_with_logging(
                 {
                     let _ = writeln!(f, "{}", image_build_progress::event_log_line(&event));
                 }
+                progress_sink::publish(event);
                 // The user-facing line keeps its approved format; only the
                 // number is now real. Printed once per whole-ten change.
                 let percent = progress.percent();
@@ -9591,15 +9593,13 @@ pub(crate) fn build_image_with_logging(
     } else {
         Err(format!("Build exited with status {}", status))
     };
+    let finished = progress.finish(&result);
     if let Some(ref log) = log_handle
         && let Ok(mut f) = log.lock()
     {
-        let _ = writeln!(
-            f,
-            "{}",
-            image_build_progress::event_log_line(&progress.finish(&result))
-        );
+        let _ = writeln!(f, "{}", image_build_progress::event_log_line(&finished));
     }
+    progress_sink::publish(finished);
     result
 }
 
@@ -17627,6 +17627,10 @@ fn maybe_spawn_vsock_listener(
         // `graceful_shutdown_async` doesn't need a signature change.
         // @trace spec:vsock-transport, spec:vm-provisioning-lifecycle
         let state = vsock_server::VmStateHandle::new();
+        // Order 1420-4grt: route this process's typed progress events (image
+        // builds) to the connections subscribed to Progress.
+        let progress_state = state.clone();
+        progress_sink::install(move |event| progress_state.publish_progress(event));
 
         // Advancer: flip Starting → Ready once /run/podman/podman.sock
         // appears, or Starting → Failed after 60s. Cheap filesystem
