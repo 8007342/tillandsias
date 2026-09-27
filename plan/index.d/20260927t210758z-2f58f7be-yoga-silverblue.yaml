@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: container-profile-tmpfs-lists-are-inert-and-untypeable
+    field: notes
+    value: |-
+      Filed by yolanda from 997-e4v2's tmpfs slice, at the coordinator's
+      direction to keep it out of that packet. The in-tree annotation added by
+      997-e4v2 names the live emitter and says the type must change before the
+      lists are trusted — that annotation is the current honest state, not the
+      fix, and this packet is the fix.
+
+
+      [2026-09-27T21:07:58Z yoga-silverblue] yoga-silverblue 2026-09-27, blast radius measured on trunk before choosing delete-vs-wire. The inertness is WIDER than the three forge profiles - every public item of crates/tillandsias-core/src/container_profile.rs has zero references outside that file (git grep -nw, excluding the file itself) - forge_opencode_profile, forge_claude_profile, forge_opencode_web_profile, terminal_profile, web_profile, proxy_profile, inference_profile, git_service_profile, ContainerProfile, tmpfs_mounts, all 0; only lib.rs pub mod and two comments (preflight.rs:492/495, main.rs:4858) mention it. But it is CITED AS POLICY by 8 litmus files, 43 references (git grep -c) - forge-offline-profile-shape 11, forge-cache-dual-tmpfs-caps 10, forge-hot-cold-split-tmpfs-shape 7, inference-container-implementation-shape 6, mcp-on-demand-shape 4, enclave-network-source-shape 3, mcp-on-demand-bridge-shape 1, native-secrets-store-shape 1 - plus openspec/specs/inference-container/spec.md, scripts/check-container-bases.sh, and cheatsheets. Deleting the module therefore means retargeting those pins onto the live launch sites (main.rs ContainerSpec chain, tillandsias-podman launch.rs), which is the choice of which site is the source of truth - not a mechanical removal. Not claimed; left ready.
+    ts: "2026-09-27T21:07:58Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: container-profile-tmpfs-lists-are-inert-and-untypeable
+    event:
+      type: progress
+      ts: "2026-09-27T21:07:58Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'Filed by yolanda from 997-e4v2's tmpfs slice, at the coordinator's
+        direction to keep it out of that packet. The in-tree annotation added by
+        997-e4v2 names the live emitter and says the type must change before the
+        lists are trusted — that annotation is the current honest state, not the
+        fix, and this packet is the fix.
+        
+        
+        [2026-09-27T21:07:58Z yoga-silverblue] yoga-silverblue 2026-09-27, blast radius measured on trunk before choosing delete-vs-wire. The inertness is WIDER than the three forge profiles - every public item of crates/tillandsias-core/src/container_profile.rs has zero references outside that file (git grep -nw, excluding the file itself) - forge_opencode_profile, forge_claude_profile, forge_opencode_web_profile, terminal_profile, web_profile, proxy_profile, inference_profile, git_service_profile, ContainerProfile, tmpfs_mounts, all 0; only lib.rs pub mod and two comments (preflight.rs:492/495, main.rs:4858) mention it. But it is CITED AS POLICY by 8 litmus files, 43 references (git grep -c) - forge-offline-profile-shape 11, forge-cache-dual-tmpfs-caps 10, forge-hot-cold-split-tmpfs-shape 7, inference-container-implementation-shape 6, mcp-on-demand-shape 4, enclave-network-source-shape 3, mcp-on-demand-bridge-shape 1, native-secrets-store-shape 1 - plus openspec/specs/inference-container/spec.md, scripts/check-container-bases.sh, and cheatsheets. Deleting the module therefore means retargeting those pins onto the live launch sites (main.rs ContainerSpec chain, tillandsias-podman launch.rs), which is the choice of which site is the source of truth - not a mechanical removal. Not claimed; left ready.' (not terminal) with evidence_refs: 131fbedd2
+  - packet_id: container-profile-tmpfs-lists-are-inert-and-untypeable
+    event:
+      type: note
+      ts: "2026-09-27T21:07:58Z"
+      host: yoga-silverblue
+      summary: |-
+        blast radius measured
