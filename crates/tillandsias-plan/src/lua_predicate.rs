@@ -148,24 +148,6 @@ pub const PROC_RUN_FIELDS: &[&str] = &[
 /// deadline and has to be written out.
 pub const PROC_RUN_DEFAULT_TIMEOUT_MS: u64 = 300_000;
 
-/// Shells that turn one string argument into a command line. Handing them a
-/// string reintroduces quoting, globbing and pipes, which is what argv-only
-/// execution exists to delete (1252-fg9e).
-const SHELL_PROGRAMS: &[&str] = &[
-    "sh",
-    "bash",
-    "dash",
-    "zsh",
-    "ksh",
-    "fish",
-    "cmd",
-    "cmd.exe",
-    "powershell",
-    "powershell.exe",
-    "pwsh",
-    "pwsh.exe",
-];
-
 /// The environment a child starts from: NOTHING is inherited except this set,
 /// plus the call's own `env` additions (design section 5.3). One constant, so
 /// "which variables leak into a check" has one answer.
@@ -196,22 +178,35 @@ pub const PROC_RUN_BASE_ENV_FIXED: &[(&str, &str)] = &[
     ("GIT_TERMINAL_PROMPT", "0"),
 ];
 
-fn is_shell_string_call(argv: &[String]) -> bool {
-    let Some(prog) = argv.first() else {
-        return false;
+/// ORDER 1443-isrk: ask the command policy before spawning. `None` means the
+/// request is allowed; `Some` carries the deny or consent decision, and the
+/// caller must NOT spawn. The host kind comes from the host's own evidence
+/// (never a flag), the regime from `TILLANDSIAS_POLICY_REGIME` (default
+/// `interactive`), and the workspace is the repository root.
+pub fn policy_gate(
+    argv: &[String],
+    cwd: Option<&Path>,
+    caller: &str,
+) -> Option<crate::command_policy::Decision> {
+    use crate::command_policy as cp;
+    let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let root = find_repo_root().unwrap_or_else(|_| here.clone());
+    let protected = cp::protected_refs(&root);
+    let (seed, _) = cp::load_seed(&root, None, &protected);
+    let regime = std::env::var("TILLANDSIAS_POLICY_REGIME")
+        .ok()
+        .filter(|r| cp::REGIMES.contains(&r.as_str()))
+        .unwrap_or_else(|| "interactive".to_string());
+    let req = cp::Request {
+        argv: argv.to_vec(),
+        cwd: cwd.map(Path::to_path_buf).unwrap_or_else(|| root.clone()),
+        workspace: root.clone(),
+        host_kind: cp::read_host_kind(&root).kind,
+        regime,
+        caller: caller.to_string(),
     };
-    let base = Path::new(prog)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or(prog)
-        .to_ascii_lowercase();
-    if !SHELL_PROGRAMS.contains(&base.as_str()) {
-        return false;
-    }
-    argv.iter().skip(1).any(|a| {
-        let a = a.to_ascii_lowercase();
-        a == "-c" || a == "/c" || a == "/k" || a == "-command" || a == "-encodedcommand"
-    })
+    let d = cp::evaluate(&req, seed.as_ref(), &protected);
+    (d.strictness != cp::Strictness::Allow).then_some(d)
 }
 
 /// `proc.run{argv=..., cwd, env, stdin, timeout_ms, group}` (order 1384-aixy,
@@ -273,13 +268,38 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
             "argv must be a sequence with no holes and no named keys".into(),
         ));
     }
-    if is_shell_string_call(&argv) {
-        return Err(err(format!(
-            "refused '{} {}': a shell given a command STRING reintroduces quoting, globbing \
-             and pipes. Pass the program's own argv instead. A script that genuinely needs \
-             one must declare allow_shell_strings (not available in this first slice).",
-            argv[0], argv[1]
-        )));
+    // Resolve cwd first: the policy measures a destroy against it.
+    let cwd_path: Option<PathBuf> = match spec.get::<LuaValue>("cwd")? {
+        LuaValue::String(s) => Some(PathBuf::from(s.to_str()?.to_string())),
+        _ => None,
+    };
+    if let Some(d) = policy_gate(
+        &argv,
+        cwd_path.as_deref().filter(|p| p.is_absolute()),
+        "proc.run",
+    ) {
+        // A refusal is a VALUE, like every other outcome of proc.run, and NO
+        // process is spawned (1443-isrk arm 5).
+        let t = lua.create_table()?;
+        let echo = lua.create_table()?;
+        for (i, a) in argv.iter().enumerate() {
+            echo.set(i + 1, crate::command_policy::redact(a))?;
+        }
+        t.set("argv", echo)?;
+        t.set(
+            "status",
+            if d.strictness == crate::command_policy::Strictness::Deny {
+                "policy_denied"
+            } else {
+                "policy_consent_required"
+            },
+        )?;
+        t.set("ok", false)?;
+        t.set("rule_id", d.rule_id.as_str())?;
+        t.set("decision", d.token.as_str())?;
+        t.set("why", d.why.unwrap_or_default())?;
+        t.set("remedy", d.remedy.unwrap_or_default())?;
+        return Ok(t);
     }
 
     let mut cmd = tillandsias_exec::Command::new(argv.clone()).env_clear();
@@ -1133,6 +1153,15 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                         ));
                     }
                     let timeout_ms: Option<u64> = spec.get("timeout_ms").ok().flatten();
+                    // 1443-isrk: the policy decides before anything spawns.
+                    if let Some(d) = policy_gate(&argv, None, "sh.run") {
+                        return Err(mlua::Error::RuntimeError(format!(
+                            "{}\n  why: {}\n  remedy: {}",
+                            d.token,
+                            d.why.unwrap_or_default(),
+                            d.remedy.unwrap_or_default()
+                        )));
+                    }
 
                     let mut cmd = tillandsias_exec::Command::new(argv);
                     if let Some(ms) = timeout_ms {
