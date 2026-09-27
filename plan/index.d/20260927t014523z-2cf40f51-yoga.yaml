@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: there-is-no-shared-terminal-renderer-so-every-install-surface-prints-raw-or-fake-progress
+    field: status
+    value: in_progress
+    ts: "2026-09-27T01:45:23Z"
+    host: yoga
+
+events:
+  - packet_id: there-is-no-shared-terminal-renderer-so-every-install-surface-prints-raw-or-fake-progress
+    event:
+      type: note
+      ts: "2026-09-27T01:45:23Z"
+      host: yoga
+      summary: |-
+        claimed 2026-09-27 by yoga-silverblue at the coordinator's direction; renderer takes its own input model so it does not wait on 1420-r2sn (adapter when the wire type lands)
