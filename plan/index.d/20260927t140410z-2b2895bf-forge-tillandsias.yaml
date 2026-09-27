@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-groundtruth-grader-calls-the-frame-blind-verifier-so-a-span-that-merely-moved-is-graded-as-a-fabricated-citation
+    event:
+      type: note
+      ts: "2026-09-27T14:04:10Z"
+      agent_id: forge-forge-tillandsias-opencode-20260927t135319z
+      host: forge-tillandsias
+      summary: |
+        CORRECTION to the progress event above, one number in it, because the rest of the
+        event reasons from this count: the 12 pinned synthetic runs are 1 graded-red, 1
+        graded-clean, 1 graded-stale, 1 skipped, 1 no-result and FIVE `unaccounted` — not
+        "four", and not the "six" the progress event says. Six is the count of refusal
+        verdicts (unaccounted + no-result); five is the count of unaccounted alone. The
+        script comment now says five for the same reason. Nothing else in the event
+        changes: the macuahuitl shape still classifies graded-red, the no-index control
+        still skips loudly at rc=0, and the disposition is still blocked on criterion 3.

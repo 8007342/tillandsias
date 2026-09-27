@@ -1,0 +1,95 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-groundtruth-grader-calls-the-frame-blind-verifier-so-a-span-that-merely-moved-is-graded-as-a-fabricated-citation
+    event:
+      type: progress
+      ts: "2026-09-27T13:53:31Z"
+      agent_id: forge-forge-tillandsias-opencode-20260927t135319z
+      host: forge-tillandsias
+      summary: |
+        CRITERION 4 IMPLEMENTED AND VERIFIED ON A FORGE WITH NO SPEC INDEX; the other four
+        exit criteria are verified hermetically too, and ONE of them needs an index-bearing
+        host. Evidence, all re-measured on this cycle rather than read off the ledger.
+
+        WHAT THE PACKET GOT WRONG ABOUT ITS OWN STATE. The implementation landed on
+        linux-next eleven days ago — 7eeb03628 ("groundtruth grading was frame-blind") and
+        28cc49695 ("wire 3: the EXPECTATION matcher was frame-blind too") — and 0b6e0c5d6
+        hardened the negative control after it. The ledger still read `ready`. So for eleven
+        days this p1 has been the `urgent=` head of EVERY host's batch, and the selector's
+        head is host-independent by construction (the batch note under Worker Drain says so
+        by name), so a packet that was finished on day one was pre-empting the epic pick on
+        every host every cycle. A cycle learns this by reading commits; the ledger is what
+        makes it cost money.
+
+        VERDICT PER EXIT CRITERION, 2026-09-27 on forge-tillandsias:
+
+          1. a moved span grades STALE, not FABRICATED, and the finding names the commit
+             it DOES hold at — VERIFIED. `groundtruth::tests::a_span_that_moved_grades_stale_and_not_fabricated`
+             asserts failures empty, stale.len()==1, and that the text contains "VERIFIES at";
+             `the_spec_engine_stamps_the_index_frame_not_the_readers_head` drives Harness::run
+             and reads the frame off the envelope that comes out, so the CALLER's choice is
+             what is under test, not a supplied subject. `cargo test --release -p
+             tillandsias-plan --lib groundtruth` = 29 passed / 0 failed.
+
+          2. NEGATIVE CONTROL, a citation that verifies at NO commit is still a hard red —
+             VERIFIED. `a_span_wrong_at_its_own_commit_is_still_a_failure` asserts
+             stale.is_empty(), failures non-empty, and that a failure says FABRICATED.
+             `an_expectation_wrong_at_every_commit_is_still_a_failure` and
+             `an_unresolvable_frame_is_not_an_acquittal` close the two ways a frame can
+             quietly become amnesty. The fixture's own arms 3 and 9 also pass on this host.
+
+          3. litmus:expert-groundtruth-harness green end to end against the index published
+             2026-09-14, WITHOUT rebuilding it — NOT VERIFIABLE HERE, and the reason is worth
+             more than the verdict. This forge has spec_index=absent, so the spec-rung1 cases
+             SKIP; and the spec itself will not start in a forge at all — it ENV-FAILs on
+             `podman ps` (the litmus runtime shim reports "podman is not on PATH"), which is
+             one of the forge-regime reds 1428-v4tv is already collecting. So criterion 3 is
+             macuahuitl's evidence alone. It may also no longer be satisfiable as written: the
+             index it names was published 13 days ago and has since been republished, so "the
+             existing 2026-09-14 index still in place, i.e. without rebuilding it" now depends
+             on macuahuitl not having republished. Whether an unsatisfiable-as-written exit
+             criterion blocks a packet or is retired by the operator is not mine to rule.
+
+          4. scenario 7 distinguishes "this host HAS an index and some cases FAILED" from "the
+             skip accounting is wrong" — IMPLEMENTED THIS CYCLE. The arm selection now lives
+             in classify_spec_run(), which reads the result line and the exit code and returns
+             exactly one of skipped / graded-clean / graded-stale / graded-red / no-result /
+             unaccounted, and the dispatch has a `graded-red` arm that names the failing cases
+             instead of the accounting. The measured macuahuitl line (total=5 pass=3 fail=2,
+             rc=1) now classifies graded-red, where the old if/elif chain fell through all four
+             arms to `bad "absent-index skip is not properly accounted"`.
+
+          5. NEGATIVE CONTROL, a host with NO index still SKIPS loudly with
+             skipped_engines=spec.answer and rc=0 — VERIFIED ON THIS HOST, live: the fixture
+             printed "an absent index SKIPS loudly, counted in the denominator (rc=0,
+             groundtruth-result: sets=1 total=5 pass=0 fail=0 stale=0 skipped=5
+             skipped_engines=spec.answer)" and exited 0.
+
+        WHY CRITERION 4 NEEDED A FUNCTION AND A PIN, NOT ONE MORE BRANCH. The discrimination
+        is not observable on a forge: an index-bearing host and a no-index host produce result
+        lines that differ only in the fields a forge never populates, and the one arm that
+        could tell them apart was the one a no-index host never reaches. So the arm selection
+        is factored out and pinned by 12 synthetic result lines (scenario 7b) that need no
+        index, no embedding endpoint, and no plan binary — six of them the `unaccounted`
+        negative controls, because the cheap way to pass the graded-red row is a classifier
+        that accepts anything plausible, and that is the blanket-amnesty failure criterion 4
+        exists to prevent. Two of the six caught a real defect: a `stale=2` row that omitted
+        `skipped=0` classified unaccounted, which is correct behaviour on a truncated line
+        and a wrong row.
+
+        A stale-only run was the same conflation one arm over and nobody had named it: the
+        old `graded rather than skipped` arm fired on a run with stale=2, which is true and
+        silent about the two cases it certified nothing about. It now has its own arm, on
+        1229-2862's own rule that STALE gets the same accounting treatment as a skip.
+
+        VERDICT: four of five criteria verified here, the fifth is macuahuitl's to produce,
+        so this goes to blocked rather than completed — a host that cannot produce the
+        evidence must not close the packet by writing down the other four.

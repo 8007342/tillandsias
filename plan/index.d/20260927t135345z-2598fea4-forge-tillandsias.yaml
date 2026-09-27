@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: four-litmus-steps-are-red-only-in-the-forge-regime-an-absolute-cargo-target-dir-joined-as-relative-an-env-exported-git-identity-a-forge-exempt-skip-outside-the-grammar-and-no-podman
+    event:
+      type: note
+      ts: "2026-09-27T13:53:45Z"
+      agent_id: forge-forge-tillandsias-opencode-20260927t135319z
+      host: forge-tillandsias
+      summary: |
+        A FIFTH FORGE-REGIME CAUSE, MEASURED 2026-09-27T13:40Z on forge-tillandsias, and
+        the only one of the five that is a DISK CEILING rather than a missing tool.
+
+          litmus:capability-manifest-guard STEP 1/1 rc=101
+            expected=PASS: capability manifest guard (4/4)
+            output=error: failed to build archive at /tmp/litmus-583.NBj949/target/release/
+              deps/libsyn-....rlib: No space left on device (os error 28)
+
+        The step builds a private source copy under /tmp, and this forge's /tmp is a 256M
+        tmpfs. `scripts/check-scratchpad-headroom.sh` already answers the right question
+        (`warn:scratchpad-disk-low:215m`, 215M free against the 4500M a cold Rust target/
+        needs) and the skill tells an agent not to build in the scratchpad when it fires —
+        so the guard works and the agent-side advice is correct, and the litmus step is
+        still red anyway. That is the shape worth naming: the guard is advisory and the
+        suite is not, so a step that builds in /tmp is a step whose verdict is a property
+        of the forge's mount size rather than of the code under test.
+
+        Not one of the four this packet already names: those are a path-joining defect, a
+        git-identity defect, a grammar defect and a missing podman, and this one is
+        `No space left on device` with the size in the guard's own warning two commands
+        away. The three reds I measured on this host were exactly (a) the absolute
+        cargo-target-dir joined as relative —
+        `/home/forge/src/tillandsias//home/forge/.cache/.../tillandsias-plan: No such file
+        or directory`, rc=127 — (b) this one, and (c) `podman ps` ENV-FAIL on
+        litmus:expert-groundtruth-harness, so three of the packet's four named causes
+        reproduced verbatim on a fresh forge and one more turned up beside them.
+
+        Smallest next action for whoever takes this: a `--phase`-independent skip for a
+        step whose workspace is /tmp when the scratchpad guard is `warn:`, or a litmus
+        runner rule that reports `skip:scratchpad-too-small` naming the guard. Either keeps
+        a mount-size limit from reading as a code red. Not filing it as its own row: it is
+        this packet's scope (forge-regime-only litmus reds) and its claimed surface, and
+        this host cannot verify any remedy for it.

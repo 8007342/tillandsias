@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-provisioning-does-not-refuse-an-unsupported-cpu-or-macos-version-up-front
+    event:
+      type: note
+      ts: "2026-09-27T16:05:26Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t160526z
+      host: tlatoanis-macbook-air
+      summary: |
+        MEASURED BEFORE BUILDING (2026-09-27): the tray-side half of this row is already enforced BELOW the tray, so a tray check would be unreachable code. (1) CPU: the shipped tray binary is arm64-only (`lipo -archs` on the installed v56.9.27.x binary prints `arm64`); an arm64 Mach-O cannot execute on an Intel Mac at all, so no in-tray arch check could ever run there. (2) macOS version: Info.plist.template sets LSMinimumSystemVersion=@MIN_MACOS@, and the installed bundle declares 14.0, so LaunchServices refuses to launch the app on older macOS with the system's own dialog. (3) The installer refuses both before installing (install-macos.sh: uname -m must be arm64, sw_vers major >= 14; verified live on the 1420-umka gate). The one bypass of LaunchServices is exec'ing the binary directly (CLI flags); the only automated caller that does so is install-macos.sh's `--reset-state`, which runs after the installer's own OS/arch gate. PROPOSAL: close as satisfied by existing guards, citing the three facts above; no code.
