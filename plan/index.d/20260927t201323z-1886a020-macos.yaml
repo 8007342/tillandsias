@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-per-project-branch-discipline-seed-tillandsias-branch-discipline-yaml-read-by-a-discipline-verb-and-an-mcp-tool-so-the-integration-branch-the-work-ref-grammar-and-the-protected-default-branch-are-data-a-tool-asks-for-never-a-constant-it-hardcodes
+    field: status
+    value: ready
+    ts: "2026-09-27T20:13:23Z"
+    host: macos
+
+events:
+  - packet_id: a-per-project-branch-discipline-seed-tillandsias-branch-discipline-yaml-read-by-a-discipline-verb-and-an-mcp-tool-so-the-integration-branch-the-work-ref-grammar-and-the-protected-default-branch-are-data-a-tool-asks-for-never-a-constant-it-hardcodes
+    event:
+      type: note
+      ts: "2026-09-27T20:13:23Z"
+      host: macos
+      summary: |-
+        released at cycle end: implementation on work/1443-w79y 7ebf29f32 awaiting relay; close on landing
