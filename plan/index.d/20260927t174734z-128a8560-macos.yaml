@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: session-tokens-from-the-harness-transcript-replaces-the-always-zero-main-ctx
+    event:
+      type: progress
+      ts: "2026-09-27T17:47:34Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t174734z
+      host: macos
+      summary: |
+        Implementation complete on work/1437-3pj7 at 2834d3dd5 (based on origin/linux-next): scripts/session-tokens.sh, cycle-metrics.sh --emit-tokens --from-transcript (plus a source field on every record), scripts/test-session-tokens.sh bound as gate step 271-1437-3pj7, and a dedupe note in agent-observability.yaml main_ctx_source. Closure measured on darwin (bash 3.2 / BSD userland, TILLANDSIAS_PLAN_BIN and CARGO_TARGET_DIR unset): ok:session-tokens:5/5 rc=0; test-token-instrument 15 passed / 0 failed. Sabotage control: removing the message.id dedupe fails arms 1 and 3 (7777 vs 5555), so the fixture detects the double count. Finding: the harness repeats a response's usage on every content-block line, 3486 lines vs 1519 messages in this session's transcript, so a naive sum overcounts 2.3x. Live on this session: main_ctx=7487756 since 17:00Z, main_ctx_cumulative=750590098, source=the session transcript. All 8 deciders ok, allocator ok:gate-step-prefix:no-collision, litmus-covering 3 specs ok. After the methodology-accountability run, no gate stamp was present, and none remains. Please relay; close after landing.
