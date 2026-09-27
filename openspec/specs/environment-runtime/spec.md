@@ -43,7 +43,22 @@ The uninstall script MUST:
 - Remove all Tillandsias artifacts: binary, libraries, data, settings, and logs
 - Report what was cleaned after deletion
 - Confirm that project files were NOT touched
-- Support `--wipe` for cache and container image removal
+- Support `--wipe` for cache and container image removal. REFINED 2026-09-27
+  (order 1437-8c6p, `host-state-lifecycle`): `--wipe` is now the DEFAULT and
+  is accepted as a no-op; the manual uninstall is the one path that removes
+  the Vault store, the download cache and the models, and it removes every
+  entry of the download manifest. The accountability obligations above are
+  unchanged; the scope of "all Tillandsias artifacts" is defined by
+  `host-state-lifecycle`.
+
+#### Scenario: Uninstall removes what the manifest and the survivor set name
+- **WHEN** `scripts/uninstall.sh` runs and the installed binary is present
+- **THEN** it SHALL delegate to `tillandsias --uninstall` (`host-state-lifecycle`)
+- **AND** the printed removal list SHALL include the Vault store, the model
+  directory and every download-manifest entry
+- **AND** `TILLANDSIAS_RESET_KEEP_MODELS` SHALL have no effect.
+- Pre-fix result: FAILS — the script keeps the cache without `--wipe` and
+  keeps models under the variable.
 
 ### Requirement: Desktop user-session runtime
 <!-- req-id: 71258bd9 -->

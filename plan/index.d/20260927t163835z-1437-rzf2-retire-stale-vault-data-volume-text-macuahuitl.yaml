@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: retire-the-stale-tillandsias-vault-data-named-volume-text-the-store-is-a-host-directory
+    order: 1437-rzf2
+    parent_order: 1437-8c6p
+    status: ready
+    kind: docs
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [vault, docs, cheatsheets, hygiene]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - crates/tillandsias-headless/src/main.rs
+      - images/default/cheatsheets/runtime/hashicorp-vault-tillandsias.md
+      - images/default/cheatsheets/utils/tillandsias-secrets-architecture.md
+    title: |
+      Replace every remaining `tillandsias-vault-data` named-volume claim (two vault_bootstrap.rs comments and one error message, one main.rs comment, two cheatsheets) with the truth: the store is the host directory `<cache>/vault-data` bound at `/vault/data`; the error's remedy names the directory, not `podman volume rm`
+    context: |
+      Spec: tillandsias-vault, CORRECTED 2026-09-27 under the storage requirement. The audit for
+      1437-8c6p found no such volume has ever existed: launch_vault_container binds
+      init_cache_dir()/vault-data, and vault_data_volume_exists checks the directory. The stale
+      name matters because a named volume dies in `podman system reset` and a host directory does
+      not — the wrong noun produced a wrong survival analysis in the spec itself. The error
+      message that tells the operator to run `podman volume rm tillandsias-vault-data` sends them
+      to a no-op.
+
+      Do: grep the four files (and anything else `grep -rn tillandsias-vault-data crates images
+      scripts/*.sh` finds outside the refusal-calibration corpora, which are frozen measurement
+      data and must not be edited) and rewrite each occurrence; the error message's remedy
+      becomes the directory path with a warning that removing it loses every credential.
+    exit_criteria:
+      - 'grep -rn tillandsias-vault-data crates/ images/default/cheatsheets/ scripts/*.sh returns zero lines (pre-fix result: FAILS — five hits across four files)'
+      - 'the refusal-calibration corpora under scripts/refusal-calibration/ are byte-identical (pre-fix result: passes — positive control; they are frozen data)'
+    verifiable_closure: |
+      grep -rn tillandsias-vault-data crates/ images/default/cheatsheets/ scripts/*.sh exits 1 (no matches) and cargo build -p tillandsias-headless still succeeds; pre-fix: the grep finds five hits.
+    unscoreable: |
+      grep-verdict: the closure is a corpus grep with an exact expected hit count (five before, zero after), mechanically checkable by anyone but not a litmus test, a scripts/ fixture or a cargo test; a one-line hygiene row does not earn a guard of its own.
+    depends_on: []
+    notes: |
+      size: S  implementer_tier: haiku
+      Mechanical, local, fully specified. Do not touch the spec (already corrected) or the
+      refusal-calibration files.
+    next_action: 'grep -rn tillandsias-vault-data crates/ images/default/cheatsheets/ scripts/*.sh and rewrite each hit to name <cache>/vault-data'
+    provenance: |
+      Filed by macuahuitl (linux-macuahuitl-claude-20260927t163835z), 2026-09-27, under umbrella 1437-8c6p.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:38:35Z"
+        agent_id: "linux-macuahuitl-claude-20260927t163835z"
+        host: macuahuitl
+        summary: |-
+          Hygiene: the volume that never existed leaves the code and the cheatsheets.

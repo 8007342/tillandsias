@@ -231,6 +231,18 @@ there.
      check-plan-binary-probe-usage, check-litmus-pin-claims,
      check-script-exec-bits, check-added-fragments-parse,
      check-scorable-obligation-added, and `cargo fmt --check`.
+     ONE COMMAND FOR THE WHOLE SEQUENCE (trims 2026-09-27, 1437-664a):
+     `scripts/relay-preflight.sh work/<order>` merges onto a scratch
+     branch, runs cycle-preflight, the deciders above plus
+     check-gate-step-regimes, check-added-test-is-referenced,
+     check-jq-callsite-ratchet, preflight-fixtures-default-target and
+     check-issue-citation-convention, `cargo fmt --check`, the touched
+     fixtures, the touched crates' tests and the SCOPED covering litmus
+     (`litmus-covering-specs.sh --relay-scope`, 1437-yfuh), and prints
+     ONE verdict line on stdout with per-item lines on stderr. Until it
+     lands, the list above is the hand-typed sequence. Canonical:
+     `methodology/multi-host-development.yaml` →
+     `pull_merge_cadence.relay_preflight`.
      ONE COMMAND, FOUR BEHAVIOURS (measured 2026-09-22, one row:
      1353-ryhq). macOS died on an unguarded `exec setsid` until
      1352-vmbc. Windows and the MinGW locus RUN it and print `ok:` while
@@ -377,6 +389,21 @@ there.
 - **Every handoff** (`tillandsias-plan loop-status-append --file …`) carries
   the verbatim `scripts/cycle-metrics.sh` block and a `tokens:` line
   (1119-6wn6); `subagent_tokens=0 agents=0` when nothing was spawned.
+  The line's numbers come from the INSTRUMENT, not from memory: run
+  `scripts/cycle-metrics.sh --emit-tokens --from-transcript cycle=<id>
+  label=<what>` at cycle end (1437-3pj7; it reads this session's own
+  harness transcript and fills `main_ctx`, the sub-agent totals and
+  `by_model`, or records `source=absent` when no transcript exists). A
+  host whose last five rows are all `main_ctx=0` while a transcript exists
+  is running the old attestation, which
+  `scripts/check-tokens-log-has-main-ctx.sh` (1437-3ynw) reports. Every
+  host and every forge records; the coordinator-only log is the defect.
+- **Every cross-session message** fits the budget: at most 600 bytes and
+  8 lines, verdict line first (`HEADS-UP|ACK|LANDED|BLOCKED|ASK|FYI:
+  <subject>:<one clause>`), every further line `- ` plus a ref. Pipe the
+  draft through `scripts/check-peer-message-shape.sh` (1437-arjg).
+  Canonical: `methodology/distributed-work.yaml` →
+  `sibling_heads_up_protocol.size_budget`.
 - **Timestamps come from the clock, never from memory**: the tool's writes
   read it; a hand-written fragment `ts:` more than 900 s in the future is an
   invented time (pirria, 2026-09-20).

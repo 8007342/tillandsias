@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Umbrella for the seven efficiency trims the operator approved 2026-09-27.
+# Design: plan/issues/efficiency-trims-design-2026-09-27.md
+packets:
+  - packet_id: efficiency-trims-2026-09-27
+    order: 1437-62g8
+    status: ready
+    kind: milestone
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [efficiency, gate-time, tokens, coordination, milestone]
+    estimated_hours: 1
+    depends_on: []
+    owned_files: [plan/issues/efficiency-trims-design-2026-09-27.md]
+    unscoreable: |
+      A milestone row. It closes when every child carrying
+      release_target: efficiency-trims-2026-09-27 is terminal; the children
+      carry the runnable closures. Nothing is scorable on this row itself.
+    title: |
+      Efficiency trims T1-T7 (operator-approved 2026-09-27): tier routing, one-command relay preflight, message budget, scoped covering litmus, main-loop token records on every host, five flake fixes, memoised never-failing gate steps
+    context: |
+      The fleet runs six to seven always-on sessions. Measured over the 7 days
+      to 2026-09-27 on the coordinator: ./build.sh --check averages 15.1 min
+      over 181 runs at 29 pct fail; three steps that never fail cost 128-145
+      runs at 140-175 s each; the relay lane hand-types ~15 commands and runs
+      37-52 covering litmus specs (~30 min) per relay; the token log holds 19
+      rows, all from one host, with main_ctx=0 on every row since 2026-09-14.
+      Each trim is one or more child packets with release_target set to this
+      row, sized S/M/L and tiered haiku/sonnet/opus in their notes. The
+      design note names what was measured, which brief premises were false
+      (the --check gate runs no litmus; the expression-pinning litmus does not
+      run a real gate) and the savings arithmetic per trim.
+    next_action: >
+      Nothing to implement here. Coordinator: drain the children by tier
+      (scripts/select-work-batch.sh with --tier once 1437-vdz5 lands; until
+      then read the notes lines by eye). Close this row when the last child
+      is terminal, citing the design note.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Milestone rows are excluded from selection (kind: milestone); the
+      batch selector groups the children as one epic through release_target.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from the
+      coordinator's own .cache/metrics (cycle-metrics.sh --cycle-start
+      2026-09-20T00:00:00Z) and the four flake events of that day.

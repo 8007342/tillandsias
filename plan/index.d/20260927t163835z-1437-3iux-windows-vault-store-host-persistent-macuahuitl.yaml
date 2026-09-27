@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: windows-vault-store-and-download-cache-are-host-persistent-across-reset
+    order: 1437-3iux
+    parent_order: 1437-8c6p
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [vault, credentials, reset, windows, wsl, credential-manager]
+    estimated_hours: 10
+    owned_files:
+      - crates/tillandsias-windows-tray/src/notify_icon.rs
+      - crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+      - crates/tillandsias-windows-tray/src/installation_uuid.rs
+      - crates/tillandsias-vm-layer/src/wsl.rs
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - scripts/install-windows.ps1
+      - scripts/check-purge-clears-vault-credentials.sh
+      - scripts/test-windows-reset-keeps-vault-store.sh
+    title: |
+      Windows: the Vault store and the models live outside the `tillandsias` distro VHDX, `--reset-state`/`--reset-guest`/`-Purge` keep them, keep `%LOCALAPPDATA%\tillandsias\cache` and keep the Credential Manager share; the re-imported distro's fresh Vault reads the pre-reset secrets
+    context: |
+      Spec: tillandsias-vault "Guest regimes keep the store off the guest disk" and "The Vault
+      store and its unseal material survive every destructive reset"; host-state-lifecycle
+      "Windows reset preserves downloads and the Vault store"; inference-container "Models
+      survive every destructive reset on every platform" (folds 1182-2vaz: models inside the
+      distro).
+
+      Today: reset_state_once runs WslLifecycle::wipe_guest (wsl --unregister tillandsias),
+      calls clear_guest_vault_credentials (Credential Manager vault-shamir-share-v1 and
+      vault-root-token-v1), and remove_dir_all on %LOCALAPPDATA%\tillandsias\cache (rootfs
+      tarballs, staged headless binary). The store and the models are
+      /root/.cache/tillandsias/{vault-data,models} inside the ext4 VHDX, so the unregister
+      destroys both. scripts/check-purge-clears-vault-credentials.sh (803-49re) PINS that every
+      purge path calls Clear-TillandsiasVaultHostCredentials — the exact behaviour this packet
+      removes from reset; re-scope that guard to the UNINSTALL path only (1437-evzi lands the
+      binary flag; until then -Purge is the uninstall and may keep calling the clearer).
+
+      Do: choose and MEASURE one of (a) a host directory under %LOCALAPPDATA%\tillandsias
+      mounted into the distro (drvfs/9p) where vault_bootstrap resolves its cache dir — Vault's
+      file backend on drvfs must pass write/reboot/read and a fresh `operator init`, and the
+      models directory on drvfs must pass an ollama pull + load; or (b) evacuate before
+      unregister and rehydrate after import with a digest check (tar over `wsl -d tillandsias`).
+      Record the measurement. Then: reset_state_once stops clearing Credential Manager, stops
+      removing cache\, announces the preserved set; 803-49re's history (a stale share delivered
+      to a NEW guest whose store is gone) no longer arises because the store now travels with the
+      share — state that in the guard's header when re-scoping it.
+    exit_criteria:
+      - 'scripts/test-windows-reset-keeps-vault-store.sh on a Windows host: a sentinel KV secret written before --reset-state is read back after the re-import from a freshly created Vault container (pre-fix result: FAILS — the store dies with the VHDX and the share is cleared)'
+      - 'after --reset-state, %LOCALAPPDATA%\tillandsias\cache is byte-identical and the models are present without re-pull (pre-fix result: FAILS — cache removed, models inside the destroyed distro)'
+      - 'scripts/check-purge-clears-vault-credentials.sh is re-scoped to uninstall paths and still exits 0 (pre-fix result: FAILS after the reset change — the guard would red the reset body that stopped clearing)'
+      - 'scripts/test-reset-state-contract.sh clearer-free arm (from 1437-qza3) passes for the Windows body (pre-fix result: FAILS — reset_state_once calls clear_guest_vault_credentials)'
+    verifiable_closure: |
+      bash scripts/test-windows-reset-keeps-vault-store.sh prints ok on a Windows host; bash scripts/check-purge-clears-vault-credentials.sh exits 0 after re-scope; bash scripts/test-reset-state-contract.sh passes its Windows arms; pre-fix: all FAIL.
+    depends_on:
+      - linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    notes: |
+      size: L  implementer_tier: opus
+      Credentials + unseal path + destructive deletion + a WSL storage decision — opus. Folds
+      1182-2vaz (models inside the distro): close that row as superseded_by this packet when the
+      models move, or leave it if the implementer scopes models out and says so. Open operator
+      question 2 (share vs evacuate) applies here too; drvfs performance for the model directory
+      is the likely deciding measurement.
+    next_action: 'measure Vault file backend and ollama model loads on a drvfs mount from %LOCALAPPDATA%\tillandsias; pick share or evacuate/rehydrate from the numbers, then stop reset_state_once from clearing Credential Manager and cache\'
+    provenance: |
+      Filed by macuahuitl (linux-macuahuitl-claude-20260927t163835z), 2026-09-27, under umbrella 1437-8c6p.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:38:35Z"
+        agent_id: "linux-macuahuitl-claude-20260927t163835z"
+        host: macuahuitl
+        summary: |-
+          Windows half of "credentials and downloads survive wipes": store and models off the VHDX, cache and Credential Manager untouched by reset; 803-49re guard re-scoped to uninstall.

@@ -124,10 +124,32 @@ low-end hosts made the CPU bottlenecks visible. Until the counter in
   refuters or fan-out.
 - **Refuters.** At most one per verdict, one tier below the verdict's author.
   Prefer one agent with a schema over N parallel ones when the items are cheap.
+- **Packets carry their tier too (trims 2026-09-27, umbrella 1437-62g8).**
+  Every filed packet declares `size: S|M|L` and `implementer_tier:
+  haiku|sonnet|opus` (as scalars once 1437-khnx lands; as two lines inside
+  `notes:` until then). S = mechanical, fully specified → haiku; M = a few
+  files, clear design → sonnet; L = cross-cutting, judgment, or
+  gate-integrity-sensitive → opus. Anything that changes what the land gate
+  or the pre-push hook refuses is at least sonnet, opus if it could let a
+  red tree land. A session states its tier to the selector
+  (`scripts/select-work-batch.sh <role> --tier <t>`, 1437-vdz5) and runs a
+  cheaper packet through `scripts/claude-delegate.sh implement <order>`
+  (1437-yjf6) or a dedicated `./repeat --model haiku` session (1437-m5yx);
+  the host session keeps verify and commit. Canonical:
+  `methodology/distributed-work.yaml` → `cycle_batch_triage.model_tier_routing`.
+- **Messages to peers fit 600 bytes / 8 lines, verdict first**, every
+  further line `- ` plus a ref; a longer message is a ledger event cited
+  by order. `scripts/check-peer-message-shape.sh` (1437-arjg) lints the
+  draft. Canonical: `distributed-work.yaml` →
+  `sibling_heads_up_protocol.size_budget`.
 - **Never delegate a read an expert answers.** `plan_status`, `plan_answer`,
   `methodology_ask` and the project-info tools cost nothing next to an agent.
-- **Report it, and LOG it.** `scripts/cycle-metrics.sh --emit-tokens` now
-  exists (1119-6wn6), so the attestation is recorded rather than only typed:
+- **Report it, and LOG it — from the instrument.** `scripts/cycle-metrics.sh
+  --emit-tokens` exists (1119-6wn6); with `--from-transcript` (1437-3pj7) it
+  reads this session's own harness transcript and fills `main_ctx`,
+  `main_ctx_cumulative`, `subagent_tokens`, `agents` and `by_model` itself,
+  or records `source=absent`. Hand-passed numbers remain accepted for a
+  harness with no transcript. The typed form was:
 
   ```
   scripts/cycle-metrics.sh --emit-tokens host=<h> cycle=<id> \

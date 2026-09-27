@@ -273,6 +273,20 @@ Three things about it that are easy to get wrong:
 
 Budgets: autonomous/pairing forge sessions = adaptive 4 packets (configurable 3-6 via `--budget N` or `TILLANDSIAS_CYCLE_BUDGET`), unattended litmus step runs = 1 packet, non-forge hosts = 6 (order 707-3x9d).
 
+Tier (trims 2026-09-27, umbrella 1437-62g8): a session STATES the model tier
+it runs at, `--tier <haiku|sonnet|opus>` or `TILLANDSIAS_MODEL_TIER`
+(1437-vdz5). A haiku caller's pool is exactly the rows whose
+`implementer_tier` is haiku and it refuses `refused:no-tier-work:model-tier=haiku`
+rather than draining the general queue; a sonnet caller takes sonnet plus
+untagged rows; an opus caller takes everything but haiku unless `--tier-any`.
+Until 1437-khnx projects the field, the tier is two lines inside the packet's
+`notes:` (`size: S|M|L`, `implementer_tier: …`) and the selector cannot see
+it — read them by eye. A cheaper packet runs in-session through
+`scripts/claude-delegate.sh implement <order>` (1437-yjf6, edits bounded to
+`owned_files`, no commit) with this session verifying and committing, or in
+a dedicated `./repeat --model haiku` session (1437-m5yx). Canonical:
+`methodology/distributed-work.yaml` → `cycle_batch_triage.model_tier_routing`.
+
 If the selector refuses (`refused:no-eligible-work`, `refused:no-plan-binary`),
 fall back to the manual ranking below — which is also the rationale the selector
 automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triage`.

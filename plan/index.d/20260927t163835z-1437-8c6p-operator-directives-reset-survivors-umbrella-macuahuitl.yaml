@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: operator-directives-2026-09-27-harness-bypass-preaccepted-vault-store-and-downloads-survive-reset-manifest-uninstall-owned-configs
+    order: 1437-8c6p
+    status: pending
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [umbrella, vault, credentials, reset, uninstall, forge, harness, podman-config, wsl]
+    estimated_hours: 2
+    retains_direct_work: false
+    split_into:
+      - linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+      - macos-vault-store-and-download-cache-are-host-persistent-across-reset
+      - windows-vault-store-and-download-cache-are-host-persistent-across-reset
+      - claude-forge-launches-with-bypass-permissions-consent-pre-accepted-never-prompting
+      - codex-antigravity-opencode-forge-bypass-pre-accepted-measured-and-forge-gated
+      - download-manifest-in-tillandsias-core-records-every-fetched-artefact-under-the-cache-root
+      - tillandsias-uninstall-flag-on-every-binary-removes-everything-manifest-driven
+      - tillandsias-owned-podman-config-files-explicit-on-every-invocation-and-winning-over-system-defaults
+      - tillandsias-owned-wslconfig-block-idempotent-merge-and-un-merge
+      - retire-the-stale-tillandsias-vault-data-named-volume-text-the-store-is-a-host-directory
+      - opencode-auth-store-has-a-vault-home-harvested-and-restored-like-the-other-harnesses
+    owned_files:
+      - openspec/specs/host-state-lifecycle/spec.md
+      - plan/issues/operator-directives-reset-survivors-and-harness-bypass-2026-09-27.md
+    title: |
+      UMBRELLA — operator directives 2026-09-27: every forge harness launches with its permission bypass pre-accepted (never prompting); the Vault store, its unseal material and the download cache survive every destructive reset on every platform; only a manual `tillandsias --uninstall` removes them, driven by a download manifest; Tillandsias owns its podman and WSL configs and uses them over system defaults
+    context: |
+      Specs written under this order: openspec/specs/host-state-lifecycle/spec.md (new — owns
+      reset vs uninstall, the survivor set, TILLANDSIAS_DESTRUCTIVE_RESET_OK, the download
+      manifest, --uninstall), plus amendments to tillandsias-vault (store is a host directory,
+      survives reset, every harness credential has a Vault home), default-image (bypass
+      pre-accepted at launch), environment-runtime (--wipe is the default), cache-recovery-
+      mechanism (reset never removes the cache root), podman-idiomatic-patterns and
+      podman-registries-config (owned podman configs), wsl-runtime (owned .wslconfig block),
+      inference-container (models survive reset everywhere).
+
+      Reconciliation with "reset is the baseline" (900-z3kv, 2026-09-13): derived state
+      (containers, images, volumes, secrets, networks, guest rootfs, WSL distro, provision
+      markers) is destroyed and rebuilt by every reset, unconditionally; operator data (Vault
+      store, unseal material, download cache, models, owned configs) is outside the reset and
+      removed only by uninstall. The 2026-09-27 directive supersedes 900-z3kv option (a) for the
+      credential subject only.
+
+      Root cause of the operator's 2026-09-27 observation (manual Claude and GitHub sign-in
+      after a forge launch although both were in Vault): scripts/install.sh runs --reset-state
+      on every install (1286-4437) and run_reset_state calls clear_host_vault_credentials
+      (900-z3kv), so every install since 2026-09-20 discarded every sign-in.
+
+      Audit and open operator questions:
+      plan/issues/operator-directives-reset-survivors-and-harness-bypass-2026-09-27.md.
+    exit_criteria:
+      - 'every split_into child is verified (pre-fix result: FAILS — none exists yet)'
+      - 'a Linux smoke host can sign in once, run --reset-state, run --init and launch a Claude forge with no sign-in prompt and no bypass dialog (pre-fix result: FAILS — both prompts appear)'
+    unscoreable: |
+      umbrella: closes through its children's closures (split_into); it holds no direct work.
+    depends_on: []
+    notes: |
+      size: — (umbrella)  implementer_tier: — (umbrella; children carry their own tags)
+      Each child carries `size:` and `implementer_tier:` in its notes. Anything that touches
+      credentials, the unseal path or destructive deletion is opus. Filed from a spec-author
+      session; no implementation code in this change.
+    next_action: 'pick children by platform from plan_next; close this row when all eleven are verified'
+    provenance: |
+      Filed by macuahuitl (linux-macuahuitl-claude-20260927t163835z), 2026-09-27, from the
+      operator's five directives of that day; code audit by symbol in the plan/issues file.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:38:35Z"
+        agent_id: "linux-macuahuitl-claude-20260927t163835z"
+        host: macuahuitl
+        summary: |-
+          Umbrella for the 2026-09-27 operator directives. Specs landed in the same change; eleven implementation packets filed as children.
