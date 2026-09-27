@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-enclave-git-mirror-enforces-the-seeded-branch-discipline-at-pre-receive-refuses-the-protected-default-branch-with-the-seeded-message-and-publishes-refs-tillandsias-discipline-digest-epoch-so-a-client-can-read-the-enforced-level-without-pushing
+    event:
+      type: observation
+      ts: "2026-09-27T22:46:58Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t224657z
+      host: macos
+      summary: |
+        Input from 1446-664f (coordinator direction, 2026-09-27): `tillandsias-plan discipline derive` observes a project from the CHECKOUT's remote-tracking refs (refs/remotes/origin/*, origin/HEAD) and `git log` over them, as of the last fetch. The mirror has no remote-tracking refs. Its observation source is the bare repository's own refs/heads/* (and HEAD), which ARE origin. The mirror-side enforcement should therefore observe refs/heads/<default>, refs/heads/*-next or seed-named integration branches, refs/heads/work/*, and `git log` over those, not refs/remotes/origin. Otherwise every qualifier reads as absent there, and every enforced rule degrades to warn:…:seed-ahead-of-reality. When the discipline ref is published, carry derived beside seed (per 664f's context). The committer qualifier counts distinct hosts by scripts/fleet-activity.sh's email-domain rule (1223-wzc4), with shared providers as unattributed buckets.
