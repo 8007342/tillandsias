@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-unreachable-forge-session-completed-eight-packets-onto-a-salvage-ref-so-trunk-offers-that-work-to-other-hosts-as-ready
+    field: next_action
+    value: |-
+      2026-09-26 yoga, the release-gate claim checked by RUNNING THE PRODUCER (1232-av4p criterion 2). MEASURED, trunk 3921bfeda: `env -i HOME=$HOME PATH=<bash+coreutils only, no nix/toolbox/podman/cargo/clang> bash scripts/build-guest-binaries.sh` -> producer_rc=1. Log: "nix lane UNAVAILABLE: … nix: command not found on PATH", "blocked:nix-toolbox:create-failed", "DEGRADED to the local Cargo fallback (reason above)", "ERROR: failed to build guest binaries with Nix or local Cargo." target-guest/ was absent before and after (nothing staged). So the 2026-08-29 observation (ERROR then rc 0) does NOT reproduce: the ERROR path is `exit 1` at scripts/build-guest-binaries.sh:459. LAYER 2 BY SOURCE, NOT RUN: build.sh:25 is `set -euo pipefail`; _prepare_ci_full_install_inputs (build.sh:1790) ends with the bare producer call, and is itself called as a plain statement (build.sh:1855), not an if-condition, so a non-zero producer aborts --ci-full. NOT MEASURED: an end-to-end --ci-full on a toolchain-less host, and the row's negative control (a corrupt staged binary fails loud). NOT MEASURED EITHER: the exact "missing aarch64 musl linker" arm (line 435) — this run failed earlier in the cargo lane; that arm is `return 1` into the same exit 1.
+
+      [2026-09-27T06:29:44Z yoga] 2026-09-27 yoga, CRITERION 4 built — work/1232-av4p 2daa5d0a3 (feature 2a…, trunk merged): scripts/check-stranded-plan-writes.sh names the PACKETS whose status only a salvage/work ref knows, by folding each relay-candidate fragment into a scratch copy of trunk's ledger (would-change vs superseded), and skills/coordinate-multihost-work gains it as a step beside salvage-audit.sh. Fixture bound in litmus:claims-fleet-visible (5 arms; control: a naive "value differs" classifier FAILS 2). On today's refs: 9 would-change — the eight 2026-09-16 rows (920-ijwa, 923-ys2t, 926-3vs6, 922-hm3n, 920-mvgp, 920-eqjr, 920-c3af, 920-tqhs) + 914-ahsy — and 14 superseded (437 among them).
+      CRITERION STATUS: (1) the file-by-file audit is done in 1425-t9v9 (fdafd13d5 supersedes 6db5aa8b8 byte-for-byte on its 23 candidate files; relayed/fixed/declined per hunk, queued); (2) measured 2026-09-26 on trunk 3921bfeda (producer rc=1; end-to-end ci-full and the corrupt-staged control NOT measured); (3) for THIS row's population the negative control holds — none of the eight reads `implemented` on trunk (all ready), and the check above now names any stranded implemented write; trunk's 20 `implemented` packets are outside this row and were not audited here; (4) this work ref. Closes when 1425-t9v9 and this ref land.
+    ts: "2026-09-27T06:29:44Z"
+    host: yoga
+
+events:
+  - packet_id: an-unreachable-forge-session-completed-eight-packets-onto-a-salvage-ref-so-trunk-offers-that-work-to-other-hosts-as-ready
+    event:
+      type: progress
+      ts: "2026-09-27T06:29:44Z"
+      host: yoga
+      summary: |-
+        status '2026-09-26 yoga, the release-gate claim checked by RUNNING THE PRODUCER (1232-av4p criterion 2). MEASURED, trunk 3921bfeda: `env -i HOME=$HOME PATH=<bash+coreutils only, no nix/toolbox/podman/cargo/clang> bash scripts/build-guest-binaries.sh` -> producer_rc=1. Log: "nix lane UNAVAILABLE: … nix: command not found on PATH", "blocked:nix-toolbox:create-failed", "DEGRADED to the local Cargo fallback (reason above)", "ERROR: failed to build guest binaries with Nix or local Cargo." target-guest/ was absent before and after (nothing staged). So the 2026-08-29 observation (ERROR then rc 0) does NOT reproduce: the ERROR path is `exit 1` at scripts/build-guest-binaries.sh:459. LAYER 2 BY SOURCE, NOT RUN: build.sh:25 is `set -euo pipefail`; _prepare_ci_full_install_inputs (build.sh:1790) ends with the bare producer call, and is itself called as a plain statement (build.sh:1855), not an if-condition, so a non-zero producer aborts --ci-full. NOT MEASURED: an end-to-end --ci-full on a toolchain-less host, and the row's negative control (a corrupt staged binary fails loud). NOT MEASURED EITHER: the exact "missing aarch64 musl linker" arm (line 435) — this run failed earlier in the cargo lane; that arm is `return 1` into the same exit 1.
+        
+        [2026-09-27T06:29:44Z yoga] 2026-09-27 yoga, CRITERION 4 built — work/1232-av4p 2daa5d0a3 (feature 2a…, trunk merged): scripts/check-stranded-plan-writes.sh names the PACKETS whose status only a salvage/work ref knows, by folding each relay-candidate fragment into a scratch copy of trunk's ledger (would-change vs superseded), and skills/coordinate-multihost-work gains it as a step beside salvage-audit.sh. Fixture bound in litmus:claims-fleet-visible (5 arms; control: a naive "value differs" classifier FAILS 2). On today's refs: 9 would-change — the eight 2026-09-16 rows (920-ijwa, 923-ys2t, 926-3vs6, 922-hm3n, 920-mvgp, 920-eqjr, 920-c3af, 920-tqhs) + 914-ahsy — and 14 superseded (437 among them).
+        CRITERION STATUS: (1) the file-by-file audit is done in 1425-t9v9 (fdafd13d5 supersedes 6db5aa8b8 byte-for-byte on its 23 candidate files; relayed/fixed/declined per hunk, queued); (2) measured 2026-09-26 on trunk 3921bfeda (producer rc=1; end-to-end ci-full and the corrupt-staged control NOT measured); (3) for THIS row's population the negative control holds — none of the eight reads `implemented` on trunk (all ready), and the check above now names any stranded implemented write; trunk's 20 `implemented` packets are outside this row and were not audited here; (4) this work ref. Closes when 1425-t9v9 and this ref land.' (not terminal) with evidence_refs: 2daa5d0a3
+  - packet_id: an-unreachable-forge-session-completed-eight-packets-onto-a-salvage-ref-so-trunk-offers-that-work-to-other-hosts-as-ready
+    event:
+      type: note
+      ts: "2026-09-27T06:29:44Z"
+      host: yoga
+      summary: |-
+        criterion 4 built; criteria 1-3 status

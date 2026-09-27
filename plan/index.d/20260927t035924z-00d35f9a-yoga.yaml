@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: salvage-920-cluster-forge-20260916-232039-holds-eight-rows-marked-implemented-that-trunk-still-offers-as-ready-relay-it-hunk-by-hunk
+    field: next_action
+    value: |-
+      2026-09-27 yoga: RELAY PUSHED as work/1425-t9v9 896f872d9 (./build.sh --check FORCE rc=0, 1321 s, on 896f872d9). Disposition of fdafd13d5, diffed against its OWN parent 2e375ae6b (13 code files, 29 plan fragments):
+      RELAYED: 922-hm3n pty_handler XDG_RUNTIME_DIR; 920-c3af main.rs builder hunk + opencode_lane_builder_mounts_only_per_lane_mcp_dir + the litmus step, together; 920-tqhs lib-common/tellme/negative-control + build.sh step; 920-ijwa build.sh overrides withheld under --release; 920-mvgp tray host_project_root; 920-eqjr inert_fragments (fragments.rs + plan main.rs); check-capability-row.sh HOST_KIND= hermeticity; test-dispatch-reap.sh zombie arm.
+      FIXED IN RELAY: tellme onto BASH_SOURCE (the salvage's B_SOURCE guard `[ -n "${B_SOURCE[0]:-}" ]` was always false — both repo-local fallbacks dead); lib-common cp=$? (status of [ -f ], not cp) -> cp=0; negative-control's two printf|grep -q verdicts -> here-strings.
+      DECLINED: test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh (trunk fixed it with env -u; trunk's bytes pass, rc=0); the 8 status:implemented fragments; the sibling ref 6db5aa8b8. PLAN: 13 note fragments relayed byte-identical (incl. a finding with no fix: test-a-claim-names-a-workstation 4/6 in a forge); 8 claims already on trunk.
+      CLOSURE-INSTRUMENT DEFECT: this row's verifiable_closure `cargo test -p tillandsias-headless child_env_seeds_xdg_runtime_dir_from_the_same_uid` selects ZERO tests and prints `ok` — pty_handler is cfg(all(feature="listen-vsock", unix)). Run it with --features tray,listen-vsock (1 passed; with the XDG push removed it FAILS). The hot-paths negative control skips by name without root, so it is unmeasured on yoga.
+      NEXT (after the relay lands): re-verify the eight rows against trunk and close or leave each with its own evidence.
+    ts: "2026-09-27T03:59:24Z"
+    host: yoga
+
+events:
+  - packet_id: salvage-920-cluster-forge-20260916-232039-holds-eight-rows-marked-implemented-that-trunk-still-offers-as-ready-relay-it-hunk-by-hunk
+    event:
+      type: progress
+      ts: "2026-09-27T03:59:24Z"
+      host: yoga
+      summary: |-
+        status '2026-09-27 yoga: RELAY PUSHED as work/1425-t9v9 896f872d9 (./build.sh --check FORCE rc=0, 1321 s, on 896f872d9). Disposition of fdafd13d5, diffed against its OWN parent 2e375ae6b (13 code files, 29 plan fragments):
+        RELAYED: 922-hm3n pty_handler XDG_RUNTIME_DIR; 920-c3af main.rs builder hunk + opencode_lane_builder_mounts_only_per_lane_mcp_dir + the litmus step, together; 920-tqhs lib-common/tellme/negative-control + build.sh step; 920-ijwa build.sh overrides withheld under --release; 920-mvgp tray host_project_root; 920-eqjr inert_fragments (fragments.rs + plan main.rs); check-capability-row.sh HOST_KIND= hermeticity; test-dispatch-reap.sh zombie arm.
+        FIXED IN RELAY: tellme onto BASH_SOURCE (the salvage's B_SOURCE guard `[ -n "${B_SOURCE[0]:-}" ]` was always false — both repo-local fallbacks dead); lib-common cp=$? (status of [ -f ], not cp) -> cp=0; negative-control's two printf|grep -q verdicts -> here-strings.
+        DECLINED: test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh (trunk fixed it with env -u; trunk's bytes pass, rc=0); the 8 status:implemented fragments; the sibling ref 6db5aa8b8. PLAN: 13 note fragments relayed byte-identical (incl. a finding with no fix: test-a-claim-names-a-workstation 4/6 in a forge); 8 claims already on trunk.
+        CLOSURE-INSTRUMENT DEFECT: this row's verifiable_closure `cargo test -p tillandsias-headless child_env_seeds_xdg_runtime_dir_from_the_same_uid` selects ZERO tests and prints `ok` — pty_handler is cfg(all(feature="listen-vsock", unix)). Run it with --features tray,listen-vsock (1 passed; with the XDG push removed it FAILS). The hot-paths negative control skips by name without root, so it is unmeasured on yoga.
+        NEXT (after the relay lands): re-verify the eight rows against trunk and close or leave each with its own evidence.' (not terminal) with evidence_refs: 896f872d9
+  - packet_id: salvage-920-cluster-forge-20260916-232039-holds-eight-rows-marked-implemented-that-trunk-still-offers-as-ready-relay-it-hunk-by-hunk
+    event:
+      type: note
+      ts: "2026-09-27T03:59:24Z"
+      host: yoga
+      summary: |-
+        relay pushed, disposition recorded

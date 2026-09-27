@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-probe-usage-guard-takes-22-minutes-per-run-on-windows-msys-so-its-15-run-corpus-arm-takes-5-hours-there
+    order: 1427-d97f
+    status: ready
+    kind: finding
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, gate, performance, decider-cost]
+    estimated_hours: 2
+    owned_files: [scripts/check-plan-binary-probe-usage.sh]
+    observed_by: yolanda
+    unscoreable: |
+      measurement-only-until-a-remedy-is-chosen: the closure is a re-measured wall time on
+      the Windows regime, not a new pin.
+    title: |
+      scripts/check-plan-binary-probe-usage.sh takes 1303 s per whole-repo run on Windows/MSYS (6.6 s on pirria), so test-plan-binary-probe-usage-determinism-corpus.sh (15 runs) takes about 5.4 h there and looks dead
+    verifiable_closure: |
+      Either the guard's single whole-repo run on the Windows/MSYS regime falls under a
+      stated budget (re-measured, with host and wall time on this row), or the row records
+      why that regime is exempt and the corpus arm names a skip there. Pre-fix measurement:
+      1303 s wall, rc=0, ok:plan-binary-probe-usage:25 eligible of 1390 scanned.
+    context: |
+      SLOW, NOT DEAD (yolanda, Git Bash on Windows 11, memory-pressed host, 2026-09-27). The
+      guard stayed alive throughout: the busiest bash process went from 35 s to 70 s CPU in
+      one sampled minute, with no 0:00 stall. I stopped a corpus-arm run after about 2.5 h
+      during 1415-my8j (work/1415-my8j), and it was simply unfinished. The coordinator asked
+      for a named finding with the regime. The corpus arm is --ci-full only and declared in
+      scripts/gate-divergence-declared.txt, so no --check gate is blocked. The guard itself is
+      in the pre-commit decider list, though, and costs about 22 min per commit on this host.
+      Cause NOT measured; per-file process spawns are the usual MSYS cost and the first thing
+      to profile. The parent row, 1130-qk7d, is archived, hence a new row.
+    events:
+      - type: filed
+        ts: "2026-09-27T03:51:12Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request after the slow-or-dead check.

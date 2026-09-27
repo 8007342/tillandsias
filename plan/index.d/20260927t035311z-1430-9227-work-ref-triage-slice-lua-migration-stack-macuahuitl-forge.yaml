@@ -1,0 +1,101 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: work-ref-triage-slice-the-stranded-2026-09-25-forge-lua-migration-stack-and-work-1334-57at-classified-with-their-never-landed-fragments
+    order: 1430-9227
+    status: ready
+    kind: investigation
+    priority: p3
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [salvage, triage, work-refs, relay]
+    estimated_hours: 2
+    title: |
+      work-ref triage slice: work/914-ahsy, work/437-forge-src-tmpfs-topology, work/retire-ruby-lua, work/1367-lua-predicate-shims (one stranded 2026-09-25 forge stack) and work/1334-57at — 1 RELAY (1334-57at, owner esme), 3 SUPERSEDED, 1 DEAD; none of the 18 never-landed fragments is safe to relay. Nothing deleted.
+    context: |
+      METHOD (macuahuitl-forge, 2026-09-27T03:53:11Z, READ-ONLY): `bash scripts/salvage-audit.sh
+      --pattern 'refs/heads/work/*'` -> ok:salvage-audit:199r:17w:212f:branch=origin/linux-next;
+      all five refs resolve on the mirror at the same tips as GitHub. Only
+      ref-may-be-AHEAD / ABSENT lines are candidates; each was read against
+      origin/linux-next, and supersession was established by content (the trunk
+      commit or test that now covers it), never by commit subject.
+
+      STRUCTURE: the first four are ONE linear stack off base 201c57566
+      (2026-09-25): 914-ahsy (fb959a842, 8da37066c) < retire-ruby-lua (+ccbeb5655,
+      769d6360b) < 437 (+f623728c8, 01d8910c0) < 1367-lua-predicate-shims
+      (+355d0dcf2). work/914-ahsy alone carries its follow-up fix 5bc53b357; the
+      others stack on the pre-fix 8da37066c. 18 shared script files are
+      byte-identical across the four.
+
+      TABLE (ref @ tip | class | evidence):
+      1. work/1334-57at @ 3042222bc (esmeraldinha, 2026-09-21) | R RELAY (owner) |
+         census-litmus-step-enforcement.sh +42 lines, NEW
+         test-census-enforced-reachability-split.sh (151) and NEW
+         litmus-census-enforced-reachability-split.yaml; row 1334-57at is ready.
+         Its fixture passes 7/7 on the ref's own tree ("real corpus reconciles
+         181 + 66 == 247"), but the ref does NOT merge cleanly onto trunk
+         (git merge-tree: conflicts; litmus-bindings.yaml reads trunk-ahead), so
+         the owner must rebase and gate it.
+      2. work/1367-lua-predicate-shims @ 355d0dcf2 | S SUPERSEDED | its own
+         commit implements 1367-q9yc/1252-hsrz, which LANDED another way: yoga's
+         relay 7a660180d ("relay(1367-q9yc,1252-hsrz): land work/1367-q9yc …
+         Lua predicate shims"); both rows completed on trunk. The ref is also the
+         superset of the stack below; do not relay it as a whole.
+      3. work/437-forge-src-tmpfs-topology @ 01d8910c0 | S SUPERSEDED (and
+         relaying would BREAK trunk) | f623728c8 wires compute_memory_ceiling_mb
+         into production and emits EQUAL --memory and --memory-swap limits
+         (main.rs +139, container_spec.rs, policy.rs). Trunk replaced that design
+         with 1375-xxzj's cgroup ForgeBudget (fbfa66456, 2026-09-25), whose test
+         swap_is_never_expressed_through_memory_swap forbids --memory-swap. NOTE
+         FOR 437's OWNER: its exit criterion 2 ("equal --memory and
+         --memory-swap limits") is stale against 1375-xxzj; criterion 3 (findmnt
+         -t tmpfs lists /home/forge/src) holds live in this forge. The row
+         needs re-scoping or closing, not this ref.
+      4. work/retire-ruby-lua @ 769d6360b | S SUPERSEDED | it marks 560 and
+         1132-r4mt implemented; trunk completed both another way (560 at
+         b38f71052, 1132-r4mt at 21027af15 via work/1132-r4mt 8f4f0a627). Its
+         ruby->lua archiver rewrite (ccbeb5655) answers no open row; its idea of
+         routing archiver scratch off the small checkout tmpfs relates to
+         1349-53h6.
+      5. work/914-ahsy @ 5bc53b357 | D DEAD | it dispatch-converts the jq LOOP
+         callers (jq -> "$JQ" inside loops, e.g. query-traces.sh), exactly the
+         approach its own row's title rejects ("the toolbox dispatch would cost
+         ~264 ms per iteration — they need restructuring to a single pass"), and
+         against trunk's jq -> tillandsias-plan json get direction (1375/1395).
+         Row 914-ahsy stays ready for the restructuring it actually asks for.
+
+      THE 18 NEVER-LANDED FRAGMENTS (all under plan/index.d/20260925t*; none
+      ever on origin/linux-next; status/event channels only, NO packet
+      declarations, so no duplicate order tokens):
+        - 560, 1132-r4mt, 1367-q9yc, 1252-hsrz: set in_progress then
+          implemented at 2026-09-25; trunk's latest status writes are LATER
+          (560 09-26T04:12Z, 1132-r4mt 09-26T00:25Z, 1367-q9yc 09-26T00:51Z,
+          1252-hsrz 09-26T23:31Z), so under (ts, host) LWW they would LOSE and
+          not flip the completed rows; but their progress events cite commits
+          that are not on trunk (dangling evidence). Do not relay.
+        - 914-ahsy (3): trunk's latest status write is 09-26T03:27Z, so its
+          "implemented" would lose; the verification event claims work the row
+          rejects. Do not relay.
+        - 437 (3): trunk has NO status write after filing, so its 09-25
+          "implemented" WOULD WIN and flip 437 ready -> implemented for code that
+          is not on trunk and is superseded. HARMFUL. Do not relay.
+      VERDICT: no fragment set is safe and wanted; relay none.
+    exit_criteria:
+      - 'work/1334-57at is rebased and landed by its owner, or declined on this row'
+      - 'each S and D ref (the four-ref stack) is deleted only after a per-ref OK from its owner or the coordinator, recorded here; the 18 fragments are NOT relayed'
+      - "437's owner re-scopes or closes 437 against 1375-xxzj (its --memory-swap criterion is stale)"
+    unscoreable: |
+      a triage row: it closes on owner decisions (relay, deletion, 437's
+      re-scope), not on a mechanical check. The fixtures cited above are its
+      evidence.
+    provenance: |
+      Filed by macuahuitl-forge (forge-forge-tillandsias-claude-20260927t035311z) at the coordinator's (macuahuitl-fedora)
+      request, 2026-09-27; read-only, nothing deleted, nothing relayed.
+    events:
+      - type: filed
+        ts: "2026-09-27T03:53:11Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t035311z"
+        host: macuahuitl-forge
+        summary: |-
+          Five work refs triaged: 1 R, 3 S, 1 D; the 18 stranded 09-25 fragments
+          are not safe to relay (437's would wrongly flip the row).

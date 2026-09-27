@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-tray-quit-ends-in-a-force-stop-because-the-guest-never-shuts-itself-down-cleanly
+    field: context
+    value: |-
+      Measured on the 1426-cb6g live arms (tlatoanis-macbook-air, signed dist bundle, provisioned Fedora 44 guest).
+      macOS: vm-layer vz.rs VzRuntime::stop calls requestStopWithError (the guest-visible power request), polls state for
+      drain_timeout, then force-stops; the guest never left the running state in 60 s. Windows (read from code, not
+      measured): vm-layer wsl.rs WslRuntime::stop takes  and immediately runs ; the tray's
+      Quit logs "wire-level drain not yet wired on vsock; falling back to wsl --terminate". The mechanism is left to the fixer
+      (e.g. ACPI power-button handling in the guest image, or a guest-side VmShutdownRequest handler — the host already
+      sends one and gets no reply, see 1426-cb6g). Coordinator ruling 2026-09-27: file it; it is cross-platform in shape.
+
+
+      [2026-09-27T04:27:48Z tlatoanis-macbook-air] CORRECTION (the first write of this row lost its backtick-quoted spans to an unquoted heredoc at filing; the blanked phrases read as follows). Title/closure: on Windows WslRuntime::stop ignores its drain timeout (the unused _drain_timeout parameter) and runs "wsl --terminate" immediately; the Windows arm of the closure is "the distro stops through the guest rather than by an immediate wsl --terminate". Context: vm-layer wsl.rs WslRuntime::stop takes its drain timeout as the unused _drain_timeout parameter and immediately runs "wsl --terminate".
+    ts: "2026-09-27T04:27:48Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: every-tray-quit-ends-in-a-force-stop-because-the-guest-never-shuts-itself-down-cleanly
+    event:
+      type: note
+      ts: "2026-09-27T04:27:48Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        restore the phrases an unquoted heredoc blanked

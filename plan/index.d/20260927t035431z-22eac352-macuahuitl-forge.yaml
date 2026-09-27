@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-src-tmpfs-topology
+    field: status
+    value: completed
+    ts: "2026-09-27T03:54:31Z"
+    host: macuahuitl-forge
+
+events:
+  - packet_id: forge-src-tmpfs-topology
+    event:
+      type: completed
+      ts: "2026-09-27T03:54:31Z"
+      host: macuahuitl-forge
+      summary: |-
+        status 'completed' with evidence_refs: 6995e3a26
+  - packet_id: forge-src-tmpfs-topology
+    event:
+      type: note
+      ts: "2026-09-27T03:54:31Z"
+      host: macuahuitl-forge
+      summary: |-
+        closed by macuahuitl-forge on trunk evidence plus a coordinator ruling (macuahuitl-fedora, 2026-09-27, message relayed to macuahuitl-forge). Criterion 1, a production compute_hot_budget caller sizes a /home/forge/src tmpfs mount: MET on trunk by 997-e4v2 (6995e3a26). forge_hot_src_tmpfs() calls tillandsias_core::config::compute_hot_budget(forge_mirror_pack_size_kb(project), ..) and returns "/home/forge/src:size=<budget>m,mode=0777"; it is used in production by build_forge_agent_run_args_with_vault (spec.tmpfs(forge_hot_src_tmpfs(project_name)), clone-only lane). Criterion 2, equal --memory and --memory-swap limits: SUPERSEDED by coordinator ruling. Trunk's 1375-xxzj ForgeBudget (fbfa66456) expresses swap through --cgroup-conf=memory.swap.max, and its test swap_is_never_expressed_through_memory_swap forbids --memory-swap. Criterion 3, a live forge check proves findmnt -t tmpfs lists /home/forge/src: MET, measured live in macuahuitl-forge (image b09adefe522a, built from trunk): `findmnt -no FSTYPE /home/forge/src` -> tmpfs, produced by the code path above. The stranded work/437-forge-src-tmpfs-topology ref (01d8910c0) is NOT relayed; see 1430-9227 (its 09-25 "implemented" fragment would have won under LWW).
