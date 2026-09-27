@@ -79,7 +79,7 @@ Built locally via `scripts/build-image.sh vault`:
 |---|---|
 | Base | `docker.io/hashicorp/vault:1.18` (or whatever is the latest 1.x at build time) |
 | Network | `--network tillandsias-enclave`, `--network-alias vault` |
-| Persistent volume | `tillandsias-vault-data:/vault/data` |
+| Persistent volume | host directory `<cache>/vault-data` bound at `/vault/data` |
 | Listener | `tcp 0.0.0.0:8200`, TLS disabled (enclave-only; if ever exposed, add TLS) |
 | Storage backend | `file` at `/vault/data` |
 | Logging | `journald` driver inside the VM; tail'd by `tillandsias-headless` for observability convergence |
@@ -116,7 +116,7 @@ log_level    = "info"
 - `logical/` — secret data, encrypted at rest with Vault's master key
 - `sys/` — system data
 
-The podman volume `tillandsias-vault-data` is the only persistent state outside the VM's root disk. Backing it up by `podman volume export tillandsias-vault-data > backup.tar` is a sanctioned recovery path; however, the volume includes encrypted blobs — without the unseal mechanism's inputs (machine-id + installation-uuid), the backup is useless. This is intentional.
+The host directory `<cache>/vault-data` is the only persistent state outside the VM's root disk. Backing it up with a plain file copy (e.g. `tar -czf backup.tar.gz -C <cache> vault-data`) is a sanctioned recovery path; however, it includes encrypted blobs — without the unseal mechanism's inputs (machine-id + installation-uuid), the backup is useless. This is intentional.
 
 ## Transparent auto-unseal — the core trick
 
@@ -206,7 +206,7 @@ If the host's keychain entry vanishes (OS reinstall, user deletes credential):
    🥀 Vault re-bootstrap required: previous secrets unrecoverable.
       [Reset Vault] [Open log]
    ```
-5. "Reset Vault" wipes the `tillandsias-vault-data` volume, generates a fresh installation-uuid, and re-initializes Vault. **All prior secrets are lost.** The user re-runs `--github-login` and any other credential-acquisition flows.
+5. "Reset Vault" wipes the `<cache>/vault-data` directory, generates a fresh installation-uuid, and re-initializes Vault. **All prior secrets are lost.** The user re-runs `--github-login` and any other credential-acquisition flows.
 
 This is documented as the "re-bootstrap flow"; it is a research item to confirm the UX is acceptable.
 
@@ -360,7 +360,7 @@ If `/vault/data/core` is corrupted (kernel panic mid-write), Vault refuses to st
 
 ## Linux migration outcome (Phase 6 — landed)
 
-Linux now runs Vault directly under host-rootless podman, treating the host as the "VM" for the POC. The host generates a per-installation UUID (`~/.config/tillandsias/installation-uuid`), combines it with `/etc/machine-id`, derives the unseal key via HKDF, and passes it to the Vault container via a tmpfs-only podman secret. The Vault container persists across tray restarts via the `tillandsias-vault-data` volume.
+Linux now runs Vault directly under host-rootless podman, treating the host as the "VM" for the POC. The host generates a per-installation UUID (`~/.config/tillandsias/installation-uuid`), combines it with `/etc/machine-id`, derives the unseal key via HKDF, and passes it to the Vault container via a tmpfs-only podman secret. The Vault container persists across tray restarts via the `<cache>/vault-data` host directory.
 
 `tillandsias --github-login` writes the token to `secret/github/token`. The git-mirror container mounts a short-lived AppRole token at `/run/secrets/vault-token` and uses the baked `vault-cli` helper to read the token at push time:
 
