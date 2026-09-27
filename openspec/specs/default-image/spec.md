@@ -827,6 +827,101 @@ as an explicit skip.
 - **AND** SHALL NOT represent the dry-run as proof that a mirror's upstream
   relay credentials are valid, because dry-run does not invoke pre-receive
 
+### Requirement: Forge harness permission bypass is pre-accepted at launch, never prompted
+<!-- req-id: f67252fa -->
+
+Inside a forge container (`TILLANDSIAS_HOST_KIND=forge`), every harness
+entrypoint SHALL launch its harness with the harness's permission bypass
+ALREADY ACCEPTED, so that no confirmation dialog, consent screen or
+first-run permission question is ever shown — on a fresh image, on a fresh
+container, after a Vault wipe, after a reset, and with no approvals document
+in Vault. Pre-acceptance is a launch-time SEED written by the entrypoint from
+knowledge it already has (the host kind), not a value remembered from a
+previous session. Outside a forge (`TILLANDSIAS_HOST_KIND` unset or any other
+value) no bypass flag and no consent seed SHALL be written, and each harness
+keeps its stock permission posture.
+
+Per harness, the bypass is the harness's own documented switch plus whatever
+consent record it checks before honouring the switch:
+
+- Claude Code: `--dangerously-skip-permissions` (already passed) AND the
+  consent record it consults — today `bypassPermissionsModeAccepted: true` in
+  `~/.claude.json` and `skipDangerousModePermissionPrompt: true` in
+  `~/.claude/settings.json` (the latter is what suppresses the "Bypass
+  Permissions mode" dialog on the operator's own host). The seed SHALL write
+  both; an implementer SHALL verify against the installed Claude which one is
+  read and record the answer in the fixture.
+- Codex: `--dangerously-bypass-approvals-and-sandbox` (already passed, on both
+  the TUI and `codex exec` paths).
+- Antigravity: `--dangerously-skip-permissions` (already passed).
+- OpenCode: `--auto` on `opencode run` (already passed) and
+  `"permission": "allow"` in its config; the config value SHALL become
+  forge-gated like the flags, because today it is applied by the overlay
+  copy regardless of host kind.
+
+The 2026-08-31 directive ("prompt the first time — those are valid prompts —
+then save the verified approval in the vault") is SUPERSEDED for the
+permission-bypass consent by the operator's 2026-09-27 directive, verbatim:
+"we want to skip that bypass permissions confirmation, and pre-accept it …
+for all projects, for all harnesses." `claude-approvals-vault.sh` keeps its
+job for the approvals that remain valid one-time prompts (workspace trust per
+project, theme, onboarding) and SHALL stop being the mechanism that makes
+the bypass consent stick: after this change the consent is present before
+the restore runs, and a Vault wipe cannot bring the dialog back.
+
+The forge is the sandbox that makes bypass acceptable (`--cap-drop=ALL`,
+`no-new-privileges`, enclave-only egress, credential quarantine); the
+"Agent permission defaults" requirement above states why. This requirement
+adds the second half: the harness must not ask the operator to confirm what
+the architecture already decided.
+
+@trace spec:default-image, spec:tillandsias-vault
+
+#### Scenario: Fresh Claude forge shows no bypass dialog
+- **WHEN** a Claude forge launches from a freshly built image with an empty
+  `HOME`, no `secret/claude/approvals` document and no prior session
+- **THEN** `seed_claude_first_run_defaults` (or its successor) SHALL have
+  written `bypassPermissionsModeAccepted: true` to `~/.claude.json` and
+  `skipDangerousModePermissionPrompt: true` to `~/.claude/settings.json`
+  before `claude` starts
+- **AND** the session SHALL reach the prompt (or the threaded
+  `TILLANDSIAS_CLAUDE_PROMPT`) with no "Bypass Permissions mode" dialog
+- **AND** the seeded keys SHALL survive `apply_claude_config_overlay` and
+  `claude-approvals-vault restore` (both are additive merges).
+- Pre-fix result: FAILS — the seed writes only `hasCompletedOnboarding` and
+  `theme`; the consent exists only if a previous session's watcher harvested
+  it, so the first launch after a Vault wipe prompts (operator observation
+  2026-09-27; 1419-e2sm records the same symptom on a CLI relaunch).
+
+#### Scenario: Every harness, empty HOME, no dialog
+- **WHEN** each of Codex, Antigravity and OpenCode launches in a forge with
+  an empty `HOME` and no Vault document
+- **THEN** the harness SHALL start its session without a confirmation of its
+  bypass, measured on the installed binary by a fixture that captures the
+  first screen or the first JSON event and asserts it is not a consent prompt
+- **AND** for OpenCode, `"permission": "allow"` SHALL be present in its
+  effective config only when `TILLANDSIAS_HOST_KIND=forge`.
+- Pre-fix result: FAILS for OpenCode's gating (the config value is applied
+  regardless of host kind); UNMEASURED for Codex and Antigravity — the
+  fixture is the measurement, and a green pre-fix run for those two is the
+  positive control, not a defect.
+
+#### Scenario: Non-forge invocation keeps the stock posture
+- **WHEN** any entrypoint's seeding function runs with `TILLANDSIAS_HOST_KIND`
+  unset
+- **THEN** no bypass flag SHALL be appended and no consent key SHALL be
+  written
+- **AND** a config that already carries a consent key SHALL be left as it is
+  (the seed is additive, never a revocation).
+
+#### Scenario: A Vault wipe cannot bring the dialog back
+- **WHEN** `secret/claude/approvals` is deleted from Vault and a Claude forge
+  launches
+- **THEN** the restore step SHALL log `no vault doc yet` and continue
+- **AND** the launch SHALL still show no bypass dialog, because the seed did
+  not depend on the document
+- **AND** the watcher MAY still harvest the project-trust and theme keys.
+
 ## Sources of Truth
 
 - `cheatsheets/runtime/forge-container.md` — Forge Container reference and patterns

@@ -1,0 +1,253 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# T1 tier routing: five packets. Design: plan/issues/efficiency-trims-design-2026-09-27.md
+packets:
+  - packet_id: plan-binary-projects-size-and-implementer-tier-scalars
+    order: 1437-khnx
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [plan-cli, ledger, tier-routing, rust]
+    estimated_hours: 3
+    depends_on: []
+    owned_files: [crates/tillandsias-plan/src/main.rs, crates/tillandsias-plan/src/lib.rs, plan/schema.yaml, plan/index.d/README.md, scripts/test-packet-tier-fields.sh]
+    verifiable_closure: |
+      cargo test -p tillandsias-plan projection_carries_size_and_implementer_tier
+      passes, and bash scripts/test-packet-tier-fields.sh prints
+      ok:packet-tier-fields:4/4 and exits 0, where arm 1: a scratch fragment
+      declaring size: S and implementer_tier: haiku as top-level packet scalars
+      is projected by tillandsias-plan query --json with both keys and values;
+      arm 2: a scratch fragment carrying the same two as lines inside notes: is
+      projected identically (the fallback for rows filed before this landed);
+      arm 3: set-field <order> implementer_tier sonnet writes a scalar
+      correction that the fold applies; arm 4 NEGATIVE CONTROL: check
+      --strict-fragments refuses implementer_tier: gpt or size: XL with a
+      named reason. PRE-FIX RESULT: FAILS — arm 1 today prints a projection
+      without either key (query_json_projection lists no such key), arm 3
+      writes a field no reader sees, arm 4 accepts any spelling.
+    title: |
+      The plan binary projects `size` and `implementer_tier` as scalar packet fields, reads the notes-line fallback, and refuses unknown vocabulary
+    context: |
+      T1 of the 2026-09-27 trims. No packet field names a model tier today;
+      the ledger has zero rows with size or implementer_tier. A novel field
+      must be a SCALAR (set-field refuses list-valued fields, 1184-tj2q) and
+      must be added to query_json_projection in crates/tillandsias-plan/src/main.rs
+      or it is writable and unreadable (the must_ship lesson, 1218-25z3).
+      Twenty rows filed today carry the two values as lines inside notes:,
+      so the projection must read that shape too until they are corrected.
+      Vocabulary: size S|M|L, implementer_tier haiku|sonnet|opus.
+    next_action: >
+      Add both keys to query_json_projection; add the notes-line fallback
+      (a line matching ^size: [SML]$ or ^implementer_tier: (haiku|sonnet|opus)$
+      inside notes) applied only when the top-level scalar is absent; teach
+      check --strict-fragments the two vocabularies; document both fields in
+      plan/index.d/README.md and plan/schema.yaml optional_fields. Write the
+      fixture in the same commit. Rebuild the plan binary on the platform
+      branch before any plan push.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Rust plus a bash fixture, a few files, fully specified. Not gate-integrity
+      sensitive: the fields are read by the selector, not by a refusal.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session; design in
+      plan/issues/efficiency-trims-design-2026-09-27.md section T1.
+
+  - packet_id: select-work-batch-and-next-honour-a-model-tier
+    order: 1437-vdz5
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [selector, tier-routing, plan-cli, bash]
+    estimated_hours: 5
+    depends_on: [plan-binary-projects-size-and-implementer-tier-scalars]
+    owned_files: [scripts/select-work-batch.sh, crates/tillandsias-plan/src/answer.rs, scripts/test-model-tier-routing.sh, openspec/litmus-tests/litmus-model-tier-routing-shape.yaml]
+    verifiable_closure: |
+      bash scripts/test-model-tier-routing.sh prints ok:model-tier-routing:5/5
+      and exits 0, where, over a scratch ledger with one haiku row, one sonnet
+      row, one opus row and one untagged row all claimable by role any: arm 1:
+      select-work-batch.sh any --tier haiku emits a batch whose packet lines
+      name ONLY the haiku row and whose batch: line carries tier=haiku; arm 2:
+      --tier haiku over a ledger with no haiku row prints
+      refused:no-tier-work:model-tier=haiku and exits 1 (never the general
+      queue); arm 3: --tier sonnet emits the sonnet row and the untagged row and
+      not the haiku or opus rows; arm 4: --tier opus emits the opus, sonnet and
+      untagged rows and not the haiku row; arm 5: tillandsias-plan next any
+      --tier haiku lists the haiku row alone, so plan_next agrees with the
+      selector. PRE-FIX RESULT: FAILS — --tier is an unknown argument to both
+      tools today and every arm's batch contains all four rows.
+    title: |
+      `select-work-batch.sh --tier <haiku|sonnet|opus>` and `next --tier` route packets by implementer_tier, refusing the general queue for a haiku caller
+    context: |
+      T1 of the 2026-09-27 trims. The selector already routes by executor
+      class for the low-end floor (HOST_TIER, TIER_TAGS,
+      refused:no-tier-work in scripts/select-work-batch.sh) and pins it with
+      litmus:capability-routing-shape; this is the same shape keyed on the
+      implementer_tier scalar 1437-khnx projects. Rule: a haiku caller's pool
+      is exactly the haiku rows; a sonnet caller takes sonnet plus untagged;
+      an opus caller takes everything but haiku unless --tier-any. The caller
+      STATES its tier (env TILLANDSIAS_MODEL_TIER or --tier); nothing is
+      inferred from a model name. Canonical rule:
+      methodology/distributed-work.yaml -> cycle_batch_triage.model_tier_routing.
+    next_action: >
+      Add --tier/TILLANDSIAS_MODEL_TIER to select-work-batch.sh beside the
+      HOST_TIER gate (filter the rows JSON on .implementer_tier before the
+      epic scoring, print tier= on the batch line, refuse on an empty haiku
+      pool); add the same filter to answer_next in
+      crates/tillandsias-plan/src/answer.rs; bind a litmus over the fixture;
+      keep litmus:capability-routing-shape green (the low-end gate composes
+      with the tier gate: both filters apply).
+    notes: |
+      size: L
+      implementer_tier: opus
+      Cross-cutting (selector, plan crate, a litmus binding) and a wrong
+      filter idles a host or hands gate-integrity work to haiku.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session; design in
+      plan/issues/efficiency-trims-design-2026-09-27.md section T1.
+
+  - packet_id: repeat-claude-arm-passes-the-model-and-effort-flags
+    order: 1437-m5yx
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [launcher, harness, tier-routing, bash]
+    estimated_hours: 1
+    depends_on: []
+    owned_files: [repeat, scripts/test-repeat-model-flag.sh]
+    verifiable_closure: |
+      bash scripts/test-repeat-model-flag.sh prints ok:repeat-model-flag:3/3
+      and exits 0, where arm 1: with CLAUDE_BIN pointing at a stub that
+      records its argv, ./repeat --times 1 --model haiku --prompt x produces a
+      recorded argv containing --model haiku; arm 2: --effort low is passed
+      through the same way; arm 3 NEGATIVE CONTROL: without --model the
+      recorded argv contains no --model token, so the harness default is
+      untouched. PRE-FIX RESULT: FAILS — the claude) arm of ./repeat calls
+      run_in_pty without "${MODEL_FLAG[@]}" (the codex and opencode arms pass
+      it), so arm 1's recorded argv has no --model token.
+    title: |
+      `./repeat --model` is silently dropped for the claude harness: the `claude)` arm omits MODEL_FLAG that the codex and opencode arms pass
+    context: |
+      T1 of the 2026-09-27 trims. A dedicated cheaper-tier session is
+      launched as ./repeat --model haiku --prompt "use /advance-work-from-plan
+      --tier haiku"; today that launches the harness default model and
+      nothing says so. One-line fix plus a stub-driven fixture.
+    next_action: >
+      Pass "${MODEL_FLAG[@]}" (and an --effort passthrough built the same way)
+      in the claude) arm of ./repeat; write the argv-recording stub fixture in
+      the same commit; wire it as a gate step file under scripts/gate-steps.d
+      with STEP_SECOND_REGIME recorded per check-gate-step-regimes.sh.
+    notes: |
+      size: S
+      implementer_tier: haiku
+      Mechanical and fully specified; the fixture is a stub that echoes argv.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session; the
+      dropped flag was read in ./repeat's claude) arm on this checkout.
+
+  - packet_id: claude-delegate-implement-mode-bounded-to-a-packets-owned-files
+    order: 1437-yjf6
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [delegation, tier-routing, harness, bash]
+    estimated_hours: 4
+    depends_on: []
+    owned_files: [scripts/claude-delegate.sh, skills/haiku-delegate/SKILL.md, scripts/test-claude-delegate-implement.sh]
+    verifiable_closure: |
+      bash scripts/test-claude-delegate-implement.sh prints
+      ok:claude-delegate-implement:4/4 and exits 0, where, with CLAUDE_BIN
+      pointing at an argv-recording stub and a scratch ledger holding one
+      packet whose owned_files lists scripts/a.sh: arm 1:
+      scripts/claude-delegate.sh implement <order> launches the stub with
+      --model haiku, --effort low and an --allowedTools set that permits
+      Edit and Write and no Bash git verb; arm 2: the prompt handed to the
+      stub names the packet's verifiable_closure verbatim and its owned_files;
+      arm 3 NEGATIVE CONTROL: a packet with no owned_files is refused with
+      refused:delegate-implement:no-owned-files before any launch; arm 4
+      NEGATIVE CONTROL: the mode never runs git commit — the stub's recorded
+      argv and the scratch repo's log are unchanged. PRE-FIX RESULT: FAILS —
+      implement is not a mode of scripts/claude-delegate.sh today (usage,
+      exit 2), so arm 1 records no launch.
+    title: |
+      `scripts/claude-delegate.sh implement <order>`: a Haiku implementer bounded to the packet's owned_files, with the host session keeping verify and commit
+    context: |
+      T1 of the 2026-09-27 trims. Today's delegate modes are read-only
+      (audit, patch-draft, json). In-session delegation is the preferred way
+      a host session runs a cheaper model for a haiku-tier packet: the host
+      claims the packet, launches the bounded implementer, verifies with the
+      packet's closure, commits and hands off on work/<order> exactly as
+      before. The haiku-delegate skill's rule that the primary agent remains
+      accountable for scope, verification and commits is unchanged and
+      restated in the skill text.
+    next_action: >
+      Add the implement mode: resolve the packet by order via the plan
+      binary, refuse without owned_files, build the prompt from title,
+      context, next_action, verifiable_closure and owned_files, launch
+      claude --print --model "${CLAUDE_DELEGATE_MODEL:-haiku}" with an
+      allowedTools set limited to Read, Grep, Glob, Edit, Write and a Bash
+      allowlist that excludes git; print the closure command for the host to
+      run. Update skills/haiku-delegate/SKILL.md in the same commit.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      A few files, clear design; the permission boundary is the judgment
+      part and is fully specified above.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session; design in
+      plan/issues/efficiency-trims-design-2026-09-27.md section T1.
+
+  - packet_id: check-packet-tier-declared-advisory-lint
+    order: 1437-cr8u
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [lint, ledger, tier-routing, bash]
+    estimated_hours: 2
+    depends_on: []
+    owned_files: [scripts/check-packet-tier-declared.sh, scripts/test-check-packet-tier-declared.sh]
+    verifiable_closure: |
+      bash scripts/test-check-packet-tier-declared.sh prints
+      ok:check-packet-tier-declared:3/3 and exits 0, where, against a scratch
+      repo with a base ref: arm 1: an added fragment declaring a packet with
+      neither size nor implementer_tier (top-level or notes-line) yields
+      advisory:packet-tier-undeclared:1 naming the packet_id, exit 0; arm 2:
+      an added fragment carrying both yields ok:packet-tier-declared:1; arm 3
+      NEGATIVE CONTROL: a fragment that only appends an event to an existing
+      packet is not a declaration and yields ok:packet-tier-declared:0.
+      PRE-FIX RESULT: FAILS — scripts/check-packet-tier-declared.sh does not
+      exist, so arm 1 prints nothing.
+    title: |
+      `check-packet-tier-declared.sh`: diff-scoped advisory that a newly declared packet carries `size` and `implementer_tier`
+    context: |
+      T1 of the 2026-09-27 trims. The filer assigns the tier; an unassigned
+      row is invisible to a haiku caller and defaults to sonnet for everyone
+      else, which is fine for one row and a routing defect at scale.
+      ADVISORY like check-carry-forward.sh: promotion to a gate step waits
+      on measured adoption. Same diff shape as check-added-fragments-parse.sh
+      (TILLANDSIAS_FRAGMENT_PARSE_BASE, --diff-filter=AM).
+    next_action: >
+      Write the checker (added fragments against the base, packets: entries
+      whose packet_id is not in the folded base ledger, both fields present
+      as scalars or as notes lines); fixture with the three arms; no gate
+      wiring in this packet.
+    notes: |
+      size: S
+      implementer_tier: haiku
+      Mechanical; the grammar and the scope are specified.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session.

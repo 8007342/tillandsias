@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    order: 1437-qza3
+    parent_order: 1437-8c6p
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [vault, credentials, reset, linux, podman, keyring]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - crates/tillandsias-core/src/reset_state.rs
+      - scripts/test-reset-state-contract.sh
+      - scripts/test-reset-keeps-vault-store.sh
+      - openspec/litmus-tests/litmus-reset-state-contract.yaml
+      - openspec/litmus-tests/litmus-reset-keeps-vault-store.yaml
+    title: |
+      Linux `--reset-state` and `--reset-guest` keep `<cache>/vault-data`, `<cache>/vault-audit` and the keyring share/root token; a freshly built Vault over the preserved store unseals and reads the pre-reset secrets; `clear_host_vault_credentials` is called from uninstall only
+    context: |
+      Spec: tillandsias-vault "The Vault store and its unseal material survive every destructive
+      reset; only uninstall removes them" and host-state-lifecycle "Destructive reset destroys
+      derived state and preserves operator data".
+
+      Today: run_reset_state runs `podman system reset --force` (fine — the store is a host
+      directory, not a named volume) and then calls clear_host_vault_credentials, which deletes
+      the keyring entries vault-shamir-share-v1 and vault-root-token-v1, both fallback_* files and
+      <cache>/vault-data. run_reset_guest removes the store via reset_guest_wipe_paths and keeps
+      the keyring — the worst combination, because launch_vault_container then re-initialises and
+      overwrites the share. announce_reset_plan lists the store under "destroyed".
+
+      Do: (1) run_reset_state no longer calls clear_host_vault_credentials; (2)
+      reset_guest_wipe_paths returns an empty list (keep the unit test
+      reset_guest_wipe_paths_exclude_model_cache and add the store to it); (3) announce_reset_plan
+      moves vault-data, vault-audit, models, the manifest and the keyring entries to the
+      PRESERVED list with the exact words the spec names; (4) TILLANDSIAS_RESET_KEEP_MODELS is
+      accepted and ignored with one stderr line; (5) clear_host_vault_credentials stays for
+      1437-evzi (uninstall) and gains a doc comment saying it is uninstall-only; (6) the
+      partial-init guard in launch_vault_container prints one line naming the store path, the
+      missing share name and that every credential is lost, before wiping; (7) extend
+      scripts/test-reset-state-contract.sh: the three reset bodies contain no call to a credential
+      clearer (grep clear_host_vault_credentials / clear_guest_vault_credentials /
+      CLEARED_CREDENTIALS outside uninstall: zero) — this arm is the cross-platform pin and MUST
+      go red on today's tree; (8) new destructive live fixture
+      scripts/test-reset-keeps-vault-store.sh (smoke hosts only, honours
+      TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 as a named skip): write a sentinel KV secret, run
+      --reset-state, run --init, read it back through vault-cli from the git service; bind it as
+      litmus:reset-keeps-vault-store (e2e phase).
+
+      Superseded rulings to cite in the commit and in the fixture header: 900-z3kv option (a),
+      and the premise of 1118-fqfk (fallback-file tmpfs); leave 1118-fqfk's decision to the
+      operator (open question 1 in the plan/issues file) — do NOT delete the fallback file on
+      reset in this packet.
+    exit_criteria:
+      - 'scripts/test-reset-state-contract.sh has an arm asserting zero credential-clearer call sites in the three reset bodies and it passes (pre-fix result: FAILS — run_reset_state calls clear_host_vault_credentials; macOS and Windows bodies call their siblings)'
+      - 'cargo test -p tillandsias-headless reset_guest_wipe_paths -- --nocapture asserts the returned list does not contain vault-data (pre-fix result: FAILS — it contains exactly that path)'
+      - 'scripts/test-reset-keeps-vault-store.sh on a Linux smoke host: sentinel written before --reset-state is read back after --init from a freshly created container (pre-fix result: FAILS — the store is deleted, Vault re-initialises, the read returns 404)'
+      - 'announce_reset_plan output names vault-data, models and the keyring entries under preserved (pre-fix result: FAILS — vault-data is listed under destroyed)'
+    verifiable_closure: |
+      bash scripts/test-reset-state-contract.sh exits 0 with the new clearer-free arm; cargo test -p tillandsias-headless reset_guest_wipe_paths passes; bash scripts/test-reset-keeps-vault-store.sh prints ok on a Linux smoke host; pre-fix: all three FAIL.
+    depends_on: []
+    notes: |
+      size: L  implementer_tier: opus
+      Touches the unseal path and destructive deletion — opus by the umbrella's rule. Cross-crate
+      (headless + core). Do not run any reset on the operator's desktop while implementing; the
+      live fixture is for smoke hosts. The unit and source-shape arms are the local closure.
+    next_action: 'remove the clear_host_vault_credentials call from run_reset_state and empty reset_guest_wipe_paths, then add the clearer-free arm to scripts/test-reset-state-contract.sh and watch it go from red to green'
+    provenance: |
+      Filed by macuahuitl (linux-macuahuitl-claude-20260927t163835z), 2026-09-27, under umbrella 1437-8c6p.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:38:35Z"
+        agent_id: "linux-macuahuitl-claude-20260927t163835z"
+        host: macuahuitl
+        summary: |-
+          Linux half of "credentials survive wipes": the reset bodies stop clearing the store and the share.

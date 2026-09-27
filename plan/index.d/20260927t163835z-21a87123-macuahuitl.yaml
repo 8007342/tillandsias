@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-claude-forge-relaunched-from-the-cli-needs-three-manual-operator-steps-accept-bypass-permissions-log-in-again-and-name-the-remote-control-session-before-it-can-join-the-fleet
+    event:
+      type: note
+      ts: "2026-09-27T16:38:35Z"
+      agent_id: linux-macuahuitl-claude-20260927t163835z
+      host: macuahuitl
+      summary: |-
+        The "bypass-permissions acceptance is a consent the operator may WANT to keep manual" question in this row is ANSWERED 2026-09-27 by the operator: "we want to skip that bypass permissions confirmation, and pre-accept it ... for all projects, for all harnesses." The bypass half of this row is superseded by 1437-y2wu (Claude: seed bypassPermissionsModeAccepted and skipDangerousModePermissionPrompt at launch when TILLANDSIAS_HOST_KIND=forge; spec default-image "Forge harness permission bypass is pre-accepted at launch, never prompted"). The other two manual steps this row records (log in again, /remote-control) are NOT covered there: the sign-in half is the reset-wipes-the-store root cause (1437-qza3), and /remote-control stays with this row.

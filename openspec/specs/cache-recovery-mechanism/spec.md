@@ -153,6 +153,15 @@ The cache directory location MUST follow XDG specifications. The `cache_version`
 - **AND** each `InitBuildState` field (image names, build status, timestamps) MUST be roundtrip-safe
 - **AND** corruption of this file (bit flip, truncation, encoding error) triggers recovery (see Corruption Recovery requirement)
 
+#### Scenario: A destructive reset never removes the cache root or the download manifest
+
+- **WHEN** `--reset-state` or `--reset-guest` runs on any platform (2026-09-27, `host-state-lifecycle`)
+- **THEN** the cache root directory MUST still exist afterwards
+- **AND** `downloads.manifest.json`, `models/`, `vault-data/`, `vault-audit/`, `packages/` and `forge-projects/` under it MUST be untouched
+- **AND** only `init-build-state.json`, `cache_version` and other derived markers MAY be removed
+- **AND** on macOS the same holds for `~/Library/Caches/tillandsias`, and on Windows for `%LOCALAPPDATA%\tillandsias\cache`
+- Pre-fix result: FAILS on macOS (`run_reset_state` removes the caches directory unless `TILLANDSIAS_RESET_KEEP_MODELS=1`) and on Windows (`reset_state_once` removes the `cache` directory); passes on Linux (positive control).
+
 ### Requirement: Version File Format and Semantics
 <!-- req-id: d531b657 -->
 
