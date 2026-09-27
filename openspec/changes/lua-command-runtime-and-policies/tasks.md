@@ -14,33 +14,64 @@ the size and the implementer tier. Order is the drain order.
 - [ ] 1.3 `1443-8pur` the agent door `tillandsias-plan run … -- <argv>`,
       `--json`, `--argv-json -`, base env only, policy before spawn
       (one `run_verb.rs` with 1375-amye). M / opus.
-- [ ] 1.4 `1443-w79y` branch-discipline seed + `discipline` verb + MCP
-      `discipline_show` + methodology pointer. M / sonnet.
-- [ ] 1.5 `1443-z3vb` land tool discipline probe (bash), before fetch/gate.
+- [x] 1.4 `1443-w79y` branch-discipline seed + `discipline` verb + MCP
+      `discipline_show` + methodology pointer. M / sonnet. (macbookair,
+      work/1443-w79y 7ebf29f32, awaiting relay.)
+- [ ] 1.5 `1443-z3vb` land tool discipline probe (bash), before fetch/gate;
+      re-scoped: effective level (seed checked against derive), integration
+      branch per project from the seed only, remedy names the skill.
       M / opus.
 - [ ] 1.6 `1443-sb9b` first script ported: `pre-push-main-branch-affordance`
       to Lua on the sandboxed `lua` CLI, fail-closed stub. M / sonnet.
+      (in progress on macbookair.)
 - [ ] 1.7 `1443-we89` temporary PreToolUse bridge hook with its retirement
-      condition. M / opus. (Where the settings entry lives is an open
-      question for the operator.)
+      condition; re-scoped: the settings entry is COMMITTED to
+      `.claude/settings.json` and the forge overlay (ruling 1); soft/hard
+      reset classes (ruling 3). M / opus.
 
 ## 2. Enforcement completes
 
-- [ ] 2.1 `1443-uit6` mirror enforces the seed at pre-receive and publishes
-      `refs/tillandsias/discipline/<digest>/<epoch>`; probe namespace.
-      L / opus. Depends on 1443-w79y and 1429-4y9f.
+- [ ] 2.1 `1443-uit6` mirror enforces the seed at pre-receive where seed and
+      derived agree, publishes
+      `refs/tillandsias/discipline/<level>/<enforcement>/<derived>/<digest>/<epoch>`;
+      probe namespace DROPPED (ruling 5). L / opus. Depends on 1443-w79y,
+      1429-4y9f.
 - [ ] 2.2 `1443-fpck` fixture filesystem scope in the engine; the litmus
       runner exports the regime. M / opus.
-- [ ] 2.3 `1443-9f5w` per-run consent tokens; smoke-skill env mapping with
-      `consent_source`. M / opus.
+- [ ] 2.3 `1443-9f5w` per-run consent tokens; re-scoped (ruling 3): SOFT
+      reset pre-authorised in forges always and by the smoke skills' env on
+      bare metal; HARD reset a per-run token every time, no env, never in a
+      forge. M / opus.
 - [ ] 2.4 `1443-w9hf` audit log with redaction; `policy audit`. S / sonnet.
+- [ ] 2.5 `1443-isrk` addendum (ruling 2): `default: {deny_after_quiet_days: N}`,
+      proposed N = 14, flips on the measured quiet period; operator confirms
+      N. (Inside the existing row; L / opus.)
 
 ## 3. Doors and the Lua land tool
 
 - [ ] 3.1 `1443-r4cj` MCP `run_command` on project-info. M / sonnet.
 - [ ] 3.2 `1443-u66u` `scripts/lua/land-on-platform-branch.lua`, every
       verdict token byte-identical, freeze and borrowed-stamp refusals,
-      stub `.sh`. L / opus.
+      stub `.sh`; re-scoped: it is Tillandsias's level-2 `land` template
+      and its remedies name the seed's `skills.land`. L / opus.
+
+## 3b. Per-project discipline on demand (operator ruling 7, 2026-09-27)
+
+- [ ] 3b.1 `1446-664f` `discipline derive`: observe the remote, committers,
+      work refs, PR merges, installed hooks; effective level = seed checked
+      against reality; refuse only where both agree. M / opus.
+- [ ] 3b.2 `1446-xqi6` hook templates embedded in the binary;
+      `discipline install-hooks` (repo-local hooksPath, level-0 advisory
+      hooks, never refuses main) and `discipline raise --to <n>`; every
+      refusal `… use /<skill> for instructions`; the forge installs for
+      every checked-out project. L / opus.
+- [ ] 3b.3 `1446-87cy` the mirror dispatches `mirror-pre-receive.lua` /
+      `mirror-post-receive.lua` per push event through the plan binary in
+      the git image, sandboxed and bounded, affordance relayed to the
+      client. L / opus.
+- [ ] 3b.4 `1446-qkx4` `skills/project-discipline/SKILL.md` in every forge
+      overlay: the ladder, the project's level and drift, how to raise,
+      the work format per hook family. M / sonnet.
 
 ## 4. Migration instruments
 
@@ -56,6 +87,8 @@ the size and the implementer tier. Order is the drain order.
 
 ## 5. Spec sync
 
+- [ ] 5.0 Retire the bridge when its printed condition holds; the same
+      quiet period feeds the policy default flip (2.5).
 - [ ] 5.1 The three new capabilities already exist as DRAFT durable specs
       (`openspec/specs/{command-runtime,command-policies,branch-discipline}/spec.md`)
       with stamped req-ids and registry entries, so the experts can answer

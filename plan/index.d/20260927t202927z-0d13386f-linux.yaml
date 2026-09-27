@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: per-run-consent-tokens-for-destructive-command-classes-minted-by-the-operator-on-the-host-consumed-once-never-grantable-in-a-forge-and-the-smoke-skills-env-authorisation-mapped-to-the-substrate-reset-class-with-its-source-recorded
+    field: title
+    value: 'CONSENT IS PER RUN AND OPERATOR-MINTED, SOFT RESET IS PRE-AUTHORISED IN FORGES, HARD RESET NEVER IS (operator 2026-09-27): tillandsias-plan policy consent grant <class> [--ttl 30m] writes a token bound to host, class and expiry under the runtime dir; policy eval allows a consent-class request ONCE against it and consumes it; an expired, foreign-host or already-consumed token answers refused:consent:invalid; the soft-reset class (--reset-state; Linux --reset-guest; host-state-lifecycle SOFT) is allowed in a forge always with consent_source=forge-policy and on bare metal by the two registered smoke skills'' TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 with consent_source=env or a per-run token; the hard-reset class (--reset-guest on a guest regime, wsl --unregister, the VM dir wipe) needs a per-run operator-minted token EVERY time, has no env pre-authorisation, and is never grantable in a forge'
+    ts: "2026-09-27T20:29:27Z"
+    host: linux
+
+events:
+  - packet_id: per-run-consent-tokens-for-destructive-command-classes-minted-by-the-operator-on-the-host-consumed-once-never-grantable-in-a-forge-and-the-smoke-skills-env-authorisation-mapped-to-the-substrate-reset-class-with-its-source-recorded
+    event:
+      type: note
+      ts: "2026-09-27T20:29:27Z"
+      host: linux
+      summary: |-
+        operator ruling 3 2026-09-27: soft reset pre-authorised in forges, hard reset explicit every time

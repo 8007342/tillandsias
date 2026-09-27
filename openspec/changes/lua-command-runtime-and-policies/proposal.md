@@ -62,13 +62,31 @@ disagree (methodology admits `work/<order>`; the mirror's
   `tillandsias-plan discipline show|target|check-ref` and a
   `discipline_show` MCP tool; the land tool's discipline probe; the Lua
   land tool.
+- **ADDED** to `branch-discipline` (operator rulings 2026-09-27): the level
+  is DERIVED from observed facts and checked against the seed, refusing
+  only where both agree; hook TEMPLATES per client and mirror event,
+  embedded in the plan binary and installed on demand per project for its
+  level (`discipline install-hooks`, `discipline raise`), a level-0 project
+  pushing to main freely; every hook refusal carries
+  `remedy: this project at level <n> … needs <X>; use /<skill> for instructions`;
+  a generic `project-discipline` skill for the sentence to resolve to.
 - **MODIFIED** `git-mirror-service`: pre-receive reads and enforces the seed
-  (protected default branch refused before relay, grammar refusal instead of
-  warning, a probe namespace), and the reconcile tick publishes
-  `refs/tillandsias/discipline/<digest>/<epoch>`.
+  at each rule's enforcement where seed and derivation agree (protected
+  default branch refused before relay, grammar per rule), dispatches the
+  project's own mirror-side hooks per push event (sandboxed, bounded, the
+  affordance relayed to the client), and the reconcile tick publishes
+  `refs/tillandsias/discipline/<level>/<enforcement>/<derived>/<digest>/<epoch>`.
+  The probe-push namespace of the first draft is dropped (ruling 5).
 - **ADDED** (temporary) a Claude Code PreToolUse hook for the Bash tool that
   classifies raw commands against the seven shapes through the policy
-  engine and carries its own retirement condition.
+  engine and carries its own retirement condition; its settings entry is
+  COMMITTED to the project's `.claude/settings.json` and the forge overlay
+  (ruling 1).
+- **Policy defaults and consent** (rulings 2 and 3): the allow default flips
+  to deny after a MEASURED quiet period (`deny_after_quiet_days`, proposed
+  14, operator to confirm); SOFT reset is pre-authorised in forges always,
+  HARD reset needs a per-run operator token every time with no environment
+  pre-authorisation.
 - **MODIFIED** deciders: `check-bash-dialect`, `check-sigpipe-verdict-pipelines-added`
   and `check-jq-callsite-ratchet` report their population against a
   bootstrap-shell allowlist and retire by a number.
@@ -101,8 +119,14 @@ disagree (methodology admits `work/<order>`; the mirror's
 - **Methodology**: one pointer key `branch_discipline_seed` in
   `methodology/multi-host-development.yaml`; the credential and reset
   specs being amended by sibling sessions are referenced, not edited.
-- **Packets**: 1443-6r3q umbrella and fourteen slices (see tasks.md and the
-  design note §7).
+- **Packets**: 1443-6r3q umbrella and fourteen slices, plus the four
+  ruling slices 1446-xqi6 (hook templates + install), 1446-664f (derive),
+  1446-87cy (mirror dispatch), 1446-qkx4 (the skill); 1443-isrk, 1443-9f5w,
+  1443-we89, 1443-uit6, 1443-z3vb and 1443-u66u re-scoped by note events
+  (see tasks.md and the design note §7).
+- **Forge**: the git image gains the plan binary (mirror dispatch);
+  `images/default/lib-common.sh` installs hooks for every checked-out
+  project, not only Tillandsias checkouts.
 - **Not changed**: verdict tokens of every existing land fixture and hook
   (they are interfaces; new tokens are additive), the plan-only lane, the
   gate-before-push order, the stamp protocol.
