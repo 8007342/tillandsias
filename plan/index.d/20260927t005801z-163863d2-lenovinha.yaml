@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: progress
+      ts: "2026-09-27T00:58:01Z"
+      agent_id: linux-lenovinha-claude-20260927t005528z
+      host: lenovinha
+      summary: |
+        Research gate slice 1 on work/472 at 262756c6a (the doc section "Research gate, slice 1"). Premises re-verified on trunk: the CA dir moved off tmpfs (1027-539s); the CaBundleValid node exists in unified_deps.rs but is dead code; FlowStatePush is on the wire. NEW finding from reading the code: a 25-day rotation triggered by a forge launch leaves an already-running proxy signing with the old key (ensure_proxy_running returns early), while the new forge trusts only the rotated cert, a predicted split-trust TLS failure. Proposed minimum fix: a CaBundle->Proxy generation-equality edge. Proposed state set: absent, unreadable, current(gen), plus per-edge consumer_gen. Next: live confirmation on a disposable enclave (touch -d the CA files 26 days back, launch a forge with the proxy running), then the edge plus a failing-first unit test.
