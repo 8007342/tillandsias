@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-per-project-branch-discipline-seed-tillandsias-branch-discipline-yaml-read-by-a-discipline-verb-and-an-mcp-tool-so-the-integration-branch-the-work-ref-grammar-and-the-protected-default-branch-are-data-a-tool-asks-for-never-a-constant-it-hardcodes
+    event:
+      type: progress
+      ts: "2026-09-27T20:13:23Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t201323z
+      host: macos
+      summary: |
+        Implementation complete on work/1443-w79y at 7ebf29f32 (merged over origin/linux-next). Contents: the .tillandsias/branch-discipline.yaml seed (level 2; default_branch enforced; ref_grammar warn; integration linux/forge->linux-next, windows->windows-next, macos->osx-next; work and salvage grammar; plan-lane paths; freeze namespace; the operator's denied message). Also branch_discipline.rs, the `discipline show|target|check-ref` verb, the forge-plan discipline_show MCP tool, the methodology pointer branch_discipline_seed, and fixture test-branch-discipline-verb.sh 6/6, bound as gate step 273 with its darwin regime. Every exit criterion has a fixture arm; the MCP arm drives forge-plan.sh over stdio. check-mcp-expert-health rc=0 ok:experts-healthy. Crate 459 passed / 0 failed; clippy clean; musl zigbuild --tests rc=0. A clean-checkout run of the whole checklist passed: 11 deciders (including the jq ratchet at 344/344 and gate-step-regimes), ratchet fixture 6/6, litmus-covering 10 specs. FOUND AND FIXED on the way: (1) .gitignore excluded the whole /.tillandsias/ directory, so the seed was silently not committed. The rule is now /.tillandsias/* plus !/.tillandsias/branch-discipline.yaml; config.toml and guest-bin stay ignored. (2) Four SIGPIPE-prone verdict pipelines in the fixture were rewritten to here-strings. Not in scope: the mirror, the land tool and the hooks consume this in 1443-z3vb / uit6 / sb9b / u66u. Please relay 7ebf29f32; close after landing.
