@@ -1,0 +1,44 @@
+# @trace spec:default-image
+name: litmus:forge-project-trust-seeds-shape
+spec: default-image
+phase: pre-build
+description: >
+  Order 1447-nmq3. A forge must not ask the operator to trust the checked-out
+  project. The Claude, Codex and Antigravity entrypoints seed the exact key
+  each harness reads for PROJECT_DIR (Claude projects[<path>].hasTrustDialogAccepted,
+  Codex [projects."<path>"] trust_level, agy settings.json trustedWorkspaces),
+  after find_project_dir, merging rather than clobbering, and write nothing
+  outside a forge. Where the real codex / agy binaries are present the fixture
+  also proves each accepts the seeded file and rejects a wrong shape.
+severity: normal
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-forge-project-trust-seeds.sh
+  - workspace contains images/default/lib-common.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-forge-project-trust-seeds.sh && test -x scripts/test-forge-project-trust-seeds.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "each harness's trust key is seeded exactly, merged, idempotent, forge-only (non-forge NEGATIVE CONTROL writes nothing)"
+    command: "bash scripts/test-forge-project-trust-seeds.sh 2>&1 | tail -n 1"
+    timeout_ms: 180000
+    expected_behavior: "PASS: forge-project-trust-seeds"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "PASS: forge-project-trust-seeds"
+  log_fields:
+    spec: "default-image"
+    test: "forge-project-trust-seeds-shape"
+    artifact: "seed_claude_project_trust + seed_codex_project_trust + seed_agy_workspace_trust"
+
+rollback:
+  on_failure: >
+    A seed that clobbers a harness config or writes outside a forge is worse
+    than the prompt it removes: restore the merge and the forge gate first.
+  command: "bash scripts/test-forge-project-trust-seeds.sh"

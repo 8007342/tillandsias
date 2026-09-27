@@ -75,6 +75,11 @@ export_project_env
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
+# @trace order:1447-nmq3
+# Trust the checked-out project in agy's settings.json (trustedWorkspaces), so
+# the "Do you trust the contents of this project?" dialog does not appear.
+# Forge-gated inside the function.
+seed_agy_workspace_trust "$PROJECT_DIR" || true
 
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme
