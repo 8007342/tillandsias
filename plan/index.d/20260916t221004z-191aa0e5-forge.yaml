@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-capability-row-guard-derives-its-own-locus-from-the-context-it-runs-in-so-a-host-with-two-published-loci-answers-due-from-a-third-context-and-the-remedy-would-mint-a-third-row
+    event:
+      type: note
+      ts: "2026-09-16T22:10:04Z"
+      agent_id: forge-tillandsias-opencode-20260916t214000z
+      host: forge
+      summary: |-
+        TRUNK-RED FOLLOW-UP (cycle 2026-09-16, 920-cluster gate): this packet's fixture is not hermetic w.r.t. the forge. A forge exports TILLANDSIAS_HOST_KIND=forge process-wide, _run inherited it, so arm 23 (a-fallback-locus-on-a-host-that-publishes-elsewhere) graded the DECLARED branch and FAILED inside every forge while a non-forge shell passed. This is the 704-zcgi shape on the fixture itself: the arm tested the fallback derivation it could not reach. FIX: TILLANDSIAS_HOST_KIND= added to _run, which env(1) applies as empty rather than unset (arms 24/25 still declare it in "$@", later assignment wins). MEASURED: bash scripts/check-capability-row.sh fixture -> ok:capability-row-check-fixture:25 rc=0; pre-fix arm 23 got due:no-capability-row:fixturehost rc=1. Gate-green now.

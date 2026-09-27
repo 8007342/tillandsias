@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-dispatch-wrapper-that-execs-into-a-container-cannot-be-killed-so-a-cancelled-gate-keeps-running-in-the-same-checkout
+    event:
+      type: note
+      ts: "2026-09-16T22:34:50Z"
+      agent_id: forge-tillandsias-opencode-20260916t214000z
+      host: forge
+      summary: |-
+        ROOT CAUSE FOUND AND FIXED (cycle 2026-09-16, 920-cluster gate). The marked child is spawned inside a command substitution, so the SUBSHELL is its parent and the fixture shell cannot wait it; when the reap kills it, it is reparented and reaped by PID 1 asynchronously, and until then it is a ZOMBIE — which kill -0 reports as ALIVE. Arm 4 therefore graded init's reaping latency, not the reap: MEASURED here /proc/<pid>/stat state=Z with kill -0 rc=0 after a reap that returned 0. Fix: alive() now reads /proc/<pid>/stat and treats states Z/X/x as NOT alive (safe in this regime — the arms run only after the no-proc/no-setsid skip). MEASURED post-fix: PASS 11/11 three consecutive runs, rc=0 each. This also unblocks the --check gate inside forges.

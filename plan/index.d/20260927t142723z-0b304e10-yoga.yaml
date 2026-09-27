@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-unreachable-forge-session-completed-eight-packets-onto-a-salvage-ref-so-trunk-offers-that-work-to-other-hosts-as-ready
+    field: status
+    value: completed
+    ts: "2026-09-27T14:27:23Z"
+    host: yoga
+
+events:
+  - packet_id: an-unreachable-forge-session-completed-eight-packets-onto-a-salvage-ref-so-trunk-offers-that-work-to-other-hosts-as-ready
+    event:
+      type: completed
+      ts: "2026-09-27T14:27:23Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: b60198ceb (criterion 4: check-stranded-plan-writes.sh + coordination-skill step + methodology stranded_plan_write_triage) + 18d97f6f2 (criterion 1: the file-by-file audit landed via 1425-t9v9); criterion 2 measured 2026-09-26 (producer rc=1; end-to-end ci-full and the corrupt-staged control NOT measured, carried on 923-ys2t); criterion 3 holds for this row's population (none of the eight reads implemented on trunk)
+  - packet_id: an-unreachable-forge-session-completed-eight-packets-onto-a-salvage-ref-so-trunk-offers-that-work-to-other-hosts-as-ready
+    event:
+      type: note
+      ts: "2026-09-27T14:27:23Z"
+      host: yoga
+      summary: |-
+        both halves on trunk

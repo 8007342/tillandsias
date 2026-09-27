@@ -20,8 +20,12 @@ critical_path:
     command: "grep -F 'println!(\"       tillandsias --init [--force] [--debug]\");' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 5000
 
+  # 1438-zqtn: the list moved out of run_init into INIT_IMAGES (shared with the
+  # debug-log cleanup); the shape pin follows it and also requires run_init to
+  # walk that constant, so the property — init builds these ten, in this order —
+  # is what is pinned, not a literal's position.
   - step: "verify the ten images are defined in the canonical order (vault: order 253; forge-base: order 76)"
-    command: "tr -d '[:space:]' < crates/tillandsias-headless/src/main.rs | grep -qF 'letimages=[\"proxy\",\"git\",\"vault\",\"inference\",\"router\",\"chromium-core\",\"chromium-framework\",\"forge-base\",\"forge\",\"web\",]' && echo 'ok: images array shape preserved'"
+    command: "tr -d '[:space:]' < crates/tillandsias-headless/src/main.rs | grep -qF 'constINIT_IMAGES:[&str;10]=[\"proxy\",\"git\",\"vault\",\"inference\",\"router\",\"chromium-core\",\"chromium-framework\",\"forge-base\",\"forge\",\"web\",]' && tr -d '[:space:]' < crates/tillandsias-headless/src/main.rs | grep -qF 'letimages=INIT_IMAGES;' && echo 'ok: images array shape preserved'"
     timeout_ms: 5000
 
   # NEGATIVE CONTROL for the source-shape assertions above (634-39ik): prove the
@@ -29,7 +33,7 @@ critical_path:
   # images-array order must NOT match. Without a negative control the grep -F
   # steps would be untestable source-text pins.
   - step: "negative control: a corrupted images-array order is rejected (the shape check discriminates)"
-    command: "if tr -d '[:space:]' < crates/tillandsias-headless/src/main.rs | grep -qF 'letimages=[\"web\",\"forge\",\"forge-base\",'; then echo 'FAIL: reversed array matched'; exit 1; fi; echo 'ok: corrupted order rejected'"
+    command: "if tr -d '[:space:]' < crates/tillandsias-headless/src/main.rs | grep -qF 'constINIT_IMAGES:[&str;10]=[\"web\",\"forge\",\"forge-base\",'; then echo 'FAIL: reversed array matched'; exit 1; fi; echo 'ok: corrupted order rejected'"
     timeout_ms: 5000
 
   - step: "verify run_init uses PodmanClient for build orchestration"

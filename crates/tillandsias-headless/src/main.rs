@@ -1083,6 +1083,7 @@ fn main() {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
+            print_status_check_verdict();
             println!("status-check completed");
         }
         if !opencode {
@@ -1108,6 +1109,7 @@ fn main() {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
+        print_status_check_verdict();
         println!("status-check completed");
         return;
     }
@@ -8108,6 +8110,41 @@ fn build_opencode_forge_args(
              back to UPSTREAM'S DEFAULT BRANCH (typically `main`)."
         );
     }
+    // ORDER 505 (mirrored from build_forge_agent_run_args_with_vault for the
+    // OpenCode lane — 920-c3af): mount only the per-lane MCP tool socket
+    // directory ($XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>) so the
+    // in-forge socat bridge (config-overlay/mcp/host-browser.sh) reaches this
+    // lane's dedicated listener. Read-only — connect() needs no filesystem
+    // write. Attribution is derived directly from which listener accepted the
+    // connection, kernel/filesystem-enforced; /proc/<pid>/environ is untrusted.
+    // The OpenCode builder previously skipped this block entirely, so every
+    // OpenCode lane launched with no route to the host control socket.
+    let raw_instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok();
+    let mcp_dir = mcp_socket_host_dir(project_name, raw_instance.as_deref());
+    if std::fs::create_dir_all(&mcp_dir).is_ok() {
+        // START THE LANE LISTENER TOO — not just the mount (mirrors the legacy
+        // tray path and the live vault builder). A mounted, env-var'd, EMPTY
+        // socket dir still leaves the in-forge host-browser bridge dead on
+        // connect; cfg-gated with the module: the listener implementation lives
+        // in tray/mod.rs, so a no-tray build cannot bind one — same
+        // pre-existing limitation as the vault builder's block.
+        #[cfg(feature = "tray")]
+        {
+            let _ = tray::start_mcp_socket_server_for_lane(
+                project_name,
+                raw_instance.as_deref().unwrap_or("default"),
+            );
+        }
+        args.extend([
+            "--mount".into(),
+            format!(
+                "type=bind,source={},target=/run/host/tillandsias-mcp,readonly=true",
+                mcp_dir.display()
+            ),
+            "--env".into(),
+            "TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock".into(),
+        ]);
+    }
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect and safe.directory, bind-mounted
     // read-only. Replaces the empty tmpfs approach — the file is owned by
@@ -8862,18 +8899,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     // hit its first vault build mid-login and every login re-invoked podman
     // build. Login stays a pure runtime operation when init has run;
     // build_vault_image keeps a fail-soft on-demand fallback.
-    let images = [
-        "proxy",
-        "git",
-        "vault",
-        "inference",
-        "router",
-        "chromium-core",
-        "chromium-framework",
-        "forge-base",
-        "forge",
-        "web",
-    ];
+    let images = INIT_IMAGES;
 
     // @trace spec:forge-staleness, spec:forge-cache-dual
     // VERSION changes only move aliases. Content identity comes from the exact
@@ -9629,19 +9655,35 @@ fn podman_build_argv(
     Ok(argv)
 }
 
+/// ORDER 1438-zqtn. THE images `--init` builds, in build order. One list for
+/// the build loop AND the debug-log cleanup: the cleanup used to keep its own
+/// hand-written copy, which omitted `vault` and `web`, so every `--debug`
+/// init — and every curl install, since install.sh runs `--reset-state
+/// --debug` — left /tmp/tillandsias-init-vault.log behind (measured on yoga
+/// 2026-09-27, mode 644).
+const INIT_IMAGES: [&str; 10] = [
+    "proxy",
+    "git",
+    "vault",
+    "inference",
+    "router",
+    "chromium-core",
+    "chromium-framework",
+    "forge-base",
+    "forge",
+    "web",
+];
+
 fn cleanup_init_logs() {
-    for image in &[
-        "proxy",
-        "git",
-        "inference",
-        "router",
-        "chromium-core",
-        "chromium-framework",
-        "forge-base",
-        "forge",
-    ] {
-        let log_path = PathBuf::from(format!("/tmp/tillandsias-init-{}.log", image));
-        let _ = fs::remove_file(&log_path);
+    cleanup_init_logs_in(Path::new("/tmp"), &INIT_IMAGES);
+}
+
+/// Remove `<dir>/tillandsias-init-<image>.log` for each image. Split out so a
+/// test can point it at a scratch directory; `init_log_file` names the same
+/// path shape under /tmp.
+fn cleanup_init_logs_in(dir: &Path, images: &[&str]) {
+    for image in images {
+        let _ = fs::remove_file(dir.join(format!("tillandsias-init-{}.log", image)));
     }
 }
 
@@ -10329,6 +10371,46 @@ fn run_sync_project(project: &str, branch: &str, debug: bool) -> Result<(), Stri
     }
 }
 
+/// ORDER 1437-dypk. What a status-check TOLERATED, so the verdict can say so.
+///
+/// The status-check lane deliberately tolerates a down Vault (its mirror is a
+/// throwaway bare repo) and says so in WARNING prose. But it then printed
+/// "status-check completed" and exited 0 either way, so a smoke or an operator
+/// reading the rc and the last line saw a pass over a mirror running with no
+/// credential (measured on yoga 2026-09-27). Each tolerance site records a
+/// short reason here, and the verdict line names them machine-readably. The
+/// "status-check completed" line itself is unchanged: its consumers match it
+/// as a substring, and the exit code stays 0 — the fake-podman litmus runs
+/// have no live Vault, and a degraded run is still a completed run.
+static STATUS_CHECK_DEGRADED: std::sync::Mutex<Vec<&'static str>> =
+    std::sync::Mutex::new(Vec::new());
+
+fn status_check_note_degraded(reason: &'static str) {
+    if let Ok(mut v) = STATUS_CHECK_DEGRADED.lock()
+        && !v.contains(&reason)
+    {
+        v.push(reason);
+    }
+}
+
+/// `status-check:ok`, or `status-check:degraded:<reason>[,<reason>...]` in the
+/// order the tolerances fired. One line, printed before "status-check completed".
+fn status_check_verdict_line(reasons: &[&str]) -> String {
+    if reasons.is_empty() {
+        "status-check:ok".to_string()
+    } else {
+        format!("status-check:degraded:{}", reasons.join(","))
+    }
+}
+
+fn print_status_check_verdict() {
+    let reasons = STATUS_CHECK_DEGRADED
+        .lock()
+        .map(|v| v.clone())
+        .unwrap_or_default();
+    println!("{}", status_check_verdict_line(&reasons));
+}
+
 fn run_status_check(debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --status-check")?;
     report_runtime_lane("--status-check", debug);
@@ -10415,6 +10497,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                 eprintln!(
                     "[tillandsias] WARNING: status-check mirror service-identity provisioning skipped: {e}"
                 );
+                status_check_note_degraded("mirror-identity-unprovisioned");
                 None
             }
         };
@@ -10426,6 +10509,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                 eprintln!(
                     "[tillandsias] WARNING: status-check mirror launching credential-less: {e}"
                 );
+                status_check_note_degraded("mirror-credential-less");
                 None
             }
         };
@@ -20892,6 +20976,50 @@ mod tests {
             status.contains("WARNING: status-check mirror launching credential-less"),
             "status-check tolerance must be loud, not debug-gated"
         );
+        // ORDER 1437-dypk, extending this pin ON PURPOSE: loud prose was not
+        // enough — the run still printed "completed" and exited 0. Each
+        // tolerance must also record a machine-readable degraded reason that
+        // the verdict line names.
+        assert!(
+            status.contains("status_check_note_degraded(\"mirror-credential-less\")")
+                && status.contains("status_check_note_degraded(\"mirror-identity-unprovisioned\")"),
+            "each status-check tolerance must record its degraded reason for the verdict (1437-dypk)"
+        );
+    }
+
+    /// ORDER 1437-dypk. The verdict line is machine-readable and names every
+    /// tolerated degradation; with none it says ok. The NEGATIVE CONTROL is the
+    /// empty case: a clean run must not read as degraded.
+    #[test]
+    fn status_check_verdict_names_each_degraded_reason_or_says_ok() {
+        assert_eq!(status_check_verdict_line(&[]), "status-check:ok");
+        assert_eq!(
+            status_check_verdict_line(&["mirror-identity-unprovisioned", "mirror-credential-less"]),
+            "status-check:degraded:mirror-identity-unprovisioned,mirror-credential-less"
+        );
+        // Both "status-check completed" sites print the verdict first.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let completed = source
+            .matches("println!(\"status-check completed\");")
+            .count();
+        let paired = source
+            .matches(
+                "print_status_check_verdict();\n            println!(\"status-check completed\");",
+            )
+            .count()
+            + source
+                .matches(
+                    "print_status_check_verdict();\n        println!(\"status-check completed\");",
+                )
+                .count();
+        assert!(
+            completed >= 2,
+            "premise: both completion sites exist ({completed})"
+        );
+        assert_eq!(
+            paired, completed,
+            "every completion line is preceded by the verdict line"
+        );
     }
 
     #[test]
@@ -28977,8 +29105,12 @@ esac
             init_window.contains("PodmanClient::new()"),
             "run_init must use PodmanClient"
         );
+        // ORDER 1438-zqtn, CHANGED ON PURPOSE: the image list moved out of
+        // run_init into INIT_IMAGES (shared with the debug-log cleanup), so
+        // the property "init builds web" is asserted on the list run_init
+        // actually walks, not on a literal's position in its source.
         assert!(
-            init_window.contains("\"web\""),
+            init_window.contains("INIT_IMAGES") && INIT_IMAGES.contains(&"web"),
             "run_init must include the web image"
         );
         assert!(
@@ -30511,6 +30643,45 @@ esac
         );
     }
 
+    /// ORDER 1438-zqtn. The debug-log cleanup covers EVERY image init builds
+    /// (the list it walks is the build list itself), and removes nothing else.
+    #[test]
+    fn cleanup_init_logs_covers_every_init_image_and_nothing_else() {
+        let dir = std::env::temp_dir().join(format!("zqtn-cleanup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        for image in INIT_IMAGES {
+            std::fs::write(dir.join(format!("tillandsias-init-{image}.log")), "x").expect("write");
+        }
+        // NEGATIVE CONTROL: a file that is not an init log survives.
+        let bystander = dir.join("tillandsias-other.log");
+        std::fs::write(&bystander, "keep").expect("write");
+        assert!(
+            INIT_IMAGES.contains(&"vault") && INIT_IMAGES.contains(&"web"),
+            "premise: the images the old list missed are built"
+        );
+        cleanup_init_logs_in(&dir, &INIT_IMAGES);
+        for image in INIT_IMAGES {
+            assert!(
+                !dir.join(format!("tillandsias-init-{image}.log")).exists(),
+                "init log for {image} was left behind"
+            );
+        }
+        assert!(
+            bystander.exists(),
+            "the cleanup must not remove a non-init file"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        // The shipped cleanup walks the build list, not a copy of it.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn cleanup_init_logs()");
+        assert!(
+            window.contains("&INIT_IMAGES"),
+            "cleanup_init_logs must walk INIT_IMAGES"
+        );
+        let init = source_window(source, "let images = INIT_IMAGES;");
+        assert!(!init.is_empty(), "the init build loop must use INIT_IMAGES");
+    }
+
     #[test]
     fn init_logs_none_in_non_debug_mode() {
         // Test that init_log_file returns None in non-debug mode.
@@ -30871,6 +31042,49 @@ esac
         assert!(
             !args_str.contains("control.sock"),
             "forge spec must NEVER mount control.sock; args: {args_str}"
+        );
+    }
+
+    /// 920-c3af: an OpenCode lane's argv comes from `build_opencode_forge_args`,
+    /// NOT from `build_forge_agent_run_args_with_vault`. The order-505 coverage
+    /// above only exercised the vault builder, so the OpenCode lane could (and
+    /// did) silently launch without the control-socket route and every
+    /// host-browser/publish_local tool stayed invisible in the lane.
+    ///
+    /// @trace plan/issues/sibling-container-diagnosis
+    #[test]
+    fn opencode_lane_builder_mounts_only_per_lane_mcp_dir() {
+        let _env = env_lock();
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            Some(&PathBuf::from("/tmp/project")),
+            None,
+            "alpha",
+            None,
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+
+        let args_str = args.join(" ");
+
+        // Mounts /run/host/tillandsias-mcp (read-only) and sets the socket env.
+        assert!(
+            args_str.contains("/run/host/tillandsias-mcp")
+                && args_str
+                    .contains("TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock"),
+            "OpenCode lane argv must bind-mount the per-lane MCP socket dir and set \
+             TILLANDSIAS_CONTROL_SOCKET; args: {args_str}"
+        );
+
+        // Must NOT mount control.sock
+        assert!(
+            !args_str.contains("control.sock"),
+            "OpenCode lane argv must NEVER mount control.sock; args: {args_str}"
         );
     }
 

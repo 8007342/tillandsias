@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-github-login-qr-screen-is-hardcoded-white-on-black-with-no-activity-while-polling
+    event:
+      type: progress
+      ts: "2026-09-27T13:02:59Z"
+      agent_id: linux-lenovinha-claude-20260927t125413z
+      host: lenovinha
+      summary: |
+        Slice (a) on work/1420-2pav at 6888aaf5d: a live activity line while the device login polls. A bar of the time remaining on the code plus an mm:ss countdown, redrawn in place; other lines pass through; the existing "[tillandsias] Authorization successful!" line turns leaf green; the plain tier is byte-for-byte unchanged. New bounded SyncPodmanCommand::status_bounded_with_stdin_streaming. No new user-facing words (pinned by a test), so no approval is needed. Tests: DevicePollView 6/6, podman 177/177, github-login 17/17, clippy rc=0 in three feature sets, preflight ran=120 refused=0. OPEN: (b) live device-code arm; (c) cross-platform via the 1420-4grt child-process bridge.
