@@ -19,9 +19,18 @@ bad() { fail=$((fail + 1)); echo "FAIL $1"; }
 fn="$(sed -n '/^_lt_step_record() {/,/^}/p' "$R")"
 [ -n "$fn" ] || { echo "FAIL premise: _lt_step_record not found in $R"; exit 1; }
 
+# Resolve THIS checkout's plan binary before anything else and hand it to the
+# runner explicitly: without it, a regime with no CARGO_TARGET_DIR and no
+# TILLANDSIAS_PLAN_BIN (the darwin gate; preflight-fixtures-default-target)
+# makes the runner refuse to execute steps (relay-fix, macuahuitl 2026-09-27;
+# the same remedy as 1427-utmy, 84f37ff24).
+. "$ROOT/scripts/plan-binary-probe.sh"
+PB="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null)" || PB=""
+case "$PB" in ./*) PB="$ROOT/${PB#./}" ;; esac
+
 # 1. A real run: one record per EXECUTED step, each valid JSON with the fields.
 log="$work/steps.jsonl"
-out="$(LITMUS_STEP_TIMING_LOG="$log" "$R" binary-signing --compact 2>&1 | sed 's/\x1b\[[0-9;]*m//g')"
+out="$(TILLANDSIAS_PLAN_BIN="$PB" LITMUS_STEP_TIMING_LOG="$log" "$R" binary-signing --compact 2>&1 | sed 's/\x1b\[[0-9;]*m//g')"
 steps="$(grep -c '\[STEP [0-9]*/[0-9]*\]' <<<"$out")"
 recs="$( [ -f "$log" ] && grep -c . "$log" || echo 0)"
 if [ "$steps" -lt 1 ]; then
@@ -35,9 +44,6 @@ fi
 # malformed record anywhere but the end passed the earlier `jq -e` form.
 # Instead print each record that FAILS the shape and require none. Read with
 # the plan binary's json get, not jq (1375-tsfu ratchet).
-. "$ROOT/scripts/plan-binary-probe.sh"
-PB="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null)" || PB=""
-case "$PB" in ./*) PB="$ROOT/${PB#./}" ;; esac
 if [ -z "$PB" ]; then
     bad "premise: no plan binary to validate the records with"
 elif [ -f "$log" ]; then
