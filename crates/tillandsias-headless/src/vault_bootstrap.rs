@@ -1888,6 +1888,98 @@ fn has_shamir_share_in_keyring() -> bool {
     false
 }
 
+/// What the OS keychain can say about the unseal share (order 1437-qza3).
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyringShare {
+    /// The keychain answered and holds a valid 32-byte share.
+    Present,
+    /// The keychain answered and has no valid share.
+    Absent,
+    /// The keychain could not be asked: no secret service, a locked keyring,
+    /// or a timeout. These cannot be told apart from here (1265-8qr6).
+    Unreachable,
+}
+
+/// Ask the keychain, and ONLY the keychain, for the unseal share. Unlike
+/// [`has_shamir_share_in_keyring`] this never consults the fallback file and
+/// keeps "no entry" apart from "could not ask", because the reset decision
+/// (see [`reset_vault_disposition`]) turns on exactly that difference.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[cfg(feature = "vault")]
+pub fn probe_keyring_share() -> KeyringShare {
+    use base64::Engine;
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let answer = match Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1) {
+            Err(_) => KeyringShare::Unreachable,
+            Ok(entry) => match entry.get_password() {
+                Ok(encoded) => {
+                    let valid = base64::engine::general_purpose::STANDARD
+                        .decode(encoded.trim())
+                        .map(|v| v.len() == 32)
+                        .unwrap_or(false);
+                    if valid {
+                        KeyringShare::Present
+                    } else {
+                        KeyringShare::Absent
+                    }
+                }
+                Err(keyring::Error::NoEntry) => KeyringShare::Absent,
+                Err(_) => KeyringShare::Unreachable,
+            },
+        };
+        let _ = tx.send(answer);
+    });
+    rx.recv_timeout(Duration::from_secs(2))
+        .unwrap_or(KeyringShare::Unreachable)
+}
+
+/// Whether a valid fallback share file exists under `<cache>`: the host has
+/// been running WITHOUT a keychain for this share.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[cfg(feature = "vault")]
+pub fn fallback_share_present() -> bool {
+    crate::init_cache_dir()
+        .map(|c| fallback_share_counts(&c))
+        .unwrap_or(false)
+}
+
+/// What a destructive reset does with the Vault store (order 1437-qza3).
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResetVaultDisposition {
+    /// The keychain holds the share: the store and the share survive.
+    Keep,
+    /// The keychain could not be asked and no fallback share exists, so the
+    /// share can only be in a keychain that is locked right now. Clearing
+    /// would destroy sign-ins the ruling means to keep; the store is kept
+    /// and the reset says it could not verify the keychain.
+    KeepUnverified,
+    /// No keychain holds the share (keyring-less host, or none anywhere):
+    /// the store and the fallback files are cleared, loudly.
+    ClearKeyringless,
+}
+
+/// Operator ruling 2026-09-27: "the presence of an unlocking keyring should be
+/// a requirement to survive the vault store." A keyring-less host keeps its
+/// share in the fallback file, so an unreachable keychain WITH a fallback share
+/// is a keyring-less host; an unreachable keychain WITHOUT one is a keychain
+/// that is merely locked at reset time, which is not the case the ruling
+/// clears.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn reset_vault_disposition(
+    keyring: KeyringShare,
+    fallback_share: bool,
+) -> ResetVaultDisposition {
+    match (keyring, fallback_share) {
+        (KeyringShare::Present, _) => ResetVaultDisposition::Keep,
+        (KeyringShare::Absent, _) => ResetVaultDisposition::ClearKeyringless,
+        (KeyringShare::Unreachable, true) => ResetVaultDisposition::ClearKeyringless,
+        (KeyringShare::Unreachable, false) => ResetVaultDisposition::KeepUnverified,
+    }
+}
+
 /// The FALLBACK half of has_shamir_share_in_keyring: the whole predicate inside
 /// a guest, which has no keychain. Split out (1200-ih38 review) so a test can
 /// assert it hermetically: on a host whose own keyring holds a share, the full
@@ -2349,7 +2441,16 @@ fn build_vault_image(debug: bool) -> Result<String, String> {
 /// shapes, and it reaches for `podman unshare` and `libc::getuid`, neither of
 /// which exists on `x86_64-pc-windows-gnu`. The Windows and macOS equivalents
 /// clear Credential Manager and the keychain from their own trays.
+///
+/// UNINSTALL-ONLY (order 1437-qza3, operator directive 2026-09-27). No reset
+/// may call this: the store and the unseal material are operator data that
+/// survive every destructive reset (tillandsias-vault, host-state-lifecycle).
+/// Its caller is `--uninstall`, which lands with 1437-evzi; until then it has
+/// none, which is why dead code is allowed here rather than the function being
+/// deleted and rewritten. `scripts/test-reset-state-contract.sh` ARM 8 fails if
+/// a reset body calls it.
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
     let mut cleared: Vec<String> = Vec::new();
     let mut failed: Vec<String> = Vec::new();
@@ -2374,6 +2475,27 @@ pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
         }
     }
 
+    let (c, f) = clear_vault_store_and_fallbacks();
+    cleared.extend(c);
+    failed.extend(f);
+
+    if debug {
+        eprintln!("[tillandsias] cleared: {}", cleared.join(" "));
+        if !failed.is_empty() {
+            eprintln!("[tillandsias] FAILED: {}", failed.join(" "));
+        }
+    }
+    (cleared, failed)
+}
+
+/// The store half of the clear: the two fallback files and `<cache>/vault-data`,
+/// and NOTHING in the keychain. Split out (order 1437-qza3) because a reset on
+/// a keyring-less host clears exactly this set, per the operator ruling of
+/// 2026-09-27, while the keychain entries are cleared only by uninstall.
+#[cfg(target_os = "linux")]
+pub fn clear_vault_store_and_fallbacks() -> (Vec<String>, Vec<String>) {
+    let mut cleared: Vec<String> = Vec::new();
+    let mut failed: Vec<String> = Vec::new();
     let cache = match crate::init_cache_dir() {
         Ok(c) => c,
         Err(e) => {
@@ -2431,12 +2553,6 @@ pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
         }
     }
 
-    if debug {
-        eprintln!("[tillandsias] cleared: {}", cleared.join(" "));
-        if !failed.is_empty() {
-            eprintln!("[tillandsias] FAILED: {}", failed.join(" "));
-        }
-    }
     (cleared, failed)
 }
 
@@ -3051,6 +3167,18 @@ fn vault_selinux_label_opt(_debug: bool) -> Option<String> {
     None
 }
 
+/// The one line printed before the partial-init guard wipes the store
+/// (order 1437-qza3): the store path, the missing share's name, and that every
+/// credential in it is lost.
+fn partial_init_wipe_line(vault_dir: &std::path::Path) -> String {
+    format!(
+        "[tillandsias-vault] WIPING {}: the unseal share {VAULT_SHAMIR_SHARE_V1} is in neither \
+         the keyring nor its fallback file, so this store cannot be opened; every credential \
+         stored in it is lost and Vault will be initialised afresh",
+        vault_dir.display()
+    )
+}
+
 fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     let image_tag = canonical_vault_launch_tag(image_tag)?;
     let host_publish_arg = vault_host_publish_arg(is_running_in_vm());
@@ -3076,15 +3204,14 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // guard fixes. @trace spec:tillandsias-vault
     let is_partial_init = vault_data_volume_exists() && !has_shamir_share_in_keyring();
     if is_partial_init {
-        if debug {
-            eprintln!(
-                "[tillandsias-vault] removing stale partial-init data volume \
-                 (volume exists but no Shamir share in keychain)"
-            );
-        }
         let vault_dir = crate::init_cache_dir()
             .unwrap_or_else(|_| PathBuf::from("."))
             .join("vault-data");
+        // Order 1437-qza3: ALWAYS say this, not only under --debug. Since no
+        // reset clears the share any more, reaching this branch means the
+        // share went missing some other way, and the wipe below destroys every
+        // stored sign-in. The operator must be able to see that it happened.
+        eprintln!("{}", partial_init_wipe_line(&vault_dir));
         let _ = std::fs::remove_dir_all(vault_dir);
     } else if debug && vault_data_volume_exists() {
         eprintln!(
@@ -7507,5 +7634,53 @@ mod tests {
             !entrypoint.contains("sign/*"),
             "no sign/* wildcard may appear anywhere in the vault entrypoint"
         );
+    }
+
+    /// Order 1437-qza3: the partial-init wipe names the store, the missing
+    /// share and the loss, so the one path that still destroys credentials is
+    /// never silent.
+    #[test]
+    fn partial_init_wipe_line_names_store_share_and_loss() {
+        let line = partial_init_wipe_line(std::path::Path::new("/c/tillandsias/vault-data"));
+        assert!(line.contains("/c/tillandsias/vault-data"), "{line}");
+        assert!(line.contains(VAULT_SHAMIR_SHARE_V1), "{line}");
+        assert!(line.contains("every credential"), "{line}");
+    }
+
+    /// The line is printed unconditionally, not behind --debug: a source pin
+    /// on the guard, since the branch needs a real store to reach.
+    #[test]
+    fn partial_init_wipe_line_is_not_debug_gated() {
+        let src = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let start = src.find("if is_partial_init {").expect("guard");
+        let guard = &src[start..start + 900];
+        let print = guard
+            .find("partial_init_wipe_line(&vault_dir)")
+            .expect("the guard prints the line");
+        let wipe = guard.find("remove_dir_all(vault_dir)").expect("the wipe");
+        assert!(print < wipe, "announce before wiping");
+        assert!(
+            !guard[..print].contains("if debug"),
+            "the wipe line must not be gated on --debug"
+        );
+    }
+
+    /// Order 1437-qza3, the operator ruling of 2026-09-27 as a table: the
+    /// store survives only where a keychain holds the share. An unreachable
+    /// keychain with a fallback share is a keyring-less host (clear); without
+    /// one, it is a locked keychain at reset time (keep, unverified).
+    #[test]
+    fn reset_disposition_follows_the_keyring_ruling() {
+        use KeyringShare::*;
+        use ResetVaultDisposition::*;
+        assert_eq!(reset_vault_disposition(Present, false), Keep);
+        assert_eq!(reset_vault_disposition(Present, true), Keep);
+        assert_eq!(reset_vault_disposition(Absent, false), ClearKeyringless);
+        assert_eq!(reset_vault_disposition(Absent, true), ClearKeyringless);
+        assert_eq!(reset_vault_disposition(Unreachable, true), ClearKeyringless);
+        assert_eq!(reset_vault_disposition(Unreachable, false), KeepUnverified);
     }
 }
