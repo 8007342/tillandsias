@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: census-litmus-layer-classification-matches-executed-commands-not-substrings
+    order: 1443-gk4t
+    parent_order: 1443-2ef7
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [litmus, census, classification, bash]
+    estimated_hours: 2
+    owned_files: [scripts/census-litmus-layer-classification.sh]
+    verifiable_closure: |
+      bash scripts/census-litmus-layer-classification.sh --self-test prints
+      ok:litmus-layer-census-self-test:6/6 and exits 0, where the three
+      original arms (real run-forge-standalone.sh launch flagged, real
+      launch_vm.sh launch flagged, cheap grep negative control not flagged)
+      are joined by three new arms: arm 4 a spec whose command GREPS FOR the
+      literal string 'podman run' inside a script's text (not an execution)
+      is NOT flagged; arm 5 a spec whose command actually runs `podman run
+      ...` is STILL flagged (the positive control proving the fix does not
+      overcorrect); arm 6 a `cargo test -p tillandsias-vm-layer ...`
+      invocation (the crate name argument contains "vm-layer" as a
+      substring, not a VM launch) is NOT flagged. Then, live:
+      `bash scripts/census-litmus-layer-classification.sh` over
+      openspec/litmus-tests prints census:litmus-layer:specs=<n>
+      misclassified=0 — none of the 10 previously-traced false positives
+      (plan/issues/1443-2ef7-census-audit-false-positives-2026-09-27.md)
+      still fire. PRE-FIX RESULT: FAILS — the live run reports
+      misclassified=10, all traced false positives (crate-path substring
+      matches on tillandsias-vm-layer, and grep-pattern/doc-text substring
+      matches on 'podman run' / 'build.sh --ci-full' / 'run-forge-standalone.sh').
+    title: |
+      The 1443-2ef7 census matches command TEXT as a plain substring; it must tokenise each command and match only the executed launcher word, ignoring grep/awk/sed/rg pattern arguments and path components
+    context: |
+      Follow-up to 1443-2ef7 (macuahuitl-fedora, land77): the live census
+      over openspec/litmus-tests flagged 10 hits across 8 specs. Manual trace
+      of every one (plan/issues/1443-2ef7-census-audit-false-positives-2026-09-27.md)
+      found zero genuine layer misclassifications — every flag fired because
+      `match_token` does `grep -qF -- "$t" <<<"$hay"` against the WHOLE
+      command line, so it cannot tell "this command RUNS X" from "this
+      command's argument NAMES X" (a grep pattern, a doc string, a crate
+      path such as crates/tillandsias-vm-layer/src/wsl.rs, or the -p
+      argument to `cargo test`). A wrong fix list is worse than none, so no
+      rows were filed against 1443-b85g and this packet exists instead.
+    next_action: >
+      In match_token (or a new helper), split $hay's command text on
+      &&/;/| into sub-commands, take each sub-command's first word as its
+      launcher (stripping a leading env-assignment or a bash/sh wrapper to
+      look at the wrapped script instead), skip sub-commands whose launcher
+      is a text-processing tool (grep, egrep, fgrep, rg, awk, sed, cat,
+      printf, echo, test, [, bash -n, mf_stage, mf_holds, mf_holds_ere) —
+      those consume the token as data, not as a command — and match a token
+      only against a survived sub-command's launcher (and, for two-word
+      tokens like "podman run" or "build.sh --ci-full", the launcher plus
+      its immediate next word/flag). Extend --self-test with the three new
+      arms above; verify census:litmus-layer:specs=<n> misclassified=0 live.
+    notes: |
+      size: S  implementer_tier: haiku
+      Mechanical tokeniser change scoped to one file; the false-positive
+      trace and the fix shape are fully specified above and in the linked
+      audit doc.
+    provenance: |
+      Filed by forge-tillandsias, 2026-09-27, at macuahuitl-fedora's request
+      after the 1443-2ef7 census audit found 10/10 flagged hits were false
+      positives.
+    events:
+      - type: filed
+        ts: "2026-09-27T22:49:57Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t185833z"
+        host: forge-tillandsias
+        summary: |-
+          Child of 1443-2ef7: the census matcher does whole-line substring
+          matching and needs to match only executed launcher words.
