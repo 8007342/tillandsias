@@ -58,6 +58,10 @@ pub fn run() -> ! {
     // setActivationPolicy returns bool indicating acceptance.
     let _ = app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
 
+    // 1244-9dx3: a quit Apple event drains the VM like the menu Quit instead of
+    // AppKit's immediate terminate:. Held for the life of the run loop.
+    let _app_delegate = crate::app_delegate::install(mtm, &app);
+
     // Per-process Tokio runtime, shared with the TrayActionHost so it
     // can spawn worker tasks for VM lifecycle calls without blocking
     // the AppKit main thread. Stays alive for the lifetime of the

@@ -942,6 +942,130 @@ pub struct TrayActionHostIvars {
     project_launches: ProjectLaunchSet,
 }
 
+/// ORDERS 1426-cb6g + 1244-9dx3 — THE ONE GRACEFUL QUIT.
+///
+/// The menu's Quit drained the VM (in-VM shutdown request, then `vz.stop()`,
+/// which also removes the per-launch `vm-swap.img`) and exited. Nothing else
+/// did: SIGTERM — install-macos.sh's own stop escalation — killed the process
+/// with no handler, and a quit Apple event reached AppKit's default
+/// `terminate:`, which exits without draining. MEASURED on the v56.9.27.1 smoke:
+/// after `pkill -TERM` the VM was torn down by the XPC service, but vm-swap.img
+/// survived, while the graceful path removed it.
+///
+/// So the drain lives here, reachable without the (main-thread-only) action
+/// host object: the menu Quit, a SIGTERM listener, and the app delegate's
+/// `applicationShouldTerminate:` all call [`request_graceful_quit`], and it
+/// runs at most once however many of them fire.
+struct QuitDrain {
+    runtime: Arc<tokio::runtime::Runtime>,
+    vm: Arc<Mutex<Option<Arc<VzRuntime>>>>,
+    vm_busy: Arc<Mutex<bool>>,
+}
+
+static QUIT_DRAIN: OnceLock<QuitDrain> = OnceLock::new();
+static QUIT_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Start the graceful drain-then-exit. Returns `true` when a drain is (now or
+/// already) in progress, `false` when the tray has no action host yet — the
+/// caller should then let the process terminate the ordinary way.
+pub(crate) fn request_graceful_quit(source: &str) -> bool {
+    let Some(q) = QUIT_DRAIN.get() else {
+        return false;
+    };
+    if QUIT_STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        eprintln!("[tillandsias-tray] Quit ({source}): a drain is already in progress");
+        return true;
+    }
+    // Take the live VM out of the slot so a stray retry click can't
+    // double-stop. With no VM (quit before boot completes) we still exit:
+    // Quit must always terminate the app.
+    let vm_taken = q.vm.lock().unwrap().take();
+    // Mark busy so concurrent click paths skip out fast; exit(0) ends it.
+    *q.vm_busy.lock().unwrap() = true;
+    eprintln!(
+        "[tillandsias-tray] Quit ({source}): draining (timeout={}s)",
+        VM_STOP_DRAIN.as_secs()
+    );
+    let runtime_for_stop = q.runtime.clone();
+    q.runtime.spawn(async move {
+        if let Some(vm) = vm_taken {
+            // Two-step graceful shutdown (mirrors windows-tray 80eceb0b Q2):
+            // the wire-level VmShutdownRequest lets the in-VM headless drain
+            // its containers first (bounded), then VZ.requestStop with its own
+            // VM_STOP_DRAIN deadline, escalating to force-stop.
+            // BOUND THE WHOLE REQUEST, not just the connect. request_vm_shutdown
+            // bounds only its 3 s connect; the handshake and the reply were
+            // unbounded, so a guest that never answers (the in-VM handler for
+            // VmShutdownRequest does not exist yet) parked Quit FOREVER and
+            // vm.stop never ran. MEASURED on the 1426-cb6g live arm: a SIGTERM
+            // drain logged "draining" and nothing else for 4+ minutes, both
+            // tokio workers idle (one parked, one in kevent). The guest has no
+            // handler for this request today, so waiting the full drain budget
+            // only delays the real stop: the live arm took 131 s (65 s here, then
+            // 60 s of requestStop) against the installer's 150 s before SIGKILL.
+            // A short bound keeps Quit well inside it; VZ.requestStop below still
+            // gives the guest VM_STOP_DRAIN to shut down.
+            let budget = Duration::from_secs(10);
+            match tokio::time::timeout(budget, request_vm_shutdown(&vm, VM_STOP_DRAIN)).await {
+                Ok(Ok(())) => eprintln!("[tillandsias-tray] Quit: in-VM headless acked shutdown request"),
+                Ok(Err(e)) => eprintln!(
+                    "[tillandsias-tray] Quit: in-VM shutdown request: {e} (proceeding to VZ.requestStop)"
+                ),
+                Err(_) => eprintln!(
+                    "[tillandsias-tray] Quit: in-VM shutdown request got no reply within {}s \
+                     (proceeding to VZ.requestStop)",
+                    budget.as_secs()
+                ),
+            }
+            // VZ.requestStop ON THE MAIN THREAD. The VM lives on the main
+            // dispatch queue, and VzRuntime::stop calls requestStopWithError and
+            // then pumps the CALLING thread's CFRunLoop. Called from this tokio
+            // worker it hit dispatch_assert_queue and the process died with
+            // SIGTRAP (crash report tillandsias-tray-2026-09-26-211531.ips,
+            // frame -[VZVirtualMachine requestStopWithError:]) before it could
+            // remove vm-swap.img — the real reason no tray quit ever did.
+            // --exec-guest stops cleanly because it calls stop() from the CLI's
+            // main thread. The main thread is not a tokio thread, so block_on is
+            // allowed there, and blocking it is fine: the app is exiting.
+            let rt = runtime_for_stop;
+            crate::main_thread::dispatch_to_main_thread(move || {
+                match rt.block_on(vm.stop(VM_STOP_DRAIN)) {
+                    Ok(()) => eprintln!("[tillandsias-tray] Quit: VM drained cleanly"),
+                    Err(e) => eprintln!("[tillandsias-tray] Quit: drain failed: {e}"),
+                }
+                // Bypass AppKit cleanup: the VM drain is the only critical
+                // shutdown step; NSApplication owns nothing we must flush.
+                std::process::exit(0);
+            });
+        } else {
+            eprintln!("[tillandsias-tray] Quit: no live VM, skipping drain");
+            std::process::exit(0);
+        }
+    });
+    true
+}
+
+/// Register the shared quit and start the SIGTERM listener (1426-cb6g). Once
+/// tokio installs its handler, SIGTERM no longer kills the process outright; it
+/// runs the same drain as the menu Quit. A second SIGTERM during the drain is
+/// absorbed; `pkill -KILL` remains the operator's hard stop.
+fn install_graceful_quit(q: QuitDrain) {
+    let runtime = q.runtime.clone();
+    if QUIT_DRAIN.set(q).is_err() {
+        return;
+    }
+    runtime.spawn(async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut term) => {
+                while term.recv().await.is_some() {
+                    let _ = request_graceful_quit("SIGTERM");
+                }
+            }
+            Err(e) => eprintln!("[tillandsias-tray] could not install the SIGTERM handler: {e}"),
+        }
+    });
+}
+
 declare_class!(
     /// AppKit responder for Tillandsias tray menu actions. Lives on
     /// the main thread; receives selector dispatch from `NSMenuItem`.
@@ -1012,78 +1136,15 @@ declare_class!(
 
         #[method(quitWithDrain:)]
         fn quit_with_drain(&self, _sender: Option<&AnyObject>) {
-            let ivars = self.ivars();
-
             // User-visible feedback: chip immediately flips to Stopping.
             // The tooltip mirrors so even with the menu closed the
             // menubar icon hover surface reflects the drain.
             self.set_status_text("\u{1F534} Stopping\u{2026}");
 
-            // Take the live VM out of the slot so a stray retry click
-            // can't double-stop. If there's no VM (e.g. user quits
-            // before boot completes), we still proceed to exit(0) —
-            // Quit must always terminate the app.
-            let vm_taken = ivars.vm.lock().unwrap().take();
-
-            // Mark busy so concurrent click paths skip out fast — the
-            // drain task never clears this; exit(0) ends the process.
-            *ivars.vm_busy.lock().unwrap() = true;
-
-            let runtime = ivars.runtime.clone();
-
-            eprintln!(
-                "[tillandsias-tray] Quit: draining (timeout={}s)",
-                VM_STOP_DRAIN.as_secs()
-            );
-            runtime.spawn(async move {
-                if let Some(vm) = vm_taken {
-                    // Two-step graceful shutdown (mirrors windows-tray
-                    // 80eceb0b Q2). Step 1: wire-level
-                    // VmShutdownRequest so the in-VM headless gets a
-                    // chance to drain podman containers + their
-                    // sessions BEFORE VZ tears down the VM. Bounded
-                    // 3s wire RTT so a wedged headless can't delay
-                    // Quit indefinitely; we then fall through to
-                    // VZ.requestStop which carries its own
-                    // VM_STOP_DRAIN deadline. On vsock today the
-                    // in-VM dispatcher routes per the matrix but no
-                    // inner VmShutdownRequest handler exists yet, so
-                    // the reply is Error{Unsupported} which we log at
-                    // info as expected. When linux adds the vsock
-                    // inner arm this auto-upgrades with NO tray code
-                    // change.
-                    match request_vm_shutdown(&vm, VM_STOP_DRAIN).await {
-                        Ok(()) => eprintln!(
-                            "[tillandsias-tray] Quit: in-VM headless acked shutdown request"
-                        ),
-                        Err(e) => eprintln!(
-                            "[tillandsias-tray] Quit: in-VM shutdown request: {e} \
-                             (proceeding to VZ.requestStop)"
-                        ),
-                    }
-                    // Step 2: VZ-level stop (existing path). Drains
-                    // VM_STOP_DRAIN waiting for state=Stopped then
-                    // escalates to force-stop.
-                    match vm.stop(VM_STOP_DRAIN).await {
-                        Ok(()) => {
-                            eprintln!("[tillandsias-tray] Quit: VM drained cleanly")
-                        }
-                        Err(e) => {
-                            eprintln!("[tillandsias-tray] Quit: drain failed: {e}")
-                        }
-                    }
-                } else {
-                    eprintln!("[tillandsias-tray] Quit: no live VM, skipping drain");
-                }
-                // Bypass AppKit cleanup — the only critical shutdown
-                // step for v0.0.1 is the VM drain above. NSApplication
-                // doesn't own state we need to flush; the Tokio
-                // runtime is fine to abandon (we're about to call
-                // exit(0) anyway). Future revisions can route this
-                // through NSApplicationDelegate::applicationShouldTerminate
-                // + NSTerminateLater for a cleaner AppKit handshake.
-                std::process::exit(0);
-            });
+            // 1426-cb6g / 1244-9dx3: the ONE graceful quit, shared with SIGTERM and
+            // the quit Apple event, so every way of asking the tray to stop drains
+            // the VM (vz stop() removes vm-swap.img) before exit.
+            let _ = request_graceful_quit("menu Quit");
         }
 
         #[method(openShell:)]
@@ -1498,7 +1559,10 @@ async fn run_start(
             );
         }
         Err(err) => {
-            return Err(format!("stage embedded guest binary: {err}"));
+            return Err(crate::provision_error::failure_text(
+                crate::provision_error::Stage::GuestBinary,
+                &format!("stage embedded guest binary: {err}"),
+            ));
         }
     }
     let vz = Arc::new(VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root));
@@ -1571,7 +1635,12 @@ async fn run_start(
             vz.rootfs_image_path().display()
         );
         let manifest = tillandsias_vm_layer::recipe::Manifest::from_toml(BUNDLED_MANIFEST_TOML)
-            .map_err(|e| format!("bundled manifest parse: {e}"))?;
+            .map_err(|e| {
+                crate::provision_error::failure_text(
+                    crate::provision_error::Stage::ImageSetup,
+                    &format!("bundled manifest parse: {e}"),
+                )
+            })?;
         vz.fetch_fedora_cloud_image(&manifest, on_phase)
             .await
             .map_err(|e| {
@@ -1613,8 +1682,18 @@ async fn run_start(
         let handle = tokio::runtime::Handle::current();
         tokio::task::spawn_blocking(move || handle.block_on(vz.start()))
             .await
-            .map_err(|e| format!("VM start task panicked: {e}"))?
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                crate::provision_error::failure_text(
+                    crate::provision_error::Stage::VmStart,
+                    &format!("VM start task panicked: {e}"),
+                )
+            })?
+            .map_err(|e| {
+                crate::provision_error::failure_text(
+                    crate::provision_error::Stage::VmStart,
+                    &e.to_string(),
+                )
+            })?;
     }
     on_phase("Connecting");
     *vm_slot.lock().unwrap() = Some(vz);
@@ -1661,6 +1740,11 @@ impl TrayActionHost {
         // SAFETY: `mtm` proves main-thread; allocation + init is the
         // standard ObjC two-step. `set_ivars` populates the declared
         // class ivars before init runs.
+        install_graceful_quit(QuitDrain {
+            runtime: ivars.runtime.clone(),
+            vm: ivars.vm.clone(),
+            vm_busy: ivars.vm_busy.clone(),
+        });
         let this = mtm.alloc::<Self>().set_ivars(ivars);
         unsafe { msg_send_id![super(this), init] }
     }
@@ -1700,12 +1784,22 @@ impl TrayActionHost {
                 // parent if the file isn't yet written). Best-effort:
                 // shell out to `open` so the user's default text editor
                 // takes over. Mirrors Windows's `open_log_file`.
-                if let Some(home) = std::env::var_os("HOME") {
-                    let log_dir = std::path::PathBuf::from(home).join("Library/Logs/Tillandsias");
-                    let _ = std::fs::create_dir_all(&log_dir);
+                // 1420-inak: the tray now WRITES tray.log (tray_log.rs), so open
+                // the file itself; before, this opened a directory nothing wrote.
+                if let Some(log) = crate::tray_log::tray_log_path() {
+                    let target = if log.exists() {
+                        log
+                    } else {
+                        let dir = log
+                            .parent()
+                            .map(std::path::Path::to_path_buf)
+                            .unwrap_or(log);
+                        let _ = std::fs::create_dir_all(&dir);
+                        dir
+                    };
                     let mut command = std::process::Command::new("/usr/bin/open");
-                    command.arg(&log_dir);
-                    spawn_and_reap(command, "open log directory");
+                    command.arg(&target);
+                    spawn_and_reap(command, "open log");
                 }
             }
             MenuAction::OpenObservatorium
@@ -2654,10 +2748,12 @@ fn apply_vm_status(
     status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
     status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
 ) -> bool {
+    let mut phase_changed = false;
     {
         let mut logged = last_logged_phase.lock().unwrap();
         if *logged != Some(phase) {
             *logged = Some(phase);
+            phase_changed = true;
             eprintln!(
                 "[tillandsias-tray] vm-status: phase={phase:?} podman_ready={podman_ready}{}",
                 last_event
@@ -2666,7 +2762,29 @@ fn apply_vm_status(
             );
         }
     }
-    let base = vm_phase_status_text(phase, podman_ready);
+    let mut base = vm_phase_status_text(phase, podman_ready);
+    // 1420-inak: a guest that FAILED provisioning used to render a bare
+    // "🔴 VM failed". The guest's own record names the failing step; read it
+    // only on Failed (a file read per status push would be wasteful) and put
+    // the step on the chip. The full text also goes to the tray log once.
+    if matches!(phase, tillandsias_control_wire::VmPhase::Failed) {
+        let record = std::fs::read_to_string(crate::diagnose::provision_state_path())
+            .map(|t| crate::diagnose::provision_record_from(&t));
+        if let Ok(crate::diagnose::ProvisionRecord::Failed { line, rc, cmd, .. }) = record {
+            let full = crate::provision_error::failure_text(
+                crate::provision_error::Stage::GuestProvisioning,
+                &crate::provision_error::guest_failure_detail(
+                    line.as_deref(),
+                    rc.as_deref(),
+                    cmd.as_deref(),
+                ),
+            );
+            if phase_changed {
+                eprintln!("[tillandsias-tray] {full}");
+            }
+            base = clamp_tray_status_chip(format!("\u{1F534} {full}"));
+        }
+    }
     let text_for_dispatch = compose_chip_text(&base, last_event);
     let mut rebuild_needed = false;
     {
@@ -3322,6 +3440,86 @@ fn dispatch_rebuild(
 
 #[cfg(test)]
 mod tests {
+
+    /// 1426-cb6g / 1244-9dx3. Before an action host exists there is nothing to
+    /// drain, so the shared quit must report "not handled" and let the caller
+    /// terminate normally — never swallow a quit it cannot perform. (Unit tests
+    /// never construct the AppKit host, so QUIT_DRAIN is unset here.)
+    #[test]
+    fn a_quit_before_the_host_exists_is_not_swallowed() {
+        assert!(!super::request_graceful_quit("test"));
+    }
+
+    /// The three quit routes share ONE drain. Pinned by source because two of
+    /// them (SIGTERM, the quit Apple event) cannot be driven without AppKit and
+    /// a signed VM; the live arm is recorded on 1426-cb6g.
+    #[test]
+    fn every_quit_route_reaches_the_shared_drain() {
+        let host = include_str!("action_host.rs");
+        let delegate = include_str!("app_delegate.rs");
+        let run = include_str!("status_item.rs");
+        let new_body = host
+            .split("    pub fn new(")
+            .nth(1)
+            .expect("TrayActionHost::new");
+        let new_body = &new_body[..new_body.find("\n    }\n").expect("end of new()")];
+        assert!(
+            new_body.contains("install_graceful_quit("),
+            "new() must register the shared quit"
+        );
+        assert!(
+            host.contains("SignalKind::terminate()")
+                && host.contains("request_graceful_quit(\"SIGTERM\")"),
+            "SIGTERM must route into the shared drain"
+        );
+        let menu = host
+            .split("fn quit_with_drain(")
+            .nth(1)
+            .expect("quit_with_drain");
+        let menu = &menu[..menu.find("\n        }\n").expect("end of quit_with_drain")];
+        assert!(
+            menu.contains("request_graceful_quit(\"menu Quit\")"),
+            "the menu Quit uses the shared drain"
+        );
+        assert!(
+            delegate.contains("applicationShouldTerminate:")
+                && delegate.contains("request_graceful_quit(\"quit Apple event\")")
+                && delegate.contains("NSTerminateCancel"),
+            "a quit Apple event must cancel AppKit's immediate terminate and drain instead"
+        );
+        assert!(
+            run.contains("app_delegate::install(mtm, &app)"),
+            "run() must install the delegate"
+        );
+        // The drain is the one that removes vm-swap.img: it must call vm.stop.
+        let drain = host
+            .split("pub(crate) fn request_graceful_quit(")
+            .nth(1)
+            .expect("drain fn");
+        let drain = &drain[..drain.find("\n}\n").expect("end of drain fn")];
+        assert!(
+            drain.contains("vm.stop(VM_STOP_DRAIN)"),
+            "the shared drain must stop the VM"
+        );
+        // And the in-VM request before it must be BOUNDED as a whole: an unbounded
+        // reply parked Quit forever in the live arm and vm.stop never ran.
+        assert!(
+            drain.contains("tokio::time::timeout(budget, request_vm_shutdown("),
+            "the in-VM shutdown request must be bounded as a whole, or a silent guest wedges Quit"
+        );
+        // And vm.stop must run on the MAIN thread: VZ traps (SIGTRAP in
+        // dispatch_assert_queue) when requestStopWithError comes from a worker.
+        let main_hop = drain
+            .find("dispatch_to_main_thread(")
+            .expect("the stop must hop to the main thread");
+        let stop_at = drain
+            .find("vm.stop(VM_STOP_DRAIN)")
+            .expect("the drain must stop the VM");
+        assert!(
+            main_hop < stop_at,
+            "vm.stop must be called inside the main-thread dispatch"
+        );
+    }
 
     /// Order 690-w94k criterion 2. `VzRuntime::start` pumps CFRunLoop on the
     /// CALLING thread for up to 30s, and says so in its own body: "the caller
