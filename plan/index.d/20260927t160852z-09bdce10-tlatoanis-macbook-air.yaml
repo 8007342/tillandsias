@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-provisioning-does-not-refuse-an-unsupported-cpu-or-macos-version-up-front
+    event:
+      type: note
+      ts: "2026-09-27T16:08:52Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t160852z
+      host: tlatoanis-macbook-air
+      summary: |
+        WHICH PATH DECIDED IT (coordinator's minos question, 2026-09-27): the MANUAL exec path. `vtool -show-build` on the installed tray binary prints `platform MACOS, minos 11.0, sdk 26.5` (otool LC_BUILD_VERSION agrees), so dyld does NOT refuse the binary on macOS 11-13; LaunchServices (LSMinimumSystemVersion 14.0) and the installer cover only the .app and install paths. So a one-line refusal WAS warranted, in provision_main, per the operator's fail-loud direction: work/1420-q2ba @ 0a981f3e4 refuses below macOS 14 via kern.osproductversion (/usr/sbin/sysctl) before staging or downloading. The earlier "close with no code" proposal is superseded by this measurement. CPU stays unreachable in-tray (arm64-only binary).

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    event:
+      type: note
+      ts: "2026-09-27T16:38:35Z"
+      agent_id: linux-macuahuitl-claude-20260927t163835z
+      host: macuahuitl
+      summary: |-
+        PREMISE CHANGED by the operator's 2026-09-27 directive (umbrella 1437-8c6p, spec tillandsias-vault "The Vault store and its unseal material survive every destructive reset; only uninstall removes them"): the Shamir share must now SURVIVE --reset-guest and --reset-state, because a freshly created Vault over the preserved store must unseal and read the pre-reset credentials. This row's --reset-guest wipe of the fallback share is therefore no longer the target. What remains open is narrower: whether the FALLBACK FILE (keyring-less hosts) may live on tmpfs at all, given that the store it unlocks is now preserved across resets — recorded as open question 1 in plan/issues/operator-directives-reset-survivors-and-harness-bypass-2026-09-27.md. Do not implement the reset-time wipe; re-scope this row to the tmpfs/keyring-less question after the operator answers, or obsolete it in favour of 1437-qza3.

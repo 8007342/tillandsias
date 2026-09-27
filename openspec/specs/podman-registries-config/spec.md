@@ -103,6 +103,31 @@ podman run "$proxy_image"
 - `cheatsheets/utils/podman-registries.md` — Configuration and short-name resolution
 - `cheatsheets/runtime/image-lifecycle.md` — Complete image build/run/cleanup cycle
 
+### 5. Owned registries.conf for the user runtime (2026-09-27)
+
+### Requirement: The user runtime reads a Tillandsias-owned registries.conf
+<!-- req-id: 8af978f8 -->
+
+The user runtime SHALL NOT depend on `scripts/setup-podman-registries.sh`
+having copied a file into `~/.config/containers/`. The registries policy this
+spec describes (no unqualified-search registries, `short-name-mode = "enforcing"`
+or the equivalent that never prompts) SHALL be written by the runtime to
+`<config>/containers/registries.conf` and selected explicitly on every podman
+invocation, per `podman-idiomatic-patterns` "Tillandsias-owned podman
+configuration is explicit on every invocation". The developer copy stays a
+developer convenience for the checkout's own `podman` use.
+
+@trace spec:podman-registries-config, spec:podman-idiomatic-patterns
+
+#### Scenario: Bare name never prompts on a host with no user registries.conf
+- **WHEN** `~/.config/containers/registries.conf` does not exist and the
+  runtime runs `--github-login` (which uses the bare `tillandsias-git` name)
+- **THEN** no TTY prompt SHALL appear and the local image SHALL be used
+- **AND** `podman info` run through the runtime's invocation SHALL report the
+  owned file's short-name mode.
+- Pre-fix result: FAILS — the runtime writes no registries file and sets no
+  `CONTAINERS_REGISTRIES_CONF`; behaviour depends on whatever the host has.
+
 ## Evidence & Validation
 
 ### Litmus Tests

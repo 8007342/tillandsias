@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-side-install-and-login-output-reaches-the-host-as-raw-bytes-not-structured-progress
+    field: status
+    value: in_progress
+    ts: "2026-09-27T16:45:02Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: guest-side-install-and-login-output-reaches-the-host-as-raw-bytes-not-structured-progress
+    event:
+      type: note
+      ts: "2026-09-27T16:45:02Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        claimed part (2), host side on macOS, per coordinator 2026-09-27 (guest/wire slice on trunk at 864aa666f)

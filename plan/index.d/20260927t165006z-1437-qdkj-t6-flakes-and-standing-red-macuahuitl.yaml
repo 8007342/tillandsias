@@ -1,0 +1,267 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# T6 four flakes plus the standing red: five packets. Design: plan/issues/efficiency-trims-design-2026-09-27.md
+packets:
+  - packet_id: credential-cold-state-determinism-arm-treats-could-not-run-as-a-regime-not-a-verdict
+    order: 1437-qdkj
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: linux
+    capability_tags: [flake, fixture, credential-probe, bash, linux]
+    estimated_hours: 2
+    depends_on: []
+    owned_files: [scripts/test-credential-cold-state-probe.sh]
+    verifiable_closure: |
+      bash scripts/test-credential-cold-state-probe.sh --inject-slow-bus
+      prints its arm 3 line as skip:credential-cold-state-probe:determinism:could-not-run-under-load:<n>/5
+      with n between 1 and 4, and the fixture's summary exits 0; and the
+      plain run keeps its current ok lines; and a NEGATIVE CONTROL injection
+      (--inject-flip, two definite verdicts warm and credential-cold across
+      the five runs) still prints the "consecutive runs disagreed" red and
+      exits 1. --inject-slow-bus places a PATH shim busctl ahead of the real
+      one that answers normally except that its second list call prints
+      nothing, which makes scripts/probe-credential-cold-state.sh answer
+      could-not-run:no-secret-service on that run. PRE-FIX RESULT: FAILS —
+      today's arm 3 compares the verdict word across all five runs, so the
+      injected run yields "consecutive runs disagreed: could-not-run vs
+      warm" and a red fixture; measured live in the 2026-09-27 land gates
+      under load and green alone (events on 900-z3kv).
+    title: |
+      The credential cold-state determinism arm reads a `could-not-run` (slow busctl under load) as a disagreement; it is a regime and must be reported as a skip, red only when two definite verdicts differ
+    context: |
+      T6 of the 2026-09-27 trims. probe-credential-cold-state.sh answers
+      could-not-run:no-secret-service when busctl --user list returns
+      without org.freedesktop.secrets, which a loaded host does. The
+      fixture's arm 3 (five runs, sort -u on the verdict word) treats that
+      as non-determinism of the probe. It is not: could-not-run says the
+      instrument did not run, and the probe's own text says so ("this is
+      NOT a cold verdict"). The arm must partition the five results into
+      definite (warm, credential-cold) and could-not-run, go red only when
+      the definite set has two members, and print the skip line with the
+      loadavg when could-not-run occurred at all.
+    next_action: >
+      Rewrite arm 3 as described; add --inject-slow-bus and --inject-flip
+      to the fixture (PATH shims under a mktemp dir, removed on exit);
+      keep every other arm byte-identical. Record the second regime on the
+      step file 240-900-z3kv.step if its verdict changes.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      A fixture change with a negative control; the injection makes the
+      pre-fix red reproducible on a quiet host.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from the
+      day's land-gate reds (arm 3 "could-not-run vs warm", green on re-run).
+
+  - packet_id: tool-materialize-arm-0-accepts-the-subjects-own-loaded-host-skip-line
+    order: 1437-bigs
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [flake, fixture, litmus, bash]
+    estimated_hours: 1
+    depends_on: []
+    owned_files: [scripts/test-tool-materialize-litmus-surfaces-arm.sh]
+    verifiable_closure: |
+      bash scripts/test-tool-materialize-litmus-surfaces-arm.sh, run with
+      TILLANDSIAS_TOOL_MATERIALIZE_LOADAVG=64 exported,
+      prints an ARM 0 line that names the regime as loaded-host (the
+      subject's skip:tool-materialize-margin:loaded-host line quoted) and
+      exits 0; the unset run keeps its current output; and a NEGATIVE
+      CONTROL where the subject prints neither a regime line nor a skip
+      (TILLANDSIAS_TOOL_MATERIALIZE_STUB_OUTPUT=garbage, a new fixture-only
+      seam) still yields the existing "ARM 0: the margin arm did not report
+      a measured regime" red. PRE-FIX RESULT: FAILS — ARM 0 accepts only the
+      toolbox skip, no-regime-probe and "regime quiet"; with the loadavg
+      seam set to 64 the subject prints skip:tool-materialize-margin:loaded-host:...
+      and ARM 0 goes red with no regime-skip line, which is what the
+      2026-09-27 parallel land gate produced (events on 1269-gfdi).
+    title: |
+      ARM 0 of the tool-materialize surfaces fixture goes red on a loaded host because it has no case for the subject's own `loaded-host` skip line
+    context: |
+      T6 of the 2026-09-27 trims. test-tool-materialize.sh's _margin_regime
+      prints skip:tool-materialize-margin:loaded-host:load=... when the 4x
+      ratio misses and load is at least 0.75 x cpus (or free space is under
+      262144 kB). The wrapper fixture's ARM 0 accepts the quiet regime, the
+      toolbox skip and no-regime-probe, and nothing else, so the subject
+      behaving correctly under load reds the wrapper. The loadavg seam
+      TILLANDSIAS_TOOL_MATERIALIZE_LOADAVG already exists (1300-q7eq).
+    next_action: >
+      Add the loaded-host case to ARM 0 (quote the subject's line, count it
+      as a regime skip), add the fixture-only stub-output seam for the
+      negative control, run the closure on this host with the seam set.
+    notes: |
+      size: S
+      implementer_tier: haiku
+      One case statement arm plus a negative control; the seam exists.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from the
+      day's land-gate red (ARM 0 red, no regime-skip line).
+
+  - packet_id: tray-tests-share-one-env-lock-so-the-mcp-browser-family-test-survives-a-parallel-run
+    order: 1437-5czv
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: linux
+    capability_tags: [flake, rust, tray, tests, linux]
+    estimated_hours: 3
+    depends_on: []
+    owned_files: [crates/tillandsias-headless/src/tray/mod.rs, crates/tillandsias-headless/src/local_projects.rs, crates/tillandsias-headless/src/remote_projects.rs, crates/tillandsias-headless/src/vault_bootstrap.rs, crates/tillandsias-headless/src/test_support.rs, scripts/test-headless-env-lock-is-single.sh]
+    verifiable_closure: |
+      bash scripts/test-headless-env-lock-is-single.sh prints
+      ok:headless-env-lock:1 and exits 0, where the script counts static
+      mutex definitions named ENV_LOCK or ENV_LOCK2 under
+      crates/tillandsias-headless/src and requires exactly one, in
+      test_support.rs; AND, as the second arm,
+      for i in 1..10: cargo test -p tillandsias-headless --features tray,listen-vsock
+      mcp_connection_serves_browser_family_over_the_socket -- --test-threads=8
+      passes 10/10. PRE-FIX RESULT: FAILS — the count today is 5 (ENV_LOCK
+      in local_projects.rs, remote_projects.rs, vault_bootstrap.rs and
+      tray/mod.rs, plus ENV_LOCK2 in tray/mod.rs), so the first arm prints
+      violation:headless-env-lock:5; the second arm failed in the full
+      parallel run on 2026-09-27 and passed 3/3 alone (events on 1242-4x53).
+    title: |
+      `mcp_connection_serves_browser_family_over_the_socket` races other tests on the process env because five independent mutexes guard the same two variables; one crate-wide env lock makes the parallel run deterministic
+    context: |
+      T6 of the 2026-09-27 trims. The test uses UnixStream::pair (no path
+      or port to collide on). Its shared state is the process environment:
+      with_known_demo_project sets TILLANDSIAS_HOST_PROJECT_ROOT and
+      TILLANDSIAS_CLOUD_PROJECT_CACHE under its own ENV_LOCK, while
+      with_no_known_projects uses ENV_LOCK2 and local_projects::tests,
+      remote_projects and vault_bootstrap each keep their own. Five locks on
+      one resource is no lock. The gate's feature pass is serial
+      (--test-threads=1) which is why it is only seen in ./build.sh --test's
+      parallel feature pass and in the workspace run; the structural arm
+      makes the criterion deterministic, the stress arm shows the symptom.
+    next_action: >
+      Introduce test_support::env_lock() returning a guard over one static
+      mutex; replace the five definitions with calls to it; write the
+      counting fixture; run the 10-round stress arm on a Linux builder and
+      paste the count.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      A mechanical refactor with a structural fixture; the judgment (which
+      lock) is made here.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session; the five
+      lock sites were enumerated on this checkout.
+
+  - packet_id: codex-registration-fixture-defaults-to-the-stub-so-step-10-fits-its-budget
+    order: 1437-wcn9
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [flake, litmus, fixture, codex, bash]
+    estimated_hours: 1
+    depends_on: []
+    owned_files: [scripts/test-codex-mcp-registration.sh]
+    verifiable_closure: |
+      bash scripts/run-litmus-test.sh forge-environment-discoverability
+      --phase pre-build --size instant --compact, run with a PATH shim named
+      codex that sleeps 16 s per invocation placed ahead of any real codex,
+      reports step 10 of
+      litmus:forge-experts-discoverability-shape OK in under 10,000 ms
+      (the timing record's duration_ms), and a run with CODEX_BIN set to
+      that shim reports step 10 killed at its 30,000 ms budget (the real
+      CLI is still honoured when named). PRE-FIX RESULT: FAILS — the fixture
+      prefers command -v codex over scripts/fixtures/codex-mcp-stub.sh and
+      applies the helper twice, so the shim is invoked twice (32 s) and
+      step 10 is killed at 30,000 ms, which is what yoga's in-gate pass
+      measured on 2026-09-27 at 30,007 ms (events on 1233-jqp4).
+    title: |
+      `test-codex-mcp-registration.sh` prefers a real `codex` on PATH over its stub and applies the helper twice, so step 10 of the discoverability litmus exceeds 30 s on a host with the CLI installed
+    context: |
+      T6 of the 2026-09-27 trims. The fixture documents CODEX_BIN as the
+      injection seam and the stub as the hermetic contract; the elif
+      command -v codex branch makes the hermetic path the exception. The
+      stub is the default; a real CLI is opt-in through CODEX_BIN. jq is
+      resolved through tool-dispatch, which may fall back to the toolbox;
+      the implementer measures whether that is the second slow path and, if
+      so, pins jq to the host binary inside the fixture.
+    next_action: >
+      Drop the command -v codex branch (stub by default, CODEX_BIN opt-in);
+      measure step 10 with the sleeping shim before and after; if the
+      toolbox jq fallback is over 2 s, resolve jq once at fixture start.
+    notes: |
+      size: S
+      implementer_tier: haiku
+      One branch removed and a measurement pasted.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from
+      yoga's 30,007 ms step-10 kill of the same day.
+
+  - packet_id: preflight-front-door-budget-derives-from-the-roster-and-the-fixture-runs-in-a-scratch-clone
+    order: 1437-m3jb
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: linux
+    capability_tags: [litmus, release-gate, budget, fixture, bash, linux]
+    estimated_hours: 4
+    depends_on: []
+    owned_files: [scripts/test-preflight-front-door.sh, openspec/litmus-tests/litmus-preflight-front-door.yaml, build.sh]
+    verifiable_closure: |
+      scripts/run-litmus-test.sh ci-release --phase pre-build --size quick
+      --compact reports litmus:preflight-front-door OK on the linux regime,
+      and the timing record it writes carries status=pass; AND
+      bash scripts/test-preflight-front-door.sh --plant-check exits 0 having
+      verified that no scripts/check-zz-1305-planted.sh and no
+      scripts/gate-steps.d/999-zz-1305-planted.step exists in the checkout
+      at any point (it runs in a scratch clone; a concurrent ls of the
+      checkout during the run finds neither); AND a NEGATIVE CONTROL: with
+      TILLANDSIAS_PREFLIGHT_BUDGET_FACTOR=0 (a fixture-only seam that forces
+      the derived budget to zero) ARM 6 goes red with its "exceeded the
+      budget" line. PRE-FIX RESULT: FAILS — the coordinator's timing log
+      holds four status=fail records for this litmus on 2026-09-27
+      (243,134 / 243,023 / 242,970 / 243,027 ms, identical digest and
+      spec_digest), the fixture asserts wall <= TILLANDSIAS_PREFLIGHT_BUDGET_S
+      with a 150 s constant against a real ./build.sh --preflight over a
+      roster that only grows, and it plants two files into the checkout it
+      runs in.
+    title: |
+      `litmus:preflight-front-door` is a standing red in every covering run (243 s, ARM 6's 150 s constant against a growing roster) and its fixture plants files into the live checkout; derive the budget from the roster and run in a scratch clone
+    context: |
+      T6 of the 2026-09-27 trims, the standing red. The front door
+      (_preflight_roster in build.sh) enumerates every scripts/check-*.sh
+      named by the gate, the step files and the hooks and runs each under a
+      5 s deadline; a corpus that only grows cannot be pinned to a constant
+      (the 1233-jqp4 class). The budget becomes guards x per-guard-deadline
+      / parallelism plus a fixed setup allowance, computed by the fixture
+      from the roster the door itself prints, so the assertion stays a
+      contract ("no guard exceeds its deadline, the door runs them at the
+      declared parallelism") rather than a number. The fixture also writes
+      scripts/check-zz-1305-planted.sh and
+      scripts/gate-steps.d/999-zz-1305-planted.step into the checkout, so a
+      gate running at the same time in the same tree picks up the planted
+      step: run in a scratch clone (git worktree add under mktemp, removed
+      on exit). A standing red masks every new red under the ci-release
+      spec.
+    next_action: >
+      Move the fixture into a scratch worktree; replace BUDGET_S with the
+      roster-derived formula (keep TILLANDSIAS_PREFLIGHT_BUDGET_S as an
+      explicit override); add the --plant-check and budget-factor seams;
+      run the closure on a Linux builder and paste the pass record's
+      duration_ms; record which arm was red before the change in the
+      completion event.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Changes what the release tier refuses, so sonnet at least; the
+      formula and the clone are specified, the judgment is done here.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from the
+      coordinator's timing log (four identical fails that day).

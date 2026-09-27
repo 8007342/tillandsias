@@ -1,132 +1,153 @@
-//! ORDER 1420-83vf — `--provision` (and `--reset-state`, which the curl
-//! installer runs) draws tillandsia progress bars for a human instead of
-//! printing `{"phase":…}` JSON lines at them.
+//! ORDER 1420-83vf, reworked by 1420-x6rz — first-provision progress for the
+//! `--provision` renderer.
 //!
-//! vm-layer still reports first-provision progress as prose through
-//! `on_phase(&str)` (typed `ProgressEvent`s are 1420-x6rz). Until then this maps
-//! vm-layer's OWN format strings — pinned below against vz.rs, so a reworded
-//! phase fails a test rather than silently dropping a bar — onto the renderer's
-//! `TaskState`. Pure: no macOS dependency, tests run on every host.
+//! 83vf had to parse vm-layer's prose ("Downloading Fedora Cloud image X/Y MB
+//! (P%)") back into numbers and pin those format strings with a drift test.
+//! Since 1420-x6rz vm-layer emits typed `ProgressEvent`s (1420-r2sn's types), so
+//! this is a straight, total mapping from the wire event to the renderer's
+//! `TaskState`: nothing is parsed, and there is no prose left to drift. Pure: no
+//! macOS dependency, tests run on every host.
 
+use tillandsias_control_wire::{ProgressEvent, ProgressKind};
 use tillandsias_progress_tty::TaskState;
 
-/// The two tasks first provisioning has: the image download and its expansion.
-pub const TASK_DOWNLOAD: &str = "Download Fedora Cloud image";
-pub const TASK_EXPAND: &str = "Prepare VM disk";
-
-/// Map one vm-layer phase line to (task, state). `None` for a line this
-/// mapper does not model (it is dropped from the bars, never misrendered).
-pub fn phase_to_task(phase: &str) -> Option<(&'static str, TaskState)> {
-    let p = phase.trim();
-    if p == "Downloading Fedora Cloud image" {
-        return Some((
-            TASK_DOWNLOAD,
-            TaskState::Indeterminate {
-                activity: "connecting".to_string(),
-            },
-        ));
-    }
-    // "Downloading Fedora Cloud image {done}/{total} MB ({pct}%)"
-    if let Some(rest) = p.strip_prefix("Downloading Fedora Cloud image ") {
-        let mb = rest.split(" MB").next()?;
-        let (done, total) = mb.split_once('/')?;
-        let (done, total) = (
-            done.trim().parse::<u64>().ok()?,
-            total.trim().parse::<u64>().ok()?,
-        );
-        if total > 0 {
-            return Some((TASK_DOWNLOAD, TaskState::Determinate { done, total }));
-        }
-        return None;
-    }
-    if p == "Converting Fedora Cloud image" {
-        return Some((
-            TASK_EXPAND,
-            TaskState::Indeterminate {
-                activity: "expanding".to_string(),
-            },
-        ));
-    }
-    // "Converting Fedora Cloud image ({pct}%)"
-    if let Some(rest) = p.strip_prefix("Converting Fedora Cloud image (") {
-        let pct = rest.strip_suffix("%)")?.trim().parse::<u64>().ok()?;
-        return Some((
-            TASK_EXPAND,
-            TaskState::Determinate {
-                done: pct.min(100),
-                total: 100,
-            },
-        ));
-    }
-    if p == "Fedora Cloud image ready" {
-        return Some((TASK_EXPAND, TaskState::Done));
-    }
-    None
+/// (display name, renderer state) for one event. The display name is the
+/// event's own `label`, so the bar reads what vm-layer calls the step.
+pub fn event_to_task(ev: &ProgressEvent) -> (String, TaskState) {
+    let state = match &ev.kind {
+        ProgressKind::Determinate {
+            done,
+            total: Some(total),
+            ..
+        } if *total > 0 => TaskState::Determinate {
+            done: (*done).min(*total),
+            total: *total,
+        },
+        // A size the source does not know is honest activity, not a guess.
+        ProgressKind::Determinate { .. } => TaskState::Indeterminate {
+            activity: "working".to_string(),
+        },
+        ProgressKind::Indeterminate { activity } => TaskState::Indeterminate {
+            activity: activity.clone(),
+        },
+        ProgressKind::Done => TaskState::Done,
+        ProgressKind::Failed { reason } => TaskState::Failed {
+            reason: reason.clone(),
+        },
+    };
+    (ev.label.clone(), state)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tillandsias_control_wire::ProgressUnit;
+
+    fn ev(label: &str, kind: ProgressKind) -> ProgressEvent {
+        ProgressEvent {
+            task: "t".to_string(),
+            parent: None,
+            label: label.to_string(),
+            kind,
+            ts_unix_ms: 0,
+        }
+    }
 
     #[test]
-    fn download_and_expand_lines_become_determinate_tasks() {
-        assert_eq!(
-            phase_to_task("Downloading Fedora Cloud image 132/528 MB (25%)"),
-            Some((
-                TASK_DOWNLOAD,
-                TaskState::Determinate {
-                    done: 132,
-                    total: 528
-                }
-            ))
+    fn typed_events_map_totally_onto_renderer_states() {
+        let bytes = ev(
+            "Download Fedora Cloud image",
+            ProgressKind::Determinate {
+                done: 132_000_000,
+                total: Some(528_000_000),
+                unit: ProgressUnit::Bytes,
+            },
         );
         assert_eq!(
-            phase_to_task("Converting Fedora Cloud image (40%)"),
-            Some((
-                TASK_EXPAND,
+            event_to_task(&bytes),
+            (
+                "Download Fedora Cloud image".to_string(),
                 TaskState::Determinate {
-                    done: 40,
-                    total: 100
+                    done: 132_000_000,
+                    total: 528_000_000
                 }
-            ))
+            )
+        );
+        let steps = ev(
+            "Prepare VM disk",
+            ProgressKind::Determinate {
+                done: 40,
+                total: Some(100),
+                unit: ProgressUnit::Steps,
+            },
         );
         assert_eq!(
-            phase_to_task("Fedora Cloud image ready"),
-            Some((TASK_EXPAND, TaskState::Done))
+            event_to_task(&steps).1,
+            TaskState::Determinate {
+                done: 40,
+                total: 100
+            }
+        );
+        assert_eq!(
+            event_to_task(&ev("x", ProgressKind::Done)).1,
+            TaskState::Done
+        );
+        assert_eq!(
+            event_to_task(&ev(
+                "x",
+                ProgressKind::Failed {
+                    reason: "ENOSPC".into()
+                }
+            ))
+            .1,
+            TaskState::Failed {
+                reason: "ENOSPC".into()
+            }
+        );
+    }
+
+    #[test]
+    fn an_unknown_total_is_activity_not_a_fake_fraction() {
+        let unknown = ev(
+            "x",
+            ProgressKind::Determinate {
+                done: 5,
+                total: None,
+                unit: ProgressUnit::Bytes,
+            },
         );
         assert!(matches!(
-            phase_to_task("Downloading Fedora Cloud image"),
-            Some((TASK_DOWNLOAD, TaskState::Indeterminate { .. }))
+            event_to_task(&unknown).1,
+            TaskState::Indeterminate { .. }
+        ));
+        let zero = ev(
+            "x",
+            ProgressKind::Determinate {
+                done: 0,
+                total: Some(0),
+                unit: ProgressUnit::Bytes,
+            },
+        );
+        assert!(matches!(
+            event_to_task(&zero).1,
+            TaskState::Indeterminate { .. }
         ));
     }
 
+    /// 1420-x6rz: vm-layer must not fold progress back into prose. The row's
+    /// criterion is that no consumer receives a formatted percent string.
     #[test]
-    fn an_unmodelled_or_malformed_line_is_dropped_not_misrendered() {
-        assert_eq!(phase_to_task("Starting Fedora Linux"), None);
-        assert_eq!(
-            phase_to_task("Downloading Fedora Cloud image x/y MB (?%)"),
-            None
-        );
-        assert_eq!(
-            phase_to_task("Downloading Fedora Cloud image 0/0 MB (0%)"),
-            None
-        );
-    }
-
-    /// DRIFT GUARD: the literals this mapper parses must be the ones vz.rs
-    /// actually emits. A reworded phase in vm-layer turns this red instead of
-    /// silently removing a bar from the installer.
-    #[test]
-    fn the_mapped_phrases_are_the_ones_vz_rs_emits() {
+    fn vm_layer_no_longer_emits_percent_prose() {
         let vz = include_str!("../../tillandsias-vm-layer/src/vz.rs");
-        for phrase in [
-            "on_phase(\"Downloading Fedora Cloud image\")",
+        for prose in [
             "\"Downloading Fedora Cloud image {}/{} MB ({}%)\"",
-            "on_phase(\"Converting Fedora Cloud image\")",
             "\"Converting Fedora Cloud image ({pct}%)\"",
-            "on_phase(\"Fedora Cloud image ready\")",
         ] {
-            assert!(vz.contains(phrase), "vz.rs no longer emits {phrase}");
+            assert!(
+                !vz.contains(prose),
+                "vz.rs emits percent prose again: {prose}"
+            );
         }
+        assert!(vz.contains("PROGRESS_TASK_DOWNLOAD") && vz.contains("ProgressUnit::Bytes"));
     }
 }

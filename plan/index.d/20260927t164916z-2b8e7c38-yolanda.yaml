@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-tray-provision-console-prints-raw-phase-lines
+    event:
+      type: note
+      ts: "2026-09-27T16:49:16Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        Observed in the v56.9.27.2 Windows smoke (yolanda, Windows PowerShell 5.1): the installer relays the guest's provisioning phase lines and their emoji arrive as mojibake, e.g. [reset-state] phase: dY"<?> Starting Fedora Linux<?> and RESULT: VM Ready <?>" control wire up <?>o". So the raw phase lines are not only unrendered but mis-decoded on the default console. Report: plan/issues/smoke-e2e-findings-v56.9.27.2-windows-2026-09-27-yolanda.md (45086af3e).

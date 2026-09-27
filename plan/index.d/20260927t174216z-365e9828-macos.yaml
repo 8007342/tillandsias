@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-trays-show-provisioning-progress-only-as-a-37-char-status-chip
+    event:
+      type: progress
+      ts: "2026-09-27T17:42:16Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t174216z
+      host: macos
+      summary: |
+        macOS slice: work/1420-v3zt at e9290b18a (merged over origin/linux-next). Typed first-provision events (x6rz) paint a tillandsia-palette bar beside the menu-bar icon and in the status row (leaf ramp, blush tip, track, percent), repainted once per whole percent, cleared on Done/Failed and when run_start returns. Tests: tray bins 152 passed / 2 ignored (default features, macOS), incl. menu_bar_bar_uses_the_tillandsia_palette and percent_gate_repaints_once_per_percent (a 528 MB download repaints 10..101 times); clippy -D warnings clean; deciders all ok; linux-musl zigbuild --tests ok; litmus-covering 3 specs ok. NOT MEASURED: the closure (>=10 distinct percents live during a real provision) needs a cold first provision, i.e. a VM wipe, which needs operator approval. Windows (taskbar progress) remains unclaimed; guest ProgressPush into the same bar follows once work/1420-4grt lands. Please relay work/1420-v3zt.

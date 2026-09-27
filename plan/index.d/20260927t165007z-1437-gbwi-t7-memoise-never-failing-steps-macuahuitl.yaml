@@ -1,0 +1,160 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# T7 memoise or skip the never-failing gate steps: three packets. Design: plan/issues/efficiency-trims-design-2026-09-27.md
+packets:
+  - packet_id: token-instrument-fixture-renders-the-tokens-line-without-the-repo-scan
+    order: 1437-gbwi
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [gate-time, fixture, metrics, bash]
+    estimated_hours: 1
+    depends_on: []
+    owned_files: [scripts/test-token-instrument.sh, scripts/cycle-metrics.sh]
+    verifiable_closure: |
+      bash scripts/test-token-instrument.sh exits 0 with every existing ok
+      line unchanged, and the timing record build.sh writes for the step
+      whose slug begins step:checking-the-token-instrument-records-a-cycle
+      carries duration_ms under 20,000 on this host; AND
+      scripts/cycle-metrics.sh --no-repo-scan with TILLANDSIAS_TOKENS_LOG
+      pointed at a one-row scratch log prints a tokens: line (today it does
+      not). PRE-FIX RESULT: FAILS — the step's 7-day average on macuahuitl
+      is 174,923 ms over 128 runs (skippable: top entry), because the
+      fixture's report() helper runs the full reporter eleven times without
+      --no-repo-scan, and the tokens: line is rendered after that flag's
+      early exit so the flag cannot be used.
+    title: |
+      The token-instrument gate step costs 175 s because its fixture calls the full cycle-metrics reporter eleven times, and the `tokens:` line is rendered after the `--no-repo-scan` early exit
+    context: |
+      T7 of the 2026-09-27 trims. The top skippable: candidate for 7 days
+      (128 runs, 0 pct fail, saved_ms_upper 22,215 s). The cost is not the
+      instrument, it is scripts/test-token-instrument.sh's report() paying
+      tillandsias-plan check and trace-coverage.sh --gate on every call
+      (17.9 s full versus 7.1 s with the scans skipped, per the fixture's own
+      measurement comment). Render the tokens: line (and token_recur: and
+      token_max:) BEFORE the --no-repo-scan early exit in cycle-metrics.sh,
+      pass the flag in the fixture, and the step drops to seconds. No memo
+      needed for this one.
+    next_action: >
+      Move the tokens block above the --no-repo-scan early exit (or add
+      --tokens-only); add --no-repo-scan to report(); run the fixture and
+      paste the step's new duration_ms from the timing log.
+    notes: |
+      size: S
+      implementer_tier: haiku
+      Two mechanical edits and a pasted measurement.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from the
+      skippable: line of cycle-metrics.sh --cycle-start 2026-09-20T00:00:00Z.
+
+  - packet_id: per-step-memo-for-the-workspace-cargo-test-step-keyed-on-its-derived-inputs-with-a-daily-forced-run
+    order: 1437-jm2d
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: linux
+    capability_tags: [gate-time, memo, build-gate, rust, bash, linux]
+    estimated_hours: 8
+    depends_on: []
+    owned_files: [scripts/step-memo.sh, scripts/workspace-test-inputs.sh, build.sh, scripts/test-step-memo.sh, openspec/litmus-tests/litmus-step-memo-shape.yaml]
+    verifiable_closure: |
+      bash scripts/test-step-memo.sh prints ok:step-memo:7/7 and exits 0,
+      where, over a scratch repo: arm 1: after a recorded green run,
+      step-memo.sh check workspace-tests prints hit:<key12> and exits 0 when
+      no enumerated input changed; arm 2: touching each path
+      scripts/workspace-test-inputs.sh enumerates (a crate source,
+      Cargo.lock, an include_bytes target under assets/, a runtime literal
+      such as plan/schema.yaml, scripts/test-known-red.txt) flips the key
+      and check prints miss; arm 3 NEGATIVE CONTROL: touching a ledger
+      fragment under plan/index.d does not flip the key; arm 4: a run that
+      exits non-zero leaves no record (check still prints miss); arm 5: when
+      the marker $GIT_DIR/tillandsias-last-full-gate is older than
+      TILLANDSIAS_FULL_GATE_MAX_AGE_S every step memo answers forced and the
+      run records; arm 6: TILLANDSIAS_FORCE_CHECK=1 bypasses; arm 7: a
+      toolchain change (rustc -V differs) flips the key. AND in build.sh a
+      memo hit on the workspace test step prints
+      skip:workspace-tests:memo-hit:<key12> and emits a timing record named
+      workspace-tests-memo-hit. PRE-FIX RESULT: FAILS — scripts/step-memo.sh
+      does not exist; the workspace test step ran 128 times in 7 days at
+      164 s average with 0 pct fail and no per-step memo (only the
+      all-or-nothing gate memo, 765-tkq2, which was forced on 1,098 of 1,402
+      runs).
+    title: |
+      A per-step memo (`scripts/step-memo.sh`) keyed on a step's DERIVED inputs, applied to the workspace `cargo test` step with a daily forced run so never-fails stays measured
+    context: |
+      T7 of the 2026-09-27 trims. Workspace cargo test is the project's core
+      test and is never dropped; it is memoised by an input digest. The key
+      is sha256 over git ls-files -s blob ids and modes of the input set,
+      the working-tree diff of that set, a toolchain digest (rustc -V, cargo
+      -V) and scripts/test-known-red.txt. The input set is DERIVED by
+      scripts/workspace-test-inputs.sh, never hand-listed: crates/,
+      Cargo.toml, Cargo.lock, .cargo/, every path an include_str! or
+      include_bytes! in crates/ reaches through ../ (today assets/icons and
+      images/default/ca-path.txt), and every repo-relative literal a crate
+      source opens at runtime (the enumerator greps the literal and takes
+      the file or directory it names, never the whole root). The memo
+      generalises archiver-check-memo.sh's _digest and reuses the existing
+      daily marker tillandsias-last-full-gate so the forced run needs no new
+      clock. A red run never records. Hits are emitted to the timing log so
+      skippable: keeps measuring the step.
+    next_action: >
+      Write step-memo.sh (check|record <step-id>, input list on stdin) and
+      workspace-test-inputs.sh; wrap the workspace test _step in build.sh
+      with the check and the record-on-green; fixture with the seven arms;
+      bind the litmus under ci-release; measure the hit rate over the first
+      week and record it on this packet.
+    notes: |
+      size: L
+      implementer_tier: opus
+      Changes what the land gate runs; a wrong key lets a red workspace land.
+      The mutation arms are the contract.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from the
+      skippable: and timing: lines of the same day.
+
+  - packet_id: archiver-check-memo-keys-on-the-archiver-code-and-the-base-ledger-not-on-every-fragment
+    order: 1437-cxt9
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [gate-time, memo, ledger, bash]
+    estimated_hours: 2
+    depends_on: [per-step-memo-for-the-workspace-cargo-test-step-keyed-on-its-derived-inputs-with-a-daily-forced-run]
+    owned_files: [scripts/archiver-check-memo.sh, scripts/test-archiver-check-memo.sh]
+    verifiable_closure: |
+      bash scripts/test-archiver-check-memo.sh exits 0 with two new arms:
+      arm A: after a recorded green check, adding a new fragment under
+      plan/index.d leaves the memo a hit; arm B: changing plan/index.yaml,
+      plan/schema.yaml, any archiver script or the plan binary's build-id
+      makes it a miss; and the existing arms are unchanged. PRE-FIX RESULT:
+      FAILS — _digest in scripts/archiver-check-memo.sh hashes every
+      plan/index.d/*.yaml, so arm A is a miss today; measured as 145
+      archiver-check-miss records in 7 days at 140 s average and 0 pct fail.
+    title: |
+      The archiver memo misses on every relay because its key hashes every ledger fragment; key it on the archiver code, the plan binary and the base ledger, and let the daily forced run cover the fragment-dependent case
+    context: |
+      T7 of the 2026-09-27 trims. The step asserts the archiver preserves
+      the ready set, a property of the archiver CODE over the ledger SHAPE.
+      Nearly every relay files a fragment, so the current key defeats the
+      memo. The daily forced run of 1437-jm2d covers a fragment the archiver
+      mishandles within 24 h, and the release tier runs the check in full.
+    next_action: >
+      Narrow _digest to the archiver scripts, plan/index.yaml,
+      plan/schema.yaml, plan/archive/*.yaml, the plan binary's build-id
+      output and the backend selector; honour the forced-run marker from
+      1437-jm2d; add the two arms.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      A key change with a stated safety argument; depends on the forced-run
+      marker landing first.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from the
+      skippable: line (archiver-check-miss third entry).

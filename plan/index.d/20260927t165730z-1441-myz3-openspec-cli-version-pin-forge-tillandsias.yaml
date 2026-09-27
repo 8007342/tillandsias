@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-project-records-no-openspec-cli-version-so-every-forge-launch-installs-latest-into-the-prefix-its-own-init-uses-and-nothing-ever-deliberately-moves-the-generated-set-forward
+    order: 1441-myz3
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [forge, openspec, harness-pinning, meta-orchestration, clean-start]
+    estimated_hours: 5
+    depends_on: [the-opsx-dirt-checker-calls-launch-generated-opsx-dirt-ok-and-meta-orchestration-tells-agents-to-commit-it-so-the-reversed-order-540-decision-keeps-re-landing-regenerated-sets-on-trunk]
+    owned_files:
+      - openspec/cli-version
+      - scripts/openspec-pin.sh
+      - scripts/test-openspec-pin.sh
+      - images/default/lib-common.sh
+      - images/default/entrypoint-forge-claude.sh
+      - images/default/entrypoint-forge-opencode.sh
+      - images/default/entrypoint-forge-opencode-web.sh
+      - images/default/entrypoint-terminal.sh
+      - skills/meta-orchestration/SKILL.md
+      - openspec/changes/openspec-cli-version-pin
+    title: |
+      the project records no openspec CLI version: every forge launch backgrounds `npm install -g @fission-ai/openspec@latest` into the SAME per-project prefix its foreground `require_openspec` + `openspec init` use, and no step ever moves the committed generated set forward deliberately — so trunk carries three generator versions and each release first surfaces as launch dirt
+    context: |
+      OPERATOR, 2026-09-27, verbatim: "The orchestrator running meta-orchestration
+      should be updating OpenSpec every now and then, when there're updates. So in
+      theory any fresh forge checkouts SHOULD NOT see this dirty refresh, as their
+      openspec checkouts should match the project's own. Looks like an npm install
+      openspec might be colliding with the project's own installed openspec. Please
+      investigate and file the ./plan packet and specs for the correct configs, and
+      have them implemented as well."
+      MEASURED (macuahuitl-forge, 2026-09-27):
+      - The collision is forge-internal. Every entrypoint backgrounds
+        ensure_forge_harnesses (npm install -g "$pkg@latest", openspec included)
+        before clone, then foreground require_openspec + openspec init use the
+        same NPM_CONFIG_PREFIX (~/.cache/tillandsias-project/npm/global). Host
+        evidence (macuahuitl-fedora): no openspec on the host or in the builder
+        toolbox. Legacy channels $CACHE/openspec/bin and /home/forge/.tools/openspec
+        are still named in PATH/docs but are absent on disk.
+      - Nothing records the version: trunk's generated sets are .claude 1.13.1,
+        .opencode 1.13.2, .codex/.github 1.3.1. Every chore(opsx) sync since
+        2026-08-17 (aa167d939 .. 64cceb25d) was launch dirt committed by the
+        order-540 step, not a deliberate update.
+      - A deliberate `openspec update` at 1.13.2 produces files BYTE-IDENTICAL to
+        the 18-file launch dirt (0 of 18 differ), so a pinned, deliberately
+        regenerated tree is exactly what a forge at that version would write.
+      - `openspec update` output depends on the per-machine global profile
+        ($XDG_CONFIG_HOME/openspec/config.json); from an empty config it derives
+        a custom profile from the committed workflows ("Migrated: custom profile
+        with 11 workflows"), so a bump must run with an isolated config.
+      - 1.13.2 moves codex skills to .agents/skills and leaves the 11 .codex
+        copies stale ("Left 11 files in .codex/ that differ from the copy in
+        .agents/"); a bump must report orphans rather than silently keep them.
+      - A bare `openspec init` in a checkout sets up EVERY tool it detects,
+        including Gemini, whose .gemini/skills symlink points at the canonical
+        skills/ tree, so it writes 11 openspec-* dirs into skills/ (measured by
+        accident in the main checkout, reverted).
+      Coordinator (macuahuitl-fedora) direction: own order stacked on
+      work/1440-w8g8; keep it to the pin file, install-the-pin, and the
+      coordinator bump step; the regeneration commit that re-levels the trees is
+      SEPARATE and made by the new step itself, so the step is proven by use.
+      Related: 1253-nmmy (alias-tree version skew; this supplies its "version
+      recorded somewhere a gate can read").
+    exit_criteria:
+      - 'the repo records one openspec CLI version (openspec/cli-version) and scripts/openspec-pin.sh drift reports every tracked generatedBy that disagrees with it (pre-fix: FAILS, no record exists; trunk has 1.13.1/1.13.2/1.3.1)'
+      - 'a forge launch on a pinned project runs openspec from a version-keyed prefix holding exactly the pinned version, never the @latest global one (pre-fix: FAILS, OS_BIN is the @latest global install)'
+      - 'meta-orchestration carries a coordinator step that, when npm publishes a newer openspec, bumps the pin and regenerates the generated set in ONE deliberate commit with an isolated openspec config (pre-fix: FAILS, no such step; the only path was committing launch dirt)'
+      - 'the re-levelling regeneration is a separate commit produced by that step, after which drift reports ok for every tracked generated set'
+    verifiable_closure: |
+      litmus:openspec-cli-pin-shape passes on trunk: scripts/test-openspec-pin.sh
+      proves check/due/drift/bump against a stub registry and the forge-side
+      pinned install, and `scripts/openspec-pin.sh drift` on the live tree prints
+      ok:openspec-generated-matches-pin.
+    deliverable: |
+      openspec/cli-version; scripts/openspec-pin.sh (pin/check/drift/bump);
+      lib-common.sh ensure_openspec_pinned used by the four entrypoints;
+      a meta-orchestration coordinator bump step; OpenSpec change
+      openspec-cli-version-pin; fixture + litmus; then one regeneration commit
+      made by the step.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:57:30Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t163026z"
+        host: forge-tillandsias
+        summary: |-
+          Filed by macuahuitl-forge on the operator's direct request, with the
+          coordinator's scope direction (macuahuitl-fedora, 2026-09-27).

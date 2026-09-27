@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# T3 peer message size budget. Design: plan/issues/efficiency-trims-design-2026-09-27.md
+packets:
+  - packet_id: check-peer-message-shape-lint-for-the-600-byte-verdict-first-budget
+    order: 1437-arjg
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [coordination, lint, tokens, bash]
+    estimated_hours: 1
+    depends_on: []
+    owned_files: [scripts/check-peer-message-shape.sh]
+    verifiable_closure: |
+      bash scripts/check-peer-message-shape.sh --self-test prints
+      ok:peer-message-self-test:4/4 and exits 0, where arm 1: a 5-line
+      message whose first line is HEADS-UP:scripts/land-on-platform-branch.sh:adding
+      a --plan flag and whose remaining lines each start with "- " and carry
+      a SHA, order token, work/ ref or path, piped on stdin, prints
+      ok:peer-message:<bytes>b/5l and exits 0; arm 2: a message over 600
+      bytes prints violation:peer-message:over-budget:<bytes>b and exits 1;
+      arm 3: a message whose first line does not match
+      ^(HEADS-UP|ACK|LANDED|BLOCKED|ASK|FYI):[^:]+:.+$ prints
+      violation:peer-message:no-verdict-line and exits 1; arm 4: an evidence
+      line with no ref prints violation:peer-message:unreferenced-line:<n>
+      and exits 1. PRE-FIX RESULT: FAILS — the script does not exist.
+    title: |
+      `check-peer-message-shape.sh`: stdin lint for the cross-session message budget (600 bytes, 8 lines, verdict line first, referenced evidence lines)
+    context: |
+      T3 of the 2026-09-27 trims. A message costs the RECEIVER's main-tier
+      context; observed heads-ups run to several paragraphs. The rule is in
+      methodology/distributed-work.yaml -> sibling_heads_up_protocol.size_budget
+      (amended with this filing) and repeated in the meta-orchestration and
+      join-the-fleet skills. This packet is the fixture-free lint: no gate
+      step, no litmus; the sender pipes the draft through it before
+      SendMessage. Kept cheap on purpose — a lint that needs a corpus is not
+      worth its own gate time.
+    next_action: >
+      Write the script: read stdin, count bytes and lines, match the verdict
+      grammar on line 1, require a ref on every further line (SHA of 7+ hex,
+      an order token, work/<order>, or a path containing /), print the
+      grammar above, --self-test runs the four arms inline. bash-dialect
+      clean, no jq.
+    notes: |
+      size: S
+      implementer_tier: haiku
+      Mechanical; the grammar is fully specified above.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session.
