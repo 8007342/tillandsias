@@ -18414,8 +18414,8 @@ async fn run_headless_async(
 
     // @trace spec:tillandsias-vault — revoke per-container AppRole tokens
     // before exit so vault audit reflects clean shutdown. The Vault
-    // container itself is preserved across tray restarts (data lives on the
-    // `tillandsias-vault-data` named volume).
+    // container itself is preserved across tray restarts (data lives in the
+    // `<cache>/vault-data` host directory).
     #[cfg(feature = "vault")]
     {
         vault_bootstrap::revoke_pending_container_tokens(false).await;
