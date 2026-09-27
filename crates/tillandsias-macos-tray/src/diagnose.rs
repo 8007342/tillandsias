@@ -1356,9 +1356,49 @@ pub fn reset_guest_main() -> i32 {
     provision_main()
 }
 
+/// ORDER 1420-q2ba. The oldest macOS first provisioning supports — the same
+/// floor install-macos.sh enforces and LSMinimumSystemVersion declares.
+pub(crate) const MIN_MACOS_MAJOR: u32 = 14;
+
+/// `Some(refusal)` when `product_version` (`kern.osproductversion`, e.g.
+/// "13.6.1") is below [`MIN_MACOS_MAJOR`]; `None` to proceed. An unreadable or
+/// unparsable version proceeds: refusing on "cannot tell" would block a host
+/// whose sysctl output this cannot parse.
+pub(crate) fn macos_version_refusal(product_version: Option<&str>) -> Option<String> {
+    let v = product_version?.trim();
+    let major: u32 = v.split('.').next()?.parse().ok()?;
+    (major < MIN_MACOS_MAJOR).then(|| {
+        format!(
+            "Tillandsias requires macOS {MIN_MACOS_MAJOR}.0 or later to provision its VM \
+             (this host runs macOS {v}); update macOS, then retry."
+        )
+    })
+}
+
 pub fn provision_main() -> i32 {
     // 1420-83vf: machine output only when asked for.
     let json = std::env::args().any(|a| a == "--json");
+    // 1420-q2ba: the MANUAL path. LaunchServices refuses the .app below
+    // LSMinimumSystemVersion (14.0) and install-macos.sh refuses before it
+    // installs, but exec'ing this binary directly is decided by the Mach-O's
+    // own minimum, which is 11.0 (`vtool -show-build`: minos 11.0), so on
+    // macOS 11-13 a cold provision would run and fail somewhere deep with no
+    // explanation. Refuse loudly first.
+    let product_version = std::process::Command::new("/usr/sbin/sysctl")
+        .args(["-n", "kern.osproductversion"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+    if let Some(refusal) = macos_version_refusal(product_version.as_deref()) {
+        if json {
+            let escaped = serde_json::to_string(&refusal).unwrap_or_else(|_| "\"\"".to_string());
+            println!("{{\"error\":{escaped}}}");
+        } else {
+            eprintln!("Provisioning refused: {refusal}");
+        }
+        return 1;
+    }
     if let Err(err) = stage_embedded_guest_binary() {
         if json {
             eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
@@ -3013,6 +3053,52 @@ mod tests {
         assert!(
             export_at < first_use,
             "HOME must be exported before the CA path that expands it: {p}"
+        );
+    }
+
+    /// 1420-q2ba: the manual `--provision` path on an unsupported macOS refuses
+    /// loudly (the Mach-O's minos is 11.0, so dyld does not stop it on 11-13).
+    #[test]
+    fn provisioning_refuses_below_macos_14_and_names_both_versions() {
+        use super::macos_version_refusal;
+        for old in ["11.7.10", "12.7", "13.6.1", "13"] {
+            let r = macos_version_refusal(Some(old)).unwrap_or_else(|| panic!("{old} must refuse"));
+            assert!(
+                r.contains("macOS 14.0 or later") && r.contains(old.trim()),
+                "{r}"
+            );
+        }
+        assert_eq!(macos_version_refusal(Some("14.0")), None);
+        assert_eq!(macos_version_refusal(Some("27.0\n")), None, "this host");
+        assert_eq!(
+            macos_version_refusal(None),
+            None,
+            "unreadable sysctl proceeds"
+        );
+        assert_eq!(
+            macos_version_refusal(Some("garbage")),
+            None,
+            "unparsable proceeds"
+        );
+    }
+
+    /// The refusal must run BEFORE staging or downloading anything.
+    #[test]
+    fn the_macos_version_refusal_runs_first_in_provision_main() {
+        let src = include_str!("diagnose.rs");
+        let body = src
+            .split("pub fn provision_main() -> i32 {")
+            .nth(1)
+            .expect("provision_main");
+        let refusal = body
+            .find("macos_version_refusal(")
+            .expect("provision_main must check the OS");
+        let staging = body
+            .find("stage_embedded_guest_binary()")
+            .expect("provision_main stages");
+        assert!(
+            refusal < staging,
+            "the OS refusal must precede staging and the download"
         );
     }
 
