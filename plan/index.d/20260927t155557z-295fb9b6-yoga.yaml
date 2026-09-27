@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: five-litmus-timeouts-were-elevated-to-unblock-a-release-and-must-come-back-down-one-at-a-time-as-the-fold-fix-lands
+    field: next_action
+    value: '2026-09-27 yoga EVIDENCE for bringing elevated budgets down (not a proposal of numbers): inside a real ./build.sh --ci-full on yoga (tree cc918b216, timing log 87,533 records), steps now budgeted at 300,000 ms ran in: cycle-batch-triage-shape step 14 2,688 ms; cycle-flow-telemetry-shape step 2 2,548 ms; build-test-timing-telemetry-shape step 2 1,829 ms (each ~0.01x). One host, one run, below the 115,860-record corpus 1233-jqp4 names; the lowering itself should wait for a reading at that corpus size (macuahuitl) and follow 1233''s regime-line rule.'
+    ts: "2026-09-27T15:55:57Z"
+    host: yoga
+
+events:
+  - packet_id: five-litmus-timeouts-were-elevated-to-unblock-a-release-and-must-come-back-down-one-at-a-time-as-the-fold-fix-lands
+    event:
+      type: progress
+      ts: "2026-09-27T15:55:57Z"
+      host: yoga
+      summary: |-
+        status '2026-09-27 yoga EVIDENCE for bringing elevated budgets down (not a proposal of numbers): inside a real ./build.sh --ci-full on yoga (tree cc918b216, timing log 87,533 records), steps now budgeted at 300,000 ms ran in: cycle-batch-triage-shape step 14 2,688 ms; cycle-flow-telemetry-shape step 2 2,548 ms; build-test-timing-telemetry-shape step 2 1,829 ms (each ~0.01x). One host, one run, below the 115,860-record corpus 1233-jqp4 names; the lowering itself should wait for a reading at that corpus size (macuahuitl) and follow 1233's regime-line rule.' (not terminal) with evidence_refs: cc918b216
+  - packet_id: five-litmus-timeouts-were-elevated-to-unblock-a-release-and-must-come-back-down-one-at-a-time-as-the-fold-fix-lands
+    event:
+      type: note
+      ts: "2026-09-27T15:55:57Z"
+      host: yoga
+      summary: |-
+        gate-load evidence for the elevated budgets
