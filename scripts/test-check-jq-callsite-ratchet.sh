@@ -84,8 +84,11 @@ fi
 
 # Arm 4 — nothing to count is a refusal, never an ok.
 t4="$scratch/arm4"; mkdir -p "$t4/scripts/portability"
-out4="$(bash "$GUARD" --root "$t4" 2>&1)"; rc4=$?
-if [ "$rc4" -eq 1 ] && [ "$out4" = "blocked:jq-ratchet-empty-population" ]; then
+# The verdict is STDOUT; stderr carries the population line (1443-xkwb), which
+# for an empty population must say so rather than be absent.
+out4="$(bash "$GUARD" --root "$t4" 2>"$scratch/arm4.err")"; rc4=$?
+if [ "$rc4" -eq 1 ] && [ "$out4" = "blocked:jq-ratchet-empty-population" ] &&
+    grep -qx 'population=0 bootstrap=0' "$scratch/arm4.err"; then
     ok "ARM 4: blocked:jq-ratchet-empty-population, rc 1"
 else
     bad "ARM 4: rc=$rc4: $out4"

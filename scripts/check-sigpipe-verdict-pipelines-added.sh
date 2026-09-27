@@ -77,6 +77,35 @@ cd "$REPO_ROOT" || exit 2
 
 base_ref="${TILLANDSIAS_SIGPIPE_BASE:-origin/linux-next}"
 
+# ORDER 1443-xkwb. This guard is diff-scoped, so what it GUARDS is every file a
+# change could hand it: tracked or untracked *.sh (and build.sh) that set
+# pipefail, the same filter as the loop below. That population, and how much
+# of it is on the bootstrap-shell allowlist (design §6.5), goes to STDERR; the
+# stdout verdict is an interface. scripts/check-decider-retirement.sh reads it.
+# Printed BEFORE the base-ref check so an unavailable base still reports it.
+_sp_allowlist="${TILLANDSIAS_BOOTSTRAP_ALLOWLIST:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/portability/bootstrap-shell-allowlist.txt}"
+[ -f "$_sp_allowlist" ] || _sp_allowlist=/dev/null
+_sp_population="$(
+    { git ls-files -z -- '*.sh' build.sh 2>/dev/null
+      git ls-files -z --others --exclude-standard -- '*.sh' build.sh 2>/dev/null; } |
+        xargs -0 grep -lE '^[[:space:]]*set[[:space:]]+-[a-zA-Z]*o[[:space:]]+pipefail' /dev/null 2>/dev/null |
+        grep -v '^/dev/null$' | LC_ALL=C sort -u
+)"
+printf '%s\n' "$_sp_population" | awk '
+    NR == FNR { if ($1 !~ /^#/ && NF) allow[$1] = 1; next }
+    NF { n++; if ($1 in allow) b++ }
+    END { printf "population=%d bootstrap=%d\n", n, b }
+' "$_sp_allowlist" - >&2
+# A guard over NOTHING is not a passing guard (1374-4u6i). With no shell file
+# at all to hand it, "0 checked" would read as clean forever, so refuse. Shell
+# that merely never sets pipefail is different: it has no SIGPIPE-verdict
+# defect to find, the verdict stays ok, and population=0 says why.
+if [ -z "$(git ls-files -- '*.sh' build.sh 2>/dev/null)$(git ls-files --others --exclude-standard -- '*.sh' build.sh 2>/dev/null)" ]; then
+    echo "blocked:sigpipe-verdict-added:scan-empty"
+    echo "  no tracked or untracked *.sh (or build.sh) under $REPO_ROOT; nothing is guarded" >&2
+    exit 1
+fi
+
 if ! git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
     echo "ok:sigpipe-verdict-added:base-unavailable"
     echo "  note: base ref '$base_ref' unavailable — added-line enforcement skipped" >&2
