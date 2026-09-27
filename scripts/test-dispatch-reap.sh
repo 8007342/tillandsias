@@ -111,7 +111,30 @@ spawn_marked() {
     echo $!
 }
 
-alive() { kill -0 "$1" 2>/dev/null; }
+# A ZOMBIE IS NOT ALIVE (order 1141-vf9w, forge follow-up 2026-09-16).
+#
+# The marked child is spawned inside a command substitution, so the SUBSHELL is
+# its parent and THIS shell cannot `wait` it. When the reap kills it, it is
+# reparented and reaped by PID 1 asynchronously — and until that happens it is a
+# ZOMBIE, which `kill -0` reports as alive. So arm 4 ("the reap kills the marked
+# process") passed or failed on whether init had gotten around to the zombie
+# yet, not on whether the reap worked.
+#
+# MEASURED on a forge 2026-09-16: after a reap that returned 0,
+# /proc/<pid>/stat state=Z with `kill -0` rc=0, arm 4 FAIL 3/3; the same
+# sequence passed on a host whose PID 1 reaps promptly, which is why this read
+# as green everywhere and red here. Judge liveness by STATE, never existence.
+#
+# /proc is absent on darwin, but the arms that use this run only after the
+# no-proc/no-setsid skip above, so the /proc read is safe in the regime it
+# serves.
+alive() {
+    local st
+    [ -r "/proc/$1/stat" ] || return 1
+    st="$(awk '{print $3}' "/proc/$1/stat" 2>/dev/null)"
+    case "$st" in Z | X | x) return 1 ;; esac
+    return 0
+}
 
 # WAIT FOR THE PREMISE, DO NOT SLEEP AND HOPE. These arms used a fixed
 # `sleep 0.3` between spawning a marked process and scanning for it, which is a

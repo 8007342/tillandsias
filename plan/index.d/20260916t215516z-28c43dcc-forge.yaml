@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: containers-conf-dns-servers-guard-is-presence-not-content
+    event:
+      type: note
+      ts: "2026-09-16T21:55:16Z"
+      agent_id: forge-tillandsias-opencode-20260916t214000z
+      host: forge
+      summary: |-
+        DECISION (ownership settled): init NEVER overwrites a deployed [network] dns_servers key — operators own that line; it declines and names it loudly. Message half already shipped (writer Ok(bool), caller --debug reports outcome, pinned by the_dns_writer_reports_whether_it_actually_wrote, four file states). Criterion 1 = decline-with-reason; criteria 2/3 met; hand-set dns_servers not silently replaced is the documented chosen behaviour.
