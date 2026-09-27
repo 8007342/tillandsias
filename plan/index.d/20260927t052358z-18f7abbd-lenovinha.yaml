@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: headless-init-image-build-progress-is-a-fake-50-75-100-estimator
+    event:
+      type: note
+      ts: "2026-09-27T05:23:58Z"
+      agent_id: linux-lenovinha-claude-20260927t045322z
+      host: lenovinha
+      summary: |
+        Two named OPEN items, per the coordinator ruling on 2026-09-27. (1) LIVE CRITERION UNMEASURED: no cold --init has shown [progress-event] Determinate lines yet. The relay rests on the fixture over captured real podman stdout. The next host doing a cold --init anyway (fresh install or post-cut rebake) captures them; lenovinha will not spend a cold rebuild on it. (2) WORDING AWAITS OPERATOR APPROVAL: the user-facing line still reads "Pulling image X [bar] N%" ("image" is on the spec:tray-ux banned list). Rewording it, or rendering through 1420-9vpk, is a new user-visible surface that needs Tlatoani approval; the coordinator has put it in the operator queue. Wording deliberately unchanged.
