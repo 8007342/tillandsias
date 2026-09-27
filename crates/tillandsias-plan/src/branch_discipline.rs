@@ -199,12 +199,34 @@ fn ok(class: &str) -> RefAnswer {
 /// with a named token.
 fn at_enforcement(
     d: &Discipline,
+    reality: Option<&Derived>,
     rule: &'static str,
     token: &str,
     why: String,
     remedy: String,
 ) -> RefAnswer {
     let e = d.enforcement_of(rule);
+    // ORDER 1446-664f — REFUSE ONLY WHERE SEED AND REALITY AGREE. An enforced
+    // rule whose qualifier was OBSERVED ABSENT degrades to a warning that names
+    // the missing qualifier; one that could not be observed keeps the seed's
+    // word (an unobservable fact is not evidence of drift).
+    if e == "enforced"
+        && let Some(r) = reality
+        && let Some(missing) = r.missing_for(rule_level(rule))
+    {
+        return RefAnswer {
+            verdict: format!("warn:discipline:{token}:seed-ahead-of-reality"),
+            why: Some(why),
+            remedy: Some(format!(
+                "the seed enforces this rule at level {}, but the project does not yet show \
+                 {missing}; the rule warns instead of refusing until that is observed \
+                 (`tillandsias-plan discipline derive` shows every qualifier)",
+                d.level
+            )),
+            refused: false,
+            rule: Some(rule),
+        };
+    }
     let (verdict, refused) = match e {
         "enforced" => (format!("refused:discipline:{token}:enforced"), true),
         "warn" => (format!("warn:discipline:{token}"), false),
@@ -236,6 +258,12 @@ fn salvage_regex(pattern: &str) -> Option<Regex> {
 /// `refs/...` namespace (tags, refs/tillandsias/*) is not a branch and is
 /// admitted as `non-branch`.
 pub fn check_ref(d: &Discipline, reference: &str) -> RefAnswer {
+    check_ref_observed(d, reference, None)
+}
+
+/// ORDER 1446-664f — `check_ref` with the project's observed facts: an
+/// enforced rule refuses only when its qualifier is observed.
+pub fn check_ref_observed(d: &Discipline, reference: &str, reality: Option<&Derived>) -> RefAnswer {
     let branch = match reference.strip_prefix("refs/heads/") {
         Some(b) => b,
         None if reference.starts_with("refs/") => return ok("non-branch"),
@@ -252,6 +280,7 @@ pub fn check_ref(d: &Discipline, reference: &str) -> RefAnswer {
     if branch == d.default_branch {
         return at_enforcement(
             d,
+            reality,
             "default_branch",
             "default-branch-protected",
             format!(
@@ -285,6 +314,7 @@ pub fn check_ref(d: &Discipline, reference: &str) -> RefAnswer {
     }
     at_enforcement(
         d,
+        reality,
         "ref_grammar",
         "ref-outside-grammar",
         format!(
@@ -507,6 +537,297 @@ pub fn load(root: &Path, seed_override: Option<&Path>) -> Discipline {
             d
         }
     }
+}
+
+// ── derive: the discipline the project's own history shows ─────────────────
+//
+// ORDER 1446-664f (operator 2026-09-27: "We should try to derive the
+// discipline but check against reality"). Neither side is blindly
+// authoritative: a seed AHEAD of reality is a project opting in early — its
+// enforced rules WARN until their qualifier is observed; a seed BEHIND reality
+// is a project that has outgrown its declaration — nothing is refused on the
+// seed's behalf, and the answer names `discipline raise`.
+//
+// OBSERVED FROM THE CHECKOUT, NOT THE NETWORK. The pre-push hook calls
+// check-ref for every ref, so observations read the checkout's own refs
+// (refs/remotes/origin/*, origin/HEAD) and `git log`: the origin as of the last
+// fetch. Every observation carries the exact command, so a reader can re-run it.
+//
+// THE COMMITTER QUALIFIER IS AUTHOR EMAILS. The design said "agent trailers,
+// then author"; measured on this repository's last 50 commits, no trailer names
+// a host (Co-Authored-By, Claude-Session, Generated-By), and author emails do
+// (tlatoani@macuahuitl…, tlatoani@yoga…, lenovinha@lenovinha…). The field is
+// named for what it counts: distinct_author_emails.
+
+/// How many commits the committer qualifier looks back over.
+pub const COMMIT_WINDOW: usize = 50;
+const DEFAULT_WORK_REF: &str = "work/[0-9]{3,4}-[a-z0-9]{4}";
+
+/// The level whose qualifier a rule needs before it may refuse.
+fn rule_level(rule: &str) -> u8 {
+    match rule {
+        "ref_grammar" => 2,
+        _ => 1,
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Observation {
+    pub name: &'static str,
+    pub value: Json,
+    pub command: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct Qualifier {
+    pub level: u8,
+    pub met: bool,
+    pub requires: &'static str,
+}
+
+#[derive(Debug, Clone)]
+pub struct Derived {
+    pub level: u8,
+    pub observations: Vec<Observation>,
+    pub qualifiers: Vec<Qualifier>,
+}
+
+impl Derived {
+    /// `Some(what is missing)` when the qualifier for `level` was observed absent.
+    pub fn missing_for(&self, level: u8) -> Option<&'static str> {
+        self.qualifiers
+            .iter()
+            .find(|q| q.level == level && !q.met)
+            .map(|q| q.requires)
+    }
+}
+
+fn git(root: &Path, args: &[&str]) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Observe the project at `root`. `None` when git cannot answer at all (not a
+/// repository, or no git): unobservable, which is not the same as level 0.
+pub fn derive(root: &Path, d: &Discipline) -> Option<Derived> {
+    git(root, &["rev-parse", "--git-dir"])?;
+    let mut obs = Vec::new();
+
+    let head_cmd = "git symbolic-ref -q --short refs/remotes/origin/HEAD";
+    let remote_head = git(
+        root,
+        &["symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"],
+    )
+    .map(|s| s.trim().trim_start_matches("origin/").to_string())
+    .filter(|s| !s.is_empty());
+    let default = remote_head
+        .clone()
+        .unwrap_or_else(|| d.default_branch.clone());
+    obs.push(Observation {
+        name: "remote_head",
+        value: json!(remote_head),
+        command: head_cmd.into(),
+    });
+
+    let heads_cmd = "git for-each-ref --format=%(refname:strip=3) refs/remotes/origin";
+    let heads: Vec<String> = git(
+        root,
+        &[
+            "for-each-ref",
+            "--format=%(refname:strip=3)",
+            "refs/remotes/origin",
+        ],
+    )
+    .unwrap_or_default()
+    .lines()
+    .map(str::trim)
+    .filter(|h| !h.is_empty() && *h != "HEAD")
+    .map(str::to_string)
+    .collect();
+    let integration: Vec<String> = heads
+        .iter()
+        .filter(|h| {
+            **h != default && (d.integration.values().any(|b| b == *h) || h.ends_with("-next"))
+        })
+        .cloned()
+        .collect();
+    obs.push(Observation {
+        name: "integration_branches_on_origin",
+        value: json!(integration),
+        command: heads_cmd.into(),
+    });
+
+    let work_re = Regex::new(&format!(
+        "^(?:{})$",
+        d.work_ref.as_deref().unwrap_or(DEFAULT_WORK_REF)
+    ))
+    .ok();
+    let work_refs = heads
+        .iter()
+        .filter(|h| work_re.as_ref().is_some_and(|re| re.is_match(h)))
+        .count();
+    obs.push(Observation {
+        name: "work_refs_on_origin",
+        value: json!(work_refs),
+        command: heads_cmd.into(),
+    });
+
+    // History to read: the default branch and every integration branch, as
+    // origin has them; the local default when origin has none.
+    let mut refs: Vec<String> = std::iter::once(&default)
+        .chain(integration.iter())
+        .filter(|b| heads.contains(b))
+        .map(|b| format!("refs/remotes/origin/{b}"))
+        .collect();
+    if refs.is_empty() {
+        refs.push("HEAD".to_string());
+    }
+    let n = COMMIT_WINDOW.to_string();
+    let mut log_args = vec!["log", "-n", n.as_str(), "--format=%ae"];
+    log_args.extend(refs.iter().map(String::as_str));
+    let emails: std::collections::BTreeSet<String> = git(root, &log_args)
+        .unwrap_or_default()
+        .lines()
+        .map(|l| l.trim().to_lowercase())
+        .filter(|l| !l.is_empty())
+        .collect();
+    obs.push(Observation {
+        name: "distinct_author_emails",
+        value: json!(emails.len()),
+        command: format!("git log -n {COMMIT_WINDOW} --format=%ae {}", refs.join(" ")),
+    });
+
+    let default_ref = if heads.contains(&default) {
+        format!("refs/remotes/origin/{default}")
+    } else {
+        default.clone()
+    };
+    let pr_merges = git(
+        root,
+        &[
+            "log",
+            "--merges",
+            "-n",
+            n.as_str(),
+            "--format=%s",
+            default_ref.as_str(),
+        ],
+    )
+    .unwrap_or_default()
+    .lines()
+    .filter(|l| l.starts_with("Merge pull request"))
+    .count();
+    obs.push(Observation {
+        name: "pull_request_merges_on_default",
+        value: json!(pr_merges),
+        command: format!("git log --merges -n {COMMIT_WINDOW} --format=%s {default_ref}"),
+    });
+
+    let hooks_dir = common_git_dir(root).map(|g| g.join("hooks"));
+    let hooks: Vec<String> = ["pre-push", "pre-commit", "pre-receive"]
+        .iter()
+        .filter(|h| hooks_dir.as_ref().is_some_and(|dir| dir.join(h).is_file()))
+        .map(|h| h.to_string())
+        .collect();
+    obs.push(Observation {
+        name: "installed_hooks",
+        value: json!(hooks),
+        command: "ls <git-common-dir>/hooks".into(),
+    });
+
+    let l1 = !integration.is_empty() || pr_merges > 0;
+    let l2 = emails.len() >= 2 && work_refs >= 1;
+    let qualifiers = vec![
+        Qualifier {
+            level: 1,
+            met: l1,
+            requires: "an integration branch on origin other than the default branch, or pull-request merges on the default branch",
+        },
+        Qualifier {
+            level: 2,
+            met: l2,
+            requires: "two or more distinct author emails in the last 50 commits AND a work ref on origin",
+        },
+    ];
+    let level = if l2 {
+        2
+    } else if l1 {
+        1
+    } else {
+        0
+    };
+    Some(Derived {
+        level,
+        observations: obs,
+        qualifiers,
+    })
+}
+
+/// The derive answer: text lines and the JSON form.
+pub fn derive_report(d: &Discipline, r: Option<&Derived>) -> (Vec<String>, Json) {
+    let seed = (d.source == Source::Seed).then_some(d.level);
+    let seed_s = seed.map_or("none".to_string(), |l| l.to_string());
+    let seed_level = seed.unwrap_or(0);
+    let Some(r) = r else {
+        let line = format!("derived=unavailable seed={seed_s} effective={seed_level}");
+        return (
+            vec![
+                line,
+                "observed=unavailable: git could not read this project; the seed stands".into(),
+            ],
+            json!({"derived": null, "seed": seed, "effective": seed_level, "observed": false}),
+        );
+    };
+    let effective = seed_level.min(r.level);
+    let mut lines = vec![format!(
+        "derived={} seed={seed_s} effective={effective}",
+        r.level
+    )];
+    for q in &r.qualifiers {
+        lines.push(format!(
+            "qualifier level={} met={} requires: {}",
+            q.level,
+            if q.met { "yes" } else { "no" },
+            q.requires
+        ));
+    }
+    for o in &r.observations {
+        lines.push(format!(
+            "observed {}={} via `{}`",
+            o.name, o.value, o.command
+        ));
+    }
+    let drift = if r.level > seed_level {
+        format!(
+            "drift:seed-behind-reality: discipline raise --to {}; use /project-discipline for instructions",
+            r.level
+        )
+    } else if r.level < seed_level {
+        format!(
+            "drift:seed-ahead-of-reality: level-{seed_level} rules warn instead of refusing until {} is observed",
+            r.missing_for(r.level + 1).unwrap_or("the next qualifier")
+        )
+    } else {
+        "ok:discipline-derive:seed-matches-reality".to_string()
+    };
+    lines.push(drift.clone());
+    let json = json!({
+        "derived": r.level,
+        "seed": seed,
+        "effective": effective,
+        "observed": true,
+        "qualifiers": r.qualifiers.iter().map(|q| json!({"level": q.level, "met": q.met, "requires": q.requires})).collect::<Vec<_>>(),
+        "observations": r.observations.iter().map(|o| json!({"name": o.name, "value": o.value, "command": o.command})).collect::<Vec<_>>(),
+        "drift": drift,
+    });
+    (lines, json)
 }
 
 #[cfg(test)]
