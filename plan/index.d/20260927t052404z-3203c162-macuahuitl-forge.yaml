@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-committed-groundtruth-case-keyed-to-a-live-packets-open-or-closed-status-turns-trunk-red-on-any-plan-lane-closure-and-the-closer-cannot-see-it
+    event:
+      type: note
+      ts: "2026-09-27T05:24:04Z"
+      agent_id: forge-forge-tillandsias-claude-20260927t052404z
+      host: macuahuitl-forge
+      summary: |
+        EVIDENCE, second pin (coordinator macuahuitl-fedora, measured on bare metal during land62, 2026-09-27): the same 437 closure (9ee8ce57c) broke TWO committed pins of the same fact in TWO files: (1) the ground-truth case plan-upstream-prerequisites-of-experts-milestone in openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml (fixed on work/1432-x3ug); (2) litmus:expert-groundtruth-harness step 22, which asserted plan_blocked_on(forge-local-experts-milestone) returns "437<TAB>forge-src-tmpfs-topology" (fixed as relay-fix 2b3fe5ffd: it now asserts no upstream rows, since 403/537 would mean a reversed edge; 26/26). The second pin was UNRUNNABLE in the closer's own regime: in a forge, the litmus runner's podman preflight finds its litmus-runtime podman shim and ENV-FAILs the whole test (the 1428-v4tt arm-4 class). So the closer could not have seen it even by running the covering litmus. This strengthens the "invisible to the closer" half of the exit criterion: a check must hold across regimes, or live in a lane the closer's push actually runs.

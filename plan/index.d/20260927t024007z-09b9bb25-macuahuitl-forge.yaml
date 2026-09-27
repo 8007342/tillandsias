@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-claims-across-branches-removes-its-temp-extract-on-every-normal-path-but-has-no-exit-trap-so-a-killed-run-leaks-a-copy-of-a-siblings-plan-dir
+    field: status
+    value: completed
+    ts: "2026-09-27T02:40:07Z"
+    host: macuahuitl-forge
+
+events:
+  - packet_id: check-claims-across-branches-removes-its-temp-extract-on-every-normal-path-but-has-no-exit-trap-so-a-killed-run-leaks-a-copy-of-a-siblings-plan-dir
+    event:
+      type: completed
+      ts: "2026-09-27T02:40:07Z"
+      host: macuahuitl-forge
+      summary: |-
+        status 'completed' with evidence_refs: 24c6cc081
+  - packet_id: check-claims-across-branches-removes-its-temp-extract-on-every-normal-path-but-has-no-exit-trap-so-a-killed-run-leaks-a-copy-of-a-siblings-plan-dir
+    event:
+      type: note
+      ts: "2026-09-27T02:40:07Z"
+      host: macuahuitl-forge
+      summary: |-
+        landed in land59: relay commit 24c6cc081 on origin/linux-next under a18724b9c, GitHub-verified; it contains the work ref tip. check-claims-across-branches removes its xbranch extract on a killed run (EXIT/INT/TERM trap); fixture 12/12 (pre-fix 11/12).

@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: salvage-920-cluster-forge-20260916-232039-holds-eight-rows-marked-implemented-that-trunk-still-offers-as-ready-relay-it-hunk-by-hunk
+    order: 1425-t9v9
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [salvage, relay, forge, pty, hot-paths]
+    estimated_hours: 4
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-headless/src/pty_handler.rs
+      - crates/tillandsias-headless/src/main.rs
+      - images/default/cli/tellme
+      - images/default/lib-common.sh
+      - openspec/litmus-tests/litmus-mcp-discoverability-shape.yaml
+      - scripts/test-populate-hot-paths-negative-control.sh
+      - scripts/test-dispatch-reap.sh
+    title: |
+      salvage/unknown/20260916-920-cluster-forge-20260916-232039 (fdafd13d5) marks EIGHT rows "implemented" — 920-c3af, 920-tqhs, 920-mvgp, 920-ijwa, 923-ys2t, 926-3vs6, 922-hm3n, 920-eqjr — whose code exists only on that ref, so trunk offers all eight as ready; relay it HUNK BY HUNK (not a whole-ref merge) and re-verify each row against trunk afterwards
+    context: |
+      FROM 1424-w4ai (salvage backlog triage, slice 1; macuahuitl-forge,
+      2026-09-27), coordinator ruling: this ref is not a simple relay. Measured
+      with scripts/salvage-audit.sh on origin/linux-next plus a read of each
+      candidate diff:
+        - its plan fragments set eight rows to "implemented"; all eight read
+          READY on trunk (tillandsias-plan status, 2026-09-27).
+        - candidate code (ref-may-be-AHEAD): pty_handler.rs +82/-14 (922-hm3n:
+          seed HOME and XDG_RUNTIME_DIR=/run/user/<uid> from one uid, with the
+          test child_env_seeds_xdg_runtime_dir_from_the_same_uid; trunk has no
+          XDG_RUNTIME_DIR seeding); tellme +14/-3 and lib-common.sh +18/-3
+          (920-tqhs: verify the cheatsheet hot-path copy, fall back to the repo
+          or image bundle and say which copy serves, instead of tracing success
+          after a failed cp); test-populate-hot-paths-negative-control.sh +84
+          (920-tqhs); litmus-mcp-discoverability-shape.yaml +4 (920-c3af step
+          running cargo test opencode_lane_builder_mounts_only_per_lane_mcp_dir);
+          test-dispatch-reap.sh +24/-1 (1141-vf9w, completed: arm 4 treats a
+          ZOMBIE as dead via /proc state; measured flake 3/3 on a forge).
+        - TRAPS for the relayer: (a) the 920-c3af litmus step names a test fn
+          present in the REF's main.rs and ABSENT on trunk, and salvage-audit
+          reads main.rs as linux-next-is-AHEAD, so the fn is invisible to the
+          candidate list; relay that main.rs hunk with the step or not at all.
+          (b) the tellme hunk's condition used the B_SOURCE typo; trunk fixed
+          it to BASH_SOURCE at efbd9708b, so rebase the hunk onto that.
+          (c) the five rows 920-mvgp, 920-ijwa, 923-ys2t, 926-3vs6, 920-eqjr
+          have NO candidate file of their own; any code they have sits in
+          files the audit reads as trunk-ahead and needs a hunk-level read
+          before the "implemented" claim is believed.
+        - the sibling ref salvage/unknown/20260916-920-cluster-forge-20260916
+          (6db5aa8b8) is superseded by this one (all 23 of its candidate files
+          byte-identical here); do not relay it.
+    exit_criteria:
+      - 'each candidate hunk of fdafd13d5 is relayed onto trunk or declined on this row with a reason; a later salvage-audit run shows no ref-may-be-AHEAD line for the relayed files (pre-fix: FAILS, 27 candidate lines)'
+      - 'each of the eight rows (920-c3af, 920-tqhs, 920-mvgp, 920-ijwa, 923-ys2t, 926-3vs6, 922-hm3n, 920-eqjr) is re-verified against TRUNK after the relay and either closed with a landed-commit citation or left ready with an event saying what is still missing (pre-fix: FAILS, all eight ready with their code only on the ref)'
+      - 'the 920-c3af litmus step and the main.rs test fn it runs land together, or neither lands'
+    verifiable_closure: |
+      on trunk after the relay: cargo test -p tillandsias-headless child_env_seeds_xdg_runtime_dir_from_the_same_uid;
+      cargo test -p tillandsias-headless opencode_lane_builder_mounts_only_per_lane_mcp_dir;
+      bash scripts/test-populate-hot-paths-negative-control.sh; bash scripts/test-dispatch-reap.sh;
+      each exits 0 (pre-fix: FAILS, the two test fns and the negative-control arms do not exist on trunk).
+    unscoreable: |
+      whether the five rows with no candidate file (920-mvgp, 920-ijwa, 923-ys2t,
+      926-3vs6, 920-eqjr) were ever really implemented cannot be scored from the
+      ref's candidate list; it takes a hunk-level read of trunk-ahead files, and
+      each of those rows closes on its own criteria, not this one's.
+    provenance: |
+      Filed by macuahuitl-forge (forge-forge-tillandsias-claude-20260927t024949z) at the coordinator's (macuahuitl-fedora)
+      request, from the 1424-w4ai slice-1 analysis, 2026-09-27.
+    events:
+      - type: filed
+        ts: "2026-09-27T02:49:49Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t024949z"
+        host: macuahuitl-forge
+        summary: |-
+          Split out of 1424-w4ai per the coordinator's ruling: a hunk-level relay
+          of fdafd13d5 plus re-verification of the eight rows it marks implemented.

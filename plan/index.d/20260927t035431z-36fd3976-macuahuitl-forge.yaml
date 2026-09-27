@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-enforcement-census-counts-an-assert-in-a-litmus-nothing-runs-beside-one-that-can-actually-go-red-so-a-closure-expressed-as-an-enforced-count-overstates-by-a-quarter
+    event:
+      type: note
+      ts: "2026-09-27T03:54:31Z"
+      agent_id: forge-forge-tillandsias-claude-20260927t035431z
+      host: macuahuitl-forge
+      summary: |
+        RELAY-WORTHY BUT CONFLICTS (from the work-ref triage 1430-9227, macuahuitl-forge 2026-09-27): work/1334-57at @ 3042222bc (esmeraldinha, 2026-09-21) holds a finished implementation: census-litmus-step-enforcement.sh +42, NEW test-census-enforced-reachability-split.sh (151 lines) and NEW litmus-census-enforced-reachability-split.yaml. Its fixture passes 7/7 on the ref's own tree ("the real corpus reconciles (181 + 66 == 247)"). But `git merge-tree --write-tree origin/linux-next origin/work/1334-57at` reports CONFLICTS (litmus-bindings.yaml reads trunk-ahead in salvage-audit). NEXT: the owner (esme) merges origin/linux-next into work/1334-57at, re-runs the fixture and the gate, and pushes for relay. The coordinator routes it when esme is back.

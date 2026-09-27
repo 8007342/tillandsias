@@ -13,7 +13,7 @@ set -euo pipefail
 # Find cheatsheets directory
 cheatsheets_dir="${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}"
 if [ ! -d "$cheatsheets_dir" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "${B_SOURCE[0]:-$0}")" && pwd)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
     if [ -d "$SCRIPT_DIR/../cheatsheets" ]; then
         cheatsheets_dir="$SCRIPT_DIR/../cheatsheets"
     elif [ -d "$SCRIPT_DIR/../../cheatsheets" ]; then

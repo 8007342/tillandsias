@@ -15,6 +15,7 @@ members = [
     "crates/tillandsias-podman",
     "crates/tillandsias-podman-cli",
     "crates/tillandsias-policy",
+    "crates/tillandsias-progress-tty",
     "crates/tillandsias-repeat-graph",
     "crates/tillandsias-router-sidecar",
     "crates/tillandsias-scanner",

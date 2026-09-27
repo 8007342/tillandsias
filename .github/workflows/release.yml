@@ -27,8 +27,13 @@ concurrency:
 # SAN mismatch; a tampered asset fails on its signature. The refs/heads
 # alternative (a workflow_dispatch run) is an ASSUMPTION until a dispatched
 # release exists to measure.
+# `[.]`, never `\.`: the Windows job runs this through Git Bash, whose MSYS
+# argument conversion rewrote every `\.` to `/.` before cosign.exe saw it, so
+# all five freshly signed Windows assets of v56.9.27.1 failed on SAN mismatch
+# (measured by yolanda, cosign v3.0.5: `\.` rc=1 "github/.com", `[.]` rc=0
+# plain and through an env var; Linux and macOS are unaffected either way).
 env:
-  RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP: '^https://github\.com/8007342/tillandsias/\.github/workflows/release\.yml@refs/(tags|heads)/'
+  RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP: '^https://github[.]com/8007342/tillandsias/[.]github/workflows/release[.]yml@refs/(tags|heads)/'
 
 jobs:
   release:

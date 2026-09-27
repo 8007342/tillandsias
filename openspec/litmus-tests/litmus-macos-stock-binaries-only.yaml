@@ -1,0 +1,44 @@
+# @trace spec:macos-native-tray, order:1420-umka, order:980-xcaf
+name: litmus:macos-stock-binaries-only
+spec: macos-native-tray
+phase: pre-build
+size: instant
+severity: high
+description: >
+  The macOS install and provision path runs only stock macOS binaries, named
+  so the user's PATH cannot choose them: every literal program spawned by the
+  macOS tray crate and the vm-layer's macOS provisioning sources is an absolute
+  path under /usr/bin, /bin, /usr/sbin, /sbin or /System, and
+  scripts/install-macos.sh pins PATH to those roots first thing. A developer
+  Mac has Homebrew on its shell PATH, so a bare or non-stock spawn works there
+  and fails on a clean Mac. MEASURED 2026-09-27: trunk had 15 bare-name spawns
+  (hdiutil, osascript, open, stty, security, bash) and an unpinned installer
+  PATH; a user's clean MacBook failed its first provision the same day.
+
+preconditions:
+  - workspace contains scripts/check-macos-stock-binaries.sh
+  - workspace contains scripts/test-check-macos-stock-binaries.sh
+  - workspace contains scripts/install-macos.sh
+  - workspace contains crates/tillandsias-vm-layer/src/vz.rs
+
+critical_path:
+  - step: "the tree spawns only absolute stock-macOS binaries and the installer pins PATH"
+    command: "bash scripts/check-macos-stock-binaries.sh 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:macos-stock-binaries:"
+  - step: "the lint refuses an added qemu-img, a bare hdiutil, a bare spawn_bounded name, a removed or Homebrew-widened PATH pin, and passes an absolute stock spawn"
+    command: "bash scripts/test-check-macos-stock-binaries.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "PASS: check-macos-stock-binaries 7/7"
+
+observability:
+  traces:
+    - "@trace spec:macos-native-tray"
+  expected_log: "no bare or non-stock binary on the macOS install/provision path"
+  log_fields:
+    spec: "macos-native-tray"
+    test: "macos-stock-binaries-only"
+
+failure_modes:
+  - "a new Command::new(\"<name>\") with a bare or Homebrew program on the macOS path"
+  - "the installer's PATH pin removed or widened to include /opt/homebrew or /usr/local"

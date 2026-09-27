@@ -264,22 +264,15 @@ cases:
       prerequisites. Before this packet the broad `blocks` classifier reversed
       the edge and returned downstream consumers 403 and 537. The milestone's
       completed direct dependency 443 is satisfied and must also be omitted.
+      1432-x3ug: 437 (forge-src-tmpfs-topology), the last OPEN upstream
+      prerequisite, completed on 2026-09-27 (9ee8ce57c), so the true answer is
+      now the EMPTY set: unsupported with zero citations. That still pins the
+      edge direction, since a reversed classifier would return 403/537 as
+      citations and break max_citations: 0. A case must not pin a live row as
+      open (1433 is the class).
     expect:
-      confidence: exact
-      citation_kind: plan
-      min_citations: 1
-      max_citations: 2
-      citations_include:
-        - path: plan/index.yaml
-          packet_id: forge-src-tmpfs-topology
-          order: "437"
-          desired_release: v0.5
-          span_contains:
-            - "packet_id: forge-src-tmpfs-topology"
-      citations_exclude:
-        - packet_id: zeroclaw-reintroduction-roadmap
-        - packet_id: v06-automation-milestone
-        - packet_id: concurrent-forges-shared-stack-safety
+      confidence: unsupported
+      max_citations: 0
       answer_contains:
         - "direct unsatisfied prerequisites blocking 'forge-local-experts-milestone'"
 

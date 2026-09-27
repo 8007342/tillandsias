@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: native-clippy-deny-warnings-reds-tillandsias-windows-tray-on-three-sites-and-no-gate-a-windows-host-runs-would-see-it
+    order: 1434-vm7g
+    status: ready
+    kind: finding
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, rust, clippy, gate, regime]
+    estimated_hours: 2
+    owned_files: [crates/tillandsias-windows-tray/src/hvsocket.rs, crates/tillandsias-windows-tray/src/notify_icon.rs, crates/tillandsias-windows-tray/src/tray_phase_icon.rs]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-mechanism-is-chosen: the pin is whichever gate the fixer adds
+      (a toolchain pin, a Windows clippy gate step, or both).
+    title: |
+      native clippy 0.1.98 with -D warnings reds tillandsias-windows-tray on three untouched sites, and no gate sees it: the repo pins no toolchain and the Linux gate never compiles the cfg(windows) crate
+    verifiable_closure: |
+      (1) cargo clippy -p tillandsias-windows-tray --all-targets -- -D warnings is clean on a
+      Windows host; and (2) some gate a Windows host actually runs would refuse a NEW clippy
+      warning in this crate (shown by a sabotage). Pre-fix result: FAILS (1), measured on
+      yolanda 2026-09-27 with clippy 0.1.98 (88d9e12ae1 2026-08-18): 3 errors, identical with
+      the 1417-t29c change stashed. (2) fails by construction today.
+    context: |
+      Found while gating 1417-t29c (work/1417-t29c). The three sites:
+        hvsocket.rs:138          clippy: this pattern is unneeded as the .. pattern can match that element
+        notify_icon.rs:422       clippy: using chunks_exact with a constant chunk size
+        tray_phase_icon.rs:134   clippy: using chunks_exact with a constant chunk size
+      No rust-toolchain file exists, so each host lints with whatever its toolchain ships,
+      and the gate runs in the Linux builder, which never compiles this crate. The mechanism
+      is left to the fixer (coordinator, 2026-09-27): pin a toolchain, add a Windows clippy
+      gate step, or both.
+    events:
+      - type: filed
+        ts: "2026-09-27T05:24:33Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request, from gating 1417-t29c.

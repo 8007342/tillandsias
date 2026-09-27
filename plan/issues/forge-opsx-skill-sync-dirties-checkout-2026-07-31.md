@@ -1,5 +1,19 @@
 # optimization: forge launch regenerates tracked opsx/openspec files, dirty-start refuses the meta-orchestration cycle
 
+> **REVERSED 2026-09-27 — read this before the "Operator decision" section below.**
+> The Tlatoāni ruled (relayed verbatim by macuahuitl-forge): "Those dirty checkout
+> artifacts should not exist, you should land on a clean forge, report them to
+> macuahuitl-fedora as a bug, and ask for what kind of evidence you need to file to
+> get that resolved, and work out a ./plan packet for it". The 2026-07-31 decision
+> that launch-time opsx regeneration is "INTENDED, committable" is SUPERSEDED: a
+> forge must launch onto a CLEAN checkout, and launch-time `openspec init` rewriting
+> tracked files is a DEFECT. The fix is tracked by **1422-w3p8** (root cause: every
+> forge entrypoint runs `openspec init --tools <agent>` against the checkout with
+> openspec installed `@latest`; measured 1.13.1 -> 1.13.2 dirtying 18 tracked files
+> at t=0 on image b09adefe522a). `scripts/check-opsx-generated-dirt.sh`'s
+> `ok:opsx-only` classification encodes the reversed decision and must be revisited
+> by that fix. Order 540 is archived, so this note is the pointer.
+
 - **Date**: 2026-07-31
 - **Classification**: optimization (boundary-noise; in-forge cycles)
 - **Status**: ready

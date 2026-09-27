@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-sigtermed-macos-tray-skips-the-vm-stop-path-and-leaves-the-per-launch-swap-image-behind
+    event:
+      type: progress
+      ts: "2026-09-27T04:26:22Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t042622z
+      host: tlatoanis-macbook-air
+      summary: |
+        LIVE ARM PASSES on work/1426-cb6g c2511b865 (also covers 1244-9dx3), signed dist bundle, provisioned VM, /Applications untouched: SIGTERM -> vm-swap.img removed, VM released, tray exits, no new crash report; quit Apple event by bundle id (the installer's new graceful stage) -> same, 76 s. Root causes found on the way, both pre-existing and shared by the menu Quit: (a) the in-VM VmShutdownRequest was bounded only at connect, so a guest with no handler parked Quit forever (4+ min, tokio workers idle); now bounded at 10 s. (b) VzRuntime::stop ran on a tokio worker and VZ trapped (SIGTRAP, dispatch_assert_queue under -[VZVirtualMachine requestStopWithError:]) before removing vm-swap.img; the stop now runs on the main thread. Menu Stop VM has the same worker-side stop: 1429-u2wd.

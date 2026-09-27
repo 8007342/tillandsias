@@ -147,9 +147,49 @@ case "$rc:$out" in
     *) echo "FAIL  8b: rc=$rc [$out]"; failures+=("8b") ;;
 esac
 
+# ── 9. A COSIGN REFUSAL IS NOT A BYTE MEASUREMENT (1425-8wir). v56.9.27.1: all
+# five Windows assets were refused seconds after the same job signed them,
+# their sha256 matched, and the report said "the bytes changed ... Re-stage",
+# having discarded cosign's actual reason. The refusal must carry cosign's
+# words and must NOT prescribe a re-stage.
+idstub="$work/idstub-bin"; mk "$idstub"
+cat > "$idstub/cosign" <<'EOS'
+#!/bin/sh
+echo 'Error: none of the expected identities matched what was in the certificate, got subjects [https://github.com/elsewhere/x/.github/workflows/release.yml@refs/tags/v1] with issuer https://token.actions.githubusercontent.com' >&2
+echo 'main.go:74: error during command execution: none of the expected identities matched' >&2
+exit 1
+EOS
+chmod +x "$idstub/cosign"
+rc=0; out="$(PATH="$idstub:$PATH" RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP='.*' "$CHECK" "$d" 2>&1)" || rc=$?
+case "$rc:$out" in
+    1:*"cosign verify-blob REFUSED"*"none of the expected identities matched"*) echo "PASS  9a the refusal carries cosign's own reason" ;;
+    *) echo "FAIL  9a cosign's reason is not in the violation: rc=$rc [$out]"; failures+=("9a") ;;
+esac
+case "$out" in
+    *"bytes do not match"*|*"bytes changed"*|*"Re-stage the artifact"*) echo "FAIL  9b a cosign refusal is reported as changed bytes / re-stage: [$out]"; failures+=("9b") ;;
+    *) echo "PASS  9b a cosign refusal does not claim the bytes changed" ;;
+esac
+# 9c. The v2 retry path: the first call's "bundle does not contain cert" must
+# not mask the retry's own reason.
+rtstub="$work/rtstub-bin"; mk "$rtstub"
+cat > "$rtstub/cosign" <<'EOS'
+#!/bin/sh
+case " $* " in
+  *" --new-bundle-format "*) echo 'Error: verifying bundle: certificate identity mismatch on retry' >&2 ;;
+  *) echo 'Error: bundle does not contain cert for verification, please provide public key' >&2 ;;
+esac
+exit 1
+EOS
+chmod +x "$rtstub/cosign"
+rc=0; out="$(PATH="$rtstub:$PATH" RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP='.*' "$CHECK" "$d" 2>&1)" || rc=$?
+case "$rc:$out" in
+    1:*"certificate identity mismatch on retry"*) echo "PASS  9c the retry's reason is the one reported" ;;
+    *) echo "FAIL  9c the retry's reason was lost: rc=$rc [$out]"; failures+=("9c") ;;
+esac
+
 if [ "${#failures[@]}" -gt 0 ]; then
     echo "FAIL: ${#failures[@]} scenario(s): ${failures[*]}"
     exit 1
 fi
-echo "ok:release-asset-integrity-fixture:11"
+echo "ok:release-asset-integrity-fixture:14"
 exit 0

@@ -1739,11 +1739,13 @@ fn prompt_line(label: &str, hidden: bool) -> String {
     // already-confusing hang is a hostile end state, and it outlives the
     // process.
     if hidden {
-        let _ = std::process::Command::new("stty").arg("-echo").status();
+        let _ = std::process::Command::new("/bin/stty")
+            .arg("-echo")
+            .status();
     }
     let restore_echo = || {
         if hidden {
-            let _ = std::process::Command::new("stty").arg("echo").status();
+            let _ = std::process::Command::new("/bin/stty").arg("echo").status();
             println!(); // newline the suppressed Enter would have produced
         }
     };

@@ -25,6 +25,12 @@
 # =============================================================================
 
 set -euo pipefail
+# 1420-umka: resolve every tool from stock macOS only. A `curl | bash` inherits
+# the user's shell PATH, where Homebrew (/opt/homebrew/bin, /usr/local/bin) can
+# shadow a stock tool with a different one; the tray's GUI launch never sees
+# that PATH, so a developer Mac would pass while a clean Mac fails.
+# scripts/check-macos-stock-binaries.sh refuses this line's removal.
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
 
 REPO="8007342/tillandsias"
 ASSET_PREFIX="tillandsias-tray-"

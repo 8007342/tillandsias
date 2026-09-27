@@ -113,8 +113,25 @@ critical_path:
     timeout_ms: 30000
     expected_behavior: "ok-probe"
 SPEC
-( cd "$_nc" && bash "$_nc/scripts/run-litmus-test.sh" "$_s" --phase pre-build --size all >/dev/null 2>&1 )
-if [ -f "$SHARED" ]; then
+# 1427-utmy: since 1419-zydw the runner REFUSES (blocked:litmus-no-plan-binary)
+# when no runnable plan binary resolves, and a scratch copy of scripts/ resolves
+# none on a host without CARGO_TARGET_DIR (every Mac gate went red here). Hand it
+# THIS checkout's binary: the arm is about the timing log, not plan binaries.
+# No binary on this host at all is a NAMED skip, never the opt-out, which would
+# hide a real miss.
+. "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+_pb="$( cd "$ROOT" && resolve_plan_binary 2>/dev/null || true )"
+case "$_pb" in /*) ;; ?*) _pb="$ROOT/$_pb" ;; esac
+if [ -z "$_pb" ]; then
+    echo "  skip  arm 3 needs a runnable tillandsias-plan and this host has none (1427-utmy)"
+    rm -rf "$_nc"
+    _arm3_skipped=1
+else
+    ( cd "$_nc" && TILLANDSIAS_PLAN_BIN="$_pb" bash "$_nc/scripts/run-litmus-test.sh" "$_s" --phase pre-build --size all >/dev/null 2>&1 )
+fi
+if [ "${_arm3_skipped:-0}" = 1 ]; then
+    :
+elif [ -f "$SHARED" ]; then
     ok "an unnamed run wrote $(wc -l < "$SHARED") record(s) to $SHARED — arm 2 is a real assertion"
 else
     bad "the runner did not split the log even unnamed; arm 2 proves nothing and this fixture is vacuous"

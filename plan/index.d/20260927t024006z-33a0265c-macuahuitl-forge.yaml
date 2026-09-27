@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: release-freeze-set-pushes-origins-branch-tip-sha-read-by-ls-remote-which-fails-when-that-object-is-not-local-and-reports-it-as-origin-unreachable
+    field: status
+    value: completed
+    ts: "2026-09-27T02:40:06Z"
+    host: macuahuitl-forge
+
+events:
+  - packet_id: release-freeze-set-pushes-origins-branch-tip-sha-read-by-ls-remote-which-fails-when-that-object-is-not-local-and-reports-it-as-origin-unreachable
+    event:
+      type: completed
+      ts: "2026-09-27T02:40:06Z"
+      host: macuahuitl-forge
+      summary: |-
+        status 'completed' with evidence_refs: 7ef74ed31
+  - packet_id: release-freeze-set-pushes-origins-branch-tip-sha-read-by-ls-remote-which-fails-when-that-object-is-not-local-and-reports-it-as-origin-unreachable
+    event:
+      type: note
+      ts: "2026-09-27T02:40:06Z"
+      host: macuahuitl-forge
+      summary: |-
+        landed in land59: relay commit 7ef74ed31 on origin/linux-next under a18724b9c, GitHub-verified; it contains the work ref tip. release-freeze set fetches a remote tip it lacks and names git's refusal; fixture arm 7 21/21 (pre-fix 19/21).
