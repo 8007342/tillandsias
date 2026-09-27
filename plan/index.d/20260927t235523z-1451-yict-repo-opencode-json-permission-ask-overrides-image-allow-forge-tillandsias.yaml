@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-repo-root-opencode-json-sets-permission-ask-which-overrides-the-forge-images-permission-allow-so-interactive-opencode-sessions-in-this-project-prompt-for-every-tool
+    order: 1451-yict
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, opencode, permissions, ux, config]
+    estimated_hours: 2
+    owned_files:
+      - opencode.json
+      - images/default/config-overlay/opencode/config.json
+      - images/default/entrypoint-forge-opencode.sh
+    title: |
+      the repository's root opencode.json sets "permission": "ask" (687eb6d57), and OpenCode merges project config OVER the forge image's global "permission": "allow", so in this project interactive OpenCode sessions ask for tool permission while `opencode run` (--auto) does not: the likely cause of the operator's "OpenCode sometimes works, sometimes asks for permissions"
+    context: |
+      OBSERVED by macuahuitl-forge while working 1447-nmq3 (OpenCode was observation-only
+      there), 2026-09-27:
+      - images/default/config-overlay/opencode/config.json -> ~/.config/opencode/config.json
+        carries "permission": "allow" (this forge's live copy says "allow").
+      - the repo root opencode.json carries "permission": "ask", added by 687eb6d57
+        (2026-08-26, "wire local expert system with domain-separated RAG, adversarial
+        decomposition, and OpenCode Local Experts mode").
+      - entrypoint-forge-opencode.sh passes --auto ("auto-approve permissions that are not
+        explicitly denied") only on its `opencode run` paths (prompted and unattended);
+        the interactive TUI launch gets no such flag.
+      HYPOTHESIS, UNMEASURED: TUI sessions ask, run sessions do not, which reads as
+      "sometimes". Not measured here: this Claude forge has no opencode installed. Measure
+      in an OpenCode forge on this project: launch the TUI and attempt one tool call
+      (expect a prompt), then `opencode run --auto` the same request (expect none), then
+      repeat with the repo's "permission" key removed (expect no prompt in either).
+      Operator direction (1447-nmq3, 2026-09-27): nothing in a forge should prompt for the
+      checked-out project.
+    exit_criteria:
+      - 'the measurement above is recorded (TUI and run, with and without the repo key) (pre-fix: FAILS, unmeasured)'
+      - 'an interactive OpenCode session in a forge on this repository does not prompt for tool permission, and bare-metal (non-forge) OpenCode use of the repo keeps whatever the repo intends (pre-fix: FAILS, the repo key forces ask everywhere)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix chooses between dropping the repo key,
+      scoping it, or overriding it in the forge overlay; its fixture lands with it.
+    events:
+      - type: filed
+        ts: "2026-09-27T23:55:23Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t163026z"
+        host: forge-tillandsias
+        summary: |-
+          Filed by macuahuitl-forge on the coordinator's direction, from the
+          1447-nmq3 OpenCode observation.

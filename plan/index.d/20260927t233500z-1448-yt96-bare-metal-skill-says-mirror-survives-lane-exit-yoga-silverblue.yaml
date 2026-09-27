@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: initialize-bare-metal-host-says-exiting-the-lane-leaves-the-stack-running-but-the-last-lane-exit-tears-the-mirror-down-by-design
+    order: 1448-yt96
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [docs, skills, git-mirror, bare-metal]
+    estimated_hours: 1
+    owned_files:
+      - skills/initialize-bare-metal-host/SKILL.md
+    observed_by: yoga-silverblue
+    unscoreable: |
+      docs-only: the defect is one sentence of skill prose contradicting the code's lane teardown;
+      no litmus pins skill prose and adding one for a single sentence would pin wording, not
+      behaviour. The behaviour itself is already observable by scripts/check-bare-metal-host-initialized.sh.
+    title: |
+      skills/initialize-bare-metal-host section 1 says exiting the lane shell "leaves the stack running", but the last lane's exit tears the per-project mirror down by design, so a host following the page reads mirror=down right after it
+    verifiable_closure: |
+      The section 1 text states what the code does: the per-project mirror (and the rest of the
+      project half of the stack) lives only while a lane of that project is active, and the
+      application-lifetime services (vault, proxy, router) survive. Checked against the teardown
+      path in crates/tillandsias-headless/src/main.rs (the refcounted "no active lane containers;
+      cleaning project + shared stack" branch). Pre-fix result: FAILS — the page says the stack stays up.
+    context: |
+      MEASURED on yoga 2026-09-27 after land78 b01b25f8c. Following section 1 verbatim -
+      tillandsias --ensure-enclave, then an interactive tillandsias --bash tillandsias exited at once -
+      left only tillandsias-vault and tillandsias-router running; the lane log reads "[tillandsias] no
+      active lane containers; cleaning project + shared stack for tillandsias (lane-scoped:
+      tillandsias-inference; keeping application-lifetime: tillandsias-vault, tillandsias-proxy,
+      tillandsias-router, ...)" and scripts/check-bare-metal-host-initialized.sh answered
+      todo:initialize-bare-metal-host:mirror. With a lane held open the same checker answered
+      mirror=up. The code comments at main.rs ~7730-7789 show the teardown is the intended
+      refcount (last lane out stops the project half; a sibling launch in flight keeps it), so the
+      page is what is wrong. Coordinator direction (macuahuitl, 2026-09-27): decide by reading the
+      code path; a skill-only fix rides a work ref.
