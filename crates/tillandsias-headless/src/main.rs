@@ -16616,42 +16616,60 @@ fn forge_hot_src_tmpfs(project_name: &str) -> String {
     format!("/home/forge/src:size={budget}m,mode=0777")
 }
 
-/// The project mirror's `size-pack` in KiB, or 0 when it cannot be read.
+/// The project mirror's object store in KiB (packs PLUS loose objects), or 0
+/// when it cannot be read.
 ///
 /// 0 is not a guess dressed as a measurement: `compute_hot_budget` clamps it UP
 /// to `HOT_PATH_BUDGET_FLOOR_MB`, which is exactly the spec's "Empty mirror
 /// returns floor (256 MB)" scenario. A fresh project has no mirror yet, and
-/// fail-closing a launch on an unreadable pack size would break the first
-/// launch of every project to protect a number that only tunes a cap.
+/// fail-closing a launch on an unreadable size would break the first launch of
+/// every project to protect a number that only tunes a cap.
 ///
-/// @trace order:997-e4v2
+/// ORDER 1445-7u63 — THIS PROBE HAD RETURNED 0 ON EVERY ROOTLESS HOST, for
+/// three independent reasons, so every forge got the 256M floor however big
+/// its repository was (lenovinha 2026-09-27: a 167M `.git` in a 256M tmpfs,
+/// filled to 100%, git died mid-write; macuahuitl-forge the day before):
+///   1. It read the named volume's host mountpoint as the invoking user, but a
+///      rootless mirror volume is owned by a subuid: "Permission denied".
+///   2. It ran `git -C <mountpoint>`, the volume ROOT (mounted at /srv/git),
+///      while the repository is `/srv/git/<project>`, one level down.
+///   3. It passed `-H`, whose "165.47 MiB" is not the KiB integer the parser
+///      reads.
+/// Asking the MIRROR CONTAINER fixes all three: it owns the files, it knows the
+/// in-container path, and it has git, which the VM guest's host OS does not.
+/// The size now includes loose objects (`parse_repo_size_kb`).
+///
+/// @trace order:997-e4v2, order:1445-7u63
 /// @trace spec:forge-hot-cold-split (Requirement: Per-launch project source
-///   budget — step 1, the mirror's `git count-objects -v -H`)
+///   budget — step 1, the mirror's `git count-objects -v`)
 fn forge_mirror_pack_size_kb(project_name: &str) -> u64 {
-    let mut inspect = podman_command();
-    inspect.args([
-        "volume",
-        "inspect",
-        &format!("tillandsias-mirror-{project_name}"),
-        "--format",
-        "{{.Mountpoint}}",
-    ]);
-    let Ok(mountpoint) = podman_command_output(inspect, false) else {
-        return 0;
-    };
-    if mountpoint.is_empty() {
-        return 0;
+    let mut probe = podman_command();
+    probe.args(mirror_repo_size_probe_args(project_name));
+    match podman_command_output(probe, false) {
+        Ok(out) => tillandsias_core::config::parse_repo_size_kb(&out),
+        Err(e) => {
+            eprintln!(
+                "[tillandsias] forge source budget: could not measure the {project_name} mirror \
+                 ({e}); using the floor"
+            );
+            0
+        }
     }
-    let Ok(output) = Command::new("git")
-        .args(["-C", &mountpoint, "count-objects", "-v", "-H"])
-        .output()
-    else {
-        return 0;
-    };
-    if !output.status.success() {
-        return 0;
-    }
-    tillandsias_core::config::parse_size_pack_kb(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// The podman argv for [`forge_mirror_pack_size_kb`]: `count-objects -v`
+/// (KiB, no `-H`) inside the project's mirror container, on the repository
+/// path, not the volume root.
+fn mirror_repo_size_probe_args(project_name: &str) -> Vec<String> {
+    vec![
+        "exec".into(),
+        format!("tillandsias-git-{project_name}"),
+        "git".into(),
+        "-C".into(),
+        format!("/srv/git/{project_name}"),
+        "count-objects".into(),
+        "-v".into(),
+    ]
 }
 
 /// In-container mount point of the DURABLE spec-index tier (order 801-a2by).
@@ -29229,6 +29247,36 @@ esac
     /// caught this — only a test that reaches the LAUNCH PATH can.
     ///
     /// @trace order:997-e4v2, spec:forge-hot-cold-split
+    /// Order 1445-7u63: the size probe asks the MIRROR CONTAINER, on the
+    /// REPOSITORY path, in KiB. Each clause pins one of the three defects that
+    /// made the pre-fix probe return 0 on every rootless host: reading the
+    /// subuid-owned volume as the host user, measuring the volume root instead
+    /// of `/srv/git/<project>`, and `-H` output the KiB parser cannot read.
+    #[test]
+    fn mirror_size_probe_execs_in_the_mirror_on_the_repo_path_in_kib() {
+        let args = mirror_repo_size_probe_args("tillandsias");
+        assert_eq!(
+            args,
+            [
+                "exec",
+                "tillandsias-git-tillandsias",
+                "git",
+                "-C",
+                "/srv/git/tillandsias",
+                "count-objects",
+                "-v"
+            ]
+        );
+        assert!(
+            !args.iter().any(|a| a == "-H"),
+            "human-readable sizes are not KiB"
+        );
+        assert!(
+            !args.iter().any(|a| a == "volume" || a == "inspect"),
+            "the host cannot read a rootless volume's mountpoint"
+        );
+    }
+
     #[test]
     fn forge_src_is_a_hot_tmpfs_sized_by_compute_hot_budget() {
         let spec = forge_hot_src_tmpfs("a-project-with-no-mirror-on-this-host");
