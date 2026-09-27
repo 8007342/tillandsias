@@ -223,7 +223,7 @@ if [ "${#violations[@]}" -gt 0 ]; then
     fi
     if [ "${#cosign_refused[@]}" -gt 0 ]; then
         i=0
-        for v in "${cosign_refused[@]}"; do
+        for v in ${cosign_refused[@]+"${cosign_refused[@]}"}; do
             echo "  $v: cosign verify-blob REFUSED — cosign says: ${cosign_reason[$i]:-<no stderr>}" >&2
             i=$((i + 1))
         done
