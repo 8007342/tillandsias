@@ -400,6 +400,7 @@ specs:
   - litmus:mcp-discoverability-shape
   - litmus:mcp-server-request-fault-isolation
   - litmus:mcp-live-build-check-fixture
+  - litmus:json-get-help-names-its-subset
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
   - litmus:forge-experts-stale-source-honesty
@@ -662,6 +663,7 @@ specs:
   - litmus:exit-code-provisioned-zero-degraded-two-symmetric
   - litmus:macos-tray-architectural-invariants
   - litmus:pty-attach-project-threading-symmetric
+  - litmus:macos-stock-binaries-only
   coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: methodology-accountability
@@ -951,6 +953,7 @@ specs:
   - litmus:spec-traceability-shape
   - litmus:spec-traceability-usage-shape
   - litmus:litmus-runner-backslash-escaping-shape
+  - litmus:litmus-no-plan-binary-refusal
   - litmus:litmus-stdlib-portability-shape
   - litmus:litmus-name-filter-fail-loud-shape
   - litmus:litmus-name-filter-hint-shape

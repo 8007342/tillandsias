@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: release-freeze-set-pushes-origins-branch-tip-sha-read-by-ls-remote-which-fails-when-that-object-is-not-local-and-reports-it-as-origin-unreachable
+    event:
+      type: note
+      ts: "2026-09-27T01:36:08Z"
+      agent_id: forge-forge-tillandsias-claude-20260927t013608z
+      host: macuahuitl-forge
+      summary: |
+        FINDING — the hooksPath sweep this row's note suggested, measured by macuahuitl-forge 2026-09-27 in a forge whose global core.hooksPath is /home/forge/.cache/tillandsias/git-hooks. SURVEY: every fixture that creates a bare scratch remote and writes server-side hooks (pre-receive/post-receive/update), across scripts/test-*.sh, litmus yamls, crates and other scripts. EIGHT found; ZERO unpinned (the only unpinned case was this row's own ARM 7b draft, pinned before it was pushed).
+        MUTATION TABLE: each fixture run as-is, then with its bare-repo core.hooksPath pin deleted:
+          test-no-stale-base-revert-pre-receive     PASS 6/6          -> unpinned FAIL 3/6 red                (pin is the only defence)
+          test-land-merges-trunk                    ok 8 arms         -> unpinned violation: 2 arm(s) failed  (pin is the only defence)
+          test-pre-receive-yaml-gate                ALL TESTS PASSED  -> unpinned "invalid YAML was accepted" (pin is the only defence)
+          test-git-mirror-ref-convergence           PASS -> PASS  (also sets HOME=$WORK/home; measured: a HOME override alone drops the global hooksPath)
+          test-git-mirror-relay-verified-ack        PASS -> PASS  (also GIT_CONFIG_GLOBAL=$WORK/gitconfig + GIT_CONFIG_NOSYSTEM=1)
+          test-git-mirror-existing-volume-hardening PASS -> PASS  (same)
+          test-git-mirror-relay-token-expiry        PASS -> PASS  (same)
+          test-mirror-receive-wrapper               not run (needs podman): upgraded-volume arms set GIT_CONFIG_GLOBAL to an empty file and install inert exit-0 hooks; the M5 arm runs inside the git-service container and asserts a marker the hook writes (/tmp/fx/receive-env)
+        Sweep done, no defect; a decider was considered and declined as unwarranted for one occurrence.

@@ -105,3 +105,97 @@ inferring it post-hoc.
   `forge-trust-ca-source-readiness-gap-2026-07-23.md`; this retires the CLASS.
 - NOT changing the Vault security boundary, squid bump/splice policy, or CA generation crypto.
 - NOT a v0.4 change — durable v0.5 architecture; current launches keep working unchanged.
+
+## Research gate, slice 1 — citations re-verified against d0454b3d4 (lenovinha, 2026-09-27)
+
+The packet was written against a July tree. Before any FSM is designed, each
+motivating citation was re-read on today's trunk. Four of the six premises have
+moved; one new hazard appeared that the original text did not name, and it is
+the strongest argument this row has.
+
+### What changed since 2026-07-24
+
+| Premise (July) | Today | Consequence |
+|---|---|---|
+| `CA_DIR = /tmp/tillandsias-ca` (tmpfs; a wipe is routine) | `ca_dir()` = `${HOME}/.local/state/tillandsias/ca` via the `images/default/ca-path.txt` manifest (1027-539s, `crates/tillandsias-core/src/ca_path.rs`) | The tmpfs-wipe incident is no longer routine. Exit criterion 2's fixture (delete the dir before a forge create) still tests the gate, but it stops being a model of an everyday event. `absent` stays in the FSM for first run and for manual deletion, not as the main path |
+| `CaBundle` is edge-less and satisfied once | Still true in `container_deps.rs` (`(Service::CaBundle, &[])`, line 76). Proxy, GitLogin and ForgeLaunch all declare it, so presence is already a precondition for every consumer | "Defer until PRESENT" already exists. What is missing is "defer until VALID/CURRENT" |
+| No data-state nodes | `unified_deps.rs` (order 470) adds `CaBundleValid` with edges from Proxy, GitLogin, GithubTokenPresent and ForgeLaunch, but the module is `#![allow(dead_code)]`, and only `mod unified_deps;` references it | The node the design needs exists as a prototype with no production caller. This row should extend it rather than add a third graph |
+| LivenessProbe re-ensures `[Vault, Proxy]` only | Unchanged (`container_deps.rs` `run_check`; the comment "CaBundle is a file, not a container") | Probe gap confirmed |
+| FlowState channel is a proposal | `ControlMessage::FlowStatePush { seq, source, from_state, to_state, reason, ts_unix }` is on the wire (`control-wire/src/lib.rs`, additive, no `WIRE_VERSION` bump) and dispatched in `control_dispatch.rs` | Exit criterion 4 needs no wire change; cert transitions are values of `from_state`/`to_state` |
+| Forge soft-degrades to vendor roots | Unchanged: `lib-common.sh` prints `[trust] WARNING: runtime proxy CA is not mounted; using vendor roots only` and continues | Criterion 2(b) is still falsifiable as written |
+
+### NEW: rotation opens a split-trust window between the proxy and new consumers
+
+Measured by reading the code path, not by a live run yet:
+
+1. `ensure_ca_bundle` rotates when either file is older than 25 days
+   (`ca_bundle_needs_refresh`, `max_age = 25d`) and publishes by
+   `fs::rename(tmp, crt)`, so the rotated certificate has a NEW inode.
+2. Every consumer mounts `intermediate.crt` as a FILE bind mount
+   (`target=/run/tillandsias/ca-chain.crt`, eight call sites in `main.rs`). A
+   file bind mount pins the inode, so running consumers keep the OLD
+   certificate. The forge also composes its trust bundle once at start
+   (`init_runtime_ca_trust` in `lib-common.sh`), so a directory mount would not
+   fix this either: **a rotation reaches a consumer only through a restart.**
+3. The proxy receives the CA key as a podman secret (755-qcxh), created only
+   at proxy launch. `ensure_proxy_running` returns early when
+   `tillandsias-proxy` is already running, without comparing the key it was
+   started with to the key on disk.
+4. `ForgeLaunch` depends on both `CaBundle` and `Proxy`. So the first forge
+   launch after day 25 ROTATES the CA (CaBundle satisfier), finds the proxy
+   running (early return), and starts a forge that trusts ONLY the new
+   certificate while the proxy still signs bumped leaves with the OLD key.
+
+The predicted symptom is TLS verification failure inside a fresh forge for
+every bumped (non-spliced) host, while older forges keep working. That points
+the operator away from the cause. A proxy restart at the next host boot clears
+it, which would explain why it has not been filed as its own incident on hosts
+that reboot within the window.
+
+This changes the priority order inside this row. Restart-on-rotation is no
+longer about stale consumers slowly converging. It is an ORDERING requirement
+with a correctness failure when it is violated: **the proxy must be re-ensured
+from the rotated key BEFORE any consumer that mounts the rotated certificate
+starts.** The minimum sound rule:
+
+- The CaBundle node records a generation (the certificate's fingerprint or
+  inode) when it is satisfied.
+- The Proxy node records the generation it was started with.
+- `Proxy` is satisfied only when the two match. A mismatch re-ensures the
+  proxy (`--replace`, respecting `container_mutations_allowed()`) before the
+  consumer's create proceeds.
+
+That is one edge property (generation equality on CaBundle→Proxy), not the
+full FSM, and it closes the correctness hole on its own. The full FSM (defer
+until trusted, fan-out restart of long-running forges) remains the rest of the
+row.
+
+### State-set decision (investigation item 1)
+
+Mapping each incident onto the proposed FSM:
+
+| Incident | State needed |
+|---|---|
+| first run / manual deletion | `absent` |
+| SELinux relabel, 1dda3032 (present but unreadable) | `unreadable` |
+| split-trust window (above) | `rotated`, plus a per-edge generation |
+| pinned inode in long-running forges | `rotated`, plus a per-edge generation |
+| vendor-roots fallback | `mounted` vs `trusted` (the consumer's own verdict) |
+
+`propagating` is not needed as a node state. It is exactly "some edge's
+generation lags the node's generation", which is per-edge data. `expiring` is
+not needed either: the 25-day refresh makes expiry a scheduled rotation, and no
+incident has been an expiry. **Proposed node states: `absent`, `unreadable`,
+`current(gen)`, plus per-edge `consumer_gen`; a transition is a generation
+change.** That is smaller than the July FSM, and every state maps to an
+incident.
+
+### Next slice
+
+1. Live confirmation of the split-trust window on a disposable enclave: age
+   the CA files past 25 days (`touch -d`), launch a forge with the proxy
+   already running, and check TLS through the proxy from the new forge. The
+   prediction is a failure; the control is the same run with the proxy
+   restarted first.
+2. The CaBundle→Proxy generation-equality edge, with a unit test in
+   `container_deps.rs` that fails on today's early return.

@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: test-selector-flags-host-scoped-criteria-exits-3-inconclusive-whenever-the-live-ledger-batch-has-no-host-scoped-row-so-every-hosts-preflight-reads-refused-on-a-clean-tree
+    order: 1420-9jdf
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [preflight, fixture, selector, hermetic]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-selector-flags-host-scoped-criteria.sh
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixing commit makes the fixture build
+      its own scratch ledger containing a host-scoped row (or name a skip when it
+      cannot), in the same commit (1136-n8sh). Closure: on a clean trunk worktree
+      whose live batch has no host-scoped row, ./build.sh --preflight no longer
+      reports this fixture as refused. PRE-FIX RESULT: FAILS — exit 3
+      "inconclusive batch" on clean origin/linux-next (macuahuitl-forge,
+      2026-09-26).
+    title: |
+      test-selector-flags-host-scoped-criteria (1199-aw6m's guard, row completed) exits 3 "inconclusive batch" whenever TODAY's live ledger batch contains no host-scoped row, so ./build.sh --preflight reads refused=1 on a clean tree on every host — a fixture asserting a property of the live ledger rather than of the code, which trains agents to discount preflight refusals
+    context: |
+      MEASURED by the rebuilt macuahuitl-forge 2026-09-26 ~22:50Z: preflight
+      refused=1 on its own change AND identically on a clean origin/linux-next
+      worktree; the one refusal is this fixture's exit 3. 1199-aw6m (the row that
+      created the guard) is completed, so a finding event there would not be
+      selectable; this row carries it. See the event appended to 1199-aw6m the
+      same evening and the memory a-fixture-can-pin-the-bugs-symptom-as-a-contract.
+    deliverable: |
+      A hermetic fixture (scratch ledger with a host-scoped row) or a named skip;
+      preflight no longer refuses on a clean tree.
+    provenance: |
+      Filed by the macuahuitl coordinator 2026-09-26 from macuahuitl-forge's report.

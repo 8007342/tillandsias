@@ -342,7 +342,7 @@ mod live {
                 // Warp doesn't honor osascript snippets; open the app
                 // and let the user paste the next step. For the stub
                 // message we just open Warp.
-                std::process::Command::new("open")
+                std::process::Command::new("/usr/bin/open")
                     .arg("-a")
                     .arg("Warp")
                     .spawn()?;
@@ -350,7 +350,7 @@ mod live {
             }
             Terminal::TerminalApp => applescript_for_open_shell_stub(message),
         };
-        std::process::Command::new("osascript")
+        std::process::Command::new("/usr/bin/osascript")
             .arg("-e")
             .arg(&snippet)
             .spawn()?;
@@ -378,7 +378,7 @@ mod live {
             )
         })?;
         let snippet = applescript_for_attach_client_tagged(exe, slave_path, sock_path);
-        std::process::Command::new("osascript")
+        std::process::Command::new("/usr/bin/osascript")
             .arg("-e")
             .arg(&snippet)
             .spawn()?;
@@ -408,7 +408,7 @@ mod live {
         budget: std::time::Duration,
     ) -> Option<(u16, u16)> {
         let snippet = applescript_for_tagged_window_geometry(&attach_window_title_token(sock_path));
-        let mut child = tokio::process::Command::new("osascript")
+        let mut child = tokio::process::Command::new("/usr/bin/osascript")
             .arg("-e")
             .arg(&snippet)
             .stdout(std::process::Stdio::piped())
@@ -791,7 +791,7 @@ mod live_geometry_probe {
              activate\nend tell",
             applescript_escape(&tag)
         );
-        let st = std::process::Command::new("osascript")
+        let st = std::process::Command::new("/usr/bin/osascript")
             .arg("-e")
             .arg(&open)
             .status()
@@ -799,7 +799,7 @@ mod live_geometry_probe {
         assert!(st.success(), "could not open the tagged window");
         std::thread::sleep(std::time::Duration::from_secs(2));
 
-        let out = std::process::Command::new("osascript")
+        let out = std::process::Command::new("/usr/bin/osascript")
             .arg("-e")
             .arg(applescript_for_tagged_window_geometry(&tag))
             .output()
@@ -822,7 +822,7 @@ mod live_geometry_probe {
 
         // NEGATIVE CONTROL: an unknown tag must answer empty, not borrow some
         // other window's size.
-        let out = std::process::Command::new("osascript")
+        let out = std::process::Command::new("/usr/bin/osascript")
             .arg("-e")
             .arg(applescript_for_tagged_window_geometry(
                 "Tillandsias no-such-window-tag",

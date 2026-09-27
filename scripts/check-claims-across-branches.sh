@@ -113,6 +113,18 @@ fi
 
 SIBLINGS="linux-next windows-next osx-next"
 
+# ORDER 1423-ydy3 — THE EXTRACT DIES WITH THE RUN. Every fold extracts a
+# sibling's plan/ (~19 MB) into ${TMPDIR:-/tmp}/xbranch.*, and the normal paths
+# rm -rf it; a KILLED run (timeout, Ctrl-C, a cycle's lock-holder reaped) did
+# not, and yoga counted 49 leaked extracts (~700 MB). One trap covers both fold
+# loops, since both run in this shell and hold the live extract in $tmp.
+# INT and TERM exit through it (128+signal); SIGKILL cannot be trapped.
+tmp=""
+_xb_cleanup() { if [ -n "$tmp" ]; then rm -rf "$tmp"; fi; }
+trap _xb_cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 # ── ORDER 1104-w9np — SUBTRACT THE READER'S OWN AUTHORSHIP ──────────────────
 #
 # MEASURED on lenovinha 2026-09-06: their OWN in_progress claim, merged into
@@ -217,7 +229,7 @@ if [ "$BATCH" = 1 ]; then
                 # The fold produced no ready set at all: treat as unusable
                 # rather than as "everything is claimed".
                 echo "blocked:empty-fold:$b" >&2
-                rm -rf "$tmp"
+                rm -rf "$tmp"; tmp=""
                 continue
             fi
             for id in $BATCH_IDS; do
@@ -235,7 +247,7 @@ $id
                 fi
             done
         fi
-        rm -rf "$tmp"
+        rm -rf "$tmp"; tmp=""
     done
     if [ "$checked" -eq 0 ]; then
         # No sibling could be folded. Saying "none claimed" here is the false
@@ -290,7 +302,7 @@ for b in $SIBLINGS; do
             fi
         fi
     fi
-    rm -rf "$tmp"
+    rm -rf "$tmp"; tmp=""
 done
 
 if [ -z "$found" ] && [ -n "$mine" ]; then

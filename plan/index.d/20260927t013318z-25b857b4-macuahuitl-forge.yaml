@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: release-freeze-set-pushes-origins-branch-tip-sha-read-by-ls-remote-which-fails-when-that-object-is-not-local-and-reports-it-as-origin-unreachable
+    field: status
+    value: in_progress
+    ts: "2026-09-27T01:33:18Z"
+    host: macuahuitl-forge
+
+events:
+  - packet_id: release-freeze-set-pushes-origins-branch-tip-sha-read-by-ls-remote-which-fails-when-that-object-is-not-local-and-reports-it-as-origin-unreachable
+    event:
+      type: note
+      ts: "2026-09-27T01:33:18Z"
+      host: macuahuitl-forge
+      summary: |-
+        claimed by macuahuitl-forge at coordinator assignment; fix already committed on work/1422-fvce
