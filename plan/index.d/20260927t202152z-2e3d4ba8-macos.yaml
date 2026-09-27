@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d
+    event:
+      type: observation
+      ts: "2026-09-27T20:21:52Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t202152z
+      host: macos
+      summary: |
+        Consumer requirement from 1443-sb9b (coordinator-ratified 2026-09-27): the sandboxed `tillandsias-plan lua` CLI has no way to set its exit status. It withholds os.exit, and a chunk's return values are only printed. So a hook stub cannot exec a Lua script and let the script decide the hook's result. scripts/hooks/pre-push-main-branch-affordance.sh (work/1443-sb9b 86dfc6206) bridges this: it captures the script's single verdict line and exits 0 only on exactly ok:main-branch-affordance, which is fail-closed. A true exec needs a status channel in the lua CLI, either a sandbox-safe os.exit(n) or a returned {exit=n} the CLI maps to its process status. When that exists, the sb9b stub should switch to `exec "$PLAN" lua …` and drop the verdict comparison. That stub is the consumer that retires the bridge.
