@@ -246,6 +246,31 @@ download cache.
    mkdir -p "$SMOKE_EVIDENCE_DIR"
    printf 'run_start=%s\n' "$SMOKE_RUN_START" | tee "$SMOKE_EVIDENCE_DIR/00-run-start.txt"
    ```
+   **Windows runs this step in PowerShell, and it is the lane that found the
+   defect** (order 1044-na6u, esmeraldinha v56.9.4.1: after a §3 abort,
+   `03-provision-exit.txt` still held the v56.9.2.1 round's `provision_exit=0`
+   and `elapsed_seconds=117`, eighteen hours old). §1's
+   `New-Item -ItemType Directory -Force` is the PowerShell spelling of the
+   `mkdir -p` above: it keeps every file already in the directory. Run this
+   before §1:
+   ```powershell
+   $SmokeEvidenceDir = 'target\smoke-e2e'
+   $SmokeRunStart = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+   # MOVE ASIDE, NEVER DELETE, exactly as the bash block does.
+   $prior = @(Get-ChildItem -LiteralPath $SmokeEvidenceDir -Force -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -notlike '_archived-*' })
+   if ($prior.Count -gt 0) {
+     $SmokeArchive = Join-Path $SmokeEvidenceDir ('_archived-' + (Get-Date).ToUniversalTime().ToString('yyyyMMdd\tHHmmss\z'))
+     New-Item -ItemType Directory -Force $SmokeArchive | Out-Null
+     $prior | Move-Item -Destination $SmokeArchive
+     "archived_to=$SmokeArchive"
+   }
+   New-Item -ItemType Directory -Force $SmokeEvidenceDir | Out-Null
+   "run_start=$SmokeRunStart" | Tee-Object (Join-Path $SmokeEvidenceDir '00-run-start.txt')
+   ```
+   With the directory emptied at the start of the round, a step that aborts
+   before its write leaves its evidence file ABSENT. Absent is a verdict; a
+   previous round's file under the same name is a lie.
    **WHY THIS IS NOT HOUSEKEEPING.** In-block assertions capture their status
    in the same shell and are unaffected. Every OUT-OF-BAND read is affected:
    the §5 report, an orchestrator polling for completion, a human scanning the
@@ -455,7 +480,9 @@ which is stable-only by GitHub semantics):
 # $SmokeTag from pre-flight, e.g. v0.3.260721.1 (strip/keep the leading v —
 # the installer normalizes both).
 $ErrorActionPreference = 'Stop'
-New-Item -ItemType Directory -Force target\smoke-e2e | Out-Null
+# Pre-flight step 4 must have run: without 00-run-start.txt the directory may
+# still hold the previous round's files (1044-na6u).
+if (-not (Test-Path target\smoke-e2e\00-run-start.txt)) { throw 'run pre-flight step 4 first: no 00-run-start.txt' }
 $env:TILLANDSIAS_VERSION = $SmokeTag
 $installExit = 0
 try {
@@ -1380,6 +1407,24 @@ was not established.
 signature; it has found nothing, and reporting nothing as a failure would make a
 floor host look like a security incident. It is a third verdict, and it must be
 visible.
+
+**The report MUST NOT cite an evidence file older than `00-run-start.txt`**
+(order 1044-na6u). Before writing any PASS, list the files that predate the
+round; each one is a leak from an earlier round, and the step it names counts
+as NOT RUN, whatever the file says:
+
+```bash
+find target/smoke-e2e -maxdepth 1 -type f ! -newer target/smoke-e2e/00-run-start.txt ! -name 00-run-start.txt -print
+```
+
+```powershell
+$rs = (Get-Item target\smoke-e2e\00-run-start.txt).LastWriteTimeUtc
+Get-ChildItem target\smoke-e2e -File | Where-Object { $_.Name -ne '00-run-start.txt' -and $_.LastWriteTimeUtc -le $rs } | ForEach-Object FullName
+```
+
+Empty output is the only answer that lets a file be cited. A missing
+`00-run-start.txt` means no file can be cited at all: the round has no start
+to compare against.
 
 `run_start` is what makes every other file in the evidence directory checkable
 (order 1189-7yvu). Without it a reader cannot tell this run's `03-init-exit.txt`
