@@ -66,7 +66,11 @@ critical_path:
     # and assert the refusal is the RIGHT refusal rather than merely a failure.
     # Note the remedy prose goes to stderr and stdout carries the bare verdict,
     # which is what makes the equality assertion below sound.
-    command: "d=$(mktemp -d); git init -q -b linux-next \"$d/repo\"; git -C \"$d/repo\" config user.useConfigOnly true; cp scripts/check-committable-branch.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null bash check-committable-branch.sh 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:no-git-identity' ] && echo 'ok: no-identity-fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    # 1428-v4tt: git ALSO takes identity from the ENVIRONMENT
+    # (GIT_AUTHOR_*/GIT_COMMITTER_*, then EMAIL), and a forge exports them, so
+    # blanking the config files alone left an identity and this step read
+    # ok:branch-linux-next in every forge. env -u removes them for the probe only.
+    command: "d=$(mktemp -d); git init -q -b linux-next \"$d/repo\"; git -C \"$d/repo\" config user.useConfigOnly true; cp scripts/check-committable-branch.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && env -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL -u EMAIL GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null bash check-committable-branch.sh 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:no-git-identity' ] && echo 'ok: no-identity-fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: no-identity-fails-closed"
   - step: "detached HEAD fails closed with its own grammar token (a committable cycle needs a branch to push)"
