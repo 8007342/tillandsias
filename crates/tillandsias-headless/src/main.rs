@@ -3607,7 +3607,7 @@ pub(crate) const PROXY_CA_KEY_SECRET: &str = "tillandsias-ca-key";
 pub(crate) const PROXY_CA_KEY_SECRET_OPTS: &str = "uid=1000,gid=1000,mode=0400";
 
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
-    vec![
+    let mut args: Vec<String> = vec![
         "--detach".into(),
         // Order 387: a crashed/exited container holding the name must not
         // block relaunch with exit-125; --replace atomically removes it
@@ -3636,8 +3636,92 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
         // 0600. The public cert above stays a bind mount on purpose.
         "--secret".into(),
         format!("{PROXY_CA_KEY_SECRET},{PROXY_CA_KEY_SECRET_OPTS}"),
-        image.into(),
-    ]
+    ];
+    // Order 472: record WHICH CA this proxy was started with, so a running
+    // proxy can be compared against the certificate on disk after a rotation.
+    if let Some(generation) = ca_generation(certs_dir) {
+        args.push("--label".into());
+        args.push(format!("{PROXY_CA_GENERATION_LABEL}={generation}"));
+    }
+    args.push(image.into());
+    args
+}
+
+/// Label on the proxy container naming the CA generation it signs with (order 472).
+const PROXY_CA_GENERATION_LABEL: &str = "tillandsias.ca-generation";
+
+/// The CA generation: the first 16 hex digits of the SHA-256 of the published
+/// `intermediate.crt`. A rotation publishes a new certificate by rename, so the
+/// generation changes exactly when the certificate does. `None` when the file
+/// cannot be read.
+fn ca_generation(certs_dir: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let bytes = std::fs::read(certs_dir.join("intermediate.crt")).ok()?;
+    let hex = format!("{:x}", Sha256::digest(&bytes));
+    Some(hex[..16].to_string())
+}
+
+/// Whether a RUNNING proxy still signs with the CA consumers are given.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ProxyCaCheck {
+    /// The running proxy's generation matches the certificate on disk.
+    Current,
+    /// It does not, or the proxy predates the label: it must be replaced
+    /// before any consumer that mounts the on-disk certificate starts.
+    Stale {
+        running: Option<String>,
+        on_disk: String,
+    },
+    /// Nothing to compare against (the certificate or the container could not
+    /// be read). Keep the serving proxy rather than restart on a guess.
+    Unknown,
+}
+
+/// The pure decision behind [`ensure_proxy_running`]'s early return (order 472).
+///
+/// THE DEFECT IT CLOSES. A forge launch first satisfies CaBundle, which
+/// rotates the CA after 25 days and publishes a new certificate, and then
+/// satisfies Proxy, which used to return early whenever the proxy was
+/// running. The new forge mounted and trusted ONLY the rotated certificate,
+/// while the running proxy kept signing bumped leaves with the key it was
+/// started with (the key reaches it as a podman secret at launch), so every
+/// bumped TLS connection from the fresh forge failed verification.
+///
+/// A proxy with NO label predates this check. It is treated as stale: its
+/// generation is unknowable, and a single replacement on upgrade is cheaper
+/// than a split-trust window nobody can see.
+fn proxy_ca_check(
+    running_label: Result<Option<String>, ()>,
+    on_disk: Option<String>,
+) -> ProxyCaCheck {
+    match (running_label, on_disk) {
+        (_, None) | (Err(()), _) => ProxyCaCheck::Unknown,
+        (Ok(Some(r)), Some(d)) if r == d => ProxyCaCheck::Current,
+        (Ok(running), Some(on_disk)) => ProxyCaCheck::Stale { running, on_disk },
+    }
+}
+
+/// The running proxy's generation label: `Ok(None)` when it has none, `Err`
+/// when the container could not be inspected.
+fn running_proxy_ca_generation() -> Result<Option<String>, ()> {
+    let out = podman_cmd_sync()
+        .args([
+            "container",
+            "inspect",
+            "--format",
+            &format!("{{{{index .Config.Labels \"{PROXY_CA_GENERATION_LABEL}\"}}}}"),
+            "tillandsias-proxy",
+        ])
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|_| ())?;
+    if !out.status.success() {
+        return Err(());
+    }
+    let value = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    Ok(match value.as_str() {
+        "" | "<no value>" => None,
+        _ => Some(value),
+    })
 }
 
 /// Refresh the `tillandsias-ca-key` podman secret from the CA bundle.
@@ -3694,10 +3778,30 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
         // Best-effort: an unreadable or absent key is not a reason to refuse
         // a proxy that is already serving.
         let _ = enforce_ca_key_mode(&PathBuf::from(ca_dir()).join("intermediate.key"));
-        if debug {
-            eprintln!("[tillandsias] enclave proxy already running");
+        // Order 472: "running" is not "current". A proxy started before the
+        // last CA rotation signs with a key no new consumer trusts.
+        match proxy_ca_check(
+            running_proxy_ca_generation(),
+            ca_generation(&PathBuf::from(ca_dir())),
+        ) {
+            ProxyCaCheck::Stale { running, on_disk } => {
+                // LOUD, on both streams (767-nkkq: launchers capture different
+                // ones): a proxy restart interrupts in-flight downloads.
+                let line = format!(
+                    "[tillandsias] proxy CA is stale (running {}, on disk {on_disk}); replacing the proxy",
+                    running.as_deref().unwrap_or("unlabelled")
+                );
+                println!("{line}");
+                eprintln!("{line}");
+                // Fall through: the launch below uses --replace.
+            }
+            ProxyCaCheck::Current | ProxyCaCheck::Unknown => {
+                if debug {
+                    eprintln!("[tillandsias] enclave proxy already running");
+                }
+                return Ok(());
+            }
         }
-        return Ok(());
     }
     // Remove any stopped/exited container from a prior run so that `podman run
     // --name tillandsias-proxy` does not fail with "name already in use".
@@ -23326,6 +23430,79 @@ mod tests {
         assert_eq!(next_shutdown_poll_delay_ms(250), 500);
         assert_eq!(next_shutdown_poll_delay_ms(500), SHUTDOWN_POLL_CAP_MS);
         assert_eq!(next_shutdown_poll_delay_ms(u64::MAX), SHUTDOWN_POLL_CAP_MS);
+    }
+
+    // ---- order 472: the CaBundle -> Proxy generation edge -------------------
+
+    #[test]
+    fn proxy_args_label_the_ca_generation_and_keep_the_image_last() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("intermediate.crt"), "CERT-A").unwrap();
+        let args = build_proxy_run_args(dir.path(), "tillandsias-proxy:v1");
+        let gen_a = ca_generation(dir.path()).unwrap();
+        assert_eq!(gen_a.len(), 16);
+        assert!(has_arg(
+            &args,
+            &format!("{PROXY_CA_GENERATION_LABEL}={gen_a}")
+        ));
+        assert_eq!(
+            args.last().map(String::as_str),
+            Some("tillandsias-proxy:v1")
+        );
+        // A rotation publishes different bytes, so the generation moves.
+        std::fs::write(dir.path().join("intermediate.crt"), "CERT-B").unwrap();
+        assert_ne!(ca_generation(dir.path()).unwrap(), gen_a);
+    }
+
+    #[test]
+    fn a_proxy_started_before_a_rotation_is_stale() {
+        assert_eq!(
+            proxy_ca_check(Ok(Some("aaaa".into())), Some("bbbb".into())),
+            ProxyCaCheck::Stale {
+                running: Some("aaaa".into()),
+                on_disk: "bbbb".into()
+            }
+        );
+        assert_eq!(
+            proxy_ca_check(Ok(Some("aaaa".into())), Some("aaaa".into())),
+            ProxyCaCheck::Current
+        );
+    }
+
+    #[test]
+    fn an_unlabelled_proxy_is_stale_and_an_unreadable_one_is_kept() {
+        assert!(matches!(
+            proxy_ca_check(Ok(None), Some("bbbb".into())),
+            ProxyCaCheck::Stale { running: None, .. }
+        ));
+        assert_eq!(
+            proxy_ca_check(Err(()), Some("bbbb".into())),
+            ProxyCaCheck::Unknown
+        );
+        assert_eq!(
+            proxy_ca_check(Ok(Some("aaaa".into())), None),
+            ProxyCaCheck::Unknown
+        );
+    }
+
+    /// The pre-fix defect was an unconditional early return for a running
+    /// proxy. This pins that the check sits between the running test and the
+    /// return, so deleting it fails here rather than in a user's forge.
+    #[test]
+    fn ensure_proxy_running_checks_the_ca_generation_before_returning_early() {
+        let body = source_window(
+            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
+            "fn ensure_proxy_running(",
+        );
+        let running = body
+            .find("container_running(\"tillandsias-proxy\")")
+            .expect("the running test");
+        let check = body.find("proxy_ca_check(").expect("the generation check");
+        let early = body.find("return Ok(());").expect("the early return");
+        assert!(
+            running < check && check < early,
+            "check must gate the early return"
+        );
     }
 
     #[test]
