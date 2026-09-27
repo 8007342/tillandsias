@@ -1,32 +1,40 @@
 #!/usr/bin/env bash
-# @trace plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md (order 540)
+# @trace plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md (order 540, reversed by 1440-w8g8)
 # check-opsx-generated-dirt.sh — deterministic detector for launch-generated
-# opsx/openspec skill-sync dirt.
+# opsx/openspec skill-sync dirt, which it REFUSES (order 1440-w8g8).
 #
-# WHY: the forge image's installed @fission-ai/openspec CLI regenerates the 22
-# tracked opsx/openspec command/skill paths into the checkout at every launch.
-# When the image's CLI templates drift from the committed ones, those 22 paths
-# come back dirty and in-forge meta-orchestration refuses the whole cycle with
-# blocked: dirty-start-worktree — every cycle until an operator intervenes
-# (plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md). Operator
-# decision 2026-07-31: the opsx sync is INTENDED, committable, and a NORMAL part
-# of meta-orchestration. This helper gives the cycle a falsifiable verdict for
-# "the ONLY dirty paths are the generated opsx/openspec set" vs anything else,
-# so the refusal stays fail-closed for genuinely dirty operator/sibling trees
-# while the deterministic launch artifact is merged instead.
+# WHY: until order 1422-w3p8, every forge launch ran the installed @latest
+# @fission-ai/openspec CLI's `init` against the checkout, which regenerated the
+# tracked opsx/openspec command/skill paths whenever the CLI's templates drifted
+# from the committed ones, so the forge started dirty. Order 540 (2026-07-31)
+# ruled that dirt INTENDED and had meta-orchestration commit it as a
+# `chore(opsx): sync` change. The operator REVERSED that on 2026-09-27: the dirt
+# "should not exist", a launch must land on a clean checkout. 1422-w3p8 stopped
+# the launch from producing it (openspec_init_if_absent, lib-common.sh), and
+# order 1440-w8g8 made this detector REFUSE it: launch-generated opsx dirt is a
+# regression of 1422-w3p8 to report, never content to commit. Moving the
+# generated set to a new CLI version is a deliberate `openspec update` + commit
+# made by a person or packet, not by a cycle that found it dirty.
+#
+# This helper still names the generated set precisely, so a cycle can say
+# WHICH kind of dirt it refused on (a launch regression vs operator/sibling
+# work), and salvage + refuse both the same way.
 #
 # Grammar (exactly one line):
-#   ^(ok:|non-opsx:)([a-z0-9._/-]*)$
-#     ok:        every status-visible dirty path is in the generated opsx set
-#     non-opsx:  at least one dirty path is NOT in the generated opsx set
-#                (a genuinely dirty operator/sibling tree — must fail closed)
+#   ^(ok:clean-tree|launch-dirt:opsx-only|non-opsx:[a-z0-9._/-]*)$
+#     ok:clean-tree         nothing dirty
+#     launch-dirt:opsx-only every dirty path is in the generated opsx set — a
+#                           launch rewrote tracked files (1422-w3p8 regressed)
+#     non-opsx:             at least one dirty path is NOT in the generated set
+#                           (a genuinely dirty operator/sibling tree)
 #
 # Exit codes:
-#   0 — ok (only generated opsx dirt, and at least one dirty path present)
-#   3 — non-opsx (real dirt present; do NOT treat as launch-generated sync)
+#   4 — ok:clean-tree (no dirty paths at all)
+#   5 — launch-dirt:opsx-only (refuse; report the launch regression)
+#   3 — non-opsx (real dirt present; refuse)
 #   2 — usage / infra error (worktree could not be inspected)
-#   4 — ok-with-clean-tree (no dirty paths at all — nothing to sync; distinct
-#       from ok so callers can skip the commit)
+# No verdict other than a clean tree is an ok: — there is no longer a dirt
+# this detector licenses (order 1440-w8g8; it used to print ok:opsx-only, 0).
 #
 # The generated set is the 22-path opsx/openspec regeneration observed at forge
 # launch, in EITHER harness locus (.opencode/ or .claude/ — see the order-540
@@ -71,10 +79,9 @@ OPSX_SKILLS=(
 # forge launched under Claude Code gets the identical 22 artifacts under
 # `.claude/`, with the CLI's Claude layout: commands nest under a per-namespace
 # directory (`commands/opsx/<verb>.md`) instead of flattening to a
-# `opsx-<verb>.md` filename. Same CLI, same cadence, same order-540 operator
-# ruling ("INTENDED and committable; must NOT block a meta-orchestration
-# cycle") — so the same verdict must apply, or a Claude-launched forge refuses
-# its whole cycle on dirt an OpenCode-launched forge commits and moves past.
+# `opsx-<verb>.md` filename. Same CLI, same cadence, so the same verdict must
+# apply to both loci (today: launch-dirt:opsx-only, a refusal — 1440-w8g8; the
+# locus was added under order 540's since-reversed commit-the-sync ruling).
 # Measured on macuahuitl-tillandsias-forge 2026-09-02: 22 dirty paths, all in
 # this set, `non-opsx:` verdict, cycle refused (order 964-fwvh).
 
@@ -166,5 +173,5 @@ if [[ -n "$non_opsx" ]]; then
     exit 3
 fi
 
-echo "ok:opsx-only"
-exit 0
+echo "launch-dirt:opsx-only"
+exit 5
