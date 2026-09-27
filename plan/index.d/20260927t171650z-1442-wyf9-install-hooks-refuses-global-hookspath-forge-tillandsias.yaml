@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: install-hooks-writes-the-repo-guards-into-a-global-core-hookspath-so-a-second-clone-inside-a-forge-recreates-the-2026-09-01-collateral-that-breaks-every-scratch-repo-test
+    order: 1442-wyf9
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [forge, git-hooks, fail-loud, collateral]
+    estimated_hours: 1
+    owned_files:
+      - scripts/install-hooks.sh
+      - scripts/test-install-hooks-refuses-global-hookspath.sh
+    title: |
+      scripts/install-hooks.sh resolves `git rev-parse --git-path hooks`, which honours a GLOBAL core.hooksPath, so run in a second clone inside a forge it writes pre-commit and pre-push into ~/.cache/tillandsias/git-hooks — the forge-wide dir — and every scratch-repo fixture on the box then fails
+    context: |
+      MEASURED (macuahuitl-forge, 2026-09-27 16:54Z): a second clone at
+      /home/forge/wk (made because the 256M /home/forge/src tmpfs was full) had no
+      local core.hooksPath. The forge sets `git config --global core.hooksPath
+      ~/.cache/tillandsias/git-hooks` for its trailer and expert-refresh hooks,
+      and join-the-fleet's hooks todo says run scripts/install-hooks.sh. It
+      printed "All git hooks installed successfully" and wrote pre-commit and
+      pre-push into the GLOBAL dir. ./build.sh --preflight then refused 3
+      guards through their scratch repos (test-added-test-is-referenced
+      "violation:added-test-guard-unproven:6", test-pre-push-honours-a-live-freeze
+      20/21, and their pre-commit calling a missing
+      <scratch>/scripts/hooks/pre-commit-openspec.sh). Removing the two files and
+      setting the clone's local core.hooksPath took both back to green
+      (ok:added-test-guard-proven:10, 21/21). This is the 2026-09-01 collateral
+      that lib-common.sh ensure_forge_project_guard_hooks exists to avoid; the
+      forge's own checkout is protected because that function sets a local
+      hooksPath first, but any other clone is not.
+      Coordinator (macuahuitl-fedora) direction 2026-09-27: install-hooks.sh must
+      refuse a global core.hooksPath target, or write into the clone's local hooks.
+    exit_criteria:
+      - 'running scripts/install-hooks.sh in a clone whose effective core.hooksPath comes from global (or system) config leaves that directory untouched and exits non-zero with the command that sets a local hooksPath (pre-fix: FAILS, it wrote pre-commit and pre-push into ~/.cache/tillandsias/git-hooks at 16:54Z)'
+      - 'with a local core.hooksPath (the forge checkout, test-forge-project-guard-hooks.sh) the installer behaves exactly as before'
+    verifiable_closure: |
+      scripts/test-install-hooks-refuses-global-hookspath.sh passes on trunk:
+      under a scratch HOME whose global core.hooksPath points at a scratch dir,
+      the installer refuses and the dir stays empty; after `git config
+      core.hooksPath` locally it installs into the local dir; and
+      scripts/test-forge-project-guard-hooks.sh stays green.
+    deliverable: |
+      install-hooks.sh refuses a non-local core.hooksPath with an affordance;
+      a fixture pins both branches.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:16:50Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t163026z"
+        host: forge-tillandsias
+        summary: |-
+          Filed by macuahuitl-forge on the coordinator's direction, from its own
+          mistake in session 2026-09-27 (reverted).
