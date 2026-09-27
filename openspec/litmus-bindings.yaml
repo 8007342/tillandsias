@@ -1258,3 +1258,18 @@ specs:
   - litmus:expert-serve-endpoint-shape
   coverage_ratio: 100
   last_verified: '2026-08-28'
+- spec_id: command-runtime
+  status: draft
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-09-27'
+- spec_id: command-policies
+  status: draft
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-09-27'
+- spec_id: branch-discipline
+  status: draft
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-09-27'
