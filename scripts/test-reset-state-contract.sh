@@ -160,6 +160,14 @@ else ok "ARM6 NEGATIVE CONTROL — a flag that does not exist is not found"; fi
 # token and the store, and install.sh runs --reset-state on every install, so
 # every install since 2026-09-20 discarded every sign-in.
 #
+# WHAT IS AND IS NOT A "CLEARER" HERE. Operator ruling 2026-09-27: "the presence
+# of an unlocking keyring should be a requirement to survive the vault store."
+# So on a keyring-less host a Linux reset DOES clear the store and the fallback
+# files, through clear_vault_store_and_fallbacks and only via
+# reset_vault_disposition (pinned in Rust by
+# reset_bodies_decide_by_keyring_and_never_clear_the_keychain). What no reset
+# may ever call is the KEYCHAIN clearer; those names are what this arm greps.
+#
 # The Linux bodies are asserted HARD. The macOS and Windows bodies are their own
 # packets (1437-av8u, 1437-3iux), so until those land a clearer there is a
 # NAMED PENDING line, not a pass and not a red that would block every gate on a

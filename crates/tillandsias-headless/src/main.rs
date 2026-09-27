@@ -10056,30 +10056,19 @@ fn run_reset_state(_debug: bool) -> Result<(), String> {
 /// this flag is the stronger sibling, not a redefinition.
 #[cfg(target_os = "linux")]
 fn run_reset_state(debug: bool) -> Result<(), String> {
-    // Order 1437-qza3 (operator directive 2026-09-27, host-state-lifecycle):
-    // a reset destroys DERIVED state only. The Vault store and its unseal
-    // material are operator data and survive; only `--uninstall` clears them.
-    // This supersedes 900-z3kv option (a) and the premise of 1118-fqfk, whose
-    // fallback-file question stays open with the operator, so the fallback
-    // files are preserved here too.
-    announce_reset_plan(
-        &[
-            "every Tillandsias podman container, volume, secret and network",
-            "ALL podman images on this host (podman system reset --force)",
-            "the build and provision markers under <cache>/tillandsias",
-        ],
-        &[
-            "<cache>/tillandsias/vault-data (the Vault store) and \
-             <cache>/tillandsias/vault-audit — your sign-ins survive the reset",
-            "the keyring entries vault-shamir-share-v1 and vault-root-token-v1, \
-             and their fallback files where no keyring exists — a freshly built \
-             Vault unseals the preserved store with them",
-            "installation-uuid-v1 in the keychain — the INSTALLATION anchor; the \
-             in-guest Vault derives its master key from it (803-49re)",
-            "<cache>/tillandsias/models and every other download in the cache",
-            "the installed tillandsias binary itself",
-        ],
+    // Order 1437-qza3. Operator directive 2026-09-27 (host-state-lifecycle): a
+    // reset destroys DERIVED state; the Vault store and its unseal share are
+    // operator data. Operator ruling the same day: "the presence of an
+    // unlocking keyring should be a requirement to survive the vault store."
+    // So the store survives when the keychain holds the share, and a
+    // keyring-less host's store and fallback files are cleared, loudly. This
+    // supersedes 900-z3kv option (a) and the premise of 1118-fqfk.
+    let disposition = vault_bootstrap::reset_vault_disposition(
+        vault_bootstrap::probe_keyring_share(),
+        vault_bootstrap::fallback_share_present(),
     );
+    let (destroyed, preserved) = reset_state_plan(disposition);
+    announce_reset_plan(&destroyed, &preserved);
     if std::env::var_os("TILLANDSIAS_RESET_KEEP_MODELS").is_some() {
         eprintln!(
             "[tillandsias] TILLANDSIAS_RESET_KEEP_MODELS is ignored: a reset always \
@@ -10114,13 +10103,98 @@ fn run_reset_state(debug: bool) -> Result<(), String> {
     run_podman_command(reset_cmd, debug)
         .map_err(|e| format!("podman system reset --force failed: {e}"))?;
 
-    // Order 1437-qza3: NO credential clearer here. The store is a host
-    // directory (the podman reset above cannot reach it) and the share is in
-    // the keyring, so the next `--init` builds a fresh Vault that takes the
-    // subsequent-boot path and unseals the preserved store.
+    // AFTER the podman reset: clearing vault-data may need `podman unshare`.
+    reset_vault_store_per_disposition(disposition)?;
 
     eprintln!("[tillandsias] --reset-state: local state reset \u{2713} — reprovisioning ...");
     run_init(debug, false)
+}
+
+/// Act on the reset's Vault disposition (order 1437-qza3). NEVER touches the
+/// keychain entries: those belong to uninstall alone.
+#[cfg(target_os = "linux")]
+fn reset_vault_store_per_disposition(
+    disposition: vault_bootstrap::ResetVaultDisposition,
+) -> Result<(), String> {
+    use vault_bootstrap::ResetVaultDisposition as D;
+    match disposition {
+        D::Keep => Ok(()),
+        D::KeepUnverified => {
+            eprintln!(
+                "[tillandsias] the keyring could not be read and no fallback share exists, so \
+                 the unseal share can only be in a keyring that is locked right now; the Vault \
+                 store is KEPT. Unlock the keyring before the next launch so it can be unsealed."
+            );
+            Ok(())
+        }
+        D::ClearKeyringless => {
+            eprintln!(
+                "[tillandsias] NO KEYRING HOLDS THE UNSEAL SHARE on this host, so the Vault \
+                 store does not survive a reset: clearing it now. Every stored sign-in is \
+                 lost; sign in again after the reset. A host with an unlocking keyring keeps \
+                 its sign-ins across resets."
+            );
+            let (cleared, failed) = vault_bootstrap::clear_vault_store_and_fallbacks();
+            eprintln!("[tillandsias] --reset-state: cleared {}", cleared.join(" "));
+            if failed.is_empty() {
+                Ok(())
+            } else {
+                // REFUSE, do not warn (1284-jf86): a half-cleared store with
+                // no share is exactly the partial-init state.
+                Err(format!(
+                    "--reset-state could not clear the keyring-less Vault store: {}. \
+                     Nothing further was attempted.",
+                    failed.join(" ")
+                ))
+            }
+        }
+    }
+}
+
+/// The two announced sets for a Linux `--reset-state`, per disposition
+/// (order 1437-qza3). Pure, so each branch's wording is tested directly.
+#[cfg(target_os = "linux")]
+fn reset_state_plan(
+    disposition: vault_bootstrap::ResetVaultDisposition,
+) -> (Vec<&'static str>, Vec<&'static str>) {
+    use vault_bootstrap::ResetVaultDisposition as D;
+    let mut destroyed = vec![
+        "every Tillandsias podman container, volume, secret and network",
+        "ALL podman images on this host (podman system reset --force)",
+        "the build and provision markers under <cache>/tillandsias",
+    ];
+    let mut preserved = vec![
+        "installation-uuid-v1 in the keychain — the INSTALLATION anchor; the in-guest \
+         Vault derives its master key from it (803-49re)",
+        "<cache>/tillandsias/models and every other download in the cache",
+        "the installed tillandsias binary itself",
+    ];
+    match disposition {
+        D::Keep | D::KeepUnverified => {
+            preserved.insert(
+                0,
+                "<cache>/tillandsias/vault-data (the Vault store) and \
+                 <cache>/tillandsias/vault-audit — your sign-ins survive the reset",
+            );
+            preserved.insert(
+                1,
+                "the keyring entries vault-shamir-share-v1 and vault-root-token-v1 — a \
+                 freshly built Vault unseals the preserved store with them",
+            );
+        }
+        D::ClearKeyringless => {
+            destroyed.push(
+                "<cache>/tillandsias/vault-data (the Vault store) — NO KEYRING holds the \
+                 unseal share on this host, so the store does not survive a reset",
+            );
+            destroyed.push(
+                "the fallback files fallback_vault-shamir-share-v1 and \
+                 fallback_vault-root-token-v1",
+            );
+            preserved.insert(0, "<cache>/tillandsias/vault-audit");
+        }
+    }
+    (destroyed, preserved)
 }
 
 fn run_reset_guest(debug: bool) -> Result<(), String> {
@@ -10132,10 +10206,12 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
         );
     }
     // Order 1437-qza3: this line used to promise the Vault and the cached
-    // credentials were discarded; they now survive, so it says what happens.
+    // credentials were discarded. Whether they survive now depends on the
+    // keyring (see reset_vault_store_per_disposition, which says which), so
+    // this line claims neither.
     eprintln!(
         "[tillandsias] EPHEMERAL RESET: this discards the local guest (containers, volumes, \
-         secrets, networks). Your sign-ins are kept in the Tillandsias vault."
+         secrets, networks)."
     );
 
     // 1. Containers (vault, proxy, git services, forges, web) — force-remove
@@ -10198,6 +10274,14 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
         }
     }
 
+    // Order 1437-qza3: the same keyring rule as --reset-state. The store
+    // survives only where a keychain holds the share.
+    #[cfg(all(target_os = "linux", feature = "vault"))]
+    reset_vault_store_per_disposition(vault_bootstrap::reset_vault_disposition(
+        vault_bootstrap::probe_keyring_share(),
+        vault_bootstrap::fallback_share_present(),
+    ))?;
+
     eprintln!("[tillandsias] guest substrate wiped \u{2014} re-initializing from scratch\u{2026}");
 
     // 6. Reprovision through the exact same first-provision path `--init`
@@ -10214,8 +10298,8 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
         eprintln!("[tillandsias] vault feature not compiled; reset finished without Vault");
     }
 
-    // Order 1437-qza3: the store and the share survive, so no re-login is due.
-    eprintln!("[tillandsias] guest reset complete \u{2713} \u{2014} your sign-ins were kept.");
+    // Order 1437-qza3: no re-login claim either way; the disposition line said it.
+    eprintln!("[tillandsias] guest reset complete \u{2713}");
     Ok(())
 }
 
@@ -31507,34 +31591,72 @@ esac
     /// storage dir and NEVER the inference model cache (the operator's
     /// ephemeral doctrine covers the guest+vault, not the downloaded
     /// models) nor the cache dir itself (build-state, images metadata).
-    /// Order 1437-qza3, criterion 4: `--reset-state` announces the Vault
-    /// store, the models and the keyring entries as PRESERVED, and none of
-    /// them as destroyed. Pinned on the source because announce_reset_plan
-    /// prints and returns nothing.
+    /// Order 1437-qza3, criterion 4, KEYRING BRANCH: with the share in the
+    /// keychain the store, the audit log, the models and the keyring entries
+    /// are announced as preserved and none as destroyed.
+    #[cfg(target_os = "linux")]
     #[test]
-    fn reset_state_announces_operator_data_as_preserved() {
+    fn reset_plan_with_a_keyring_preserves_the_store_and_the_share() {
+        use vault_bootstrap::ResetVaultDisposition as D;
+        for d in [D::Keep, D::KeepUnverified] {
+            let (destroyed, preserved) = reset_state_plan(d);
+            let (destroyed, preserved) = (destroyed.join("\n"), preserved.join("\n"));
+            for kept in [
+                "vault-data",
+                "vault-audit",
+                "models",
+                "vault-shamir-share-v1",
+                "vault-root-token-v1",
+            ] {
+                assert!(preserved.contains(kept), "{d:?}: {kept} must be preserved");
+                assert!(
+                    !destroyed.contains(kept),
+                    "{d:?}: {kept} must not be destroyed"
+                );
+            }
+        }
+    }
+
+    /// Order 1437-qza3, KEYRING-LESS BRANCH (operator ruling 2026-09-27): the
+    /// store and the fallback files are announced as destroyed, with the
+    /// reason; models and the audit log are still preserved.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn reset_plan_without_a_keyring_destroys_the_store_and_says_why() {
+        let (destroyed, preserved) =
+            reset_state_plan(vault_bootstrap::ResetVaultDisposition::ClearKeyringless);
+        let (destroyed, preserved) = (destroyed.join("\n"), preserved.join("\n"));
+        assert!(destroyed.contains("vault-data"), "{destroyed}");
+        assert!(
+            destroyed.contains("NO KEYRING"),
+            "the reason is named: {destroyed}"
+        );
+        assert!(
+            destroyed.contains("fallback_vault-shamir-share-v1"),
+            "{destroyed}"
+        );
+        assert!(!preserved.contains("vault-data"), "{preserved}");
+        assert!(preserved.contains("models") && preserved.contains("vault-audit"));
+    }
+
+    /// Both reset bodies route through the keyring disposition, and neither
+    /// calls the keychain clearer, which is uninstall's alone.
+    #[test]
+    fn reset_bodies_decide_by_keyring_and_never_clear_the_keychain() {
         let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let start = src
-            .find("fn run_reset_state(debug: bool)")
-            .expect("the Linux reset body");
-        let body = &src[start..];
-        let call = body.find("announce_reset_plan(").expect("the announcement");
-        let lists = &body[call..call + body[call..].find(");").expect("end of call")];
-        let (destroyed, preserved) = lists.split_at(lists.find("],").expect("two lists"));
-        for kept in [
-            "vault-data",
-            "vault-audit",
-            "models",
-            "vault-shamir-share-v1",
-            "vault-root-token-v1",
+        for opener in [
+            "fn run_reset_state(debug: bool)",
+            "fn run_reset_guest(debug: bool)",
         ] {
+            let start = src.find(opener).expect(opener);
+            let body = &src[start..start + src[start..].find("\n}\n").expect("end")];
             assert!(
-                preserved.contains(kept),
-                "{kept} must be announced as preserved"
+                body.contains("reset_vault_disposition("),
+                "{opener} must decide by keyring"
             );
             assert!(
-                !destroyed.contains(kept),
-                "{kept} must not be announced as destroyed"
+                !body.contains(&["clear_host", "_vault_credentials("].concat()),
+                "{opener} must not clear the keychain"
             );
         }
     }
