@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-forge-launch-runs-openspec-init-against-the-checkout-with-an-unpinned-latest-cli-so-every-openspec-release-rewrites-tracked-files-and-the-forge-starts-dirty
+    order: 1422-w3p8
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [forge, entrypoint, openspec, harness-pinning, clean-start]
+    estimated_hours: 4
+    owned_files:
+      - images/default/entrypoint-forge-claude.sh
+      - images/default/entrypoint-forge-opencode.sh
+      - images/default/entrypoint-forge-opencode-web.sh
+      - images/default/entrypoint-terminal.sh
+      - images/default/lib-common.sh
+      - scripts/check-opsx-generated-dirt.sh
+    title: |
+      a forge launch runs `openspec init` against the project checkout with an @latest (unpinned) openspec CLI, so the first launch after any openspec release rewrites tracked .claude/ files and the forge starts DIRTY — measured: 18 tracked files at t=0 on image b09adefe522a (installed @fission-ai/openspec 1.13.2, committed generatedBy "1.13.1")
+    context: |
+      OPERATOR RULING 2026-09-27, reverses the 2026-07-31 decision recorded under
+      order 540 / plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md
+      (that decision: "the opsx sync is INTENDED, committable, and a NORMAL part
+      of meta-orchestration"). Verbatim, as relayed by macuahuitl-forge: "Those
+      dirty checkout artifacts should not exist, you should land on a clean
+      forge, report them to macuahuitl-fedora as a bug, and ask for what kind of
+      evidence you need to file to get that resolved, and work out a ./plan
+      packet for it". Order 540 is archived and takes no events; the
+      coordinator appends a dated REVERSAL note to that plan/issues doc pointing
+      here.
+      THE CALL SITES, by symbol: each forge entrypoint runs "$OS_BIN" init in the
+      project dir at launch — `init --tools claude` in entrypoint-forge-claude.sh,
+      `init --tools opencode` in entrypoint-forge-opencode.sh and
+      entrypoint-forge-opencode-web.sh, bare `init` in entrypoint-terminal.sh.
+      OS_BIN comes from _require_harness, and lib-common.sh's
+      ensure_forge_harnesses refreshes @fission-ai/openspec with
+      `npm install -g "$pkg@latest"` on every launch. So the generator version
+      is whatever npm published last, never the version that generated the
+      committed tree.
+      EVIDENCE, t=0 (the harness's first `git status` in session
+      macuahuitl-forge, 2026-09-26 ~22:40Z, before any command ran), branch
+      linux-next, image b09adefe522a:
+        M .claude/commands/opsx/{archive,bulk-archive,continue,explore,ff,onboard,verify}.md
+        M .claude/skills/openspec-{apply-change,archive-change,bulk-archive-change,continue-change,explore,ff-change,new-change,onboard,propose,sync-specs,verify-change}/SKILL.md
+        18 files changed, 204 insertions(+), 105 deletions(-)
+      e.g. `generatedBy: "1.13.1"` -> `"1.13.2"`; ff.md "(unclear context)" ->
+      "(critically unclear context)"; verify.md and openspec-verify-change
+      rewritten wholesale. `npm ls -g`: @fission-ai/openspec@1.13.2.
+      COST, measured the same session: a `git commit -am` swept all 18 into a
+      commit (caught before push); every plan-lane rebase needs --autostash;
+      an autostash failed ENOSPC on the 256M checkout tmpfs (1349-53h6).
+      pirria measured the same regeneration on 2026-09-19 (1.13.1 vs 1.13.0,
+      22 files; event on 1253-nmmy).
+      RELATED, NOT THE SAME DEFECT: 1253-nmmy (the alias trees carry divergent
+      duplicate copies) — its "one openspec version recorded somewhere a gate
+      can read" is the likely fix here too. SURFACE THE FIX MUST REVISIT:
+      scripts/check-opsx-generated-dirt.sh classifies exactly this dirt as
+      `ok:opsx-only` (acceptable), encoding the superseded 540 decision; left
+      as is, it keeps calling a dirty launch acceptable.
+    exit_criteria:
+      - 'a freshly launched forge has an EMPTY `git status --porcelain` for tracked files in the project checkout (pre-fix: FAILS, 18 files at t=0 on image b09adefe522a)'
+      - 'a test fails if any forge entrypoint runs openspec init/update against the checkout with a CLI version other than the repo-recorded one (pre-fix: FAILS, every entrypoint runs it with @latest)'
+      - 'moving the openspec version regenerates the tracked tree in ONE deliberate commit, never at launch; check-opsx-generated-dirt.sh no longer reports launch dirt as ok (pre-fix: FAILS, it reads ok:opsx-only on the dirty tree)'
+    unscoreable: |
+      the fix's SHAPE is the fixer's choice. Preferred (coordinator): pin the
+      openspec version in the repo where a gate can read it, install that
+      version in the forge, and regenerate deliberately on a pin bump.
+      Alternatives: run init against a scratch dir and only report a diff, or
+      skip init when the tree is already initialised. Whether other @latest
+      harnesses (codex) dirty tracked files the same way is unmeasured here.
+    deliverable: |
+      Forge launch leaves tracked files untouched; the openspec generator
+      version is repo-recorded and gate-read; the opsx dirt checker stops
+      classifying launch dirt as acceptable; a fixture pins each.
+    provenance: |
+      Filed by macuahuitl-forge (forge-forge-tillandsias-claude-20260927t012637z) on the operator's ruling and the
+      coordinator's evidence spec (macuahuitl-fedora, 2026-09-27). The 18
+      paths were restored in that forge's checkout after this evidence was
+      captured.
+    events:
+      - type: filed
+        ts: "2026-09-27T01:26:37Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t012637z"
+        host: macuahuitl-forge
+        summary: |-
+          Filed from a t=0 dirty checkout on image b09adefe522a. Reverses order
+          540's 2026-07-31 decision per the operator's 2026-09-27 ruling; related
+          to 1253-nmmy.
