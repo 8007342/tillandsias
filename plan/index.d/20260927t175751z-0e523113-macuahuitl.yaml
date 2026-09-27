@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-peer-message-shape-lint-for-the-600-byte-verdict-first-budget
+    event:
+      type: blocked
+      ts: "2026-09-27T17:57:51Z"
+      agent_id: linux-macuahuitl-fable-20260927t175751z
+      host: macuahuitl
+      summary: |
+        blocked: operator question pending — the operator asked WHY a message budget (2026-09-27); the coordinator is explaining. Left as filed; do not claim until the question is answered on this row.

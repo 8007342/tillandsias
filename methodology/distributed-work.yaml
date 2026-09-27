@@ -1766,13 +1766,50 @@ distributed_work:
       selection: >
         A session STATES its tier (`select-work-batch.sh <role> --tier <t>`
         or TILLANDSIAS_MODEL_TIER); nothing is inferred from a model name.
-        Same shape as the low-end tier gate: a haiku caller's pool is
-        EXACTLY the haiku rows and an empty pool refuses
+        OPERATOR RULING 2026-09-27: "No size tags get Opus" — an UNTAGGED
+        row's tier is opus. implementer_tier is a FLOOR: a caller at tier T
+        takes rows whose floor is at or below T, ranked AT-tier first so a
+        bigger model drains smaller work only when its own tier is empty.
+        So a haiku caller's pool is exactly the haiku rows (same shape as
+        the low-end tier gate) and an empty pool refuses
         `refused:no-tier-work:model-tier=haiku`, never the general queue; a
-        sonnet caller takes sonnet plus untagged rows; an opus caller takes
-        everything but haiku unless --tier-any. The batch: line prints
-        tier=<t>. `next` honours the same filter so plan_next and the
-        selector agree.
+        sonnet caller takes sonnet rows, then haiku rows, never untagged or
+        opus; an opus caller takes opus and untagged rows, then sonnet, then
+        haiku. `--tier-any` is the orchestrator's view (everything, for
+        delegation). The batch: line prints tier=<t> tier_fallback=<n>.
+        `next` honours the same filter so plan_next and the selector agree.
+        (The first design said "sonnet takes untagged"; withdrawn by the
+        ruling.)
+      orchestrator_session: >
+        OPERATOR RULING 2026-09-27: "We can try hosts running Haiku
+        sessions all day and then have them delegate work to larger
+        agents. Haikus for simple orchestration." A host may run an all-day
+        HAIKU ORCHESTRATOR (skills/haiku-orchestrate, 1443-hbgt), launched
+        as `./repeat --model haiku --prompt "Use the /haiku-orchestrate
+        skill"` (1437-m5yx). It drains the selector with --tier-any,
+        claims, delegates each packet to ONE sub-agent at the packet's
+        implementer_tier (sonnet or opus; an untagged row gets opus), and
+        ACCEPTS ONLY A MEASURED CLOSURE: it runs
+        `scripts/verify-closure.sh <order>` (1443-qwpj), which executes the
+        packet's own verifiable_closure command and compares the printed
+        output to the criterion, and branches on that one line — ok:
+        completion with the verify line as evidence; unmet: one
+        re-delegation with the measured line pasted, then a blocked event;
+        unscoreable: a note, never an acceptance. The delegate's report is
+        not an input to acceptance. MEASURED 2026-09-27: a Haiku
+        implementer reported 1437-gbwi's criterion met while its own
+        numbers read 76 s then 70 s against "under 20 s"; self-report is
+        an instrument, and an unverified "verified" is a green gate that
+        ran no tests. THE ORCHESTRATOR NEVER: implements or edits code
+        under a packet; judges a closure from a report; pushes to a
+        platform branch or main (work/<order> only — the relay lane
+        lands); edits methodology/, openspec/specs/, scripts/hooks/,
+        scripts/gate-steps.d/ or any file that decides what a gate runs;
+        re-tiers a packet (a disagreement is a set-field --reason for the
+        coordinator); runs ./build.sh --check as its own gate; sends a
+        peer message over the budget; or accepts work whose closure it
+        could not run. Its sub-agent budget is the meta-orchestration
+        rule, recorded through --emit-tokens --from-transcript.
       execution: >
         A haiku packet is run in-session by the host through
         `scripts/claude-delegate.sh implement <order>` (edits bounded to the

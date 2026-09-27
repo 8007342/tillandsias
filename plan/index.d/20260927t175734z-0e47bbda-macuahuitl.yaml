@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: archiver-check-memo-keys-on-the-archiver-code-and-the-base-ledger-not-on-every-fragment
+    field: context
+    value: |-
+      T7 of the 2026-09-27 trims. The step asserts the archiver preserves
+      the ready set, a property of the archiver CODE over the ledger SHAPE.
+      Nearly every relay files a fragment, so the current key defeats the
+      memo. The daily forced run of 1437-jm2d covers a fragment the archiver
+      mishandles within 24 h, and the release tier runs the check in full.
+
+
+      [2026-09-27T17:57:34Z macuahuitl] RULING 2026-09-27 (operator, via the coordinator): the memo epoch is the
+      release cut (VERSION content in the key), keys are pure content hashes
+      (the plan binary enters by its build-id output, not by size and mtime),
+      and the archiver step is enrolled in scripts/memo-classified-expensive.txt
+      by 1437-jm2d's mechanism. The "daily forced run" this row leaned on is
+      withdrawn; the cut's fresh run is the safety net for a fragment the
+      archiver mishandles.
+    ts: "2026-09-27T17:57:34Z"
+    host: macuahuitl
+
+events:
+  - packet_id: archiver-check-memo-keys-on-the-archiver-code-and-the-base-ledger-not-on-every-fragment
+    event:
+      type: note
+      ts: "2026-09-27T17:57:34Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-09-27 relayed by the coordinator (efficiency trims 1437-62g8)

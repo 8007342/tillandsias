@@ -131,17 +131,21 @@ low-end hosts made the CPU bottlenecks visible. Until the counter in
   files, clear design → sonnet; L = cross-cutting, judgment, or
   gate-integrity-sensitive → opus. Anything that changes what the land gate
   or the pre-push hook refuses is at least sonnet, opus if it could let a
-  red tree land. A session states its tier to the selector
-  (`scripts/select-work-batch.sh <role> --tier <t>`, 1437-vdz5) and runs a
-  cheaper packet through `scripts/claude-delegate.sh implement <order>`
-  (1437-yjf6) or a dedicated `./repeat --model haiku` session (1437-m5yx);
-  the host session keeps verify and commit. Canonical:
-  `methodology/distributed-work.yaml` → `cycle_batch_triage.model_tier_routing`.
-- **Messages to peers fit 600 bytes / 8 lines, verdict first**, every
-  further line `- ` plus a ref; a longer message is a ledger event cited
-  by order. `scripts/check-peer-message-shape.sh` (1437-arjg) lints the
-  draft. Canonical: `distributed-work.yaml` →
-  `sibling_heads_up_protocol.size_budget`.
+  red tree land. An UNTAGGED row is opus (operator 2026-09-27: "No size
+  tags get Opus") and the tier is a floor. A session states its tier to the
+  selector (`scripts/select-work-batch.sh <role> --tier <t>`, 1437-vdz5)
+  and runs a cheaper packet through `scripts/claude-delegate.sh implement
+  <order>` (1437-yjf6) or a dedicated `./repeat --model haiku` session
+  (1437-m5yx); the host session keeps verify and commit. A host may also
+  run an all-day Haiku ORCHESTRATOR (`/haiku-orchestrate`, 1443-hbgt) that
+  delegates by tier and accepts only a closure it measured with
+  `scripts/verify-closure.sh` (1443-qwpj) — never a delegate's "met".
+  Canonical: `methodology/distributed-work.yaml` →
+  `cycle_batch_triage.model_tier_routing`.
+- **Messages to peers: budget ON HOLD** (operator question pending,
+  2026-09-27; 1437-arjg blocked). The shape in
+  `distributed-work.yaml` → `sibling_heads_up_protocol.size_budget` stays
+  written and is not enforced until the operator answers.
 - **Never delegate a read an expert answers.** `plan_status`, `plan_answer`,
   `methodology_ask` and the project-info tools cost nothing next to an agent.
 - **Report it, and LOG it — from the instrument.** `scripts/cycle-metrics.sh
