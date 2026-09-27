@@ -1082,6 +1082,7 @@ fn main() {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
+            print_status_check_verdict();
             println!("status-check completed");
         }
         if !opencode {
@@ -1107,6 +1108,7 @@ fn main() {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
+        print_status_check_verdict();
         println!("status-check completed");
         return;
     }
@@ -10329,6 +10331,46 @@ fn run_sync_project(project: &str, branch: &str, debug: bool) -> Result<(), Stri
     }
 }
 
+/// ORDER 1437-dypk. What a status-check TOLERATED, so the verdict can say so.
+///
+/// The status-check lane deliberately tolerates a down Vault (its mirror is a
+/// throwaway bare repo) and says so in WARNING prose. But it then printed
+/// "status-check completed" and exited 0 either way, so a smoke or an operator
+/// reading the rc and the last line saw a pass over a mirror running with no
+/// credential (measured on yoga 2026-09-27). Each tolerance site records a
+/// short reason here, and the verdict line names them machine-readably. The
+/// "status-check completed" line itself is unchanged: its consumers match it
+/// as a substring, and the exit code stays 0 — the fake-podman litmus runs
+/// have no live Vault, and a degraded run is still a completed run.
+static STATUS_CHECK_DEGRADED: std::sync::Mutex<Vec<&'static str>> =
+    std::sync::Mutex::new(Vec::new());
+
+fn status_check_note_degraded(reason: &'static str) {
+    if let Ok(mut v) = STATUS_CHECK_DEGRADED.lock()
+        && !v.contains(&reason)
+    {
+        v.push(reason);
+    }
+}
+
+/// `status-check:ok`, or `status-check:degraded:<reason>[,<reason>...]` in the
+/// order the tolerances fired. One line, printed before "status-check completed".
+fn status_check_verdict_line(reasons: &[&str]) -> String {
+    if reasons.is_empty() {
+        "status-check:ok".to_string()
+    } else {
+        format!("status-check:degraded:{}", reasons.join(","))
+    }
+}
+
+fn print_status_check_verdict() {
+    let reasons = STATUS_CHECK_DEGRADED
+        .lock()
+        .map(|v| v.clone())
+        .unwrap_or_default();
+    println!("{}", status_check_verdict_line(&reasons));
+}
+
 fn run_status_check(debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --status-check")?;
     report_runtime_lane("--status-check", debug);
@@ -10415,6 +10457,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                 eprintln!(
                     "[tillandsias] WARNING: status-check mirror service-identity provisioning skipped: {e}"
                 );
+                status_check_note_degraded("mirror-identity-unprovisioned");
                 None
             }
         };
@@ -10426,6 +10469,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                 eprintln!(
                     "[tillandsias] WARNING: status-check mirror launching credential-less: {e}"
                 );
+                status_check_note_degraded("mirror-credential-less");
                 None
             }
         };
@@ -20887,6 +20931,50 @@ mod tests {
         assert!(
             status.contains("WARNING: status-check mirror launching credential-less"),
             "status-check tolerance must be loud, not debug-gated"
+        );
+        // ORDER 1437-dypk, extending this pin ON PURPOSE: loud prose was not
+        // enough — the run still printed "completed" and exited 0. Each
+        // tolerance must also record a machine-readable degraded reason that
+        // the verdict line names.
+        assert!(
+            status.contains("status_check_note_degraded(\"mirror-credential-less\")")
+                && status.contains("status_check_note_degraded(\"mirror-identity-unprovisioned\")"),
+            "each status-check tolerance must record its degraded reason for the verdict (1437-dypk)"
+        );
+    }
+
+    /// ORDER 1437-dypk. The verdict line is machine-readable and names every
+    /// tolerated degradation; with none it says ok. The NEGATIVE CONTROL is the
+    /// empty case: a clean run must not read as degraded.
+    #[test]
+    fn status_check_verdict_names_each_degraded_reason_or_says_ok() {
+        assert_eq!(status_check_verdict_line(&[]), "status-check:ok");
+        assert_eq!(
+            status_check_verdict_line(&["mirror-identity-unprovisioned", "mirror-credential-less"]),
+            "status-check:degraded:mirror-identity-unprovisioned,mirror-credential-less"
+        );
+        // Both "status-check completed" sites print the verdict first.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let completed = source
+            .matches("println!(\"status-check completed\");")
+            .count();
+        let paired = source
+            .matches(
+                "print_status_check_verdict();\n            println!(\"status-check completed\");",
+            )
+            .count()
+            + source
+                .matches(
+                    "print_status_check_verdict();\n        println!(\"status-check completed\");",
+                )
+                .count();
+        assert!(
+            completed >= 2,
+            "premise: both completion sites exist ({completed})"
+        );
+        assert_eq!(
+            paired, completed,
+            "every completion line is preceded by the verdict line"
         );
     }
 
