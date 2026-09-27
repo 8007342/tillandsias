@@ -260,6 +260,9 @@ pub struct VmStateHandle {
     /// semantics as `vm_status_tx`; nothing is sent unless a connection
     /// subscribed to `SubscriptionTopic::Progress`.
     progress_tx: broadcast::Sender<ControlMessage>,
+    /// Flow and dependency-node transitions (order 472 slice 3): the
+    /// `FlowStatePush` channel, reached through `flow_sink`.
+    flow: tillandsias_control_wire::FlowEventChannel,
     /// Monotonic counter for the `seq` field carried inside each push
     /// message (distinct from the per-request `ControlEnvelope.seq`, which
     /// pushes don't have a request to reply to). Shared across all push
@@ -326,6 +329,7 @@ impl VmStateHandle {
             cloud_projects_tx,
             cloud_projects: Arc::new(RwLock::new(None)),
             progress_tx,
+            flow: tillandsias_control_wire::FlowEventChannel::with_default_capacity(),
             push_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             last_event: Arc::new(RwLock::new(SERVER_NAME.to_string())),
             subscriber_nudge: Arc::new(tokio::sync::Notify::new()),
@@ -385,6 +389,30 @@ impl VmStateHandle {
         let _ = self
             .progress_tx
             .send(ControlMessage::ProgressPush { seq, event });
+    }
+
+    /// Subscribe to the `FlowState` push topic (order 472 slice 3).
+    pub fn subscribe_flow_state(&self) -> broadcast::Receiver<ControlMessage> {
+        self.flow.subscribe()
+    }
+
+    /// Emit one flow or dependency-node transition to `FlowState`
+    /// subscribers. With no subscriber nothing is sent.
+    pub fn publish_flow(
+        &self,
+        source: tillandsias_control_wire::FlowSource,
+        from: String,
+        to: String,
+        reason: Option<String>,
+    ) {
+        if self.flow.receiver_count() == 0 {
+            return;
+        }
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        self.flow.emit(source, from, to, reason, ts);
     }
 
     /// True when at least one connection is subscribed to `LoginState`.
@@ -1060,6 +1088,8 @@ async fn serve_ready_stream(
     let mut cloud_projects_rx: Option<broadcast::Receiver<ControlMessage>> = None;
     // Order 1420-4grt: Progress topic, same contract.
     let mut progress_rx: Option<broadcast::Receiver<ControlMessage>> = None;
+    // Order 472 slice 3: FlowState topic, same contract.
+    let mut flow_rx: Option<broadcast::Receiver<ControlMessage>> = None;
     // Order 260: LocalProjects topic, same contract.
 
     'connection: loop {
@@ -1201,6 +1231,35 @@ async fn serve_ready_stream(
                 }
                 continue;
             }
+            // Server-push: FlowStatePush (order 472 slice 3). Same lag-skip
+            // contract: a skipped transition is superseded by the next one,
+            // which names the node's current state in full.
+            push = async {
+                loop {
+                    match flow_rx.as_mut()?.recv().await {
+                        Ok(msg) => return Some(msg),
+                        Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                            warn!(spec = "vsock-transport", skipped, "FlowState push receiver lagged; skipping to latest");
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => return None,
+                    }
+                }
+            }, if flow_rx.is_some() => {
+                match push {
+                    Some(body) => {
+                        let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
+                        if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
+                            debug!(spec = "vsock-transport", "vsock write failed during FlowStatePush; closing connection");
+                            break 'connection;
+                        }
+                    }
+                    None => {
+                        flow_rx = None;
+                    }
+                }
+                continue;
+            }
             // Inbound frame — received from the dedicated reader task via
             // channel. The reader owns the read half and never appears in a
             // select! branch, so cancellation cannot interrupt it mid-frame
@@ -1316,6 +1375,9 @@ async fn serve_ready_stream(
                 }
                 if topics.contains(&tillandsias_control_wire::SubscriptionTopic::Progress) {
                     progress_rx = Some(state.subscribe_progress());
+                }
+                if topics.contains(&tillandsias_control_wire::SubscriptionTopic::FlowState) {
+                    flow_rx = Some(state.subscribe_flow_state());
                 }
                 let ack = ControlEnvelope {
                     wire_version: WIRE_VERSION,
@@ -2536,6 +2598,49 @@ mod tests {
             "the first frame must be the VmStatus push, not progress: {:?}",
             env.body
         );
+    }
+
+    /// Order 472 slice 3, exit criterion 4's subscriber half: a CA rotation
+    /// published through the state reaches a FlowState subscriber as a
+    /// DependencyNode transition, with the node, both states and the reason.
+    #[tokio::test]
+    async fn a_ca_rotation_reaches_a_flow_state_subscriber() {
+        let (state, mut client, _caps, _stop) =
+            progress_test_client(vec![tillandsias_control_wire::SubscriptionTopic::FlowState])
+                .await;
+        let (from, to, reason) = crate::flow_sink::ca_transition(Some("aa"), Some("bb")).unwrap();
+        state.publish_flow(
+            tillandsias_control_wire::FlowSource::DependencyNode {
+                node: crate::flow_sink::CA_BUNDLE_NODE.into(),
+            },
+            from,
+            to,
+            Some(reason.into()),
+        );
+        let env = tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+            .await
+            .expect("FlowStatePush did not arrive")
+            .unwrap();
+        match env.body {
+            ControlMessage::FlowStatePush {
+                source,
+                from_state,
+                to_state,
+                reason,
+                ..
+            } => {
+                assert_eq!(
+                    source,
+                    tillandsias_control_wire::FlowSource::DependencyNode {
+                        node: "ca_bundle".into()
+                    }
+                );
+                assert_eq!(from_state, "current:aa");
+                assert_eq!(to_state, "current:bb");
+                assert_eq!(reason.as_deref(), Some("rotated"));
+            }
+            other => panic!("expected FlowStatePush, got {other:?}"),
+        }
     }
 
     /// Frame an envelope the way a hand-rolled peer does, for tests that must
