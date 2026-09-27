@@ -325,6 +325,19 @@ for b in $SIBLINGS; do
     rm -rf "$tmp"; tmp=""
 done
 
+# ORDER 1435-ebcx. ZERO SIBLINGS FOLDED IS NOT "NOBODY HOLDS IT" — in per-packet
+# mode too. --batch has refused this since 1034-whsp; this path answered
+# ok:cross-branch-claims:0 sibling branch(es) checked (exit 0) in a checkout
+# with no resolvable origin/<sibling>, and a host then claimed on an ok that
+# compared nothing. Same token and exit as --batch, so every consumer that reads
+# blocked:* as STOP (advance-work-from-plan §2) already handles it.
+if [ "$checked" -eq 0 ]; then
+    echo "blocked:no-siblings-folded" >&2
+    _afford "no sibling platform branch resolved as origin/<branch> (other than the current one), so nothing was compared for $PACKET" \
+        "fetch the sibling branches (git fetch origin), confirm they resolve with git branch -r, then re-run; never read this as unclaimed"
+    echo "blocked:no-siblings-folded"
+    exit 2
+fi
 if [ -z "$found" ] && [ -n "$mine" ]; then
     # THE VERDICT THE ROW ASKS FOR, and it is an ok rather than a refusal: every
     # branch carrying this claim carries it under THIS host's own label, so the

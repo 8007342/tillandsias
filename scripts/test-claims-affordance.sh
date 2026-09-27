@@ -17,6 +17,9 @@
 #   (blocked:no-siblings-folded: unreachable in practice, see the scratch-checkout
 #    note below; covered by ARM 8 statically)
 #   7  unknown-packet             carries why/remedy
+#   9  1435-ebcx: PER-PACKET mode with zero folded siblings refuses
+#      (blocked:no-siblings-folded, like --batch); REMEDY EXECUTED: a resolvable
+#      sibling ref clears it
 #   8  STATIC: every refusal token the script emits sits within six lines of an
 #      _afford call, so a refusal added later without one fails here
 #      (blocked:no-root is reachable only when the checkout is unreadable, so
@@ -125,6 +128,32 @@ git -C "$R" init -q -b work/fixture
 git -C "$R" -c user.email=f@f -c user.name=f add -A >/dev/null
 git -C "$R" -c user.email=f@f -c user.name=f commit -q -m base
 git -C "$R" update-ref refs/remotes/origin/linux-next HEAD
+
+# ARM 9 — ORDER 1435-ebcx. PER-PACKET mode with zero siblings folded must refuse
+# like --batch, not answer ok. A fresh scratch checkout with NO sibling ref.
+R0="$W/repo0"
+mkdir -p "$R0/scripts" "$R0/plan/index.d"
+cp "$CHECK" "$ROOT/scripts/plan-binary-probe.sh" "$R0/scripts/"
+printf 'packets: []\n' > "$R0/plan/index.yaml"
+git -C "$R0" init -q -b work/fixture
+git -C "$R0" -c user.email=f@f -c user.name=f add -A >/dev/null
+git -C "$R0" -c user.email=f@f -c user.name=f commit -q -m base
+rc="$(run "$R0" TILLANDSIAS_PLAN_BIN="$W/free/tillandsias-plan" bash scripts/check-claims-across-branches.sh SOME-PKT --no-fetch)"
+if [ "$rc" = 2 ] && [ "$(first)" = "blocked:no-siblings-folded" ] && has_afford; then
+    git -C "$R0" update-ref refs/remotes/origin/linux-next HEAD
+    rc2="$(run "$R0" TILLANDSIAS_PLAN_BIN="$W/free/tillandsias-plan" bash scripts/check-claims-across-branches.sh SOME-PKT --no-fetch)"
+    case "$(first)" in
+        (ok:cross-branch-claims:1*) okv=1 ;;
+        (*) okv=0 ;;
+    esac
+    if [ "$rc2" = 0 ] && [ "$okv" = 1 ]; then
+        ok "ARM 9: per-packet mode refuses zero folded siblings with its affordance, and the remedy (a resolvable sibling) clears it to an ok that counts one"
+    else
+        bad "ARM 9: the stated remedy did not clear the refusal" "rc=$rc2 out=$(first)"
+    fi
+else
+    bad "ARM 9: per-packet mode with zero siblings did not refuse (1435-ebcx)" "rc=$rc out=$(first)"
+fi
 
 # ARM 2 — in the scratch checkout (which now has a resolvable sibling), with
 # origin pointed at a path that does not exist, so the fetch itself fails.
