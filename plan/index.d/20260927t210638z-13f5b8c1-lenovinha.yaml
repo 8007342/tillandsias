@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    event:
+      type: progress
+      ts: "2026-09-27T21:06:38Z"
+      agent_id: linux-lenovinha-claude-20260927t205321z
+      host: lenovinha
+      summary: |
+        LIVE EVIDENCE, relayed by the coordinator 2026-09-27: yoga ran a live SOFT reset (--reset-state) on 7bf46265e and it PASSED: the sign-ins survived the reset. That is the core of criterion 3 (reset, then the credentials are readable), observed on a real host. The follow-on forge launch then hit "Out of diskspace" at the 256M /home/forge/src floor, which is 1445-7u63 (fix at dcb16387f), not this row. yoga also saw no Verified:KEEP token, because this commit predates the spec tokens; the post-landing alignment slice covers it.

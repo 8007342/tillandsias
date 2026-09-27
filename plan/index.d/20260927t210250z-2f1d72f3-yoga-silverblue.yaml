@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    field: notes
+    value: |-
+      size: L  implementer_tier: opus
+      Touches the unseal path and destructive deletion — opus by the umbrella's rule. Cross-crate
+      (headless + core). Do not run any reset on the operator's desktop while implementing; the
+      live fixture is for smoke hosts. The unit and source-shape arms are the local closure.
+
+
+      [2026-09-27T21:02:50Z yoga-silverblue] yoga-silverblue 2026-09-27, LIVE SOFT --reset-state for criterion 3, operator-approved directly on yoga. Binary v56.9.27.3 built by ./build.sh --install from work/1437-qza3 7bf46265e merged with origin/linux-next (fb9337165); the installed launcher contains the qza3 announce strings.
+      STEP 1 build+install PASS (rc=0).
+      STEP 2 BEFORE PASS - vault-data 153 files / 97573 bytes; keyring vault-shamir-share-v1 and vault-root-token-v1 present (byte counts only, never values); Vault KV key names 7, including secret/github/token and secret/claude/oauth; check-bare-metal-host-initialized github=seeded.
+      PREVIEW with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 (nothing destroyed) - WILL BE PRESERVED lists vault-data + vault-audit, both keyring entries, installation-uuid-v1, models; WILL BE DESTROYED lists containers/volumes/secrets/networks, all images, build+provision markers. NOTE - no disposition token is printed; there is no Verified:KEEP string in this build, and Keep vs KeepUnverified announce identically (they differ only in a warning printed AFTER podman reset). The keyring read above is what ruled out KeepUnverified.
+      STEP 3 SOFT reset PASS - rc=0, same PRESERVED/DESTROYED lists, podman system reset ran, reprovision completed.
+      STEP 4 AFTER PASS - vault-data 160 files / 101804 bytes (grew, not wiped); both keyring entries present; after --init (rc=0) and --status-check (status-check:ok, rc=0) the Vault unsealed and the 7 KV key names are byte-identical to BEFORE; no sign-in / re-auth prompt in any log.
+      STEP 4 mirror-not-credential-less - NOT MEASURED. The forge launch that brings the mirror up failed inside the forge - "sha1 file /home/forge/src/tillandsias/.git/index.lock write error. Out of diskspace" (clone succeeded, checkout failed); host /var/home has 238G free, so it is the forge src tmpfs (1349-53h6 shape), not the host. The mirror's inputs (secret/github/token, secret/mirror-identity/*) are present in the unsealed Vault, which is necessary but not the mirror verdict itself.
+      Safety copy of the pre-reset vault-data kept at ~/.cache/tillandsias-qza3-backup-20260927 on yoga.
+    ts: "2026-09-27T21:02:50Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    event:
+      type: progress
+      ts: "2026-09-27T21:02:50Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'size: L  implementer_tier: opus
+        Touches the unseal path and destructive deletion — opus by the umbrella's rule. Cross-crate
+        (headless + core). Do not run any reset on the operator's desktop while implementing; the
+        live fixture is for smoke hosts. The unit and source-shape arms are the local closure.
+        
+        
+        [2026-09-27T21:02:50Z yoga-silverblue] yoga-silverblue 2026-09-27, LIVE SOFT --reset-state for criterion 3, operator-approved directly on yoga. Binary v56.9.27.3 built by ./build.sh --install from work/1437-qza3 7bf46265e merged with origin/linux-next (fb9337165); the installed launcher contains the qza3 announce strings.
+        STEP 1 build+install PASS (rc=0).
+        STEP 2 BEFORE PASS - vault-data 153 files / 97573 bytes; keyring vault-shamir-share-v1 and vault-root-token-v1 present (byte counts only, never values); Vault KV key names 7, including secret/github/token and secret/claude/oauth; check-bare-metal-host-initialized github=seeded.
+        PREVIEW with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 (nothing destroyed) - WILL BE PRESERVED lists vault-data + vault-audit, both keyring entries, installation-uuid-v1, models; WILL BE DESTROYED lists containers/volumes/secrets/networks, all images, build+provision markers. NOTE - no disposition token is printed; there is no Verified:KEEP string in this build, and Keep vs KeepUnverified announce identically (they differ only in a warning printed AFTER podman reset). The keyring read above is what ruled out KeepUnverified.
+        STEP 3 SOFT reset PASS - rc=0, same PRESERVED/DESTROYED lists, podman system reset ran, reprovision completed.
+        STEP 4 AFTER PASS - vault-data 160 files / 101804 bytes (grew, not wiped); both keyring entries present; after --init (rc=0) and --status-check (status-check:ok, rc=0) the Vault unsealed and the 7 KV key names are byte-identical to BEFORE; no sign-in / re-auth prompt in any log.
+        STEP 4 mirror-not-credential-less - NOT MEASURED. The forge launch that brings the mirror up failed inside the forge - "sha1 file /home/forge/src/tillandsias/.git/index.lock write error. Out of diskspace" (clone succeeded, checkout failed); host /var/home has 238G free, so it is the forge src tmpfs (1349-53h6 shape), not the host. The mirror's inputs (secret/github/token, secret/mirror-identity/*) are present in the unsealed Vault, which is necessary but not the mirror verdict itself.
+        Safety copy of the pre-reset vault-data kept at ~/.cache/tillandsias-qza3-backup-20260927 on yoga.' (not terminal) with evidence_refs: fb9337165
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    event:
+      type: note
+      ts: "2026-09-27T21:02:50Z"
+      host: yoga-silverblue
+      summary: |-
+        live SOFT reset-state on yoga, criterion 3

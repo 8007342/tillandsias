@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: accel-proof-probes-a-container-name-dev-hosts-do-not-run
+    field: notes
+    value: yoga-silverblue 2026-09-27. SOURCE - the fix is on trunk as 183095fec (2026-09-03, this order) - accel_probe.rs resolve_inference_container() tries INFERENCE_CONTAINER_CANDIDATES [tillandsias-inference, tillandsias-dev-inference] after the TILLANDSIAS_INFERENCE_CONTAINER override that scripts/dev-inference-ensure.sh:118 exports. MEASURED - bash scripts/check-inference-container-name-agreement.sh answers ok:inference-container-name-agreement:tillandsias-dev-inference rc=0. NOT MEASURED - the live rung. yoga no longer runs either Tillandsias name; its inference server is the operator's own Quadlet unit, container "ollama" (docker.io/ollama/ollama, OLLAMA_VULKAN=1, --sdnotify=conmon, published on 127.0.0.1:11434), so dev-inference-ensure.sh would collide on the port and I did not start it. And accel_envelope has no CLI entry to read the rung directly. Marked implemented, not completed - a host running the dev lane (or a CLI for the envelope) closes it. Note for 793/accel work - on a host whose server is an operator-named container, neither candidate matches, and the rung reads - again unless TILLANDSIAS_INFERENCE_CONTAINER is set.
+    ts: "2026-09-27T21:07:00Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: accel-proof-probes-a-container-name-dev-hosts-do-not-run
+    event:
+      type: progress
+      ts: "2026-09-27T21:07:00Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'yoga-silverblue 2026-09-27. SOURCE - the fix is on trunk as 183095fec (2026-09-03, this order) - accel_probe.rs resolve_inference_container() tries INFERENCE_CONTAINER_CANDIDATES [tillandsias-inference, tillandsias-dev-inference] after the TILLANDSIAS_INFERENCE_CONTAINER override that scripts/dev-inference-ensure.sh:118 exports. MEASURED - bash scripts/check-inference-container-name-agreement.sh answers ok:inference-container-name-agreement:tillandsias-dev-inference rc=0. NOT MEASURED - the live rung. yoga no longer runs either Tillandsias name; its inference server is the operator's own Quadlet unit, container "ollama" (docker.io/ollama/ollama, OLLAMA_VULKAN=1, --sdnotify=conmon, published on 127.0.0.1:11434), so dev-inference-ensure.sh would collide on the port and I did not start it. And accel_envelope has no CLI entry to read the rung directly. Marked implemented, not completed - a host running the dev lane (or a CLI for the envelope) closes it. Note for 793/accel work - on a host whose server is an operator-named container, neither candidate matches, and the rung reads - again unless TILLANDSIAS_INFERENCE_CONTAINER is set.' (not terminal) with evidence_refs: 183095fec
+  - packet_id: accel-proof-probes-a-container-name-dev-hosts-do-not-run
+    event:
+      type: note
+      ts: "2026-09-27T21:07:00Z"
+      host: yoga-silverblue
+      summary: |-
+        fix on trunk, live rung unmeasured on yoga

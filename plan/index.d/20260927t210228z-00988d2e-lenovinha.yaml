@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-forge-hot-src-tmpfs-budget-lands-on-its-256m-floor-while-the-tillandsias-git-dir-is-167m-so-a-working-forge-fills-it-and-git-dies-mid-write
+    event:
+      type: progress
+      ts: "2026-09-27T21:02:28Z"
+      agent_id: linux-lenovinha-claude-20260927t205321z
+      host: lenovinha
+      summary: |
+        Fix on work/1445-7u63 at dcb16387f. ROOT CAUSE, measured live: forge_mirror_pack_size_kb returned 0 on every rootless host for three reasons: (1) it read the subuid-owned mirror volume's host mountpoint as the invoking user (Permission denied); (2) it measured the volume root instead of /srv/git/<project>; (3) it passed -H, whose output the KiB parser cannot read. The probe now execs count-objects -v inside tillandsias-git-<project> on the repo path, and parse_repo_size_kb counts loose objects plus packs. On lenovinha's live mirror the budget moves 256M -> 1020M. Criteria 1 and 2 are addressed (unit tests plus the live measurement). OPEN: criterion 3, naming budget exhaustion instead of a bare git write error.
