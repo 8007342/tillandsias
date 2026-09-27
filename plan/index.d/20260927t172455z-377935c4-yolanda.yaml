@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-tray-provision-console-prints-raw-phase-lines
+    event:
+      type: note
+      ts: "2026-09-27T17:24:55Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        Pushed work/1420-ev7i at 6136bf3a6, stacked on work/1434-vm7g (whose clippy fixes this tree needs to lint clean), so it lands after 1434. Evidence: provision_console tests 5/5 on Windows and in the Linux builder; tray 127/127 natively; native clippy -D warnings clean on the combined tree and live in the push hook; Linux clippy and fmt clean. NOT YET VERIFIED LIVE: conhost colours, and a piped run of the real binary (zero ESC, ASCII). A dev build embeds an empty headless placeholder, so it was not pointed at the smoke-installed guest. The next Windows smoke exercises both, because install-windows.ps1 runs --reset-state through a pipe. Close only after that smoke.
