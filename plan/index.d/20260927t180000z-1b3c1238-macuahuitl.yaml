@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: operator-directives-2026-09-27-harness-bypass-preaccepted-vault-store-and-downloads-survive-reset-manifest-uninstall-owned-configs
+    event:
+      type: note
+      ts: "2026-09-27T18:00:00Z"
+      agent_id: linux-macuahuitl-claude-20260927t180000z
+      host: macuahuitl
+      summary: |-
+        AMENDED 2026-09-27 (1438-pk9j): the operator answered the five open questions the same day. (1) Keyring is a REQUIREMENT for store survival, no persisted fallback share — 1437-qza3 criteria amended by event, 1118-fqfk confirmed. (2) Guest regimes get SOFT (--reset-state: keep VM/guest, inject binary, wipe containers in guest, reinit; stores kept) and HARD (--reset-guest: today's wipe, store and share go, announced) — 1437-av8u and 1437-3iux re-scoped by event; installer runs SOFT for updates, HARD only on request. (3) One folder ~/.tillandsias/ with a first-launch migration — NEW child 1438-pk9j (everything-tillandsias-owns-on-a-host-lives-under-tillandsias-home-and-a-first-launch-migrates-the-legacy-roots), which 1437-jdgg, 1437-evzi and the platform slices depend on; 1437-2pix, 1437-6ghz, 1437-rzf2 path-amended by event. (4) Uninstall leaves ZERO traces, prompts [y/N] for ~/.tillandsias, anchors go — 1437-evzi re-scoped by event. (5) Which consent key Claude honours is measured by 1437-y2wu's live arm — unchanged. The split_into list of this row is read as including 1438-pk9j (a list field cannot be amended by set-field; this note is the record). Specs amended in the same change: host-state-lifecycle (rewritten), tillandsias-vault, cache-recovery-mechanism, environment-runtime, inference-container, podman-idiomatic-patterns, podman-registries-config, wsl-runtime.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-opsx-dirt-checker-calls-launch-generated-opsx-dirt-ok-and-meta-orchestration-tells-agents-to-commit-it-so-the-reversed-order-540-decision-keeps-re-landing-regenerated-sets-on-trunk
+    field: status
+    value: completed
+    ts: "2026-09-27T19:43:34Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: the-opsx-dirt-checker-calls-launch-generated-opsx-dirt-ok-and-meta-orchestration-tells-agents-to-commit-it-so-the-reversed-order-540-decision-keeps-re-landing-regenerated-sets-on-trunk
+    event:
+      type: completed
+      ts: "2026-09-27T19:43:34Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: 49c2d548c
+  - packet_id: the-opsx-dirt-checker-calls-launch-generated-opsx-dirt-ok-and-meta-orchestration-tells-agents-to-commit-it-so-the-reversed-order-540-decision-keeps-re-landing-regenerated-sets-on-trunk
+    event:
+      type: note
+      ts: "2026-09-27T19:43:34Z"
+      host: forge-tillandsias
+      summary: |-
+        landed on origin/linux-next at 49c2d548c (land75, real 1325 s gate; coordinator macuahuitl-fedora), verified from the forge mirror: contains work/1440-w8g8 c77caffa7; check-opsx-generated-dirt.sh prints launch-dirt:opsx-only (exit 5); meta-orchestration commit-the-sync step removed.

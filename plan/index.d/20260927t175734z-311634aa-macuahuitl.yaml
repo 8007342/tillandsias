@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: per-step-memo-for-the-workspace-cargo-test-step-keyed-on-its-derived-inputs-with-a-daily-forced-run
+    field: context
+    value: |-
+      T7 of the 2026-09-27 trims. Workspace cargo test is the project's core
+      test and is never dropped; it is memoised by an input digest. The key
+      is sha256 over git ls-files -s blob ids and modes of the input set,
+      the working-tree diff of that set, a toolchain digest (rustc -V, cargo
+      -V) and scripts/test-known-red.txt. The input set is DERIVED by
+      scripts/workspace-test-inputs.sh, never hand-listed: crates/,
+      Cargo.toml, Cargo.lock, .cargo/, every path an include_str! or
+      include_bytes! in crates/ reaches through ../ (today assets/icons and
+      images/default/ca-path.txt), and every repo-relative literal a crate
+      source opens at runtime (the enumerator greps the literal and takes
+      the file or directory it names, never the whole root). The memo
+      generalises archiver-check-memo.sh's _digest and reuses the existing
+      daily marker tillandsias-last-full-gate so the forced run needs no new
+      clock. A red run never records. Hits are emitted to the timing log so
+      skippable: keeps measuring the step.
+
+
+      [2026-09-27T17:57:34Z macuahuitl] RULING 2026-09-27 (operator, via the coordinator): "memoize between
+      releases, sometimes less than 24 hours, sometimes more. But a new release
+      cut should get fresh tests. We'll look for memoization issues with pure
+      hashes and classify some of the expensive tests, it might not be worth the
+      flakiness to memoize the cheap tests." So: (1) the memo EPOCH is the
+      release cut, not a 24 h clock — the key includes the VERSION file's
+      content, which every cut bumps (scripts/bump-version.sh) and back-merges,
+      so the first gate after a cut misses everywhere; the 24 h forced-run
+      marker (tillandsias-last-full-gate) is NOT consulted by the memo; (2) keys
+      are PURE CONTENT HASHES: git blob ids plus the working-tree diff of the
+      enumerated inputs, the toolchain version strings and VERSION — never an
+      mtime, never a timestamp, never a host name; (3) only steps listed in
+      scripts/memo-classified-expensive.txt are memoised (initially the
+      workspace cargo test step; the archiver step joins through 1437-cxt9); a
+      step not listed always runs, because a cheap step's memo buys little and
+      its flakiness costs a land; (4) the cut runs everything fresh: the
+      release tier (local-ci.sh under --ci-full) sets TILLANDSIAS_FORCE_CHECK=1
+      for its own gate. The title's "daily forced run" is superseded by the
+      release-cut epoch; the packet_id is permanent and is not renamed.
+    ts: "2026-09-27T17:57:34Z"
+    host: macuahuitl
+
+events:
+  - packet_id: per-step-memo-for-the-workspace-cargo-test-step-keyed-on-its-derived-inputs-with-a-daily-forced-run
+    event:
+      type: note
+      ts: "2026-09-27T17:57:34Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-09-27 relayed by the coordinator (efficiency trims 1437-62g8)

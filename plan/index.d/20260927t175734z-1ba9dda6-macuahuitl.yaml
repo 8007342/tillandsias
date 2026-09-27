@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: per-step-memo-for-the-workspace-cargo-test-step-keyed-on-its-derived-inputs-with-a-daily-forced-run
+    field: verifiable_closure
+    value: |-
+      bash scripts/test-step-memo.sh prints ok:step-memo:8/8 and exits 0,
+      where, over a scratch repo: arm 1: after a recorded green run,
+      step-memo.sh check workspace-tests prints hit:<key12> and exits 0 when no
+      enumerated input changed; arm 2: touching each path
+      scripts/workspace-test-inputs.sh enumerates (a crate source, Cargo.lock,
+      an include_bytes target under assets/, a runtime literal such as
+      plan/schema.yaml, scripts/test-known-red.txt) flips the key and check
+      prints miss; arm 3 NEGATIVE CONTROL: touching a ledger fragment under
+      plan/index.d does not flip the key; arm 4: a run that exits non-zero
+      leaves no record (check still prints miss); arm 5: the VERSION file's
+      content is part of every key, so a scratch bump of VERSION (the artifact
+      every release cut changes and back-merges) makes every recorded memo a
+      miss — no clock, no marker, no age is consulted anywhere in step-memo.sh
+      (grep -c for date, mtime, age and last-full-gate in it prints 0); arm 6:
+      TILLANDSIAS_FORCE_CHECK=1 bypasses and records nothing; arm 7: a
+      toolchain change (rustc -V differs) flips the key; arm 8: a step whose id
+      is not listed in scripts/memo-classified-expensive.txt is never memoised
+      (check prints unclassified and the step runs). AND in build.sh a memo hit
+      on the workspace test step prints skip:workspace-tests:memo-hit:<key12>
+      and emits a timing record named workspace-tests-memo-hit. PRE-FIX RESULT:
+      FAILS — scripts/step-memo.sh does not exist; the workspace test step ran
+      128 times in 7 days at 164 s average with 0 pct fail and no per-step memo.
+    ts: "2026-09-27T17:57:34Z"
+    host: macuahuitl
+
+events:
+  - packet_id: per-step-memo-for-the-workspace-cargo-test-step-keyed-on-its-derived-inputs-with-a-daily-forced-run
+    event:
+      type: note
+      ts: "2026-09-27T17:57:34Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-09-27 relayed by the coordinator (efficiency trims 1437-62g8)

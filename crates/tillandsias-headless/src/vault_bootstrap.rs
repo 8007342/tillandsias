@@ -2174,7 +2174,7 @@ pub fn mint_approle_secret_lease(
 ///
 /// Best-effort: errors are logged and continued past so a partial failure
 /// doesn't deadlock the shutdown path. The Vault container itself is
-/// preserved on disk (matches the `tillandsias-vault-data` volume
+/// preserved on disk (matches the `<cache>/vault-data` host directory
 /// contract).
 pub async fn revoke_pending_container_tokens(debug: bool) {
     let token_entries: Vec<(String, String)> = match revocation_registry().lock() {
@@ -4387,9 +4387,9 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
 
     Err(
         "vault is initialized but no first-boot handover is present and the host \
-         keychain has no root token or fallback — the keychain and the data volume are out of \
-         sync. Reset with `podman volume rm tillandsias-vault-data` and re-run \
-         `tillandsias --init` to re-bootstrap."
+         keychain has no root token or fallback — the keychain and the data directory are out of \
+         sync. Reset by removing the `<cache>/vault-data` directory (this loses every credential) \
+         and re-run `tillandsias --init` to re-bootstrap."
             .to_string(),
     )
 }

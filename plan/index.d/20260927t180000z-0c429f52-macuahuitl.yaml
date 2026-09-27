@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-uninstall-flag-on-every-binary-removes-everything-manifest-driven
+    event:
+      type: note
+      ts: "2026-09-27T18:00:00Z"
+      agent_id: linux-macuahuitl-claude-20260927t180000z
+      host: macuahuitl
+      summary: |-
+        RE-SCOPED 2026-09-27 (1438-pk9j), operator ruling verbatim: "--uninstall should be the preferred way to remove, and should leave ZERO TRACES. Prompt on uninstall if ~/.tillandsias should also be removed, [y/N], and show some clear large text 'this is the only leftover, safe to delete …'". The anchors (installation-uuid-v1 / tillandsias-vm-uuid, /var/lib/tillandsias) go too. NEW DELIVERABLE (spec host-state-lifecycle, requirement "--uninstall is the preferred removal, leaves ZERO traces, and asks before removing ~/.tillandsias/"): the ZERO-TRACES set is removed unconditionally — binary, every launcher registration (desktop file, LaunchAgent, Start Menu, autostart, PATH blocks, registry Uninstall key, NotifyIcon settings, event-log source), every keyring entry under service tillandsias INCLUDING the anchors, every tillandsias-* podman object, the HARD-reset set on a guest regime, the Tillandsias block of every merged system file (reverted, never deleted), the Linux service-account stack including /var/lib/tillandsias, and any surviving legacy root; THEN one prompt `Also remove ~/.tillandsias (your Vault store, downloads and configs)? [y/N]`, default N; non-interactive (no TTY) answers N without blocking; --remove-home answers y without asking, --keep-home answers N without asking; --wipe on scripts/uninstall.sh is an alias of --remove-home; on N print the large boxed notice from the spec (sized to the terminal, one-line form without a TTY) saying ~/.tillandsias is the only leftover, safe to delete, and that its Vault store can no longer be unlocked because the key left with the keyring entries. The manifest is now ~/.tillandsias/downloads/manifest.json with relative entries (1437-jdgg). CRITERIA now: scripts/test-uninstall-removes-everything.sh N arm: exactly one Tillandsias path remains (~/.tillandsias, byte-identical), the notice was printed, every registration/keyring entry/podman object is gone (pre-fix: FAILS — no flag); y arm and --remove-home arm: the root is gone and no notice (pre-fix: FAILS); non-interactive arm: no block, N, one-line notice (pre-fix: FAILS); merged-file arm: only the marked block removed (pre-fix: FAILS); anchors arm: installation-uuid-v1 / tillandsias-vm-uuid absent after (pre-fix: FAILS — nothing removes them); keep-models and preserves-vm fixtures and litmus retired with the dated note (pre-fix: FAILS — bound and green). depends_on gains 1438-pk9j (the root it prompts about). size: L  implementer_tier: opus (unchanged).

@@ -279,8 +279,9 @@ script under `scripts/` that runs podman on the runtime's behalf) SHALL point
 podman at Tillandsias-OWNED configuration files under the Tillandsias config
 directory — `<config>/containers/containers.conf`, `<config>/containers/registries.conf`
 and, where the isolated graphroot is in use, `<config>/containers/storage.conf`
-(`<config>` is `~/.config/tillandsias` on Linux, the platform config dir
-elsewhere) — through podman's own environment contract (`CONTAINERS_CONF`,
+(`<config>` is `~/.tillandsias/config` on every platform — `TILLANDSIAS_HOME/config`,
+per `host-state-lifecycle`; AMENDED 2026-09-27, 1438-pk9j, from the
+`~/.config/tillandsias` the 1437-8c6p text named) — through podman's own environment contract (`CONTAINERS_CONF`,
 `CONTAINERS_REGISTRIES_CONF`, `CONTAINERS_STORAGE_CONF`, or the override
 variant, whichever the implementer proves gives Tillandsias's values
 precedence). A key Tillandsias sets in its own file SHALL take effect even

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-uninstall-flag-on-every-binary-removes-everything-manifest-driven
+    event:
+      type: note
+      ts: "2026-09-27T17:42:24Z"
+      agent_id: linux-lenovinha-claude-20260927t174223z
+      host: lenovinha
+      summary: |
+        CONSUMER TO SWITCH OVER (coordinator ruling 2026-09-27, relayed by lenovinha from 1437-qza3): the smoke lanes (scripts/e2e-step2-linux.sh, skills/build-install-and-smoke-test-e2e and skills/smoke-curl-install-and-test-e2e) run scripts/clear-vault-host-credentials.sh after podman system reset to force a cold room. That is a HARNESS action standing in for a first-install user. When this row lands `tillandsias --uninstall`, the smoke's cold room becomes "uninstall, then install" (the real user path), and clear-vault-host-credentials.sh retires from the smoke lanes.

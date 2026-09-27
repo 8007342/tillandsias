@@ -19,13 +19,21 @@ Source: [github.com/Fission-AI/OpenSpec](https://github.com/Fission-AI/OpenSpec)
 | Nix (run) | `nix run github:Fission-AI/OpenSpec -- init` |
 | Nix (profile) | `nix profile install github:Fission-AI/OpenSpec` |
 
-### Container (cached install)
+### Container (Tillandsias forge)
 
-Used in Tillandsias forge entrypoints (`lib-common.sh`):
+A project that records its openspec version in `openspec/cli-version` gets
+exactly that version in the forge (`ensure_openspec_pinned`, `lib-common.sh`,
+order 1441-myz3), installed into the forge's global npm prefix, and the
+background harness refresher never moves it to `@latest`. Projects without a
+pin get `@latest`. The pin moves only through the coordinator's deliberate
+bump, which regenerates the committed `/opsx` sets in one change:
 ```bash
-npm install -g --prefix "$CACHE/openspec" @fission-ai/openspec
-export PATH="$CACHE/openspec/bin:$PATH"
+scripts/openspec-pin.sh check   # due:openspec-bump:<pin>-><latest> when npm has newer
+scripts/openspec-pin.sh bump    # isolated config, writes the pin, never commits
+scripts/openspec-pin.sh drift   # every tracked generatedBy == the pin
 ```
+The older `$CACHE/openspec` and `/home/forge/.tools/openspec` install channels
+are retired; nothing installs there.
 
 ## Verify
 

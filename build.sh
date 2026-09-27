@@ -3150,6 +3150,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Forge project guard-hook fixture passed"
+    # Order 1442-wyf9: the same invariant from the installer's side — run in a
+    # clone whose core.hooksPath is GLOBAL (any second clone inside a forge),
+    # scripts/install-hooks.sh must refuse rather than arm the guards box-wide.
+    if ! _run bash "$SCRIPT_DIR/scripts/test-install-hooks-refuses-global-hookspath.sh" 2>&1; then
+        _error "scripts/install-hooks.sh wrote into a GLOBAL core.hooksPath — that arms the guards in every repo on the box"
+        exit 1
+    fi
 
     # Order 748-tkjx. ./build.sh --check runs NO litmus (deliberate — the suite
     # is minutes and a gate that slow gets bypassed with --no-verify), so a

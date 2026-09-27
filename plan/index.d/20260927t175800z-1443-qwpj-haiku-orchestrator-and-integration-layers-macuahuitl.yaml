@@ -1,0 +1,300 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator rulings 2026-09-27 on the efficiency trims (umbrella 1437-62g8):
+# an all-day Haiku ORCHESTRATOR session (rulings 2) and the integration-layer
+# test classification (ruling 3). Design: plan/issues/efficiency-trims-design-2026-09-27.md
+# section "Rulings 2026-09-27".
+packets:
+  - packet_id: verify-closure-runs-a-packets-verifiable-closure-and-compares-the-printed-output-to-the-criterion
+    order: 1443-qwpj
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [verification, delegation, plan-cli, bash, gate-integrity]
+    estimated_hours: 5
+    depends_on: []
+    owned_files: [scripts/verify-closure.sh, scripts/test-verify-closure.sh, openspec/litmus-tests/litmus-verify-closure-shape.yaml]
+    verifiable_closure: |
+      bash scripts/test-verify-closure.sh prints ok:verify-closure:6/6 and
+      exits 0, where, over a scratch ledger: arm 1: for a packet whose
+      verifiable_closure reads "bash scripts/x.sh prints ok:x:3/3 and exits
+      0, where ...", scripts/verify-closure.sh <order> runs exactly that
+      command, and when its stdout carries a line matching ok:x:3/3 and its
+      rc is 0 prints ok:closure:<order>:ok:x:3/3 and exits 0; arm 2: when
+      the command's stdout carries ok:x:2/3 instead, prints
+      unmet:closure:<order>:expected=ok:x:3/3 measured=ok:x:2/3 and exits 1;
+      arm 3: when the rc is non-zero with the expected line present, prints
+      unmet:closure:<order>:rc=<n> and exits 1; arm 4: a placeholder in the
+      expected line (<n>, <key12>, <sha>) matches any non-empty token; arm
+      5 NEGATIVE CONTROL: a closure with no leading command of the
+      scorable grammar (litmus:<test>, bash scripts/<name>.sh, cargo test
+      ...) prints unscoreable:closure:<order>:no-command-grammar and exits
+      2, never ok; arm 6 NEGATIVE CONTROL: a "verified" claim passed on
+      stdin or in any argument is ignored — the verdict depends only on the
+      command's output (the fixture passes --claim met with an unmet
+      measurement and gets unmet). PRE-FIX RESULT: FAILS — the script does
+      not exist; on 2026-09-27 a Haiku implementer reported the 1437-gbwi
+      criterion "met" while its own measurement read 76 s then 70 s against
+      a "under 20 s" criterion, and nothing between the report and the
+      acceptance ran the closure.
+    title: |
+      `scripts/verify-closure.sh <order>`: run the packet's own verifiable_closure command and compare the PRINTED output to the criterion — the acceptance check an orchestrator runs instead of reading a delegate's "met"
+    context: |
+      Operator ruling 2 of 2026-09-27: Haiku sessions may orchestrate all
+      day and delegate to larger agents, and the check that a delegate's
+      result is MEASURED must be built in. The scorable-obligation guard
+      (977-448j) already restricts a closure to a litmus name, a scripts/
+      command or a cargo test invocation, so every open packet carries a
+      runnable command by construction; this script extracts it (the text
+      up to " prints " or " passes"), runs it under a timeout, and compares
+      the output line the closure names, with <placeholders> matching any
+      token. A delegate's report is never an input. The verdict grammar is
+      one line so an orchestrator at the haiku tier can branch on it
+      without judgment. Self-report is an instrument: an unverified
+      "verified" is a green gate that ran no tests.
+    next_action: >
+      Write the extractor (closure text from the folded packet via the plan
+      binary's --json projection; command = leading token run of the
+      scorable grammar; expected = the token after "prints "), the runner
+      (timeout from TILLANDSIAS_CLOSURE_TIMEOUT_S, default 1800; cwd repo
+      root), the comparator and the three-verdict grammar; fixture with
+      six arms over a scratch ledger; bind the litmus under ci-release.
+    notes: |
+      size: L
+      implementer_tier: opus
+      Gate-integrity: this is the acceptance check for delegated work; a
+      comparator that matches too loosely accepts an unmet criterion.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from the
+      coordinator's relay of the operator's rulings and the 1437-gbwi
+      misreport (76 s then 70 s reported as meeting a <20 s criterion).
+
+  - packet_id: haiku-orchestrate-skill-an-all-day-haiku-session-that-triages-delegates-by-tier-and-accepts-only-measured-closures
+    order: 1443-hbgt
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [orchestration, delegation, tier-routing, skills, bash]
+    estimated_hours: 6
+    depends_on: [verify-closure-runs-a-packets-verifiable-closure-and-compares-the-printed-output-to-the-criterion, repeat-claude-arm-passes-the-model-and-effort-flags]
+    owned_files: [skills/haiku-orchestrate/SKILL.md, scripts/haiku-orchestrate-cycle.sh, scripts/test-haiku-orchestrate-cycle.sh, methodology/distributed-work.yaml]
+    verifiable_closure: |
+      bash scripts/test-haiku-orchestrate-cycle.sh prints
+      ok:haiku-orchestrate:6/6 and exits 0, where, with CLAUDE_BIN pointing
+      at an argv-recording stub delegate and a scratch ledger of one sonnet
+      row and one opus row claimable by role any: arm 1:
+      scripts/haiku-orchestrate-cycle.sh any launches one delegate per row
+      with --model equal to the row's implementer_tier (sonnet for the
+      sonnet row, opus for the opus row; an untagged row gets opus) and
+      never --model haiku for an implementer; arm 2: after the stub
+      delegate returns, the cycle runs scripts/verify-closure.sh <order>
+      and accepts (writes the completion through set-field with the
+      verify line as evidence) ONLY on ok:closure; arm 3: on
+      unmet:closure the cycle re-delegates once with the measured line in
+      the prompt, and on a second unmet writes a blocked event carrying
+      both measured lines and moves on — it never writes completed; arm 4
+      NEGATIVE CONTROL: a stub delegate that prints "criterion met" while
+      the closure measures unmet is not accepted (the ledger status stays
+      in_progress/blocked, never completed); arm 5: the cycle's own argv
+      to git contains no push to linux-next, windows-next, osx-next or
+      main (work/<order> pushes only) and no edit under methodology/,
+      openspec/specs/, scripts/hooks/ or scripts/gate-steps.d/ is made by
+      the orchestrator process itself (a diff of those paths against the
+      pre-cycle tree is empty); arm 6: the cycle ends with a tokens:
+      record written through --emit-tokens --from-transcript, or
+      source=absent. PRE-FIX RESULT: FAILS — neither the skill nor the
+      cycle script exists; the only Haiku delegate today is read-only
+      (audit, patch-draft, json) and no session verifies a delegate's
+      closure by running it.
+    title: |
+      `/haiku-orchestrate`: an all-day Haiku orchestrator session that drains plan_next, triages, delegates each packet to a Sonnet or Opus sub-agent by its tier, and accepts only a closure it measured itself
+    context: |
+      Operator ruling 2 of 2026-09-27: "We can try hosts running Haiku
+      sessions all day and then have them delegate work to larger agents.
+      Haikus for simple orchestration." LAUNCH: a host runs
+      ./repeat --model haiku --prompt "Use the /haiku-orchestrate skill"
+      (needs 1437-m5yx, the claude arm passing --model), on the same
+      stagger slot as its worker session; in a forge the same prompt
+      through the harness default until 689-jxb2. THE LOOP per cycle:
+      cycle-preflight; select-work-batch.sh <role> --tier-any (the
+      orchestrator picks for its delegates, not for itself); for each row,
+      claim through set-field, launch ONE delegate (Agent tool with
+      model = the row's implementer_tier, or scripts/claude-delegate.sh
+      implement <order> with CLAUDE_DELEGATE_MODEL set to that tier) with
+      the packet's title, context, next_action, verifiable_closure and
+      owned_files; when it returns, run scripts/verify-closure.sh <order>
+      (1443-qwpj) and branch on its one line: ok -> completion with the
+      verify line as evidence and a work/<order> push; unmet -> one
+      re-delegation with the measured line pasted, then a blocked event;
+      unscoreable -> a note event and no acceptance. Sub-agent budget as
+      the meta-orchestration rule (at most 8 per cycle, 3 concurrent),
+      recorded through --emit-tokens --from-transcript. WHAT IT MUST
+      NEVER DO ITSELF: implement or edit code under a packet; judge a
+      closure by reading a delegate's report (the 1437-gbwi misreport:
+      76 s then 70 s reported as meeting a <20 s criterion); push to any
+      platform branch or main (work/<order> refs only; the relay lane
+      lands); edit methodology/, openspec/specs/, scripts/hooks/,
+      scripts/gate-steps.d/ or any file that decides what a gate runs;
+      re-tier a packet (a disagreement is a set-field --reason for the
+      coordinator to read, not a routing change); run ./build.sh --check
+      as its own gate (the delegate and the relay lane own gates); send a
+      peer message longer than the budget; or accept work whose closure it
+      could not run (no-command-grammar is a refusal, not a pass). The
+      canonical rule is methodology/distributed-work.yaml ->
+      cycle_batch_triage.model_tier_routing.orchestrator_session.
+    next_action: >
+      Write the skill (orientation, the loop above, the never-list
+      verbatim, the launch line, the handoff shape) and the cycle script
+      it drives; fixture with six arms over the argv-recording stub and a
+      scratch ledger; amend the methodology subsection if the
+      implementation finds a rule the design missed (say which).
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      The design is specified; the judgment (acceptance) lives in 1443-qwpj.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from the
+      coordinator's relay of the operator's rulings.
+
+  - packet_id: integration-layer-test-classification-what-runs-on-a-work-ref-push-a-relay-land-and-the-daily-cut
+    order: 1443-b85g
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: linux
+    capability_tags: [ci, litmus, gate, classification, bash, linux, gate-integrity]
+    estimated_hours: 8
+    depends_on: [litmus-covering-specs-relay-scope-partition]
+    owned_files: [scripts/integration-layer-tests.sh, scripts/run-litmus-test.sh, scripts/local-ci.sh, scripts/test-integration-layer-tests.sh, openspec/litmus-tests/litmus-integration-layer-classification-shape.yaml, methodology/ci.yaml]
+    verifiable_closure: |
+      bash scripts/test-integration-layer-tests.sh prints
+      ok:integration-layers:7/7 and exits 0, where, over a scratch litmus
+      corpus, bindings and a diff against a base: arm 1:
+      scripts/integration-layer-tests.sh work-ref --diff <base> prints the
+      decider set and the touched fixtures and NO litmus and NO cargo
+      line; arm 2: integration-layer-tests.sh relay --diff <base> prints
+      the change-class tier (light|scoped|full, from change-class.sh), the
+      workspace test line, and exactly the run set that
+      litmus-covering-specs.sh --relay-scope <base> prints (byte-equal on
+      the litmus lines) — pre-build, instant and quick, declared or
+      command matches; arm 3: integration-layer-tests.sh cut prints every
+      bound pre-build spec of every size, then post-build and runtime
+      phases, with memo=off on every line; arm 4: a spec of phase
+      post-build, runtime or integration, or of size e2e, never appears in
+      the work-ref or relay output (deferred:layer:cut is printed instead
+      with the spec name); arm 5: scripts/run-litmus-test.sh --layer relay
+      runs exactly the specs the classifier prints for relay and skips the
+      rest with a "Layer-scoped: deferred to cut" line, and --layer cut
+      with the memo env set still runs everything; arm 6 NEGATIVE CONTROL:
+      an unknown layer name is refused with exit 2 and a spec with no size
+      or phase field is classified to cut (fails closed, never dropped);
+      arm 7: two runs on the same diff and corpus print byte-identical
+      output. PRE-FIX RESULT: FAILS — no classifier exists; the relay lane
+      runs every covering spec of every size and phase, the work-ref hook
+      runs no fixtures, and the cut runs the same suites with whatever
+      memo state the host holds.
+    title: |
+      Integration-layer test classification: `scripts/integration-layer-tests.sh <work-ref|relay|cut>` decides which test class runs at which branch layer (work-ref push, linux-next relay land, daily cut to main), and `run-litmus-test.sh --layer` honours it
+    context: |
+      Operator ruling 3 of 2026-09-27: "let's defer e2e and other
+      integration tests to their corresponding integration layers", with
+      the classification of which integration tests run for each layer to
+      be REVISITED. The layers are the branch layers: a work/<order> ref
+      (the pre-push hook, seconds), a relay land on linux-next (the land
+      gate, minutes), the daily cut to main (--ci-full, an hour), and the
+      stable promotion (per-platform smokes, unchanged here). The test
+      classes are: deciders (whole-tree check-*.sh), fixtures
+      (scripts/test-*.sh), crate unit tests (cargo test --workspace and the
+      feature-gated pass), pre-build litmus by size (instant, quick versus
+      long, large), and post-build/runtime/integration litmus (e2e, needs a
+      forge or a guest). THE TABLE (canonical in methodology/ci.yaml ->
+      integration_layers): work-ref = deciders + touched fixtures, no
+      cargo, no litmus (the worker runs relay-preflight.sh on its own ref
+      before the PR, which is the relay layer applied early); relay =
+      change-class tier of ./build.sh --check (deciders, fixtures,
+      workspace cargo test memoised per 1437-jm2d, feature-gated pass) +
+      the scoped covering litmus of 1437-yfuh (declared and instant/quick
+      command matches, pre-build only); cut = every bound pre-build spec
+      of every size, post-build, runtime, integration and e2e, install,
+      all with memo off (ruling 4: a cut runs everything fresh). This row
+      ALIGNS with 1437-yfuh (yoga, in progress): the relay layer's litmus
+      set IS --relay-scope's run set, consumed not re-derived; this row
+      adds the other two layers, the deferred:layer:cut line so a deferred
+      spec is named where it was deferred, and the --layer switch on the
+      runner. The classification is data the runner reads (size, phase,
+      binding), not a second taxonomy: an unclassifiable spec goes to the
+      cut (fails closed).
+    next_action: >
+      Write the classifier (reads change-class.sh for the tier,
+      litmus-covering-specs.sh --relay-scope for the relay set, the corpus
+      size and phase fields for the cut set); add --layer to
+      run-litmus-test.sh; make local-ci.sh's check:litmus-pre-build call
+      --layer cut with the memo env cleared; amend methodology/ci.yaml
+      integration_layers if the implementation changes the table (say
+      which cell and why); fixture with seven arms; bind the litmus under
+      ci-release.
+    notes: |
+      size: L
+      implementer_tier: opus
+      Decides what each layer runs; a wrong cell lets a red spec reach the
+      cut or main unseen.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from the
+      coordinator's relay of the operator's rulings; the phase and size
+      vocabulary was counted on this checkout (406 pre-build, 16
+      post-build, 337 instant, 79 quick, 27 e2e, 9 long).
+
+  - packet_id: census-litmus-layer-misclassification-specs-whose-size-or-phase-disagrees-with-what-they-run
+    order: 1443-2ef7
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [litmus, census, classification, bash]
+    estimated_hours: 2
+    depends_on: []
+    owned_files: [scripts/census-litmus-layer-classification.sh]
+    verifiable_closure: |
+      bash scripts/census-litmus-layer-classification.sh --self-test prints
+      ok:litmus-layer-census-self-test:3/3 and exits 0, where, over a
+      scratch corpus: arm 1: a spec declared size instant whose command
+      lines name run-forge-standalone.sh, tillandsias --init, podman run or
+      build.sh --ci-full is printed as
+      misclassified:<spec>:size=instant:runs=<token>; arm 2: a spec
+      declared phase pre-build whose command lines name a guest, a VM or a
+      forge launch is printed as misclassified:<spec>:phase=pre-build:runs=<token>;
+      arm 3 NEGATIVE CONTROL: a spec whose size and phase agree with its
+      commands prints nothing for that spec, and the summary line
+      census:litmus-layer:specs=<n> misclassified=<m> is always printed with
+      m=0 for a clean corpus. The live run over openspec/litmus-tests
+      prints that summary line and exits 0 whatever m is (a census, not a
+      gate). PRE-FIX RESULT: FAILS — the script does not exist; the size
+      and phase fields have never been checked against what a spec runs,
+      and 1443-b85g routes on them.
+    title: |
+      A census of litmus specs whose declared `size` or `phase` disagrees with what their commands run, because the integration-layer classifier routes on those two fields
+    context: |
+      Operator ruling 3 of 2026-09-27 asks for the layer classification to
+      be revisited; the classifier (1443-b85g) routes on size and phase,
+      so a spec that says instant and launches a forge is routed to the
+      wrong layer. This census names them; the owners re-declare. Advisory
+      by design: it prints, it never refuses.
+    next_action: >
+      Write the census with the token table in the closure and --self-test;
+      run it live once and paste the summary line and the misclassified
+      names on this packet's completion event.
+    notes: |
+      size: S
+      implementer_tier: haiku
+      A grep-driven census with a stated token table and a self-test.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session.

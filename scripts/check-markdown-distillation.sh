@@ -52,7 +52,8 @@ allowed_path() {
     .claude/commands/*|.opencode/commands/*|.opencode/command/*|.github/prompts/*) return 0 ;;
     # 2026-08-28 repair: a runtime instruction surface the OpenCode agent loads at launch — same class as the AGENTS.md entry above.
     .opencode/instructions/*) return 0 ;;
-    .claude/skills/*/SKILL.md|.opencode/skills/*/SKILL.md|.codex/skills/*/SKILL.md|.gemini/skills/*/SKILL.md|.github/skills/*/SKILL.md) return 0 ;;
+    # .agents/skills: openspec's vendor-neutral skill target (codex since 1.13.x; order 1441-myz3).
+    .agents/skills/*/SKILL.md|.claude/skills/*/SKILL.md|.opencode/skills/*/SKILL.md|.codex/skills/*/SKILL.md|.gemini/skills/*/SKILL.md|.github/skills/*/SKILL.md) return 0 ;;
     images/default/cheatsheets/*|images/default/config-overlay/opencode/*) return 0 ;;
     @methodology/.opencode/*) return 0 ;;
     *) return 1 ;;
