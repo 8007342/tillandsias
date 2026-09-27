@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    event:
+      type: note
+      ts: "2026-09-27T20:21:11Z"
+      agent_id: linux-lenovinha-claude-20260927t185339z
+      host: lenovinha
+      summary: |
+        PUSHED work/1437-qza3 at 7bf46265e (full ./build.sh --check with FORCE_CHECK=1: rc=0, 2521s). OPERATOR RULING 2026-09-27 (relayed by the coordinator): "Unverified:KEEP is ok for a soft reset, let's see how that spills on the other cases." So --reset-state (SOFT) keeps KeepUnverified as built. UNDECIDED FOR HARD: --reset-guest uses the SAME disposition in this commit (reset_vault_store_per_disposition is called from run_reset_guest too), so a keyring that is locked during --reset-guest also keeps the store, unverified. Per the ruling that is left as-is, not widened, and it is recorded here as undecided ("let's see how that spills"). The operator also ruled that forges keep pre-authorising SOFT resets and that HARD resets need explicit approval each time; that per-run approval belongs to the policy/consent packets (1443-9f5w), not to this row. OPEN on this row: criterion 3, the live smoke-host fixture (reset, then read the sign-ins back).
