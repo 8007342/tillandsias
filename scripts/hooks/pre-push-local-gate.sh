@@ -2051,5 +2051,29 @@ if [[ -f scripts/check-added-test-is-referenced.sh ]]; then
 else
     echo "${YLW}note: scripts/check-added-test-is-referenced.sh absent — added-test reference check skipped${RST}" >&2
 fi
+
+# ORDER 1434-vm7g. Native clippy -D warnings on the Windows tray. It lives HERE
+# because this hook is the one gate git runs natively on a Windows host:
+# ./build.sh re-execs inside the WSL2 builder, where the crate compiles its
+# Linux stubs, so a build.sh step would skip forever there. The checker skips
+# by name off Windows and when the change does not touch the crate. A
+# could-not-run (no cargo) is noted, not refused: a host without a toolchain
+# cannot have built the change it is pushing either.
+if [[ -f scripts/check-windows-tray-clippy.sh ]]; then
+    _wtc_out="$(bash scripts/check-windows-tray-clippy.sh 2>&1)"
+    _wtc_rc=$?
+    _wtc_verdict="$(printf '%s\n' "$_wtc_out" | tail -1)"
+    case "$_wtc_rc:$_wtc_verdict" in
+        0:ok:*) echo "${GRN}✓ ${_wtc_verdict}${RST}" >&2 ;;
+        0:skip:*) ;;
+        3:*) echo "${YLW}note: ${_wtc_verdict}${RST}" >&2 ;;
+        *)
+            TILLANDSIAS_HOOK_DECIDER="windows-tray-clippy" \
+            refuse "native clippy -D warnings refuses the Windows tray (1434-vm7g): ${_wtc_verdict:-<no verdict line>}" \
+                   "$(printf '%s\n' "$_wtc_out" | head -8)" \
+                   "Fix each site; cargo clippy -p tillandsias-windows-tray --all-targets -- -D warnings reproduces it."
+            ;;
+    esac
+fi
 echo "${GRN}✓ local gate: preflight clean, ./build.sh --check current for this tree${RST}" >&2
 exit 0
