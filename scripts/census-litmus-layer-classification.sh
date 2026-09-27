@@ -84,7 +84,7 @@ self_test() {
   mkdir -p "$tmp/arm1" "$tmp/arm2" "$tmp/arm3"
 
   cat >"$tmp/arm1/arm1.yaml" <<'EOF'
-name: litmus:arm1
+name: selftest-arm1
 spec: arm1
 phase: pre-build
 size: instant
@@ -94,7 +94,7 @@ critical_path:
 EOF
 
   cat >"$tmp/arm2/arm2.yaml" <<'EOF'
-name: litmus:arm2
+name: selftest-arm2
 spec: arm2
 phase: pre-build
 size: full
@@ -104,7 +104,7 @@ critical_path:
 EOF
 
   cat >"$tmp/arm3/arm3.yaml" <<'EOF'
-name: litmus:arm3
+name: selftest-arm3
 spec: arm3
 phase: pre-build
 size: instant
