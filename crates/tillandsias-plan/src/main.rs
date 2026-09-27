@@ -8093,6 +8093,25 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 std::process::exit(1);
             };
 
+            // ORDER 1431-k6s7 — the write-side twin of append-event's 896-f8ti.
+            // `resolve()` falls through to the ARCHIVE last, which is right for
+            // reads and wrong for a write: a set-field on an archived order
+            // printed ok: and filed a fragment the live fold drops ("dropped-entry
+            // … NO SUCH PACKET"), caught only by the release preflight as
+            // plan-ledger-incomplete (yoga: `set-field 606-um5s next_action
+            // --append …`). Refuse before any write, naming it archived, with its
+            // own remedy — the reference is right; the target is finished. No
+            // archived-reopen path exists, so this removes nothing that worked.
+            if ledger.is_archived(&pid) {
+                eprintln!(
+                    "error: {target} resolves to {pid}, which is ARCHIVED (completed work, in \
+                     plan/archive/) — REFUSED before any write. A field set here lands in a \
+                     fragment no reader folds. Your reference is not a typo; the target is \
+                     finished. If this work is genuinely continuing, file a new packet citing {pid}."
+                );
+                std::process::exit(1);
+            }
+
             // ORDER 1201-hsf9 — A CLAIM MUST NAME A WORKSTATION.
             //
             // `status: in_progress` is the one write whose whole purpose is to
