@@ -6,6 +6,17 @@
 
 set -euo pipefail
 
+# 1191-vrjf: this renderer WRITES DATA FILES, so its numbers must not follow the
+# caller's locale. Under LC_NUMERIC=fr_FR.UTF-8 bash's `printf '%.1f'` refused
+# the dot-decimal percent outright ("printf: 89.8989898989899: nombre non
+# valable", measured on yoga) and, worse, rendered an integer as "89,0" into a
+# dashboard read as data. Pinned HERE, at the renderer's boundary, rather than
+# asked of callers: a fix that depends on the caller's environment is the same
+# defect in a new place. LC_ALL (not LC_NUMERIC alone) because a caller's
+# LC_ALL overrides LC_NUMERIC; nothing here sorts or matches classes, so C
+# changes numbers and nothing else.
+export LC_ALL=C
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE="${SOURCE:-$REPO_ROOT/target/convergence/centicolon-signature.jsonl}"
 DOC_DIR="$REPO_ROOT/docs/convergence"
@@ -242,9 +253,15 @@ else
 fi
 
 # @trace gap:OBS-008 — dashboard refresh auto-detection
-generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-generated_date_display="$(date -u +%Y-%m-%d)"
-generated_time_display="$(date -u +%H:%M)"
+# ONE clock read, and every displayed date/time derived from it (1191-vrjf).
+# Three separate `date` calls could disagree across a minute boundary, and the
+# stamp made two renders of the same data differ — macbookair's darwin run of
+# the locale guard failed on exactly that, 1.1 s apart. CONVERGENCE_DASHBOARD_NOW
+# is the seam a test pins; it must be the same UTC ISO-8601 form date prints.
+generated_at="${CONVERGENCE_DASHBOARD_NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+generated_date_display="${generated_at%%T*}"
+generated_time_display="${generated_at#*T}"
+generated_time_display="${generated_time_display:0:5}"
 record_count="${#rows[@]}"
 
 # Compute trend metrics from history rows for alert thresholds.

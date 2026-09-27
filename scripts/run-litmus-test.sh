@@ -109,7 +109,9 @@ readonly LITMUS_BINDINGS="${TILLANDSIAS_LITMUS_BINDINGS:-${PROJECT_ROOT}/openspe
 # The default is unchanged, so every existing caller resolves identically.
 readonly LITMUS_TESTS_DIR="${TILLANDSIAS_LITMUS_TESTS_DIR:-${PROJECT_ROOT}/openspec/litmus-tests}"
 readonly METHODOLOGY_LITMUS="${PROJECT_ROOT}/methodology/litmus.yaml"
-readonly LITMUS_RUNTIME_DIR="${PROJECT_ROOT}/target/litmus-runtime"
+# TILLANDSIAS_LITMUS_RUNTIME_DIR (1375-6pnd): a fixture that must run with NO
+# yq needs a runtime dir without the cached toolbox yq shim below.
+readonly LITMUS_RUNTIME_DIR="${TILLANDSIAS_LITMUS_RUNTIME_DIR:-${PROJECT_ROOT}/target/litmus-runtime}"
 readonly LITMUS_PODMAN_ROOT="${PROJECT_ROOT}/target/litmus-podman/root"
 readonly LITMUS_PODMAN_RUNROOT="${PROJECT_ROOT}/target/litmus-podman/runroot"
 readonly LITMUS_PODMAN_TMPDIR="${PROJECT_ROOT}/target/litmus-podman/tmp"
@@ -284,6 +286,56 @@ if [[ -f "$PROJECT_ROOT/scripts/plan-binary-probe.sh" ]]; then
         LITMUS_PLAN_BIN="$(resolve_plan_binary 2>/dev/null)" || LITMUS_PLAN_BIN=""
     fi
 fi
+# Whether that binary answers `yaml get` (1375-6pnd), decided ONCE here: _yaml_jq
+# always runs inside $(...), so a cache set there would not outlive the call.
+_LITMUS_HAS_YAML_GET=0
+_litmus_caps_rc=1
+if [[ -n "$LITMUS_PLAN_BIN" ]]; then
+    # `&& … || …`, not `; rc=$?`: this runner is `set -e`, and a failing $( ) in
+    # a plain assignment EXITS it — with the stub's own rc and no output at all,
+    # which is how a broken TILLANDSIAS_PLAN_BIN ended the run before 1419-zydw.
+    _litmus_caps="$("$LITMUS_PLAN_BIN" capabilities 2>/dev/null)" && _litmus_caps_rc=0 || _litmus_caps_rc=$?
+    case $'\n'"$_litmus_caps"$'\n' in *$'\nyaml\n'*) _LITMUS_HAS_YAML_GET=1 ;; esac
+fi
+
+# ── ORDER 1419-zydw: NO RUNNABLE PLAN BINARY IS ONE NAMED REFUSAL ─────────────
+# Without it, plan-backed steps do not refuse — each degrades its own way, and
+# the run reads as several unrelated regressions. MEASURED 2026-09-26 on darwin
+# in a fresh linked worktree (meta-orchestration): four reds, four surfaces —
+# claim-ledger-node LEASED the fixture's fake near-miss id (the unverifiable-
+# ledger path leases by design), the long-running view read missing=2, a
+# fixture said "no runnable tillandsias-plan", a methodology query failed —
+# every one green once a binary was supplied. So refuse ONCE, before any test.
+# The binary must RUN (`capabilities`), not merely exist: an explicit
+# TILLANDSIAS_PLAN_BIN is honoured on existence alone by resolve_plan_binary,
+# so a stale or foreign binary would otherwise pass as "present".
+# ./build.sh --check builds the binary in preflight and never reaches this.
+# Opt-out, for a caller KNOWINGLY running binary-free:
+# TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN=1 (the pre-1419 behaviour).
+# ONLY ON PATHS THAT EXECUTE TESTS: --parse-only and --list never run a step,
+# so they must not be gated on a binary they do not use. It first ran at top
+# level and refused test-litmus-item-opener-refused.sh ARM 3, whose mutant copy
+# of this runner does --parse-only from a $TMP root with no binary (land57).
+_litmus_require_plan_binary() {
+    [[ "${TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN:-}" != "1" ]] || return 0
+    local _litmus_nobin=""
+    if [[ -z "$LITMUS_PLAN_BIN" ]]; then
+        _litmus_nobin="blocked:litmus-no-plan-binary"
+    elif [[ "$_litmus_caps_rc" -ne 0 ]]; then
+        _litmus_nobin="blocked:litmus-plan-binary-unrunnable:$LITMUS_PLAN_BIN"
+    fi
+    if [[ -n "$_litmus_nobin" ]]; then
+        echo "$_litmus_nobin"
+        {
+            echo "[litmus] no RUNNABLE tillandsias-plan resolved (resolve_plan_binary + capabilities)."
+            echo "  Plan-backed steps would not refuse; each would degrade and read as its own"
+            echo "  regression (a lease, missing=N, a failed query). Nothing was run."
+            echo "  REMEDY: cargo build --release -p tillandsias-plan   (or TILLANDSIAS_PLAN_BIN=<runnable binary>)"
+            echo "  To run anyway, knowingly: TILLANDSIAS_LITMUS_ALLOW_NO_PLAN_BIN=1"
+        } >&2
+        exit 2
+    fi
+}
 # _yaml_jq <file> <jq-filter> — the first tier. Returns non-zero (and prints
 # nothing) when the tier is unavailable or the file does not load, so callers
 # fall through to the next tier. A `blocked:` verdict from yaml-json lands on
@@ -314,8 +366,21 @@ fi
 # fix becomes a claim.
 _yaml_jq() {
     [[ -n "$LITMUS_PLAN_BIN" ]] || return 1
-    command -v jq &>/dev/null || return 1
     local out
+    # ORDER 1375-6pnd: `yaml get` answers the runner's filters (all inside the
+    # json get subset) from the binary itself, so the test SELECTION no longer
+    # depends on jq or yq being on the host. Measured before this change: with
+    # jq, yq and the toolbox yq shim all absent, a spec whose tests are
+    # pre-build selected NOTHING (the yq tier's `|| echo runtime` default
+    # claimed every phase was runtime) while a host with jq selected them all.
+    # LF on every platform, so no CR strip is needed on this path.
+    if [[ "$_LITMUS_HAS_YAML_GET" == 1 ]]; then
+        out="$("$LITMUS_PLAN_BIN" yaml get -r "$2" "$1" 2>/dev/null)" || return 1
+        [[ -n "$out" ]] && printf '%s\n' "$out"
+        return 0
+    fi
+    # An older binary without `yaml get`: the previous yaml-json | jq path.
+    command -v jq &>/dev/null || return 1
     out="$("$LITMUS_PLAN_BIN" yaml-json "$1" 2>/dev/null | jq -r "$2" 2>/dev/null)" || return 1
     printf '%s\n' "${out//$'\r'/}"
 }
@@ -2754,6 +2819,9 @@ main() {
         list_all_tests
         exit 0
     fi
+
+    # 1419-zydw: from here on tests EXECUTE, so a runnable plan binary is required.
+    _litmus_require_plan_binary
 
     log_info "Timeout per test: ${TIMEOUT_SECONDS}s"
     log_info "Phase filter: ${FILTER_PHASE}"

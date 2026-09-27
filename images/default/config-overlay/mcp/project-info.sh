@@ -46,6 +46,31 @@ if command -v tillandsias_dev_env_hook >/dev/null 2>&1; then
     tillandsias_dev_env_hook "$PWD" || true
 fi
 
+# ORDER 1414-mjdw (the 823-u3k9 mechanism, extended from forge-plan). This is a
+# long-lived process: a fix landing in this file does not reach it until the
+# session relaunches, and check-mcp-expert-health.sh cannot see that because it
+# probes a FRESH instance. MEASURED 2026-09-26: a server started before
+# 1388-pfys answered grep_code "health_log|HEALTH_LOG" with "No matches found"
+# while the current file returned 4 lines. So the id is computed ONCE, here,
+# and reported by project_info; check-mcp-live-build.sh compares it with disk.
+# Recomputing it per call would always agree with disk and detect nothing.
+for _bid_candidate in \
+    "${TILLANDSIAS_MCP_BUILD_ID_LIB:-}" \
+    "${BASH_SOURCE[0]%/*}/../../lib-mcp-build-id.sh" \
+    "/usr/local/lib/tillandsias/lib-mcp-build-id.sh"; do
+    if [ -n "$_bid_candidate" ] && [ -r "$_bid_candidate" ]; then
+        # shellcheck source=/dev/null
+        . "$_bid_candidate" 2>/dev/null || true
+        break
+    fi
+done
+MCP_SERVER_SOURCE="${BASH_SOURCE[0]}"
+if command -v tillandsias_mcp_build_id >/dev/null 2>&1; then
+    MCP_SERVER_BUILD_ID="$(tillandsias_mcp_build_id "$MCP_SERVER_SOURCE")"
+else
+    MCP_SERVER_BUILD_ID="unknown"
+fi
+
 # ── Project type detection ──────────────────────────────────────
 # @trace spec:forge-environment-discoverability
 # Detects project type by examining canonical marker files.
@@ -878,6 +903,12 @@ ${preview}"
                     # Get detailed project info (deprecated in favor of project_metadata)
                     path=$(echo "$args" | jq -r '.path // "."')
                     result=$(get_project_metadata "$path")
+                    # 1414-mjdw: the one fact only the RUNNING process has.
+                    # Attest with: check-mcp-live-build.sh attest <server_build value
+                    # before " source="> --source <path after it>.
+                    result=$(printf '%s' "$result" | jq \
+                        --arg sb "project-info=${MCP_SERVER_BUILD_ID:-unknown} source=${MCP_SERVER_SOURCE:--}" \
+                        '. + {server_build: $sb}' 2>/dev/null) || result=$(get_project_metadata "$path")
                     ;;
                 "project_metadata")
                     # @trace spec:forge-environment-discoverability

@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Filed by yoga from its 2026-09-27 Start Of Day gate, where nix-gc was the one
+# maintenance step that could not run.
+packets:
+  - packet_id: nix-toolbox-store-subcommands-call-the-host-nix-binary-so-gc-pin-and-store-status-cannot-run-on-a-toolbox-rung-host
+    order: 1421-3pd6
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: linux
+    capability_tags: [nix, toolbox, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - scripts/nix-toolbox.sh
+      - scripts/test-nix-toolbox.sh
+    unscoreable: "unpinnable-until-the-guard-exists: the closure is a fixture arm in scripts/test-nix-toolbox.sh, built like 799-nx4r's arm 14 (host nix shadowed, the container's nix reachable ONLY through a fake `toolbox run`), asserting `gc` answers an ok:nix-store-gc:* line rather than blocked:nix-store-gc:nix-unusable. Pre-fix result: FAILS — measured on yoga (below). NEGATIVE CONTROL: a host with NO nix and NO toolbox still answers blocked, never a fabricated ok."
+    title: |
+      scripts/nix-toolbox.sh's store subcommands (gc, pin, store-status) call the HOST nix binary through `_store_nix`, so on a host whose only nix is the toolbox rung they answer blocked:nix-store-gc:nix-unusable — the daily gate's nix-gc step can never run there, and the store only grows
+    context: |
+      MEASURED on yoga (Fedora Silverblue, toolbox rung) 2026-09-27 during the
+      Start Of Day gate:
+
+        scripts/nix-toolbox.sh ensure  -> ok:nix-toolbox:toolbox
+        scripts/nix-toolbox.sh gc      -> blocked:nix-store-gc:nix-unusable
+
+      CAUSE, by source reading: `_store_nix() { nix "${NIX_FEATURES[@]}" --store
+      "$CHROOT_STORE" "$@"; }` invokes `nix` on the HOST PATH, and store_gc's
+      precondition (`_store_nix store ping` at ~:429) fails where the only nix
+      is inside the toolbox. yoga has no host nix.
+
+      SAME CLASS AS 799-nx4r, other subcommands: `run` ignored the rung until
+      6deb56e9a/01333f3e1; the store subcommands still do. The toolbox rung's
+      store is the same $CHROOT_STORE under $HOME (shared into the container),
+      so routing _store_nix through `toolbox run -c "$TOOLBOX_NAME"` on that
+      rung should address the identical store — to be MEASURED, not assumed.
+
+      WHY IT MATTERS: the daily gate stamps nix-gc as a maintenance step; on a
+      toolbox-rung host it is `blocked` every day, so the store is never
+      pruned, and a stamp that honestly records "blocked" every day reads as
+      furniture.

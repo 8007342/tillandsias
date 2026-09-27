@@ -46,6 +46,8 @@ pub mod fragments;
 pub mod gitref;
 /// ORDER 394d — the committed ground-truth query set and its grader.
 pub mod groundtruth;
+/// ORDER 1375-8g5t — sha256 and the clock behind the `hash` / `time` verbs and Lua.
+pub mod host_verbs;
 /// ORDER 1375-rn9b — the jq-subset query engine behind `json get` / `yaml get`.
 pub mod json_query;
 /// ORDER 582-nqw5 — the same fragment overlay applied to `plan/loop_status.md`.

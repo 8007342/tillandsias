@@ -116,13 +116,25 @@ now_epoch() {
     date -u +%s 2>/dev/null || echo 0
 }
 
+# ORDER 1414-mjdw: the stamp holds ONE LINE PER SERVER (forge-plan and
+# project-info are both long-lived), so a project-info attestation no longer
+# overwrites forge-plan's. stamp_field reads the line selected into STAMP_LINE.
+STAMP_LINE=""
 stamp_field() {
-    [ -f "$STAMP" ] || return 1
+    [ -n "$STAMP_LINE" ] || return 1
     # Space-split, name-anchored — never `\b`, which BSD sed silently never
-    # matches and which cost 803-bqte every macOS attestation.
-    tr ' ' '\n' <"$STAMP" 2>/dev/null \
-        | sed -n "s/^$1=\\(.*\\)\$/\\1/p" \
-        | grep -m1 . || return 1
+    # matches and which cost 803-bqte every macOS attestation. A word loop,
+    # not a pipeline: `| grep -m1` exits early and under pipefail a MATCH can
+    # surface as a failure (the sigpipe-verdict rule). set -f: no globbing.
+    local _w _rc=1
+    set -f
+    for _w in $STAMP_LINE; do
+        case "$_w" in
+            "$1="?*) printf '%s\n' "${_w#"$1="}"; _rc=0; break ;;
+        esac
+    done
+    set +f
+    return "$_rc"
 }
 
 usage() {
@@ -169,70 +181,98 @@ case "${1:-check}" in
             echo "refused:attest-needs-the-source-path-the-server-reported"; usage; exit 2
         fi
         mkdir -p "$(dirname "$STAMP")" 2>/dev/null || true
-        printf 'ts=%s epoch=%s server=%s build=%s source=%s agent=%s\n' \
-            "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)" \
-            "$(now_epoch)" "$server" "$build" "$source_path" "$agent" \
-            >"$STAMP" 2>/dev/null || { echo "refused:attest-unwritable-stamp"; exit 2; }
+        # Replace THIS server's line, keep every other server's (1414-mjdw).
+        _others="$(grep -v " server=$server " "$STAMP" 2>/dev/null || true)"
+        {
+            [ -n "$_others" ] && printf '%s\n' "$_others"
+            printf 'ts=%s epoch=%s server=%s build=%s source=%s agent=%s\n' \
+                "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)" \
+                "$(now_epoch)" "$server" "$build" "$source_path" "$agent"
+        } >"$STAMP" 2>/dev/null || { echo "refused:attest-unwritable-stamp"; exit 2; }
         echo "ok:live-build-attested:$server=$build"
         exit 0
         ;;
     check)
-        server="$(stamp_field server)" || server=""
-        attested="$(stamp_field build)" || attested=""
-        source_path="$(stamp_field source)" || source_path=""
-        if [ -z "$server" ] || [ -z "$attested" ] || [ -z "$source_path" ]; then
-            echo "unattested:no-live-build-claim"
-            exit 3
-        fi
-
-        stamp_epoch="$(stamp_field epoch)" || stamp_epoch=""
-        case "$stamp_epoch" in
-            '' | *[!0-9]*) stamp_epoch="" ;;
-        esac
-        if [ -n "$stamp_epoch" ]; then
-            age=$(( $(now_epoch) - stamp_epoch ))
-            [ "$age" -lt 0 ] && age=0
-            if [ "$age" -gt "$MAX_AGE" ]; then
-                # An earlier cycle's claim describes an earlier cycle's PROCESS.
-                # Inheriting it is the unfalsifiable-premise failure again.
-                echo "unattested:live-build-claim-stale"
-                exit 3
+        # 1414-mjdw: the original single-claim check, now run per attested line.
+        check_selected() {
+            server="$(stamp_field server)" || server=""
+            attested="$(stamp_field build)" || attested=""
+            source_path="$(stamp_field source)" || source_path=""
+            if [ -z "$server" ] || [ -z "$attested" ] || [ -z "$source_path" ]; then
+                echo "unattested:no-live-build-claim"
+                return 3
             fi
+    
+            stamp_epoch="$(stamp_field epoch)" || stamp_epoch=""
+            case "$stamp_epoch" in
+                '' | *[!0-9]*) stamp_epoch="" ;;
+            esac
+            if [ -n "$stamp_epoch" ]; then
+                age=$(( $(now_epoch) - stamp_epoch ))
+                [ "$age" -lt 0 ] && age=0
+                if [ "$age" -gt "$MAX_AGE" ]; then
+                    # An earlier cycle's claim describes an earlier cycle's PROCESS.
+                    # Inheriting it is the unfalsifiable-premise failure again.
+                    echo "unattested:live-build-claim-stale"
+                    return 3
+                fi
+            fi
+    
+            case "$source_path" in
+                /*) abs="$source_path" ;;
+                *)  abs="$ROOT/$source_path" ;;
+            esac
+            if [ ! -r "$abs" ]; then
+                echo "unavailable:server-source-unreadable"
+                return 2
+            fi
+            if ! command -v tillandsias_mcp_build_id >/dev/null 2>&1; then
+                echo "unavailable:build-id-unknown"
+                return 2
+            fi
+            ondisk="$(tillandsias_mcp_build_id "$abs")"
+            # UNKNOWABLE is never `current`. Comparing two `unknown`s and calling it
+            # a match would manufacture the green this file exists to withdraw.
+            if [ "$attested" = "unreported" ]; then
+                # The live server answered, and its answer carried no build line at
+                # all. It cannot be current: the file on disk emits one. Naming this
+                # separately matters because the REMEDY differs — `unknown` means
+                # this check cannot tell, `unreported` means the server is old.
+                echo "stale:live-server-build-unreported:$server"
+                return 1
+            fi
+            if [ "$ondisk" = "unknown" ] || [ "$attested" = "unknown" ]; then
+                echo "unavailable:build-id-unknown"
+                return 2
+            fi
+            if [ "$attested" != "$ondisk" ]; then
+                echo "stale:live-server-build:$server:$attested!=$ondisk"
+                return 1
+            fi
+            echo "ok:live-build-current:$server"
+            return 0
+        }
+        want="${2:-}"
+        if [ -n "$want" ]; then
+            STAMP_LINE="$(grep -m1 " server=$want " "$STAMP" 2>/dev/null || true)"
+            check_selected; exit $?
         fi
-
-        case "$source_path" in
-            /*) abs="$source_path" ;;
-            *)  abs="$ROOT/$source_path" ;;
-        esac
-        if [ ! -r "$abs" ]; then
-            echo "unavailable:server-source-unreadable"
-            exit 2
-        fi
-        if ! command -v tillandsias_mcp_build_id >/dev/null 2>&1; then
-            echo "unavailable:build-id-unknown"
-            exit 2
-        fi
-        ondisk="$(tillandsias_mcp_build_id "$abs")"
-        # UNKNOWABLE is never `current`. Comparing two `unknown`s and calling it
-        # a match would manufacture the green this file exists to withdraw.
-        if [ "$attested" = "unreported" ]; then
-            # The live server answered, and its answer carried no build line at
-            # all. It cannot be current: the file on disk emits one. Naming this
-            # separately matters because the REMEDY differs — `unknown` means
-            # this check cannot tell, `unreported` means the server is old.
-            echo "stale:live-server-build-unreported:$server"
-            exit 1
-        fi
-        if [ "$ondisk" = "unknown" ] || [ "$attested" = "unknown" ]; then
-            echo "unavailable:build-id-unknown"
-            exit 2
-        fi
-        if [ "$attested" != "$ondisk" ]; then
-            echo "stale:live-server-build:$server:$attested!=$ondisk"
-            exit 1
-        fi
-        echo "ok:live-build-current:$server"
-        exit 0
+        # No server named: judge EVERY attested server and report the worst,
+        # so a stale project-info cannot hide behind a current forge-plan.
+        # Rank: stale(1) > unavailable(2) > unattested(3) > ok(0).
+        worst_rc=""; worst_line=""
+        while IFS= read -r STAMP_LINE; do
+            [ -n "$STAMP_LINE" ] || continue
+            line="$(check_selected)"; rc=$?
+            case "$rc" in 1) r=4 ;; 2) r=3 ;; 3) r=2 ;; *) r=1 ;; esac
+            case "$worst_rc" in 1) w=4 ;; 2) w=3 ;; 3) w=2 ;; 0) w=1 ;; *) w=0 ;; esac
+            if [ "$r" -gt "$w" ]; then worst_rc="$rc"; worst_line="$line"; fi
+        done <<EOF_STAMP
+$(cat "$STAMP" 2>/dev/null)
+EOF_STAMP
+        if [ -z "$worst_rc" ]; then STAMP_LINE=""; check_selected; exit $?; fi
+        echo "$worst_line"
+        exit "$worst_rc"
         ;;
     show)
         [ -f "$STAMP" ] && cat "$STAMP" || echo "(no live-build attestation at $STAMP)"
@@ -336,6 +376,37 @@ case "${1:-check}" in
         _expect "a-server-that-reports-no-build-is-stale-not-unknown" \
             "stale:live-server-build-unreported:forge-plan" 1 check
 
+        # 9c. ORDER 1414-mjdw — TWO long-lived servers. A current forge-plan
+        #     must not vouch for a stale project-info: the bare check reports
+        #     the WORST attested server, and attesting one server keeps the
+        #     other's line. MEASURED 2026-09-26: a pre-1388-pfys project-info
+        #     answered "No matches found" while every health signal read green.
+        _fx_pi="$_fx_dir/project-info.sh"
+        printf 'echo pi v1\n' >"$_fx_pi"
+        _pi1="$(_id_of "$_fx_pi")"
+        _run attest "project-info=$_pi1" --source "$_fx_pi" >/dev/null 2>&1
+        printf 'echo pi v2 1388 fix\n' >"$_fx_pi"
+        _pi2="$(_id_of "$_fx_pi")"
+        _run attest "forge-plan=$_v2" --source "$_fx_src" >/dev/null 2>&1
+        _expect "a-current-forge-plan-does-not-hide-a-stale-project-info" \
+            "stale:live-server-build:project-info:$_pi1!=$_pi2" 1 check
+        _expect "each-server-is-checkable-by-name" \
+            "ok:live-build-current:forge-plan" 0 check forge-plan
+        _run attest "project-info=$_pi2" --source "$_fx_pi" >/dev/null 2>&1
+        _expect "relaunched-project-info-clears-and-forge-plan-survives" \
+            "ok:live-build-current:forge-plan" 0 check forge-plan
+
+        # 9d. THE REAL project-info SERVER honours the contract too.
+        _real_pi="$ROOT/images/default/config-overlay/mcp/project-info.sh"
+        if grep -q 'server_build: \$sb' "$_real_pi" 2>/dev/null \
+           && grep -q 'project-info=\${MCP_SERVER_BUILD_ID' "$_real_pi" 2>/dev/null \
+           && grep -q 'MCP_SERVER_BUILD_ID="\$(tillandsias_mcp_build_id' "$_real_pi" 2>/dev/null; then
+            echo "ok: the-real-project-info-server-reports-its-own-build"
+        else
+            echo "FAIL: $_real_pi does not compute and report a server_build id"
+            _fx_fail=1
+        fi
+
         # 10. Grammar: exactly one well-formed line per invocation.
         _run attest "forge-plan=$_v2" --source "$_fx_src" >/dev/null 2>&1
         _lines="$(_run check 2>/dev/null | grep -cE '^(ok:live-build-current:[a-z0-9-]+|stale:live-server-build:[a-z0-9-]+:[0-9a-f]+!=[0-9a-f]+|stale:live-server-build-unreported:[a-z0-9-]+|unattested:(no-live-build-claim|live-build-claim-stale)|unavailable:[a-z-]+)$')"
@@ -347,7 +418,7 @@ case "${1:-check}" in
         fi
 
         rm -rf "$_fx_dir"
-        [ "$_fx_fail" = 0 ] && echo "ok:mcp-live-build-check-fixture:11"
+        [ "$_fx_fail" = 0 ] && echo "ok:mcp-live-build-check-fixture:15"
         exit "$_fx_fail"
         ;;
     *)

@@ -18,6 +18,20 @@
 # freshness: auditor=macos-tlatoanis-macbook-air-fable5 date=2026-08-16 verdict=refreshed scope=761-g36m authoring
 set -u
 
+# 1413-8bee: TILLANDSIAS_DIALECT_SCAN_FILES is an ALIAS for a single-path
+# TILLANDSIAS_DIALECT_SCAN_DIR. litmus:enclave-service-health-shape scoped its
+# one-file check with that name, which this script never read, so the "one
+# file" check silently scanned every script plus build.sh: 16.9 s on darwin,
+# 9.2 s on macuahuitl, against a 10 s step budget. Scoped, it is 0.03 s.
+if [ -z "${TILLANDSIAS_DIALECT_SCAN_DIR:-}" ] && [ -n "${TILLANDSIAS_DIALECT_SCAN_FILES:-}" ]; then
+  case "$TILLANDSIAS_DIALECT_SCAN_FILES" in
+    (*[[:space:]]*)
+      echo "blocked:bash-dialect:scan-files-multiple"
+      echo "[check-bash-dialect] TILLANDSIAS_DIALECT_SCAN_FILES names ONE path (file or directory); got: '$TILLANDSIAS_DIALECT_SCAN_FILES'" >&2
+      exit 1 ;;
+  esac
+  TILLANDSIAS_DIALECT_SCAN_DIR="$TILLANDSIAS_DIALECT_SCAN_FILES"
+fi
 SCAN_DIR="${TILLANDSIAS_DIALECT_SCAN_DIR:-scripts}"
 SELF_NAME="check-bash-dialect.sh"
 
@@ -196,6 +210,81 @@ awkv_multiline_sites() {
           for (j = i; j <= i + 20 && j <= NR; j++)
             if (index(line[j], "split(" m ",") && index(line[j], "\"\\n\"")) { print i ":" m; break }
           s = substr(s, RSTART + RLENGTH)
+        }
+      }
+    }' "$1" 2>/dev/null
+}
+
+# AN UNPARENTHESISED CASE PATTERN INSIDE $( ) (1413-8bee, 2026-09-26). bash 3.2
+# ends the command substitution at the pattern's `)`, so the script does not
+# PARSE on macOS while bash 4+ accepts it. It redded every Mac gate via
+# 84f37ff24 (1375-2x4e). MEASURED on /bin/bash 3.2.57, 2026-09-26:
+#   x=$(case "$p" in /*) a ;; *) b ;; esac)            syntax error, rc=2
+#   the same with $( and case on their own lines       syntax error, rc=2
+#   x=$(echo pre; case "$p" in b) m ;; esac)           syntax error, rc=2
+#   x=$(case "$p" in (b) p1 ;; *) p2 ;; esac)          syntax error: EVERY arm
+#   x="$(case "$p" in /*) a ;; esac)"                  WORSE: `bash -n` passes, then a
+#       runtime syntax error; x is EMPTY or the REST OF THE LINE as text
+#       (84f37ff24 shape: " printf %s  ;; *) printf rel ;; esac)") and the
+#       script carries on
+#   every arm written (pat) / backticks / ( case ) subshell / $(f)   all parse
+# REMEDY: the leading-paren form `(pat)` on EVERY arm, or move the case into a
+# function and call it through $(f).
+# Line-level exemption (on the arm line): `# case-in-cs: ok (<reason>)`.
+CASE_IN_CS_EXEMPT='# case-in-cs: ok'
+
+case_in_cs_sites() {
+  # "<line>" for every unparenthesised case arm inside a command substitution.
+  awk '
+    function arms_bad(t,   n, i, seg, parts) {
+      # t: the text after "case WORD in". Every arm must open with "(".
+      n = split(t, parts, ";;")
+      for (i = 1; i <= n; i++) {
+        seg = parts[i]; sub(/^[[:space:]]+/, "", seg)
+        if (seg == "" || seg ~ /^esac/ || seg ~ /^\)/) continue
+        if (substr(seg, 1, 1) != "(") return 1
+      }
+      return 0
+    }
+    {
+      s = $0
+      if (s ~ /^[[:space:]]*#/) next
+      if (index(s, "# case-in-cs: ok")) next
+      if (in_case > 0) {
+        if (s ~ /^[[:space:]]*esac([[:space:];)]|$)/) { in_case--; if (in_case == 0) cs_open = 0; next }
+        if (s ~ /^[[:space:]]*case[[:space:]].*[[:space:]]in[[:space:]]*$/) { in_case++; next }
+        if (match(s, /^[[:space:]]*[^([:space:]#][^[:space:]]*\)/)) {
+          tok = substr(s, RSTART, RLENGTH)
+          if (index(tok, "$(") == 0 && index(tok, "=") == 0) print NR
+        }
+        next
+      }
+      # Multi-line: a $( left open at end of line, then a case line.
+      if (cs_open && s ~ /^[[:space:]]*\)/) cs_open = 0
+      if (cs_open && s ~ /^[[:space:]]*case[[:space:]].*[[:space:]]in[[:space:]]*$/) { in_case = 1; next }
+      if (s ~ /\$\([[:space:]]*$/) { cs_open = 1; next }
+      # Single line (or a $(case ... in that continues on the next lines).
+      # From each $( walk forward counting parens, so a NESTED $(...) before
+      # the case (84f37ff24: `$(cd … && _p="$(resolve…)" && case …`) does not
+      # hide it; stop where this $( closes.
+      rest = s
+      while ((p = index(rest, "$(")) > 0) {
+        rest = substr(rest, p + 2)
+        cpos = 0; depth = 1; L = length(rest)
+        for (k = 1; k <= L && depth > 0; k++) {
+          c = substr(rest, k, 1)
+          if (c == "(") depth++
+          else if (c == ")") depth--
+          else if (c == "c" && substr(rest, k, 5) ~ /^case[[:space:]]/ \
+                   && (k == 1 || substr(rest, k - 1, 1) ~ /[[:space:];&|(]/)) { cpos = k + 5; break }
+        }
+        if (cpos > 0) {
+          after = substr(rest, cpos)
+          if (match(after, /[[:space:]]in([[:space:]]|$)/)) {
+            tail = substr(after, RSTART + RLENGTH)
+            if (tail ~ /^[[:space:]]*$/) { in_case = 1; break }
+            if (arms_bad(tail)) { print NR; break }
+          }
         }
       }
     }' "$1" 2>/dev/null
@@ -453,6 +542,13 @@ for f in $SCAN_FILES; do
   if [ -n "$awkv_bad" ]; then
     echo "[check-bash-dialect] MULTI-LINE awk -v value in '$f' (BSD awk — the awk macOS ships — rejects a newline in a -v assignment with 'newline in string' and prints nothing; the program splits this variable on \"\\n\", so it IS multi-line. Silent on darwin, and fully silent under 2>/dev/null or || true; 1399-wtpq). Pass it via the environment: NAME=\"\$var\" awk '... ENVIRON[\"NAME\"] ...':" >&2
     printf '%s\n' "$awkv_bad" | head -3 | sed "s|^|  $f:|" >&2
+    _file_bad=1
+  fi
+  # Unparenthesised case arm inside $( ) (1413-8bee): does not PARSE on 3.2.
+  caseincs_bad="$(case_in_cs_sites "$f")"
+  if [ -n "$caseincs_bad" ]; then
+    echo "[check-bash-dialect] UNPARENTHESISED case pattern inside \$( ) in '$f' (bash 3.2 — the only bash macOS ships — ends the substitution at the pattern's ')' and the script does not parse; quoted \"\$( )\" passes bash -n, then yields EMPTY or the rest of the line as the value; redded every Mac gate via 84f37ff24, 1413-8bee). Write EVERY arm as (pat), or call a function through \$(f):" >&2
+    printf '%s\n' "$caseincs_bad" | head -3 | sed "s|^|  $f:|" >&2
     _file_bad=1
   fi
   if [ "$_file_bad" -eq 1 ]; then unguarded=$((unguarded + 1)); fi

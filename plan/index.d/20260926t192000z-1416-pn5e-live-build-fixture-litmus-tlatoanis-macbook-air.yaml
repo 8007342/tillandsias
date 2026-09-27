@@ -1,0 +1,22 @@
+packets:
+  - packet_id: nothing-runs-the-mcp-live-build-check-fixture-so-its-arms-and-the-1414-mutation-control-only-execute-when-someone-types-the-command
+    order: 1416-pn5e
+    status: in_progress
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [mcp, experts, testing]
+    estimated_hours: 1
+    observed_by: macuahuitl
+    title: |
+      scripts/check-mcp-live-build.sh fixture (823-u3k9, extended to 15 arms by 1414-mjdw) is referenced by no litmus,
+      gate step or script, so a regression in the live-build join or the per-server stamp would land silently
+    verifiable_closure: |
+      litmus:mcp-live-build-check-fixture (bound under forge-environment-discoverability) runs the fixture and
+      expects ok:mcp-live-build-check-fixture:15; pre-fix result: FAILS (no litmus references the fixture).
+    context: |
+      Found by the coordinator gating land48 (1414-mjdw), 2026-09-26. Mutation control: re-introducing the
+      single-slot attest overwrite turns the forge-environment-discoverability spec run from passed=19 to failed=1.
+    exit_criteria:
+      - 'the litmus is bound and passes on darwin and linux; pre-fix result: FAILS'

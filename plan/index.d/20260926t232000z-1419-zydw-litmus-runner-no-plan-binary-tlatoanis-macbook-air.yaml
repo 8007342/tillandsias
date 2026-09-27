@@ -1,0 +1,37 @@
+packets:
+  - packet_id: the-litmus-runner-in-a-checkout-with-no-plan-binary-produces-several-misleading-reds-instead-of-one-named-refusal
+    order: 1419-zydw
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [testing, litmus, observability]
+    estimated_hours: 2
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the deliverable is the runner precondition and its fixture; the pin lands with it.
+    title: |
+      scripts/run-litmus-test.sh run where resolve_plan_binary/mf_plan_binary finds nothing (a fresh linked worktree,
+      no target/*/tillandsias-plan) gives several unrelated-looking reds rather than one named "no plan binary" verdict
+    verifiable_closure: |
+      in a checkout with no resolvable plan binary, run-litmus-test.sh prints ONE named refusal or loud skip (e.g.
+      blocked:litmus:no-plan-binary) and no plan-dependent step reports a red of its own; with a binary the spec is
+      unchanged; pre-fix result: FAILS (meta-orchestration on darwin, fresh worktree at eac34b4b9: four misleading reds).
+    context: |
+      MEASURED 2026-09-26 on tlatoanis-macbook-air during 1418-bug2. With no plan binary in a linked worktree, the
+      meta-orchestration spec went red on four tests for four different-looking reasons, each passing once
+      TILLANDSIAS_PLAN_BIN was supplied:
+        litmus:ledger-node-claim-shape 6/7: the ledger is unverifiable, so claim-ledger-node degrades loudly and
+          LEASES by design; the fixture's fake near-miss id "fixture-reel-node" was claimed (rc=0), reading as a
+          refusal regression
+        litmus:resumable-claim-dirt-shape 1/5: "no runnable tillandsias-plan"
+        litmus:long-running-view-agreement 1/7: violation:long-running-view:missing=2 (with a binary: ok, 26 listed),
+          reading as ledger drift
+        litmus:forge-expert-base-guard-shape 10/15: methodology query failed
+      The first diagnosis pass chased ledger content and darwin regime before finding the one shared cause.
+      ./build.sh --check builds the binary in preflight, so the gate itself is unaffected; ad hoc and worktree
+      litmus runs are what mislead. Related: 1418-bug2.
+    exit_criteria:
+      - 'no plan binary -> one named refusal/skip, not per-test reds; pre-fix result: FAILS (four reds)'
+      - 'with a binary, spec results unchanged'

@@ -34,7 +34,7 @@ critical_path:
     # the here-string rewrite is immune under identical conditions.
     command: "bash scripts/test-sigpipe-verdict-pipelines.sh 2>&1 | tail -1"
     timeout_ms: 120000
-    expected_behavior: "ok:sigpipe-verdict-pipelines-fixture:11"
+    expected_behavior: "ok:sigpipe-verdict-pipelines-fixture:13"
 
   # `-eq`, NOT `=` — BSD wc PADS ITS COUNT AND THIS FAILED ON EVERY macOS HOST.
   # `echo "$out" | wc -l` prints "       1" on BSD/macOS and "1" on GNU, so the

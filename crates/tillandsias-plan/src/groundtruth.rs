@@ -704,6 +704,18 @@ pub struct Harness {
     /// envelope then took `Freshness::for_source`, i.e. THIS CHECKOUT'S HEAD,
     /// and stamped it onto spans the index read at a different commit.
     spec_freshness: Option<crate::answer::Freshness>,
+    /// ORDER 1415-89bs. An injected spec-index directory for TESTS; `None`
+    /// (production) keeps the env-first resolution ladder. A test that
+    /// set_var'd TILLANDSIAS_SPEC_INDEX_DIR instead redirected every sibling
+    /// test that resolves the ladder (spec_index::resolve_dir) while it ran.
+    spec_index_dir: Option<String>,
+    /// ORDER 1258-u8re. The embedder the loaded index declares (`.model`).
+    spec_model: Option<String>,
+    /// Every spec.answer retrieval so far: (case id, query-vector bits, the
+    /// ordered citation keys). Two DISTINCT query vectors that retrieve the
+    /// identical ordered list is the observable signature of a dead retriever.
+    retrieved: Vec<(String, Vec<u32>, Vec<String>)>,
+    degenerate: Vec<String>,
 }
 
 /// ORDER 888-miiy. Marks an engine error as a HOST CAPABILITY GAP rather than
@@ -723,6 +735,94 @@ pub struct Harness {
 /// a bare `Err` that still aborts with rc=2. "The index is wrong" and "this host
 /// has no index" look similar and mean opposite things.
 pub const ENGINE_UNAVAILABLE: &str = "engine-unavailable: ";
+
+/// ORDER 1258-u8re. The query side and the index are INCOMMENSURABLE: a
+/// different embedding dimension, or a different declared embedder. Not a host
+/// gap (the index exists) and not a graded result — grading it measures
+/// nothing. MEASURED on yoga 2026-09-18: 768-dim queries against a 1024-dim
+/// index graded spec-rung1 pass=2 fail=3 (the matching index: 5/0), two unrelated
+/// questions retrieved the identical ordered chunk list, and two filed records
+/// scored identically from models 15x apart. It stays a bare `Err`, so the run
+/// aborts with rc=2 and grades nothing.
+pub const WRONG_INDEX: &str = "config-refusal: wrong-index: ";
+
+/// A committed query vector and what produced it (1258-u8re criterion 5).
+#[derive(Debug, Clone, PartialEq)]
+pub struct QueryVector {
+    /// The embedder that produced it; `None` for a legacy bare array.
+    pub model: Option<String>,
+    pub vector: Vec<f32>,
+}
+
+/// Parse a query-vector file: `{"model": "...", "dim": N, "vector": [...]}`, or
+/// the legacy bare float array. A declared `dim` must equal the vector's length,
+/// so the provenance cannot drift from the data it describes.
+pub fn parse_query_vector(text: &str, what: &str) -> Result<QueryVector, String> {
+    let v: serde_json::Value =
+        serde_json::from_str(text.trim()).map_err(|e| format!("{what}: not JSON: {e}"))?;
+    if v.is_array() {
+        let vector: Vec<f32> =
+            serde_json::from_value(v).map_err(|e| format!("{what}: not a float vector: {e}"))?;
+        return Ok(QueryVector {
+            model: None,
+            vector,
+        });
+    }
+    let model = v
+        .get("model")
+        .and_then(|m| m.as_str())
+        .filter(|m| !m.trim().is_empty())
+        .ok_or_else(|| format!("{what}: a query-vector object must name its \"model\""))?
+        .to_string();
+    let vector: Vec<f32> = v
+        .get("vector")
+        .cloned()
+        .ok_or_else(|| format!("{what}: a query-vector object must carry \"vector\""))
+        .and_then(|x| {
+            serde_json::from_value(x)
+                .map_err(|e| format!("{what}: \"vector\" is not a float array: {e}"))
+        })?;
+    let dim = v
+        .get("dim")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| format!("{what}: a query-vector object must declare \"dim\""))?;
+    if usize::try_from(dim).ok() != Some(vector.len()) {
+        return Err(format!(
+            "{what}: declares dim={dim} but carries {} floats",
+            vector.len()
+        ));
+    }
+    Ok(QueryVector {
+        model: Some(model),
+        vector,
+    })
+}
+
+/// The refusal for an index that cannot be graded against this query vector,
+/// or `None` when the two are commensurable. Dimension is decisive; the models
+/// are compared only when BOTH sides declare one (a legacy index or vector
+/// cannot contradict what it never stated).
+#[must_use]
+pub fn wrong_index_refusal(
+    q: &QueryVector,
+    index_dim: Option<usize>,
+    index_model: Option<&str>,
+) -> Option<String> {
+    let qd = q.vector.len();
+    let qm = q.model.as_deref().unwrap_or("undeclared");
+    let im = index_model.unwrap_or("undeclared");
+    let dim_bad = index_dim.is_some_and(|d| d != qd);
+    let model_bad = matches!((q.model.as_deref(), index_model), (Some(a), Some(b)) if a != b);
+    if !dim_bad && !model_bad {
+        return None;
+    }
+    let id = index_dim.map_or_else(|| "?".to_string(), |d| d.to_string());
+    Some(format!(
+        "{WRONG_INDEX}the query vectors are {qd}-dim ({qm}) but the spec index is {id}-dim ({im}); \
+         grading them against each other measures nothing, so NOTHING was graded (1258-u8re). \
+         Rebuild the index with {qm}, or regenerate the query vectors with {im}"
+    ))
+}
 
 /// True when an engine error is a host capability gap (see [`ENGINE_UNAVAILABLE`]).
 ///
@@ -746,11 +846,29 @@ impl Harness {
             spec_vectors: None,
             spec_chunks: None,
             spec_freshness: None,
+            spec_index_dir: None,
+            spec_model: None,
+            retrieved: Vec::new(),
+            degenerate: Vec::new(),
         }
+    }
+
+    /// Answer spec.answer from THIS index directory instead of resolving the
+    /// ladder (1415-89bs): the test seam that replaces mutating process env.
+    pub fn with_spec_index_dir(mut self, dir: impl Into<String>) -> Self {
+        self.spec_index_dir = Some(dir.into());
+        self
     }
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Degenerate-retrieval findings so far (1258-u8re criterion 4): pairs of
+    /// DISTINCT query vectors that retrieved the identical ordered chunk list.
+    #[must_use]
+    pub fn degenerate_retrieval(&self) -> &[String] {
+        &self.degenerate
     }
 
     fn ledger(&mut self) -> Result<&Ledger, String> {
@@ -786,13 +904,17 @@ impl Harness {
             // keeps a shifted pairing from grading as plausible-and-wrong)
             // lives in spec_index::SpecIndexEntry now; only the caching and
             // the ENGINE_UNAVAILABLE framing above stay grading-specific.
-            let dir = resolve_spec_index_dir()?;
+            let dir = match &self.spec_index_dir {
+                Some(d) => d.clone(),
+                None => resolve_spec_index_dir()?,
+            };
             let entry = crate::spec_index::SpecIndexEntry::load_dir(Path::new(&dir))?;
             // 1229-2862: TAKE THE FRAME BEFORE DESTRUCTURING. `entry.freshness()`
             // borrows the entry, so it must be read here rather than reconstructed
             // later from a path — reconstructing it from a path is precisely the
             // `Freshness::for_source` mistake this order removes.
             self.spec_freshness = Some(entry.freshness());
+            self.spec_model = entry.model.clone();
             self.spec_vectors = Some(entry.vectors);
             self.spec_chunks = Some(entry.chunks);
         }
@@ -840,13 +962,28 @@ impl Harness {
                 let qpath = root.join(rel);
                 let qtext = std::fs::read_to_string(&qpath)
                     .map_err(|e| format!("read {}: {e}", qpath.display()))?;
-                let qvec: Vec<f32> = serde_json::from_str(&qtext)
-                    .map_err(|e| format!("{}: not a float vector: {e}", qpath.display()))?;
+                let q = parse_query_vector(&qtext, &qpath.display().to_string())?;
                 // BOTH sides from the index, written by one run over one tree.
                 // Re-deriving chunks from the repo was the first shape and it is
                 // wrong: `crates/` is IN the corpus, so editing any Rust file
                 // shifts the pairing. Caught immediately — adding this engine
                 // took the tree to 19485 chunks against 19483 stored vectors.
+                self.spec_index()?;
+                // 1258-u8re: REFUSE BEFORE GRADING. top_k's cosine does not
+                // error on unequal lengths; it scores a truncated prefix and
+                // returns a near-constant list, which grades as ordinary
+                // failures with every provenance field correct.
+                if let Some(refusal) = wrong_index_refusal(
+                    &q,
+                    self.spec_vectors
+                        .as_ref()
+                        .and_then(|v| v.first())
+                        .map(Vec::len),
+                    self.spec_model.as_deref(),
+                ) {
+                    return Err(refusal);
+                }
+                let qvec = q.vector;
                 let (chunks, vectors) = self.spec_index()?;
                 // ORDER 917-6iwv: the SAME width the pipeline serves, not a
                 // second literal beside it. This line read `6` while
@@ -868,6 +1005,26 @@ impl Harness {
                 // citation set, not the prose (this packet's own criterion).
                 let plain: Vec<crate::spec::Chunk> =
                     picked.iter().map(|p| p.chunk.clone()).collect();
+                // 1258-u8re criterion 4: a dead retriever's signature, checked
+                // on its own terms. Identical VECTORS are exempt: two cases may
+                // legitimately share one (spec-rung1's out-of-corpus pair).
+                let keys: Vec<String> = plain
+                    .iter()
+                    .map(|c| format!("{}:{}-{}", c.path, c.line_start, c.line_end))
+                    .collect();
+                let bits: Vec<u32> = qvec.iter().map(|f| f.to_bits()).collect();
+                for (other, obits, okeys) in &self.retrieved {
+                    if *okeys == keys && *obits != bits && !keys.is_empty() {
+                        self.degenerate.push(format!(
+                            "{other} and {} are DISTINCT queries that retrieved the identical ordered \
+                             chunk list [{}] — the signature of a retriever that is not reading the \
+                             query (1258-u8re)",
+                            case.id,
+                            keys.join(", ")
+                        ));
+                    }
+                }
+                self.retrieved.push((case.id.clone(), bits, keys));
                 // 865-h4tn: a case may supply its OWN prose. The synthesised
                 // fallback lists every chunk key, which is what makes the
                 // retrieval-only floor deterministic — and also what made
@@ -1593,19 +1750,16 @@ citations_include:
         }))
         .expect("case deserializes");
 
-        let prev = std::env::var("TILLANDSIAS_SPEC_INDEX_DIR").ok();
-        // SAFETY: restored before this test returns; no sibling reads it.
-        unsafe { std::env::set_var("TILLANDSIAS_SPEC_INDEX_DIR", &idx) };
+        // 1415-nvzz shape: inject the index, never set_var it. The old
+        // comment here said "no sibling reads it"; spec_index::resolve_dir
+        // reads it for every test that resolves the ladder.
         let mut h = Harness::new(
             r.path().to_path_buf(),
             r.path().join("plan/index.yaml"),
             "plan/index.yaml".to_string(),
-        );
+        )
+        .with_spec_index_dir(idx.to_string_lossy().into_owned());
         let envelope = h.run(&case);
-        match prev {
-            Some(v) => unsafe { std::env::set_var("TILLANDSIAS_SPEC_INDEX_DIR", v) },
-            None => unsafe { std::env::remove_var("TILLANDSIAS_SPEC_INDEX_DIR") },
-        }
 
         let envelope = envelope.expect("the spec engine answers from the published entry");
         assert_eq!(
@@ -1618,6 +1772,213 @@ citations_include:
             head,
             "stamping the reader's HEAD is the 1229-2862 defect: spans read at one \
              commit were being attributed to another"
+        );
+    }
+
+    // ── ORDER 1258-u8re: an index the query vectors cannot be graded against ──
+
+    /// A published index of `RETRIEVE_K + 2` one-line chunks, each a `dim`-wide
+    /// one-hot-ish vector, with the TARGET chunk LAST. That placement is the
+    /// point: `spec::cosine` returns 0.0 for unequal lengths, so a mismatched
+    /// index scores every chunk 0 and the stable sort returns the FIRST K in
+    /// index order for any query — the constant list yoga measured. A case that
+    /// must retrieve the last chunk therefore genuinely depends on retrieval
+    /// (1258-u8re criterion 3); the structural cases would pass either way.
+    fn wrong_index_fixture(
+        tag: &str,
+        dim: usize,
+        model: Option<&str>,
+    ) -> (crate::gitref::testrepo::Repo, PathBuf, usize) {
+        let n = crate::pipeline::RETRIEVE_K + 2;
+        let r = crate::gitref::testrepo::repo(tag);
+        let body: String = (0..n).map(|i| format!("## k{i}\n")).collect();
+        r.write("openspec/specs/x/spec.md", &body);
+        r.commit("a");
+        let idx = r.path().join("published-index");
+        std::fs::create_dir_all(&idx).expect("mkdir index");
+        let mut chunks = String::new();
+        let mut vectors = String::new();
+        for i in 0..n {
+            chunks.push_str(&format!(
+                "{}\n",
+                serde_json::json!({
+                    "id": i, "path": "openspec/specs/x/spec.md",
+                    "line_start": i + 1, "line_end": i + 1, "kind": "spec",
+                    "key": format!("k{i}"), "content_hash": "00", "text": format!("## k{i}"),
+                })
+            ));
+            let mut v = vec![0.0f32; dim];
+            v[i % dim] = 1.0;
+            v[(i + 1) % dim] += 0.01 * (i as f32);
+            vectors.push_str(&format!("{}\n", serde_json::to_string(&v).expect("vec")));
+        }
+        std::fs::write(idx.join("chunks.jsonl"), chunks).expect("chunks");
+        std::fs::write(idx.join("vectors.jsonl"), vectors).expect("vectors");
+        if let Some(m) = model {
+            std::fs::write(idx.join(".model"), format!("{m}\n")).expect("model marker");
+        }
+        (r, idx, n - 1)
+    }
+
+    /// The query that points at the target (last) chunk, in the chunk's own space.
+    fn target_query(dim: usize, target: usize) -> Vec<f32> {
+        let mut v = vec![0.0f32; dim];
+        v[target % dim] = 1.0;
+        v[(target + 1) % dim] += 0.01 * (target as f32);
+        v
+    }
+
+    fn spec_case(id: &str, qv: &str) -> Case {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "engine": "spec.answer", "query": "q", "query_vec": qv,
+            "expect": { "confidence": "retrieved" },
+        }))
+        .expect("case deserializes")
+    }
+
+    fn harness_on(r: &crate::gitref::testrepo::Repo, idx: &Path) -> Harness {
+        Harness::new(
+            r.path().to_path_buf(),
+            r.path().join("plan/index.yaml"),
+            "plan/index.yaml".to_string(),
+        )
+        .with_spec_index_dir(idx.to_string_lossy().into_owned())
+    }
+
+    #[test]
+    fn query_vectors_parse_both_forms_and_refuse_a_lying_dim() {
+        let legacy = parse_query_vector("[1.0,0.5]", "t").expect("bare array");
+        assert_eq!(legacy.model, None);
+        assert_eq!(legacy.vector, vec![1.0, 0.5]);
+        let q =
+            parse_query_vector(r#"{"model":"m","dim":2,"vector":[1.0,0.5]}"#, "t").expect("object");
+        assert_eq!(q.model.as_deref(), Some("m"));
+        assert!(
+            parse_query_vector(r#"{"model":"m","dim":3,"vector":[1.0,0.5]}"#, "t")
+                .unwrap_err()
+                .contains("declares dim=3 but carries 2")
+        );
+        assert!(
+            parse_query_vector(r#"{"dim":2,"vector":[1.0,0.5]}"#, "t")
+                .unwrap_err()
+                .contains("\"model\"")
+        );
+    }
+
+    /// The COMMITTED vectors declare their provenance (criterion 5), and it is
+    /// true of the data: every file parses as a self-describing object.
+    #[test]
+    fn the_committed_query_vectors_declare_model_and_dim() {
+        let dir = repo_root().join("openspec/litmus-tests/groundtruth/query-vectors");
+        let mut n = 0;
+        for e in std::fs::read_dir(&dir)
+            .expect("query-vectors dir")
+            .flatten()
+        {
+            let p = e.path();
+            if p.extension().is_some_and(|x| x == "json") {
+                let text = std::fs::read_to_string(&p).expect("read");
+                let q = parse_query_vector(&text, &p.display().to_string()).expect("parses");
+                assert!(
+                    q.model.is_some(),
+                    "{} does not declare its model",
+                    p.display()
+                );
+                n += 1;
+            }
+        }
+        assert!(n >= 4, "expected the committed query vectors, found {n}");
+    }
+
+    /// Criterion 1: a dimension mismatch REFUSES, naming both dimensions and both
+    /// models, and grades nothing. Pre-fix this graded: the constant first-K list
+    /// never contains the target, so it was an ordinary failed case.
+    #[test]
+    fn a_dimension_mismatch_refuses_naming_both_sides() {
+        let (r, idx, target) = wrong_index_fixture("gt-wrong-dim", 4, Some("fixture-4d"));
+        let q =
+            serde_json::json!({"model": "fixture-3d", "dim": 3, "vector": target_query(3, target)});
+        std::fs::write(r.path().join("q3.json"), q.to_string()).expect("q3");
+        let err = harness_on(&r, &idx)
+            .run(&spec_case("dim-probe", "q3.json"))
+            .expect_err("a mismatched index must not grade");
+        assert!(err.starts_with(WRONG_INDEX), "not the named refusal: {err}");
+        for needle in [
+            "3-dim",
+            "4-dim",
+            "fixture-3d",
+            "fixture-4d",
+            "NOTHING was graded",
+        ] {
+            assert!(err.contains(needle), "refusal must name {needle:?}: {err}");
+        }
+        assert!(
+            !is_engine_unavailable(&err),
+            "a wrong index is not a host gap"
+        );
+    }
+
+    /// Same width, different declared embedder: equally incommensurable.
+    #[test]
+    fn a_model_mismatch_at_equal_dimension_refuses() {
+        let (r, idx, target) = wrong_index_fixture("gt-wrong-model", 4, Some("fixture-a"));
+        let q =
+            serde_json::json!({"model": "fixture-b", "dim": 4, "vector": target_query(4, target)});
+        std::fs::write(r.path().join("qb.json"), q.to_string()).expect("qb");
+        let err = harness_on(&r, &idx)
+            .run(&spec_case("model-probe", "qb.json"))
+            .expect_err("a different embedder must not grade");
+        assert!(
+            err.starts_with(WRONG_INDEX) && err.contains("fixture-a") && err.contains("fixture-b"),
+            "{err}"
+        );
+    }
+
+    /// Criteria 2 and 3, the NEGATIVE CONTROL: a matching index still grades, and
+    /// the proof is retrieval-dependent — the target is the LAST chunk, which the
+    /// dead-retriever constant (first K by index order) can never contain.
+    #[test]
+    fn a_matching_index_grades_and_retrieves_the_target() {
+        let (r, idx, target) = wrong_index_fixture("gt-right-dim", 4, Some("fixture-4d"));
+        let q =
+            serde_json::json!({"model": "fixture-4d", "dim": 4, "vector": target_query(4, target)});
+        std::fs::write(r.path().join("q4.json"), q.to_string()).expect("q4");
+        let env = harness_on(&r, &idx)
+            .run(&spec_case("match-probe", "q4.json"))
+            .expect("a matching index grades");
+        let first = env.citations().first().expect("at least one citation");
+        assert_eq!(
+            (first.path(), first.line_start()),
+            ("openspec/specs/x/spec.md", target + 1),
+            "the matching index must retrieve the target chunk first"
+        );
+        // A legacy (undeclared) index still grades on dimension alone.
+        std::fs::remove_file(idx.join(".model")).expect("drop marker");
+        harness_on(&r, &idx)
+            .run(&spec_case("legacy-probe", "q4.json"))
+            .expect("an undeclared index of the right width still grades");
+    }
+
+    /// Criterion 4: two DISTINCT queries retrieving the identical ordered list is
+    /// reported on its own terms; one vector shared by two cases is not.
+    #[test]
+    fn degenerate_retrieval_is_reported_and_a_shared_vector_is_not() {
+        let (r, idx, _) = wrong_index_fixture("gt-degenerate", 4, None);
+        std::fs::write(r.path().join("a.json"), "[1.0,0.0,0.0,0.0]").expect("a");
+        std::fs::write(r.path().join("b.json"), "[2.0,0.0,0.0,0.0]").expect("b");
+        let mut h = harness_on(&r, &idx);
+        h.run(&spec_case("first", "a.json")).expect("grades");
+        h.run(&spec_case("same-vector", "a.json")).expect("grades");
+        assert!(
+            h.degenerate_retrieval().is_empty(),
+            "one shared vector is not degenerate"
+        );
+        h.run(&spec_case("near-twin", "b.json")).expect("grades");
+        let d = h.degenerate_retrieval();
+        assert_eq!(d.len(), 2, "near-twin vs each earlier run of a.json: {d:?}");
+        assert!(
+            d[0].contains("first and near-twin") && d[0].contains("DISTINCT"),
+            "{d:?}"
         );
     }
 

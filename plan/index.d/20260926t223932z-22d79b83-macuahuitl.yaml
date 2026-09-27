@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-reconcile-fetch-takes-tags-non-forced-so-a-moved-stable-tag-prints-would-clobber-existing-tag-after-every-refused-push-and-the-real-refusal-reason-is-not-shown
+    event:
+      type: finding
+      ts: "2026-09-26T22:39:32Z"
+      agent_id: linux-macuahuitl-claude-20260925t193247z
+      host: macuahuitl
+      summary: |
+        LIKELY PRIMARY CAUSE (hypothesis, not yet verified in the mirror log), from the freshly rebuilt macuahuitl-forge 2026-09-26 ~22:45Z: scripts/check-credential-channel.sh -> blocked:upstream-push-unauthorized; the mirror is reachable and its PUBLISHED upstream-auth verdict is "denied", REASON=unauthenticated (401, no username: a missing or malformed token, not a scope problem). The mirror's upstream token came from the operator's GitHub App device-flow login on 2026-09-25 (1381-za6b); GitHub App user-to-server tokens expire after ~8 h unless refreshed, which would explain a refusal of every mirror push the next day, with the moved-tag line (reconcile fetch, non-forced tags) printed afterwards as noise. Hosts that push via the keyring (the coordinator's relays) are unaffected, which matches every relay landing today. TWO FOLLOW-UPS: (1) the operator re-seeds the token (tillandsias --github-login); no agent does; (2) if the expiry hypothesis holds, the device-flow login needs a refresh-token path or a loud expiry verdict, because a credential that silently dies overnight strands every forge push. That may deserve its own row once confirmed.

@@ -95,6 +95,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "fragment-terminal-events",
     "fragments",
     "grade",
+    "hash",
     "json",
     "loop-status",
     "loop-status-append",
@@ -125,6 +126,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "spec-index",
     "spec-retrieve",
     "status",
+    "time",
     "validate-yaml",
     "verify-answer",
     "yaml",
@@ -1799,6 +1801,8 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
 
     let started = std::time::Instant::now();
     let mut outcomes: Vec<groundtruth::Outcome> = Vec::new();
+    // 1258-u8re: degenerate-retrieval findings, gathered from every harness.
+    let mut degenerate: Vec<String> = Vec::new();
     let mut skipped: Vec<(String, String, String)> = Vec::new();
 
     if let Some(src) = envelope_src {
@@ -1947,10 +1951,18 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
                 stale: found.stale,
             });
         }
+        for (_, _, h) in &harnesses {
+            degenerate.extend(h.degenerate_retrieval().iter().cloned());
+        }
     }
 
+    // 1258-u8re criterion 4: a dead retriever, reported on its own terms. It
+    // invalidates the spec.answer measurement, so it also fails the run.
+    for d in &degenerate {
+        println!("DEGENERATE RETRIEVAL: {d}");
+    }
     let failed = report(&outcomes, &skipped, &sets, started);
-    i32::from(failed > 0)
+    i32::from(failed > 0 || !degenerate.is_empty())
 }
 
 /// Print the per-case verdicts plus ONE machine-readable summary line, and
@@ -2451,10 +2463,14 @@ fn read_query_vec(path: &Path) -> Vec<f32> {
         eprintln!("error: read {}: {e}", path.display());
         std::process::exit(1);
     });
-    serde_json::from_str::<Vec<f32>>(text.trim()).unwrap_or_else(|e| {
-        eprintln!("error: {} is not a JSON float array: {e}", path.display());
-        std::process::exit(1);
-    })
+    // 1258-u8re: the same parser the grader uses, so the self-describing form
+    // ({"model","dim","vector"}) and the legacy bare array both load here too.
+    tillandsias_plan::groundtruth::parse_query_vector(&text, &path.display().to_string())
+        .map(|q| q.vector)
+        .unwrap_or_else(|e| {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        })
 }
 
 /// Event type and summary prefix for a `set-field --evidence` write (696-6byc).
@@ -2888,6 +2904,106 @@ fn carry_forward_gaps(doc: &serde_yaml::Value) -> Vec<String> {
 /// runner calls these in a per-file loop where that overhead multiplies into
 /// minutes. Measured 2026-08-29 on macuahuitl: yaml-type on a 40-line file,
 /// 227ms behind the ledger load; the parse itself is under 5ms.
+/// ORDER 1375-8g5t. `hash sha256 <file|->` and `time now --ms|--iso|--rfc3339`:
+/// the sha256 tool and the millisecond clock, identical on every platform.
+/// `hash sha256` prints the lowercase hex digest alone (no `  -`, no filename:
+/// the `cut -d' ' -f1` every caller appends is not needed). `time now --ms` is
+/// real milliseconds where BSD `date +%s%3N` has one-second resolution
+/// (1279-a7b6). Usage errors exit 2; an unreadable file exits 1.
+fn host_verbs_dispatch(subcommand: &str, args: &[String]) {
+    use tillandsias_plan::host_verbs;
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan hash sha256 <file|->  |  tillandsias-plan time now --ms|--iso|--rfc3339"
+        );
+        std::process::exit(2);
+    };
+    match (
+        subcommand,
+        args.get(1).map(String::as_str),
+        args.get(2).map(String::as_str),
+    ) {
+        ("hash", Some("sha256"), Some(src)) if args.len() == 3 => {
+            let digest = if src == "-" {
+                host_verbs::sha256_hex_reader(std::io::stdin().lock())
+            } else {
+                std::fs::File::open(src).and_then(host_verbs::sha256_hex_reader)
+            };
+            match digest {
+                Ok(d) => println!("{d}"),
+                Err(e) => {
+                    eprintln!("hash sha256: {src}: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        ("time", Some("now"), Some(flag)) if args.len() == 3 => match flag {
+            "--ms" => println!("{}", host_verbs::now_ms()),
+            "--iso" => println!("{}", host_verbs::now_iso()),
+            "--rfc3339" => println!("{}", host_verbs::now_rfc3339()),
+            _ => usage(),
+        },
+        _ => usage(),
+    }
+}
+
+/// ORDER 1401-bcd7. What `json get --help` / `yaml get --help` print, so a
+/// jq-ratchet migration reads the surface instead of probing the binary for it.
+/// `{SUB}` is replaced with `json` or `yaml`. Every "refused" line names the
+/// reshape that stays inside the subset; scripts/test-json-get-help-names-its-subset.sh
+/// pins each line against what the parser actually accepts.
+const JSON_QUERY_HELP: &str = "\
+usage: tillandsias-plan {SUB} get [flags] <filter> [file...]
+
+A jq SUBSET over {SUB} input. Argument order is jq's, so a call site swaps
+`jq` for `tillandsias-plan {SUB} get`. No file, or `-`, reads stdin.
+
+flags:
+  -r, --raw-output       print strings without quotes
+  -c, --compact-output   one line per result
+  -e, --exit-status      exit 1 if the last result is false/null, 4 if none
+  -n, --null-input       run the filter once against null; read no input
+  -s, --slurp            read every input into one array
+  -M                     accepted and ignored (output is never coloured)
+  --arg k v              bind $k to the string v
+  --argjson k v          bind $k to the JSON value v
+  --parse-only           parse the filter and exit (0 in the subset, 3 not)
+  -h, --help             this text
+
+supported:
+  paths                  .a  .a.b  .[\"x-y\"]  .a[0]  .a[-1]  .[$k]
+  iterate                .a[]   keys[]   .o | keys[]
+  optional               .a?   .a[]?
+  pipe, comma            .a | .b     .a, .b
+  alternative            .a // \"default\"
+  array construction     [.a[] | .k]
+  compare, logic         ==  !=  <  <=  >  >=  and  or  not
+  literals               \"str\"  1  true  false  null  $var
+  builtins               select(f)  has(k)  length  keys  keys_unsorted
+                         type  not  empty  ascii_downcase  tostring
+
+refused (exit 3, `unsupported:<construct>`), and the reshape:
+  join(\",\")              -r '.a[]' | paste -sd, -
+  \"\\(.a) \\(.b)\"          -r '.a, .b' and assemble the lines in shell
+  {a: .a}                one query per field, or the array [.a, .b]
+  map(f)                 [.[] | f]
+  arithmetic (+ - * / %) compute in shell: $(( ... ))
+  if/then/else           select(cond), with // for the default
+  . as $v                --arg/--argjson, or two queries
+  slices .[1:3]          index .[n], or trim in shell
+  @csv @tsv @sh @base64  -r the fields and format in shell
+  test split startswith contains ltrimstr
+                         -r the string and match with case/grep in shell
+  first last             .[0]   .[-1]
+  sort unique            -r '.[]' | sort -u
+  to_entries values      -r 'keys[]', then .[$k] per key with --arg k
+  any                    [.[] | select(cond)] | length > 0
+  ..  reduce  def  try   no reshape inside the subset: use a Lua table
+
+exit: 0 ok; 1/4 under -e; 2 usage or unreadable input; 3 parse error or
+unsupported; 5 a runtime error in some input (the rest still run).
+";
+
 /// ORDER 1375-rn9b. `json get` / `yaml get`: the jq subset, on the binary every
 /// gate host already has. Argument order is jq's (flags, filter, files) so a
 /// call site swaps `jq` for `tillandsias-plan json get` and nothing else.
@@ -2912,8 +3028,14 @@ fn json_query_dispatch(subcommand: &str, args: &[String]) {
         );
         std::process::exit(2);
     };
-    if args.get(1).map(String::as_str) != Some("get") {
-        usage();
+    let help = || -> ! {
+        print!("{}", JSON_QUERY_HELP.replace("{SUB}", subcommand));
+        std::process::exit(0);
+    };
+    match args.get(1).map(String::as_str) {
+        Some("get") => {}
+        Some("-h" | "--help") => help(),
+        _ => usage(),
     }
     let (mut raw, mut compact, mut exit_status, mut null_input, mut slurp, mut parse_only) =
         (false, false, false, false, false, false);
@@ -2943,6 +3065,7 @@ fn json_query_dispatch(subcommand: &str, args: &[String]) {
                 continue;
             }
             "--parse-only" => parse_only = true,
+            "--help" => help(),
             "--raw-output" => raw = true,
             "--compact-output" => compact = true,
             "--exit-status" => exit_status = true,
@@ -2958,6 +3081,7 @@ fn json_query_dispatch(subcommand: &str, args: &[String]) {
                         'e' => exit_status = true,
                         'n' => null_input = true,
                         's' => slurp = true,
+                        'h' => help(),
                         'M' => {}
                         _ => usage(),
                     }
@@ -3931,6 +4055,11 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
         // ORDER 1375-rn9b. File-local like the yaml readers: no ledger load.
         "json" | "yaml" => {
             json_query_dispatch(subcommand, args);
+            true
+        }
+        // ORDER 1375-8g5t. File-local too: no ledger load.
+        "hash" | "time" => {
+            host_verbs_dispatch(subcommand, args);
             true
         }
         _ => false,

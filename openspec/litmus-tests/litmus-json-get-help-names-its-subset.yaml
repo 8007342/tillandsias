@@ -1,0 +1,39 @@
+# @trace spec:forge-environment-discoverability, order:1401-bcd7, order:1375-rn9b
+name: litmus:json-get-help-names-its-subset
+spec: forge-environment-discoverability
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  `tillandsias-plan json get --help` is the onboarding for every jq-ratchet
+  migration (1395-ue3i): it names the flags, the supported filter forms, and
+  each refused construct with the reshape that stays inside the subset.
+  Before 1401-bcd7, --help was a usage error listing only flag letters, so
+  migrating authors learned the surface by probing the binary. The fixture
+  checks every help line against the parser itself, so help that drifts from
+  the binary fails here. MEASURED 2026-09-26: the packet that filed this
+  listed select() as refused; the parser supports it.
+
+preconditions:
+  - workspace contains scripts/test-json-get-help-names-its-subset.sh
+  - workspace contains scripts/plan-binary-probe.sh
+  - workspace contains crates/tillandsias-plan/src/json_query.rs
+
+critical_path:
+  - step: "every help line holds against the parser: flags named, supported forms parse, refused forms exit 3 unsupported, filter reshapes parse"
+    command: "bash scripts/test-json-get-help-names-its-subset.sh 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "PASS: json-get-help-names-its-subset 6/6"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+  expected_log: "json get / yaml get --help describe the jq subset the parser actually accepts"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "json-get-help-names-its-subset"
+
+failure_modes:
+  - "a builtin is added to or removed from the parser and the help is not updated"
+  - "--help reverts to the usage error (exit 2) or prints to stderr"
+  - "a recommended reshape is itself outside the subset"

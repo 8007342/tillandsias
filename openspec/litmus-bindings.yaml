@@ -399,6 +399,8 @@ specs:
   - litmus:forge-environment-discoverability-install-shape
   - litmus:mcp-discoverability-shape
   - litmus:mcp-server-request-fault-isolation
+  - litmus:mcp-live-build-check-fixture
+  - litmus:json-get-help-names-its-subset
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
   - litmus:forge-experts-stale-source-honesty
@@ -950,6 +952,7 @@ specs:
   - litmus:spec-traceability-shape
   - litmus:spec-traceability-usage-shape
   - litmus:litmus-runner-backslash-escaping-shape
+  - litmus:litmus-no-plan-binary-refusal
   - litmus:litmus-stdlib-portability-shape
   - litmus:litmus-name-filter-fail-loud-shape
   - litmus:litmus-name-filter-hint-shape

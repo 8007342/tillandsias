@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-bash-dialect-has-no-rule-for-an-unparenthesised-case-pattern-inside-a-command-substitution-which-bash-3-2-cannot-parse-so-a-linux-green-script-does-not-even-parse-on-every-mac
+    event:
+      type: finding
+      ts: "2026-09-26T21:34:25Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260926t213425z
+      host: tlatoanis-macbook-air
+      summary: |
+        MEASURED on /bin/bash 3.2.57 (2026-09-26): the QUOTED form "$( … case … /*) … esac)" PASSES `bash -n`, and at RUNTIME bash prints a syntax error, the variable silently gets the REST OF THE LINE AS TEXT (the 84f37ff24 shape yielded " printf %s  ;; *) printf rel ;; esac)"), and the script carries on. This class is worse than "does not parse on a Mac": no syntax check catches it, so `bash -n` in CI does NOT cover bash 3.2 for this construct. Only the static rule (check-bash-dialect case_in_cs_sites, work/1413-8bee ac9064eb6) or actually running under bash 3.2 does. The unquoted single- and multi-line forms fail to parse (rc=2).

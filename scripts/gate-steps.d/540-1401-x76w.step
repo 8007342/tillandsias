@@ -1,0 +1,19 @@
+# Gate step 1401-x76w — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. scripts/preflight-fixtures-default-target.sh, the decider
+# build.sh --check runs over ADDED fixtures. This step runs its hermetic
+# fixture, which proves the decider refuses a fixture that resolves the plan
+# binary after a cd under BOTH masks (an absolute CARGO_TARGET_DIR, and a plan
+# binary on PATH), admits one that absolutises first, refuses a fixture that
+# SKIPS without the mask, and only notes one red in every regime.
+#
+# SABOTAGE, run 2026-09-26 on yolanda: dropping the PATH strip reds ARM 2;
+# dropping the skip rule reds ARM 4 (7/8 each; dropping the no-timeout skip reds ARM 7). The real pre-fix subject
+# (test-hardware-fingerprint.sh at 84f37ff24^) is refused; on trunk, admitted.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the default-target fixture decider refuses masked fixtures (1401-x76w)"
+STEP_SCRIPT="scripts/test-preflight-fixtures-default-target.sh"
+STEP_ERROR="the decider no longer catches a fixture that passes only under a masking plan-binary regime (1401-x76w); see which arm failed above"
+STEP_OK="default-target fixture decider refuses masked fixtures and admits absolutising ones"
+STEP_SECOND_REGIME="yolanda 2026-09-26 msys ok:fixture-default-target-fixture:8"

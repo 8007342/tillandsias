@@ -1179,7 +1179,12 @@ if [ -n "${HOST_NAME:-}" ] && [ -n "${CAP_HOSTS:-}" ]; then
         [ -n "$_hs_text" ] || continue
         # Named hosts that are NOT this one. If the criteria also name THIS host,
         # say nothing: the row wants several hosts and this one is among them.
-        case " $_hs_text " in *" $HOST_NAME"*) continue ;; esac
+        # Matched as a WORD with punctuation as a boundary (1420-9jdf): 1132-r4mt's
+        # own criterion reads "(yoga or macuahuitl)", and a space-only boundary
+        # missed "(yoga", so yoga was told the evidence must come from elsewhere.
+        _hs_words=" $(printf '%s' "$_hs_text" | tr -c 'a-z0-9' ' ') "
+        _hs_me="$(printf '%s' "$HOST_NAME" | tr -c 'a-z0-9' ' ')"
+        case "$_hs_words" in *" $_hs_me "*) continue ;; esac
         _hs_named=""
         for _hs_h in $_hs_roster; do
             [ "$_hs_h" = "$HOST_NAME" ] && continue

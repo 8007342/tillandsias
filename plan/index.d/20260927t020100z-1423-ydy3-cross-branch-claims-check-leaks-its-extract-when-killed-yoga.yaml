@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Filed by yoga at macuahuitl's request (2026-09-27), from the Start Of Day
+# gate's scratchpad-headroom warning.
+packets:
+  - packet_id: check-claims-across-branches-removes-its-temp-extract-on-every-normal-path-but-has-no-exit-trap-so-a-killed-run-leaks-a-copy-of-a-siblings-plan-dir
+    order: 1423-ydy3
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [hygiene, scratchpad, fail-loud]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-claims-across-branches.sh
+    unscoreable: "unpinnable-until-the-guard-exists: the closure is a fixture arm that starts the check with TMPDIR pointed at a scratch dir, kills it mid-fold (after the xbranch.* extract exists), and asserts no xbranch.* remains; pre-fix result: FAILS — a killed run leaves its extract (measured leftovers below). NEGATIVE CONTROL: a normal run still leaves none, and its verdict line is unchanged."
+    title: |
+      scripts/check-claims-across-branches.sh `rm -rf`s its xbranch.* extract on every normal path (:220, :238, :293) but installs no EXIT trap, so a run killed mid-fold (a timeout wrapper, an interrupted cycle) leaks a ~19 MB copy of a sibling branch's plan/ into /tmp — 49 of them on yoga, ~700 MB against the agent scratchpad's shared quota
+    context: |
+      MEASURED on yoga 2026-09-27 during the Start Of Day gate:
+      scripts/check-scratchpad-headroom.sh -> warn:scratchpad-headroom-low
+      (4396m-of-6052m), although the agent scratchpad itself held 6.2 MB.
+      `du -sh /tmp/*` found 49 /tmp/xbranch.* dirs, ~19 MB each (719,856 KB
+      total), mtimes 2026-09-25 15:22 to 2026-09-26 13:13, each a `git archive
+      origin/<sibling> plan/index.yaml plan/index.d` extract. Source: mktemp -d
+      at :199 and :272; rm -rf at :220, :238, :293; no `trap`. After deleting
+      them (and an unrelated 832 MB leftover clone) headroom read
+      ok:scratchpad-headroom:5930m-of-6052m.
+
+      Why it bites: /tmp is quota-bound per user, the quota binds before df
+      sees it, and a full quota kills every agent tool call (the scratchpad
+      trap in methodology). A check that runs on every claim, and is killed
+      whenever its caller times out, is a slow leak into exactly that quota.
+
+      FIX: `trap 'rm -rf "$tmp"' EXIT` (tracking the current extract), plus the
+      fixture arm above.

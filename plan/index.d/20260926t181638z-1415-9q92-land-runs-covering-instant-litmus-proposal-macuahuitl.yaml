@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: no-land-or-preflight-runs-the-pre-build-litmus-covering-the-files-a-landing-touches-so-a-fixture-arm-change-reds-a-litmus-pin-on-trunk-and-only-the-release-tier-sees-it
+    order: 1415-9q92
+    status: ready
+    kind: decision
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, litmus, land-tool, bar-raise, decision]
+    estimated_hours: 3
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+      - scripts/litmus-covering-specs.sh
+    unscoreable: |
+      decision-pending: this is a PROPOSAL to change what a landing runs, which
+      is a bar raise and Tlatoāni-gated (convergence.yaml bar_raise_governance).
+      If approved, the closure is: a landing whose diff adds an arm to a fixture
+      that a pre-build instant litmus pins by count (`ok:<name>:N`) is refused
+      before push; PRE-FIX RESULT: FAILS — land36 and land40 both landed exactly
+      that, measured below.
+    title: |
+      No landing runs the pre-build litmus that covers the files it touches, so three reds reached trunk through green lands in one night (a fixture gaining arms 6->8 and 11->13 against count pins, and a cfg(test) item shrinking a source-shape pin's window) and only a later relay's covering-litmus run, or the release tier, could see them — PROPOSAL, operator-gated
+    context: |
+      MEASURED on 2026-09-26, all via the macuahuitl coordinator's relays:
+        * land33 (1200-ih38) added a `#[cfg(test)]` item near the top of
+          vault_bootstrap.rs; litmus:vault-audit-persistence-shape counted 0
+          mounts; red on trunk until d8d19b462 (land40).
+        * land36 (1255-s4im) added fixture arms 7-8; litmus:join-the-fleet-
+          idempotent still pinned :6/6; red on trunk until land46.
+        * land40 (1391-8ikx) added fixture arms U1/U2; litmus:sigpipe-verdict-
+          pipeline-shape still pinned :11; red on trunk until land46.
+      Every land was GREEN: ./build.sh --check runs no pre-build litmus by
+      design (the-release-tier-is-the-only-tier-that-runs-the-pre-build-litmus).
+      scripts/litmus-covering-specs.sh --run --changed already names the
+      covering specs in ~90 ms; running only their INSTANT-size pre-build tests
+      took seconds to a couple of minutes per land tonight and caught the last
+      two before they would have compounded.
+      OPTIONS for the operator: (a) the land tool runs covering instant
+      pre-build litmus after integrate and before push, refusing on red with a
+      named step; (b) advisory-only in the land tool, printed but not refusing;
+      (c) keep it a coordinator/author discipline (already adopted by the
+      coordinator and yoga tonight). (a) changes gate scope; (b)/(c) do not.
+    deliverable: |
+      The operator's choice among (a)/(b)/(c), recorded; if (a) or (b), the
+      land-tool change with a fixture reproducing the land36 shape.
+    provenance: |
+      Filed by the macuahuitl coordinator 2026-09-26 after the third instance.
