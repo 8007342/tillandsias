@@ -72,12 +72,6 @@ fn exit_status_from_code(code: Option<i32>) -> std::process::ExitStatus {
     std::process::ExitStatus::from_raw(code.unwrap_or(1) << 8)
 }
 
-#[cfg(windows)]
-fn exit_status_from_code(code: Option<i32>) -> std::process::ExitStatus {
-    use std::os::windows::process::ExitStatusExt;
-    std::process::ExitStatus::from_raw(code.unwrap_or(1) as u32)
-}
-
 /// Async equivalent of `wsl_distro_exists` — used by `image_exists` on Windows
 /// where the runtime backend is WSL, not podman. Returns true when a WSL distro
 /// with the given name appears in `wsl --list --quiet`.
@@ -102,8 +96,10 @@ async fn wsl_distro_exists_async(name: &str) -> bool {
     // wsl.exe emits UTF-16 LE on Windows.
     let utf16: Vec<u16> = out
         .stdout
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
         .collect();
     let decoded = String::from_utf16_lossy(&utf16);
     decoded
@@ -117,6 +113,7 @@ async fn wsl_distro_exists_async(name: &str) -> bool {
 /// `signal = Some(s)` → `["kill", "--signal", s, <name>]`.
 ///
 /// @trace spec:app-lifecycle, spec:podman-orchestration
+#[cfg_attr(target_os = "windows", allow(dead_code))] // 1444-bzpu: Unix path and tests only
 fn build_kill_args(name: &str, signal: Option<&str>) -> Vec<String> {
     let mut args = Vec::with_capacity(4);
     args.push("kill".into());
@@ -529,8 +526,10 @@ impl PodmanClient {
             // wsl.exe emits UTF-16 LE on Windows.
             let utf16: Vec<u16> = output
                 .stdout
-                .chunks_exact(2)
-                .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|c| u16::from_le_bytes(*c))
                 .collect();
             let decoded = String::from_utf16_lossy(&utf16);
 
@@ -599,10 +598,13 @@ impl PodmanClient {
     ///
     /// @trace spec:cross-platform
     pub async fn stop_container(&self, name: &str, timeout_secs: u32) -> Result<(), PodmanError> {
+        // 1444-bzpu: a TAIL expression, not `return`: cfg leaves exactly one
+        // of these two blocks per platform, so each is the function's value.
         #[cfg(target_os = "windows")]
         {
+            let _ = timeout_secs;
             debug!(name, "WSL distro stop is a no-op (distros persist)");
-            return Ok(());
+            Ok(())
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -633,7 +635,7 @@ impl PodmanClient {
         #[cfg(target_os = "windows")]
         {
             debug!(name, "WSL distro start is a no-op");
-            return Ok(());
+            Ok(())
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -671,7 +673,7 @@ impl PodmanClient {
         #[cfg(target_os = "windows")]
         {
             debug!(name, "WSL distro kill is a no-op");
-            return Ok(());
+            Ok(())
         }
 
         #[cfg(not(target_os = "windows"))]
