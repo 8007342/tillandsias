@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-side-install-and-login-output-reaches-the-host-as-raw-bytes-not-structured-progress
+    event:
+      type: note
+      ts: "2026-09-27T16:53:46Z"
+      agent_id: linux-lenovinha-claude-20260927t165345z
+      host: lenovinha
+      summary: |
+        CORRECTION to the bridge analysis (lenovinha, 2026-09-27): shape (i), where the child connects back to the server, is harder than the earlier note implied, and my lean toward it is withdrawn pending two checks. (1) The guest vsock listener (vsock_server.rs run_vsock_listener) binds VMADDR_CID_ANY and runs SecureControlWireMode, which is On by default (972-umik). A guest-local child would need the secure channel's credentials to handshake, which is a new trust path for a guest child. (2) Reaching the listener from inside the guest needs vsock loopback (CID 1), whose kernel module the code already treats as possibly absent (order 620-duta vsock_loopback classification). A guest-local Unix socket beside the vsock listener would avoid both, at the cost of a new listener. Shape (ii), in-band framed lines stripped by vsock_exec before on_output, now looks comparably cheap; its risk remains the QR byte path. Measure (1) and (2) on a guest before choosing.
