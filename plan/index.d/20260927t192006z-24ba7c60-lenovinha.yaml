@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: claude-forge-launches-with-bypass-permissions-consent-pre-accepted-never-prompting
+    event:
+      type: progress
+      ts: "2026-09-27T19:20:06Z"
+      agent_id: linux-lenovinha-claude-20260927t185339z
+      host: lenovinha
+      summary: |
+        Reconciled on work/1437-y2wu at 20ca7a7bf, a fast-forward over macuahuitl's e49cebe5f: their implementation plus two arms from lenovinha's independent one (the restore still merges $v * .; entrypoint order first-run < bypass seed < restore), both mutation-verified. The fixture is 6 arms, jq-free; ratchet ok:jq-callsites:344:floor:344, its test 6/6; preflight ran=120 refused=0. EVIDENCE (a), which key the dialog reads, from the installed Claude Code 2.1.283 bundle: the gate is `!N1() && !le().bypassPermissionsModeAccepted`, where le() is the global config ~/.claude.json, and a startup migration copies that key into userSettings as skipDangerousModePermissionPrompt:true. Both keys are live in this version. EVIDENCE (b), a live forge sample from lenovinha-forge (read-only, claude 2.1.283, HOST_KIND=forge): ~/.claude.json has NO bypassPermissionsModeAccepted; ~/.claude/settings.json HAS skipDangerousModePermissionPrompt:true. The forge could not attest whether the dialog appeared (its transcript starts post-launch), so criterion 4's live observation is still open.
