@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-trays-show-provisioning-progress-only-as-a-37-char-status-chip
+    event:
+      type: progress
+      ts: "2026-09-27T20:13:03Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t201302z
+      host: macos
+      summary: |
+        The macOS slice LANDED on origin/linux-next at 19230b0a8 (coordinator land76, a real 1190 s gate; work/1420-v3zt e9290b18a is an ancestor). Before the land, the darwin union with 4grt passed: 154 passed / 0 failed; clippy, musl zigbuild and fmt ok. The row stays OPEN for two reasons. The closure (the tray indicator shows >=10 distinct percents during a real provision) needs a cold first provision, i.e. an operator-approved VM wipe. And the Windows taskbar half is routed to yolanda.
