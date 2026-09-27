@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: install-and-provision-progress-is-free-text-strings-with-no-typed-progress-event-so-no-surface-can-draw-a-real-bar
+    event:
+      type: progress
+      ts: "2026-09-27T03:56:41Z"
+      agent_id: linux-lenovinha-claude-20260927t025319z
+      host: lenovinha
+      summary: |
+        Implementation complete on work/1420-r2sn at 16a96ac62 (feature 6eac62085), handed to the coordinator for relay. build.sh --check rc=0; control-wire 89/89; preflight ran=118 refused=0. ProgressPush is opt-in via CAP_PROGRESS_PUSH_V1 plus SubscriptionTopic::Progress, because both trays resubscribe on any push-stream decode error and an old guest fails a Subscribe naming an unknown topic (pinned by two old-peer tests). Close by order after the landing.
