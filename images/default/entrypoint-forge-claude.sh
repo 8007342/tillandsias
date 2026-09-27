@@ -88,6 +88,12 @@ fi
 # in the same document. The overlay merge preserves every non-MCP field.
 apply_claude_config_overlay
 seed_claude_first_run_defaults
+# @trace spec:default-image, order:1437-y2wu
+# Pre-accept the bypass-permissions dialog (forge-gated inside the function
+# itself). Must run BEFORE the approvals restore below so the live config
+# already carries the consent and a stale/absent vault doc can never bring
+# the dialog back.
+seed_claude_bypass_consent
 # Operator-approved interactive dialogs, restored from vault (2026-08-31):
 # first-ever launch prompts once — those are valid prompts — the watcher
 # below harvests the approval, and every later forge launch restores it.

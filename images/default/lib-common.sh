@@ -3575,6 +3575,74 @@ seed_claude_first_run_defaults() {
     trace_lifecycle "config" "claude first-run defaults seeded (onboarding, theme)"
 }
 
+# @trace spec:default-image, order:1437-y2wu
+# Pre-accept the "Bypass Permissions mode" dialog. Operator directive
+# 2026-09-27, verbatim: "we want to skip that bypass permissions
+# confirmation, and pre-accept it ... for all projects, for all harnesses."
+# This SUPERSEDES the bypass half of the 2026-08-31 "prompt once, then vault
+# it" directive (claude-approvals-vault.sh keeps that job for workspace
+# trust, theme and onboarding, which remain valid one-time prompts): a fresh
+# image, a fresh container, or a Vault wipe must never show the dialog, and
+# pre-acceptance has to come from a launch-time SEED — not from a value only
+# a previous session's watcher happened to harvest into Vault.
+#
+# Two consent records, because it is unverified which one the installed
+# Claude Code actually reads (open question 5, plan/issues/
+# operator-directives-reset-survivors-and-harness-bypass-2026-09-27.md): the
+# seed writes BOTH.
+#   - bypassPermissionsModeAccepted: true in ~/.claude.json (the same
+#     document claude-approvals-vault.sh restores/harvests)
+#   - skipDangerousModePermissionPrompt: true in ~/.claude/settings.json
+#     (measured on the operator's own host as the key that suppresses the
+#     dialog there)
+#
+# FORGE-GATED, exactly like --dangerously-skip-permissions itself (the forge
+# is the sandbox that makes the bypass acceptable — cap-drop=ALL, no-new-
+# privileges, enclave-only egress, credential quarantine; a non-forge
+# invocation keeps Claude's stock permission posture and this function
+# writes nothing at all, touching neither file).
+#
+# Idempotent and additive, like seed_claude_first_run_defaults above: only an
+# ABSENT key is seeded, so an existing explicit value (including an explicit
+# `false` a config already carries) is never overwritten, and a config
+# restored from Vault afterward cannot revoke what this seed wrote (vault
+# restore's `$v * .` gives the live config priority — see
+# claude-approvals-vault.sh::restore_approvals).
+seed_claude_bypass_consent() {
+    [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] || return 0
+
+    local user_cfg="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
+    local settings_cfg="${CLAUDE_SETTINGS_FILE:-$HOME/.claude/settings.json}"
+    local tmp
+
+    # `has()`, never `// true`: jq's alternative operator treats an existing
+    # explicit `false` as absent (its LHS is falsy) and would flip it back to
+    # `true`, exactly the overwrite the additive contract forbids.
+    mkdir -p "$(dirname "$user_cfg")"
+    tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$user_cfg" ] && jq -e 'type == "object"' "$user_cfg" >/dev/null 2>&1; then
+        jq '. + {bypassPermissionsModeAccepted: (if has("bypassPermissionsModeAccepted") then .bypassPermissionsModeAccepted else true end)}' \
+            "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        printf '{"bypassPermissionsModeAccepted": true}\n' >"$tmp"
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$user_cfg"
+
+    mkdir -p "$(dirname "$settings_cfg")"
+    tmp="$(mktemp "${settings_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$settings_cfg" ] && jq -e 'type == "object"' "$settings_cfg" >/dev/null 2>&1; then
+        jq '. + {skipDangerousModePermissionPrompt: (if has("skipDangerousModePermissionPrompt") then .skipDangerousModePermissionPrompt else true end)}' \
+            "$settings_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        printf '{"skipDangerousModePermissionPrompt": true}\n' >"$tmp"
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$settings_cfg"
+
+    trace_lifecycle "config" "claude bypass-permissions consent seeded (forge)"
+}
+
 # Pre-trust the forge project folder (2026-08-31, minted-session blocker #2:
 # after the theme picker was seeded away, claude's workspace-trust dialog —
 # "Yes, I trust this folder / Enter to confirm" — blocked the prompt next).
