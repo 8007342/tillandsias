@@ -25,7 +25,10 @@ critical_path:
     # design; the pipe into grep -q hid that line, so the runner saw a silent
     # non-zero and scored FAIL. Echo the named skip so the runner records a
     # question NOT asked (1309-fhxb); any other answer must match the grammar.
-    command: "test -x scripts/check-build-cache-sweep.sh && out=$(scripts/check-build-cache-sweep.sh) && case \"$out\" in (skip:forge-exempt) echo \"$out\" ;; (*) grep -qE '^(ok:build-cache-sweep-not-due|due:build-cache-sweep):bytes=[0-9]+:gib=[0-9]+:marker=[^:]+:reason=[a-z0-9-]+$' <<<\"$out\" && echo 'ok: grammar pinned' ;; esac"
+    # `;` not `&&` after the capture: the gate EXITS 1 when a sweep is due
+    # (due:build-cache-sweep:...), so `&&` silenced exactly the answer this
+    # step pins (relay-fix, macuahuitl 2026-09-27: 50 GiB cache, rc=1).
+    command: "test -x scripts/check-build-cache-sweep.sh && out=$(scripts/check-build-cache-sweep.sh); case \"$out\" in (skip:forge-exempt) echo \"$out\" ;; (*) grep -qE '^(ok:build-cache-sweep-not-due|due:build-cache-sweep):bytes=[0-9]+:gib=[0-9]+:marker=[^:]+:reason=[a-z0-9-]+$' <<<\"$out\" && echo 'ok: grammar pinned' ;; esac"
     expected_behavior: "ok: grammar pinned"
     timeout_ms: 30000
 
