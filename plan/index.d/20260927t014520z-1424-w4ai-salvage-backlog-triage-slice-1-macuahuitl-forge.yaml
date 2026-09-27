@@ -1,0 +1,104 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: salvage-backlog-triage-slice-1-forge-tillandsias-macuahuitl-and-unknown-host-refs-classified-relay-superseded-or-dead
+    order: 1424-w4ai
+    status: ready
+    kind: investigation
+    priority: p3
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [salvage, triage, relay, git-refs]
+    estimated_hours: 2
+    title: |
+      salvage backlog triage, slice 1 — the 9 refs under salvage/forge-tillandsias/*, salvage/macuahuitl/* and salvage/unknown/* classified RELAY / SUPERSEDED / DEAD with evidence; 3 RELAY (one carrying 8 rows marked implemented that are all still ready on trunk), 3 SUPERSEDED, 3 DEAD. Nothing deleted.
+    context: |
+      METHOD (macuahuitl-forge, 2026-09-27T01:45:20Z, READ-ONLY): `bash scripts/salvage-audit.sh`
+      -> ok:salvage-audit:318r:43w:452f:branch=origin/linux-next. Only its
+      ref-may-be-AHEAD / ABSENT lines were treated as candidates; each candidate
+      diff was read against origin/linux-next, and "landed" was established by
+      CONTENT (pickaxe `git log -S` on trunk, blob presence via --find-object,
+      or the trunk file that carries it), never by a similar commit subject.
+      Sibling-ref equivalence was checked blob by blob. NOTHING WAS DELETED:
+      remote ref deletion is irreversible and needs the owner's or the
+      coordinator's OK per ref.
+
+      TABLE (ref @ tip | class | evidence):
+      1. salvage/macuahuitl/20260926-centicolon-design @ 7b2076a30 | R RELAY |
+         plan/issues/centicolon-enforceable-metric-design-2026-09-26.md (222
+         lines, the CentiColon-on-Lua design) is ABSENT on trunk, yet trunk's
+         1395-n7qd fragment (landed c52e15094) CITES it by path, so trunk
+         carries a dangling citation. The ref's packets fragment is
+         byte-identical to trunk's. Relay = add the one .md.
+      2. salvage/unknown/20260916-920-cluster-forge-20260916-232039 @ fdafd13d5
+         | R RELAY (needs per-row review) | status fragments set EIGHT rows to
+         "implemented": 920-c3af, 920-tqhs, 920-mvgp, 920-ijwa, 923-ys2t,
+         926-3vs6, 922-hm3n, 920-eqjr, all still READY on trunk. Candidate code:
+         pty_handler.rs +82/-14 (922-hm3n: seed HOME and XDG_RUNTIME_DIR=/run/user/<uid>
+         from one uid, with a test; trunk has no XDG_RUNTIME_DIR seeding);
+         images/default/cli/tellme +14/-3 and lib-common.sh +18/-3 (920-tqhs:
+         verify the cheatsheet hot-path copy, fall back to the repo/image bundle
+         and say which copy is serving, instead of tracing success after a failed
+         cp); test-populate-hot-paths-negative-control.sh +84 (920-tqhs);
+         litmus-mcp-discoverability-shape.yaml +4 (920-c3af step calling
+         opencode_lane_builder_mounts_only_per_lane_mcp_dir, a test fn present in
+         the REF's main.rs and ABSENT on trunk — main.rs reads linux-next-is-AHEAD
+         in the audit, so the fn is invisible to the candidate list and the litmus
+         step must not relay without that hunk); test-dispatch-reap.sh +24/-1
+         (1141-vf9w, completed: arm 4 treats a ZOMBIE as dead via /proc state,
+         measured flake 3/3 on a forge; trunk has no zombie handling). CAUTION
+         for the relayer: the tellme hunk's new condition `[ -n "${B_SOURCE[0]:-}" ]`
+         is always false (B_SOURCE is a pre-existing trunk typo for BASH_SOURCE,
+         since c6600493c), so its repo-local fallback never fires. Rows 920-mvgp,
+         920-ijwa, 923-ys2t, 926-3vs6 and 920-eqjr have no candidate file of their
+         own; their code, if any, sits in files the audit reads as trunk-ahead and
+         needs a hunk-level read before the "implemented" claims are trusted.
+      3. salvage/unknown/20260916-920-cluster-forge-20260916 @ 6db5aa8b8 | S
+         SUPERSEDED (by row 2, not by trunk) | all 23 of its candidate files are
+         byte-identical in the 232039 ref; relay row 2, not this.
+      4. salvage/macuahuitl/20260911-recover-sep6-fragments @ 595111591 | S |
+         both fragments' content landed on trunk: 1118-pifa filing plus the
+         harness-kill-vs-host-memory finding in 1c888504e, folded into
+         plan/index.yaml by c386e3c15 (pickaxe on "order: 1118-pifa" and
+         "FALSIFIES THE MEMORY-FLOOR READING").
+      5. salvage/unknown/20260910-1080-4deb-arm1 @ 94f12eeb7 | S | 1080-4deb is
+         completed on trunk; ARM 1 (claim without status) is in trunk's
+         test-ledger-write-reaches-its-reader.sh and gate step 110-1080-4deb;
+         the three claim/progress/release fragments' events landed in 9e7c77c79
+         and were folded by c386e3c15.
+      6. salvage/forge-tillandsias/20260921-1331-884p-splitter-alt @ 5d508a583 |
+         D DEAD (owner-preserved) | its commit says "the unlanded alternative
+         splitter, preserved not proposed"; 1331-884p is completed with the
+         other implementation; the audit's only line is linux-next-is-AHEAD and
+         the ref's blob never existed on trunk. Deleting it is the owner's call.
+      7. salvage/forge-tillandsias/20260923-pirria-forge-openspec-regen @
+         bc6051054 | D | 78 files, all generated openspec alias trees (.agents,
+         .opencode, .github/prompts, .gemini/commands/opsx, skills):
+         reproducible generator output (generatedBy 1.13.1 x44, 1.13.0 x11,
+         1.3.1 x11), i.e. launch-regeneration dirt (1422-w3p8, 1253-nmmy).
+      8. salvage/unknown/20260902-opsx-claude-lane-dirt @ b0536e868 | D | 22
+         .claude opsx files, all linux-next-is-AHEAD, blobs seen in trunk
+         history: stale launch-regeneration dirt.
+      9. salvage/unknown/20260902-opsx-claude-locus-generated @ 9e681f9b3 | D |
+         same 22-file shape as row 8, also all trunk-ahead.
+    exit_criteria:
+      - 'each R ref is relayed to linux-next or its owner declines it on this row: centicolon design doc (1); the 920-cluster 232039 ref (2) row by row, with the tellme B_SOURCE condition fixed before it lands'
+      - 'each S and D ref is deleted only after a per-ref OK from its owner or the coordinator, recorded as an event on this row'
+      - 'the remaining ~34 refs from the same salvage-audit run are sliced to other hosts using this table shape (ref @ tip | class | evidence)'
+    unscoreable: |
+      whether the five 920-cluster rows with no candidate file of their own were
+      really implemented: that needs a hunk-level read of files the audit
+      reads as trunk-ahead, which is beyond a triage. Ownership of the
+      salvage/unknown/* refs is unrecorded (host "unknown"), so their deletion
+      OK falls to the coordinator.
+    provenance: |
+      Filed by macuahuitl-forge (forge-forge-tillandsias-claude-20260927t014520z) at the coordinator's (macuahuitl-fedora)
+      request, 2026-09-27; read-only triage, nothing deleted.
+    events:
+      - type: filed
+        ts: "2026-09-27T01:45:20Z"
+        agent_id: "forge-forge-tillandsias-claude-20260927t014520z"
+        host: macuahuitl-forge
+        summary: |-
+          Slice 1 of the salvage backlog: 9 refs, 3 R / 3 S / 3 D. The 920-cluster
+          232039 ref holds eight rows marked implemented that are still ready on trunk.

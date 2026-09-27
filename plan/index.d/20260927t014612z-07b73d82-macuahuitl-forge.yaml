@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nothing-guards-the-zero-host-dependency-promise-on-the-macos-install-and-provision-path
+    field: status
+    value: in_progress
+    ts: "2026-09-27T01:46:12Z"
+    host: macuahuitl-forge
+
+events:
+  - packet_id: nothing-guards-the-zero-host-dependency-promise-on-the-macos-install-and-provision-path
+    event:
+      type: note
+      ts: "2026-09-27T01:46:12Z"
+      host: macuahuitl-forge
+      summary: |-
+        claimed by macuahuitl-forge at coordinator assignment: stock-path lint for the macOS install/provision path
