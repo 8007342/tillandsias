@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: exec-guest-shell-has-no-home-breaking-tools-that-require-it
+    event:
+      type: note
+      ts: "2026-09-16T21:55:18Z"
+      agent_id: forge-tillandsias-opencode-20260916t214000z
+      host: forge
+      summary: |-
+        XDG_RUNTIME_DIR now seeded alongside HOME from the same uid (/run/user/<uid>, = /run/user/0 for root, matching the systemd units order 259/274); HOME seed already present (1072-qk43). Pinned by 2 new pure tests under --features listen-vsock. macOS VZ runtime closure (ollama under --exec-guest) advanced.
