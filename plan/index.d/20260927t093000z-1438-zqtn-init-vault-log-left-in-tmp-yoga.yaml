@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Filed by yoga at macuahuitl's request (2026-09-27), from the v56.9.27.2 Linux
+# smoke; severity established WITHOUT printing any content.
+packets:
+  - packet_id: debug-init-leaves-tmp-tillandsias-init-vault-log-world-readable-because-cleanup-init-logs-omits-vault
+    order: 1438-zqtn
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [hygiene, init, vault, installer, litmus]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    unscoreable: "unpinnable-until-the-guard-exists: litmus:binary-e2e-smoke step 5 ('verify init log cleaned up': zero /tmp/tillandsias-init-*.log) already pins the property and is RED on yoga against the installed v56.9.27.2; the closure is that step green after a --debug --init, plus a unit test that cleanup_init_logs covers every image init builds (vault included) — derived from the build list, not a second hand-kept list."
+    title: |
+      a --debug --init (which every curl install runs: install.sh calls `tillandsias --reset-state --debug`) leaves /tmp/tillandsias-init-vault.log behind, mode 644, because cleanup_init_logs removes the init logs of eight images and omits vault — hygiene, no secrets (measured by count)
+    context: |
+      MEASURED on yoga 2026-09-27 after the v56.9.27.2 curl-install smoke (reset
+      opted out, so reprovision ran --init with --debug at 08:30Z):
+        (a) stat -c '%a %U %s' /tmp/tillandsias-init-vault.log -> 644 tlatoani 3865
+            (world-readable; /tmp is drwxrwxrwt)
+        (b) grep -cE 'Unseal Key|Root Token|hvs\.|s\.[A-Za-z0-9]{24}' -> 0
+            (a wider case-insensitive token|secret|unseal|root count is 3; with
+            every 12+-char token-like run redacted those three lines are image
+            BUILD output — `USER root`, an `apk add … chown vault:vault`, and
+            a HEALTHCHECK — no credential)
+        (c) CODE PATH, by reading (not an older-install run): init_log_file()
+            (main.rs ~:2215) returns /tmp/tillandsias-init-<image>.log ONLY when
+            debug; cleanup_init_logs() (~:9626) removes it for proxy, git,
+            inference, router, chromium-core, chromium-framework, forge-base,
+            forge — NOT vault. Identical list at v56.9.25.2 (current stable),
+            so this is not new in 27.2.
+      Also red because of it: litmus:binary-e2e-smoke step 5 (bound in dev-build
+      and headless-mode), which runs the INSTALLED binary.
+      Note vault_bootstrap.rs (~:2319) writes its on-demand build log to the
+      user's cache dir, not /tmp — the /tmp copy comes from the --init path.
+      FIX DIRECTION: add vault to the cleanup — better, derive the cleanup from
+      the same image list init builds, so the next image cannot repeat this —
+      and consider writing debug build logs under the user's state dir with
+      0600 instead of /tmp at the umask's 0644.
