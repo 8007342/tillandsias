@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-committed-groundtruth-case-keyed-to-a-live-packets-open-or-closed-status-turns-trunk-red-on-any-plan-lane-closure-and-the-closer-cannot-see-it
+    field: notes
+    value: 'yoga-silverblue 2026-09-27 (from 1437-yfuh, routed here by macuahuitl): the 437 closure 9ee8ce57c touched only three plan/index.d fragments. MEASURED - litmus-covering-specs.sh over those paths answers ok:litmus-coverage:0-spec(s), and --relay-scope answers run=0; check-groundtruth-mutable-status-pins.sh on the pre-fix tree 562e6281a^ answers ok:groundtruth-status-pins:3 live-checked rc=0. So no covering litmus and no pin check sees a plan-lane closure that breaks a groundtruth case; only cargo test -p tillandsias-plan the_committed_query_set_is_green_at_head catches it, and the plan-only lane runs no gate.'
+    ts: "2026-09-27T17:47:19Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: a-committed-groundtruth-case-keyed-to-a-live-packets-open-or-closed-status-turns-trunk-red-on-any-plan-lane-closure-and-the-closer-cannot-see-it
+    event:
+      type: progress
+      ts: "2026-09-27T17:47:19Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'yoga-silverblue 2026-09-27 (from 1437-yfuh, routed here by macuahuitl): the 437 closure 9ee8ce57c touched only three plan/index.d fragments. MEASURED - litmus-covering-specs.sh over those paths answers ok:litmus-coverage:0-spec(s), and --relay-scope answers run=0; check-groundtruth-mutable-status-pins.sh on the pre-fix tree 562e6281a^ answers ok:groundtruth-status-pins:3 live-checked rc=0. So no covering litmus and no pin check sees a plan-lane closure that breaks a groundtruth case; only cargo test -p tillandsias-plan the_committed_query_set_is_green_at_head catches it, and the plan-only lane runs no gate.' (not terminal) with evidence_refs: 9ee8ce57c
+  - packet_id: a-committed-groundtruth-case-keyed-to-a-live-packets-open-or-closed-status-turns-trunk-red-on-any-plan-lane-closure-and-the-closer-cannot-see-it
+    event:
+      type: note
+      ts: "2026-09-27T17:47:19Z"
+      host: yoga-silverblue
+      summary: |-
+        plan-only closure gap measured, routed from 1437-yfuh
