@@ -304,8 +304,41 @@ pub struct RealSatisfier {
 // Helper: `ensure_ca_bundle` returns `Result<PathBuf, String>` but the Satisfier
 // trait returns `Result<(), String>`.  Unify by discarding the path.
 fn satisfy_ca_bundle(debug: bool) -> Result<(), String> {
-    crate::ensure_ca_bundle(debug)?;
-    Ok(())
+    let certs_dir = crate::ensure_ca_bundle(debug)?;
+    // Order 472 slice 4: "the file exists" is not "consumers can trust it".
+    // Without this check a consumer mounted an unreadable or malformed
+    // certificate and the forge fell back to vendor roots INSIDE the
+    // container, with only a WARNING line to show for it (lib-common.sh). A
+    // forge has its CA injected by the host and never generates one, so it is
+    // exempt here exactly as ensure_ca_bundle exempts it.
+    if std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge") {
+        return Ok(());
+    }
+    ca_bundle_trustable(&certs_dir)
+}
+
+/// Whether the published CA certificate can be handed to consumers: it
+/// reads, and it is a PEM certificate by the same test the forge's
+/// `init_runtime_ca_trust` applies (a BEGIN and an END CERTIFICATE line), so
+/// the host refuses exactly what the container would otherwise have silently
+/// replaced with vendor roots. The error names the 472 state: `unreadable`.
+pub(crate) fn ca_bundle_trustable(certs_dir: &std::path::Path) -> Result<(), String> {
+    let crt = certs_dir.join("intermediate.crt");
+    let text = std::fs::read_to_string(&crt).map_err(|e| {
+        format!(
+            "ca-bundle unreadable: {} could not be read ({e}); refusing to start a consumer that would silently fall back to vendor roots",
+            crt.display()
+        )
+    })?;
+    let has = |marker: &str| text.lines().any(|l| l.trim_end() == marker);
+    if has("-----BEGIN CERTIFICATE-----") && has("-----END CERTIFICATE-----") {
+        Ok(())
+    } else {
+        Err(format!(
+            "ca-bundle unreadable: {} is not a PEM certificate; refusing to start a consumer that would silently fall back to vendor roots",
+            crt.display()
+        ))
+    }
 }
 
 impl Satisfier for RealSatisfier {
@@ -1010,5 +1043,47 @@ mod tests {
                  (994-8r3w)"
             );
         }
+    }
+
+    // ---- order 472 slice 4: an unreadable CA is refused host-side ----------
+
+    #[test]
+    fn a_pem_certificate_is_trustable() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("intermediate.crt"),
+            "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+        assert_eq!(ca_bundle_trustable(dir.path()), Ok(()));
+    }
+
+    #[test]
+    fn a_missing_or_malformed_certificate_is_refused_as_unreadable() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = ca_bundle_trustable(dir.path()).unwrap_err();
+        assert!(missing.starts_with("ca-bundle unreadable:"), "{missing}");
+        std::fs::write(dir.path().join("intermediate.crt"), "not a certificate\n").unwrap();
+        let malformed = ca_bundle_trustable(dir.path()).unwrap_err();
+        assert!(
+            malformed.contains("is not a PEM certificate"),
+            "{malformed}"
+        );
+    }
+
+    /// The negative path the 472 criterion asks for: deleting the check from
+    /// the satisfier (so the graph only knows "the file exists") fails here.
+    #[test]
+    fn the_ca_satisfier_refuses_what_it_cannot_trust() {
+        let src = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/container_deps.rs"
+        ));
+        let start = src.find("fn satisfy_ca_bundle(").expect("satisfier");
+        let body = &src[start..start + src[start..].find("\n}\n").expect("end")];
+        assert!(
+            body.contains("ca_bundle_trustable(&certs_dir)"),
+            "satisfy_ca_bundle must gate on ca_bundle_trustable"
+        );
     }
 }
