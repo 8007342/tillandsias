@@ -8861,18 +8861,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     // hit its first vault build mid-login and every login re-invoked podman
     // build. Login stays a pure runtime operation when init has run;
     // build_vault_image keeps a fail-soft on-demand fallback.
-    let images = [
-        "proxy",
-        "git",
-        "vault",
-        "inference",
-        "router",
-        "chromium-core",
-        "chromium-framework",
-        "forge-base",
-        "forge",
-        "web",
-    ];
+    let images = INIT_IMAGES;
 
     // @trace spec:forge-staleness, spec:forge-cache-dual
     // VERSION changes only move aliases. Content identity comes from the exact
@@ -9629,19 +9618,35 @@ fn podman_build_argv(
     Ok(argv)
 }
 
+/// ORDER 1438-zqtn. THE images `--init` builds, in build order. One list for
+/// the build loop AND the debug-log cleanup: the cleanup used to keep its own
+/// hand-written copy, which omitted `vault` and `web`, so every `--debug`
+/// init — and every curl install, since install.sh runs `--reset-state
+/// --debug` — left /tmp/tillandsias-init-vault.log behind (measured on yoga
+/// 2026-09-27, mode 644).
+const INIT_IMAGES: [&str; 10] = [
+    "proxy",
+    "git",
+    "vault",
+    "inference",
+    "router",
+    "chromium-core",
+    "chromium-framework",
+    "forge-base",
+    "forge",
+    "web",
+];
+
 fn cleanup_init_logs() {
-    for image in &[
-        "proxy",
-        "git",
-        "inference",
-        "router",
-        "chromium-core",
-        "chromium-framework",
-        "forge-base",
-        "forge",
-    ] {
-        let log_path = PathBuf::from(format!("/tmp/tillandsias-init-{}.log", image));
-        let _ = fs::remove_file(&log_path);
+    cleanup_init_logs_in(Path::new("/tmp"), &INIT_IMAGES);
+}
+
+/// Remove `<dir>/tillandsias-init-<image>.log` for each image. Split out so a
+/// test can point it at a scratch directory; `init_log_file` names the same
+/// path shape under /tmp.
+fn cleanup_init_logs_in(dir: &Path, images: &[&str]) {
+    for image in images {
+        let _ = fs::remove_file(dir.join(format!("tillandsias-init-{}.log", image)));
     }
 }
 
@@ -28973,8 +28978,12 @@ esac
             init_window.contains("PodmanClient::new()"),
             "run_init must use PodmanClient"
         );
+        // ORDER 1438-zqtn, CHANGED ON PURPOSE: the image list moved out of
+        // run_init into INIT_IMAGES (shared with the debug-log cleanup), so
+        // the property "init builds web" is asserted on the list run_init
+        // actually walks, not on a literal's position in its source.
         assert!(
-            init_window.contains("\"web\""),
+            init_window.contains("INIT_IMAGES") && INIT_IMAGES.contains(&"web"),
             "run_init must include the web image"
         );
         assert!(
@@ -30505,6 +30514,45 @@ esac
             path.to_string_lossy()
                 .contains("tillandsias-init-proxy.log")
         );
+    }
+
+    /// ORDER 1438-zqtn. The debug-log cleanup covers EVERY image init builds
+    /// (the list it walks is the build list itself), and removes nothing else.
+    #[test]
+    fn cleanup_init_logs_covers_every_init_image_and_nothing_else() {
+        let dir = std::env::temp_dir().join(format!("zqtn-cleanup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        for image in INIT_IMAGES {
+            std::fs::write(dir.join(format!("tillandsias-init-{image}.log")), "x").expect("write");
+        }
+        // NEGATIVE CONTROL: a file that is not an init log survives.
+        let bystander = dir.join("tillandsias-other.log");
+        std::fs::write(&bystander, "keep").expect("write");
+        assert!(
+            INIT_IMAGES.contains(&"vault") && INIT_IMAGES.contains(&"web"),
+            "premise: the images the old list missed are built"
+        );
+        cleanup_init_logs_in(&dir, &INIT_IMAGES);
+        for image in INIT_IMAGES {
+            assert!(
+                !dir.join(format!("tillandsias-init-{image}.log")).exists(),
+                "init log for {image} was left behind"
+            );
+        }
+        assert!(
+            bystander.exists(),
+            "the cleanup must not remove a non-init file"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        // The shipped cleanup walks the build list, not a copy of it.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn cleanup_init_logs()");
+        assert!(
+            window.contains("&INIT_IMAGES"),
+            "cleanup_init_logs must walk INIT_IMAGES"
+        );
+        let init = source_window(source, "let images = INIT_IMAGES;");
+        assert!(!init.is_empty(), "the init build loop must use INIT_IMAGES");
     }
 
     #[test]
