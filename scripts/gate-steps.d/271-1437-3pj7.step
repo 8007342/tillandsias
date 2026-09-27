@@ -1,0 +1,11 @@
+# Gate step 1437-3pj7 — data, not code (order 1072-b7eq).
+#
+# main_ctx was 0 on every token row because nothing measured it. This pins the
+# transcript instrument: the four-field sum, message-id dedupe, the sub-agent
+# totals, the --from-transcript record, and both absent/schema-drift controls.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking session-tokens measures main_ctx from the transcript (1437-3pj7)"
+STEP_SCRIPT="scripts/test-session-tokens.sh"
+STEP_ERROR="session-tokens stopped measuring main_ctx from the transcript, double-counted repeated message lines, or reported a guess where it should say absent (1437-3pj7) — see the verdict line above"
+STEP_OK="Session-tokens instrument passed"

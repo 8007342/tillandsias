@@ -571,6 +571,13 @@ fi
 #   cycle-metrics.sh --emit-tokens host=<h> cycle=<id> main_ctx=<n> \
 #       subagent_tokens=<n> agents=<n> by_model=<opus:3,haiku:39> label=<what>
 #
+#   cycle-metrics.sh --emit-tokens --from-transcript host=<h> cycle=<id> \
+#       label=<what> [since=<utc>] [transcript=<path>]
+#
+# --from-transcript (order 1437-3pj7) measures the token fields with
+# scripts/session-tokens.sh from the harness transcript instead of taking them
+# from the caller, and prints the measured line; every record carries `source`.
+#
 # `label` is what makes token_recur: possible: it names the WORK, not the cycle,
 # so the same expensive delegation recurring across days is visible as one
 # ranked entry rather than as seven unrelated rows. Without it the log answers
@@ -580,8 +587,14 @@ if [ "${1:-}" = "--emit-tokens" ]; then
     shift
     et_host="-"; et_cycle=""; et_by_model="-"; et_label="-"
     et_main_ctx=0; et_subagent_tokens=0; et_agents=0; et_main_ctx_cum=0
+    # ORDER 1437-3pj7: `source` says where the numbers came from — `caller`
+    # (hand-attested, the pre-3pj7 path), a transcript path, or `absent[:…]`.
+    et_from_transcript=0; et_transcript=""; et_since=""; et_source="caller"
     for tok in "$@"; do
         case "$tok" in
+            --from-transcript)  et_from_transcript=1 ;;
+            transcript=*)       et_transcript="${tok#transcript=}" ;;
+            since=*)            et_since="${tok#since=}" ;;
             host=*)             et_host="${tok#host=}" ;;
             cycle=*)            et_cycle="${tok#cycle=}" ;;
             main_ctx=*)         et_main_ctx="${tok#main_ctx=}" ;;
@@ -599,6 +612,29 @@ if [ "${1:-}" = "--emit-tokens" ]; then
             label=*)            et_label="${tok#label=}" ;;
         esac
     done
+    # ORDER 1437-3pj7: --from-transcript measures instead of trusting the
+    # caller. The measurement REPLACES any hand-passed token fields, and an
+    # absent/drifted transcript writes zeros with the reason in `source`, never
+    # the caller's guess (a proxy recorded as a measurement is the defect).
+    if [ "$et_from_transcript" = 1 ]; then
+        et_st_args=()
+        [ -n "$et_transcript" ] && et_st_args+=(--transcript "$et_transcript")
+        [ -n "$et_since" ] && et_st_args+=(--since "$et_since")
+        et_line="$(bash "$(dirname "$0")/session-tokens.sh" ${et_st_args[@]+"${et_st_args[@]}"} 2>/dev/null)" || et_line=""
+        [ -n "$et_line" ] || et_line="main_ctx=0 main_ctx_cumulative=0 subagent_tokens=0 agents=0 by_model=- source=absent"
+        for kv in $et_line; do
+            case "$kv" in
+                main_ctx=*)            et_main_ctx="${kv#main_ctx=}" ;;
+                main_ctx_cumulative=*) et_main_ctx_cum="${kv#main_ctx_cumulative=}" ;;
+                subagent_tokens=*)     et_subagent_tokens="${kv#subagent_tokens=}" ;;
+                agents=*)              et_agents="${kv#agents=}" ;;
+                by_model=*)            et_by_model="${kv#by_model=}" ;;
+                source=*)              et_source="${kv#source=}" ;;
+            esac
+        done
+        echo "$et_line"
+    fi
+    et_source="${et_source//[\"\\]/_}"; et_source="${et_source//[[:cntrl:][:space:]]/_}"
     # Coerce non-numerics to 0 rather than write a poisoned row the rolling
     # average would then carry forever (--emit-flow's rule, same reason).
     for v in et_main_ctx et_subagent_tokens et_agents et_main_ctx_cum; do
@@ -624,9 +660,9 @@ if [ "${1:-}" = "--emit-tokens" ]; then
     et_cycle="${et_cycle//[\"\\]/_}"; et_cycle="${et_cycle//[[:cntrl:][:space:]]/_}"
     {
         et_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-        et_record="$(printf '{"ts":"%s","host":"%s","cycle":"%s","label":"%s","main_ctx":%s,"main_ctx_cumulative":%s,"subagent_tokens":%s,"agents":%s,"by_model":"%s"}' \
+        et_record="$(printf '{"ts":"%s","host":"%s","cycle":"%s","label":"%s","main_ctx":%s,"main_ctx_cumulative":%s,"subagent_tokens":%s,"agents":%s,"by_model":"%s","source":"%s"}' \
             "$et_ts" "$et_host" "$et_cycle" "$et_label" \
-            "$et_main_ctx" "$et_main_ctx_cum" "$et_subagent_tokens" "$et_agents" "$et_by_model")"
+            "$et_main_ctx" "$et_main_ctx_cum" "$et_subagent_tokens" "$et_agents" "$et_by_model" "$et_source")"
         mkdir -p "$(dirname "$TOKENS_LOG")" 2>/dev/null || true
         if [ -f "$TOKENS_LOG" ] \
            && grep -q "\"host\":\"${et_host}\",\"cycle\":\"${et_cycle}\"" "$TOKENS_LOG"; then
