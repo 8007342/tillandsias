@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: salvage-backlog-triage-slice-1-forge-tillandsias-macuahuitl-and-unknown-host-refs-classified-relay-superseded-or-dead
+    field: status
+    value: in_progress
+    ts: "2026-09-27T02:50:00Z"
+    host: macuahuitl-forge
+
+events:
+  - packet_id: salvage-backlog-triage-slice-1-forge-tillandsias-macuahuitl-and-unknown-host-refs-classified-relay-superseded-or-dead
+    event:
+      type: note
+      ts: "2026-09-27T02:50:00Z"
+      host: macuahuitl-forge
+      summary: |-
+        claimed by macuahuitl-forge to record the coordinator's slice-1 dispositions; stays open for owner-OK'd deletions and the remaining slices
