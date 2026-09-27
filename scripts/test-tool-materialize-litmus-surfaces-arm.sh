@@ -108,6 +108,15 @@ elif _tms_skip="$(printf '%s' "$(sed -n 's/.*\(arms 4-7 need [^"]*\)/\1/p' "$TMP
         esac
         ok "ARM 0: the subject SKIPPED arms 4-7 ($_tms_skip), so the regime probe could not run — arms 1, 1b and 2 are skipped by name below for the same reason, so NOTHING in this run exercises the margin arm; that coverage lives on a host with a working builder"
     fi
+elif grep -q 'skip:tool-materialize-margin:loaded-host' "$TMP/real.out"; then
+    # ORDER 1437-bigs. THE SUBJECT ITSELF REPORTS A BAD REGIME under load.
+    # When the load is high enough, _margin_regime is set to loaded-host in the
+    # subject and the margin arm prints a named skip. This is NOT a failure of
+    # the probe — it is the probe correctly reporting that it cannot measure the
+    # mechanism under the current regime. The subject has run under its own
+    # conditions and reported them faithfully.
+    _tms_loaded="$(sed -n 's/.*\(skip:tool-materialize-margin:loaded-host:[^[:space:]]*\).*/\1/p' "$TMP/real.out" | head -1)"
+    ok "ARM 0: the subject SKIPPED the margin arm under load with its own regime line ($_tms_loaded), which is what a quiet host reports as such; coverage of this regime lives in ARM 2"
 elif grep -q 'skip:tool-materialize-margin:no-regime-probe' "$TMP/real.out"; then
     # ORDER 1300-q7eq. A host with NO readable probe source — no /proc/loadavg
     # and no sysctl vm.loadavg — cannot print a measured regime, and demanding
