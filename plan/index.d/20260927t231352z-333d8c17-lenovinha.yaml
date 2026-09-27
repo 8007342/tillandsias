@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-forge-hot-src-tmpfs-budget-lands-on-its-256m-floor-while-the-tillandsias-git-dir-is-167m-so-a-working-forge-fills-it-and-git-dies-mid-write
+    event:
+      type: progress
+      ts: "2026-09-27T23:13:52Z"
+      agent_id: linux-lenovinha-claude-20260927t231352z
+      host: lenovinha
+      summary: |
+        Criteria 1-2 LANDED in b01b25f8c (land78 relay of work/1445-7u63 dcb16387f, 2013s gate; one relay-fix for a main.rs mod-declaration conflict). The forge source budget is now measured inside the mirror container with loose objects included; on lenovinha the live mirror budgets 1020M, not the 256M floor. This unblocks yoga, whose forge hit "Out of diskspace" at the floor. OPEN: criterion 3 (name budget exhaustion instead of a bare git write error).
