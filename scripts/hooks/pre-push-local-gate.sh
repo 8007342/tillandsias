@@ -283,6 +283,34 @@ if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then
     exit 0
 fi
 
+# ORDER 1427-r2d2 — A DELETION TRANSFERS NO TREE. A push whose every ref is a
+# deletion (local sha all zeros) uploads nothing, so the local tree's gate
+# stamp measures the wrong subject: `git push origin --delete
+# release/version-bump-56.9.27.1` was refused mid-cut because the working tree
+# held an ungated relay merge that the push never carried. Such a push skips
+# the tree checks below ONLY when no ref it deletes is protected. main,
+# linux-next, windows-next and osx-next, tags, and salvage/* (874-w2gc, refused
+# above when the push is all-salvage) fall through to the gate exactly as
+# before, and a mixed push (any update) is never exempt.
+_all_delete=1
+_protected_delete=""
+while read -r _l _ls _remote_ref _rs; do
+    [[ -z "${_remote_ref:-}" ]] && continue
+    if [[ ! "$_ls" =~ ^0+$ ]]; then
+        _all_delete=0
+        break
+    fi
+    case "$_remote_ref" in
+        (refs/heads/main | refs/heads/linux-next | refs/heads/windows-next | refs/heads/osx-next \
+            | refs/heads/salvage/* | refs/tags/*)
+            _protected_delete="${_protected_delete:+$_protected_delete }$_remote_ref" ;;
+    esac
+done < <(printf '%s\n' "$REFS")
+if [[ "$_any_ref" -eq 1 && "$_all_delete" -eq 1 && -z "$_protected_delete" ]]; then
+    echo "${GRN}✓ local gate: deletion-only push of unprotected ref(s) — nothing is uploaded, so the tree stamp does not apply (1427-r2d2)${RST}" >&2
+    exit 0
+fi
+
 # ── 1. Release preflight ───────────────────────────────────────────────────────
 if [[ -f scripts/release-preflight.sh ]]; then
     verdict="$(bash scripts/release-preflight.sh 2>/dev/null | tail -1)"

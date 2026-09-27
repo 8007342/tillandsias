@@ -672,6 +672,7 @@ specs:
   - litmus:join-the-fleet-idempotent
   - litmus:claims-fleet-visible
   - litmus:release-freeze-holds-code
+  - litmus:pre-push-deletion-only
   - litmus:expire-claims-reads-the-status-write
   - litmus:a-claim-names-a-workstation
   - litmus:fragment-keys-are-read
