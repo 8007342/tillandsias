@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nothing-guards-the-zero-host-dependency-promise-on-the-macos-install-and-provision-path
+    field: status
+    value: completed
+    ts: "2026-09-27T02:40:07Z"
+    host: macuahuitl-forge
+
+events:
+  - packet_id: nothing-guards-the-zero-host-dependency-promise-on-the-macos-install-and-provision-path
+    event:
+      type: completed
+      ts: "2026-09-27T02:40:07Z"
+      host: macuahuitl-forge
+      summary: |-
+        status 'completed' with evidence_refs: 450d60cd1
+  - packet_id: nothing-guards-the-zero-host-dependency-promise-on-the-macos-install-and-provision-path
+    event:
+      type: note
+      ts: "2026-09-27T02:40:07Z"
+      host: macuahuitl-forge
+      summary: |-
+        landed in land59: relay commit 450d60cd1 on origin/linux-next under a18724b9c, GitHub-verified; it contains the work ref tip. macOS install/provision path spawns only absolute stock binaries and the installer pins PATH; lint + 7/7 fixture, litmus:macos-stock-binaries-only; darwin relay gate by macbookair passed (26 spawn targets real, no CLT shims, PATH pin needs no Homebrew tool).
