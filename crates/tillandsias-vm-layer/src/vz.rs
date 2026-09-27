@@ -223,6 +223,14 @@ fn explain_start_failure(err: &str, nvram: Option<&Path>) -> String {
     )
 }
 
+/// ORDER 1420-inak. Stage prefixes on `fetch_fedora_cloud_image` errors, so a
+/// caller (the macOS tray's red chip) can name WHICH first-provision stage failed
+/// without guessing from free text. Download covers fetch + SHA-256 verify;
+/// expand covers the qcow2 -> raw conversion (where a full disk surfaces).
+pub const FETCH_STAGE_DOWNLOAD: &str = "download/verify Fedora Cloud image: ";
+/// See [`FETCH_STAGE_DOWNLOAD`].
+pub const FETCH_STAGE_EXPAND: &str = "expand Fedora Cloud image to rootfs.img: ";
+
 impl VzRuntime {
     /// Construct a runtime handle. Does NOT touch the host yet.
     pub fn new(guest_cid: u32, image_root: PathBuf) -> Self {
@@ -481,9 +489,10 @@ impl VzRuntime {
             }
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("{FETCH_STAGE_DOWNLOAD}{e}"))?;
 
         convert_qcow2_to_raw(&qcow2_dest, &self.rootfs_image_path(), on_phase)
+            .map_err(|e| format!("{FETCH_STAGE_EXPAND}{e}"))
     }
 
     /// Fetch the recipe-published rootfs artifact (per l9 URL contract)

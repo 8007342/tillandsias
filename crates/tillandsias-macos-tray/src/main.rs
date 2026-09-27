@@ -37,10 +37,15 @@ mod pty_vsock_bridge;
 mod reset_state;
 #[cfg(target_os = "macos")]
 mod status_item;
+#[cfg(target_os = "macos")]
+mod tray_log;
 
 // These modules compile on every target: their public surface is host-shell
 // data + plain Rust formatting that we want to test from the Linux dev box.
 mod menu_disabled_v2;
+// 1420-inak: pure, ungated (no crate:: / unix), so its tests run on every host.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod provision_error;
 mod terminal_attach;
 
 /// The `--version` / `-V` line: release version, git SHA and build time from
@@ -409,6 +414,9 @@ fn main() {
                 std::process::exit(1);
             }
         };
+    // 1420-inak: GUI mode gets a real log file (tray.log) before anything else
+    // runs, so a failed first provision leaves something a user can send.
+    tray_log::install_for_gui_mode(&version_line());
     status_item::run();
 }
 

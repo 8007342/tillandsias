@@ -1498,7 +1498,10 @@ async fn run_start(
             );
         }
         Err(err) => {
-            return Err(format!("stage embedded guest binary: {err}"));
+            return Err(crate::provision_error::failure_text(
+                crate::provision_error::Stage::GuestBinary,
+                &format!("stage embedded guest binary: {err}"),
+            ));
         }
     }
     let vz = Arc::new(VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root));
@@ -1571,7 +1574,12 @@ async fn run_start(
             vz.rootfs_image_path().display()
         );
         let manifest = tillandsias_vm_layer::recipe::Manifest::from_toml(BUNDLED_MANIFEST_TOML)
-            .map_err(|e| format!("bundled manifest parse: {e}"))?;
+            .map_err(|e| {
+                crate::provision_error::failure_text(
+                    crate::provision_error::Stage::ImageSetup,
+                    &format!("bundled manifest parse: {e}"),
+                )
+            })?;
         vz.fetch_fedora_cloud_image(&manifest, on_phase)
             .await
             .map_err(|e| {
@@ -1613,8 +1621,18 @@ async fn run_start(
         let handle = tokio::runtime::Handle::current();
         tokio::task::spawn_blocking(move || handle.block_on(vz.start()))
             .await
-            .map_err(|e| format!("VM start task panicked: {e}"))?
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                crate::provision_error::failure_text(
+                    crate::provision_error::Stage::VmStart,
+                    &format!("VM start task panicked: {e}"),
+                )
+            })?
+            .map_err(|e| {
+                crate::provision_error::failure_text(
+                    crate::provision_error::Stage::VmStart,
+                    &e.to_string(),
+                )
+            })?;
     }
     on_phase("Connecting");
     *vm_slot.lock().unwrap() = Some(vz);
@@ -1700,12 +1718,22 @@ impl TrayActionHost {
                 // parent if the file isn't yet written). Best-effort:
                 // shell out to `open` so the user's default text editor
                 // takes over. Mirrors Windows's `open_log_file`.
-                if let Some(home) = std::env::var_os("HOME") {
-                    let log_dir = std::path::PathBuf::from(home).join("Library/Logs/Tillandsias");
-                    let _ = std::fs::create_dir_all(&log_dir);
+                // 1420-inak: the tray now WRITES tray.log (tray_log.rs), so open
+                // the file itself; before, this opened a directory nothing wrote.
+                if let Some(log) = crate::tray_log::tray_log_path() {
+                    let target = if log.exists() {
+                        log
+                    } else {
+                        let dir = log
+                            .parent()
+                            .map(std::path::Path::to_path_buf)
+                            .unwrap_or(log);
+                        let _ = std::fs::create_dir_all(&dir);
+                        dir
+                    };
                     let mut command = std::process::Command::new("/usr/bin/open");
-                    command.arg(&log_dir);
-                    spawn_and_reap(command, "open log directory");
+                    command.arg(&target);
+                    spawn_and_reap(command, "open log");
                 }
             }
             MenuAction::OpenObservatorium
@@ -2654,10 +2682,12 @@ fn apply_vm_status(
     status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
     status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
 ) -> bool {
+    let mut phase_changed = false;
     {
         let mut logged = last_logged_phase.lock().unwrap();
         if *logged != Some(phase) {
             *logged = Some(phase);
+            phase_changed = true;
             eprintln!(
                 "[tillandsias-tray] vm-status: phase={phase:?} podman_ready={podman_ready}{}",
                 last_event
@@ -2666,7 +2696,29 @@ fn apply_vm_status(
             );
         }
     }
-    let base = vm_phase_status_text(phase, podman_ready);
+    let mut base = vm_phase_status_text(phase, podman_ready);
+    // 1420-inak: a guest that FAILED provisioning used to render a bare
+    // "🔴 VM failed". The guest's own record names the failing step; read it
+    // only on Failed (a file read per status push would be wasteful) and put
+    // the step on the chip. The full text also goes to the tray log once.
+    if matches!(phase, tillandsias_control_wire::VmPhase::Failed) {
+        let record = std::fs::read_to_string(crate::diagnose::provision_state_path())
+            .map(|t| crate::diagnose::provision_record_from(&t));
+        if let Ok(crate::diagnose::ProvisionRecord::Failed { line, rc, cmd, .. }) = record {
+            let full = crate::provision_error::failure_text(
+                crate::provision_error::Stage::GuestProvisioning,
+                &crate::provision_error::guest_failure_detail(
+                    line.as_deref(),
+                    rc.as_deref(),
+                    cmd.as_deref(),
+                ),
+            );
+            if phase_changed {
+                eprintln!("[tillandsias-tray] {full}");
+            }
+            base = clamp_tray_status_chip(format!("\u{1F534} {full}"));
+        }
+    }
     let text_for_dispatch = compose_chip_text(&base, last_event);
     let mut rebuild_needed = false;
     {
