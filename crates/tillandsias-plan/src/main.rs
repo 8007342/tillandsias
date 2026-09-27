@@ -1801,6 +1801,8 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
 
     let started = std::time::Instant::now();
     let mut outcomes: Vec<groundtruth::Outcome> = Vec::new();
+    // 1258-u8re: degenerate-retrieval findings, gathered from every harness.
+    let mut degenerate: Vec<String> = Vec::new();
     let mut skipped: Vec<(String, String, String)> = Vec::new();
 
     if let Some(src) = envelope_src {
@@ -1949,10 +1951,18 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
                 stale: found.stale,
             });
         }
+        for (_, _, h) in &harnesses {
+            degenerate.extend(h.degenerate_retrieval().iter().cloned());
+        }
     }
 
+    // 1258-u8re criterion 4: a dead retriever, reported on its own terms. It
+    // invalidates the spec.answer measurement, so it also fails the run.
+    for d in &degenerate {
+        println!("DEGENERATE RETRIEVAL: {d}");
+    }
     let failed = report(&outcomes, &skipped, &sets, started);
-    i32::from(failed > 0)
+    i32::from(failed > 0 || !degenerate.is_empty())
 }
 
 /// Print the per-case verdicts plus ONE machine-readable summary line, and
@@ -2453,10 +2463,14 @@ fn read_query_vec(path: &Path) -> Vec<f32> {
         eprintln!("error: read {}: {e}", path.display());
         std::process::exit(1);
     });
-    serde_json::from_str::<Vec<f32>>(text.trim()).unwrap_or_else(|e| {
-        eprintln!("error: {} is not a JSON float array: {e}", path.display());
-        std::process::exit(1);
-    })
+    // 1258-u8re: the same parser the grader uses, so the self-describing form
+    // ({"model","dim","vector"}) and the legacy bare array both load here too.
+    tillandsias_plan::groundtruth::parse_query_vector(&text, &path.display().to_string())
+        .map(|q| q.vector)
+        .unwrap_or_else(|e| {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        })
 }
 
 /// Event type and summary prefix for a `set-field --evidence` write (696-6byc).
