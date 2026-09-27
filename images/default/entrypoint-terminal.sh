@@ -90,13 +90,10 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # base, expert-source, inference, and experts verdict as every agent lane.
 inject_startup_context "$PROJECT_DIR"
 
-# ── OpenSpec init (every launch, silent) ────────────────────
-if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
-    if ! OS_OUTPUT=$("$OS_BIN" init </dev/null 2>&1); then
-        echo "[entrypoint] WARNING: OpenSpec init failed — /opsx commands may not work" >&2
-        echo "[entrypoint] $OS_OUTPUT" >&2
-    fi
-fi
+# ── OpenSpec init (only when absent, silent) ────────────────
+# Never rewrites a committed /opsx set: a launch must not modify tracked
+# files (order 1422-w3p8; see openspec_init_if_absent in lib-common.sh).
+openspec_init_if_absent "$PROJECT_DIR"
 
 # ── Multi-workspace quick-switch menu ──────────────────────
 # @trace gap:ON-006
