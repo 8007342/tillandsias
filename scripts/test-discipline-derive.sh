@@ -56,11 +56,16 @@ dis() { "$PLAN" discipline "$@" 2>&1; }
 project p1
 d1="$(dis derive --root "$W/p1")"
 c1="$(dis check-ref refs/heads/main --root "$W/p1")"; rc1=$?
+# …and a project that never fetched says so, instead of looking like level 0.
+mkdir -p "$W/nofetch"; g -C "$W/nofetch" init -q; g -C "$W/nofetch" commit -q --allow-empty -m x
+d1n="$(dis derive --root "$W/nofetch")"
 if [ "$(first "$d1")" = "derived=0 seed=none effective=0" ] && [ "$rc1" -eq 0 ] \
-   && [ "$(first "$c1")" = "ok:discipline:default-branch:level=0" ]; then
-    ok "arm 1: derived=0 seed=none effective=0; main is ok at level 0"
+   && [ "$(first "$c1")" = "ok:discipline:default-branch:level=0" ] \
+   && ! grep -q '^note: no refs/remotes/origin' <<<"$d1" \
+   && grep -q '^note: no refs/remotes/origin/\* here' <<<"$d1n"; then
+    ok "arm 1: derived=0 seed=none effective=0; main is ok at level 0; a never-fetched project gets the fetch note"
 else
-    bad "arm 1: derive=[$(first "$d1")] check-ref rc=$rc1 [$(first "$c1")]"
+    bad "arm 1: derive=[$(first "$d1")] check-ref rc=$rc1 [$(first "$c1")] nofetch=[$d1n]"
 fi
 
 # 2 — a seed ahead of reality warns, naming the missing qualifier.
@@ -106,7 +111,7 @@ j5="$("$PLAN" discipline derive --json --root "$W/p3" 2>/dev/null)"
 pairs="$(printf '%s\n' "$j5" | "$PLAN" json get -c '.observations[] | [.name, .command]' 2>/dev/null)"
 n_obs="$(grep -c '^\["[a-z_]*","\(git \|ls \)' <<<"$pairs")"
 n_all="$(grep -c . <<<"$pairs")"
-if [ "$n_all" -ge 5 ] && [ "$n_obs" = "$n_all" ] && grep -q '"distinct_author_emails","git log -n 50 --format=%ae' <<<"$pairs"; then
+if [ "$n_all" -ge 5 ] && [ "$n_obs" = "$n_all" ] && grep -q '"distinct_committer_hosts","git log -n 50 --format=%ae' <<<"$pairs"; then
     ok "arm 5: derive --json names all $n_all observations with the command that made each"
 else
     bad "arm 5: $n_obs/$n_all observations carry a command: [$pairs]"

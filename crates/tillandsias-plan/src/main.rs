@@ -431,6 +431,8 @@ const USAGE: &str = concat!(
     "                                     branches, work refs, author emails, PR merges, hooks) and prints\n",
     "                                     derived=<n> seed=<n|none> effective=<n>; an enforced rule refuses only\n",
     "                                     when its qualifier is observed, else warns :seed-ahead-of-reality.\n",
+    "                                     Observations read the checkout's refs as of its LAST FETCH:\n",
+    "                                     `git fetch origin` first (a note: line says when nothing was fetched).\n",
     "                                     ORDER 1443-w79y. The branch-discipline seed\n",
     "                                     (.tillandsias/branch-discipline.yaml): level, per-rule\n",
     "                                     enforcement, integration branch per platform, ref grammar.\n",
@@ -4369,7 +4371,7 @@ fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
     use tillandsias_plan::branch_discipline as bd;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan discipline show [--json] | target --platform <linux|forge|windows|macos> | check-ref <ref> | derive [--json]   [--root <dir>] [--seed <path>]"
+            "usage: tillandsias-plan discipline show [--json] | target --platform <linux|forge|windows|macos> | check-ref <ref> | derive [--json]   [--root <dir>] [--seed <path>]\n  derive and check-ref observe the checkout's refs as of its last fetch: run `git fetch origin` first."
         );
         std::process::exit(2);
     };

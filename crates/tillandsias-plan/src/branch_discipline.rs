@@ -553,11 +553,42 @@ pub fn load(root: &Path, seed_override: Option<&Path>) -> Discipline {
 // (refs/remotes/origin/*, origin/HEAD) and `git log`: the origin as of the last
 // fetch. Every observation carries the exact command, so a reader can re-run it.
 //
-// THE COMMITTER QUALIFIER IS AUTHOR EMAILS. The design said "agent trailers,
-// then author"; measured on this repository's last 50 commits, no trailer names
-// a host (Co-Authored-By, Claude-Session, Generated-By), and author emails do
-// (tlatoani@macuahuitl…, tlatoani@yoga…, lenovinha@lenovinha…). The field is
-// named for what it counts: distinct_author_emails.
+// THE COMMITTER QUALIFIER IS HOSTS DERIVED FROM AUTHOR EMAILS. The design said
+// "agent trailers, then author"; measured on this repository's last 50 commits,
+// no trailer names a host (Co-Authored-By, Claude-Session, Generated-By), and
+// author emails do (tlatoani@macuahuitl…, tlatoani@yoga…). The host is derived
+// by scripts/fleet-activity.sh's rule (1223-wzc4, coordinator-ratified): the
+// domain's FIRST LABEL is the host; an address at a shared provider, or with no
+// domain, is an UNATTRIBUTED BUCKET and names no host (1012-hu7d). The provider
+// list is pinned equal to that script's by a unit test, so the two cannot drift.
+//
+// FETCH FIRST. Observations are as of the checkout's last fetch; a checkout with
+// no refs/remotes/origin/* observes nothing on origin, and its enforced rules
+// warn. derive says so with a `note:` line.
+
+/// Shared mail providers: an address here names no host. MUST equal
+/// SHARED_PROVIDERS in scripts/fleet-activity.sh (pinned by
+/// `shared_providers_match_fleet_activity`).
+pub const SHARED_PROVIDERS: [&str; 8] = [
+    "gmail.com",
+    "hotmail.com",
+    "outlook.com",
+    "yahoo.com",
+    "icloud.com",
+    "protonmail.com",
+    "proton.me",
+    "users.noreply.github.com",
+];
+
+/// fleet-activity.sh's host rule: `Some(host)`, or `None` for a bucket.
+pub fn host_of_email(email: &str) -> Option<String> {
+    let (_, domain) = email.split_once('@')?;
+    let domain = domain.trim().to_lowercase();
+    if domain.is_empty() || SHARED_PROVIDERS.contains(&domain.as_str()) {
+        return None;
+    }
+    domain.split('.').next().map(str::to_string)
+}
 
 /// How many commits the committer qualifier looks back over.
 pub const COMMIT_WINDOW: usize = 50;
@@ -590,6 +621,8 @@ pub struct Derived {
     pub level: u8,
     pub observations: Vec<Observation>,
     pub qualifiers: Vec<Qualifier>,
+    /// No refs/remotes/origin/* at all: origin was never fetched here.
+    pub unfetched: bool,
 }
 
 impl Derived {
@@ -698,9 +731,17 @@ pub fn derive(root: &Path, d: &Discipline) -> Option<Derived> {
         .map(|l| l.trim().to_lowercase())
         .filter(|l| !l.is_empty())
         .collect();
+    let hosts: std::collections::BTreeSet<String> =
+        emails.iter().filter_map(|e| host_of_email(e)).collect();
+    let buckets = emails.iter().filter(|e| host_of_email(e).is_none()).count();
     obs.push(Observation {
-        name: "distinct_author_emails",
-        value: json!(emails.len()),
+        name: "unattributed_bucket_emails",
+        value: json!(buckets),
+        command: format!("git log -n {COMMIT_WINDOW} --format=%ae {}", refs.join(" ")),
+    });
+    obs.push(Observation {
+        name: "distinct_committer_hosts",
+        value: json!(hosts),
         command: format!("git log -n {COMMIT_WINDOW} --format=%ae {}", refs.join(" ")),
     });
 
@@ -743,7 +784,7 @@ pub fn derive(root: &Path, d: &Discipline) -> Option<Derived> {
     });
 
     let l1 = !integration.is_empty() || pr_merges > 0;
-    let l2 = emails.len() >= 2 && work_refs >= 1;
+    let l2 = hosts.len() >= 2 && work_refs >= 1;
     let qualifiers = vec![
         Qualifier {
             level: 1,
@@ -753,7 +794,7 @@ pub fn derive(root: &Path, d: &Discipline) -> Option<Derived> {
         Qualifier {
             level: 2,
             met: l2,
-            requires: "two or more distinct author emails in the last 50 commits AND a work ref on origin",
+            requires: "two or more distinct committer hosts (by author email domain) in the last 50 commits AND a work ref on origin",
         },
     ];
     let level = if l2 {
@@ -767,6 +808,7 @@ pub fn derive(root: &Path, d: &Discipline) -> Option<Derived> {
         level,
         observations: obs,
         qualifiers,
+        unfetched: heads.is_empty(),
     })
 }
 
@@ -818,6 +860,13 @@ pub fn derive_report(d: &Discipline, r: Option<&Derived>) -> (Vec<String>, Json)
         "ok:discipline-derive:seed-matches-reality".to_string()
     };
     lines.push(drift.clone());
+    if r.unfetched {
+        lines.push(
+            "note: no refs/remotes/origin/* here — origin was never fetched, so nothing on origin \
+             was observed; run `git fetch origin` and derive again"
+                .to_string(),
+        );
+    }
     let json = json!({
         "derived": r.level,
         "seed": seed,
@@ -826,6 +875,7 @@ pub fn derive_report(d: &Discipline, r: Option<&Derived>) -> (Vec<String>, Json)
         "qualifiers": r.qualifiers.iter().map(|q| json!({"level": q.level, "met": q.met, "requires": q.requires})).collect::<Vec<_>>(),
         "observations": r.observations.iter().map(|o| json!({"name": o.name, "value": o.value, "command": o.command})).collect::<Vec<_>>(),
         "drift": drift,
+        "unfetched": r.unfetched,
     });
     (lines, json)
 }
@@ -848,6 +898,29 @@ messages:
 
     fn seed() -> Discipline {
         parse_seed(SEED, None, "main").unwrap()
+    }
+
+    /// 1446-664f: the host rule is fleet-activity.sh's (1223-wzc4), not a
+    /// second one — the provider list is read out of that script.
+    #[test]
+    fn shared_providers_match_fleet_activity() {
+        let script = include_str!("../../../scripts/fleet-activity.sh");
+        let line = script
+            .lines()
+            .find(|l| l.starts_with("SHARED_PROVIDERS="))
+            .expect("fleet-activity.sh defines SHARED_PROVIDERS");
+        let list: Vec<&str> = line
+            .trim_start_matches("SHARED_PROVIDERS=")
+            .trim_matches('"')
+            .split_whitespace()
+            .collect();
+        assert_eq!(list, SHARED_PROVIDERS.to_vec());
+        assert_eq!(
+            host_of_email("t@macuahuitl.ayahuitlcalpan.com").as_deref(),
+            Some("macuahuitl")
+        );
+        assert_eq!(host_of_email("bulloncito@gmail.com"), None);
+        assert_eq!(host_of_email("no-domain"), None);
     }
 
     #[test]
