@@ -236,12 +236,34 @@ survive the vault store." A host whose share is not in an unlocking keyring
 Credential Manager; for a guest, the host keyring that delivers the share
 over the control channel) has NO persisted fallback share — the fallback
 file is never written to disk that outlives the process (1118-fqfk's
-direction, now ruled) — and its store therefore does not survive a reset.
-The reset SHALL NOT itself delete that store (reset bodies call no credential
-clearer); it SHALL print, before destroying anything,
-`reset: no unlocking keyring holds vault-shamir-share-v1 — the Vault store
-cannot survive this reset and will be re-initialised at next init`, and the
-partial-init guard at the next init removes it with its own loud line.
+direction, now ruled). A SOFT reset SHALL NOT itself delete any store (reset
+bodies call no credential clearer); what it does is ANNOUNCE one of three
+dispositions, decided by asking the keyring before destroying anything:
+
+| keyring answer at reset time | disposition | announcement |
+|---|---|---|
+| reachable, holds a 32-byte share | `Verified:KEEP` | `reset: Vault store kept (Verified:KEEP) — share vault-shamir-share-v1 present` |
+| UNREACHABLE (Secret Service down, D-Bus timeout, locked keyring that cannot be asked) and no fallback share | `Unverified:KEEP` | `reset: keyring unreachable — Vault store kept unverified (Unverified:KEEP); it unseals at next init if the share is there, else init re-initialises it and says so` |
+| reachable, holds no share | `Absent:REINIT-AT-INIT` | `reset: no unlocking keyring holds vault-shamir-share-v1 — the Vault store cannot survive this reset and will be re-initialised at next init` |
+
+AMENDED 2026-09-27 (order 1443-bs9z), operator verbatim: "Unverified:KEEP is
+ok for a soft reset, let's see how that spills on the other cases." The
+middle row is that ruling: an unreachable keyring is not evidence of an
+absent share, so a SOFT reset keeps the store and says it could not verify
+it; the partial-init guard at the next init is the decider, with its own
+loud line. The `Unverified:KEEP` token is an interface (fixtures and the
+tray read it); do not respell it.
+
+OPEN QUESTION, not decided here: what a HARD reset does when the keyring is
+unreachable. HARD clears the share for the store it destroys; with the
+keyring unreachable it cannot clear it, so either it refuses (no HARD
+without a reachable keyring — a stale share left behind is the 803-49re
+shape) or it proceeds and records the unverified clearing for the next
+launch to retry. The operator has not ruled; the HARD scenarios below
+assume a reachable keyring, and a HARD reset that finds the keyring
+unreachable SHALL stop and print `reset: HARD refused — keyring unreachable,
+share cannot be cleared (open question, host-state-lifecycle)` until the
+ruling lands, because refusing is the reversible choice.
 
 `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` remains the ONE opt-out and keeps its
 meaning: the reset is skipped and init runs. No new environment variable
@@ -249,15 +271,34 @@ SHALL be added to make a reset preserve operator data, because preserving it
 is the only SOFT behaviour. `TILLANDSIAS_RESET_KEEP_MODELS` becomes a no-op
 that is accepted and ignored with one stderr line naming this spec.
 
+Consent, AMENDED 2026-09-27 (1443-bs9z), operator verbatim: "Forges should
+keep pre-authorizing SOFT RESET always. HARD RESET should require explicit
+approval each time." A SOFT reset needs NO consent: it destroys only derived
+state, so a forge (`TILLANDSIAS_HOST_KIND=forge`), a smoke skill, and the
+installer's update path run it without asking and without any approval
+variable, and nothing SHALL ever add a prompt to it. A HARD reset requires
+an EXPLICIT, PER-RUN operator approval: on a TTY it asks
+`HARD reset destroys the guest, its Vault store and every sign-in. Type HARD to continue:`
+and proceeds only on that exact word; without a TTY it proceeds only when
+`TILLANDSIAS_HARD_RESET_APPROVED=1` is present on THAT invocation's
+environment (or the binary's `--approve-hard-reset` argument). The approval
+is never read from a config file, a settings file, a forge image, a
+persisted environment or a previous run; `TILLANDSIAS_INSTALL_RESET=hard`
+SELECTS the hard kind and does NOT approve it; and a forge SHALL never carry
+the approval variable (the forge-launch argv builders SHALL strip it). The
+1004-vsh2 per-run-consent ruling for destructive smokes stands and is the
+same shape.
+
 Installer decision point: an install over an existing install is an UPDATE
-and SHALL run the SOFT reset (`--reset-state`); the installer SHALL run the
-HARD reset only on explicit request (`TILLANDSIAS_INSTALL_RESET=hard`, or the
-installer's `--hard-reset` argument), and SHALL name which it is running on
-its first line, with the escape it already has (`TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`).
-This spec RECOMMENDS the default stay SOFT: an update must not cost the
-operator a sign-in, and the HARD path exists for a guest that is itself
-broken. The 1286-4437 wording "the reset destroys the vault store, mirrors
-and images" is superseded for the vault store.
+and SHALL run the SOFT reset (`--reset-state`), pre-authorised; the installer
+SHALL run the HARD reset only on explicit request (`TILLANDSIAS_INSTALL_RESET=hard`,
+or the installer's `--hard-reset` argument) AND with the per-run approval
+above, and SHALL name which it is running on its first line, with the escape
+it already has (`TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`). This spec RECOMMENDS
+the default stay SOFT: an update must not cost the operator a sign-in, and
+the HARD path exists for a guest that is itself broken. The 1286-4437
+wording "the reset destroys the vault store, mirrors and images" is
+superseded for the vault store.
 
 @trace spec:host-state-lifecycle, spec:tillandsias-vault, spec:inference-container
 
@@ -280,11 +321,12 @@ and images" is superseded for the vault store.
   the store; the next launch prompts for Claude and GitHub sign-in (operator
   observation 2026-09-27, the incident behind this spec).
 
-#### Scenario: A host without an unlocking keyring does not keep the store
-- **WHEN** `--reset-state` runs on a Linux host whose Secret Service is
-  absent or locked, so the share was only ever held in memory
-- **THEN** the reset SHALL print the `no unlocking keyring` line above before
-  destroying anything
+#### Scenario: A host whose keyring holds no share does not keep the store
+- **WHEN** `--reset-state` runs on a Linux host whose Secret Service answers
+  and holds no `vault-shamir-share-v1`, so the share was only ever held in
+  memory
+- **THEN** the reset SHALL print the `Absent:REINIT-AT-INIT` line above
+  before destroying anything
 - **AND** no fallback share file SHALL exist anywhere on disk before or after
 - **AND** the next `--init` SHALL re-initialise Vault and print the
   partial-init line naming the lost store
@@ -294,6 +336,42 @@ and images" is superseded for the vault store.
   preserves nothing anyway; after 1437-qza3's first local cut (lenovinha,
   2026-09-27) the fallback file was PRESERVED across reset, which this ruling
   reverses.
+
+#### Scenario: SOFT reset with the keyring unreachable keeps the store unverified
+- **WHEN** `--reset-state` runs on a Linux host whose Secret Service cannot
+  be asked (daemon absent, D-Bus timeout, locked and unpromptable) and no
+  fallback share exists
+- **THEN** the reset SHALL print the `Unverified:KEEP` line above before
+  destroying anything
+- **AND** `~/.tillandsias/vault/data` SHALL be byte-identical afterwards
+- **AND** the reset SHALL NOT prompt and SHALL NOT wait for the keyring
+  beyond the existing 2-second `with_keyring_timeout`
+- **AND** when the keyring is reachable again at the next `--init` and holds
+  the share, Vault SHALL unseal over the kept store; when it holds none, the
+  partial-init guard SHALL re-initialise with its loud line.
+- Pre-fix result: FAILS — nothing distinguishes unreachable from absent
+  today; both fall through to `keychain_set_blocking`'s fallback file, and
+  the reset then clears the store regardless.
+
+#### Scenario: SOFT reset is pre-authorised everywhere, HARD asks every time
+- **WHEN** `--reset-state` runs inside a forge, from a smoke skill, or from
+  an installer's update path
+- **THEN** it SHALL run with no prompt and no approval variable
+- **AND** **WHEN** `--reset-guest` (HARD) runs on a guest regime on a TTY
+- **THEN** it SHALL ask for the literal word `HARD` and refuse any other
+  input
+- **AND** **WHEN** it runs without a TTY and `TILLANDSIAS_HARD_RESET_APPROVED=1`
+  is absent from that invocation — including when `TILLANDSIAS_INSTALL_RESET=hard`
+  IS set
+- **THEN** it SHALL refuse with `reset: HARD requires per-run approval
+  (TILLANDSIAS_HARD_RESET_APPROVED=1 or --approve-hard-reset)` and exit 1
+  before touching anything
+- **AND** a forge-launch argv builder SHALL strip `TILLANDSIAS_HARD_RESET_APPROVED`
+  from the container environment, proven by a fixture arm that sets it on the
+  host and reads the container's `/proc/1/environ`.
+- Pre-fix result: FAILS — today's `--reset-guest` on both trays destroys the
+  guest with no approval of any kind, and `TILLANDSIAS_DESTRUCTIVE_RESET_OK`
+  (an opt-out, not an approval) is the only gate.
 
 #### Scenario: Linux reset-guest keeps the Vault store
 - **WHEN** `tillandsias --reset-guest` runs on Linux
@@ -325,7 +403,9 @@ and images" is superseded for the vault store.
   unless the keep-models variable is set.
 
 #### Scenario: macOS HARD reset destroys the guest and says the store goes with it
-- **WHEN** `tillandsias-tray --reset-guest` runs on macOS
+- **WHEN** `tillandsias-tray --reset-guest` runs on macOS with the per-run
+  approval given (the typed `HARD`, or `TILLANDSIAS_HARD_RESET_APPROVED=1`
+  on this invocation) and the Keychain reachable
 - **THEN** the announcement SHALL say `reset: HARD` and that the Vault store
   inside the guest and its Keychain share will be removed
 - **AND** `vm/` contents SHALL be recreated by provisioning
@@ -350,7 +430,9 @@ and images" is superseded for the vault store.
   `clear_guest_vault_credentials` and removes the cache directory.
 
 #### Scenario: Windows HARD reset destroys the distro and says the store goes with it
-- **WHEN** `tillandsias-tray.exe --reset-guest` runs on Windows
+- **WHEN** `tillandsias-tray.exe --reset-guest` runs on Windows with the
+  per-run approval given (the typed `HARD`, or `TILLANDSIAS_HARD_RESET_APPROVED=1`
+  on this invocation) and Credential Manager reachable
 - **THEN** the announcement SHALL say `reset: HARD` and that the Vault store
   inside the distro and its Credential Manager share will be removed
 - **AND** `wsl --unregister tillandsias` SHALL run and provisioning SHALL
@@ -365,12 +447,18 @@ and images" is superseded for the vault store.
 - **WHEN** `scripts/install.sh`, `scripts/install-macos.sh` or
   `scripts/install-windows.ps1` runs over an existing install with no
   reset-kind request
-- **THEN** it SHALL run `--reset-state` (SOFT) and its first line SHALL say
+- **THEN** it SHALL run `--reset-state` (SOFT) with no prompt and no approval
+  variable, and its first line SHALL say
   `install: SOFT reset (stores and sign-ins kept); TILLANDSIAS_INSTALL_RESET=hard for a full guest wipe`
 - **AND** with `TILLANDSIAS_INSTALL_RESET=hard` (or `--hard-reset`) it SHALL
-  run `--reset-guest` on a guest regime and say so.
+  run `--reset-guest` on a guest regime, say so, and pass the per-run
+  approval question through to the operator: on a TTY the `HARD` prompt is
+  shown by the reset itself; without a TTY the installer SHALL refuse the
+  hard kind unless `TILLANDSIAS_HARD_RESET_APPROVED=1` is on that invocation,
+  and SHALL NOT set that variable itself.
 - Pre-fix result: FAILS — the installers run `--reset-state`, which today
-  clears the store on every platform, and offer no reset-kind choice.
+  clears the store on every platform, offer no reset-kind choice, and ask
+  no approval for anything.
 
 #### Scenario: The opt-out still opts out of everything
 - **WHEN** `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` is set and either reset runs

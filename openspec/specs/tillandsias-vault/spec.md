@@ -500,11 +500,17 @@ thing that removed the share.
 - **THEN** no file under `TILLANDSIAS_HOME` or any legacy root SHALL contain
   the share after the process exits (`fallback_vault-shamir-share-v1` and
   `fallback_vault-root-token-v1` SHALL NOT be written to persistent disk)
-- **AND** a SOFT reset on that host SHALL print `reset: no unlocking keyring
-  holds vault-shamir-share-v1 — the Vault store cannot survive this reset
-  and will be re-initialised at next init` before destroying anything
-- **AND** the next init SHALL re-initialise Vault through the partial-init
-  guard with its own loud line.
+- **AND** a SOFT reset on a host whose keyring ANSWERS and holds no share
+  SHALL print `reset: no unlocking keyring holds vault-shamir-share-v1 — the
+  Vault store cannot survive this reset and will be re-initialised at next
+  init` (`Absent:REINIT-AT-INIT`) before destroying anything
+- **AND** a SOFT reset on a host whose keyring is UNREACHABLE SHALL instead
+  keep the store and print the `Unverified:KEEP` line (AMENDED 2026-09-27,
+  1443-bs9z, operator: "Unverified:KEEP is ok for a soft reset"); the three
+  dispositions and the HARD-reset open question are in `host-state-lifecycle`
+- **AND** the next init SHALL decide: unseal if the share is then reachable,
+  else re-initialise Vault through the partial-init guard with its own loud
+  line.
 - Pre-fix result: FAILS — `keychain_set_blocking` writes the two
   `fallback_*` files at mode 0600 into the cache directory whenever the
   keyring call fails or times out.

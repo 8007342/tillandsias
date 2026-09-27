@@ -163,3 +163,17 @@ supersedes 900-z3kv's option (a) for the credential subject only. Stated in
    prompt and the notice cover only `config/ downloads/ cache/ state/`, and
    the notice must not imply recoverable credentials.
 5. Consent key: measured by 1437-y2wu's live arm; unchanged.
+
+## Further rulings (2026-09-27, order 1443-bs9z)
+
+- "Forges should keep pre-authorizing SOFT RESET always. HARD RESET should
+  require explicit approval each time." SOFT needs no consent anywhere;
+  HARD asks for the typed word `HARD` on a TTY, or needs
+  `TILLANDSIAS_HARD_RESET_APPROVED=1` on that invocation without one;
+  `TILLANDSIAS_INSTALL_RESET=hard` selects but never approves; forges strip
+  the variable. Events on 1437-av8u and 1437-3iux.
+- "Unverified:KEEP is ok for a soft reset, let's see how that spills on the
+  other cases." Three SOFT dispositions (`Verified:KEEP`, `Unverified:KEEP`,
+  `Absent:REINIT-AT-INIT`) in `host-state-lifecycle`; event on 1437-qza3.
+  HARD with the keyring unreachable is left as an OPEN QUESTION in the spec
+  (refuse until ruled).
