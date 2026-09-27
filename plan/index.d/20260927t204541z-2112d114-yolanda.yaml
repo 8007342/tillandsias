@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: native-windows-clippy-deny-warnings-reds-tillandsias-podman-on-twelve-sites-so-headless-and-plan-cannot-be-linted-natively-either
+    event:
+      type: finding
+      ts: "2026-09-27T20:45:41Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        FINDING OUT OF THIS ROW'S SCOPE, recorded where it surfaced. With 5c354024f the tillandsias-podman TEST target compiles on native Windows for the first time (two #!/bin/sh stub tests were unconditional; now cfg(unix)). Two podman tests then FAIL natively on Windows, on image-cache behaviour, not lint: client::tests::existing_squashed_image_remains_an_on_demand_cache_hit (client.rs:3032, "exists and inspect only": left 1, right 2) and client::tests::existing_unsquashed_or_mislabeled_image_is_rebuilt_once (panics at client.rs:3008). On Windows the image path makes one podman call where the tests expect two. Linux: podman 177/177. Either the tests are Unix-shaped and want cfg(unix), or the Windows image path skips a call it should make: decide in the subsystem, not in the test.
