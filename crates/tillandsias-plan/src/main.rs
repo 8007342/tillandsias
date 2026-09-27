@@ -67,6 +67,7 @@ fn capability_tokens() -> Vec<&'static str> {
 /// order exists to surface.
 const DISPATCH_ARMS: &[&str] = &[
     "set-field",
+    "session-tokens",
     "append-event",
     "answer",
     "arrival-routing-check",
@@ -419,6 +420,11 @@ const USAGE: &str = concat!(
     "                                     then answer it. Unrouted questions are unsupported.\n",
     "           methodology-index [--root D]\n",
     "                                     every indexed path with its file:line (the query surface)\n",
+    "           session-tokens [--since <utc>] [--transcript <path>]\n",
+    "                                     ORDER 1437-3pj7. This session's BILLED tokens from the harness\n",
+    "                                     transcript (message.usage, deduplicated by message.id), plus the\n",
+    "                                     sub-agent totals; source=absent or absent:schema-drift:<field>\n",
+    "                                     with zeros when it cannot measure. Never a guess.\n",
     "           metrics-log-path <basename> [repo-root]\n",
     "                                     ORDER 1125-92xa. Where THIS BINARY would put a metrics log:\n",
     "                                     <checkout>/.cache/metrics/<basename>, falling back to /tmp when\n",
@@ -4375,6 +4381,47 @@ fn main() {
     // Optional second argument is the repo root, mirroring the shell rule's
     // second parameter, so the fixture can ask about a root that is NOT the cwd
     // (that is how the outside-a-checkout negative control is driven).
+    // ORDER 1437-3pj7 — a session's billed token spend from its transcript.
+    // Early: it reads the harness transcript, never the ledger.
+    if args[0] == "session-tokens" {
+        let mut since = std::env::var("TILLANDSIAS_CYCLE_START_TS")
+            .ok()
+            .filter(|s| !s.is_empty());
+        let mut transcript: Option<PathBuf> = None;
+        let mut i = 1;
+        while i < args.len() {
+            match (args[i].as_str(), args.get(i + 1)) {
+                ("--since", Some(v)) => since = Some(v.clone()),
+                ("--transcript", Some(v)) => transcript = Some(PathBuf::from(v)),
+                _ => {
+                    eprintln!(
+                        "usage: tillandsias-plan session-tokens [--since <utc>] [--transcript <path>]"
+                    );
+                    std::process::exit(2);
+                }
+            }
+            i += 2;
+        }
+        let config = std::env::var("CLAUDE_CONFIG_DIR")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .map(|h| PathBuf::from(h).join(".claude"))
+            })
+            .unwrap_or_default();
+        let session = std::env::var("CLAUDE_CODE_SESSION_ID").ok();
+        let path = tillandsias_plan::session_tokens::resolve_transcript(
+            transcript.as_deref(),
+            session.as_deref(),
+            &config,
+        );
+        let answer = tillandsias_plan::session_tokens::measure(path.as_deref(), since.as_deref());
+        println!("{}", answer.line());
+        std::process::exit(0);
+    }
     if args[0] == "metrics-log-path" {
         let base = args.get(1).map(String::as_str).unwrap_or("");
         if base.is_empty() {

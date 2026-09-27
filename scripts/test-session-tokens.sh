@@ -27,7 +27,12 @@ pass=0; total=5
 ok()  { echo "ok:   $*"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $*" >&2; }
 
-command -v jq >/dev/null 2>&1 || { echo "skip:session-tokens:no-jq"; exit 0; }
+# The plan binary does the summing (session_tokens.rs) and reads the log back
+# (json get, not jq: the 1375-tsfu ratchet admits no new jq call site).
+_plan="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _plan=""
+case "$_plan" in ./*) _plan="$ROOT/${_plan#./}" ;; esac
+[ -n "$_plan" ] || { echo "skip:session-tokens:no-plan-binary — build one: cargo build --release -p tillandsias-plan"; exit 0; }
+PLAN="$_plan"
 [ -f "$ST" ] || { echo "fail:session-tokens:0/$total (session-tokens.sh missing)"; exit 1; }
 
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/session-tokens.XXXXXX")"
@@ -77,11 +82,11 @@ log="$scratch/tokens.jsonl"
 CLAUDE_CONFIG_DIR="$scratch" CLAUDE_CODE_SESSION_ID=sess1 TILLANDSIAS_TOKENS_LOG="$log" \
     bash "$CM" --emit-tokens --from-transcript host=h cycle=c1 label=l since=2026-09-27T10:00:00Z >/dev/null 2>&1
 rows="$(wc -l < "$log" 2>/dev/null | tr -d ' ')"
-got="$(jq -r 'select(.cycle == "c1") | "\(.main_ctx) \(.source)"' "$log" 2>/dev/null)"
-if [ "$rows" = 1 ] && [ "$got" = "5555 $T" ]; then
+got="$("$PLAN" json get -c 'select(.cycle == "c1") | [.main_ctx, .source]' "$log" 2>/dev/null)"
+if [ "$rows" = 1 ] && [ "$got" = "[5555,\"$T\"]" ]; then
     ok "arm 3: --from-transcript wrote one record, main_ctx=5555 source=transcript"
 else
-    bad "arm 3: want one record '5555 $T', got rows=$rows '$got'"
+    bad "arm 3: want one record [5555,\"$T\"], got rows=$rows '$got'"
 fi
 
 # 4 — NEGATIVE CONTROL: nothing resolvable is absent, not a guess, even when
@@ -89,11 +94,11 @@ fi
 log4="$scratch/tokens4.jsonl"
 env -u CLAUDE_CODE_SESSION_ID CLAUDE_CONFIG_DIR="$scratch/none" TILLANDSIAS_TOKENS_LOG="$log4" \
     bash "$CM" --emit-tokens --from-transcript host=h cycle=c4 label=l main_ctx=999 >/dev/null 2>&1
-got4="$(jq -r '"\(.main_ctx) \(.source)"' "$log4" 2>/dev/null)"
-if [ "$got4" = "0 absent" ]; then
+got4="$("$PLAN" json get -c '[.main_ctx, .source]' "$log4" 2>/dev/null)"
+if [ "$got4" = '[0,"absent"]' ]; then
     ok "arm 4: no transcript -> main_ctx=0 source=absent"
 else
-    bad "arm 4: want '0 absent', got '$got4'"
+    bad "arm 4: want [0,\"absent\"], got '$got4'"
 fi
 
 # 5 — NEGATIVE CONTROL: a drifted usage object names the missing field.

@@ -9,3 +9,4 @@ STEP_DESC="Checking session-tokens measures main_ctx from the transcript (1437-3
 STEP_SCRIPT="scripts/test-session-tokens.sh"
 STEP_ERROR="session-tokens stopped measuring main_ctx from the transcript, double-counted repeated message lines, or reported a guess where it should say absent (1437-3pj7) — see the verdict line above"
 STEP_OK="Session-tokens instrument passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:session-tokens:5/5"
