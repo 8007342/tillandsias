@@ -430,17 +430,22 @@ impl VzRuntime {
         // first provision, instead of failing mid-expand after ~500 MB of
         // transfer. Measured at the nearest existing ancestor: on a first
         // install image_root does not exist yet and df on it would fail.
-        let mut probe_at = self.image_root.as_path();
-        while !probe_at.exists() {
-            match probe_at.parent() {
-                Some(p) => probe_at = p,
-                None => break,
-            }
-        }
-        if let Some(refusal) =
-            boot::first_provision_space_refusal(boot::free_bytes_at(probe_at), probe_at)
+        // macOS-only like `boot`: with the `download` feature this function
+        // compiles on Linux too, where there is no `boot` module.
+        #[cfg(target_os = "macos")]
         {
-            return Err(refusal);
+            let mut probe_at = self.image_root.as_path();
+            while !probe_at.exists() {
+                match probe_at.parent() {
+                    Some(p) => probe_at = p,
+                    None => break,
+                }
+            }
+            if let Some(refusal) =
+                boot::first_provision_space_refusal(boot::free_bytes_at(probe_at), probe_at)
+            {
+                return Err(refusal);
+            }
         }
 
         let arch = if cfg!(target_arch = "aarch64") {
