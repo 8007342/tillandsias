@@ -222,5 +222,53 @@ else
     bad "a known packet must still pass" "rc=$rc out=[$out]"
 fi
 
+# 6. ORDER 1423-ydy3 — A KILLED RUN LEAVES NO EXTRACT. Each fold extracts a
+#    sibling's plan/ (~19 MB) into ${TMPDIR}/xbranch.*; the normal paths remove
+#    it, and a run killed mid-fold used to leak it (yoga counted 49, ~700 MB).
+#    The kill must land on a REAL in-flight fold, not a finished process, so the
+#    stub records its pid and then BLOCKS on a fifo: when the marker appears,
+#    the extract exists and the fold is waiting on the stub.
+XT="$W/xtmp"; mkdir -p "$XT" "$W/block"
+mkfifo "$W/block/fifo"
+cat > "$W/block/tillandsias-plan" <<STUB
+#!/bin/sh
+echo \$\$ > "$W/block/started"
+read _ < "$W/block/fifo"
+STUB
+chmod +x "$W/block/tillandsias-plan"
+( cd "$ROOT" && TMPDIR="$XT" TILLANDSIAS_PLAN_BIN="$W/block/tillandsias-plan" \
+    exec bash "$CHECK" SOME-PKT --no-fetch >/dev/null 2>&1 ) &
+_cpid=$!
+_i=0
+while [ ! -s "$W/block/started" ] && [ "$_i" -lt 300 ]; do sleep 0.1; _i=$((_i + 1)); done
+_live="$(find "$XT" -maxdepth 1 -name 'xbranch.*' | grep -c .)"
+if [ ! -s "$W/block/started" ] || [ "$_live" -eq 0 ]; then
+    kill "$_cpid" 2>/dev/null
+    bad "killed-run arm could not reach a live fold" "started=$([ -s "$W/block/started" ] && echo yes || echo no) extracts=$_live"
+else
+    # TERM the check first; bash defers its trap until the foreground child
+    # returns, so then end the stub the way a group kill would.
+    kill -TERM "$_cpid" 2>/dev/null
+    kill -TERM "$(cat "$W/block/started")" 2>/dev/null
+    wait "$_cpid"; _crc=$?
+    _left="$(find "$XT" -maxdepth 1 -name 'xbranch.*' | grep -c .)"
+    if [ "$_left" -eq 0 ]; then
+        ok "a run killed mid-fold (TERM, rc=$_crc, $_live extract live at the kill) leaves no xbranch.* behind"
+    else
+        bad "a killed run leaked its extract" "rc=$_crc left=$_left: $(find "$XT" -maxdepth 1 -name 'xbranch.*' | tr '\n' ' ')"
+    fi
+fi
+rm -rf "$XT"/xbranch.* 2>/dev/null
+
+# 6b. NEGATIVE CONTROL: a normal run in the same scratch TMPDIR leaves nothing,
+#     and its verdict is the one arm 2 reads.
+out="$(cd "$ROOT" && TMPDIR="$XT" TILLANDSIAS_PLAN_BIN="$W/free/tillandsias-plan" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
+_left="$(find "$XT" -maxdepth 1 -name 'xbranch.*' | grep -c .)"
+if [ "$rc" -eq 0 ] && [ "$_left" -eq 0 ] && printf '%s' "$out" | grep -q '^ok:cross-branch-claims:'; then
+    ok "a normal run leaves no extract and still reads ok"
+else
+    bad "a normal run changed" "rc=$rc left=$_left out=[$out]"
+fi
+
 echo "claims-across-branches: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
