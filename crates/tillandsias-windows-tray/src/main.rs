@@ -38,6 +38,10 @@ mod wsl_probe_policy;
 // including the negative control that a live portable build survives — are
 // exercised on every host rather than only where a registry exists.
 mod tray_registry;
+// ORDER 1420-ev7i: the --provision-once / --reset-state console. The tier rule
+// and phase mapping are portable and tested everywhere; only enabling VT on
+// the console is Win32, inside.
+mod provision_console;
 // ORDER 1335-jz8c: VmPhase -> tray glyph. Mapping is platform-independent
 // (and unit-tested everywhere); the HICON construction inside is cfg-gated.
 mod tray_phase_icon;

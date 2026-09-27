@@ -1026,18 +1026,12 @@ pub fn help_text() -> String {
 /// live-provision dress rehearsal. Does NOT hold a keepalive — it provisions to
 /// Ready, reports, and exits (the VM idles down normally afterward).
 pub fn provision_once() -> i32 {
-    struct ConsoleProgress;
-    impl ProvisionProgress for ConsoleProgress {
-        fn report_phase(&self, phase: ProvisionPhase) {
-            println!("[provision] phase: {}", phase.status_text());
-            tracing::info!(?phase, "provision phase");
-        }
-        fn report_message(&self, message: &str) {
-            println!("[provision] {message}");
-        }
-    }
+    use crate::provision_console::{PhaseConsole, process_tier, render_line};
 
     init_tracing();
+    // ORDER 1420-ev7i: phases drive the tillandsia renderer, coloured bars on a
+    // console and plain ASCII lines when piped (the installer's capture).
+    let tier = process_tier();
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -1048,15 +1042,24 @@ pub fn provision_once() -> i32 {
             return 1;
         }
     };
-    println!("[provision] starting recipe provisioning (live dress rehearsal)\u{2026}");
+    println!(
+        "{}",
+        render_line(
+            tier,
+            "provision",
+            "starting recipe provisioning (live dress rehearsal)\u{2026}"
+        )
+    );
     runtime.block_on(async {
         let lifecycle = WslLifecycle::new();
-        match lifecycle
-            .provision_via_recipe(std::sync::Arc::new(ConsoleProgress))
-            .await
-        {
+        let console = std::sync::Arc::new(PhaseConsole::for_process("provision"));
+        match lifecycle.provision_via_recipe(console.clone()).await {
             Ok(()) => {
-                println!("[provision] RESULT: VM Ready \u{2014} control wire up \u{2713}");
+                console.finish_ok();
+                println!(
+                    "{}",
+                    console.line("RESULT: VM Ready \u{2014} control wire up \u{2713}")
+                );
                 tracing::info!("provision-once: VM Ready");
                 // ORDER 1004-5f7p. Record that this installation reached Ready,
                 // because in about a minute it will stop being true and nothing
@@ -1075,7 +1078,11 @@ pub fn provision_once() -> i32 {
                 0
             }
             Err(err) => {
-                eprintln!("[provision] RESULT: FAILED \u{2014} {err}");
+                console.finish_err(&err);
+                eprintln!(
+                    "{}",
+                    console.line(&format!("RESULT: FAILED \u{2014} {err}"))
+                );
                 tracing::error!(%err, "provision-once failed");
                 1
             }
@@ -1116,18 +1123,12 @@ pub fn provision_once() -> i32 {
 ///
 /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
 pub fn reset_state_once() -> i32 {
-    struct ConsoleProgress;
-    impl ProvisionProgress for ConsoleProgress {
-        fn report_phase(&self, phase: ProvisionPhase) {
-            println!("[reset-state] phase: {}", phase.status_text());
-            tracing::info!(?phase, "reset-state provision phase");
-        }
-        fn report_message(&self, message: &str) {
-            println!("[reset-state] {message}");
-        }
-    }
+    use crate::provision_console::{PhaseConsole, process_tier, render_line};
 
     init_tracing();
+    // ORDER 1420-ev7i: see provision_once. The console itself is created only
+    // when provisioning starts, after the wipe's own lines.
+    let tier = process_tier();
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -1195,7 +1196,10 @@ pub fn reset_state_once() -> i32 {
         let lifecycle = WslLifecycle::new();
         if wipe {
             if let Err(err) = lifecycle.wipe_guest().await {
-                eprintln!("[reset-state] RESULT: FAILED \u{2014} wipe: {err}");
+                eprintln!(
+                    "{}",
+                    render_line(tier, "reset-state", &format!("RESULT: FAILED \u{2014} wipe: {err}"))
+                );
                 tracing::error!(%err, "reset-state wipe failed");
                 return 1;
             }
@@ -1252,19 +1256,32 @@ pub fn reset_state_once() -> i32 {
                     tracing::warn!(%err, "reset-state could not remove download cache");
                 }
             }
-            println!("[reset-state] state wiped \u{2014} reprovisioning from scratch\u{2026}");
+            println!(
+                "{}",
+                render_line(
+                    tier,
+                    "reset-state",
+                    "state wiped \u{2014} reprovisioning from scratch\u{2026}"
+                )
+            );
         }
-        match lifecycle
-            .provision_via_recipe(std::sync::Arc::new(ConsoleProgress))
-            .await
-        {
+        let console = std::sync::Arc::new(PhaseConsole::for_process("reset-state"));
+        match lifecycle.provision_via_recipe(console.clone()).await {
             Ok(()) => {
-                println!("[reset-state] RESULT: VM Ready \u{2014} control wire up \u{2713}");
+                console.finish_ok();
+                println!(
+                    "{}",
+                    console.line("RESULT: VM Ready \u{2014} control wire up \u{2713}")
+                );
                 tracing::info!("reset-state: VM Ready");
                 0
             }
             Err(err) => {
-                eprintln!("[reset-state] RESULT: FAILED \u{2014} provision: {err}");
+                console.finish_err(&err);
+                eprintln!(
+                    "{}",
+                    console.line(&format!("RESULT: FAILED \u{2014} provision: {err}"))
+                );
                 tracing::error!(%err, "reset-state provision failed");
                 1
             }
