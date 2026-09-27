@@ -94,6 +94,13 @@ pub trait ProvisionProgress: Send + Sync {
     /// Report a free-form sub-message attached to the current phase. The
     /// tray MAY ignore this (the spec only requires the phase strings).
     fn report_message(&self, message: &str);
+    /// Report a typed progress event (order 1420-r2sn). The default adapter
+    /// flattens it to one plain line through `report_message`, so every
+    /// existing implementation keeps working unchanged; a surface that can
+    /// draw a real bar overrides this and reads the fields instead.
+    fn report_event(&self, event: &tillandsias_control_wire::ProgressEvent) {
+        self.report_message(&event.summary_line());
+    }
 }
 
 /// `ProvisionProgress` impl that logs to `tracing` and otherwise no-ops.
@@ -265,6 +272,45 @@ mod tests {
         assert_eq!(
             ProvisionPhase::Connecting.status_text(),
             "\u{1F535} Connecting\u{2026}"
+        );
+    }
+}
+
+// Portable: the default `report_event` adapter has no transport, so it is
+// tested on every host rather than under the unix-only module above.
+#[cfg(test)]
+mod report_event_tests {
+    use super::*;
+    use std::sync::Mutex;
+    use tillandsias_control_wire::{ProgressEvent, ProgressKind, ProgressUnit};
+
+    #[derive(Default)]
+    struct Recorder(Mutex<Vec<String>>);
+
+    impl ProvisionProgress for Recorder {
+        fn report_phase(&self, _phase: ProvisionPhase) {}
+        fn report_message(&self, message: &str) {
+            self.0.lock().unwrap().push(message.to_string());
+        }
+    }
+
+    #[test]
+    fn default_report_event_adapts_to_report_message() {
+        let r = Recorder::default();
+        r.report_event(&ProgressEvent {
+            task: "provision/download-rootfs".into(),
+            parent: Some("provision".into()),
+            label: "Downloading Fedora rootfs".into(),
+            kind: ProgressKind::Determinate {
+                done: 3,
+                total: Some(4),
+                unit: ProgressUnit::Items,
+            },
+            ts_unix_ms: 0,
+        });
+        assert_eq!(
+            *r.0.lock().unwrap(),
+            vec!["Downloading Fedora rootfs: 3/4 items (75%)".to_string()]
         );
     }
 }
