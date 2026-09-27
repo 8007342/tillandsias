@@ -1,0 +1,24 @@
+packets:
+  - packet_id: every-macos-tray-path-that-calls-vzruntime-stop-from-a-tokio-worker-traps-in-dispatch-assert-queue
+    order: 1429-u2wd
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, tray, virtualization-framework, crash]
+    estimated_hours: 2
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: a source pin plus a live arm on a signed bundle land with it (the 1426-cb6g pattern).
+    title: |
+      VzRuntime::stop calls -[VZVirtualMachine requestStopWithError:] and pumps the CALLING thread's CFRunLoop, but the VM lives on the main dispatch queue; from a tokio worker it hits dispatch_assert_queue and the tray dies with SIGTRAP. 1426-cb6g moved the QUIT drain to the main thread; the menu "Stop VM" (stopVm:, runtime.spawn → vm.stop) and any other worker-side stop still trap
+    verifiable_closure: |
+      no tray code path calls VzRuntime::stop off the main thread (a source pin over action_host.rs), and a live Stop VM on a signed bundle leaves the tray alive with the VM stopped and vm-swap.img removed; pre-fix result: FAILS (by the same mechanism measured for Quit: crash report tillandsias-tray-2026-09-26-211531.ips, EXC_BREAKPOINT in dispatch_assert_queue under requestStopWithError from a tillandsias-tray-worker thread).
+    context: |
+      Found on the 1426-cb6g live arm, 2026-09-27. --exec-guest stops cleanly because it calls stop() from the CLI's main
+      thread. The Stop VM arm was not exercised live; it is filed from reading the same call shape (runtime.spawn(async {
+      vm.stop(VM_STOP_DRAIN).await })) — measure before fixing. A cleaner long-term shape may be for VzRuntime::stop itself
+      to hop to the VM's queue.
+    exit_criteria:
+      - 'no worker-thread VzRuntime::stop in the tray; live Stop VM does not crash; pre-fix result: FAILS'
