@@ -65,6 +65,10 @@
 #   litmus-covering-specs.sh --changed <ref>   files changed since <ref>
 #   litmus-covering-specs.sh --run         print the run-litmus-test.sh
 #                                          command lines instead of the rows
+#   litmus-covering-specs.sh --relay-scope [--all-covering] <base>
+#                                          run/deferred partition of the specs
+#                                          covering <base>...HEAD (1437-yfuh)
+#   litmus-covering-specs.sh --relay-scope [--all-covering] --paths <path>...
 #   litmus-covering-specs.sh fixture
 #
 # Seams (used by the fixture):
@@ -191,7 +195,7 @@ query() {
     # accumulators would be lost. Feed it from a here-doc instead.
     while IFS="$(printf '\t')" read -r p spec test match phase size; do
         [ -n "$test" ] || continue
-        if printf '%s\n' "$_q_bound" | grep -qxF "$test"; then
+        if grep -qxF "$test" <<<"$_q_bound"; then
             binding="bound"
         else
             binding="unbound"
@@ -228,6 +232,134 @@ EOF
     return 0
 }
 
+# ── --relay-scope (order 1437-yfuh; design: T4 of
+#    plan/issues/efficiency-trims-design-2026-09-27.md) ────────────────────────
+#
+# The coordinator ran EVERY covering spec per relay (37-52, ~30 min). This mode
+# partitions the covering set into what a relay must run now and what the daily
+# cut runs later, one line per SPEC (run-litmus-test.sh takes spec names):
+#
+#   run:<declared|command>:<spec>\t<path>\t<size>
+#   deferred:<size|phase|cap>:<spec>\t<path>\t<size>
+#   ok:litmus-relay-scope:run=<n> deferred=<m>
+#
+# Per bound test (an unbound test runs in no suite, so it never appears):
+#   phase other than pre-build   -> deferred:phase (a pre-build run skips it)
+#   declared match               -> run, whatever its size
+#   command match, instant|quick -> run
+#   command match, anything else -> deferred:size
+# A spec runs if any of its tests runs; <size> is the largest size among its
+# running tests, so the printed run-litmus-test.sh call reaches every one.
+#
+# AN EDITED LITMUS FILE COVERS ITSELF. The 1428-v4tt relay (f18dc0d74) touched
+# only three litmus yamls; no test names a litmus yaml's own path, so the
+# path query answered 0 specs for the exact diff that broke one of them. Here a
+# touched openspec/litmus-tests/<file>.yaml contributes its own test as a
+# declared match.
+#
+# CAP: more than 15 running specs keeps the first 15 by (declared first, spec
+# name) and prints the rest as deferred:cap; --all-covering lifts the cap.
+# Output is sorted, so the same inputs give the same bytes.
+self_rows() {
+    printf '%s\n' "$1" | while IFS= read -r _sr_p; do
+        case "$_sr_p" in
+            openspec/litmus-tests/*/*) continue ;;
+            openspec/litmus-tests/*.yaml) ;;
+            *) continue ;;
+        esac
+        _sr_f="$TESTS_DIR/${_sr_p#openspec/litmus-tests/}"
+        [ -r "$_sr_f" ] || continue
+        awk -v p="$_sr_p" '
+            /^name:[ \t]/  { if (n  == "") n  = t(substr($0, 6)) }
+            /^spec:[ \t]/  { if (s  == "") s  = t(substr($0, 6)) }
+            /^phase:[ \t]/ { if (ph == "") ph = t(substr($0, 7)) }
+            /^size:[ \t]/  { if (sz == "") sz = t(substr($0, 6)) }
+            END { if (n != "") printf "%s\t%s\t%s\tdeclared\t%s\t%s\n", p, s, n, ph, sz }
+            function t(x) { sub(/^[ \t]+/, "", x); sub(/[ \t\r]+$/, "", x); return x }
+        ' "$_sr_f"
+    done
+}
+
+relay_scope() {
+    _rs_targets="$1"; _rs_all="$2"
+    [ -d "$TESTS_DIR" ] || { echo "unavailable:litmus-corpus-unreadable"; return 2; }
+    [ -r "$BINDINGS" ] || { echo "unavailable:litmus-bindings-unreadable"; return 2; }
+    _rs_bound="$(bound_tests)"
+    _rs_rows="$(scan "$_rs_targets")" || { echo "unavailable:litmus-scan-failed"; return 2; }
+    _rs_rows="$(printf '%s\n%s\n' "$_rs_rows" "$(self_rows "$_rs_targets")" | grep . | LC_ALL=C sort -u)"
+
+    # One classified line per bound test row: <class>\t<spec>\t<path>\t<size>
+    # where class is run-declared, run-command, deferred-size or deferred-phase.
+    _rs_cls=""
+    while IFS="$(printf '\t')" read -r p spec test match phase size; do
+        [ -n "$test" ] || continue
+        grep -qxF "$test" <<<"$_rs_bound" || continue
+        size="${size:-instant}"
+        if [ "${phase:-pre-build}" != "pre-build" ]; then c="deferred-phase"
+        elif [ "$match" = "declared" ]; then c="run-declared"
+        else
+            case "$size" in
+                instant|quick) c="run-command" ;;
+                *) c="deferred-size" ;;
+            esac
+        fi
+        _rs_cls="${_rs_cls}${c}	${spec}	${p}	${size}
+"
+    done <<EOF_ROWS
+$_rs_rows
+EOF_ROWS
+
+    # Reduce to one line per spec. Best class wins in the order above; the
+    # printed path is the first (sorted) path giving that class; the printed
+    # size is the largest among the spec's running tests.
+    _rs_specs="$(printf '%s' "$_rs_cls" | awk -F '\t' '
+        function rank(c) { return c == "run-declared" ? 1 : c == "run-command" ? 2 : c == "deferred-size" ? 3 : 4 }
+        function srank(s) { return s == "instant" ? 1 : s == "quick" ? 2 : s == "long" ? 3 : s == "large" ? 4 : 5 }
+        NF >= 4 {
+            s = $2
+            if (!(s in best) || rank($1) < rank(best[s]) || (rank($1) == rank(best[s]) && $3 < path[s])) {
+                best[s] = $1; path[s] = $3
+            }
+            if ($1 ~ /^run-/ && (!(s in rsz) || srank($4) > srank(rsz[s]))) rsz[s] = $4
+            if (!(s in anysz) || srank($4) > srank(anysz[s])) anysz[s] = $4
+        }
+        END {
+            for (s in best) {
+                z = (best[s] ~ /^run-/) ? rsz[s] : anysz[s]
+                printf "%d\t%s\t%s\t%s\t%s\n", rank(best[s]), s, best[s], path[s], z
+            }
+        }' | LC_ALL=C sort -t "$(printf '\t')" -k1,1n -k2,2)"
+
+    _rs_run=0; _rs_def=0; _rs_out=""; _rs_tail=""
+    while IFS="$(printf '\t')" read -r _r spec cls p size; do
+        [ -n "$spec" ] || continue
+        case "$cls" in
+            run-*)
+                if [ "$_rs_all" != 1 ] && [ "$_rs_run" -ge 15 ]; then
+                    _rs_tail="${_rs_tail}deferred:cap:${spec}	${p}	${size}
+"
+                    _rs_def=$((_rs_def + 1))
+                    continue
+                fi
+                _rs_out="${_rs_out}run:${cls#run-}:${spec}	${p}	${size}
+"
+                _rs_run=$((_rs_run + 1))
+                ;;
+            *)
+                _rs_tail="${_rs_tail}deferred:${cls#deferred-}:${spec}	${p}	${size}
+"
+                _rs_def=$((_rs_def + 1))
+                ;;
+        esac
+    done <<EOF_SPECS
+$_rs_specs
+EOF_SPECS
+    [ -n "$_rs_out" ] && printf '%s' "$_rs_out"
+    [ -n "$_rs_tail" ] && printf '%s' "$_rs_tail"
+    echo "ok:litmus-relay-scope:run=${_rs_run} deferred=${_rs_def}"
+    return 0
+}
+
 changed_files() {
     if [ -n "${1:-}" ]; then
         git -C "$ROOT" diff --name-only "$1" 2>/dev/null
@@ -248,6 +380,24 @@ case "${1:-}" in
         exit 2
         ;;
     fixture) ;;
+    --relay-scope)
+        shift
+        all=0
+        if [ "${1:-}" = "--all-covering" ]; then all=1; shift; fi
+        if [ "${1:-}" = "--paths" ]; then
+            shift
+            targets="$(printf '%s\n' "$@")"
+        elif [ -n "${1:-}" ]; then
+            git -C "$ROOT" rev-parse --verify -q "$1^{commit}" >/dev/null || {
+                echo "unavailable:relay-scope-base-unresolved:$1"; exit 2; }
+            targets="$(git -C "$ROOT" diff --name-only "$1...HEAD" 2>/dev/null | LC_ALL=C sort -u | grep .)"
+        else
+            echo "usage: litmus-covering-specs.sh --relay-scope [--all-covering] <base> | --paths <path>..." >&2
+            exit 2
+        fi
+        relay_scope "$targets" "$all"
+        exit $?
+        ;;
     *)
         mode="rows"
         if [ "$1" = "--run" ]; then mode="run"; shift; fi

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-plan-discipline-derive-observes-the-projects-real-branching-facts-remote-head-integration-branches-committer-hosts-work-refs-installed-hooks-and-compares-them-to-the-seed-so-a-rule-refuses-only-where-seed-and-reality-agree-and-drift-is-reported-with-an-affordance
+    event:
+      type: progress
+      ts: "2026-09-27T22:08:49Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t220848z
+      host: macos
+      summary: |
+        Implementation complete on work/1446-664f at 5b75054d7 (feature commit 937437f7e; merged over origin/linux-next; the gate step was reallocated 275 -> 277 by the allocator because 275-1128-4ffr holds 275). What it adds: `discipline derive [--json]`, which observes from the checkout's own refs with no network (origin HEAD, integration branches on origin, work refs on origin, distinct author emails in the last 50 commits of the default and integration branches, PR merges on the default branch, installed hooks). It prints derived/seed/effective, each qualifier, each observation with its exact command, and the drift (seed-behind-reality -> `discipline raise --to <n>; use /project-discipline for instructions`). check-ref now refuses an enforced rule only where the seed and the observed qualifier agree (default_branch needs level 1, ref_grammar level 2); otherwise it answers warn:discipline:<rule>:seed-ahead-of-reality naming the missing qualifier. An unobservable project keeps the seed's word. DESIGN NOTE: the committer qualifier counts AUTHOR EMAILS, because measured over this repo's last 50 commits no trailer names a host. Evidence from a clean checkout of the ref (darwin): test-discipline-derive.sh 5/5, 0/5 against the pre-fix binary (arm 2 there shows the defect: the seed alone refused a project with no integration branch); w79y 6/6 and sb9b 5/5 unchanged; 11 deciders rc=0 (jq 344/344, regimes 121); ratchet 6/6; litmus-covering 5 specs; crate 463/0; clippy clean; musl zigbuild --tests rc=0. This repo derives 2 = seed 2, so main stays refused. CAVEAT for consumers: derive reads remote-tracking refs, so a checkout that has never fetched (or a shallow forge clone missing refs/remotes/origin/*) observes less and its enforced rules warn. That is the intended direction (unobserved qualifier means warn), but check-ref consumers should fetch first. Please relay; close after landing.
