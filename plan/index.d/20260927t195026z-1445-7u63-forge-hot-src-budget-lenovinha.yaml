@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed on the coordinator's ask after growing lenovinha-forge's full tmpfs live.
+packets:
+  - packet_id: the-forge-hot-src-tmpfs-budget-lands-on-its-256m-floor-while-the-tillandsias-git-dir-is-167m-so-a-working-forge-fills-it-and-git-dies-mid-write
+    order: 1445-7u63
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, tmpfs, git, budget, hot-cold-split]
+    estimated_hours: 3
+    observed_by: lenovinha
+    owned_files:
+      - crates/tillandsias-core/src/config.rs
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      /home/forge/src is sized by compute_hot_budget (997-e4v2) from the git mirror's size-pack alone and landed on the 256M floor for the tillandsias repo, whose .git is 167M in the forge; a working forge filled it to 100% and git died mid-write
+    context: |
+      MEASURED 2026-09-27 on lenovinha, container tillandsias-tillandsias-forge-claude (lenovinha-forge):
+      `df -h /home/forge/src` -> tmpfs 256M 256M 896K 100%, `du -sh /home/forge/src/tillandsias/.git` -> 167M.
+      git died mid-write; fsck clean afterwards (reported by macuahuitl-fedora). Grown live from the host with
+      `podman unshare nsenter -t <pid> -U -m mount -o remount,...,size=4G /home/forge/src` -> 4.0G, 7% used.
+      The same remount fixed macuahuitl-forge on 2026-09-26, so this is the second host.
+      WHY THE FLOOR: compute_hot_budget (crates/tillandsias-core/src/config.rs) takes the mirror's
+      `git count-objects` size-pack only (KiB -> MiB, x hot_path_inflation, default 4, clamped to [256, 4096]).
+      A 167M .git would have budgeted ~668M if the pack had measured 167M; landing exactly on 256 means the
+      pack measured under 64M or the probe returned 0. Candidates to check: loose objects (count-objects
+      `size:`) are excluded; the forge fetches or creates objects beyond the mirror's pack; the probe runs
+      before the mirror is populated. The budget must track what .git actually becomes in the forge, with
+      headroom for a working session (checkouts, index, new commits), not the mirror pack at launch.
+    exit_criteria:
+      - 'a forge of the tillandsias repo launched from a mirror like the measured one gets a /home/forge/src budget that holds its .git plus a working tree with headroom (pre-fix result: FAILS, 256M budget against a 167M .git, filled to 100%)'
+      - 'the budget input counts loose objects as well as packs, or measures the forge-side .git, and a unit test pins the measured 167M case above the floor (pre-fix result: FAILS)'
+      - 'when the budget is exhausted anyway, the forge says so by name instead of git dying mid-write (pre-fix result: FAILS, a bare git write error)'
+    unscoreable: |
+      unpinnable-until-measured: the unit test and a forge-launch measurement land with the fix.
+    events:
+      - type: filed
+        ts: "2026-09-27T19:50:26Z"
+        agent_id: "linux-lenovinha-claude-20260927t185339z"
+        host: lenovinha
+        summary: |-
+          Filed on macuahuitl-fedora's ask after growing lenovinha-forge's /home/forge/src live from 256M (100%) to 4G.
