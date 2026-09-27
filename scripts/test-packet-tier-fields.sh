@@ -32,7 +32,6 @@ if [ -z "$_validator" ]; then
 fi
 PLAN="$_validator"
 export TILLANDSIAS_PLAN_BIN="$PLAN"
-command -v jq >/dev/null 2>&1 || { echo "skip:packet-tier-fields:no-jq"; exit 0; }
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/packet-tier-fields.XXXXXX")"
@@ -49,9 +48,12 @@ mk() { # mk <dir> <fragment body: the packet's extra lines>
         printf '%s\n' "$2"
     } > "$d/plan/index.d/20260927t000000z-00000000-fixture.yaml"
 }
-proj() { # proj <dir> -> "size implementer_tier" of the fixture row
+proj() { # proj <dir> -> "size implementer_tier" of the fixture row, "-" when absent
+    # The plan binary's own reader, not jq (1375-tsfu ratchet): its subset has
+    # no `//` or string building, so it emits ["size","tier"] and sed spells it.
     "$PLAN" --index "$1/plan/index.yaml" query --json --limit 50 2>/dev/null \
-        | jq -r '.[] | select(.packet_id == "a-tier-row") | "\(.size // "-") \(.implementer_tier // "-")"'
+        | "$PLAN" json get -c '.[] | select(.packet_id == "a-tier-row") | [.size, .implementer_tier]' 2>/dev/null \
+        | sed -e 's/null/"-"/g' -e 's/^\["//' -e 's/"\]$//' -e 's/","/ /'
 }
 
 # 1 — top-level scalars.
@@ -62,8 +64,7 @@ got="$(proj "$W/a1")"
 # operator's "No size tags get Opus" is applied by the selector (1437-vdz5).
 mk "$W/a1u" '    notes: |
       no tier stated here'
-gotu="$("$PLAN" --index "$W/a1u/plan/index.yaml" query --json --limit 50 2>/dev/null \
-        | jq -r '.[] | select(.packet_id == "a-tier-row") | "\(.size // "-") \(.implementer_tier // "-")"')"
+gotu="$(proj "$W/a1u")"
 if [ "$got" = "S haiku" ] && [ "$gotu" = "- -" ]; then
     ok "arm 1: top-level scalars project (S haiku); an untagged row projects neither key"
 else

@@ -9,3 +9,4 @@ STEP_DESC="Checking the plan binary projects size and implementer_tier (1437-khn
 STEP_SCRIPT="scripts/test-packet-tier-fields.sh"
 STEP_ERROR="size/implementer_tier stopped projecting, lost the notes fallback, began defaulting untagged rows, or began accepting unknown vocabulary (1437-khnx) — see the verdict line above"
 STEP_OK="Packet tier fields passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:packet-tier-fields:4/4"
