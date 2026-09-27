@@ -340,6 +340,22 @@ if [ -z "${TILLANDSIAS_DIALECT_SCAN_DIR:-}" ] && [ -f build.sh ]; then
   SCAN_FILES="$SCAN_FILES build.sh"
 fi
 
+# ORDER 1443-xkwb. How much of what this decider guards is still MIGRATABLE
+# shell: the scanned files, and how many of them are on the bootstrap-shell
+# allowlist (the shell that must stay, design §6.5). On STDERR because the
+# stdout verdict line is an interface consumers grep exactly.
+# scripts/check-decider-retirement.sh reads it; when the two numbers are
+# equal, this decider guards only bootstrap shell and can retire.
+_bd_allowlist="${TILLANDSIAS_BOOTSTRAP_ALLOWLIST:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/portability/bootstrap-shell-allowlist.txt}"
+# One awk pass: the allowlist first (comments and blanks skipped), then the
+# scanned files, one per line.
+[ -f "$_bd_allowlist" ] || _bd_allowlist=/dev/null
+for _f in $SCAN_FILES; do printf '%s\n' "${_f#./}"; done | awk '
+  NR == FNR { if ($1 !~ /^#/ && NF) allow[$1] = 1; next }
+  NF { n++; if ($1 in allow) b++ }
+  END { printf "population=%d bootstrap=%d\n", n, b }
+' "$_bd_allowlist" - >&2
+
 # A SCAN THAT CONSIDERED NOTHING IS NOT A CLEAN SCAN. With the file case fixed
 # above, the remaining way to reach zero files is a SCAN_DIR that does not
 # exist — a typo, or a directory renamed out from under a caller — and that
