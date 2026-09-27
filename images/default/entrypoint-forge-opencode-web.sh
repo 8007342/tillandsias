@@ -108,6 +108,9 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # ── OpenSpec init (only when absent, silent) ────────────────
 # Never rewrites a committed /opsx set: a launch must not modify tracked
 # files (order 1422-w3p8; see openspec_init_if_absent in lib-common.sh).
+# The CLI is the project's pinned version when openspec/cli-version exists
+# (order 1441-myz3; see ensure_openspec_pinned).
+ensure_openspec_pinned "$PROJECT_DIR"
 openspec_init_if_absent "$PROJECT_DIR" opencode
 
 # ── Startup context injection ───────────────────────────────

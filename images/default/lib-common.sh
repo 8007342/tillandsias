@@ -2695,6 +2695,15 @@ ensure_forge_harnesses() {
             "@fission-ai/openspec") bin=openspec ;;
             "@openai/codex") bin=codex ;;
         esac
+        # A project that pins its openspec CLI (openspec/cli-version) owns the
+        # version: ensure_openspec_pinned installs exactly that pin in the
+        # foreground and records it here. Refreshing it to @latest behind the
+        # launch's back is the collision that made every forge start dirty
+        # (order 1441-myz3).
+        if [ "$bin" = openspec ] && [ -s "$(openspec_pin_marker)" ]; then
+            trace_lifecycle "harness" "openspec pinned by the project ($(cat "$(openspec_pin_marker)" 2>/dev/null)); not refreshing @latest"
+            continue
+        fi
         # stdout MUST be muted too: this function is backgrounded by the agent
         # entrypoints and shares the TTY with a live TUI — npm's "added N
         # packages" stdout lands mid-frame and corrupts the agent's display
@@ -3290,6 +3299,75 @@ require_claude() {
 
 require_openspec() {
     OS_BIN="$(_require_harness openspec "@fission-ai/openspec" openspec)"
+    return 0
+}
+
+# Where the forge remembers the project's pinned openspec version, on the
+# persistent per-project cache, so the backgrounded ensure_forge_harnesses —
+# which starts before the project is cloned and cannot read the pin — knows to
+# leave openspec alone (order 1441-myz3).
+openspec_pin_marker() {
+    printf '%s\n' "$HOME/.cache/tillandsias-project/openspec-pin"
+}
+
+# ensure_openspec_pinned <project_dir> — make the ONE openspec on PATH the
+# version the project records in openspec/cli-version (order 1441-myz3).
+#
+# Before this, the forge held whatever npm published last: ensure_forge_harnesses
+# ran `npm install -g @fission-ai/openspec@latest` in the background into the
+# same prefix the foreground `openspec init` used, and nothing recorded which
+# version generated the committed /opsx sets — so every openspec release first
+# appeared as launch dirt. The pin moves only through the coordinator's
+# deliberate bump (scripts/openspec-pin.sh bump; skills/meta-orchestration).
+#
+# One prefix, one writer policy: the pinned version is installed into the same
+# global npm prefix every shell rc puts first on PATH (a side prefix would lose
+# to it in interactive shells), under the same npm-update lock the background
+# refresher holds, and the marker stops that refresher from moving it again.
+# Unpinned projects are untouched. Fail-soft: on any failure the launch keeps
+# the installed openspec, and openspec_init_if_absent still keeps tracked files
+# unwritten.
+ensure_openspec_pinned() {
+    local dir="${1:-}" pin have lock waited=0
+    [ -n "$dir" ] && [ -r "$dir/openspec/cli-version" ] || return 0
+    pin="$(tr -d ' \t\r\n' <"$dir/openspec/cli-version" 2>/dev/null)"
+    case "$pin" in
+        ''|*[!0-9.]*|.*|*.|*..*)
+            echo "[entrypoint] WARNING: openspec/cli-version is not a version ('$pin') — keeping the installed openspec" >&2
+            return 0 ;;
+    esac
+    mkdir -p "$HOME/.cache/tillandsias-project" 2>/dev/null || true
+    printf '%s\n' "$pin" >"$(openspec_pin_marker)" 2>/dev/null || true
+    if [ -n "${OS_BIN:-}" ] && [ -x "$OS_BIN" ]; then
+        have="$("$OS_BIN" --version 2>/dev/null | tail -n 1)"
+        if [ "$have" = "$pin" ]; then
+            trace_lifecycle "openspec" "pinned $pin already installed"
+            return 0
+        fi
+    fi
+    lock="$HOME/.cache/tillandsias-project/npm-update.lock"
+    while ! mkdir "$lock" 2>/dev/null; do
+        if [ "$waited" -ge 120 ]; then
+            trace_lifecycle "openspec" "npm-update lock still held after ${waited}s — installing the pin anyway"
+            lock=""
+            break
+        fi
+        sleep 2
+        waited=$((waited + 2))
+    done
+    if npm install -g --no-audit --no-fund "@fission-ai/openspec@$pin" >/dev/null 2>&1; then
+        OS_BIN="${NPM_CONFIG_PREFIX:-/usr/local}/bin/openspec"
+        have="$("$OS_BIN" --version 2>/dev/null | tail -n 1)"
+    else
+        have=""
+    fi
+    [ -n "$lock" ] && rm -rf "$lock"
+    if [ "$have" = "$pin" ]; then
+        trace_lifecycle "openspec" "installed pinned $pin"
+    else
+        echo "[entrypoint] WARNING: could not install openspec $pin (project pin) — /opsx commands run on '${have:-unknown}'" >&2
+        trace_lifecycle "openspec" "pinned install of $pin FAILED (have '${have:-none}')"
+    fi
     return 0
 }
 

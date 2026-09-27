@@ -1,0 +1,55 @@
+# @trace spec:meta-orchestration
+name: litmus:openspec-cli-pin-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin the project's openspec CLI version contract (order 1441-myz3,
+  openspec/changes/openspec-cli-version-pin): openspec/cli-version is the one
+  recorded version; forges install exactly it and the background refresher
+  never moves it to @latest; the coordinator's scripts/openspec-pin.sh bump is
+  the only path that regenerates the committed /opsx sets, with an isolated
+  openspec config. The live tree's generated skills must match the pin.
+severity: critical
+size: instant
+
+preconditions:
+  - workspace contains openspec/cli-version
+  - workspace contains scripts/openspec-pin.sh
+  - workspace contains scripts/test-openspec-pin.sh
+
+critical_path:
+  - step: "pin script and fixture are executable and parse"
+    command: "test -x scripts/openspec-pin.sh && test -x scripts/test-openspec-pin.sh && bash -n scripts/openspec-pin.sh scripts/test-openspec-pin.sh && echo 'ok: executable'"
+    timeout_ms: 2000
+    expected_behavior: "ok: executable"
+
+  - step: "pin, check, drift, bump and the forge-side pinned install (hermetic stubs)"
+    command: "bash scripts/test-openspec-pin.sh"
+    timeout_ms: 30000
+    expected_behavior: "ok:openspec-pin"
+
+  - step: "the live tree's generated skills match the pin"
+    command: "scripts/openspec-pin.sh drift"
+    timeout_ms: 10000
+    expected_behavior: "ok:openspec-generated-matches-pin:"
+
+  - step: "the coordinator step is wired in meta-orchestration"
+    command: "grep -Fq 'scripts/openspec-pin.sh check' skills/meta-orchestration/SKILL.md && grep -Fq 'scripts/openspec-pin.sh bump' skills/meta-orchestration/SKILL.md && echo 'ok: coordinator step wired'"
+    timeout_ms: 2000
+    expected_behavior: "ok: coordinator step wired"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "ok:openspec-pin"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "openspec-cli-pin-shape"
+    artifact: "openspec/cli-version + scripts/openspec-pin.sh + ensure_openspec_pinned"
+
+rollback:
+  on_failure: >
+    Do not commit regenerated /opsx files by hand. Re-run
+    scripts/openspec-pin.sh bump --to "$(cat openspec/cli-version)" on a clean
+    tree, resolve any review: line it prints, and commit the result as one change.
+  command: "scripts/openspec-pin.sh drift"
