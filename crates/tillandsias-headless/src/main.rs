@@ -72,6 +72,7 @@ use serde::{Deserialize, Serialize};
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
 mod device_poll_view;
+mod flow_sink;
 mod image_build_progress;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
@@ -3307,6 +3308,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     }
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
+    // Order 472 slice 3: the generation before any refresh, so a mint or a
+    // rotation below is announced as a transition rather than inferred later.
+    let generation_before = ca_generation(&certs_dir);
     std::fs::create_dir_all(&certs_dir)
         .map_err(|e| format!("Failed to create CA directory: {e}"))?;
 
@@ -3457,6 +3461,20 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     #[cfg(unix)]
     if key.is_file() {
         let _ = enforce_ca_key_mode(&key);
+    }
+
+    if let Some((from, to, reason)) = flow_sink::ca_transition(
+        generation_before.as_deref(),
+        ca_generation(&certs_dir).as_deref(),
+    ) {
+        flow_sink::emit(
+            tillandsias_control_wire::FlowSource::DependencyNode {
+                node: flow_sink::CA_BUNDLE_NODE.to_string(),
+            },
+            from,
+            to,
+            Some(reason.to_string()),
+        );
     }
 
     Ok(certs_dir)
@@ -17868,6 +17886,12 @@ fn maybe_spawn_vsock_listener(
         // builds) to the connections subscribed to Progress.
         let progress_state = state.clone();
         progress_sink::install(move |event| progress_state.publish_progress(event));
+        // Order 472 slice 3: dependency-node transitions (the CA bundle first)
+        // reach connections subscribed to FlowState.
+        let flow_state = state.clone();
+        flow_sink::install(move |source, from, to, reason| {
+            flow_state.publish_flow(source, from, to, reason)
+        });
 
         // Advancer: flip Starting → Ready once /run/podman/podman.sock
         // appears, or Starting → Failed after 60s. Cheap filesystem
