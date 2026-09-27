@@ -14,6 +14,9 @@ path = "src/main.rs"
 [dependencies]
 tillandsias-core = { path = "../tillandsias-core" }
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
+# Order 1420-2pav: the tillandsia palette and colour-tier detection for the
+# QR login screen (the renderer crate is 1420-9vpk).
+tillandsias-progress-tty = { path = "../tillandsias-progress-tty" }
 # Order 779-3trn: the tray's per-lane MCP dispatcher composes the browser
 # tool family. Before this the crate had no [[bin]] and no dependents — it
 # was dead code in the product while the forge's host-browser MCP server

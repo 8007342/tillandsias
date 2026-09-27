@@ -10591,26 +10591,82 @@ fn podman_command() -> tillandsias_podman::SyncPodmanCommand {
 /// GitHub App Client ID for Tillandsias (Owned by: @8007342, App ID: 5081125).
 pub const GITHUB_APP_CLIENT_ID: &str = "Iv23liddVkg9ME6OB1K1";
 
-/// Render a terminal QR code with blocky characters.
+/// The colour tier for the QR login screen (order 1420-2pav).
 ///
-/// Uses `qrcode::render::unicode::Dense1x2` wrapped in ANSI styling
-/// (white background `\x1b[47m`, black foreground `\x1b[30m`) so that
-/// the QR code renders as crisp black modules on a white square
-/// with high contrast across both light and dark terminal emulators.
-pub fn render_terminal_qr(url: &str) -> Result<String, String> {
+/// The QR and the code go to STDOUT, so the terminal test is on stdout, not
+/// on stderr as `EnvView::from_process` assumes for progress bars. Everything
+/// else (`NO_COLOR`, `CI`, `TERM=dumb`, `COLORTERM`) is the renderer's own rule.
+fn qr_tier() -> tillandsias_progress_tty::Tier {
+    use std::io::IsTerminal;
+    let mut env = tillandsias_progress_tty::EnvView::from_process();
+    env.is_tty = std::io::stdout().is_terminal();
+    tillandsias_progress_tty::Tier::detect(&env)
+}
+
+/// SGR for foreground `fg` on background `bg`, in the given tier; empty for Plain.
+fn qr_sgr(
+    tier: tillandsias_progress_tty::Tier,
+    fg: tillandsias_progress_tty::palette::Colour,
+    bg: Option<tillandsias_progress_tty::palette::Colour>,
+) -> String {
+    use tillandsias_progress_tty::Tier;
+    match (tier, bg) {
+        (Tier::Plain, _) => String::new(),
+        (Tier::TrueColor, None) => format!("\x1b[38;2;{};{};{}m", fg.rgb.0, fg.rgb.1, fg.rgb.2),
+        (Tier::TrueColor, Some(b)) => format!(
+            "\x1b[38;2;{};{};{};48;2;{};{};{}m",
+            fg.rgb.0, fg.rgb.1, fg.rgb.2, b.rgb.0, b.rgb.1, b.rgb.2
+        ),
+        (Tier::Ansi256, None) => format!("\x1b[38;5;{}m", fg.xterm256),
+        (Tier::Ansi256, Some(b)) => format!("\x1b[38;5;{};48;5;{}m", fg.xterm256, b.xterm256),
+    }
+}
+
+/// Render a terminal QR code with blocky characters, in the given tier.
+///
+/// Order 1420-2pav: the modules are the tillandsia palette's high-contrast
+/// pair, leaf-deepest on leaf-light (the row's own constraint), instead of a
+/// hardcoded white-on-black. In the Plain tier (`NO_COLOR`, `CI`, `TERM=dumb`,
+/// or stdout not a terminal) the output carries ZERO escape bytes: the Unicode
+/// blocks with their quiet zone, nothing else.
+pub fn render_terminal_qr_in(
+    url: &str,
+    tier: tillandsias_progress_tty::Tier,
+) -> Result<String, String> {
     use qrcode::QrCode;
     use qrcode::render::unicode::Dense1x2;
+    use tillandsias_progress_tty::palette::{LEAF_DEEPEST, LEAF_LIGHT};
 
     let code = QrCode::new(url.as_bytes()).map_err(|e| format!("QR encoding failed: {e}"))?;
     let raw = code.render::<Dense1x2>().quiet_zone(true).build();
 
+    let open = qr_sgr(tier, LEAF_DEEPEST, Some(LEAF_LIGHT));
+    let close = if open.is_empty() { "" } else { "\x1b[0m" };
     let mut out = String::new();
     for line in raw.lines() {
-        out.push_str("\x1b[47m\x1b[30m  ");
+        out.push_str(&open);
+        out.push_str("  ");
         out.push_str(line);
-        out.push_str("  \x1b[0m\n");
+        out.push_str("  ");
+        out.push_str(close);
+        out.push('\n');
     }
     Ok(out)
+}
+
+/// [`render_terminal_qr_in`] at the tier this process's stdout supports.
+pub fn render_terminal_qr(url: &str) -> Result<String, String> {
+    render_terminal_qr_in(url, qr_tier())
+}
+
+/// The one-time code, in blush on a colour tier and plain otherwise.
+fn styled_user_code(code: &str, tier: tillandsias_progress_tty::Tier) -> String {
+    let open = qr_sgr(tier, tillandsias_progress_tty::palette::TIP_BLUSH, None);
+    if open.is_empty() {
+        code.to_string()
+    } else {
+        format!("{open}{code}\x1b[0m")
+    }
 }
 
 /// `--refresh-github-token` spends the single-use refresh token, so it is an
@@ -10827,13 +10883,17 @@ fn run_github_device_login(container: &str, debug: bool) -> Result<(), String> {
     let dc = parse_device_code_response(&output)?;
 
     let mobile_url = format!("{}?user_code={}", dc.verification_uri, dc.user_code);
-    let qr_code_str = render_terminal_qr(&mobile_url)?;
+    let tier = qr_tier();
+    let qr_code_str = render_terminal_qr_in(&mobile_url, tier)?;
 
     println!("\nScan this QR code with your mobile phone to complete GitHub login:\n");
     print!("{qr_code_str}");
     println!();
     println!("  Or in any browser, visit: {}", dc.verification_uri);
-    println!("  Enter one-time code:      {}\n", dc.user_code);
+    println!(
+        "  Enter one-time code:      {}\n",
+        styled_user_code(&dc.user_code, tier)
+    );
 
     // The litmus switch (an ENVIRONMENT flag, never the reply's content) stops
     // here: it proves the request and the QR, and cannot reach the poll, an
@@ -23544,17 +23604,89 @@ mod tests {
         assert_eq!(GITHUB_APP_CLIENT_ID, "Iv23liddVkg9ME6OB1K1");
     }
 
+    const QR_URL: &str = "https://github.com/login/device?user_code=ABCD-1234";
+
+    /// Order 1420-2pav: on a truecolor terminal the modules are leaf-deepest
+    /// (#1E4A32) on leaf-light (#9DBBA5), and every line resets.
     #[test]
-    fn terminal_qr_renderer_produces_high_contrast_ansi_blocks() {
-        let qr = render_terminal_qr("https://github.com/login/device?user_code=ABCD-1234")
+    fn terminal_qr_uses_the_palette_pair_on_truecolor() {
+        let qr = render_terminal_qr_in(QR_URL, tillandsias_progress_tty::Tier::TrueColor)
             .expect("QR code rendering must succeed");
-        assert!(!qr.is_empty(), "QR code must not be empty");
-        assert!(
-            qr.contains("\x1b[47m\x1b[30m"),
-            "QR code must use ANSI white bg / black fg for contrast"
-        );
-        assert!(qr.contains("\x1b[0m"), "QR code must reset ANSI formatting");
         assert!(qr.lines().count() >= 10, "QR code must have multiple lines");
+        for line in qr.lines() {
+            assert!(
+                line.starts_with("\x1b[38;2;30;74;50;48;2;157;187;165m"),
+                "{line:?}"
+            );
+            assert!(line.ends_with("\x1b[0m"), "{line:?}");
+        }
+        assert!(
+            !qr.contains("\x1b[47m"),
+            "the hardcoded white-on-black is gone"
+        );
+    }
+
+    #[test]
+    fn terminal_qr_uses_the_palette_pair_on_256_colours() {
+        let qr = render_terminal_qr_in(QR_URL, tillandsias_progress_tty::Tier::Ansi256).unwrap();
+        assert!(qr.lines().all(|l| l.starts_with("\x1b[38;5;22;48;5;108m")));
+    }
+
+    /// The closure's plain arm: NO_COLOR / non-TTY means zero ESC bytes in the
+    /// QR AND the code, with the same QR modules as the coloured tiers.
+    #[test]
+    fn terminal_qr_and_code_are_escape_free_when_plain() {
+        use tillandsias_progress_tty::Tier;
+        let plain = render_terminal_qr_in(QR_URL, Tier::Plain).unwrap();
+        assert!(!plain.contains('\x1b'), "plain QR must carry no ESC byte");
+        let code = styled_user_code("ABCD-1234", Tier::Plain);
+        assert_eq!(code, "ABCD-1234");
+        let coloured = render_terminal_qr_in(QR_URL, Tier::TrueColor).unwrap();
+        let stripped: String = coloured
+            .lines()
+            .map(|l| {
+                let body = l.split_once('m').map(|(_, b)| b).unwrap_or(l);
+                format!("{}\n", body.trim_end_matches("\x1b[0m"))
+            })
+            .collect();
+        assert_eq!(
+            stripped, plain,
+            "the tiers differ only in styling, never in modules"
+        );
+    }
+
+    #[test]
+    fn user_code_is_blush_on_a_colour_tier() {
+        assert_eq!(
+            styled_user_code("ABCD-1234", tillandsias_progress_tty::Tier::TrueColor),
+            "\x1b[38;2;232;99;122mABCD-1234\x1b[0m"
+        );
+    }
+
+    /// The tier decision itself: NO_COLOR and a non-TTY each force Plain.
+    #[test]
+    fn qr_tier_rule_is_plain_on_no_color_or_non_tty() {
+        use tillandsias_progress_tty::{EnvView, Tier};
+        let tty = EnvView {
+            term: Some("xterm-256color".into()),
+            is_tty: true,
+            ..EnvView::default()
+        };
+        assert_eq!(Tier::detect(&tty), Tier::Ansi256);
+        assert_eq!(
+            Tier::detect(&EnvView {
+                no_color: Some(String::new()),
+                ..tty.clone()
+            }),
+            Tier::Plain
+        );
+        assert_eq!(
+            Tier::detect(&EnvView {
+                is_tty: false,
+                ..tty
+            }),
+            Tier::Plain
+        );
     }
 
     #[test]
