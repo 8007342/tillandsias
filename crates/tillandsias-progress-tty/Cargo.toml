@@ -1,0 +1,14 @@
+[package]
+name = "tillandsias-progress-tty"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Tillandsia-palette terminal progress rendering with truecolor/256/plain tiers (order 1420-9vpk)"
+
+[dependencies]
+# Pure Rust only (methodology/event/026). indicatif draws the LIVE bars on a
+# TTY; every property the closure pins is in the pure core below it, so the
+# golden tests need no terminal.
+indicatif = "0.17"
+console = "0.15"
