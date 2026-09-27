@@ -426,7 +426,13 @@ const USAGE: &str = concat!(
     "                                     transcript (message.usage, deduplicated by message.id), plus the\n",
     "                                     sub-agent totals; source=absent or absent:schema-drift:<field>\n",
     "                                     with zeros when it cannot measure. Never a guess.\n",
-    "           discipline show [--json] | target --platform <p> | check-ref <ref>  [--root D] [--seed F]\n",
+    "           discipline show [--json] | target --platform <p> | check-ref <ref> | derive [--json]  [--root D] [--seed F]\n",
+    "                                     ORDER 1446-664f: derive observes the project (origin HEAD, integration\n",
+    "                                     branches, work refs, author emails, PR merges, hooks) and prints\n",
+    "                                     derived=<n> seed=<n|none> effective=<n>; an enforced rule refuses only\n",
+    "                                     when its qualifier is observed, else warns :seed-ahead-of-reality.\n",
+    "                                     Observations read the checkout's refs as of its LAST FETCH:\n",
+    "                                     `git fetch origin` first (a note: line says when nothing was fetched).\n",
     "                                     ORDER 1443-w79y. The branch-discipline seed\n",
     "                                     (.tillandsias/branch-discipline.yaml): level, per-rule\n",
     "                                     enforcement, integration branch per platform, ref grammar.\n",
@@ -4365,7 +4371,7 @@ fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
     use tillandsias_plan::branch_discipline as bd;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan discipline show [--json] | target --platform <linux|forge|windows|macos> | check-ref <ref>   [--root <dir>] [--seed <path>]"
+            "usage: tillandsias-plan discipline show [--json] | target --platform <linux|forge|windows|macos> | check-ref <ref> | derive [--json]   [--root <dir>] [--seed <path>]\n  derive and check-ref observe the checkout's refs as of its last fetch: run `git fetch origin` first."
         );
         std::process::exit(2);
     };
@@ -4453,8 +4459,29 @@ fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
             println!("{} {}", d.target(&p), d.provenance(None));
             std::process::exit(0);
         }
+        Some("derive") if positional.len() == 1 => {
+            // ORDER 1446-664f — the discipline the project's history shows,
+            // beside the seed, and the drift between them.
+            let r = bd::derive(&root, &d);
+            let (lines, j) = bd::derive_report(&d, r.as_ref());
+            if json {
+                println!("{j}");
+            } else {
+                for l in lines {
+                    println!("{l}");
+                }
+            }
+            std::process::exit(0);
+        }
         Some("check-ref") if positional.len() == 2 => {
-            let a = bd::check_ref(&d, &positional[1]);
+            // ORDER 1446-664f — an enforced rule refuses only where the seed
+            // and the observed qualifier agree.
+            let reality = if d.level > 0 {
+                bd::derive(&root, &d)
+            } else {
+                None
+            };
+            let a = bd::check_ref_observed(&d, &positional[1], reality.as_ref());
             println!("{}", a.verdict);
             if let Some(w) = &a.why {
                 println!("why: {w}");
