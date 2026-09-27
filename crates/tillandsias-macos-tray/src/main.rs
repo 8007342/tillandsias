@@ -41,6 +41,9 @@ mod status_item;
 // These modules compile on every target: their public surface is host-shell
 // data + plain Rust formatting that we want to test from the Linux dev box.
 mod menu_disabled_v2;
+// 1420-83vf: pure (no crate:: / unix), so its tests run on every host.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod provision_progress;
 mod terminal_attach;
 
 /// The `--version` / `-V` line: release version, git SHA and build time from
