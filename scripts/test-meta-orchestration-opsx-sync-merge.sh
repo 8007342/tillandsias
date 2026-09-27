@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
-# @trace plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md (order 540)
-# test-meta-orchestration-opsx-sync-merge.sh — litmus for the generated opsx
-# sync-merge path through the real meta-orchestration start-of-cycle flow.
+# @trace plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md (order 540, reversed by 1440-w8g8)
+# test-meta-orchestration-opsx-sync-merge.sh — litmus for how the
+# meta-orchestration start-of-cycle flow treats launch-generated opsx dirt.
 #
-# Proves order-540 exit criteria against a fixture repo:
+# Order 540 (2026-07-31) had the cycle COMMIT that dirt as a chore(opsx) sync;
+# the operator reversed it on 2026-09-27 (launch dirt "should not exist").
+# 1422-w3p8 stopped launches from producing it; 1440-w8g8 made the cycle refuse
+# it. The file keeps its name because litmus-bindings.yaml binds it by name.
+#
+# Proves against a fixture repo:
 #   (a) a checkout whose only dirt is a simulated newer openspec CLI
-#       regeneration of the 22 opsx paths does NOT get refused
-#   (b) the chore(opsx): sync commit lands on the canonical branch (local), and
-#       the boundary is re-anchored so the final guard verify passes
+#       regeneration of the 22 opsx paths reads launch-dirt:opsx-only, rc=5 —
+#       a refusal, not an ok:
+#   (b) the refused cycle commits nothing: HEAD is unchanged, the 22 paths are
+#       still dirty, and the startup boundary verifies byte-identical
 #   (c) the dirty-start fixture with ANY non-opsx path still fails closed and
 #       preserves startup bytes byte-identically
-#   (d) the skill wires the deterministic checker (not prose judgment)
+#   (d) the skill wires the deterministic checker, and NO skill, script,
+#       methodology or image file tells an agent to commit launch-generated
+#       opsx files
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -49,35 +57,32 @@ for sk in apply-change archive-change bulk-archive-change continue-change explor
     printf 'openspec-%s v2\n' "$sk" >"$repo/.opencode/skills/openspec-$sk/SKILL.md"
 done
 
-# ── (a) deterministic detector: opsx-only is NOT a refusal ───────────────────
-verdict="$(cd "$repo" && "$CHECKER")"
-[[ "$verdict" == "ok:opsx-only" ]] || {
-    echo "FAIL(a): expected ok:opsx-only, got '$verdict'" >&2
+# ── (a) deterministic detector: launch dirt is a refusal, not an ok ────────
+if verdict="$(cd "$repo" && "$CHECKER")"; then rc=0; else rc=$?; fi
+[[ "$verdict" == "launch-dirt:opsx-only" && $rc -eq 5 ]] || {
+    echo "FAIL(a): expected launch-dirt:opsx-only rc=5, got '$verdict' rc=$rc" >&2
     exit 1
 }
-echo "ok: (a) checker verdict '$verdict'"
+echo "ok: (a) checker verdict '$verdict' rc=$rc"
 
-# ── start-of-cycle snapshot, then sync-merge + re-anchor ─────────────────────
+# ── (b) the refused cycle commits nothing and preserves the dirt ─────────────
+head_before="$(git -C "$repo" rev-parse HEAD)"
 (cd "$repo" && "$GUARD" snapshot "$boundary")
-git -C "$repo" add .opencode/commands/opsx-*.md .opencode/skills/openspec-*/
-git -C "$repo" commit -qm "chore(opsx): sync generated openspec commands and skills"
-(cd "$repo" && "$GUARD" re-snapshot "$boundary")
-
-# ── (b) chore(opsx) landed on canonical branch; verify passes after re-anchor ─
-git -C "$repo" log -1 --format='%s' | grep -q '^chore(opsx): sync' || {
-    echo "FAIL(b): chore(opsx) commit missing" >&2
+(cd "$repo" && "$GUARD" verify "$boundary") | grep -q '^ok: startup worktree boundary preserved$' || {
+    echo "FAIL(b): guard verify rejected the untouched startup boundary" >&2
     exit 1
 }
-[[ "$(git -C "$repo" status --porcelain)" == "" ]] || {
-    echo "FAIL(b): worktree not clean after sync-merge" >&2
+[[ "$(git -C "$repo" rev-parse HEAD)" == "$head_before" ]] || {
+    echo "FAIL(b): a commit landed on a refused cycle" >&2
+    exit 1
+}
+[[ "$(git -C "$repo" status --porcelain | wc -l | tr -d ' ')" == 22 ]] || {
+    echo "FAIL(b): the 22 launch-dirt paths were not preserved" >&2
     git -C "$repo" status --porcelain
     exit 1
 }
-(cd "$repo" && "$GUARD" verify "$boundary") | grep -q '^ok: startup worktree boundary preserved$' || {
-    echo "FAIL(b): guard verify rejected re-anchored boundary" >&2
-    exit 1
-}
-echo "ok: (b) chore(opsx) on linux-next + re-anchored verify passes"
+git -C "$repo" checkout -q -- .
+echo "ok: (b) refused cycle: HEAD unchanged, launch dirt preserved"
 
 # ── (c) non-opsx dirt still fails closed, byte-identical preservation ────────
 printf 'operator tracked edit\n' >"$repo/base.txt"
@@ -105,11 +110,16 @@ printf 'operator tracked edit\n' >"$repo/base.txt"
 [[ "$(git -C "$repo" hash-object --no-filters -- base.txt)" == "$tracked_before" ]]
 echo "ok: (c) non-opsx dirt refuses closed and preserves bytes"
 
-# ── (d) the skill wires the deterministic checker ────────────────────────────
+# ── (d) the skill wires the checker; nothing tells an agent to commit ───────
 grep -Fq 'scripts/check-opsx-generated-dirt.sh' "$ROOT/skills/meta-orchestration/SKILL.md"
-grep -Fq 'chore(opsx): sync generated openspec commands and skills' "$ROOT/skills/meta-orchestration/SKILL.md"
-grep -Fq 're-snapshot' "$ROOT/skills/meta-orchestration/SKILL.md"
-grep -Fq 're-snapshot' "$ROOT/scripts/meta-orchestration-worktree-guard.sh"
-echo "ok: (d) skill wires deterministic checker + re-anchor"
+grep -Fq 'launch-dirt:opsx-only' "$ROOT/skills/meta-orchestration/SKILL.md"
+self="scripts/test-meta-orchestration-opsx-sync-merge.sh"
+if hits="$(cd "$ROOT" && git grep -n -F -e 'chore(opsx): sync generated' -e 'git add .opencode/commands/opsx-' \
+        -- skills methodology methodology.yaml scripts images ":!$self")"; then
+    echo "FAIL(d): an instruction still commits launch-generated opsx files:" >&2
+    printf '%s\n' "$hits" >&2
+    exit 1
+fi
+echo "ok: (d) skill wires the checker; no instruction commits launch opsx dirt"
 
-echo "PASS: order-540 opsx sync-merge exit criteria (a)-(d)"
+echo "PASS: 1440-w8g8 launch opsx dirt refused, never committed (a)-(d)"

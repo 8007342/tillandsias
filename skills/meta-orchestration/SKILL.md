@@ -366,8 +366,8 @@ needs to know the copy does not exist before deciding what to do with the
 directory.
 
 **AN OPERATOR LICENCE CAN GO STALE, AND A CLEAN TREE IS HOW YOU KNOW.** When a
-prompt authorises you to land dirt — order 833-fpe7's `resumable:` verdict,
-order 540's opsx merge, or an operator sentence naming specific work to review
+prompt authorises you to land dirt — order 833-fpe7's `resumable:` verdict
+or an operator sentence naming specific work to review
 and land — CHECK THAT THE DIRT IS STILL THERE before acting on it. If
 `git status --porcelain --untracked-files=all` is empty, the premise of the
 licence is gone: answer **"the premise is gone"**, say what the licence expected
@@ -890,33 +890,31 @@ filing — not the prompt.
    2026-08-24 a fresh clone is exactly what took it. The salvage cannot touch
    the worktree — temporary index and plumbing only — so it is safe to run on
    dirt you have just been forbidden to alter, and it must run BEFORE the two
-   detectors below: whether the dirt turns out to be `ok:opsx-only` or
-   `resumable:` changes what you may LAND, never whether a copy should exist.
-4. **Generated opsx sync merge (deterministic, order 540)**: before refusing on
-   startup dirt, run the deterministic detector:
+   detectors below: whether the dirt turns out to be `resumable:` changes what
+   you may LAND, never whether a copy should exist.
+4. **Launch-generated opsx dirt is a refusal (deterministic, order 1440-w8g8)**:
+   before refusing on startup dirt, name WHICH dirt it is:
    ```bash
    scripts/check-opsx-generated-dirt.sh
    ```
-   It prints exactly one line matching `^(ok:opsx-only|ok:clean-tree|non-opsx:.*)$`
-   and exits `0` only when every status-visible dirty path is exactly the
-   22-path opsx/openspec generated set (`.opencode/commands/opsx-*.md` +
-   `.opencode/skills/openspec-*/SKILL.md`) — the launch-generated artifact from
-   the installed openspec CLI (see
-   `plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md`). On
-   `ok:opsx-only`, the dirt is INTENDED versioned project content, not operator
-   work: commit it as its own sync change on the canonical branch before worker
-   drain, then re-anchor the startup boundary:
-   ```bash
-   git add .opencode/commands/opsx-*.md .opencode/skills/openspec-*/
-   git commit -m "chore(opsx): sync generated openspec commands and skills"
-   scripts/meta-orchestration-worktree-guard.sh re-snapshot "$boundary_dir"
-   ```
-   A `non-opsx:` verdict means real sibling/operator dirt — fall through to the
-   dirty-start refusal exactly as written; never commit, discard, or clean it.
-   An `ok:clean-tree` verdict means there is nothing to merge. The checker is a
-   falsifiable machine decision; do not substitute prose judgment for it.
+   It prints exactly one line matching
+   `^(ok:clean-tree|launch-dirt:opsx-only|non-opsx:.*)$`. `launch-dirt:opsx-only`
+   (exit 5) means every dirty path is the opsx/openspec command/skill set the
+   openspec CLI generates — a forge launch rewrote tracked files, which
+   1422-w3p8 made impossible. That is a REGRESSION to report, not content to
+   land: refuse the cycle exactly as for any dirty start (salvage first, as
+   above), name 1422-w3p8 and the verdict line in the handoff, and do not
+   commit, discard, restore or clean the dirt. Order 540 (2026-07-31) used to
+   commit it as a `chore(opsx)` sync; the operator reversed that on
+   2026-09-27 (the dirt "should not exist"), and 64cceb25d is what the old
+   step produced. Moving the generated set to a new openspec version is a
+   deliberate `openspec update` + commit under its own packet, never a cycle's
+   reaction to dirt. `non-opsx:` (exit 3) is real sibling/operator dirt: fall
+   through to 4b, then to the dirty-start refusal. `ok:clean-tree` (exit 4)
+   means there is nothing to name. The checker is a falsifiable machine
+   decision; do not substitute prose judgment for it.
 4b. **Resumable claim dirt (deterministic, order 833-fpe7)**: when the dirt is
-   NOT the opsx set, run the second detector before refusing:
+   `non-opsx:`, run the second detector before refusing:
    ```bash
    scripts/check-resumable-claim-dirt.sh
    ```
@@ -934,7 +932,7 @@ filing — not the prompt.
    `resumable:` is a licence to REVIEW AND LAND, never to auto-commit: read
    the diff against each named order's packet, land what implements it as its
    own commit(s) citing the orders, then re-anchor with the guard's
-   `re-snapshot` — the same sequence order 540 sanctions. Whether an edit
+   `re-snapshot` (scripts/meta-orchestration-worktree-guard.sh). Whether an edit
    IMPLEMENTS the packet beside it is the agent's judgment; the detector only
    removes the deadlock. Any `unattributable:` verdict falls through to the
    dirty-start refusal exactly as written. Pinned by

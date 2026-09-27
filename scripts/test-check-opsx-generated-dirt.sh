@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# @trace plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md (order 540)
+# @trace plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md (order 540, reversed by 1440-w8g8)
 # test-check-opsx-generated-dirt.sh — fixture proof for the deterministic
 # launch-generated opsx-dirt detector.
 #
 # Proves the detector's branches against throwaway repos:
-#   1.  ok:opsx-only      — ONLY the 22 generated opsx/openspec paths are dirty
-#   1b. ok:opsx-only      — the same set in the .claude/ locus (order 964-fwvh)
-#   1c. ok:opsx-only      — both harness loci dirty at once
+#   1.  launch-dirt:opsx-only (rc=5, a REFUSAL since 1440-w8g8) — ONLY the 22 generated opsx/openspec paths are dirty
+#   1b. launch-dirt:opsx-only — the same set in the .claude/ locus (order 964-fwvh)
+#   1c. launch-dirt:opsx-only — both harness loci dirty at once
 #   1d. non-opsx:<path>   — the widened set still fails closed on real dirt
 #   2.  non-opsx:<path>   — ANY real dirt fails closed (tracked edit, untracked,
 #                          and the untracked-vs-tracked mix)
 #   3.  ok:clean-tree     — no dirt at all (exit 4, distinct from a sync)
 #
-# Grammar pinned: ^(ok:opsx-only|ok:clean-tree|non-opsx:[a-z0-9._/-]+)$
+# Grammar pinned: ^(launch-dirt:opsx-only|ok:clean-tree|non-opsx:[a-z0-9._/-]+)$
+# No dirt is ever an ok: verdict; the old opsx-only ok (rc=0) is retired (1440-w8g8).
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
@@ -30,7 +31,7 @@ printf 'base\n' >"$repo/base.txt"
 git -C "$repo" add base.txt
 git -C "$repo" commit -qm baseline
 
-# ── branch 1: ONLY the generated opsx set is dirty → ok:opsx-only ────────────
+# ── branch 1: ONLY the generated opsx set is dirty → launch-dirt:opsx-only ─
 # Create the 22 paths as tracked baseline, then modify ALL of them (simulating a
 # newer openspec CLI regeneration) while nothing else is dirty.
 for cmd in apply archive bulk-archive continue explore ff new onboard propose sync verify; do
@@ -56,13 +57,13 @@ if verdict="$(cd "$repo" && "$CHECKER")"; then
 else
     code=$?
 fi
-[[ "$verdict" == "ok:opsx-only" && $code -eq 0 ]] || {
-    echo "FAIL branch1: expected ok:opsx-only rc=0, got '$verdict' rc=$code" >&2
+[[ "$verdict" == "launch-dirt:opsx-only" && $code -eq 5 ]] || {
+    echo "FAIL branch1: expected launch-dirt:opsx-only rc=5, got '$verdict' rc=$code" >&2
     exit 1
 }
-echo "ok: branch1 ok:opsx-only rc=0"
+echo "ok: branch1 launch-dirt:opsx-only rc=5"
 
-# ── branch 1b: the SAME set in the .claude/ locus → ok:opsx-only (964-fwvh) ──
+# ── branch 1b: the SAME set in the .claude/ locus → launch-dirt (964-fwvh) ──
 # A Claude-Code-launched forge gets the identical 22 artifacts under `.claude/`
 # with the CLI's nested command layout. Before 964-fwvh the detector knew only
 # the `.opencode/` locus, so a Claude-launched forge read `non-opsx:` on 22
@@ -92,13 +93,13 @@ if verdict="$(cd "$repo" && "$CHECKER")"; then
 else
     code=$?
 fi
-[[ "$verdict" == "ok:opsx-only" && $code -eq 0 ]] || {
-    echo "FAIL branch1b: expected ok:opsx-only rc=0 for .claude locus, got '$verdict' rc=$code" >&2
+[[ "$verdict" == "launch-dirt:opsx-only" && $code -eq 5 ]] || {
+    echo "FAIL branch1b: expected launch-dirt:opsx-only rc=5 for .claude locus, got '$verdict' rc=$code" >&2
     exit 1
 }
-echo "ok: branch1b ok:opsx-only rc=0 (.claude locus)"
+echo "ok: branch1b launch-dirt:opsx-only rc=5 (.claude locus)"
 
-# ── branch 1c: both loci dirty at once → still ok:opsx-only ──────────────────
+# ── branch 1c: both loci dirty at once → still launch-dirt:opsx-only ─────────
 for cmd in apply archive bulk-archive continue explore ff new onboard propose sync verify; do
     printf '%s\n' "opsx-$cmd v3" >"$repo/.opencode/commands/opsx-$cmd.md"
 done
@@ -107,11 +108,11 @@ if verdict="$(cd "$repo" && "$CHECKER")"; then
 else
     code=$?
 fi
-[[ "$verdict" == "ok:opsx-only" && $code -eq 0 ]] || {
-    echo "FAIL branch1c: expected ok:opsx-only rc=0 for both loci, got '$verdict' rc=$code" >&2
+[[ "$verdict" == "launch-dirt:opsx-only" && $code -eq 5 ]] || {
+    echo "FAIL branch1c: expected launch-dirt:opsx-only rc=5 for both loci, got '$verdict' rc=$code" >&2
     exit 1
 }
-echo "ok: branch1c ok:opsx-only rc=0 (both loci)"
+echo "ok: branch1c launch-dirt:opsx-only rc=5 (both loci)"
 
 # ── branch 1d: real dirt alongside .claude locus dirt → still fails closed ───
 # The widened set must not weaken the refusal: one non-generated path is enough.
@@ -171,13 +172,13 @@ fi
 echo "ok: branch3 ok:clean-tree rc=4"
 
 # ── the live worktree must currently be clean or fail with honest verdict ────
-# The checker exits nonzero BY CONTRACT for every verdict except opsx-only
-# (3=non-opsx, 4=clean-tree); under set -e the bare assignment died on a
+# The checker exits nonzero BY CONTRACT for every verdict
+# (3=non-opsx, 4=clean-tree, 5=launch-dirt); under set -e the bare assignment died on a
 # clean tree before the PASS line ever printed. Tolerate the rc, judge the
 # verdict string — the case below is the assertion.
 live="$(cd "$ROOT" && "$CHECKER")" || true
 case "$live" in
-    ok:clean-tree|ok:opsx-only) echo "ok: live worktree verdict '$live'" ;;
+    ok:clean-tree) echo "ok: live worktree verdict '$live'" ;;
     *) echo "WARN: live worktree is not clean: '$live' (expected during active work)" ;;
 esac
 

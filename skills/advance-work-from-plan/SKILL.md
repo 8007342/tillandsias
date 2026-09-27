@@ -124,8 +124,7 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     merge (§6) still applies; this is the earlier one.
 1b. **Snapshot the startup boundary NOW — before any guard that writes.**
     Right after the pull and the branch guard, before the credential guard,
-    the daily-maintenance body, the capability-row republish, the opsx sync,
-    or any edit:
+    the daily-maintenance body, the capability-row republish, or any edit:
     ```bash
     boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
     scripts/meta-orchestration-worktree-guard.sh snapshot "$boundary_dir"
