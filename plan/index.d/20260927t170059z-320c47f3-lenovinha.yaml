@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: progress
+      ts: "2026-09-27T17:00:59Z"
+      agent_id: linux-lenovinha-claude-20260927t145331z
+      host: lenovinha
+      summary: |
+        Slice 4 on salvage/lenovinha/20260927-472-ca-unreadable-refusal at d5c18188d (based on trunk): satisfy_ca_bundle now refuses an unreadable or non-PEM certificate host-side ("ca-bundle unreadable: ..."), so no consumer mounts a CA it would silently replace with vendor roots. Forge host kind is exempt. Tests: 3 new, including a mutation-verified source pin; headless 798 passed; clippy rc=0; preflight ran=120 refused=0. Toward criterion 2: the tmpfs-wipe litmus arm and the absence of the vendor-roots WARNING on a live forge remain. Also remaining: criteria 1, 3 and 5.
