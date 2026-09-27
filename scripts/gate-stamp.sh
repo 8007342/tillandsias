@@ -224,6 +224,29 @@ STAMP_FILE="$GIT_DIR/tillandsias-gate-stamp"
 # It lives in $GIT_DIR, never the worktree: a manifest inside the tree would be
 # enumerated by the very walk that writes it.
 STAMP_MANIFEST="$GIT_DIR/tillandsias-gate-stamp-manifest"
+
+# ORDER 1442-22d2. A BORROWED STAMP IS NOBODY'S EVIDENCE.
+# scripts/test-gate-stamp-memoization.sh has to mint a full-scope stamp in the
+# real git dir, because what it tests is the real build.sh reading one. It
+# snapshots the checkout's gate files into this directory first and restores
+# them when it exits. While the directory exists, the stamp in place was minted
+# by a fixture, not earned by a gate. Only the fixture's own children, which
+# carry its owner token, may read it. Everyone else (the pre-push hook, the land
+# tool, a build.sh memo outside the fixture) is refused. This also covers the
+# one exit no trap sees: a SIGKILLed fixture leaves the directory behind, and
+# its stamp stays refused until the next fixture run restores the snapshot.
+# Four relay lands on 2026-09-27 adopted a fixture stamp and ran no gate.
+GATE_FIXTURE_SNAPSHOT="$GIT_DIR/tillandsias-gate-fixture-snapshot"
+refuse_borrowed_stamp() {
+    [[ -d "$GATE_FIXTURE_SNAPSHOT" ]] || return 0
+    local owner
+    owner="$(cat "$GATE_FIXTURE_SNAPSHOT/owner" 2>/dev/null)"
+    if [[ -n "$owner" && "${TILLANDSIAS_GATE_FIXTURE_OWNER:-}" == "$owner" ]]; then
+        return 0
+    fi
+    echo "stale:fixture-borrowed-stamp"
+    exit 1
+}
 # Cleared unconditionally so an INHERITED value cannot turn manifest emission on
 # during `verify`. Only the write path's inline assignment enables it; without
 # this line an exported variable would silently make a verify rewrite the
@@ -814,6 +837,7 @@ case "${1:-verify}" in
         exit 0
         ;;
     verify)
+        refuse_borrowed_stamp
         if [[ ! -f "$STAMP_FILE" ]]; then
             echo "stale:never-run"
             exit 1
@@ -842,6 +866,7 @@ case "${1:-verify}" in
         echo "ok:gate-fresh"
         ;;
     scope)
+        refuse_borrowed_stamp
         if [[ ! -f "$STAMP_FILE" ]]; then
             echo "stale:never-run"
             exit 1
@@ -880,6 +905,7 @@ case "${1:-verify}" in
             echo "stale:memo-check-needs-a-dispatch"
             exit 2
         fi
+        refuse_borrowed_stamp
         if [[ ! -f "$STAMP_FILE" ]]; then
             echo "stale:never-run"
             exit 1

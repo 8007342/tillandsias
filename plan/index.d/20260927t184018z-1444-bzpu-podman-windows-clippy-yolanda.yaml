@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: native-windows-clippy-deny-warnings-reds-tillandsias-podman-on-twelve-sites-so-headless-and-plan-cannot-be-linted-natively-either
+    order: 1444-bzpu
+    status: ready
+    kind: finding
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, rust, clippy, gate, regime]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-podman/src/client.rs
+      - crates/tillandsias-podman/src/events.rs
+      - crates/tillandsias-podman/src/lib.rs
+      - scripts/check-windows-tray-clippy.sh
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-mechanism-is-chosen: the pin is whichever gate the fixer widens
+      or adds (see the recommendation below).
+    title: |
+      native Windows clippy -D warnings reds tillandsias-podman on 12 sites (cfg(windows) dead code, unneeded returns, constant chunks_exact), so tillandsias-headless and tillandsias-plan cannot be linted natively on Windows either; no gate compiles podman for Windows
+    verifiable_closure: |
+      (1) cargo clippy -p tillandsias-podman --all-targets -- -D warnings is clean on a Windows
+      host, and so are -p tillandsias-headless and -p tillandsias-plan; (2) a gate a Windows
+      host runs refuses a NEW warning in a cfg(windows) crate (sabotage). Pre-fix result: FAILS
+      (1), measured on yolanda 2026-09-27 with clippy 0.1.98: 12 findings, all in podman.
+    context: |
+      Same class as 1434-vm7g (a crate no Linux gate compiles for Windows). Found while gating
+      1393-aa7v, whose native clippy of tillandsias-plan stopped in this dependency. Measured per
+      crate (native clippy --all-targets -D warnings, one at a time):
+        clean:  tillandsias-core, -exec, -host-shell, -vm-layer (and -windows-tray after 1434-vm7g)
+        red:    tillandsias-podman (12 own findings); tillandsias-headless and tillandsias-plan red
+                ONLY through podman (0 findings of their own)
+      THE 12 SITES:
+        client.rs:76   exit_status_from_code never used
+        client.rs:105  chunks_exact with a constant chunk size
+        client.rs:120  build_kill_args never used
+        client.rs:532  chunks_exact with a constant chunk size
+        client.rs:601  unused variable timeout_secs
+        client.rs:605, 636, 674   unneeded return
+        events.rs:435  parse_podman_lifecycle_record never used
+        events.rs:498  extract_podman_exit_code never used
+        events.rs:571  variant NoStdout never constructed
+        lib.rs:316     host_session_bus_path never used
+      Most are cfg(windows) dead code: helpers used only by the Unix path. The fix is to gate
+      them (cfg(not(windows)) or cfg_attr allow at the item), not to delete them.
+      HOOK RECOMMENDATION (the coordinator asked): YES, widen. scripts/check-windows-tray-clippy.sh
+      (1434-vm7g) lints only tillandsias-windows-tray, and it is scoped to changes under that
+      crate. The measurement shows the class is live in a second crate. Proposed: run native
+      clippy for EACH crate the change touches that contains cfg(windows) code (today: core,
+      exec, headless, host-shell, plan, podman, vm-layer, windows-tray), same diff scope, same
+      skip-by-name off Windows. Land the podman cleanup first, or the widened arm refuses every
+      push that touches podman, headless or plan.
+    events:
+      - type: filed
+        ts: "2026-09-27T18:40:19Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request, from gating 1393-aa7v; measured per crate.
