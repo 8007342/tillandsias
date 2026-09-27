@@ -343,7 +343,35 @@ capability_rung() {
 
 # Always addressed explicitly with --store. The host's own /nix is NOT ours to
 # collect, so nothing below can be pointed at it even on the daemon rung.
-_store_nix() { nix "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" "$@"; }
+#
+# ORDER 1421-3pd6: on a host whose ONLY nix is the toolbox rung, the store
+# subcommands (gc, pin, store-status) called the HOST nix, which does not exist
+# there, so they answered blocked:nix-store-gc:nix-unusable — every day's nix-gc
+# maintenance step, on yoga, while the rung itself worked. The store is the same
+# $CHROOT_STORE under $HOME either way (shared into the toolbox), so the command
+# is routed through `toolbox run` when there is no host nix and the toolbox's
+# nix answers against that store. Decided ONCE per process, and it neither
+# creates nor installs anything: maintenance must not provision. With neither
+# available it falls through to the host call, so the existing refusal stands.
+_STORE_NIX_VIA=""
+_store_nix() {
+    if [ -z "$_STORE_NIX_VIA" ]; then
+        # A WORKING host nix, not a present one: a host whose distro nix exists
+        # but cannot address the store must still reach the toolbox (the
+        # probe the chroot rung already uses — exercise the store, not PATH).
+        if command -v nix >/dev/null 2>&1 \
+           && nix "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" store info >/dev/null 2>&1; then
+            _STORE_NIX_VIA=host
+        elif toolbox_exists && toolbox_nix_works; then _STORE_NIX_VIA=toolbox
+        else _STORE_NIX_VIA=host
+        fi
+    fi
+    if [ "$_STORE_NIX_VIA" = toolbox ]; then
+        _toolbox run -c "$TOOLBOX_NAME" nix "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" "$@"
+    else
+        nix "${NIX_FEATURES[@]}" --store "$CHROOT_STORE" "$@"
+    fi
+}
 
 # nix reports store paths as LOGICAL /nix/store/... paths even for a chroot
 # store, and this JSON schema gives some of them as bare basenames. Both must
