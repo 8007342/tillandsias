@@ -240,26 +240,6 @@ pub fn tier_field(packet: &Value, field: &str) -> Option<String> {
     })
 }
 
-/// ORDER 1437-khnx — operator ruling 2026-09-27: "No size tags get Opus."
-/// A packet that states no implementer_tier (no scalar, no notes line) is
-/// written for opus, so the cheap tiers only ever receive work someone sized.
-pub const DEFAULT_IMPLEMENTER_TIER: &str = "opus";
-
-/// ORDER 1437-khnx — (tier, source) where source is `field`, `notes` or
-/// `default`. The source is projected beside the tier so a defaulted opus is
-/// never mistaken for a stated one.
-pub fn implementer_tier(packet: &Value) -> (String, &'static str) {
-    if packet.get("implementer_tier").is_some()
-        && let Some(t) = tier_field(packet, "implementer_tier")
-    {
-        return (t, "field");
-    }
-    match tier_field(packet, "implementer_tier") {
-        Some(t) => (t, "notes"),
-        None => (DEFAULT_IMPLEMENTER_TIER.to_string(), "default"),
-    }
-}
-
 /// ORDER 1437-khnx — `Some(reason)` when `value` is outside `field`'s
 /// vocabulary; `None` for an in-vocabulary value or a field that has none.
 pub fn tier_vocabulary_refusal(field: &str, value: &str) -> Option<String> {

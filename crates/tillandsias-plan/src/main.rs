@@ -1510,21 +1510,15 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
     // (1437-vdz5) can read them — the must_ship lesson above: a field a
     // consumer reads must be HERE or it is writable and unreadable. Read via
     // tier_field, so the notes-line shape of today's rows projects the same.
-    // An absent implementer_tier projects as opus (operator ruling
-    // 2026-09-27, "No size tags get Opus"), with implementer_tier_source
-    // saying whether it was stated (field|notes) or defaulted.
-    if let Some(size) = tillandsias_plan::tier_field(packet, "size") {
-        obj.insert("size".to_string(), serde_json::Value::String(size));
+    // NEVER DEFAULTED HERE (designer correction 2026-09-27): an untagged row
+    // stays absent, so a reader can tell a filed opus from an unfiled row.
+    // The operator's "No size tags get Opus" is applied by the selector
+    // (1437-vdz5), which is the only place a missing tier means anything.
+    for (field, _) in tillandsias_plan::TIER_FIELDS {
+        if let Some(value) = tillandsias_plan::tier_field(packet, field) {
+            obj.insert(field.to_string(), serde_json::Value::String(value));
+        }
     }
-    let (tier, tier_source) = tillandsias_plan::implementer_tier(packet);
-    obj.insert(
-        "implementer_tier".to_string(),
-        serde_json::Value::String(tier),
-    );
-    obj.insert(
-        "implementer_tier_source".to_string(),
-        serde_json::Value::String(tier_source.to_string()),
-    );
     // ORDER 706-ddw6. Project active lease information directly.
     if let Some(packet_id) = packet.get("packet_id").and_then(serde_yaml::Value::as_str) {
         if let Some(lease) = inspect_lease(packet_id) {
@@ -11042,13 +11036,11 @@ mod tests {
         assert_eq!(both["implementer_tier"], "opus");
         let prose = proj("packet_id: d\norder: 4\nnotes: |\n  size: XL\n");
         assert!(prose.get("size").is_none());
-        // Operator ruling 2026-09-27: "No size tags get Opus."
+        // Untagged stays ABSENT: the untagged=opus rule is the selector's
+        // (1437-vdz5), never the projection's.
         let untagged = proj("packet_id: e\norder: 5\n");
-        assert_eq!(untagged["implementer_tier"], "opus");
-        assert_eq!(untagged["implementer_tier_source"], "default");
+        assert!(untagged.get("implementer_tier").is_none());
         assert!(untagged.get("size").is_none());
-        assert_eq!(top["implementer_tier_source"], "field");
-        assert_eq!(noted["implementer_tier_source"], "notes");
     }
 
     #[test]

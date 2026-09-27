@@ -190,8 +190,8 @@ Say so rather than editing. Canonical rule:
   projects both for the selector's tier routing. Rows filed before the
   scalars existed carry them as lines inside `notes:`, and those project the
   same until corrected; a top-level value always wins. A row that states no
-  tier projects `implementer_tier: opus` with `implementer_tier_source:
-  default` (operator ruling 2026-09-27: "No size tags get Opus"). Correct one with
+  tier projects no key: the projection never defaults. The operator's
+  "No size tags get Opus" (2026-09-27) is applied by the selector (1437-vdz5). Correct one with
   `set-field <order> implementer_tier <tier>`. Any other spelling is refused
   by `set-field` and by `check --strict-fragments`, because it would route no
   packet and could not be told from an untagged row.

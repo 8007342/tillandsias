@@ -80,9 +80,10 @@ optional_fields:
     note: >
       ORDER 1437-khnx. The model tier a packet is written for, read by the
       selector's tier routing (1437-vdz5). Same scalar, projection, notes-line
-      fallback and vocabulary refusal as `size`. ABSENT MEANS OPUS (operator
-      ruling 2026-09-27, "No size tags get Opus"): the projection carries
-      implementer_tier=opus with implementer_tier_source=default.
+      fallback and vocabulary refusal as `size`. The projection never
+      defaults it: an untagged row stays absent. The operator's "No size tags
+      get Opus" (2026-09-27) is applied by the selector (1437-vdz5), so a
+      filed opus stays distinguishable from an unfiled row.
   retains_direct_work:
     kind: optional
     type: bool

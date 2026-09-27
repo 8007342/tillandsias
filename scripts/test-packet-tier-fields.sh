@@ -6,8 +6,8 @@
 #
 #   1. a fragment declaring size: S and implementer_tier: haiku as top-level
 #      packet scalars is projected by `query --json` with both keys and values,
-#      and an untagged row projects implementer_tier=opus with
-#      implementer_tier_source=default (operator: "No size tags get Opus");
+#      and an untagged row projects neither (never defaulted: the untagged=opus
+#      rule is the selector's, 1437-vdz5);
 #   2. a fragment carrying the same two as lines inside notes: projects
 #      identically (the fallback for rows filed before the scalars existed);
 #   3. `set-field <order> implementer_tier sonnet` writes a scalar correction
@@ -58,16 +58,16 @@ proj() { # proj <dir> -> "size implementer_tier" of the fixture row
 mk "$W/a1" '    size: S
     implementer_tier: haiku'
 got="$(proj "$W/a1")"
-# Operator ruling 2026-09-27, "No size tags get Opus": an untagged row projects
-# implementer_tier=opus, marked as defaulted, and no size.
+# An untagged row projects NEITHER key: the projection never defaults them. The
+# operator's "No size tags get Opus" is applied by the selector (1437-vdz5).
 mk "$W/a1u" '    notes: |
       no tier stated here'
 gotu="$("$PLAN" --index "$W/a1u/plan/index.yaml" query --json --limit 50 2>/dev/null \
-        | jq -r '.[] | select(.packet_id == "a-tier-row") | "\(.size // "-") \(.implementer_tier) \(.implementer_tier_source)"')"
-if [ "$got" = "S haiku" ] && [ "$gotu" = "- opus default" ]; then
-    ok "arm 1: top-level scalars project (S haiku); an untagged row projects opus/default"
+        | jq -r '.[] | select(.packet_id == "a-tier-row") | "\(.size // "-") \(.implementer_tier // "-")"')"
+if [ "$got" = "S haiku" ] && [ "$gotu" = "- -" ]; then
+    ok "arm 1: top-level scalars project (S haiku); an untagged row projects neither key"
 else
-    bad "arm 1: want 'S haiku' and '- opus default', got '$got' / '$gotu'"
+    bad "arm 1: want 'S haiku' and '- -', got '$got' / '$gotu'"
 fi
 
 # 2 — the notes-line fallback projects identically.
