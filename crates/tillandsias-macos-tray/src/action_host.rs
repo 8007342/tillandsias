@@ -1641,24 +1641,34 @@ async fn run_start(
                     &format!("bundled manifest parse: {e}"),
                 )
             })?;
-        vz.fetch_fedora_cloud_image(&manifest, on_phase)
-            .await
-            .map_err(|e| {
-                // NO LONGER TELLS THE OPERATOR TO INSTALL QEMU (980-xcaf).
-                // That advice could never have worked from a GUI launch: the
-                // tray's PATH is /usr/bin:/bin:/usr/sbin:/sbin, so a
-                // Homebrew-installed qemu-img was never reachable, and the
-                // operator who followed it hit the identical failure and
-                // reasonably concluded the install had not taken. Conversion
-                // is in-process now, so any failure here is ours.
-                format!(
-                    "Fedora Cloud image fetch failed: {e}\n\n\
+        // 1420-x6rz: the chip's percent comes from the typed event's own
+        // fraction, not from a formatted string vm-layer used to build.
+        vz.fetch_fedora_cloud_image(
+            &manifest,
+            on_phase,
+            &|ev: tillandsias_control_wire::ProgressEvent| {
+                if let Some(f) = ev.kind.fraction() {
+                    on_phase(&format!("{} {}%", ev.label, (f * 100.0).floor() as u32));
+                }
+            },
+        )
+        .await
+        .map_err(|e| {
+            // NO LONGER TELLS THE OPERATOR TO INSTALL QEMU (980-xcaf).
+            // That advice could never have worked from a GUI launch: the
+            // tray's PATH is /usr/bin:/bin:/usr/sbin:/sbin, so a
+            // Homebrew-installed qemu-img was never reachable, and the
+            // operator who followed it hit the identical failure and
+            // reasonably concluded the install had not taken. Conversion
+            // is in-process now, so any failure here is ours.
+            format!(
+                "Fedora Cloud image fetch failed: {e}\n\n\
                      This is a download or disk-space problem, not a missing \
                      tool — image conversion no longer needs anything \
                      installed on the host. Check connectivity and free space, \
                      then retry Start VM."
-                )
-            })?;
+            )
+        })?;
         eprintln!("[tillandsias-tray] Start VM: Fedora Cloud image ready");
     }
 

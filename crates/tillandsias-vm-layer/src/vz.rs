@@ -233,6 +233,33 @@ pub const FETCH_STAGE_EXPAND: &str = "expand Fedora Cloud image to rootfs.img: "
 /// See [`FETCH_STAGE_DOWNLOAD`]. The pre-download free-space check (1420-299a).
 pub const FETCH_STAGE_SPACE: &str = "check free space for the Fedora Cloud image: ";
 
+/// ORDER 1420-x6rz. Typed first-provision progress: the image fetch reports
+/// bytes and percent as `ProgressEvent`s (1420-r2sn's types) instead of
+/// folding them into prose ("Downloading … X/Y MB (P%)") that every consumer
+/// had to re-parse. `on_phase` keeps only the milestone names.
+pub type ProgressSink<'a> = &'a (dyn Fn(tillandsias_control_wire::ProgressEvent) + Send + Sync);
+/// Task id of the Fedora Cloud image download (units: bytes).
+pub const PROGRESS_TASK_DOWNLOAD: &str = "fedora-image/download";
+/// Task id of the qcow2 -> rootfs.img expansion (units: percent steps of 100).
+pub const PROGRESS_TASK_EXPAND: &str = "fedora-image/expand";
+
+fn progress_event(
+    task: &str,
+    label: &str,
+    kind: tillandsias_control_wire::ProgressKind,
+) -> tillandsias_control_wire::ProgressEvent {
+    tillandsias_control_wire::ProgressEvent {
+        task: task.to_string(),
+        parent: None,
+        label: label.to_string(),
+        kind,
+        ts_unix_ms: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0),
+    }
+}
+
 impl VzRuntime {
     /// Construct a runtime handle. Does NOT touch the host yet.
     pub fn new(guest_cid: u32, image_root: PathBuf) -> Self {
@@ -433,6 +460,7 @@ impl VzRuntime {
         &self,
         manifest: &crate::recipe::Manifest,
         on_phase: &(dyn Fn(&str) + Send + Sync),
+        on_event: ProgressSink<'_>,
     ) -> Result<(), String> {
         use crate::fetch::{RemoteArtifact, download_verified};
 
@@ -492,6 +520,13 @@ impl VzRuntime {
             bytes: None,
         };
         on_phase("Downloading Fedora Cloud image");
+        on_event(progress_event(
+            PROGRESS_TASK_DOWNLOAD,
+            "Download Fedora Cloud image",
+            tillandsias_control_wire::ProgressKind::Indeterminate {
+                activity: "connecting".to_string(),
+            },
+        ));
         // Throttle to integer-percent changes. `download_verified` invokes this
         // callback per chunk (~100x per MB), so emitting unconditionally spammed
         // ~64k identical "N/528 MB (P%)" phase lines for one 528 MB download
@@ -503,19 +538,27 @@ impl VzRuntime {
             if let Some(total_bytes) = total {
                 let percent = ((downloaded * 100) / total_bytes.max(1)) as i32;
                 if last_percent.swap(percent, std::sync::atomic::Ordering::Relaxed) != percent {
-                    on_phase(&format!(
-                        "Downloading Fedora Cloud image {}/{} MB ({}%)",
-                        downloaded / 1_000_000,
-                        total_bytes / 1_000_000,
-                        percent
+                    on_event(progress_event(
+                        PROGRESS_TASK_DOWNLOAD,
+                        "Download Fedora Cloud image",
+                        tillandsias_control_wire::ProgressKind::Determinate {
+                            done: downloaded,
+                            total: Some(total_bytes),
+                            unit: tillandsias_control_wire::ProgressUnit::Bytes,
+                        },
                     ));
                 }
             }
         })
         .await
         .map_err(|e| format!("{FETCH_STAGE_DOWNLOAD}{e}"))?;
+        on_event(progress_event(
+            PROGRESS_TASK_DOWNLOAD,
+            "Download Fedora Cloud image",
+            tillandsias_control_wire::ProgressKind::Done,
+        ));
 
-        convert_qcow2_to_raw(&qcow2_dest, &self.rootfs_image_path(), on_phase)
+        convert_qcow2_to_raw(&qcow2_dest, &self.rootfs_image_path(), on_phase, on_event)
             .map_err(|e| format!("{FETCH_STAGE_EXPAND}{e}"))
     }
 
@@ -1570,6 +1613,7 @@ fn convert_qcow2_to_raw(
     qcow2_path: &std::path::Path,
     raw_dest: &std::path::Path,
     on_phase: &(dyn Fn(&str) + Send + Sync),
+    on_event: ProgressSink<'_>,
 ) -> Result<(), String> {
     on_phase("Converting Fedora Cloud image");
     let raw_part = raw_dest.with_extension("img.partial");
@@ -1598,7 +1642,15 @@ fn convert_qcow2_to_raw(
             // guarded form, and the two are exactly equivalent here — a zero
             // total yields None and reports no percentage, same as before.
             if let Some(pct) = (done * 100).checked_div(total) {
-                on_phase(&format!("Converting Fedora Cloud image ({pct}%)"));
+                on_event(progress_event(
+                    PROGRESS_TASK_EXPAND,
+                    "Prepare VM disk",
+                    tillandsias_control_wire::ProgressKind::Determinate {
+                        done: pct,
+                        total: Some(100),
+                        unit: tillandsias_control_wire::ProgressUnit::Steps,
+                    },
+                ));
             }
         },
     );
@@ -1615,6 +1667,11 @@ fn convert_qcow2_to_raw(
             raw_dest.display()
         )
     })?;
+    on_event(progress_event(
+        PROGRESS_TASK_EXPAND,
+        "Prepare VM disk",
+        tillandsias_control_wire::ProgressKind::Done,
+    ));
     on_phase("Fedora Cloud image ready");
     Ok(())
 }
@@ -4170,9 +4227,11 @@ mod tests {
             std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
             std::fs::copy(&seed, &dest).expect("seed qcow2 copies into temp root");
         }
-        rt.fetch_fedora_cloud_image(&manifest, &|phase| eprintln!("[smoke] {phase}"))
-            .await
-            .expect("cold provision through the live qcow2 path succeeds");
+        rt.fetch_fedora_cloud_image(&manifest, &|phase| eprintln!("[smoke] {phase}"), &|ev| {
+            eprintln!("[smoke] {}", ev.summary_line())
+        })
+        .await
+        .expect("cold provision through the live qcow2 path succeeds");
         assert!(
             rt.is_provisioned(),
             "fetch_fedora_cloud_image must leave the root provisioned"
