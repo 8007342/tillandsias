@@ -260,8 +260,8 @@ classify_spec_run() { # <result-line> <rc> [full-output]
             return
         fi
         if [ "$skip" -gt 0 ] \
-           && { ! printf '%s' "$line" | grep -q 'skipped_engines=' \
-                || ! printf '%s' "$full" | grep -q '^SKIP  .*\['; }; then
+           && { ! grep -q 'skipped_engines=' <<<"$line" \
+                || ! grep -qE '^SKIP  .*\[' <<<"$full"; }; then
             printf 'unaccounted'
             return
         fi
@@ -274,8 +274,8 @@ classify_spec_run() { # <result-line> <rc> [full-output]
     # true, and silent about the two cases it certified nothing about.
     if [ "$stale" -gt 0 ]; then
         if [ "$rc" -eq 0 ] \
-           && printf '%s' "$line" | grep -q 'stale_engines=' \
-           && printf '%s' "$full" | grep -q '^STALE .*NOT VALID in this checkout'; then
+           && grep -q 'stale_engines=' <<<"$line" \
+           && grep -qE '^STALE .*NOT VALID in this checkout' <<<"$full"; then
             printf 'graded-stale'
         else
             printf 'unaccounted'
@@ -284,8 +284,8 @@ classify_spec_run() { # <result-line> <rc> [full-output]
     fi
     if [ "$skip" -gt 0 ]; then
         if [ "$rc" -eq 0 ] && [ "$total" -eq "$skip" ] \
-           && printf '%s' "$line" | grep -q 'skipped_engines=' \
-           && printf '%s' "$full" | grep -q '^SKIP  .*\['; then
+           && grep -q 'skipped_engines=' <<<"$line" \
+           && grep -qE '^SKIP  .*\[' <<<"$full"; then
             printf 'skipped'
         else
             printf 'unaccounted'
@@ -318,7 +318,10 @@ case "$(classify_spec_run "$sp_line" "$sp_rc" "$sp")" in
         # THE ARM THAT WAS MISSING. The accounting is fine and the run is RED:
         # name the cases, because a reader sent to the skip accounting for a
         # real red reads three lines of correct code before finding nothing.
-        bad "spec.answer GRADED and FAILED — the skip accounting is fine: $sp_line; first reds: $(printf '%s' "$sp" | grep '^FAIL  ' | head -3 | tr '\n' ' ')"
+        # `-m 3` rather than an early-exiting downstream consumer: `head` would
+        # SIGPIPE this grep, and the reader of this line is a person deciding
+        # whether the reds are real. Bounded at the producer instead.
+        bad "spec.answer GRADED and FAILED — the skip accounting is fine: $sp_line; first reds: $(grep -m 3 '^FAIL  ' <<<"$sp" | tr '\n' ' ')"
         ;;
     no-result)
         # ORDER 888-miiy, found from the WITH-ENDPOINT side, which is the only
