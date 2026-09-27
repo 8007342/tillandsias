@@ -434,6 +434,28 @@ impl VzRuntime {
     ) -> Result<(), String> {
         use crate::fetch::{RemoteArtifact, download_verified};
 
+        // 1420-299a: refuse BEFORE the download when the volume cannot hold a
+        // first provision, instead of failing mid-expand after ~500 MB of
+        // transfer. Measured at the nearest existing ancestor: on a first
+        // install image_root does not exist yet and df on it would fail.
+        // macOS-only like `boot`: with the `download` feature this function
+        // compiles on Linux too, where there is no `boot` module.
+        #[cfg(target_os = "macos")]
+        {
+            let mut probe_at = self.image_root.as_path();
+            while !probe_at.exists() {
+                match probe_at.parent() {
+                    Some(p) => probe_at = p,
+                    None => break,
+                }
+            }
+            if let Some(refusal) =
+                boot::first_provision_space_refusal(boot::free_bytes_at(probe_at), probe_at)
+            {
+                return Err(refusal);
+            }
+        }
+
         let arch = if cfg!(target_arch = "aarch64") {
             "aarch64"
         } else {
@@ -2024,6 +2046,32 @@ pub mod boot {
                 free_bytes >= at_least && free_bytes.saturating_sub(size) >= KEEP_FREE
             })
             .map(|(size, _)| size)
+    }
+
+    /// ORDER 1420-299a. Free space a FIRST provision needs on the image volume:
+    /// the ~0.5 GiB qcow2 download plus the expanded rootfs.img's real
+    /// footprint (sparse: 250 GiB apparent, 1.78 GiB allocated on a booted
+    /// guest, measured 2026-09-27) plus headroom for first boot. Swap is sized
+    /// separately and degrades to none on its own, so it is not counted here.
+    pub const FIRST_PROVISION_MIN_FREE: u64 = 4 * 1024 * 1024 * 1024;
+
+    /// `Some(refusal)` when `free` is known and below the requirement; `None`
+    /// to proceed. An UNREADABLE df (`None`) proceeds: refusing on "cannot
+    /// tell" would block every host whose df output this cannot parse.
+    pub fn first_provision_space_refusal(free: Option<u64>, volume: &Path) -> Option<String> {
+        let free = free?;
+        if free >= FIRST_PROVISION_MIN_FREE {
+            return None;
+        }
+        let gb = |b: u64| b as f64 / 1_000_000_000.0;
+        Some(format!(
+            "not enough free disk space for first provisioning: need {:.1} GB, have {:.1} GB free on the \
+             volume holding {}. Free up at least {:.1} GB, then retry.",
+            gb(FIRST_PROVISION_MIN_FREE),
+            gb(free),
+            volume.display(),
+            gb(FIRST_PROVISION_MIN_FREE - free)
+        ))
     }
 
     /// Free bytes on the filesystem holding `dir`, from `/bin/df -k` (an
@@ -3857,6 +3905,51 @@ mod tests {
 
     /// The one size rule: 8 GiB; 16 at >= 100 GiB free; 24 at >= 200 GiB
     /// free; a tier only if 20 GiB stays free after it.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn first_provision_refuses_below_the_space_it_needs_and_says_how_much() {
+        use super::boot::{FIRST_PROVISION_MIN_FREE, first_provision_space_refusal};
+        let vol = std::path::Path::new("/Volumes/Tiny");
+        let gib = 1024 * 1024 * 1024u64;
+        let r = first_provision_space_refusal(Some(gib), vol).expect("1 GiB free must refuse");
+        assert!(
+            r.contains("need 4.3 GB") && r.contains("have 1.1 GB") && r.contains("/Volumes/Tiny"),
+            "{r}"
+        );
+        assert!(r.contains("Free up at least 3.2 GB"), "{r}");
+        assert!(first_provision_space_refusal(Some(FIRST_PROVISION_MIN_FREE - 1), vol).is_some());
+        assert!(first_provision_space_refusal(Some(FIRST_PROVISION_MIN_FREE), vol).is_none());
+        assert!(
+            first_provision_space_refusal(Some(677 * gib), vol).is_none(),
+            "this host"
+        );
+        assert!(
+            first_provision_space_refusal(None, vol).is_none(),
+            "an unreadable df must not block provisioning"
+        );
+    }
+
+    /// 1420-299a criterion: the refusal happens BEFORE any download. Pinned by
+    /// source because a real refusal needs a nearly full volume.
+    #[test]
+    fn the_space_check_runs_before_the_image_download() {
+        let src = include_str!("vz.rs");
+        let body = src
+            .split("pub async fn fetch_fedora_cloud_image(")
+            .nth(1)
+            .expect("fetch_fedora_cloud_image");
+        let check = body
+            .find("first_provision_space_refusal(")
+            .expect("the fetch must check free space");
+        let download = body
+            .find("download_verified(&artifact")
+            .expect("the fetch downloads");
+        assert!(
+            check < download,
+            "the space check must precede the download"
+        );
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn swap_image_size_follows_the_free_space_tiers() {
