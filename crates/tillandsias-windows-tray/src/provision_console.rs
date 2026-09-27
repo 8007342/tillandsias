@@ -257,6 +257,117 @@ pub fn enable_vt_on_stderr() -> bool {
     false
 }
 
+// ---------------------------------------------------------------------------
+// ORDER 1439-p853: GUEST progress over the control wire.
+// ---------------------------------------------------------------------------
+
+/// The topics the tray's push listener subscribes to, given the guest's
+/// `HelloAck.server_caps`: the base three, plus `Progress` ONLY when the guest
+/// advertises `progress.push@v1`. Built through the wire crate's
+/// `subscription_topics`, the one place the opt-in rule lives. The rule is not
+/// optional: the tray's reader loop treats any decode error as "stream dropped,
+/// resubscribe", and an older guest fails a whole Subscribe that names a topic
+/// it does not know, so asking unconditionally would loop forever against it.
+pub fn push_subscribe_topics(
+    server_caps: &[String],
+) -> Vec<tillandsias_control_wire::SubscriptionTopic> {
+    tillandsias_control_wire::subscription_topics(&base_push_topics(), server_caps)
+}
+
+/// The tray's base push topics, before any capability opt-in. The single
+/// source: notify_icon's `vm_status_subscribe_topics` delegates here.
+pub fn base_push_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
+    use tillandsias_control_wire::SubscriptionTopic;
+    vec![
+        SubscriptionTopic::VmStatus,
+        SubscriptionTopic::LoginState,
+        SubscriptionTopic::CloudProjects,
+    ]
+}
+
+/// A guest `ProgressKind` as the renderer's `TaskState`. A determinate kind
+/// with no known total cannot be a fraction, so it shows as activity ("12.0
+/// MB"), never as a bar stuck at 0%.
+pub fn task_state_of(kind: &tillandsias_control_wire::ProgressKind) -> TaskState {
+    use tillandsias_control_wire::{ProgressKind, ProgressUnit};
+    match kind {
+        ProgressKind::Determinate {
+            done,
+            total: Some(total),
+            ..
+        } => TaskState::Determinate {
+            done: *done,
+            total: *total,
+        },
+        ProgressKind::Determinate {
+            done,
+            total: None,
+            unit,
+        } => TaskState::Indeterminate {
+            activity: match unit {
+                ProgressUnit::Bytes => format!("{:.1} MB", *done as f64 / 1_048_576.0),
+                ProgressUnit::Items => format!("{done} items"),
+                ProgressUnit::Steps => format!("{done} steps"),
+            },
+        },
+        ProgressKind::Indeterminate { activity } => TaskState::Indeterminate {
+            activity: ascii_only(activity),
+        },
+        ProgressKind::Done => TaskState::Done,
+        ProgressKind::Failed { reason } => TaskState::Failed {
+            reason: ascii_only(reason),
+        },
+    }
+}
+
+/// Guest progress into a renderer sink, keyed by the event's label (the human
+/// name; the task id is an internal key). The sink decides the output: the GUI
+/// tray has no console, so it gets a PlainSink over tray.log — one ASCII line
+/// per task STATE CHANGE, which is the renderer's own throttle (a 500-step
+/// build writes a handful of lines, not 500).
+pub struct GuestProgress {
+    sink: Box<dyn Sink + Send>,
+}
+
+impl GuestProgress {
+    pub fn with_sink(sink: Box<dyn Sink + Send>) -> Self {
+        GuestProgress { sink }
+    }
+
+    /// For the GUI tray: a plain sink whose lines go to tray.log.
+    pub fn to_tray_log() -> Self {
+        Self::with_sink(Box::new(PlainSink::new(TracingLines::default())))
+    }
+
+    pub fn observe(&mut self, event: &tillandsias_control_wire::ProgressEvent) {
+        let _ = self
+            .sink
+            .update(&ascii_only(&event.label), task_state_of(&event.kind));
+    }
+}
+
+/// A `Write` that turns each complete line into one `tracing::info!` record,
+/// so a PlainSink can render into tray.log.
+#[derive(Default)]
+struct TracingLines {
+    pending: Vec<u8>,
+}
+
+impl std::io::Write for TracingLines {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.pending.extend_from_slice(buf);
+        while let Some(nl) = self.pending.iter().position(|b| *b == b'\n') {
+            let line: Vec<u8> = self.pending.drain(..=nl).collect();
+            let text = String::from_utf8_lossy(&line[..line.len() - 1]).into_owned();
+            tracing::info!(target: "guest_progress", "guest progress {text}");
+        }
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -408,5 +519,86 @@ mod tests {
             let l = phase_label(phase);
             assert!(l.is_ascii() && !l.ends_with('.'), "{l:?}");
         }
+    }
+
+    /// 1439-p853: against a guest WITHOUT progress.push@v1 the Subscribe is
+    /// byte-identical to the pre-change one; with it, Progress is appended.
+    #[test]
+    fn progress_topic_is_opt_in_and_the_old_subscribe_is_byte_identical() {
+        use tillandsias_control_wire::{
+            CAP_PROGRESS_PUSH_V1, ControlEnvelope, ControlMessage, SubscriptionTopic, WIRE_VERSION,
+            encode,
+        };
+        let sub = |topics| {
+            encode(&ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 7,
+                body: ControlMessage::Subscribe { topics },
+            })
+            .expect("encode")
+        };
+        // Spelled out, not base_push_topics(): this is the pre-change list the
+        // old-guest Subscribe must still equal byte for byte.
+        let before = vec![
+            SubscriptionTopic::VmStatus,
+            SubscriptionTopic::LoginState,
+            SubscriptionTopic::CloudProjects,
+        ];
+        assert_eq!(base_push_topics(), before);
+        let old_guest = push_subscribe_topics(&["exec.argv@v1".to_string()]);
+        assert_eq!(
+            sub(old_guest),
+            sub(before.clone()),
+            "an old guest's Subscribe changed"
+        );
+        let new_guest = push_subscribe_topics(&[CAP_PROGRESS_PUSH_V1.to_string()]);
+        assert_eq!(new_guest.last(), Some(&SubscriptionTopic::Progress));
+        assert_eq!(&new_guest[..3], &before[..]);
+    }
+
+    /// 1439-p853: guest events render through the 9vpk PlainSink as ASCII
+    /// lines, one per state change, and an unknown total is activity, not 0%.
+    #[test]
+    fn guest_progress_renders_plain_ascii_per_state_change() {
+        use tillandsias_control_wire::{ProgressEvent, ProgressKind, ProgressUnit};
+        let buf = Shared::default();
+        let mut gp = GuestProgress::with_sink(Box::new(PlainSink::new(buf.clone())));
+        let ev = |kind| ProgressEvent {
+            task: "image/forge".into(),
+            parent: None,
+            label: "Build forge image \u{2014} layers".into(),
+            kind,
+            ts_unix_ms: 0,
+        };
+        for done in 0..=100 {
+            gp.observe(&ev(ProgressKind::Determinate {
+                done,
+                total: Some(100),
+                unit: ProgressUnit::Steps,
+            }));
+        }
+        gp.observe(&ev(ProgressKind::Done));
+        let out = String::from_utf8(buf.0.lock().unwrap().clone()).unwrap();
+        assert!(out.is_ascii() && !out.contains('\x1b'), "{out}");
+        assert_eq!(out.lines().count(), 2, "one line per state change:\n{out}");
+        assert!(
+            out.contains("Build forge image - layers: in progress"),
+            "{out}"
+        );
+        assert!(
+            out.contains("Build forge image - layers: done (overall 100%)"),
+            "{out}"
+        );
+
+        assert_eq!(
+            task_state_of(&ProgressKind::Determinate {
+                done: 12 * 1_048_576,
+                total: None,
+                unit: ProgressUnit::Bytes,
+            }),
+            TaskState::Indeterminate {
+                activity: "12.0 MB".into()
+            }
+        );
     }
 }
