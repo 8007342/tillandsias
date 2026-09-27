@@ -398,12 +398,11 @@ there.
   is running the old attestation, which
   `scripts/check-tokens-log-has-main-ctx.sh` (1437-3ynw) reports. Every
   host and every forge records; the coordinator-only log is the defect.
-- **Every cross-session message** fits the budget: at most 600 bytes and
-  8 lines, verdict line first (`HEADS-UP|ACK|LANDED|BLOCKED|ASK|FYI:
-  <subject>:<one clause>`), every further line `- ` plus a ref. Pipe the
-  draft through `scripts/check-peer-message-shape.sh` (1437-arjg).
-  Canonical: `methodology/distributed-work.yaml` →
-  `sibling_heads_up_protocol.size_budget`.
+- **Cross-session message budget: ON HOLD** (operator question pending,
+  2026-09-27; 1437-arjg is blocked). The shape (600 bytes, 8 lines, verdict
+  line first, `- ` plus a ref per evidence line) is written in
+  `methodology/distributed-work.yaml` → `sibling_heads_up_protocol.size_budget`
+  and is not enforced until the operator answers.
 - **Timestamps come from the clock, never from memory**: the tool's writes
   read it; a hand-written fragment `ts:` more than 900 s in the future is an
   invented time (pirria, 2026-09-20).

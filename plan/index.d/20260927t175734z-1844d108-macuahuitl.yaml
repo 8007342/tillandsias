@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: plan-binary-projects-size-and-implementer-tier-scalars
+    field: context
+    value: |-
+      T1 of the 2026-09-27 trims. No packet field names a model tier today;
+      the ledger has zero rows with size or implementer_tier. A novel field
+      must be a SCALAR (set-field refuses list-valued fields, 1184-tj2q) and
+      must be added to query_json_projection in crates/tillandsias-plan/src/main.rs
+      or it is writable and unreadable (the must_ship lesson, 1218-25z3).
+      Twenty rows filed today carry the two values as lines inside notes:,
+      so the projection must read that shape too until they are corrected.
+      Vocabulary: size S|M|L, implementer_tier haiku|sonnet|opus.
+
+
+      [2026-09-27T17:57:34Z macuahuitl] RULING 2026-09-27 (operator, via the coordinator): "No size tags get Opus."
+      An untagged row routes as OPUS, not sonnet. The projection emits size and
+      implementer_tier only when present (absent stays absent, never a default);
+      the opus default is the SELECTOR's rule (1437-vdz5), so a reader of the
+      projection can still tell a filed opus from an unfiled row. The notes-line
+      fallback is unchanged.
+    ts: "2026-09-27T17:57:34Z"
+    host: macuahuitl
+
+events:
+  - packet_id: plan-binary-projects-size-and-implementer-tier-scalars
+    event:
+      type: note
+      ts: "2026-09-27T17:57:34Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-09-27 relayed by the coordinator (efficiency trims 1437-62g8)
