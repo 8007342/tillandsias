@@ -337,6 +337,24 @@ pub const CAP_PTY_DATA_SESSION: &str = "pty.data-session@v1";
 /// @trace order:1420-r2sn
 pub const CAP_PROGRESS_PUSH_V1: &str = "progress.push@v1";
 
+/// The subscription topics a host should request, given the guest's
+/// `HelloAck.server_caps`: `base` unchanged, plus `Progress` ONLY when the
+/// guest advertises [`CAP_PROGRESS_PUSH_V1`] (order 1420-4grt). Every host
+/// shell builds its `Subscribe` through this, so the opt-in rule lives in one
+/// place instead of being re-derived per tray.
+pub fn subscription_topics(
+    base: &[SubscriptionTopic],
+    server_caps: &[String],
+) -> Vec<SubscriptionTopic> {
+    let mut topics = base.to_vec();
+    if server_caps.iter().any(|c| c == CAP_PROGRESS_PUSH_V1)
+        && !topics.contains(&SubscriptionTopic::Progress)
+    {
+        topics.push(SubscriptionTopic::Progress);
+    }
+    topics
+}
+
 /// Order 779-dqsv: this number OUTLIVED the transport it was written for.
 /// It was the per-variant cap on `McpFrame`, which order 505 retired (that
 /// path is now refused; see `host-browser-mcp` spec). The live MCP transport
@@ -2937,6 +2955,32 @@ mod tests {
         .unwrap();
         let after: OldEnvelope = postcard::from_bytes(&next).expect("next frame decodes");
         assert!(matches!(after.body, OldBody::V23));
+    }
+
+    #[test]
+    fn subscription_topics_adds_progress_only_on_the_capability() {
+        let base = [SubscriptionTopic::VmStatus, SubscriptionTopic::LoginState];
+        assert_eq!(
+            subscription_topics(&base, &["pty.attach@v1".into()]),
+            base.to_vec(),
+            "an old guest must never be asked for Progress"
+        );
+        assert_eq!(
+            subscription_topics(&base, &[CAP_PROGRESS_PUSH_V1.into()]),
+            vec![
+                SubscriptionTopic::VmStatus,
+                SubscriptionTopic::LoginState,
+                SubscriptionTopic::Progress
+            ]
+        );
+        assert_eq!(
+            subscription_topics(
+                &[SubscriptionTopic::Progress],
+                &[CAP_PROGRESS_PUSH_V1.into()]
+            ),
+            vec![SubscriptionTopic::Progress],
+            "no duplicate topic"
+        );
     }
 
     /// An old GUEST receiving a new tray's `Subscribe` that names `Progress`
