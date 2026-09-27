@@ -27,6 +27,10 @@
 #   5. the fetch-failure trade: an unreachable remote WARNS and ADMITS, naming
 #      the check, rather than blocking every offline push.
 #   6. usage refusals from the freeze tool, and a branch name it will not accept.
+#   7. 1422-fvce: `set` when the REMOTE tip is AHEAD of this clone (another
+#      clone pushed since the last fetch) succeeds and marks that tip; and a
+#      marker push the remote refuses names git's own refusal, not a bare
+#      "could not push".
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$ROOT/scripts/hooks/pre-push-local-gate.sh"
@@ -231,6 +235,47 @@ out="$(freeze set work/1176-9vqn 2>/dev/null | tail -1)"; rc=$?
     && ok "ARM 6: a branch name with a slash is refused rather than mis-parsed back out of the ref" || bad "ARM 6f: rc=$rc '$out'"
 out="$(freeze set no-such-branch 2>/dev/null | tail -1)"
 [ "$out" = "refused:freeze:no-such-branch:no-such-branch" ] && ok "ARM 6: freezing a branch the remote does not have is refused" || bad "ARM 6g: '$out'"
+
+# ── ARM 7: 1422-fvce — the remote tip is AHEAD of this clone ──────────────
+# `set` reads the tip with ls-remote and pushes it as the marker. Pre-fix, a
+# tip this clone never fetched was not a local object, the push failed, and a
+# discarded stderr made it "refused:freeze:unreachable" — a false STOP in the
+# release runbook. A second clone pushes past this one to build that state.
+git clone -q "$W/bare.git" "$W/other" 2>/dev/null
+( cd "$W/other" && git checkout -q linux-next && printf 'ahead\n' >> README.md \
+    && G commit -q -am "ahead of wc" && git push -q --no-verify origin linux-next ) >/dev/null 2>&1
+AHEAD="$(tip linux-next)"
+if git cat-file -e "$AHEAD^{commit}" 2>/dev/null; then
+    bad "ARM 7a: setup — the remote tip $AHEAD is already local, so the arm would test nothing"
+else
+    out="$(freeze set linux-next 2>/dev/null | tail -1)"
+    marker="${out#ok:freeze-set:}"
+    case "$out" in
+        ok:freeze-set:refs/tillandsias/freeze/linux-next/*/*)
+            if [ "$(git ls-remote "$W/bare.git" "$marker" | cut -f1)" = "$AHEAD" ]; then
+                ok "ARM 7: set succeeds when the remote tip is ahead of this clone, and marks that tip"
+            else
+                bad "ARM 7a: the marker does not point at the remote tip $AHEAD"
+            fi ;;
+        *) bad "ARM 7a: set refused with the remote tip ahead of this clone: '$out'" ;;
+    esac
+    freeze clear linux-next >/dev/null 2>&1
+fi
+# A refusal names git's reason: the remote rejects marker refs by hook.
+printf '#!/bin/sh\nwhile read o n r; do case "$r" in refs/tillandsias/*) echo "fixture-hook: markers refused here"; exit 1 ;; esac; done\n' \
+    > "$W/bare.git/hooks/pre-receive"
+chmod +x "$W/bare.git/hooks/pre-receive"
+# Pin the scratch remote to its OWN hooks: a global core.hooksPath (a forge sets
+# one) would otherwise make the bare repo ignore hooks/ and the push succeed.
+git -C "$W/bare.git" config core.hooksPath "$W/bare.git/hooks"
+out="$(freeze set linux-next 2>/dev/null | tail -1)"
+case "$out" in
+    "refused:freeze:unreachable:could not push the marker to origin:"*"fixture-hook: markers refused here"*)
+        ok "ARM 7: a refused marker push names the remote's own reason" ;;
+    *) bad "ARM 7b: the refusal does not carry git's reason: '$out'" ;;
+esac
+rm -f "$W/bare.git/hooks/pre-receive"
+git -C "$W/bare.git" config --unset core.hooksPath
 
 total=$((pass+fail))
 [ "$skipped" -gt 0 ] && echo "note: $skipped arm(s) skipped by name — see the skip: lines above"
