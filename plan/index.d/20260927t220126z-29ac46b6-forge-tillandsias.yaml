@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: repeat-claude-arm-passes-the-model-and-effort-flags
+    field: status
+    value: completed
+    ts: "2026-09-27T22:01:26Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: repeat-claude-arm-passes-the-model-and-effort-flags
+    event:
+      type: completed
+      ts: "2026-09-27T22:01:26Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: 9e0a6a8ce
+  - packet_id: repeat-claude-arm-passes-the-model-and-effort-flags
+    event:
+      type: note
+      ts: "2026-09-27T22:01:26Z"
+      host: forge-tillandsias
+      summary: |-
+        landed on origin/linux-next via land77; repeat's claude arm now passes --model/--effort through via CLAUDE_MODEL_FLAG/CLAUDE_EFFORT_FLAG; scripts/test-repeat-model-flag.sh: ok:repeat-model-flag:3/3
