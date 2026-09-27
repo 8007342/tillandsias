@@ -41,10 +41,15 @@ Umbrella packet: `1443-6r3q`. OpenSpec change:
    read by `tillandsias-plan discipline`, a forge-plan MCP tool, the mirror's
    pre-receive, and the land tool.
 5. The mirror publishes `refs/tillandsias/discipline/<level>/<enforcement>/<digest>/<epoch>`
-   — the level actively enforced, readable by ls-remote — because a
-   `git push --dry-run` cannot be answered by a pre-receive hook
-   (it sends no ref commands); an opt-in probe push to a namespace the hook
-   always rejects gives the server's own wording.
+   — now with `<derived>` beside the seed's level: the level actively
+   enforced, readable by ls-remote — because a `git push --dry-run` cannot
+   be answered by a pre-receive hook (it sends no ref commands). The first
+   draft's opt-in probe push is dropped (operator ruling 5).
+7. (Rulings 2026-09-27, §8.) Hooks are TEMPLATES installed on demand per
+   project for its level; a fresh project pushes to main; raising the level
+   installs its hooks; the mirror dispatches the project's own hooks per
+   push event; every refusal ends "use /<skill> for instructions"; the
+   level is DERIVED and checked against the seed.
 6. The land tool probes the discipline first (bash, 1443-z3vb), then becomes
    Lua (1443-u66u) with every verdict token byte-identical and the freeze,
    stamp-provenance and proof-against-remote guarantees kept.
@@ -116,9 +121,25 @@ New here:
   build.sh's loop, `hook` by stubs, `relay` by the land/relay tools).
 - **Affordances**: token on stdout, `why:`/`remedy:` on stderr (1247-amcu,
   the shape 1247-lwek is adding to the land tool).
-- **Consent**: `policy consent grant <class> [--ttl]`; host-bound 0600
-  token; consumed on first use; refused in a forge; the smoke skills' env
-  authorisation mapped to `substrate-reset` with `consent_source=env`.
+- **Consent** (operator ruling 3, 2026-09-27, verbatim: "Forges should
+  keep pre-authorizing SOFT RESET always. HARD RESET should require
+  explicit approval each time"): `policy consent grant <class> [--ttl]`;
+  host-bound 0600 token; consumed on first use; the grant refused in a
+  forge. Classes follow `host-state-lifecycle`: `soft-reset`
+  (`--reset-state` everywhere, Linux `--reset-guest`, the podman reset
+  inside them) is allowed in a forge always (`consent_source=forge-policy`)
+  and on bare metal by the two registered smoke skills'
+  `TILLANDSIAS_DESTRUCTIVE_RESET_OK=1` (`consent_source=env`; `=0` stays
+  the one opt-out) or a token; `hard-reset` (`--reset-guest` on a guest
+  regime, `wsl --unregister`, the VM dir wipe, `TILLANDSIAS_INSTALL_RESET=hard`)
+  takes a per-run operator token EVERY time, has no env pre-authorisation,
+  and is never grantable in a forge. `workspace-destroy` and `force-push`
+  are the other consent classes.
+- **Default flip** (ruling 2: "Deny after a measured time period"): the
+  seed's `default: {deny_after_quiet_days: N}` flips unmatched requests to
+  deny once the host's audit shows N consecutive days with zero deny and
+  zero ask from `caller=pretooluse`; N = 14, operator-confirmed 2026-09-27
+  ("14 days is a good starting point"). Not a calendar date.
 - **Audit**: `.cache/metrics/command-policy-audit.jsonl`, redaction before
   formatting, `policy audit --since`.
 - **Network and credential rules**: `no-credential-mutation` (`gh auth
@@ -155,7 +176,13 @@ Removal criterion (printed by `--status`, pinned by the fixture): 1443-8pur
 and 1443-r4cj closed on every locus; the audit shows zero deny and zero ask
 from `caller=pretooluse` for fourteen consecutive fleet days; the operator
 flips the Bash tool default. `TILLANDSIAS_PRETOOLUSE_HOOK=off` is the
-logged kill switch.
+logged kill switch. Location (ruling 1: "Commit the hook to the project"):
+the PreToolUse entry is committed in this repository's
+`.claude/settings.json` and in the forge overlay
+`images/default/config-overlay/claude/settings.json`, with a repo-relative
+command path. Shape 4's ask class follows ruling 3: soft resets ask on bare
+metal (unless the smoke-skill env applies) and are allowed in a forge; hard
+resets always ask.
 
 Deciders: `check-bash-dialect.sh`, `check-sigpipe-verdict-pipelines-added.sh`
 and `check-jq-callsite-ratchet.sh` gain a `population=<n> bootstrap=<b>`
@@ -201,17 +228,45 @@ ratchet retires when its floor reaches zero.
   `warn_if_outside_branch_grammar` warns on everything outside
   `TILLANDSIAS_BRANCH_CREATION_REGEX`, which lacks `work/` while the
   methodology admits it — the seed fixes that disagreement); a project
-  with no seed is never refused. It always rejects
-  `refs/tillandsias/discipline-probe/*` with the discipline lines, and
-  `publish-discipline.sh` keeps one
-  `refs/tillandsias/discipline/<level>/<enforcement>/<digest>/<epoch>` on
-  `run_auth_probe`'s tick — the ref name IS "the level of branch discipline
-  being actively enforced". Freeze export in forges is 1429-4y9f
-  (dependency).
+  with no seed is never refused. `publish-discipline.sh` keeps one
+  `refs/tillandsias/discipline/<level>/<enforcement>/<derived>/<digest>/<epoch>`
+  on `run_auth_probe`'s tick — the ref name IS "the level of branch
+  discipline being actively enforced", with the derived level beside the
+  seed's so client and server agree on both. The first draft's probe-push
+  namespace is dropped (ruling 5; load-bearing nowhere). Freeze export in
+  forges is 1429-4y9f (dependency).
 - **The dry-run finding**: `git push --dry-run` sends no ref commands, so no
   pre-receive runs — measured in `probe-upstream-auth.sh`'s own use of it
   (it proves reachability and auth, not acceptance). The published ref is
-  the answer; the probe push is the opt-in for server wording.
+  the answer.
+- **Derive, then check against reality** (ruling 4): `discipline derive`
+  observes the remote's HEAD, the integration branches on origin, distinct
+  committer hosts in the last 50 commits, `work/<id>` refs, PR merges on
+  the default branch and the installed hooks; prints `derived=<n> seed=<n>
+  effective=<n>` naming each qualifier and its observing command. A rule
+  refuses only where the seed says enforced AND the qualifier is observed;
+  a seed ahead of reality degrades to `warn:…:seed-ahead-of-reality`; a
+  project past its seed is told `discipline raise --to <derived>`;
+  observed level 0 is never refused. The integration branch is per project
+  from the seed only, enforcement raised organically per rule (ruling 6).
+  Row 1446-664f.
+- **Hook templates on demand** (ruling 7, verbatim in the fragment and in
+  design.md decision 15): one embedded Lua template per client event
+  (pre-commit, post-commit, pre-push, post-merge, post-checkout) and per
+  mirror event (mirror-pre-receive, mirror-post-receive);
+  `discipline install-hooks` writes the level's set into a repo-LOCAL
+  hooksPath as fail-closed bash-3.2 stubs; level 0 = advisory hooks only,
+  push to main allowed; `discipline raise --to <n>` installs that level's
+  hooks; `.tillandsias/hooks/<event>.lua` overrides. The mirror's
+  `dispatch-project-hooks.sh` runs the project's mirror templates through
+  the plan binary shipped in the git image, sandboxed and bounded (60 s),
+  and relays the refusal WITH `why:` and
+  `remedy: this project at level <n> (<rule> <enforcement>) needs <X>; use /<skill> for instructions`
+  to the pushing client. The `project-discipline` skill ships in every
+  forge overlay so the sentence resolves for non-Tillandsias projects; the
+  forge installs hooks for every checked-out project. Tillandsias's
+  `scripts/hooks/*` are its level-2 hooks and the high-enforcement
+  example. Rows 1446-xqi6, 1446-87cy, 1446-qkx4.
 - **Land tool decision**: probe first (`check-ref` on the target; the
   platform's integration branch when none is named — today the tool lands
   the CURRENT branch, which pushes a work ref as trunk; digest compare with
@@ -253,6 +308,20 @@ door's result shape is identical on Linux, macOS and native Windows, and
 | 1443-9f5w | per-run consent tokens; smoke-skill env mapping with `consent_source` | linux | M | opus | 1443-isrk |
 | 1443-xkwb | bootstrap-shell allowlist; population lines; `check-decider-retirement.sh` | any | S | sonnet | — |
 | 1443-r4cj | MCP `run_command` on project-info | any | M | sonnet | 1443-8pur |
+| 1446-664f | `discipline derive`: observed qualifiers vs seed; refuse only where both agree; drift affordance | any | M | opus | 1443-w79y |
+| 1446-xqi6 | hook templates embedded; `install-hooks` / `raise`; level-0 advisory only; forge installs for every project | linux | L | opus | 1443-w79y |
+| 1446-87cy | mirror dispatches the project's mirror-side hooks per push event; plan binary in the git image; affordance relayed | linux | L | opus | 1446-xqi6, 1443-uit6 |
+| 1446-qkx4 | `skills/project-discipline` in every forge overlay | any | M | sonnet | 1446-xqi6 |
+
+Re-scoped by note events in the 1446-xqi6 fragment (sizes and tiers
+unchanged): 1443-isrk (measured default flip, soft/hard classes), 1443-9f5w
+(soft pre-authorised in forges, hard per-run always; headline corrected via
+set-field), 1443-we89 (settings entry committed), 1443-uit6 (probe namespace
+dropped, derived level published, refuse only where seed and derived agree;
+headline corrected via set-field), 1443-z3vb (effective level, per-project
+integration branch, skill in the remedy), 1443-u66u (the Lua land tool is
+Tillandsias's level-2 land template). Nothing retired; 1443-w79y is landed
+by macbookair on its work ref and 1443-sb9b is in progress there.
 
 Drain order: 1443-esm5 → 1443-isrk → 1443-8pur, with 1443-w79y and
 1443-sb9b in parallel, then 1443-z3vb and 1443-we89 (the usable vertical
@@ -265,32 +334,49 @@ Not re-filed, referenced: 1252-fg9e, 1384-aixy, 1384-bqhy, 1384-bxhk,
 event cross-references it: fragment
 `20260927t175832z-1363-xp2v-note-evaluator-slice-macuahuitl.yaml`).
 
-## 8. Open questions for the operator
+## 8. Operator rulings (2026-09-27, relayed by the coordinator) and where each landed
 
-1. Where does the PreToolUse settings entry live: committed in the
-   project's `.claude/settings.json` (every clone gets the bridge) or per
-   host? The architect session did not edit settings files.
-2. Does the command policy default flip from allow to deny-by-default at a
-   date, or at a measured number (for example, fourteen fleet days with zero
-   bridge denials)?
-3. Should `TILLANDSIAS_DESTRUCTIVE_RESET_OK=1` keep pre-authorising the two
-   smoke skills on smoke hosts (mapped with `consent_source=env`), or should
-   every substrate reset take a minted per-run token?
-4. Is the branch-discipline seed the canonical authority with the
-   methodology pointing at it, or the reverse (the seed generated from the
-   methodology)? This design keeps the methodology canonical and the seed a
-   projection.
-5. The seed DECLARES the project's level (Tillandsias: 2) and each rule's
-   enforcement (default branch enforced, grammar warn). 1363-xp2v's open
-   question — is the level derived from observable facts (host count,
-   commit count, presence of a gate) or declared and validated against
-   them — is still open; which does the operator want the first evaluator
-   to assume, and who may raise a rule from warn to enforced?
-6. Is the opt-in probe push (`refs/tillandsias/discipline-probe/*`) wanted,
-   or is the published ref alone enough?
-7. Should the land tool's default target be the seed's integration branch
-   for the platform (this design) or a refusal that asks for an explicit
-   branch?
+1. Hook location — "Commit the hook to the project." → the PreToolUse entry
+   is committed in `.claude/settings.json` and the forge overlay
+   (1443-we89 note event; design.md decision 10).
+2. Default flip — "Deny after a measured time period." → `default:
+   {deny_after_quiet_days: 14}`: **N = 14** fleet days with zero bridge
+   deny/ask, operator-confirmed the same day ("14 days is a good starting
+   point"); not a calendar date (1443-isrk note events; command-policies
+   spec).
+3. Consent — "Forges should keep pre-authorizing SOFT RESET always. HARD
+   RESET should require explicit approval each time." → `soft-reset`
+   allowed in forges, smoke-skill env on bare metal; `hard-reset` per-run
+   token every time, no env, never in a forge (1443-9f5w headline and note;
+   §3 above).
+4. Discipline source — "We should try to derive the discipline but check
+   against reality." → `discipline derive`, refuse only where seed and
+   observation agree, drift reported with an affordance (1446-664f).
+5. Probe push — dropped; it was load-bearing nowhere (1443-uit6 headline
+   and note). Operator, same day: "Drop the probe-push namespace, but keep
+   the document in case we need it later, it could work for something
+   else." The design text is kept as a PARKED ALTERNATIVE (not a
+   requirement, not a packet) in design.md under "Parked alternative":
+   what it was, why a dry-run push cannot replace it and the published ref
+   does, and what it could serve later.
+6. "Integration branch should be per project, and enforcement raised
+   organically." → the seed alone names the integration branch; `raise`
+   moves one rule at a time (1443-z3vb note; 1446-xqi6).
+7. Verbatim: "Fresh new projects opened in a tillandsias forge should be
+   allowed to push to main by default. As projects grow and their own gates
+   rise they should be able to install the hooks on demand, per project,
+   these hooks should then trigger on the push through the git-mirror, at
+   their relevant events (pre/post - commit/push/pull/etc) and return not
+   only the ERRORS but the AFFORDANCES: 'this project at this state needs
+   work in X format, use /<skill> for instructions'. This automatic wiring
+   should be the desired state on any project checked out on a forge. Our
+   CURRENT STATE is already requiring certain enforcements but what our
+   skills and HOOK TEMPLATES should provide is the affordances on how to
+   work with them ONCE ENABLED." → 1446-xqi6 (templates, install-hooks,
+   raise), 1446-87cy (mirror per-event dispatch), 1446-qkx4 (the skill);
+   1443-u66u re-scoped as Tillandsias's level-2 land template.
+
+Nothing remains open for the operator: N = 14 was confirmed 2026-09-27.
 
 ## 9. What was not verified
 
