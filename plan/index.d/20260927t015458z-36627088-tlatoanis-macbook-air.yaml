@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-guards-the-zero-host-dependency-promise-on-the-macos-install-and-provision-path
+    event:
+      type: note
+      ts: "2026-09-27T01:54:58Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t015458z
+      host: tlatoanis-macbook-air
+      summary: |
+        DARWIN RELAY GATE (tlatoanis-macbook-air, macOS 27.0 arm64, bash 3.2.57) for 5a774334f: PASS. All 26 Rust spawn literals and every install-macos.sh command resolve to stock binaries under env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin; NONE is an Xcode-CLT shim (detected by libxcselect linkage; positive control: /usr/bin/git and /usr/bin/python3 ARE detected). macOS 27 ships /usr/bin/jq. Lint x3 ok (26 literals); fixture 7/7.
+        MISSING-TOOL CLASSIFICATION of install-macos.sh under set -euo pipefail (theoretical — every tool is stock), by reading the source:
+        - LOUD+NAMED: curl for SHA256SUMS (|| die), --reset-state failure, --diagnose hard-fail.
+        - LOUD but MISLEADING: awk absent -> "no ... entry in SHA256SUMS-macos"; shasum absent -> "SHA-256 mismatch"; codesign absent -> "WARNING: codesign --verify failed".
+        - RAW abort: curl (asset) or tar absent -> bash "command not found".
+        - SILENT: pgrep absent -> treated as not running (--reset-state then refuses a live tray loudly); xattr absent -> quarantine strip skipped (Gatekeeper may block); osascript quit/login-item are || true / warn; jq absent -> version breadcrumb skipped (cosmetic).
+        Caveat the PATH pin cannot cover: in `curl | bash` the interpreter is chosen by the user's shell before the pin (a Homebrew bash 5 may run it); harmless, the script is 3.2-clean and runs on 5.
