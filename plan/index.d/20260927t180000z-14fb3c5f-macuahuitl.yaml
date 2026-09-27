@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    event:
+      type: note
+      ts: "2026-09-27T18:00:00Z"
+      agent_id: linux-macuahuitl-claude-20260927t180000z
+      host: macuahuitl
+      summary: |-
+        RULING 2026-09-27 (1438-pk9j), operator verbatim: "the presence of an unlocking keyring should be a requirement to survive the vault store." This CHANGES this row's criteria: (1) the fallback files fallback_vault-shamir-share-v1 and fallback_vault-root-token-v1 are NOT preserved across reset — they must not exist on persistent disk at all (keychain_set_blocking must stop writing them; keep the share in memory or on tmpfs for the process's life); (2) a SOFT reset on a host whose Secret Service is absent or locked prints, before destroying anything, `reset: no unlocking keyring holds vault-shamir-share-v1 — the Vault store cannot survive this reset and will be re-initialised at next init`, and the partial-init guard at next init removes the store with its own loud line; the reset body still calls no clearer; (3) new fixture arm in scripts/test-reset-keeps-vault-store.sh: with the keyring made unavailable (the credential-channel fixtures' locked-keyring seam), the reset prints that line and no fallback_* file exists before or after (pre-fix: FAILS — the files are written). Everything else in the row stands. lenovinha's local cut preserved the fallback files across reset — that part reverses; the coordinator is relaying this to them. Spec: tillandsias-vault "No unlocking keyring, no persisted share, no survival"; host-state-lifecycle "A host without an unlocking keyring does not keep the store". Paths: the store is now ~/.tillandsias/vault/data once 1438-pk9j lands; until then the legacy <cache>/vault-data is the same directory — do not block on the layout row, but read the path through the core resolver if it exists when you land.

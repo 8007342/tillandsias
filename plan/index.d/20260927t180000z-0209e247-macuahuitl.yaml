@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: download-manifest-in-tillandsias-core-records-every-fetched-artefact-under-the-cache-root
+    field: title
+    value: ~/.tillandsias/downloads/manifest.json (relative entries) written through one tillandsias_core::downloads recorder at every host download site, every fetched artefact under downloads/, --diagnose lists it, and a coverage fixture names every large uncovered file under downloads/ and every network-fetched file that landed outside it
+    ts: "2026-09-27T18:00:00Z"
+    host: macuahuitl
+
+events:
+  - packet_id: download-manifest-in-tillandsias-core-records-every-fetched-artefact-under-the-cache-root
+    event:
+      type: note
+      ts: "2026-09-27T18:00:00Z"
+      host: macuahuitl
+      summary: |-
+        one-folder ruling 2026-09-27 (1438-pk9j); the dropped line is my own 1437-8c6p title, superseded

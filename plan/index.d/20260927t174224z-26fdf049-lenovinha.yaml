@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    event:
+      type: note
+      ts: "2026-09-27T17:42:24Z"
+      agent_id: linux-lenovinha-claude-20260927t174223z
+      host: lenovinha
+      summary: |
+        WORDING FOR OPERATOR REVIEW (spec:tray-ux; "vault" is on the ban list, with precedent in the approved "Saved your GitHub login to the Tillandsias vault"). run_reset_guest's two user-facing lines, changed because the old ones promised credentials were discarded, which is now false. (1) Start line, was "EPHEMERAL RESET: this discards the local guest (containers, vault, cached credentials). Everything lives in the cloud — you'll re-authenticate once." Now: "EPHEMERAL RESET: this discards the local guest (containers, volumes, secrets, networks). Your sign-ins are kept in the Tillandsias vault." (2) Completion line, was "guest reset complete ✓ — re-authenticate with --github-login (or the tray's GitHub Login) to restore cloud access." Now: "guest reset complete ✓ — your sign-ins were kept." Also ruled by the coordinator: criterion 3's live fixture is a smoke-host arm (reset, then read the sign-ins back), not run on lenovinha's desktop. Implementation is held locally at f786e79c1 because lenovinha's keyring is locked.

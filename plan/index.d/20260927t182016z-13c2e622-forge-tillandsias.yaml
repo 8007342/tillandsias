@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-gate-stamp-memoization-fixture-mints-a-pass-token-and-writes-a-full-scope-stamp-into-the-real-checkouts-git-dir-so-a-pre-build-litmus-run-leaves-an-unearned-green-stamp-that-land-adopts-and-pre-push-accepts
+    field: status
+    value: completed
+    ts: "2026-09-27T18:20:16Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: the-gate-stamp-memoization-fixture-mints-a-pass-token-and-writes-a-full-scope-stamp-into-the-real-checkouts-git-dir-so-a-pre-build-litmus-run-leaves-an-unearned-green-stamp-that-land-adopts-and-pre-push-accepts
+    event:
+      type: completed
+      ts: "2026-09-27T18:20:16Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: 6ce44eaa6
+  - packet_id: the-gate-stamp-memoization-fixture-mints-a-pass-token-and-writes-a-full-scope-stamp-into-the-real-checkouts-git-dir-so-a-pre-build-litmus-run-leaves-an-unearned-green-stamp-that-land-adopts-and-pre-push-accepts
+    event:
+      type: note
+      ts: "2026-09-27T18:20:16Z"
+      host: forge-tillandsias
+      summary: |-
+        landed on origin/linux-next at 6ce44eaa6 (land74, real 1169 s gate; contains fix e2e146d9e). Coordinator on macuahuitl: memoization fixture 15/15 incl. case 13, real gate files byte-identical after a run, no snapshot left, 5 other stamp fixtures green. Verified from the forge mirror: 6ce44eaa6 is an ancestor of origin/linux-next and carries refuse_borrowed_stamp + ok:gate-stamp-memoization-fixture:15.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-uninstall-flag-on-every-binary-removes-everything-manifest-driven
+    event:
+      type: note
+      ts: "2026-09-27T18:30:00Z"
+      agent_id: linux-macuahuitl-claude-20260927t180000z
+      host: macuahuitl
+      summary: |-
+        RULED 2026-09-27 (1438-pk9j, second ruling), operator verbatim: "Let's wipe the unrecoverable vault store during uninstall, together with the host keyring entry. That's what an 'UNINSTALL' means for a user." CHANGE to this row: ~/.tillandsias/vault/ (store and audit) and the keyring share, root token and anchor are removed UNCONDITIONALLY, before the [y/N] question, and the pre-deletion listing names them. The prompt becomes `Also remove ~/.tillandsias (downloaded models, Tillandsias configs and caches)? [y/N]` and covers only config/, downloads/ (with the manifest), cache/, state/. The boxed notice says the folder holds models, configs and caches and NO credentials (the store and its key were removed with the uninstall); it must not imply recoverable credentials. CRITERIA: the N arm additionally asserts vault/ is absent and the notice text carries no credentials claim; a new three-arm scenario (N, y, no-TTY) asserts the store and the keyring entries are gone under every answer (pre-fix: FAILS — nothing removes them). Spec: host-state-lifecycle "--uninstall is the preferred removal…" steps 3-5 and the scenario "The Vault store goes whatever the answer"; tillandsias-vault "Uninstall and HARD reset are the only paths that clear". Size and tier unchanged (L, opus).

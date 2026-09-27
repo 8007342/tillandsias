@@ -264,7 +264,7 @@ Host System
     ├── tillandsias-ca-cert (tmpfs)
     └── tillandsias-ca-key (tmpfs)
 
-Vault Container (tillandsias-vault-data volume)
+Vault Container (<cache>/vault-data host directory)
 ├── secret/github/token (persisted GitHub token)
 ├── auth/approle/role/<name>/role-id
 └── auth/approle/role/<name>/secret-id

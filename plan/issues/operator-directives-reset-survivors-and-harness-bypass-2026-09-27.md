@@ -116,28 +116,50 @@ supersedes 900-z3kv's option (a) for the credential subject only. Stated in
 | 1437-6ghz | owned WSL config block and un-merge | windows | M | sonnet |
 | 1437-rzf2 | retire the stale `tillandsias-vault-data` volume text | any | S | haiku |
 | 1437-5hpv | OpenCode auth store in Vault | linux | M | opus |
+| 1438-pk9j | `~/.tillandsias/` single root, resolver and first-launch migration (added by the 2026-09-27 rulings) | linux | L | opus |
 
-## Open questions for the operator
+## Operator rulings on the open questions (2026-09-27, same day; order 1438-pk9j)
 
-1. On a host with no usable keyring, the share lives in
-   `<cache>/fallback_vault-shamir-share-v1` beside the store it unlocks. Keep
-   that file across resets (the store is useless without it) or accept that
-   keyring-less hosts lose credentials on reset (1118-fqfk's tmpfs intent)?
-   The specs preserve it until answered.
-2. macOS and Windows: host share into the guest (virtiofs / 9p, like the
-   macOS model cache) or evacuate-before-wipe and rehydrate-after-provision?
-   Vault's file backend over a network filesystem is untested here; the
-   platform packets choose and measure, but a preference now saves a round.
-3. "likely just contained in our .tillandsias downloads, configs, and caches
-   folder": consolidate the XDG-spread roots (`~/.cache/tillandsias`,
-   `~/.local/share/tillandsias`, `~/.config/tillandsias`,
-   `~/.local/state/tillandsias`) into one `~/.tillandsias`? The manifest and
-   uninstall work either way; consolidation is a separate migration packet if
-   wanted.
-4. Uninstall keeps nothing: also `installation-uuid-v1` / `tillandsias-vm-uuid`
-   (the install anchor) and the service account's `/var/lib/tillandsias` on a
-   headless install? The specs say yes to both.
-5. Which consent record does the installed Claude Code actually honour for the
-   bypass dialog — `bypassPermissionsModeAccepted` in `~/.claude.json` or
-   `skipDangerousModePermissionPrompt` in `~/.claude/settings.json`? The seed
-   writes both; the fixture records the measured answer.
+1. Keyring: "the presence of an unlocking keyring should be a requirement to
+   survive the vault store." No persisted fallback share file on any host; a
+   host without an unlocking keyring does not keep its store across a reset
+   and the reset says so first. Specs: `tillandsias-vault` "No unlocking
+   keyring, no persisted share, no survival"; `host-state-lifecycle`.
+   1437-qza3's criteria amended by event (lenovinha's local cut preserved the
+   fallback files — reversed); 1118-fqfk confirmed and widened.
+2. Guest regimes get a SOFT and a HARD reset. HARD = today's wipe of the VM
+   and guest (stores and share go, announced). SOFT = "the VM and the FEDORA
+   GUEST are kept, but the tillandsias binary and the Tillandsias STORES
+   (Vault, Caches, Downloaded stuff, etc) is kept. We can still wipe the
+   previous containers, and inject the new updated tillandsias binary, and
+   let it initialize the containers in the guest from scratch, as if it were
+   doing in a native linux 'reset' which preserves stores." `--reset-state`
+   is SOFT everywhere; `--reset-guest` is HARD on guest regimes. Installer:
+   SOFT for an update, HARD only on explicit request
+   (`TILLANDSIAS_INSTALL_RESET=hard`), recommended default SOFT. The
+   evacuate-vs-share question for the Vault store is dissolved (the guest is
+   the persistent thing); what is left is the host-side models/downloads
+   share, already present on macOS (virtiofs), measured on Windows by
+   1437-3iux. 1437-av8u and 1437-3iux re-scoped by event and re-titled.
+3. One folder: "keep all our configs and downloaded files in ~/.tillandsias/
+   for a user to easily find them, snoop around, and wipe them afterwards."
+   Layout `config/ downloads/ vault/ cache/ state/ vm/`, `TILLANDSIAS_HOME`
+   seam, first-launch migration from every legacy root, convergence from any
+   mixed state without prompting. New packet 1438-pk9j; 1437-jdgg (manifest
+   at `downloads/manifest.json`), 1437-2pix, 1437-6ghz, 1437-rzf2 path-amended
+   by event; `cache-recovery-mechanism`, `environment-runtime`,
+   `inference-container` superseded their XDG / `~/Library` / `%APPDATA%`
+   paths.
+4. Uninstall: "--uninstall should be the preferred way to remove, and should
+   leave ZERO TRACES. Prompt on uninstall if ~/.tillandsias should also be
+   removed, [y/N], and show some clear large text 'this is the only leftover,
+   safe to delete …'". Anchors and `/var/lib/tillandsias` go. Non-interactive
+   defaults to N; `--remove-home` / `--keep-home`; the notice shape is in the
+   spec. 1437-evzi re-scoped by event and re-titled. The flagged
+   interpretation (a kept folder with an unlockable store) was RULED the same
+   day, verbatim: "Let's wipe the unrecoverable vault store during uninstall,
+   together with the host keyring entry. That's what an 'UNINSTALL' means for
+   a user." So `vault/` and the keyring entries go under every answer; the
+   prompt and the notice cover only `config/ downloads/ cache/ state/`, and
+   the notice must not imply recoverable credentials.
+5. Consent key: measured by 1437-y2wu's live arm; unchanged.

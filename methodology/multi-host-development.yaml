@@ -766,6 +766,17 @@ multi_host_development:
         so this scoped run is the only pre-build litmus a change sees
         before the cut; the partition is a gate-integrity decision and its
         rows are tiered opus.
+      rulings_2026_09_27: >
+        The operator confirmed the deferral ("defer e2e and other
+        integration tests to their corresponding integration layers") and
+        asked for the classification to be REVISITED per branch layer:
+        canonical table in methodology/ci.yaml -> integration_layers
+        (1443-b85g); the relay layer's litmus set IS --relay-scope's run set
+        (1437-yfuh), consumed not re-derived. The land tool itself
+        (scripts/land-on-platform-branch.sh) is being redesigned in Lua by
+        a separate design; relay-preflight.sh (1437-664a) may be superseded
+        by it and is written as separately callable phases so the Lua tool
+        can adopt them. Nothing here redesigns the land tool.
     pre_push_gate:
       rule: >
         NON-linux-next branches (windows-next, osx-next, any shared non-trunk

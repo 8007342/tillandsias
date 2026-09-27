@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: download-manifest-in-tillandsias-core-records-every-fetched-artefact-under-the-cache-root
+    event:
+      type: note
+      ts: "2026-09-27T18:00:00Z"
+      agent_id: linux-macuahuitl-claude-20260927t180000z
+      host: macuahuitl
+      summary: |-
+        RE-SCOPED 2026-09-27 (1438-pk9j) by the one-folder ruling: the manifest is ~/.tillandsias/downloads/manifest.json (TILLANDSIAS_HOME/downloads/manifest.json), NOT <cache>/downloads.manifest.json; entries carry paths RELATIVE to downloads/ so the folder can be inspected or moved as a unit; every host download lands under downloads/ (models/, rootfs/, bin/, tools/, chromium/, nix/) and the coverage fixture ALSO asserts that no file > 1 MiB that came from the network exists under cache/ or state/ (a download outside downloads/ is the defect the layout prevents). The corrupt-file sidecar is manifest.json.corrupt-<ts>. Depends on 1438-pk9j for downloads_dir(); if picked up first, write the recorder against tillandsias_core::home::downloads_dir() as the row defines it and land the two together. Everything else in the row stands; size: L  implementer_tier: opus (unchanged).

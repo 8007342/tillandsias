@@ -219,12 +219,14 @@ case "$mode" in
         rm -f "$(stamp_path boundary-verified)"
         ;;
     re-snapshot)
-        # Re-anchor the boundary after an intentional commit of launch-generated
-        # opsx/openspec dirt (order 540). Sole caller: meta-orchestration after
-        # scripts/check-opsx-generated-dirt.sh returned ok: and the cycle merged
-        # the generated set as a chore(opsx): commit. Anything NOT in the
-        # generated set must have been refused earlier, so re-anchoring here is
-        # safe only when the caller proved the prior dirty set was opsx-only.
+        # Re-anchor the boundary after the cycle intentionally LANDED startup
+        # dirt it was licensed to land. Sole caller today: meta-orchestration
+        # step 4b, after scripts/check-resumable-claim-dirt.sh returned
+        # resumable: and the agent reviewed and committed that claim's diff.
+        # Order 540 also called it after committing launch-generated opsx dirt;
+        # 1440-w8g8 retired that path (the dirt is refused, never committed).
+        # Re-anchoring is safe only when the caller proved what the prior dirty
+        # set was and landed exactly that.
         load_state "$@"
         mkdir -p "$state_dir/tmp"
         capture "$state_dir/startup"

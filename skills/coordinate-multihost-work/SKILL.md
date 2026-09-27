@@ -460,6 +460,11 @@ over-cap specs are named as deferred and run in the daily cut's
 `check:litmus-pre-build`. Until it lands, the hand-typed sequence in
 `join-the-fleet` §3 stands. Canonical:
 `methodology/multi-host-development.yaml` → `pull_merge_cadence.relay_preflight`.
+Rulings 2026-09-27: the per-layer table (work-ref / relay / cut) is
+`methodology/ci.yaml` → `integration_layers` (1443-b85g); the land tool
+itself is being redesigned in Lua by a separate design and
+`relay-preflight.sh` may be superseded by it — do not redesign the land
+tool from this skill.
 
 ## Integration And Runtime Executor
 

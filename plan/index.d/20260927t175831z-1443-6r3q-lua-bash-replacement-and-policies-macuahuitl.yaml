@@ -1,0 +1,1002 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Umbrella + 14 slices for the Lua bash replacement and the command policies
+# engine (operator direction 2026-09-27). Design:
+#   plan/issues/lua-bash-replacement-and-policies-design-2026-09-27.md
+#   openspec/changes/lua-command-runtime-and-policies/
+# Builds on, and does not re-file: 1252-fg9e (tillandsias-exec), 1384-aixy
+# (proc.run/proc.spawn), 1384-bqhy (script run + verdict), 1384-bxhk (shell
+# ratchet), 1384-ddua (decider pilot), 1375-amye (run verb), 902-5bf9 (litmus
+# steps), 1429-4y9f (freeze export), 1442-22d2 (borrowed stamp), 1247-amcu
+# (affordances).
+packets:
+  - packet_id: lua-bash-replacement-and-policies-2026-09-27
+    order: 1443-6r3q
+    status: ready
+    kind: milestone
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, policy, exec, land, mirror, branch-discipline, milestone]
+    estimated_hours: 1
+    depends_on: []
+    owned_files: [plan/issues/lua-bash-replacement-and-policies-design-2026-09-27.md, openspec/changes/lua-command-runtime-and-policies]
+    unscoreable: |
+      A milestone row. It closes when every child carrying
+      release_target: lua-bash-replacement-and-policies-2026-09-27 is
+      terminal; the children carry the runnable closures. Nothing is
+      scorable on this row itself.
+    title: |
+      LUA BASH REPLACEMENT + COMMAND POLICIES ENGINE (operator 2026-09-27): agents execute commands through the Rust-hosted Lua runtime as argv with named parameters and no pipes; a versioned, tighten-only policy seed decides allow/deny/consent per command family, host kind and regime with why+remedy on every refusal; a temporary PreToolUse hook routes raw Bash; branch discipline is SEEDED per project, enforced and published by the enclave mirror, and the land tool asks the runtime where to land
+    context: |
+      The operator's words (2026-09-27): "a LUA runtime for BASH execution
+      with named parameters and NO PIPES … the full LUA runtime to replace
+      unbounded bash, we'll add BASH POLICIES" and "land-on-platform-branch
+      might need to be a .lua … SEED some BRANCH DISCIPLINE … the git mirror
+      should then respond with the level of branch discipline being actively
+      enforced for the checked out project".
+      WHAT ALREADY EXISTS AND IS NOT RE-FILED: tillandsias-exec (argv, two
+      fds drained concurrently, Completion as a value, RunId) landed under
+      1252-fg9e; proc.run{argv,cwd,env,stdin,timeout_ms,group} and
+      sh.run{argv} are live in lua_predicate.rs (1384-aixy in progress for
+      spawn/streams); `tillandsias-plan lua <script>` is sandboxed by default
+      (1375-btuf); fs.read/write/mkdir/list are repo-rooted with the symlink
+      fixes of 1411-b5fk and 1412-n5cp; the no-pipes design of 2026-09-26
+      already filed script run (1384-bqhy), the shell ratchet (1384-bxhk),
+      the decider pilot (1384-ddua) and build.sh-as-launcher (1384-j3cv).
+      WHAT THIS UMBRELLA ADDS: (A) the AGENT doors onto that runtime — a
+      `run --json` verb with named flags, an MCP `run_command` tool, a
+      bounded capture, a Windows argv-json form that never crosses MSYS or
+      wsl.exe as a string; (B) the COMMAND POLICIES engine — a built-in
+      floor plus a per-project seed .tillandsias/command-policies.yaml that
+      can only tighten it, evaluated inside proc.run/sh.run/fs.* and the run
+      verb, with consent tokens, an audit log and 1247-amcu affordances;
+      (C) the MIGRATION bridge — a PreToolUse hook that classifies raw Bash
+      against the seven measured failure shapes, with its removal criterion
+      written into the hook; (D) BRANCH DISCIPLINE — a per-project seed
+      .tillandsias/branch-discipline.yaml, a `discipline` verb and MCP tool,
+      mirror-side enforcement at pre-receive plus a published
+      refs/tillandsias/discipline/<digest>/<epoch> ref, and the land tool
+      first probing the discipline (bash today) then ported to Lua.
+      THE SEED CARRIES 1363-xp2v'S TWO AXES (operator ruling 2026-09-22):
+      WHICH LEVEL the project has reached (0 = a bare project pushes freely
+      to its default branch; 1 = an integration branch and pull requests;
+      2 = work refs into the integration branch, multiple hosts) — forward
+      only — and HOW HARD each rule is applied (advised | warn | enforced),
+      ratcheting per rule. The floor is absolute: a project with no seed is
+      level 0 advised and NOTHING refuses its first push. Tillandsias's seed
+      is level 2 with default-branch protection enforced and the ref grammar
+      at warn (work_ref_lane: migration, not enforcement). 1443-w79y is
+      therefore also the first evaluator slice 1363-xp2v asked for; the
+      ladder's DETERMINATION (derived versus declared) stays that row's
+      research.
+      FINDING RECORDED HERE because it changes the operator's proposal:
+      `git push --dry-run` sends NO ref commands to the server, so a
+      pre-receive hook never runs for it; the mirror's answer is therefore a
+      PUBLISHED ref the client reads with ls-remote (and, on request, a
+      probe push to a namespace the hook always rejects with the discipline
+      text). The dry-run alone would only prove reachability.
+    next_action: >
+      Nothing to implement here. Drain the children in the order the design
+      note §7 gives (1443-esm5, 1443-isrk, 1443-8pur, 1443-w79y, 1443-z3vb,
+      1443-sb9b, 1443-we89 form the first usable vertical slice); close this
+      row when the last child is terminal, citing the design note.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Milestone rows are excluded from selection (kind: milestone); the
+      children group through release_target.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the architect session the coordinator
+      delegated (Fable). Research: crates/tillandsias-exec, lua_predicate.rs,
+      lua_std.rs, run_lua_cli, scripts/land-on-platform-branch.sh,
+      scripts/hooks/pre-push-local-gate.sh, images/git/pre-receive-hook.sh,
+      relay-refs.sh, probe-upstream-auth.sh, methodology
+      multi_host_development.branch_namespaces.work_ref_lane, and the two
+      2026-09-26 design notes.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          Umbrella filed with fourteen single-session slices; the vertical
+          slice (executor bound, policy core, agent door, discipline seed,
+          land probe, one ported hook, the bridge hook) comes first.
+
+  - packet_id: a-bounded-capture-on-tillandsias-exec-so-a-child-that-out-writes-the-cap-returns-truncated-true-and-ok-false-instead-of-an-unbounded-buffer-or-a-capture-that-looks-whole
+    order: 1443-esm5
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [rust, exec, process, tests]
+    estimated_hours: 3
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-exec/src/lib.rs
+      - crates/tillandsias-exec/tests/capture_bound.rs
+      - crates/tillandsias-plan/src/lua_predicate.rs
+    title: |
+      tillandsias_exec::Command gains capture_bytes(n): a child that writes past the cap keeps being DRAINED (no deadlock) but the Output says truncated=true and dropped=<n>, proc.run maps that to ok=false, so bounded output is a property of the executor and a capture that looks whole is unrepresentable
+    context: |
+      Today Command::run holds every byte of both fds in memory; the only
+      bound is the deadline. The operator asked for "bounded time and
+      output". 1252-fg9e's rule applies: a truncated capture that LOOKS
+      whole is the `| tail -1` defect in another form, so the cap is
+      reported as a field and never silently applied. The design of
+      2026-09-26 §4.3 names capture_bytes for proc.spawn (1384-aixy); this
+      row puts it on the synchronous Command::run so every door (proc.run,
+      sh.run, the run verb, the MCP tool) inherits one bound. Default 8 MiB
+      so no live predicate changes behaviour; callers that want tighter
+      write it out.
+    exit_criteria:
+      - 'a child writing 3 MiB to stdout under capture_bytes(1 MiB) returns Output{completion: Exited(0), truncated: true, dropped: 2 MiB} with stdout.len() == 1 MiB, and the run completes in under the deadline (pre-fix: FAILS — no capture_bytes method exists and stdout holds all 3 MiB)'
+      - 'a child writing 64 MiB to stdout AND 64 MiB to stderr under a 1 MiB cap completes (both fds keep draining past the cap; nothing deadlocks at the pipe buffer) (pre-fix: FAILS — no cap; the test would allocate 128 MiB and pass for the wrong reason)'
+      - 'proc.run{argv=…, capture_bytes=1048576} on that child returns ok=false, truncated=true, status="exited", code=0, so a Lua caller cannot read a clipped capture as a whole one (pre-fix: FAILS — proc.run rejects capture_bytes as an unknown field)'
+      - 'NEGATIVE CONTROL: a child writing 100 bytes under the same cap returns truncated=false, dropped=0, ok=true'
+    verifiable_closure: |
+      cargo test -p tillandsias-exec --test capture_bound
+      plus the proc.run arm in crates/tillandsias-plan/tests/lua_proc.rs.
+      Pre-fix: FAILS to compile (Command has no capture_bytes; Output has no
+      truncated field).
+    next_action: >
+      Add capture_bytes to Command and truncated/dropped to Output; drain
+      past the cap and count; surface the two fields in shell_result_to_lua
+      and proc_run; write the four arms.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      One crate, one method, two fields; the only judgment is the default.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          First slice: the executor bound every door inherits.
+
+  - packet_id: a-command-policy-evaluator-in-the-plan-binary-decides-allow-deny-or-consent-for-an-argv-request-from-a-built-in-floor-plus-a-per-project-seed-that-can-only-tighten-it-and-every-refusal-names-why-and-remedy
+    order: 1443-isrk
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [rust, lua, policy, security, plan-binary, tests]
+    estimated_hours: 10
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-plan/src/command_policy.rs
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/src/main.rs
+      - crates/tillandsias-plan/capabilities.txt
+      - .tillandsias/command-policies.yaml
+      - scripts/test-command-policy-evaluator.sh
+    title: |
+      COMMAND POLICIES ENGINE core: `tillandsias-plan policy eval [--host-kind k] [--regime r] -- <argv>` decides allow | deny | consent for one argv request from a BUILT-IN floor (no shell strings, no credential mutation, destructive classes need consent) plus a per-project seed .tillandsias/command-policies.yaml that can only TIGHTEN the floor; the same evaluator runs inside proc.run/sh.run before spawn; every deny and consent prints refused:policy:<rule-id> with why: and remedy: lines
+    context: |
+      Spec: openspec/changes/lua-command-runtime-and-policies/specs/command-policies/spec.md.
+      REQUEST SHAPE: {argv, cwd, env_keys, host_kind (bare-metal|forge|ci),
+      platform, regime (interactive|gate|fixture|hook|relay), caller}. Host
+      kind is read from TILLANDSIAS_HOST_KIND, /run/.containerenv and the
+      .forge-startup-context.md marker together; a disagreement is reported
+      in the decision (a self-declared host kind is not a security fact —
+      cheatsheets/concurrent-git/git-mirror-architecture-audit.md).
+      THE FLOOR IS COMPILED IN and a seed cannot loosen it: a seed rule that
+      would allow what the floor denies is refused at LOAD, not silently
+      ignored — otherwise a project file becomes the way round the fleet
+      rule (never weaken a fail-closed credential gate for a test).
+      THE THREE SEED RULES OF THE FIRST SLICE: no-shell-strings (sh/bash/
+      cmd/pwsh with -c/-lc//c/-Command; proc.run's is_shell_string_call
+      moves here and is called from there), no-credential-mutation (gh auth
+      login|refresh|logout|token, git credential approve/reject, vault
+      login), substrate-reset consent (podman system reset, --reset-state,
+      rm -rf outside the workspace, git push --force* to a protected ref).
+      DEFAULT FOR AN UNMATCHED REQUEST IS ALLOW in this phase (migration,
+      not enforcement — the same posture as work_ref_lane); the operator
+      decides when the default flips (open question in the design note).
+      AFFORDANCE SHAPE is 1247-amcu's: the verdict line stays a token, a
+      `  why: <rule>` line names the rule and a `  remedy: <what clears it>`
+      line names the argv form or the consent that would be allowed.
+    exit_criteria:
+      - '`tillandsias-plan policy eval --host-kind forge --regime interactive -- gh auth refresh` prints refused:policy:no-credential-mutation on stdout, a why: line and a remedy: line (naming `tillandsias --github-login --with-token`) on stderr, and exits 1 (pre-fix: FAILS — `tillandsias-plan capabilities` lists no `policy`)'
+      - '`tillandsias-plan policy eval -- bash -c "a | b"` prints refused:policy:no-shell-strings with a remedy naming the argv form (pre-fix: FAILS — no verb; proc.run refuses the same argv with a Lua error() and no rule id)'
+      - '`tillandsias-plan policy eval --host-kind bare-metal -- podman system reset --force` prints consent:policy:substrate-reset and exits 4; with --host-kind forge it prints refused:policy:substrate-reset:not-grantable-in-forge and exits 1 (pre-fix: FAILS)'
+      - 'a seed whose rule sets decision: allow for a program the floor denies is refused at load with refused:policy-seed:cannot-loosen:<rule-id>, and the evaluator then answers from the floor alone, never from a partial seed (pre-fix: FAILS — no seed, no loader)'
+      - 'proc.run{argv={"gh","auth","login"}} in the Observing environment returns status="policy_denied", rule_id="no-credential-mutation", why and remedy fields, and NO process is spawned (proven by a wrapper program that would write a marker file) (pre-fix: FAILS — it spawns)'
+      - 'NEGATIVE CONTROL: `tillandsias-plan policy eval -- git status --porcelain` prints ok:policy:allow:default and exits 0, and proc.run of the same argv runs'
+    verifiable_closure: |
+      bash scripts/test-command-policy-evaluator.sh
+      exits 0 with the six arms above passing. Pre-fix: FAILS at the first
+      arm because the binary has no `policy` subcommand.
+    next_action: >
+      Write command_policy.rs (Request, Rule, Decision, floor, seed loader
+      with the cannot-loosen check), the `policy eval` dispatch arm and
+      capabilities token, call it from proc_run and the sh.run closure
+      before Command::new, ship the seed with the three rules, write the
+      fixture.
+    notes: |
+      size: L
+      implementer_tier: opus
+      This is the enforcement path: a wrong rule blocks every agent on the
+      fleet, a missing one lets a credential mutation through. Credential
+      and security surfaces are opus by the tier rubric.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design; the failure
+      shapes it answers are the seven in the design note §1.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          Policy core with three rules; the floor is compiled in and a seed
+          can only tighten it.
+
+  - packet_id: the-agent-door-tillandsias-plan-run-json-takes-named-flags-and-an-argv-never-a-string-evaluates-the-policy-before-spawning-starts-the-child-from-the-base-env-only-and-reads-argv-as-json-on-windows-so-nothing-crosses-msys-or-wsl-as-a-string
+    order: 1443-8pur
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [rust, exec, plan-binary, windows, macos, policy, tests]
+    estimated_hours: 8
+    depends_on: [a-command-policy-evaluator-in-the-plan-binary-decides-allow-deny-or-consent-for-an-argv-request-from-a-built-in-floor-plus-a-per-project-seed-that-can-only-tighten-it-and-every-refusal-names-why-and-remedy, a-bounded-capture-on-tillandsias-exec-so-a-child-that-out-writes-the-cap-returns-truncated-true-and-ok-false-instead-of-an-unbounded-buffer-or-a-capture-that-looks-whole]
+    owned_files:
+      - crates/tillandsias-plan/src/run_verb.rs
+      - crates/tillandsias-plan/src/main.rs
+      - crates/tillandsias-plan/capabilities.txt
+      - scripts/test-run-verb-agent-door.sh
+    title: |
+      THE AGENT DOOR: `tillandsias-plan run [--cwd P] [--env K=V]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] [--json] -- <argv…>` (and `--argv-json -` reading argv as a JSON array on stdin) runs one child through tillandsias-exec after the policy evaluator says allow, from the PROC_RUN base environment only, and prints one typed result — run_id, status, code|signal, ok, stdout, stderr, truncated, wall_ms, argv, policy — so an agent never writes a shell string and a result never crosses a shell boundary as an integer
+    context: |
+      Spec: openspec/changes/lua-command-runtime-and-policies/specs/command-runtime/spec.md.
+      SAME VERB AS 1375-amye. That row files `run` as the timeout/setsid/
+      flock replacement with the preflight door as its first caller; this
+      row is the AGENT-facing shape of the same verb (named flags, --json,
+      --argv-json, the policy gate, the capture bound). Whichever lands
+      first, the other adds its arms to the same run_verb.rs; neither may
+      add a second spawn path.
+      WHY --argv-json: Git Bash's MSYS conversion rewrote `\.` to `/.` in a
+      cosign identity regexp and broke a release (1425-8wir, fixed as
+      `[.]`); a wsl.exe argument lost its quoting and a fragment ran a
+      poweroff as root (smoke-e2e-findings-v56.9.27.2-windows). Both are
+      the same class: an argument crossed a shell boundary as text. Reading
+      argv as a JSON array on stdin means NO argument is on the command
+      line at all, so there is nothing for MSYS or wsl.exe to convert.
+      Cross-locus dispatch (Windows host to WSL guest) stays in the one
+      constructor 795-jjw3 allows (crates/tillandsias-core wsl.rs) and
+      passes argv-json through it; it is out of scope here.
+      NAMED PARAMETERS ARE FLAGS: --cwd, --env, --timeout-ms, --capture-bytes,
+      --stdin-file. There is no positional string form and no --shell.
+    exit_criteria:
+      - '`tillandsias-plan run --json --timeout-ms 5000 -- printf "a b"` prints exactly one JSON object with keys run_id,status,code,ok,stdout,stderr,truncated,wall_ms,argv,policy and exits 0; a non-zero child exit is reported as code with the verb exiting 0 (status is a VALUE, not the verb''s exit) unless --exit-with-child is given (pre-fix: FAILS — capabilities lists no `run`)'
+      - 'an argument containing a space, a double quote and `*` reaches the child as ONE argv entry, proven by a child that prints argc and its argv[1] — asserted on Linux, and by filed events from macbookair and from yolanda running the NATIVE .exe (pre-fix: FAILS — no verb)'
+      - 'with `--argv-json -` and the JSON array ["printf","%s","C:\\x\\."] on stdin, Git Bash on yolanda delivers the third element unconverted (a filed event with the output), where the positional form under MSYS rewrites it (pre-fix: FAILS — no such form)'
+      - 'a request the policy denies prints the same JSON with status="policy_denied", rule_id, why, remedy, and no run_id, exits 1, and no child was spawned (pre-fix: FAILS)'
+      - 'the child sees ONLY the PROC_RUN_BASE_ENV_PASSTHROUGH set, TILLANDSIAS_* and the --env additions: a caller exporting GH_TOKEN=x runs `run -- env` and GH_TOKEN is absent from stdout (pre-fix: FAILS — nothing to run)'
+      - 'stdout exceeding --capture-bytes yields truncated:true and ok:false in the JSON (inherits 1443-esm5)'
+    verifiable_closure: |
+      bash scripts/test-run-verb-agent-door.sh
+      exits 0 on Linux with the six arms (the two platform arms assert on
+      Linux and are re-asserted by filed events from macOS and native
+      Windows before this row closes). Pre-fix: FAILS at arm 1.
+    next_action: >
+      Implement run_verb.rs over tillandsias_exec::Command, call
+      command_policy before spawn, add the --argv-json reader, print the
+      JSON result, and write the fixture; ask macbookair and yolanda for
+      the two platform events.
+    notes: |
+      size: M
+      implementer_tier: opus
+      The policy call sits in this verb's spawn path (enforcement path
+      rule); the argv-json form is the Windows quoting fix and must be
+      verified on the native binary, not only in WSL.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          The agent door; coordinates with 1375-amye on one run_verb.rs.
+
+  - packet_id: a-per-project-branch-discipline-seed-tillandsias-branch-discipline-yaml-read-by-a-discipline-verb-and-an-mcp-tool-so-the-integration-branch-the-work-ref-grammar-and-the-protected-default-branch-are-data-a-tool-asks-for-never-a-constant-it-hardcodes
+    order: 1443-w79y
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [rust, plan-binary, branch-discipline, mcp, methodology, tests]
+    estimated_hours: 6
+    depends_on: []
+    owned_files:
+      - .tillandsias/branch-discipline.yaml
+      - crates/tillandsias-plan/src/branch_discipline.rs
+      - crates/tillandsias-plan/src/main.rs
+      - crates/tillandsias-plan/capabilities.txt
+      - images/default/config-overlay/mcp/forge-plan.sh
+      - methodology/multi-host-development.yaml
+      - scripts/test-branch-discipline-verb.sh
+    title: |
+      BRANCH DISCIPLINE IS SEEDED: .tillandsias/branch-discipline.yaml (level 0|1|2 per 1363-xp2v's ladder, per-rule enforcement advised|warn|enforced, default_branch, integration per platform, work-ref and salvage grammar, plan-only lane paths, freeze namespace, the operator-worded denial message) is the per-project seed; `tillandsias-plan discipline show|target|check-ref` and a forge-plan MCP tool `discipline_show` answer from it with level and enforcement on every answer; a project with no seed is level 0 advised and nothing is refused; methodology/multi-host-development.yaml points at the seed as its machine-readable projection
+    context: |
+      Spec: openspec/changes/lua-command-runtime-and-policies/specs/branch-discipline/spec.md.
+      TODAY the branch model lives in prose (multi_host_development.
+      branch_inventory, branch_namespaces.creation_regex, work_ref_lane),
+      the mirror's grammar is an env var in images/git/entrypoint.sh
+      (TILLANDSIAS_BRANCH_CREATION_REGEX) that does NOT admit work/<order>
+      while the methodology regex does, and pre-push-main-branch-affordance
+      hardcodes "linux-next". Three places, three answers — the 1315-4a7j
+      shape again. A seed file the runtime, the mirror and the hooks all
+      READ makes one answer.
+      TILLANDSIAS'S OWN SEED encodes today's rules exactly (main protected;
+      linux/forge → linux-next, windows → windows-next, macos → osx-next;
+      work/[0-9]{3,4}-[a-z0-9]{4}; salvage/<host>/<yyyymmdd>-<slug>). A
+      project WITHOUT a seed is LEVEL 0 ADVISED (1363-xp2v's floor is
+      absolute: a new bare project pushes freely, including to its default
+      branch); the built-in default names the remote's HEAD branch as the
+      default branch, admits every ref, refuses nothing, and every answer
+      says `source=default level=0 enforcement=advised`. The seed's `level`
+      is DECLARED here; whether it is derived from observable facts is
+      1363-xp2v's open research and this row does not pre-empt it.
+      THE MESSAGE IS THE OPERATOR'S: messages.default_branch_denied holds
+      the text the mirror and the land tool print ("push to main denied,
+      this project uses branch <b> for integration and work/<id> for work;
+      switch to the corresponding branch and rebase to remote"), with the
+      branch names substituted from the seed.
+    exit_criteria:
+      - '`tillandsias-plan discipline target --platform macos` prints osx-next and `--platform forge` prints linux-next, each with `source=seed level=2` (pre-fix: FAILS — no verb)'
+      - '`tillandsias-plan discipline check-ref refs/heads/main` prints refused:discipline:default-branch-protected:enforced with why: and a remedy: line carrying the seed''s substituted message; `check-ref refs/heads/work/1443-w79y` prints ok:discipline:work-ref; `check-ref refs/heads/feature-x` prints warn:discipline:ref-outside-grammar because this repository''s seed holds the grammar rule at warn, and the same ref against a fixture seed holding it at enforced prints refused:discipline:ref-outside-grammar:enforced (pre-fix: FAILS)'
+      - 'against a scratch project with NO seed, `check-ref refs/heads/main` prints ok:discipline:default-branch:level=0 and nothing is refused (the absolute floor of the 2026-09-22 ruling) (pre-fix: FAILS — no verb, and pre-push-main-branch-affordance would block it)'
+      - '`tillandsias-plan discipline show --json` carries digest equal to `tillandsias-plan hash sha256 .tillandsias/branch-discipline.yaml`, so a mirror-published digest can be compared to the checkout''s seed (pre-fix: FAILS)'
+      - 'a seed whose integration branch equals default_branch at level 1 or 2, whose work_ref regex does not compile, or whose level is lower than a previously published level (levels are forward-only) is refused at load with refused:discipline-seed:<reason> and the verb answers from the built-in default with source=default level=0 (pre-fix: FAILS)'
+      - 'the forge-plan MCP server lists a `discipline_show` tool and `tools/call` returns the same JSON; scripts/check-mcp-expert-health.sh stays green (pre-fix: FAILS — no tool)'
+      - 'methodology/multi-host-development.yaml gains one key, branch_discipline_seed, naming the file and stating that the seed is the machine-readable projection of branch_inventory and branch_namespaces (a pointer, not a duplicate of the prose)'
+    verifiable_closure: |
+      bash scripts/test-branch-discipline-verb.sh
+      exits 0 with the arms above (the MCP arm drives forge-plan.sh over
+      stdio with a tools/call request). Pre-fix: FAILS at arm 1.
+    next_action: >
+      Write the seed for this repository, branch_discipline.rs (parse,
+      validate, target, check-ref, digest), the dispatch arm, the MCP arm
+      in forge-plan.sh, the methodology pointer and the fixture.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Data plus a small verb; nothing here refuses a push yet (1443-uit6
+      and 1443-z3vb consume it).
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          The seed and the verb every other discipline consumer reads.
+
+  - packet_id: land-on-platform-branch-probes-the-branch-discipline-before-it-fetches-or-gates-refuses-the-protected-default-branch-with-the-seeded-message-picks-the-integration-branch-from-the-seed-and-compares-the-mirror-published-digest-to-the-checkouts-seed
+    order: 1443-z3vb
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [land, branch-discipline, gate-integrity, bash, tests]
+    estimated_hours: 5
+    depends_on: [a-per-project-branch-discipline-seed-tillandsias-branch-discipline-yaml-read-by-a-discipline-verb-and-an-mcp-tool-so-the-integration-branch-the-work-ref-grammar-and-the-protected-default-branch-are-data-a-tool-asks-for-never-a-constant-it-hardcodes]
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+      - scripts/test-land-discipline-probe.sh
+    title: |
+      THE LAND TOOL ASKS THE RUNTIME WHERE TO LAND: before any fetch or gate, scripts/land-on-platform-branch.sh runs the discipline probe — `tillandsias-plan discipline check-ref` on the requested target, the platform's integration branch from the seed when no branch is named, and `git ls-remote origin refs/tillandsias/discipline/*` compared to the checkout's seed digest — and refuses refused:land:discipline:<reason> with the seeded message instead of gating for fifteen minutes and learning the answer from GitHub's GH006
+    context: |
+      Today the tool takes the branch positionally, defaults to the CURRENT
+      branch, and discovers a protected target only after the gate, from
+      the remote's rejection (relay-refs.sh prints ADVICE on GH006). A host
+      parked on a work ref that runs the tool with no argument pushes that
+      work ref as if it were trunk. The probe is cheap (one ls-remote, one
+      local verb) and runs FIRST so a refusal costs seconds, not a gate.
+      Verdict tokens are an interface (1247-lwek is adding why/remedy to
+      the thirteen existing ones): this row ADDS refused:land:discipline:*
+      and land:target:<branch>:from=<seed|mirror-ref|default> and changes
+      no existing token.
+      This is the bash tool; 1443-u66u ports it to Lua and inherits the
+      probe as a proc.run call.
+    exit_criteria:
+      - '`scripts/land-on-platform-branch.sh main` in this repository (level 2, rule enforced) prints refused:land:discipline:default-branch-protected with why: and the seed''s remedy: line and exits 9 BEFORE any `git fetch` (proven by a fixture whose origin is unreachable) (pre-fix: FAILS — the tool fetches, gates, pushes, and the refusal is the remote''s)'
+      - 'in a scratch level-0 project (no seed), `land-on-platform-branch.sh main` prints land:target:main:from=default:level=0 and proceeds — the floor is absolute and the tool never refuses a bare project''s default branch (pre-fix: FAILS — no probe, no level)'
+      - 'on a checkout whose current branch is work/1443-z3vb, running the tool with no argument prints land:target:linux-next:from=seed:level=2 and proceeds against linux-next (pre-fix: FAILS — it lands work/1443-z3vb itself)'
+      - 'when origin publishes refs/tillandsias/discipline/<digest>/<epoch> and the digest differs from the checkout''s seed, the tool prints refused:land:discipline:seed-drift naming both digests (pre-fix: FAILS — nothing reads the ref); when origin publishes nothing, it prints land:discipline:mirror-silent and continues from the seed'
+      - 'a named target outside the seed''s grammar (`scripts/land-on-platform-branch.sh feature-x`) is refused:land:discipline:ref-outside-grammar (pre-fix: FAILS)'
+      - 'the thirteen existing land fixtures (scripts/test-land-*.sh) stay green unchanged'
+    verifiable_closure: |
+      bash scripts/test-land-discipline-probe.sh
+      exits 0 with the arms above against a scratch origin; pre-fix FAILS
+      at arm 1 (the refusal arrives, if at all, after the gate).
+    next_action: >
+      Add the probe block at the top of the attempt loop, the two new
+      token families with affordances, and the fixture; leave every
+      existing verdict line byte-identical.
+    notes: |
+      size: M
+      implementer_tier: opus
+      It changes where a push goes; a wrong default lands a work ref on
+      trunk or refuses every land on the fleet.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          The land tool's discipline probe, in bash, ahead of the Lua port.
+
+  - packet_id: pre-push-main-branch-affordance-is-the-first-hook-ported-to-lua-on-the-sandboxed-lua-cli-with-a-stub-that-fails-closed-without-a-binary-and-a-remedy-read-from-the-discipline-seed-instead-of-a-hardcoded-branch
+    order: 1443-sb9b
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [lua, hooks, branch-discipline, macos, tests]
+    estimated_hours: 4
+    depends_on: [a-per-project-branch-discipline-seed-tillandsias-branch-discipline-yaml-read-by-a-discipline-verb-and-an-mcp-tool-so-the-integration-branch-the-work-ref-grammar-and-the-protected-default-branch-are-data-a-tool-asks-for-never-a-constant-it-hardcodes]
+    owned_files:
+      - scripts/lua/pre-push-main-branch-affordance.lua
+      - scripts/hooks/pre-push-main-branch-affordance.sh
+      - scripts/test-pre-push-main-branch-affordance.sh
+    title: |
+      ONE REAL SCRIPT PORTED: scripts/hooks/pre-push-main-branch-affordance.sh becomes scripts/lua/pre-push-main-branch-affordance.lua run by the sandboxed `tillandsias-plan lua` CLI — same verdict tokens, the suggested branch read from the discipline seed (today it hardcodes linux-next and guesses from OS and TILLANDSIAS_HOST_KIND), and the .sh reduced to a stub that execs the binary and fails CLOSED when none runs
+    context: |
+      The design's rule: port on touch, keep the verdict grammar byte for
+      byte, delete the shell logic in the same commit. This hook is the
+      right first port because it is small, it is the model 1247-amcu
+      copies, and its one defect is exactly what the seed fixes (a
+      hardcoded branch). It runs with the sandboxed `lua` CLI that exists
+      today (1375-btuf) — no dependence on 1384-bqhy's script run; when
+      that verb lands the stub switches to it for the verdict module.
+      The stub fails closed: a hook that cannot find a runnable plan
+      binary prints blocked:main-branch-affordance:no-plan-binary and exits
+      1, the same posture test-pre-push-plan-lane-fails-closed-without-
+      binary.sh already pins for the plan lane.
+    exit_criteria:
+      - 'fed `refs/heads/x <sha> refs/heads/main <sha>` on stdin, the Lua hook prints blocked:main-branch-affordance and a remedy naming the seed''s integration branch for the platform, with source=seed (pre-fix: FAILS — the .sh prints a hardcoded linux-next and never says where it came from)'
+      - 'the .sh is at most fifteen lines, execs `"$PLAN" lua scripts/lua/pre-push-main-branch-affordance.lua`, and with TILLANDSIAS_PLAN_BIN pointing at a non-runnable file prints blocked:main-branch-affordance:no-plan-binary and exits 1 (pre-fix: FAILS — no stub; the .sh carries the logic)'
+      - 'NEGATIVE CONTROL: stdin naming only refs/heads/linux-next prints ok:main-branch-affordance and exits 0, on Linux and (filed event) on macOS bash 3.2'
+      - 'scripts/check-bash-dialect.sh and scripts/check-sigpipe-verdict-pipelines-added.sh stay green over the stub'
+    verifiable_closure: |
+      bash scripts/test-pre-push-main-branch-affordance.sh
+      exits 0 with the arms above. Pre-fix: FAILS at arm 1 (no .lua, and
+      the .sh answer carries no source).
+    next_action: >
+      Write the .lua over the discipline verb (proc.run of the plan binary
+      or, when 1443-w79y exposes it, a Lua `discipline` table), reduce the
+      .sh to the stub, write the fixture, ask macbookair for the bash 3.2
+      event.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      A small port with a clear model; the fail-closed stub is the one
+      judgment and it copies an existing fixture's posture.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          The first script ported on the existing sandboxed lua CLI.
+
+  - packet_id: a-temporary-claude-code-pretooluse-hook-classifies-a-raw-bash-command-against-the-seven-measured-failure-shapes-through-the-policy-engine-refuses-with-why-and-remedy-asks-for-consent-on-destructive-classes-and-prints-its-own-retirement-condition
+    order: 1443-we89
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [hooks, claude-code, policy, bash, migration, tests]
+    estimated_hours: 8
+    depends_on: [a-command-policy-evaluator-in-the-plan-binary-decides-allow-deny-or-consent-for-an-argv-request-from-a-built-in-floor-plus-a-per-project-seed-that-can-only-tighten-it-and-every-refusal-names-why-and-remedy]
+    owned_files:
+      - scripts/hooks/claude-pretooluse-command-policy.sh
+      - crates/tillandsias-plan/src/command_policy.rs
+      - .claude/settings.json
+      - images/default/config-overlay/claude/settings.json
+      - scripts/test-pretooluse-command-policy.sh
+    title: |
+      THE TEMPORARY BRIDGE (the operator called it a temporary fix): a Claude Code PreToolUse hook for the Bash tool, a bash-3.2-clean stub of under sixty lines that hands the tool's JSON to `tillandsias-plan policy classify-bash`, which classifies the raw command against the seven measured shapes — unquoted heredoc carrying backticks or $( ), SIGPIPE verdict pipeline under pipefail, verdict read through `| tail -1`, gh auth mutation, destructive class, wsl.exe/bash -c string with a pipe or backtick, token-shaped literal — and answers deny (exit 2 with why+remedy), ask (permissionDecision ask) or allow; `--status` prints the decision counts and the hook's own RETIREMENT CONDITION
+    context: |
+      WHY A HOOK AND WHY TEMPORARY. The damage of failure shape 1 happens in
+      the shell before any file exists to lint: on 2026-09-27 two fragments
+      lost their backticked spans to `<<EOF` and one run EXECUTED `openspec
+      init` and `openspec update` in a protected checkout (1430-rnpd's
+      correction 2aa367c0; 1256-t3w8 is the older row). No decider can see
+      that; only the tool boundary can. The hook is the bridge until agents
+      call the runtime directly (1443-8pur, 1443-r4cj) and the Bash tool is
+      no longer the default door.
+      THE CLASSIFIER IS IN RUST, the stub is not: bash cannot be trusted to
+      parse bash (the harness's own worktree guard refuses compound shells
+      for the same reason). classify-bash is lexical over the seven shapes
+      with a stated grammar, not a parser; 1252-r72q's tree-sitter lint is
+      the future parser and the classifier hands over to it when it lands.
+      DECISION MAPPING to Claude Code's hook contract: deny = exit 2 with
+      the refusal on stderr (the model sees it); ask = stdout JSON
+      {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"…"}};
+      allow = exit 0 silently. Unknown shapes ALLOW — a bridge that refuses
+      what it does not understand stops the fleet.
+      RETIREMENT CONDITION, printed by --status and pinned by the fixture:
+      the hook retires when (a) 1443-8pur and 1443-r4cj are closed on every
+      locus, (b) the audit log (1443-w9hf) shows zero deny and zero ask
+      decisions from caller=pretooluse for fourteen consecutive fleet days,
+      and (c) the operator flips the Bash tool's default. TILLANDSIAS_
+      PRETOOLUSE_HOOK=off is the kill switch and is logged when used.
+      WIRING is a settings.json hooks entry for PreToolUse matcher Bash in
+      the project's .claude/settings.json and the forge overlay; the
+      architect session that filed this row did not edit either file (no
+      edits to settings files was its rule), so the operator decides
+      whether the project file is committed or the entry is per host
+      (open question in the design note).
+    exit_criteria:
+      - 'hook JSON whose command is a `cat <<EOF` heredoc whose body contains a backtick span exits 2 with refused:bash-policy:unquoted-heredoc-executes-prose, a why: line and a remedy: line naming `<<''EOF''` and `tillandsias-plan run --stdin-file` (pre-fix: FAILS — no hook exists; the command runs and executes the span)'
+      - 'a command containing `set -o pipefail` and a pipeline ending in `grep -q` exits 2 with refused:bash-policy:sigpipe-verdict-pipeline and a remedy naming `run --json` and `grep -q PAT <<<"$var"`; a pipeline ending in `| tail -1` whose left side is a check-/test- script is refused:bash-policy:verdict-through-tail (pre-fix: FAILS)'
+      - '`gh auth refresh`, `gh auth login` and `gh auth token` exit 2 with refused:bash-policy:no-credential-mutation (pre-fix: FAILS)'
+      - '`podman system reset --force`, `tillandsias --reset-state`, `rm -rf <path outside cwd, TMPDIR and the scratchpad>` and `git push --force origin linux-next` print the ask JSON with a reason naming the consent class, never allow (pre-fix: FAILS)'
+      - '`wsl.exe -d x -- bash -lc "a | b"` and `bash -c "$(cat f)"` exit 2 with refused:bash-policy:string-crosses-a-boundary (pre-fix: FAILS)'
+      - 'NEGATIVE CONTROL: `git status`, `ls -la /tmp`, a QUOTED heredoc `<<''EOF''` whose body contains backticks, and `printf %s "$x" | sort` (no pipefail, no verdict consumer) all exit 0 with nothing on stdout'
+      - '`scripts/hooks/claude-pretooluse-command-policy.sh --status` prints decisions=<deny>/<ask>/<allow> from the audit log and the three-part retirement condition verbatim; with TILLANDSIAS_PRETOOLUSE_HOOK=off every input exits 0 and the audit records kill_switch=1 (pre-fix: FAILS)'
+      - 'the stub passes scripts/check-bash-dialect.sh (no mapfile, no declare -A, no ${x,,}) and a filed event from macbookair shows it running under bash 3.2'
+    verifiable_closure: |
+      bash scripts/test-pretooluse-command-policy.sh
+      exits 0 feeding each fixture JSON to the stub and asserting exit code,
+      stdout and the verdict token. Pre-fix: FAILS at arm 1 (no hook).
+    next_action: >
+      Add classify-bash to command_policy.rs with the seven shapes and
+      their grammar in the header, write the stub, the fixture and the
+      two settings entries (pending the operator's answer on where the
+      entry lives), then measure one day of decisions before widening.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Every agent Bash call on the fleet passes through it; a false deny
+      halts work and a false allow repeats the heredoc incident. The
+      classifier's grammar must be stated so the negative arms are real.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design; the seven
+      shapes are the design note §1 table with their measured incidents.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          The bridge hook, designed as temporary with its removal criterion
+          inside it.
+
+  - packet_id: the-enclave-git-mirror-enforces-the-seeded-branch-discipline-at-pre-receive-refuses-the-protected-default-branch-with-the-seeded-message-and-publishes-refs-tillandsias-discipline-digest-epoch-so-a-client-can-read-the-enforced-level-without-pushing
+    order: 1443-uit6
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [mirror, git, branch-discipline, pre-receive, security, tests]
+    estimated_hours: 10
+    depends_on: [a-per-project-branch-discipline-seed-tillandsias-branch-discipline-yaml-read-by-a-discipline-verb-and-an-mcp-tool-so-the-integration-branch-the-work-ref-grammar-and-the-protected-default-branch-are-data-a-tool-asks-for-never-a-constant-it-hardcodes, a-release-freeze-is-invisible-inside-a-forge-because-the-mirror-exports-only-refs-heads-so-status-reads-none-and-the-pre-push-freeze-check-admits-a-code-push]
+    owned_files:
+      - images/git/pre-receive-hook.sh
+      - images/git/publish-discipline.sh
+      - images/git/entrypoint.sh
+      - images/git/reconcile-exported-heads.sh
+      - scripts/test-mirror-discipline.sh
+    title: |
+      THE MIRROR ANSWERS WITH THE LEVEL OF DISCIPLINE ACTIVELY ENFORCED: images/git/pre-receive-hook.sh reads .tillandsias/branch-discipline.yaml from the integration branch's tree (level 0 advised when absent — nothing refused), applies each rule at ITS enforcement (advised = silent, warn = today's warning, enforced = rejection): an update to refs/heads/<default_branch> under an enforced rule is rejected with the seed's message before relaying, a new ref outside the grammar is warned or rejected per the rule, refs/tillandsias/discipline-probe/* is always rejected carrying the discipline text, and publish-discipline.sh keeps exactly one refs/tillandsias/discipline/<level>/<enforcement>/<digest>/<epoch> ref pointing at the seed blob on every reconcile tick — so `git ls-remote origin 'refs/tillandsias/discipline/*'` reads the level, the enforcement and the digest without pushing
+    context: |
+      Spec deltas: openspec/changes/lua-command-runtime-and-policies/specs/git-mirror-service/spec.md
+      and specs/branch-discipline/spec.md.
+      MEASURED PREMISE THAT REDIRECTS THE OPERATOR'S PROPOSAL: a `git push
+      --dry-run` sends no ref commands, so the server's pre-receive never
+      runs and cannot answer it. The mirror's answer is therefore a
+      PUBLISHED ref in the same family as refs/tillandsias/upstream-auth/*
+      (probe-upstream-auth.sh, read by check-credential-channel.sh) and
+      refs/tillandsias/sync-state/* (publish-sync-state.sh): ls-remote reads
+      the digest in the ref name; a fetch of the ref yields the seed bytes
+      themselves. For a client that wants the server's own wording without
+      a real ref change, a push to refs/tillandsias/discipline-probe/<epoch>
+      is ALWAYS rejected and the rejection carries the discipline lines —
+      a rejected push mutates nothing, and the local pre-push gate already
+      exempts refs/tillandsias/* (1176-9vqn).
+      TODAY the hook never pre-refuses a protected branch (GitHub does,
+      after the relay, as GH006 → ADVICE), its grammar is warn-only and its
+      env-var regex lacks work/<order> while the methodology admits it.
+      FREEZE: the same reconcile tick that publishes the discipline ref
+      exports refs/tillandsias/freeze/* from upstream (1429-4y9f owns that
+      fix; this row depends on it and does not duplicate it).
+    exit_criteria:
+      - 'in a scratch bare mirror running the images/git hook scripts with a level-2 seed whose default-branch rule is enforced, a push to refs/heads/main is rejected BEFORE tillandsias-relay-refs runs, and the rejection text equals the seed''s messages.default_branch_denied with the branch names substituted (pre-fix: FAILS — the hook relays and the refusal, if any, is GitHub''s GH006)'
+      - '`git ls-remote <mirror> ''refs/tillandsias/discipline/*''` lists exactly one ref whose name carries the level, the enforcement word and the sha256 digest of the seed; `git fetch` of that ref followed by `git cat-file -p` yields the seed bytes; after the seed changes on the integration branch the next reconcile tick replaces the ref (pre-fix: FAILS — nothing is published)'
+      - 'ABSOLUTE FLOOR (1363-xp2v ruling 2026-09-22): in a scratch mirror for a project with NO seed, a push to its default branch is ACCEPTED and relayed, no warning is printed, and the published ref reads level 0 enforcement advised (pre-fix: FAILS — nothing is published; and a pre-fix hook that protected HEAD by default would have violated the ruling)'
+      - 'with the grammar rule at warn, a push creating refs/heads/feature-x is accepted with the warning (today''s behaviour) and refs/heads/work/1443-uit6 is accepted WITHOUT a warning (pre-fix: FAILS — the env regex lacks work/ and warns on it); with the rule at enforced in a fixture seed, feature-x is rejected with the grammar hint while work/ and salvage/ refs are accepted'
+      - 'a push to refs/tillandsias/discipline-probe/<epoch> is always rejected and the rejection carries the four discipline lines (default, integration, work grammar, rebase guidance) (pre-fix: FAILS)'
+      - 'NEGATIVE CONTROL: a fast-forward push to the integration branch still relays exactly as today (the existing relay fixture stays green), and refs/tillandsias/upstream-auth/* keeps its single-ref invariant'
+    verifiable_closure: |
+      bash scripts/test-mirror-discipline.sh
+      exits 0 against a scratch bare repository with the hook and
+      publisher installed (hermetic; no container needed). Pre-fix: FAILS
+      at arm 1.
+    next_action: >
+      Read the seed in pre-receive (git cat-file from the integration
+      branch tip), add the default-branch refusal and the grammar refusal,
+      add publish-discipline.sh to run_auth_probe's tick, add the probe
+      namespace, write the fixture.
+    notes: |
+      size: L
+      implementer_tier: opus
+      Pre-receive is the one server-side gate the fleet has; a wrong
+      refusal blocks every forge push, a missing one lets main move.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design; the
+      dry-run finding was checked against images/git/pre-receive-hook.sh
+      and probe-upstream-auth.sh before filing.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          Mirror-side enforcement and the published discipline ref.
+
+  - packet_id: land-on-platform-branch-becomes-scripts-lua-land-on-platform-branch-lua-with-every-existing-verdict-token-byte-identical-the-push-bounded-by-proc-run-the-stamp-read-as-a-value-the-freeze-read-through-the-exported-refs-and-the-sh-reduced-to-a-stub
+    order: 1443-u66u
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [lua, land, gate-integrity, release, tests]
+    estimated_hours: 14
+    depends_on: [land-on-platform-branch-probes-the-branch-discipline-before-it-fetches-or-gates-refuses-the-protected-default-branch-with-the-seeded-message-picks-the-integration-branch-from-the-seed-and-compares-the-mirror-published-digest-to-the-checkouts-seed, pre-push-main-branch-affordance-is-the-first-hook-ported-to-lua-on-the-sandboxed-lua-cli-with-a-stub-that-fails-closed-without-a-binary-and-a-remedy-read-from-the-discipline-seed-instead-of-a-hardcoded-branch]
+    owned_files:
+      - scripts/lua/land-on-platform-branch.lua
+      - scripts/land-on-platform-branch.sh
+      - scripts/test-land-verdict-through-a-pipe.sh
+      - scripts/test-land-frozen.sh
+    title: |
+      THE LAND TOOL IS LUA: scripts/lua/land-on-platform-branch.lua keeps the whole verdict vocabulary byte-identical (thirteen refused:land:* tokens, ok:land:<sha>:attempt-N, ok:land-adopts-valid-stamp, the 1443-z3vb discipline tokens), runs every git and gate command through proc.run with a deadline so a hung push is status=timed_out mapped to refused:land:push-emitted-nothing, reads `gate-stamp.sh verify` as a VALUE and refuses stale:fixture-borrowed-stamp (1442-22d2), reads the freeze through the exported refs and refuses refused:land:frozen:<branch> before gating, and the .sh is a stub that fails closed
+    context: |
+      Keeps today's guarantees by construction: gate-before-push (stamp
+      adoption or build.sh --check, unchanged order), proof against the
+      remote (fetch then merge-base --is-ancestor, unchanged), the freeze
+      (read from origin's refs/tillandsias/freeze/* which 1429-4y9f/
+      1443-uit6 make visible in forges), stamp integrity (the verify
+      verdict is a typed value; a borrowed stamp is refused, not adopted).
+      What the port DELETES as a class: `| tail -1` readers of the gate
+      log, `timeout 300 git push` whose rc is decoration, and the merged
+      2>&1 capture that hides which line was the refusal (design §1 rows
+      A, E, F). The thirteen land fixtures are the interface and must pass
+      unchanged against the stub. Runner: `tillandsias-plan lua` today;
+      when 1384-bqhy lands, `script run` with the verdict module — the
+      tokens do not change either way.
+    exit_criteria:
+      - 'every scripts/test-land-*.sh fixture passes unchanged against the stub .sh, which execs the .lua (pre-fix: FAILS — no .lua exists)'
+      - '`git grep -c "| tail" scripts/land-on-platform-branch.sh` is 0 and the file is at most twenty lines; the logic lives in the .lua (pre-fix: FAILS — 770 lines of bash)'
+      - 'a push that emits nothing for the deadline returns status=timed_out from proc.run and the tool prints refused:land:push-emitted-nothing:<timeout> exactly as today (scripts/test-land-push-bounded.sh green through the .lua)'
+      - 'with a stamp that `gate-stamp.sh verify` reports as stale:fixture-borrowed-stamp the tool does NOT adopt and runs the gate; the verify output is read as a value, not grepped from a merged log (pre-fix: FAILS — the bash tool predates the verdict and adopts on ok:gate-fresh only)'
+      - 'with a freeze ref for the target branch on origin the tool prints refused:land:frozen:<branch>:by=<host> BEFORE the gate and exits 10; plan-only trees are still admitted (pre-fix: FAILS — the bash tool never reads freeze refs; the pre-push hook does, after a fifteen-minute gate)'
+      - 'the .lua contains no `bash -c` and no shell string: `git grep -c ''"bash", *"-c"'' scripts/lua/land-on-platform-branch.lua` is 0'
+    verifiable_closure: |
+      bash scripts/test-land-verdict-through-a-pipe.sh
+      then every other scripts/test-land-*.sh and the new
+      scripts/test-land-frozen.sh, all exit 0 through the stub. Pre-fix:
+      the frozen fixture FAILS (no such refusal) and the stub does not exist.
+    next_action: >
+      Port step by step in the attempt loop's order, keeping each verdict
+      line as a literal, add the freeze read and the borrowed-stamp
+      refusal, reduce the .sh to the stub, run all land fixtures.
+    notes: |
+      size: L
+      implementer_tier: opus
+      The push decision of the fleet's only integration gate.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          The Lua land tool; the fixtures are the interface.
+
+  - packet_id: a-fixture-regime-scope-in-the-policy-engine-refuses-any-write-into-the-real-checkouts-git-dir-or-outside-the-declared-scratch-from-fs-write-and-proc-run-so-a-fixture-cannot-mint-a-green-stamp-as-a-class
+    order: 1443-fpck
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [policy, gate-integrity, fixtures, litmus, lua, tests]
+    estimated_hours: 6
+    depends_on: [a-command-policy-evaluator-in-the-plan-binary-decides-allow-deny-or-consent-for-an-argv-request-from-a-built-in-floor-plus-a-per-project-seed-that-can-only-tighten-it-and-every-refusal-names-why-and-remedy]
+    owned_files:
+      - crates/tillandsias-plan/src/command_policy.rs
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - scripts/run-litmus-test.sh
+      - scripts/litmus-stdlib.sh
+      - scripts/test-fixture-git-dir-scope.sh
+    title: |
+      FILESYSTEM SCOPE POLICY FOR FIXTURES: under regime=fixture with TILLANDSIAS_FIXTURE_SCOPE=<scratch>, fs.write/mkdir and proc.run refuse a write into the real checkout's git dir (any path under `git rev-parse --absolute-git-dir` of the checkout) or outside the declared scope, with refused:policy:fixture-writes-outside-scope and a remedy naming the scratch worktree — so the 1442-22d2 shape (a fixture minting a full-scope gate stamp in the real git dir) is unconstructible for every fixture, not fixed in one
+    context: |
+      1442-22d2 fixes ONE fixture (snapshot/restore plus the borrowed-stamp
+      refusal). This row makes the class unrepresentable: run-litmus-test.sh
+      exports the fixture regime and scope for every step, and the engine
+      refuses the write before it happens. Today fs.write is rooted at the
+      REPO root, and the git dir is inside it, so a fixture can write
+      $GIT_DIR/tillandsias-gate-stamp through the sandbox. proc.run has no
+      fs view at all; for it the rule is by argv: gate-stamp.sh write, git
+      update-ref, git push and rm under the git dir are denied under the
+      fixture regime.
+      A hermetic fixture is silent about the substrate: the fixture here
+      uses a real scratch worktree with a real git dir, and asserts on the
+      REAL checkout's git dir mtime and bytes before and after.
+    exit_criteria:
+      - 'with TILLANDSIAS_REGIME=fixture and TILLANDSIAS_FIXTURE_SCOPE=<scratch>, fs.write("<real git dir>/tillandsias-gate-stamp", "x") returns a refusal refused:policy:fixture-writes-outside-scope with why: and remedy: and the file is untouched (pre-fix: FAILS — the write succeeds because the git dir is under the repo root)'
+      - 'proc.run{argv={"bash","scripts/gate-stamp.sh","write","--scope","full","--dispatch","check"}} under the fixture regime returns status="policy_denied", rule_id="fixture-gate-stamp-write" (pre-fix: FAILS — it runs and writes)'
+      - 'scripts/run-litmus-test.sh exports the regime and scope for every step, and a litmus step that runs `gate-stamp.sh write` against the real git dir goes RED naming the rule (pre-fix: FAILS — 1442-22d2 reproduced exactly this step going green)'
+      - 'NEGATIVE CONTROL: the same fs.write and the same gate-stamp.sh write INSIDE the scope succeed, and a step under regime=gate (not fixture) is unaffected'
+    verifiable_closure: |
+      bash scripts/test-fixture-git-dir-scope.sh
+      exits 0 with the four arms; it snapshots the real git dir's stamp
+      and token bytes first and asserts them byte-identical at exit.
+      Pre-fix: FAILS at arm 1.
+    next_action: >
+      Add the fs-scope rule family to command_policy.rs, thread the regime
+      and scope into fs write verbs and proc_run, export them from the
+      litmus runner, write the fixture.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Gate integrity; the negative arm must prove the scope does not block
+      legitimate fixture writes or the runner stops working.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          The fixture scope rule that generalises 1442-22d2.
+
+  - packet_id: every-policy-decision-is-appended-to-a-per-host-audit-log-with-token-shaped-literals-redacted-and-tillandsias-plan-policy-audit-summarises-it-so-the-bridge-hooks-retirement-condition-and-a-refusal-storm-are-both-readable-numbers
+    order: 1443-w9hf
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [policy, observability, security, plan-binary, tests]
+    estimated_hours: 4
+    depends_on: [a-command-policy-evaluator-in-the-plan-binary-decides-allow-deny-or-consent-for-an-argv-request-from-a-built-in-floor-plus-a-per-project-seed-that-can-only-tighten-it-and-every-refusal-names-why-and-remedy]
+    owned_files:
+      - crates/tillandsias-plan/src/command_policy.rs
+      - crates/tillandsias-plan/src/main.rs
+      - scripts/test-command-policy-audit.sh
+    title: |
+      POLICY AUDIT LOG: every evaluate() appends one JSONL line {ts, run_id|null, host_kind, regime, caller, program, argv_digest, rule_id, decision, consent_source} to .cache/metrics/command-policy-audit.jsonl on the host; token-shaped literals are replaced by <redacted:token> in the log AND in any refusal text; `tillandsias-plan policy audit --since <dur>` prints counts per rule and decision and answers ok:policy-audit:empty when there is no log
+    context: |
+      The bridge hook's retirement condition (1443-we89) and the
+      "refusal storm" failure of a wrong rule are both numbers only if the
+      decisions are recorded. The log is per host, under .cache
+      (gitignored), never the shared timing path (1204-3s2s). Redaction
+      matches the token shapes the fleet has actually leaked (gh[pousr]_…,
+      -----BEGIN, hvs., AWS-style keys) and is applied before the line is
+      formatted, so a refusal that echoes argv cannot print a token.
+    exit_criteria:
+      - 'after `policy eval -- gh auth token` the log''s last line has decision="deny", rule_id="no-credential-mutation", program="gh", and the argv_digest is a sha256, not the argv (pre-fix: FAILS — no log)'
+      - '`policy eval -- curl -H "Authorization: token ghp_abcdefghijklmnopqrstuvwxyz0123456789"` writes <redacted:token> in the log line and the refusal/allow text, and `git grep`-style search of the log for ghp_ finds nothing (pre-fix: FAILS)'
+      - '`tillandsias-plan policy audit --since 24h` prints one line per (rule_id, decision) with a count and a total; with no log it prints ok:policy-audit:empty and exits 0 (pre-fix: FAILS — no verb)'
+      - 'NEGATIVE CONTROL: TILLANDSIAS_TIMING_LOG and /tmp/tillandsias-timing.jsonl do not grow across a hundred evaluations'
+    verifiable_closure: |
+      bash scripts/test-command-policy-audit.sh
+      exits 0 with the four arms under a redirected HOME. Pre-fix: FAILS
+      at arm 1.
+    next_action: >
+      Add the append in evaluate() behind one writer, the redactor, the
+      audit verb and the fixture.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Observation, not enforcement; the redactor is the one security
+      surface and its shapes are listed in the header.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          The audit log the retirement condition reads.
+
+  - packet_id: per-run-consent-tokens-for-destructive-command-classes-minted-by-the-operator-on-the-host-consumed-once-never-grantable-in-a-forge-and-the-smoke-skills-env-authorisation-mapped-to-the-substrate-reset-class-with-its-source-recorded
+    order: 1443-9f5w
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [policy, security, consent, plan-binary, tests]
+    estimated_hours: 6
+    depends_on: [a-command-policy-evaluator-in-the-plan-binary-decides-allow-deny-or-consent-for-an-argv-request-from-a-built-in-floor-plus-a-per-project-seed-that-can-only-tighten-it-and-every-refusal-names-why-and-remedy]
+    owned_files:
+      - crates/tillandsias-plan/src/command_policy.rs
+      - crates/tillandsias-plan/src/main.rs
+      - scripts/test-command-policy-consent.sh
+    title: |
+      CONSENT IS PER RUN AND OPERATOR-MINTED: `tillandsias-plan policy consent grant <class> [--ttl 30m]` writes a token bound to host, class and expiry under the runtime dir; `policy eval` allows a consent-class request ONCE against it and consumes it; an expired, foreign-host or already-consumed token answers refused:consent:invalid; in a forge the substrate-reset class is never grantable; TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 maps to a substrate-reset consent only for the two registered smoke skills and the audit records consent_source=env
+    context: |
+      The fleet rule (skills/smoke-curl-install-and-test-e2e, order
+      1004-vsh2): a destructive workstation action needs the operator's
+      authorisation for THAT RUN; an orchestrator's instruction is not it.
+      methodology.yaml's destructive_reset_policy says the two smoke skills
+      are pre-authorised on smoke hosts unless the env is 0. Both rules
+      survive: the token is the per-run consent; the env mapping is the
+      skills' pre-authorisation, recorded as such so an audit can tell
+      them apart. A peer cannot commit operator spend: the grant verb
+      refuses when TILLANDSIAS_HOST_KIND=forge or the container marker is
+      present.
+    exit_criteria:
+      - '`tillandsias-plan policy consent grant substrate-reset --ttl 30m` prints ok:consent:substrate-reset:until=<iso> and writes one token file readable only by the user (mode 0600) (pre-fix: FAILS — no verb)'
+      - '`policy eval -- podman system reset --force` with that token prints ok:policy:substrate-reset:consented and exits 0; the SAME eval run again prints consent:policy:substrate-reset and exits 4 — the token was consumed (pre-fix: FAILS)'
+      - 'a token whose host field differs, or whose expiry has passed, answers refused:consent:invalid:<reason> and is deleted (pre-fix: FAILS)'
+      - 'with TILLANDSIAS_HOST_KIND=forge, `consent grant substrate-reset` prints refused:consent:not-grantable-in-forge and exits 1 (pre-fix: FAILS)'
+      - 'with TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 and TILLANDSIAS_SKILL=smoke-curl-install-and-test-e2e, the eval allows substrate-reset and the audit line says consent_source=env; with the env set but no registered skill it still asks (pre-fix: FAILS)'
+    verifiable_closure: |
+      bash scripts/test-command-policy-consent.sh
+      exits 0 with the five arms under a redirected runtime dir. Pre-fix:
+      FAILS at arm 1.
+    next_action: >
+      Add the token store (path, format, mode), the grant/consume verbs,
+      the forge refusal, the env mapping with its source field, the fixture.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Consent is the destructive-action gate; the env mapping is the one
+      place a wrong rule pre-authorises a workstation wipe.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design; the skill
+      rule and the methodology rule were both read before filing.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          Per-run consent tokens; the smoke skills' env authorisation is
+          mapped, not replaced.
+
+  - packet_id: the-three-bash-deciders-report-their-population-against-the-bootstrap-shell-allowlist-on-stderr-and-a-retirement-decider-names-the-one-whose-population-has-shrunk-to-the-allowlist-so-each-bash-guard-retires-by-a-number-not-a-decision
+    order: 1443-xkwb
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [deciders, migration, bash, portability, tests]
+    estimated_hours: 4
+    depends_on: []
+    owned_files:
+      - scripts/check-bash-dialect.sh
+      - scripts/check-sigpipe-verdict-pipelines-added.sh
+      - scripts/check-jq-callsite-ratchet.sh
+      - scripts/portability/bootstrap-shell-allowlist.txt
+      - scripts/check-decider-retirement.sh
+      - scripts/test-decider-retirement.sh
+    title: |
+      HOW THE BASH DECIDERS RETIRE: scripts/portability/bootstrap-shell-allowlist.txt names the shell that must stay (installers, the cargo bootstrap in build.sh, hook stubs, image entrypoints before the binary ships — design §6.5); check-bash-dialect, check-sigpipe-verdict-pipelines-added and check-jq-callsite-ratchet print `population=<n> bootstrap=<b>` on STDERR (their stdout verdict line is an interface and does not change); scripts/check-decider-retirement.sh prints retire:<decider> when population equals bootstrap, else ok:decider-retirement:<n> live — advisory, so a decider retires when its number says so
+    context: |
+      The deciders were written for a bash corpus; as scripts move to
+      scripts/lua the corpus they scan shrinks toward the bootstrap set
+      and each one becomes a guard over nothing. 1384-bxhk's ratchet
+      counts the whole population; this row gives each decider its own
+      denominator and a retirement rule with teeth (a decider whose
+      population is EMPTY already refuses, 1374-4u6i; equal to bootstrap
+      is the new terminal state). The verdict line on stdout is grepped
+      exactly by consumers, so the new fields go to stderr.
+    exit_criteria:
+      - 'each of the three deciders prints `population=<n> bootstrap=<b>` on stderr and its stdout verdict line is byte-identical to today (pre-fix: FAILS — no such line)'
+      - 'scripts/check-decider-retirement.sh over a fixture tree whose scripts/ holds only allowlisted files prints retire:check-bash-dialect (and the other two) and exits 0; over the real tree prints ok:decider-retirement:3 live (pre-fix: FAILS — no script)'
+      - 'NEGATIVE CONTROL: a fixture tree with an empty scripts/ makes each decider refuse blocked:<name>:scan-empty, never retire'
+      - 'the allowlist entries each exist on disk (a dangling entry is refused) and the list is the design §6.5 table'
+    verifiable_closure: |
+      bash scripts/test-decider-retirement.sh
+      exits 0 with the four arms. Pre-fix: FAILS at arm 1.
+    next_action: >
+      Write the allowlist, add the stderr line to the three deciders, the
+      retirement decider and the fixture; wire it as an advisory step.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Mechanical, but it touches three verdict producers (a verdict string
+      is an interface) — sonnet, not haiku.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          The deciders' retirement rule.
+
+  - packet_id: an-mcp-run-command-tool-on-the-project-info-server-takes-argv-and-named-parameters-and-returns-the-run-verbs-typed-result-so-a-forge-agent-executes-through-the-runtime-without-a-shell-string-anywhere-on-the-path
+    order: 1443-r4cj
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [mcp, exec, forge, policy, tests]
+    estimated_hours: 5
+    depends_on: [the-agent-door-tillandsias-plan-run-json-takes-named-flags-and-an-argv-never-a-string-evaluates-the-policy-before-spawning-starts-the-child-from-the-base-env-only-and-reads-argv-as-json-on-windows-so-nothing-crosses-msys-or-wsl-as-a-string]
+    owned_files:
+      - images/default/config-overlay/mcp/project-info.sh
+      - scripts/check-mcp-expert-health.sh
+      - openspec/litmus-tests/litmus-mcp-discoverability-shape.yaml
+      - scripts/test-mcp-run-command-tool.sh
+    title: |
+      THE HARNESS MAPPING FOR FORGE AGENTS: project-info lists a `run_command` tool {argv: string[], cwd?, env?, timeout_ms?, stdin?, capture_bytes?} whose tools/call hands the arguments to `tillandsias-plan run --argv-json -` on stdin and returns the verb's JSON result verbatim — a policy denial is a result object, not a JSON-RPC error — and the server's call path contains no eval and no `bash -c`
+    context: |
+      Agents inside a forge reach the experts over MCP already; a
+      run_command tool on the same server is the door that needs no CLI
+      on PATH and no Bash tool. The stdin argv-json form (1443-8pur) is
+      what keeps the server's bash from interpolating anything: the tool
+      arguments go from JSON to the binary as bytes.
+    exit_criteria:
+      - 'project-info tools/list includes run_command with the schema above (pre-fix: FAILS — no tool)'
+      - 'tools/call run_command {argv:["git","status","--porcelain"]} returns the same JSON `run --json` prints, including run_id and policy; a denied argv returns the status="policy_denied" object with why and remedy, and the JSON-RPC envelope is a result, not an error (pre-fix: FAILS)'
+      - '`git grep -n -E "eval |bash -c" images/default/config-overlay/mcp/project-info.sh` finds nothing on the run_command path, and the arguments reach the binary through --argv-json on stdin (pre-fix: FAILS — no path)'
+      - 'scripts/check-mcp-expert-health.sh and litmus:mcp-discoverability-shape stay green with the new tool'
+    verifiable_closure: |
+      bash scripts/test-mcp-run-command-tool.sh
+      exits 0 driving project-info.sh over stdio. Pre-fix: FAILS at arm 1.
+    next_action: >
+      Add the tools/list entry and the tools/call arm, pipe the JSON to
+      the verb on stdin, update the discoverability litmus, write the
+      fixture.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      A thin bash arm; the enforcement lives in the verb it calls.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl from the 1443-6r3q design.
+    events:
+      - type: filed
+        ts: "2026-09-27T17:58:31Z"
+        agent_id: "linux-macuahuitl-claude-20260927t175831z"
+        host: macuahuitl
+        summary: |-
+          The MCP door for forge agents.

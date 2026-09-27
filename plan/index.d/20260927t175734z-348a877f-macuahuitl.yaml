@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: archiver-check-memo-keys-on-the-archiver-code-and-the-base-ledger-not-on-every-fragment
+    field: verifiable_closure
+    value: |-
+      bash scripts/test-archiver-check-memo.sh exits 0 with three new arms:
+      arm A: after a recorded green check, adding a new fragment under
+      plan/index.d leaves the memo a hit; arm B: changing plan/index.yaml,
+      plan/schema.yaml, any archiver script, the plan binary's build-id output
+      or the VERSION file's content makes it a miss; arm C: the memo code
+      consults no clock, mtime or age (grep -c for date, mtime, age and
+      last-full-gate in scripts/archiver-check-memo.sh prints 0; the plan
+      binary is keyed by its build-id output, no longer by stat size and
+      mtime); and the existing arms are unchanged. PRE-FIX RESULT: FAILS —
+      _digest in scripts/archiver-check-memo.sh hashes every plan/index.d/*.yaml
+      (arm A is a miss today) and keys the plan binary by stat -c '%s %Y', an
+      mtime (arm C prints a non-zero count); measured as 145 archiver-check-miss
+      records in 7 days at 140 s average and 0 pct fail.
+    ts: "2026-09-27T17:57:34Z"
+    host: macuahuitl
+
+events:
+  - packet_id: archiver-check-memo-keys-on-the-archiver-code-and-the-base-ledger-not-on-every-fragment
+    event:
+      type: note
+      ts: "2026-09-27T17:57:34Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-09-27 relayed by the coordinator (efficiency trims 1437-62g8)

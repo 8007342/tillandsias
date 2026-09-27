@@ -22,6 +22,29 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # every installed guard remains inert.
 GIT_HOOKS_DIR="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-path hooks)"
 
+# NEVER INTO A GLOBAL hooksPath (order 1442-wyf9). --git-path honours a
+# core.hooksPath set in ~/.gitconfig or /etc/gitconfig, and a forge sets one
+# (~/.cache/tillandsias/git-hooks) for its trailer and expert-refresh hooks. A
+# second clone inside a forge has no local hooksPath, so this installer wrote
+# pre-commit and pre-push into that forge-wide dir, and every scratch-repo
+# fixture on the box started failing (macuahuitl-forge, 2026-09-27: 3 preflight
+# refusals; the 2026-09-01 collateral again). The forge's own checkout is safe
+# because ensure_forge_project_guard_hooks sets a LOCAL hooksPath before calling
+# this. Refuse rather than guess where the guards belong; the fix is one line.
+HOOKS_PATH_SCOPE="$(git -C "$REPO_ROOT" config --show-scope --get core.hooksPath 2>/dev/null | cut -f1)" || HOOKS_PATH_SCOPE=""
+case "$HOOKS_PATH_SCOPE" in
+    ''|local|worktree) ;;
+    *)
+        echo "refused:install-hooks:${HOOKS_PATH_SCOPE}-hooks-path:$GIT_HOOKS_DIR" >&2
+        echo "  core.hooksPath comes from $HOOKS_PATH_SCOPE config, so installing here would arm these" >&2
+        echo "  guards in EVERY repository on this machine. Give this clone its own hooks dir:" >&2
+        echo "    git -C \"$REPO_ROOT\" config core.hooksPath \"\$(git -C \"$REPO_ROOT\" rev-parse --path-format=absolute --git-common-dir)/hooks\"" >&2
+        echo "  (in a forge, also copy $GIT_HOOKS_DIR/prepare-commit-msg there to keep the agent trailer)," >&2
+        echo "  then re-run scripts/install-hooks.sh." >&2
+        exit 3
+        ;;
+esac
+
 # HOOK BODIES RESOLVE THE REPO ROOT AT RUN TIME, NEVER AT INSTALL TIME.
 # Order 632-* (Windows host 2026-08-09). Baking "$REPO_ROOT" into the generated
 # hook records the path as the INSTALLING shell saw it, and one checkout has

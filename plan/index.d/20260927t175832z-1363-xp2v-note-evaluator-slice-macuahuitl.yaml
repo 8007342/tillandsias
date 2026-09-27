@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Cross-reference from the 1443-6r3q design onto the progressive
+# branching-discipline research row, so the two are not drained apart.
+events:
+  - packet_id: a-project-earns-its-branching-discipline-progressively-and-nothing-today-can-tell-an-agent-which-level-a-loaded-project-is-at
+    event:
+      type: note
+      ts: "2026-09-27T17:58:32Z"
+      agent_id: linux-macuahuitl-claude-20260927t175831z
+      host: macuahuitl
+      summary: |
+        The 1443-6r3q design (openspec/changes/lua-command-runtime-and-policies,
+        plan/issues/lua-bash-replacement-and-policies-design-2026-09-27.md)
+        takes the 2026-09-22 ruling on this row as given and files the first
+        evaluator slice this row asked for as 1443-w79y: a per-project seed
+        .tillandsias/branch-discipline.yaml carrying BOTH axes — `level`
+        (0 bare, 1 integration branch + PRs, 2 work refs into integration,
+        forward-only) and per-rule `enforcement` (advised | warn | enforced) —
+        read by `tillandsias-plan discipline`, a forge-plan MCP tool, the
+        enclave mirror's pre-receive (1443-uit6, which also PUBLISHES the
+        level actively enforced as refs/tillandsias/discipline/<level>/
+        <enforcement>/<digest>/<epoch>) and the land tool (1443-z3vb). The
+        absolute floor is pinned by exit criteria on all three rows: a
+        project with no seed is level 0 advised and nothing refuses its
+        first push, including to its default branch. What this row still
+        owns and 1443-w79y does not pre-empt: the ladder as a written
+        document, whether the level is DERIVED from observable facts or
+        DECLARED and validated (the seed declares it today), and the
+        fresh-forge-no-context affordance beyond the mirror ref.

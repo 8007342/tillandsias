@@ -123,20 +123,22 @@ When the `init-build-state.json` file exists but is corrupted (unreadable or inv
 ### Requirement: Cache Directory Lifecycle and Paths
 <!-- req-id: b3f8d1a1 -->
 
-The cache directory location MUST follow XDG specifications. The `cache_version` file MUST be written only after successful initialization, creating a checkpoint for future staleness checks.
+The cache directory is `~/.tillandsias/cache/` (`TILLANDSIAS_HOME/cache`) on every platform. SUPERSEDED 2026-09-27 (order 1438-pk9j, operator ruling: "keep all our configs and downloaded files in ~/.tillandsias/ for a user to easily find them, snoop around, and wipe them afterwards"): this requirement previously said the location MUST follow XDG; the XDG paths are now the LEGACY roots that `host-state-lifecycle`'s first-launch migration reads and empties, and `XDG_CACHE_HOME` is no longer consulted for a Tillandsias root. The `cache_version` file MUST be written only after successful initialization, creating a checkpoint for future staleness checks. Downloads are NOT under `cache/`: they live in `~/.tillandsias/downloads/` with the manifest; `cache/` holds only derived, rebuildable content (`packages/`, `forge-projects/`, `nix-cache/`, `runtime/<version>/`, `init-build-state.json`, `cache_version`).
 
-#### Scenario: XDG_CACHE_HOME respects environment variable
+#### Scenario: The cache directory is under the single root
 
-- **WHEN** the `XDG_CACHE_HOME` environment variable is set
-- **THEN** Tillandsias MUST use `$XDG_CACHE_HOME/tillandsias/` as the cache directory
-- **AND** `cache_version` MUST be written to `$XDG_CACHE_HOME/tillandsias/cache_version`
+- **WHEN** Tillandsias resolves its cache directory on any platform
+- **THEN** it MUST be `TILLANDSIAS_HOME/cache` (`~/.tillandsias/cache/` by default; `%USERPROFILE%\.tillandsias\cache` on Windows)
+- **AND** `cache_version` MUST be written to `~/.tillandsias/cache/cache_version`
+- **AND** `XDG_CACHE_HOME` MUST NOT change the answer
+- Pre-fix result: FAILS — `init_cache_dir` and `cache_root()` resolve `$XDG_CACHE_HOME/tillandsias` or `~/.cache/tillandsias`
 
-#### Scenario: Fallback to ~/.cache/tillandsias/ when XDG_CACHE_HOME is unset
+#### Scenario: A legacy XDG cache is migrated, not read in place
 
-- **WHEN** `XDG_CACHE_HOME` is not set
-- **AND** `HOME` environment variable is available
-- **THEN** Tillandsias MUST use `~/.cache/tillandsias/` as the cache directory
-- **AND** `cache_version` MUST be written to `~/.cache/tillandsias/cache_version`
+- **WHEN** `$XDG_CACHE_HOME/tillandsias/` or `~/.cache/tillandsias/` exists on first launch of a binary carrying the single root
+- **THEN** its children MUST be moved to their homes under `~/.tillandsias/` (`vault-data` → `vault/data`, `models` → `downloads/models`, `packages` and `forge-projects` → `cache/`, `cache_version` and `init-build-state.json` → `cache/`) per `host-state-lifecycle`
+- **AND** the emptied legacy root MUST be removed
+- **AND** a second launch MUST find nothing to migrate
 
 #### Scenario: Version file is written after successful init, not before
 
@@ -157,9 +159,9 @@ The cache directory location MUST follow XDG specifications. The `cache_version`
 
 - **WHEN** `--reset-state` or `--reset-guest` runs on any platform (2026-09-27, `host-state-lifecycle`)
 - **THEN** the cache root directory MUST still exist afterwards
-- **AND** `downloads.manifest.json`, `models/`, `vault-data/`, `vault-audit/`, `packages/` and `forge-projects/` under it MUST be untouched
-- **AND** only `init-build-state.json`, `cache_version` and other derived markers MAY be removed
-- **AND** on macOS the same holds for `~/Library/Caches/tillandsias`, and on Windows for `%LOCALAPPDATA%\tillandsias\cache`
+- **AND** `~/.tillandsias/downloads/` (with `manifest.json` and `models/`), `~/.tillandsias/vault/` and `~/.tillandsias/config/` MUST be untouched
+- **AND** only `cache/init-build-state.json`, `cache/cache_version`, `cache/packages/`, `cache/forge-projects/` and other derived content MAY be removed
+- **AND** on macOS and Windows the same holds for the host-side `~/.tillandsias/` and, under a SOFT reset, for `/root/.tillandsias/` inside the guest
 - Pre-fix result: FAILS on macOS (`run_reset_state` removes the caches directory unless `TILLANDSIAS_RESET_KEEP_MODELS=1`) and on Windows (`reset_state_once` removes the `cache` directory); passes on Linux (positive control).
 
 ### Requirement: Version File Format and Semantics

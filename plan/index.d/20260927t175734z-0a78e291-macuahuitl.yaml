@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: covering-litmus-memo-skips-a-spec-that-passed-on-identical-bytes-and-inputs
+    field: verifiable_closure
+    value: |-
+      bash scripts/test-litmus-covering-memo.sh prints ok:covering-memo:5/5 and
+      exits 0, where, over a scratch timing log and corpus: arm 1: a spec of
+      size quick, long, large or e2e with a status=pass record from this host
+      whose digest, spec_digest, inputs_digest and version_digest equal the
+      current values prints deferred:memo:<spec>; arm 2: the same spec with a
+      status=fail record prints run:… (a fail never memoises); arm 3: a record
+      whose version_digest differs from the current VERSION file's content
+      (a release cut happened between) does not memoise, and no age or clock
+      is consulted (grep -c for date, mtime and age in the memo code prints 0);
+      arm 4: a change to any file the spec's declared preconditions name
+      changes inputs_digest and the spec runs; arm 5 NEGATIVE CONTROL: a spec
+      of size instant is never deferred:memo however many passes it holds
+      (cheap tests are not memoised). PRE-FIX RESULT: FAILS —
+      run-litmus-test.sh records digest and spec_digest (1395-88tp) but no
+      inputs_digest or version_digest, and nothing reads the records back;
+      litmus:preflight-front-door was re-run four times on 2026-09-27 at 243 s
+      each on identical digest and spec_digest.
+    ts: "2026-09-27T17:57:34Z"
+    host: macuahuitl
+
+events:
+  - packet_id: covering-litmus-memo-skips-a-spec-that-passed-on-identical-bytes-and-inputs
+    event:
+      type: note
+      ts: "2026-09-27T17:57:34Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-09-27 relayed by the coordinator (efficiency trims 1437-62g8)
