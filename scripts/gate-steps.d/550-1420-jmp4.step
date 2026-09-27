@@ -1,0 +1,25 @@
+# Gate step 1420-jmp4 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. PRETTY INSTALLER 9/10: install.sh downloads the release with
+# curl --progress-bar (one clean bar, as install-macos.sh does) instead of
+# curl's raw 12-column meter; install-windows.ps1 streams the release zip
+# through Save-WithProgress (Write-Progress once per whole percent, closed with
+# -Completed, leaf green where PowerShell 7.2+ can style it) and runs every
+# Invoke-WebRequest with its own flickering PowerShell 5 bar silenced.
+#
+# CUT AND RUN, NOT READ. The fixture cuts each download block between exact
+# marker lines and runs it: a curl stub records argv; Save-WithProgress
+# downloads 3 MiB from a local HttpListener, byte-exact, with >=10 distinct
+# percents reaching 100. Pre-fix: every arm FAILS. Sabotage: dropping the
+# SilentlyContinue reds W3 (prefs=Continue), dropping -Completed reds W1.
+#
+# REGIMES. Without PowerShell (a Linux gate) the W arms skip by name and L1
+# still runs. Measured on yolanda under both pwsh 7 (5/5) and Windows
+# PowerShell 5.1 (4/4, W2 skipped by name: no $PSStyle).
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the installers draw one clean download progress bar (1420-jmp4)"
+STEP_SCRIPT="scripts/test-installers-quiet-progress.sh"
+STEP_ERROR="an installer download is back to curl's raw meter or PowerShell's flickering bar (1420-jmp4); see which arm failed above"
+STEP_OK="installer download progress is quiet and single-bar"
+STEP_SECOND_REGIME="yolanda 2026-09-27 msys ok:quiet-progress-fixture:ran=5 skipped=0"

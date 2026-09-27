@@ -241,8 +241,13 @@ BINARY_TMP="$TMPDIR_TILLANDSIAS/$ASSET"
 CHECKSUMS_TMP="$TMPDIR_TILLANDSIAS/SHA256SUMS"
 CHECKSUM_ONE="$TMPDIR_TILLANDSIAS/SHA256SUMS.$ASSET"
 
+# BEGIN-ASSET-DOWNLOAD
 say "Downloading $ASSET..."
-curl -fL --retry 3 --retry-delay 2 -o "$BINARY_TMP" "$RELEASE_BASE/$ASSET"
+# ORDER 1420-jmp4: --progress-bar draws one clean # bar instead of curl's raw
+# 12-column meter, the way install-macos.sh already does. The markers around
+# this block are cut and run by scripts/test-installers-quiet-progress.sh.
+curl -fL --progress-bar --retry 3 --retry-delay 2 -o "$BINARY_TMP" "$RELEASE_BASE/$ASSET"
+# END-ASSET-DOWNLOAD
 
 if curl -fsL --retry 3 --retry-delay 2 -o "$CHECKSUMS_TMP" "$RELEASE_BASE/SHA256SUMS"; then
     if grep -E "[[:space:]]${ASSET}$" "$CHECKSUMS_TMP" > "$CHECKSUM_ONE"; then
