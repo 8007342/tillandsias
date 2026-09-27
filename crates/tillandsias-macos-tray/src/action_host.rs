@@ -2462,6 +2462,51 @@ fn push_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
     ]
 }
 
+/// 1420-4grt: throttles guest `ProgressPush` events into tray.log lines —
+/// one per task per whole-ten-percent step, plus every terminal or
+/// indeterminate transition, so a 500-step build writes ~10 lines, not 500.
+#[derive(Default)]
+struct ProgressLog {
+    last_decile: std::collections::HashMap<String, u8>,
+}
+
+impl ProgressLog {
+    fn observe(&mut self, ev: &tillandsias_control_wire::ProgressEvent) -> Option<String> {
+        use tillandsias_control_wire::ProgressKind;
+        match &ev.kind {
+            ProgressKind::Done => {
+                self.last_decile.remove(&ev.task);
+                Some(format!("progress {}: done", ev.label))
+            }
+            ProgressKind::Failed { reason } => {
+                self.last_decile.remove(&ev.task);
+                Some(format!("progress {}: FAILED — {reason}", ev.label))
+            }
+            kind => match kind.fraction() {
+                Some(f) => {
+                    let decile = (f * 10.0).floor() as u8;
+                    if self.last_decile.get(&ev.task) == Some(&decile) {
+                        return None;
+                    }
+                    self.last_decile.insert(ev.task.clone(), decile);
+                    Some(format!(
+                        "progress {}: {}%",
+                        ev.label,
+                        u32::from(decile) * 10
+                    ))
+                }
+                None => {
+                    if self.last_decile.contains_key(&ev.task) {
+                        return None;
+                    }
+                    self.last_decile.insert(ev.task.clone(), u8::MAX);
+                    Some(format!("progress {}: working", ev.label))
+                }
+            },
+        }
+    }
+}
+
 /// Map a `GithubLoginStatusReply`/`LoginStatePush` payload to the menu's
 /// login state. Shared by the fallback poll and the push listener (order 155
 /// slice 2) so both surfaces stay byte-identical.
@@ -2965,8 +3010,13 @@ async fn run_push_listener(
             let sub = ControlEnvelope {
                 wire_version: WIRE_VERSION,
                 seq: client.allocate_seq(),
+                // 1420-4grt: Progress is added ONLY when this guest advertised
+                // CAP_PROGRESS_PUSH_V1; an old guest never sees the topic.
                 body: ControlMessage::Subscribe {
-                    topics: push_subscribe_topics(),
+                    topics: tillandsias_control_wire::subscription_topics(
+                        &push_subscribe_topics(),
+                        client.server_caps(),
+                    ),
                 },
             };
             let reply = client
@@ -3044,6 +3094,7 @@ async fn run_push_listener(
             continue;
         }
 
+        let mut progress_log = ProgressLog::default();
         loop {
             match client.next_envelope().await {
                 Ok(env) => match env.body {
@@ -3153,6 +3204,14 @@ async fn run_push_listener(
                                 &status_menu_item,
                                 &self_handle,
                             );
+                        }
+                    }
+                    // 1420-4grt: guest image-build progress. Logged (tray.log)
+                    // at whole-ten-percent steps per task; the menu bar/menu
+                    // rendering of the same events is 1420-v3zt.
+                    ControlMessage::ProgressPush { event, .. } => {
+                        if let Some(line) = progress_log.observe(&event) {
+                            eprintln!("[tillandsias-tray] {line}");
                         }
                     }
                     other => {
@@ -3803,6 +3862,51 @@ mod tests {
                 tillandsias_control_wire::SubscriptionTopic::LoginState,
                 tillandsias_control_wire::SubscriptionTopic::CloudProjects,
             ]
+        );
+    }
+
+    /// 1420-4grt: Progress rides the subscription only for a capable guest.
+    #[test]
+    fn progress_topic_is_opt_in_by_guest_capability() {
+        use tillandsias_control_wire::{
+            CAP_PROGRESS_PUSH_V1, SubscriptionTopic, subscription_topics,
+        };
+        assert_eq!(
+            subscription_topics(&push_subscribe_topics(), &[]),
+            push_subscribe_topics()
+        );
+        let with = subscription_topics(
+            &push_subscribe_topics(),
+            &[CAP_PROGRESS_PUSH_V1.to_string()],
+        );
+        assert_eq!(with.last(), Some(&SubscriptionTopic::Progress));
+    }
+
+    /// 1420-4grt: one tray.log line per whole-ten-percent step, not per event.
+    #[test]
+    fn progress_log_throttles_to_deciles() {
+        use tillandsias_control_wire::{ProgressEvent, ProgressKind, ProgressUnit};
+        let ev = |kind| ProgressEvent {
+            task: "image/forge".into(),
+            parent: None,
+            label: "Build forge image".into(),
+            kind,
+            ts_unix_ms: 0,
+        };
+        let step = |done| ProgressKind::Determinate {
+            done,
+            total: Some(100),
+            unit: ProgressUnit::Steps,
+        };
+        let mut log = ProgressLog::default();
+        let lines: Vec<_> = (0..=100)
+            .filter_map(|d| log.observe(&ev(step(d))))
+            .collect();
+        assert_eq!(lines.len(), 11, "{lines:?}");
+        assert_eq!(lines[3], "progress Build forge image: 30%");
+        assert_eq!(
+            log.observe(&ev(ProgressKind::Done)).as_deref(),
+            Some("progress Build forge image: done")
         );
     }
 
