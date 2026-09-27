@@ -150,7 +150,8 @@ Interactive GitHub Login MUST use GitHub App OAuth Device Authorization Grant (R
 - **WHEN** the user initiates interactive `--github-login`
 - **THEN** the flow MUST request a device code from GitHub using Client ID `Iv23liddVkg9ME6OB1K1`
 - **AND** the terminal MUST render a QR code containing `https://github.com/login/device?user_code=<user_code>`
-- **AND** the QR code MUST be formatted using Unicode block characters with ANSI high-contrast styling (`\x1b[47m\x1b[30m`) ensuring readability across both dark and light terminal emulators
+- **AND** the QR code MUST be formatted using Unicode block characters in a high-contrast module pair: on a colour terminal, the tillandsia palette's leaf-deepest (#1E4A32, xterm-256 22) on leaf-light (#9DBBA5, xterm-256 108), which reads on both dark and light terminal emulators (order 1420-2pav, replacing the hardcoded `\x1b[47m\x1b[30m`)
+- **AND** when `NO_COLOR` is set, `CI` is set, `TERM` is `dumb`, or stdout is not a terminal, the QR code and the one-time code MUST print with zero escape bytes (order 1420-2pav)
 - **AND** the flow MUST display the verification URL and user code as text fallback
 
 #### Scenario: Mobile authorization polling and persistence

@@ -3379,6 +3379,7 @@ dependencies = [
  "tillandsias-metrics",
  "tillandsias-otp",
  "tillandsias-podman",
+ "tillandsias-progress-tty",
  "tillandsias-secure-channel",
  "tillandsias-vault-client",
  "tokio",
