@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    event:
+      type: progress
+      ts: "2026-09-28T16:07:20Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t160720z
+      host: macos
+      summary: |
+        work/1235-rfub @ 66c80a318 ready for relay (tlatoanis-macbook-air, darwin). This is the ruling's fallback, because the builder cannot lint darwin (lenovinha measurement above).
+        - scripts/attest-native-lint.sh is the only writer. It runs `cargo clippy -p <pkg> --all-targets -- -D warnings` natively (criterion 2), and only on rc 0 adds an empty commit with a `Native-Lint: <host> <platform> <crate-path>=<subtree-sha> ...` trailer. A failed clippy writes nothing.
+        - scripts/check-native-lint-attested.sh: when a gated crate's subtree differs from the base, base..HEAD must carry an attestation for that platform at HEAD's subtree. It refuses `unattested` (naming the AUTHORING platform host as accountable, criterion 3) or `stale`. Admission says "attested by the named host, NOT re-run here".
+        - land-on-platform-branch.sh runs the check after the integrate and before the gate, and refuses with exit 9 (criterion 1).
+        - Fixture scripts/test-native-lint-attested.sh 7/7, using the incident's useless_format line and a stub cargo: unattested, failing clippy, passing clippy (argv asserted), stale after edit, wrong-platform trailer, linux-only negative control, relay wiring. Gate step 285 with a darwin STEP_SECOND_REGIME.
+        - KNOWN LIMIT, named in the checker: path dependencies (core, host-shell) are not bound.
+        Clean-checkout deciders are all ok. The land fixtures pass (adopts-valid-stamp, affordance, auth-retry, gate-refusal, merges-trunk, notice, push-bounded, push-classification, verdict-pipe). The exception is test-land-queue, which reports 12/14 failed, and fails identically on bare origin/linux-next (no-plan-binary in its scratch queue). It is pre-existing and does not call the relay script.
