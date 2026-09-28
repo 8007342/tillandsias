@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: windows-ci-release-baseline-separates-cannot-run-here-from-broken
+    order: 1462-trch
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, gate, preflight]
+    estimated_hours: 2
+    owned_files: [scripts/test-forge-swap-service.sh, scripts/plan-binary-probe.sh]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the forge-swap fix adds a named MSYS skip (or a headless-binary resolution) with a fixture arm in the same commit; the four stale-binary entries are a recorded baseline, not code.
+    title: |
+      Windows ci-release baseline: a ./build.sh --preflight on yolanda refused 5 fixtures, and every one traces to the Windows regime (stale or wrong binary), none to broken code. The row keeps that baseline so the next Windows red is compared against it and not re-diagnosed.
+    verifiable_closure: |
+      Each entry below is either fixed so it runs green or skips BY NAME on Windows, or recorded as an accepted Windows baseline. A Windows preflight then refuses none of them for the reasons given here.
+      Baseline, measured on yolanda 2026-09-28. Trunk run: origin/linux-next 002e409b9, in a fresh worktree with a freshly built trunk plan binary (TILLANDSIAS_PLAN_BIN). Branch run: work/1459-b5fh, same binary.
+        - test-bsd-count-shapes: trunk ok 4/4, branch ok 4/4. Preflight refusal ("could not read the litmus command") = STALE plan binary. Windows CAN run this.
+        - test-json-query-jq-parity: trunk ok 79/79, branch ok 79/79. STALE binary. Windows CAN run this.
+        - test-lua-determinism: trunk ok 6 arms, branch ok. STALE binary. Windows CAN run this.
+        - test-plan-hash-time-verbs: trunk PASS 6/6, branch PASS. STALE binary. Windows CAN run this.
+        - test-forge-swap-service: branch FAIL 26/31 (arms 8-12 print "Unsupported option: --swap"). Trunk worktree ok, but only because it had no target/ and the arms skipped. WINDOWS CANNOT RUN THIS AS WRITTEN: resolve_target_binary tillandsias debug picks target/debug/tillandsias.exe, which is the Windows TRAY, not tillandsias-headless (where --swap lives, swap_cmd.rs). A Linux-only binary is exercised with a Windows artifact. Fix: skip arms 8-12 by name when the resolved binary is not the headless one (or on MSYS), or resolve the headless binary explicitly.
+      Common cause for the first four: preflight ran against a target/release/tillandsias-plan.exe older than the tree (the WSL gate leaves the native plan binary stale). Candidate follow-up: have preflight refuse "stale plan binary" by name instead of four unrelated-looking fixture refusals.
+    events:
+      - type: filed
+        ts: "2026-09-28T17:30:00Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request (1459-b5fh preflight follow-up).
