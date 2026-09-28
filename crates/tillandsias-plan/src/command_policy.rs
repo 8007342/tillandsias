@@ -1630,6 +1630,18 @@ pub fn consent_consume(ctx: &ConsentCtx, class: &str, argv: &[String]) -> TokenC
     TokenCheck::NoToken { replayed_at }
 }
 
+/// The smoke skills' env arm (1443-9f5w), alone: a SOFT reset with an explicit
+/// `TILLANDSIAS_DESTRUCTIVE_RESET_OK=1` and `TILLANDSIAS_SKILL` naming a
+/// registered smoke skill. Unset is not `1`: a skill name alone never
+/// authorises a wipe. The caller owns the bare-metal check. Shared with the
+/// Bash-tool bridge (1462-qvxj), which may use this arm and never the token
+/// arm: a token is spent by the run that proceeds, and the hook does not run.
+pub fn env_preauthorises(class: &str, reset_ok: Option<&str>, skill: Option<&str>) -> bool {
+    class == "soft-reset"
+        && reset_ok == Some("1")
+        && skill.is_some_and(|s| REGISTERED_SMOKE_SKILLS.contains(&s))
+}
+
 /// Turn a floor consent answer into an allow when the env mapping or a token
 /// satisfies it; otherwise the same consent (never a new ASK: only the floor's
 /// classes reach here, and a failed token is a refusal, not a question).
@@ -1641,13 +1653,7 @@ pub fn resolve_consent(req: &Request, d: Decision, ctx: &ConsentCtx) -> Decision
         return d;
     }
     let class = d.rule_id.clone();
-    if class == "soft-reset"
-        && ctx.reset_ok.as_deref() == Some("1")
-        && ctx
-            .skill
-            .as_deref()
-            .is_some_and(|s| REGISTERED_SMOKE_SKILLS.contains(&s))
-    {
+    if env_preauthorises(&class, ctx.reset_ok.as_deref(), ctx.skill.as_deref()) {
         return Decision::allow(
             "soft-reset",
             "ok:policy:soft-reset:env-preauthorised".into(),

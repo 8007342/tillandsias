@@ -42,8 +42,12 @@ and secret — including:
   **rebuilt from scratch on the next `--init`, which can take many minutes**.
 
 On a DEDICATED SMOKE HOST, wiping Podman is expected and is a required
-precondition for the release idempotence test. If
-`TILLANDSIAS_DESTRUCTIVE_RESET_OK` is unset or `1`, do not ask for confirmation,
+precondition for the release idempotence test.
+Pre-authorise the reset by prefixing the reset command with exactly `TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 TILLANDSIAS_SKILL=smoke-curl-install-and-test-e2e` (1462-qvxj). The consent
+engine (1443-9f5w) and the Bash-tool bridge honour ONLY that pair, on bare
+metal, for a SOFT reset: unset is not `1`, and a skill name alone never
+authorises a wipe. Without both, the reset is asked, not skipped. With it set,
+do not ask for confirmation,
 do not pause for operator timing, and do not skip Step 2 because Podman state
 will be destroyed. Only block the reset when the environment explicitly sets
 `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, in which case file a plan blocker and

@@ -37,8 +37,12 @@ runtime state. The operator selected this skill with that behavior understood.
 **Do not ask for confirmation before the destruction step.**
 
 On Tillandsias smoke hosts, destructive runtime reset is not merely allowed; it
-is a required precondition for the idempotence test. If
-`TILLANDSIAS_DESTRUCTIVE_RESET_OK` is unset or `1`, run the reset. Do not stop,
+is a required precondition for the idempotence test.
+Pre-authorise the reset by prefixing the reset command with exactly `TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 TILLANDSIAS_SKILL=build-install-and-smoke-test-e2e` (1462-qvxj). The consent
+engine (1443-9f5w) and the Bash-tool bridge honour ONLY that pair, on bare
+metal, for a SOFT reset: unset is not `1`, and a skill name alone never
+authorises a wipe. Without both, the reset is asked, not skipped. With it set,
+run the reset. Do not stop,
 skip, or file a blocker because Podman will be wiped. Only refuse the reset when
 the environment explicitly sets `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`.
 
