@@ -4439,13 +4439,43 @@ fn run_run_verb(args: &[String]) -> ! {
     while i < args.len() {
         let a = args[i].as_str();
         if a == "--" {
-            spec.argv = args[i + 1..].to_vec();
+            if !spec.argv.is_empty() && i + 1 < args.len() {
+                eprintln!("error: argv came from --argv-json; do not also pass it after --");
+                std::process::exit(2);
+            }
+            if spec.argv.is_empty() {
+                spec.argv = args[i + 1..].to_vec();
+            }
             saw_dd = true;
             break;
         }
         if a == "--json" {
             json = true;
             i += 1;
+            continue;
+        }
+        // Slice 3: `--argv-json -` reads argv as a JSON array of strings on
+        // stdin, so NO argument is on the command line for MSYS or wsl.exe to
+        // convert (1425-8wir's `\.` → `/.`, the smoke-e2e poweroff).
+        if a == "--argv-json" {
+            if args.get(i + 1).map(String::as_str) != Some("-") {
+                eprintln!("error: --argv-json takes `-` (the array is read from stdin)");
+                std::process::exit(2);
+            }
+            let mut input = String::new();
+            let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input);
+            let parsed: Result<Vec<String>, _> = serde_json::from_str(&input);
+            match parsed {
+                Ok(v) if !v.is_empty() => spec.argv = v,
+                _ => {
+                    eprintln!(
+                        "error: --argv-json - expects a non-empty JSON array of strings on stdin, e.g. [\"git\",\"status\"]"
+                    );
+                    std::process::exit(2);
+                }
+            }
+            saw_dd = true;
+            i += 2;
             continue;
         }
         let Some(v) = args.get(i + 1) else { usage() };

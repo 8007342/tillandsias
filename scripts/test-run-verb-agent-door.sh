@@ -17,7 +17,8 @@
 #   6  a capture past --capture-bytes is truncated:true and ok:false
 #   8  the plain form's limitation, pinned: a refusal and a child's exit 1 share
 #      rc 1 there; --json tells them apart; a usage error is 2
-#   (arm 3, --argv-json, arrives with the next slice)
+#   3  --argv-json -: argv as a JSON array on stdin, delivered byte for byte
+#      (C:\x\. unconverted), through the same policy; malformed input is 2
 #
 # Pre-fix: FAILS at arm 2 (`run` is an unknown subcommand).
 set -uo pipefail
@@ -149,6 +150,31 @@ else
 fi
 "$PLAN" run --bogus-flag -- true >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 2 ] && ok "arm 8: a usage error is 2, never 1 or 4 (so a binary without a flag is not a refusal)" || bad "arm 8 usage: rc=$rc"
+
+# ── 3 (slice 3: --argv-json -) ──────────────────────────────────────────────
+# argv arrives as a JSON array on stdin, so no argument is on the command line
+# for MSYS or wsl.exe to convert. On Linux the element must arrive byte for
+# byte; the Git Bash contrast (the positional form rewritten under MSYS) is a
+# filed event from yolanda.
+out="$(printf '%s' '["printf","%s","C:\\x\\."]' | "$PLAN" run --json --argv-json - 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 0 ] && [ "$(jget -r '.stdout' <<<"$out")" = 'C:\x\.' ] && [ "$(jget -r '.status' <<<"$out")" = exited ]; then
+    ok "arm 3: --argv-json - delivers [\"printf\",\"%s\",\"C:\\\\x\\\\.\"] and the child prints C:\\x\\. unconverted"
+else
+    bad "arm 3: rc=$rc [$out]"
+fi
+out="$(printf '%s' '["sh","'"$W"'/argc.sh","a \"b\" *"]' | "$PLAN" run --argv-json - 2>&1)"; rc=$?
+[ "$rc" -eq 0 ] && grep -qx 'argc=1' <<<"$out" && grep -qxF 'argv1=[a "b" *]' <<<"$out" &&
+    ok "arm 3: --argv-json keeps a space, a quote and * inside one entry" || bad "arm 3 argc: rc=$rc [$out]"
+printf '%s' '["bash","-c","touch '"$W"'/marker3"]' | "$PLAN" run --argv-json - >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 1 ] && [ ! -e "$W/marker3" ] &&
+    ok "arm 3: argv from --argv-json goes through the same policy (a shell string is refused, nothing spawned)" ||
+    bad "arm 3 policy: rc=$rc marker=$([ -e "$W/marker3" ] && echo PRESENT || echo absent)"
+for bad_in in '"git status"' '[]' '["git",1]' 'not json'; do
+    printf '%s' "$bad_in" | "$PLAN" run --argv-json - >/dev/null 2>&1; rc=$?
+    [ "$rc" -eq 2 ] && ok "arm 3: --argv-json rejects $bad_in as a usage error (2)" || bad "arm 3 reject $bad_in: rc=$rc"
+done
+printf '%s' '["true"]' | "$PLAN" run --argv-json - -- echo also >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 2 ] && ok "arm 3: argv from both --argv-json and -- is a usage error" || bad "arm 3 both: rc=$rc"
 
 total=$((pass + fail))
 if [ "$fail" -eq 0 ]; then
