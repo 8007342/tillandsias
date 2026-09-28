@@ -4717,7 +4717,7 @@ fn run_policy(args: &[String]) -> ! {
     use tillandsias_plan::command_policy as cp;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan policy eval [--host-kind bare-metal|forge|ci] [--regime interactive|gate|fixture|hook|relay] [--caller c] [--cwd dir] [--root dir] [--seed path] -- <argv...>\n       tillandsias-plan policy show [--root dir] [--seed path]\n       tillandsias-plan policy audit [--since 24h|7d|30m] [--caller c] [--root dir]\n       tillandsias-plan policy classify-bash --hook | --status | --command <cmd>"
+            "usage: tillandsias-plan policy eval [--host-kind bare-metal|forge|ci] [--regime interactive|gate|fixture|hook|relay] [--caller c] [--cwd dir] [--root dir] [--seed path] -- <argv...>\n       tillandsias-plan policy show [--root dir] [--seed path]\n       tillandsias-plan policy audit [--since 24h|7d|30m] [--caller c] [--root dir]\n       tillandsias-plan policy consent grant <soft-reset|hard-reset|workspace-destroy|force-push> [--ttl 30m] [--root dir] -- <argv...>   (the OPERATOR, on the host)\n       tillandsias-plan policy classify-bash --hook | --status | --command <cmd>"
         );
         std::process::exit(2);
     };
@@ -4767,6 +4767,108 @@ fn run_policy(args: &[String]) -> ! {
             }
         }
         std::process::exit(0);
+    }
+    // ORDER 1443-9f5w — `policy consent grant <class> [--ttl 30m] [--root dir]
+    // -- <argv…>`: the OPERATOR approves ONE run of exactly that argv on this
+    // host. Refused in a forge or CI (the variable or the evidence), and for an
+    // argv that is not of that class here.
+    if verb == "consent" {
+        if args.get(1).map(String::as_str) != Some("grant") {
+            usage()
+        }
+        let Some(class) = args.get(2).cloned() else {
+            usage()
+        };
+        let mut ttl = chrono::Duration::seconds(cp::CONSENT_DEFAULT_TTL_SECS);
+        let mut root: Option<PathBuf> = None;
+        let mut argv: Vec<String> = Vec::new();
+        let mut i = 3;
+        while i < args.len() {
+            let a = args[i].as_str();
+            if a == "--" {
+                argv = args[i + 1..].to_vec();
+                break;
+            }
+            let Some(v) = args.get(i + 1) else { usage() };
+            match a {
+                "--ttl" => match cp::parse_since(v) {
+                    Some(d)
+                        if d.num_seconds() > 0 && d.num_seconds() <= cp::CONSENT_MAX_TTL_SECS =>
+                    {
+                        ttl = d
+                    }
+                    _ => {
+                        eprintln!("error: --ttl takes 1s..24h, e.g. 30m");
+                        std::process::exit(2);
+                    }
+                },
+                "--root" => root = Some(PathBuf::from(v)),
+                _ => usage(),
+            }
+            i += 2;
+        }
+        if !cp::CONSENT_CLASSES.contains(&class.as_str()) {
+            println!("refused:consent:unknown-class:{class}");
+            eprintln!("  classes: {}", cp::CONSENT_CLASSES.join(", "));
+            std::process::exit(1);
+        }
+        if argv.is_empty() {
+            println!("refused:consent:no-argv");
+            eprintln!(
+                "  a token approves ONE run of an exact argv: tillandsias-plan policy consent grant {class} -- <argv…>"
+            );
+            std::process::exit(1);
+        }
+        let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let root = root
+            .or_else(|| tillandsias_plan::branch_discipline::find_root(&here))
+            .unwrap_or_else(|| here.clone());
+        let ctx = cp::ConsentCtx::from_env(&root);
+        let env_kind = std::env::var("TILLANDSIAS_HOST_KIND").ok();
+        if let Some(r) = cp::grant_refusal(env_kind.as_deref(), ctx.evidence) {
+            println!("{r}");
+            eprintln!(
+                "  why: a consent token is the operator's approval on the host; a forge or CI cannot commit operator spend (operator ruling 3, 2026-09-27)"
+            );
+            std::process::exit(1);
+        }
+        // The argv must be of this class HERE, so a token cannot be minted for
+        // something the floor would not ask about.
+        let protected = cp::protected_refs(&root);
+        let (loaded, _) = cp::load_seed(&root, None, &protected);
+        let req = cp::Request {
+            argv: argv.clone(),
+            cwd: here,
+            workspace: root,
+            host_kind: cp::HostKind::BareMetal,
+            regime: "interactive".into(),
+            caller: "consent-grant".into(),
+        };
+        let d = cp::decide(&req, loaded.as_ref(), &protected);
+        if d.strictness != cp::Strictness::Consent || d.rule_id != class {
+            println!("refused:consent:argv-not-in-class:{class}");
+            eprintln!("  this argv answers {} here, not consent:{class}", d.token);
+            std::process::exit(1);
+        }
+        match cp::consent_grant(&ctx, &class, &argv, ttl.num_seconds()) {
+            Ok((path, until)) => {
+                println!(
+                    "ok:consent:{class}:until={}",
+                    until.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+                );
+                eprintln!("  token: {}", path.display());
+                eprintln!(
+                    "  approves ONE run of exactly this argv on {}; spent by the first matching run, deleted if it expires unused",
+                    ctx.host
+                );
+                std::process::exit(0);
+            }
+            Err(e) => {
+                println!("refused:consent:store:{}", e.kind());
+                eprintln!("  {}: {e}", ctx.dir.display());
+                std::process::exit(1);
+            }
+        }
     }
     let mut host_kind: Option<cp::HostKind> = None;
     let mut regime = "interactive".to_string();

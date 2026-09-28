@@ -232,6 +232,13 @@ pub fn execute(spec: &RunSpec, caller: &str) -> RunOutcome {
     // decide() is side-effect free; the audit line is written once, below,
     // when the run identity (if any) is known.
     let d = cp::decide(&req, seed.as_ref(), &protected);
+    // A consent class may be satisfied by the smoke-skill env or an operator
+    // token (1443-9f5w); a token is spent here because the child then spawns.
+    let d = if d.strictness == cp::Strictness::Consent {
+        cp::resolve_consent(&req, d, &cp::ConsentCtx::from_env(&root))
+    } else {
+        d
+    };
     if d.strictness != cp::Strictness::Allow {
         cp::audit_decision(&req, &d, None);
         return RunOutcome::Refused(d);

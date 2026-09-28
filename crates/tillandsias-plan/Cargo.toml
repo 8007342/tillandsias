@@ -44,6 +44,11 @@ redb = { workspace = true }
 regex = { workspace = true }
 sha2 = { workspace = true }
 
+# ORDER 1443-9f5w: gethostname(2) binds a consent token to its host without
+# spawning `hostname` (already in the lockfile through tillandsias-exec).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 # ORDER 977-dpbj. proptest, not quickcheck: integrated shrinking that respects
 # custom generators, plus seeded reproduction — this suite needs both, because
