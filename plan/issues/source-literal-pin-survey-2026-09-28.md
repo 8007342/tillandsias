@@ -10,9 +10,9 @@ name files and SYMBOLS, never line numbers (check-issue-citation-convention).
 
 ## Why this matters now
 
-These pins break a CORRECT change and leave a WRONG one passing. The coordinator
-reports land85 going red three times on 2026-09-28 from pins on a representation
-that a correct change moved. The row was filed after three in one session. Every
+These pins break a CORRECT change and leave a WRONG one passing. On 2026-09-28, the coordinator
+measured land85 going red on pins over a representation that a correct change
+moved (entry 10 is one of them). The row was filed after three in one session. Every
 repair so far went the same direction: re-express the pin against a value a
 function BUILDS (`proxy_exec_preamble`, `readiness::ready_unit`,
 `provision_user_data_for_test`). Each repair was strictly stronger than the grep
@@ -105,10 +105,12 @@ Each entry was checked by reading the current tree and the repair commit.
    - **Problem:** its real claim is "adding the metrics variants renumbered nothing, so old peers still decode". The version is a premise that unrelated changes keep moving (rebased 2→3→4).
    - **Replacement:** check in a golden `encode(...)` frame for `MetricsSnapshotRequest` and assert `decode(golden)` round-trips, next to `metrics_snapshot_request_roundtrip`.
    - **Evidence:** f41a64f15, b1f4ada5e.
-10. **litmus-forge-expert-base-guard-shape — the awk ORDER pin over lib-common.sh's host-mount block** (class a).
-    - **Pin:** a `sed` window keyed on 4-space indentation, then awk requires `rewrite_origin_for_enclave_push` < `checkout_forge_seed_branch` < `return 0` by line. Comments count.
-    - **Replacement:** extract `_clone_project_from_mirror_impl` the way the next step already extracts `checkout_forge_seed_branch`. Stub `rewrite_origin_for_enclave_push`, `configure_git_identity` and `trace_lifecycle` to log their order, run it in a scratch repo with `TILLANDSIAS_PROJECT_HOST_MOUNT=1`, and assert the logged order and HEAD. It needs one seam, because `clone_dir` is hard-coded.
-    - **Caveat:** re-run here, the awk passes on linux-next tip and on 957d48faf (u8ww). The red the coordinator saw on land85 was not reproduced from this checkout, so treat its cost as reported rather than measured.
+10. **litmus-git-mirror-unborn-head-repair — step `seed-tail-both-transports`** (class a; this is the one that reddened land85 on 2026-09-28).
+    - **Pin:** it counts BARE call lines, `^[[:space:]]+checkout_forge_seed_branch$`, under the `COMMON TAIL (order 501, B6)` markers in images/default/lib-common.sh, and expects 2.
+    - **Fragility, MEASURED by the coordinator:** 1362-u8ww correctly changed both clone paths to `checkout_forge_seed_branch resolve`, and the pin then read `b6_markers_with_tail=0 expected=2`. The relay-fix in land85 widened the regex. That is a repair of the same kind, so it will break again at the next argument change.
+    - **Guarantee:** BOTH clone transports converge to the seed branch after cloning.
+    - **Replacement:** extract `_clone_project_from_mirror_impl` the way the forge-expert-base litmus already extracts `checkout_forge_seed_branch` (sed the function out, source it). Stub `checkout_forge_seed_branch` (and `rewrite_origin_for_enclave_push`, `configure_git_identity`, `trace_lifecycle`) to log their calls and arguments. Drive each transport in a scratch repo and assert the seed call happened on both, whatever its arguments. It needs one seam, because `clone_dir` is hard-coded.
+    - **Related, not counted:** the forge-expert-base awk ORDER pin over the same block has the same indentation and comment sensitivity, but no failure of it was observed.
 
 ## Finding: a product defect behind pin 3
 
