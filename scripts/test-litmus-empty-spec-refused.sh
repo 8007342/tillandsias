@@ -9,7 +9,7 @@
 # Arms:
 #   1 EMPTY     an explicit "" exits 3 with refused:empty-litmus-spec-argument
 #               and runs no test
-#   2 NAMED     (negative control) a real spec name is not refused by this rule
+#   2 NAMED     (negative control) a real spec name passes the parser; nothing runs
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 R="$ROOT/scripts/run-litmus-test.sh"
@@ -23,10 +23,16 @@ if [ "$rc1" -eq 3 ] && grep -q 'refused:empty-litmus-spec-argument' <<<"$out1"; 
     ok "ARM1 an explicit empty spec is refused (rc=3) instead of running every spec"
 else bad "ARM1 rc=$rc1 (124 means it started running the suite)"; fi
 
-out2="$(cd "$ROOT" && timeout 60 bash "$R" git-mirror-service --list 2>&1)"; rc2=$?
-if grep -q 'refused:empty-litmus-spec-argument' <<<"$out2"; then
-    bad "ARM2 a named spec was refused by the empty-spec rule"
-else ok "ARM2 a named spec is not refused by this rule (rc=$rc2)"; fi
+# ARM 2 must run NOTHING (yolanda 2026-09-28: a --list run hit its timeout
+# under MSYS and stranded images/router/.sidecar.stamp.* in the checkout).
+# A named spec followed by an unknown flag stops inside argument parsing, after
+# the positional has been accepted and before any setup: exit 3, "Unknown
+# option", and no empty-spec refusal.
+out2="$(cd "$ROOT" && timeout 30 bash "$R" git-mirror-service --no-such-flag-1460 2>&1)"; rc2=$?
+if [ "$rc2" -eq 3 ] && grep -q 'Unknown option' <<<"$out2" \
+   && ! grep -q 'refused:empty-litmus-spec-argument' <<<"$out2"; then
+    ok "ARM2 a named spec is accepted by the parser (it reached the next argument)"
+else bad "ARM2 rc=$rc2 out='$(head -3 <<<"$out2" | tr '\n' '|')'"; fi
 
 [ "$FAIL" -eq 0 ] && { echo "PASS: litmus-empty-spec-refused (1460-3gja)"; exit 0; }
 echo "FAILED: litmus-empty-spec-refused (1460-3gja)"; exit 1
