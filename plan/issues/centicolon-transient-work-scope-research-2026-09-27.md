@@ -7,8 +7,7 @@ X") — and should the same metric or a sibling one count it?
 
 Shape of this document (coordinator, 2026-09-27): a MEASURED baseline first
 (tlatoanis-macbook-air), then positions (Codex, Antigravity), then the
-coordinator's synthesis and a recommendation. Only the baseline is filled in
-here; the headings after it are deliberately empty.
+coordinator's synthesis and a recommendation. The baseline and both agent positions are now recorded; the final policy pick remains the operator's.
 
 ## Baseline (measured) — tlatoanis-macbook-air, 2026-09-27
 
@@ -198,6 +197,231 @@ match became case-insensitive.
 
 ### Codex
 
+_Contributed by Codex on macuahuitl, 2026-09-28 UTC (2026-09-27 operator
+local date), at the operator's request to complement Antigravity on
+`work/1447-9sne`. This is research and a recommended program, not approval
+to implement or raise the enforcement bar._
+
+#### Verdict and architectural fit
+
+Endorse the separation of obligations, evidence and work events. Revise the
+evidence contract before extending scoring or enforcement. Lua makes
+extraction and evaluation practical; it does not establish that a predicate
+asks the right question or that a recorded pass applies to this implementation.
+
+The durable flow is methodology (policy) -> specs/invariants (intent) ->
+litmus and observations (evidence) -> grader (obligation states) -> plan
+(work and decisions) -> skills (execution) -> release projections (public
+claims), with failures returning to unknown-event intake. A packet is a
+transition and provenance link, not a unit of correctness. Specs already
+cover internal contracts such as methodology accountability; "not user
+visible" is not a reason to forbid an invariant from living in a spec.
+
+#### Measured baseline and evidence counterexamples
+
+Read-only probe on checkout `b9f65cc04`, using the installed
+`tillandsias-plan` build-id `0.1.0+c7ee806ecfcdb036` to execute the
+checked-out Lua sources directly:
+
+- 1,455 scenario/requirement obligations, 662 requirements, all declared.
+- 464 litmus files, zero resolved requirement keys, zero candidates.
+- 125 invariants extracted separately but not consumed by the grader.
+- 39 unregistered spec directories, zero missing files, zero unkeyed
+  requirements within the counted population.
+- Excluded specs: 3 deprecated, 32 obsolete. Static grading returns false
+  with `zero-resolved-requirement-keys:files=464`.
+
+These are attribution counts, not counts of proven implementation failures.
+The earlier coordinator baseline remains separately attributed above. Its
+30 pre-fix-FAIL mentions are textual claims, not a verified lower bound on
+tests that catch their bugs; the baseline did not execute those tests.
+
+Four in-memory counterexamples executed the existing static and observed
+Lua graders, with mock file reads and captured JSON output, without
+editing the repository or invoking the production predicate memo:
+
+| Input | Actual result | Required interpretation |
+|---|---|---|
+| Two scenario IDs under one req-id; one bound asserted step names that req-id | Both scenarios have a candidate; a matching file pass credits 2/2 | Credit only explicitly covered scenarios/assertions |
+| Same pass omits spec and implementation digests | satisfied=2/2, R=0 | Missing mandatory provenance is unmeasured/invalid |
+| Same pass names spec beta instead of alpha and an unrelated implementation revision | satisfied=2/2, R=0 | Wrong subject is rejected, not credited |
+| Linux fail, then later Windows pass, same test digest | satisfied=2/2, R=0, host=windows | Retain separate outcomes for each required regime |
+
+Reproduction recipe: load `scripts/lua/centicolon-grade-static.lua` and
+`scripts/lua/centicolon-grade-observed.lua` into `tillandsias-plan lua -e`.
+Supply an extractor document with IDs `cc:aaaa0001:scenario-a` and
+`cc:aaaa0001:scenario-b`, both req_id=aaaa0001, spec=alpha,
+spec_digest=current-spec. Bind `litmus:one` under alpha, with phase=pre-build,
+size=instant and one critical_path step carrying requirement=aaaa0001 and
+assert_exit=0. Hash that test document for the run's digest. Capture
+`centicolon-grade-static:` JSON via expert.log_info and feed it to the
+observed grader. Vary records exactly as the table describes. The run
+step is `litmus:one`; Linux fail timestamp is 2026-09-27T01:00:00Z,
+Windows pass timestamp is 2026-09-27T02:00:00Z. All cases returned the
+outcomes above. These probes diagnose attribution, not sandbox purity.
+
+Source explanations at the reviewed tree:
+`scripts/lua/centicolon-grade-static.lua`, the `ext.obligations` loop,
+assigns every scenario `refs[o.req_id]`.
+`scripts/lua/centicolon-grade-observed.lua`, function `observe`, selects
+`latest` by test and digest, not regime; its `spec_moved`/pass branch does
+not require a spec digest or an implementation-input match.
+`scripts/run-litmus-test.sh` explicitly
+allows a file-level PASS containing both passing and skipped steps: a
+file pass therefore cannot witness an unexecuted assertion. The latter is
+a source-reviewed implication, not a separately executed probe.
+
+The website follow-up independently rechecked the same boundary at stable
+v56.9.27.2 (52e3bc32e). `scripts/run-litmus-test.sh`, `_lt_verdict` mapping,
+also serializes advisory verdict 3 as status=pass; `_pt_files`/`_pt_digests`
+hash test/spec files at suite emission, not implementation dependencies.
+Neither an advisory file verdict nor a skipped assertion is strict success.
+These are additional source findings, not additional executed counterexamples.
+`scripts/check-centicolon-ratchet.sh` advances last.txt even after lost
+credit: the following unchanged run can appear monotone without repair.
+Keep an accepted baseline distinct from the latest observed snapshot.
+
+#### Purity, memo validity and semantic adequacy are different contracts
+
+The operator suggested the findings might be predicate-purity refinements.
+There are four independently testable properties:
+
+1. **Capability isolation:** Cacheable predicates cannot consult clocks,
+   processes, mutable environment or external state. Keep the existing
+   Cacheable/Observing split.
+2. **Input completeness and snapshot consistency:** every value affecting a
+   verdict belongs to an immutable input manifest, including the evaluator
+   source, runtime/stdlib version, policy, corpus membership, dependencies
+   and explicit observation-time context where applicable.
+3. **Attribution:** evidence identifies the obligation, exact executed
+   assertion, implementation/artifact inputs, spec, bindings, toolchain and
+   platform to which the outcome applies.
+4. **Adequacy:** the assertion discriminates the intended behavior; test it
+   with the actual pre-fix behavior or a controlled semantic mutation.
+
+A constant-true predicate is pure. So is a grader that deterministically
+credits every sibling scenario. Moving either into Cacheable does not
+repair it. An Observing result can be valid evidence if its provenance and
+applicability are explicit.
+
+Separate source-reviewed memo hazards in
+`crates/tillandsias-plan/src/lua_predicate.rs`:
+`PredicateRegistry::register` replaces a name's source without clearing
+that name's cached entries; `eval` keys lookup by name and argument,
+checks prior read-path digests, and caches only a Boolean. The read log
+stores paths; content digests are computed after evaluation rather than
+being captured with the bytes returned by fs.read. Source replacement
+and a file changed between read and post-evaluation hashing therefore
+need adversarial tests before a persistent cache is an evidence authority.
+These are code-review findings, not experimentally verified cache exploits.
+
+Recommended boundary:
+`Observe -> immutable evidence bundle -> pure Grade(bundle, policy, scope)
+-> per-obligation Compare(base, head)`.
+The grade can be pure even though acquiring evidence was Observing.
+Freshness is evaluated against an explicit evaluation context, never a
+hidden clock. Cached typed results include reasons and provenance; a
+Boolean or a log side effect is not the evidence artifact. A cache hit
+must reproduce the complete result, not merely suppress execution.
+
+Use a key covering predicate source, runtime/stdlib, policy/schema, arguments
+and the complete input manifest. Capture content identity at read time
+against a stable snapshot; validate the whole read set before publishing.
+Report discovery/manifest gaps. Filesystem discovery and external command
+dependencies cannot be inferred soundly just from the command string.
+
+#### Answers to the six scope questions
+
+| Question | Codex recommendation | Difference from Antigravity |
+|---|---|---|
+| One metric or two? | One obligation identity/evidence model; residual breakdown by spec/invariant/environment; independent packet-yield and discovery metrics | No double-counting an invariant already represented by a scenario; totals are projections, not the regression test |
+| Durable residue? | A reusable declared obligation and discriminating executable evidence, bound into its verification tier | Rust tests, platform observations and existing guards count; new Lua code is not mandatory |
+| Closure? | A structured closure manifest identifies obligations, assertions and run artifacts; legacy prose is an adapter during migration | A command exiting zero or the word maintenance is insufficient; do not force every class to the same positive-only evidence bar |
+| Monotonicity? | Compare retained obligations individually under a versioned scope/policy; report additions, retirements, lost credit and unmeasured inputs separately | A falling scalar or a three-component vector can conceal individual losses |
+| Recurrence? | Stable failure-family IDs plus evidence-linked instances; distinguish repeated discovery of one incident from a new escape after a guard | Text matching is triage, not proof of recurrence; no native AST capability is assumed |
+| Cost? | Measure cold, warm, invalidated and cross-host runs; use full-vs-incremental equality as the correctness control | No sub-5ms/sub-100ms guarantee follows from mlua or content hashing alone |
+
+Define preventive yield as the number of eligible closed defect packets
+with verified preventive evidence divided by all eligible closed defect
+packets in a declared cohort. Count each packet once; allow an existing
+invariant with a new reproducer. Report numerator, denominator, exceptions,
+undated closures, cohort dates and kind-normalization policy; an empty
+cohort is not 100%. It is a process rate and need not be monotone.
+
+A known counterexample to an already credited obligation invalidates that
+credit immediately. It must not wait in the queue for a new denominator
+entry. A genuinely new obligation enters by an explicit scope event; its
+arrival is disclosed and is not implementation regression. Truthful
+observations may raise residuals. The acceptance policy can prevent
+unexplained regression in accepted changes; it cannot forbid learning
+that an earlier claim was wrong.
+
+#### A measurable contract and its convergence limit
+
+For fixed finite scope S, positive integer policy weights w_i, and closure
+predicate C_i requiring all applicable mandatory evidence:
+
+`R_S(x) = sum(i in S, w_i * (1 - C_i(x)))`.
+
+Keep raw obligation counts and weighted cc distinct. The current Lua
+count, Rust score-checks CI weights, and proximity.yaml's richer credits,
+caps and penalties are not interchangeable implementations of one formula.
+Adoption must version and reconcile the scoring policy; do not silently
+replace any of the three with a dashboard label.
+
+Store independent evidence facts (positive, negative, runtime, bundled);
+one does not imply the others. If keeping the seven-rung display, derive
+a rung only when its cumulative prerequisites hold. Required platforms
+are explicit per obligation; closure quantifies over ALL applicable
+mandatory regimes, with unavailable evidence reported as unmeasured.
+Duplicate/reordered records and unsynchronized wall clocks must not erase
+conflicting evidence. Applicability follows subject identity and explicit
+supersession, not whichever host has the greatest timestamp.
+
+Require no lost credit on retained obligations for ordinary accepted
+transitions, with explicit exceptions and retirement records. A fresh
+clone must reproduce the comparison from a durable accepted baseline.
+The current local untracked last.txt and always-zero advisory exit status
+are an exploratory instrument, not a fleet enforcement baseline.
+
+Bounded non-increase alone allows R=10 forever. Conditional theorem: if
+scope, weights and evidence policy are fixed, no regression occurs, and
+each interval of at most K cycles while R>0 reduces this integer residual
+by at least one, then closure occurs within K*R_0 cycles. The progress
+premise is an additional assumption to validate, not something a velocity
+alarm makes true. `refine(x)=x` with R>0 is validator stability/stall,
+not completion. Unknown discoveries and new scope require explicit
+qualification; no project-wide contraction or probability of correctness
+is established. See methodology/math-foundations.yaml and
+[ranking abstractions](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/12/esop08_ranking_slides.pdf).
+
+#### Progressive program (proposed, not new implementation filings)
+
+| Stage | Concrete work and existing seams | Exit evidence |
+|---|---|---|
+| 1. Contract | Align methodology/proximity, convergence, accountability and skills; explicit identities, applicability, evidence bars, exceptions and units | Same term denotes the same quantity in every consumer; operator chooses enforcement scope |
+| 2. Trustworthy attribution | Extend 1395-88tp; step/assertion records; subject/input manifests; regime separation; evaluator and cache semantics; coordinate with 1437-v3gb | Four counterexamples above and mixed-pass/skip case cannot gain credit; source changes, incomplete manifests and cold/warm runs are distinguished |
+| 3. Pilot | Extend 1395-64r7 with one systemic invariant and one platform obligation; report only | Pre-fix or targeted mutation fails for the intended reason, corrected behavior passes, another required regime remains unmeasured until observed |
+| 4. Transient work | Typed closure links, kind normalization, yield cohorts, recurrence family IDs and explicit exceptions | A defect closure resolves to both behavior evidence and the durable prevention mechanism |
+| 5. Ratchet | Extend 1395-ue3i on the pilot's approved scope; durable baseline and structured tombstones | A regression cannot be cancelled by another improvement; fresh-clone replay agrees; new scope is reported separately |
+| 6. Feedback and release | Extend 1395-miwn with comparable-scope velocity; candidate-ranking experiments; release evidence and website corrections | Every published score is reproducible; stalls are named; empirical prioritization never awards correctness credit |
+
+The existing packets name useful seams, not verified completion of these
+expanded criteria. The parent 1447-9sne remains open for the operator's
+design pick. Follow-up implementation packets are proposed here only.
+
+#### Stockfish follow-up
+
+Operator-assigned research packet 1453-p9gb is carried on this same branch.
+Its completed source investigation is
+[Modern Stockfish lessons for CentiColon](stockfish-centicolon-lessons-research-2026-09-28.md).
+The key proposed transfer is three separate layers: hard correctness
+evidence, a revisable heuristic for selecting work, and empirical
+comparison of candidate policies. Borrow validated caching, bounded search
+and controlled experiments; do not turn chess evaluation into a proof
+of software convergence.
+
+
 ### Antigravity
 
 _Contributed by Antigravity (calmecacpilli, `work/1447-9sne` e7ef20ce9, 2026-09-28), relayed by the coordinator. Text below is Antigravity's, headings demoted to sit under this section._
@@ -309,7 +533,7 @@ At packet closure time, the grader validates that named obligations are $\ge \te
 
 #### Proposed spec requirements (Antigravity) — NOT ADOPTED
 
-_Antigravity proposed three requirements for `openspec/specs/methodology-accountability/spec.md` (req-ids e45b37c5, a1b71f16, 5ee5d6af). The coordinator did not merge them into the durable spec: 1447-9sne closes on the operator's pick among the recorded positions, Codex has not stated its position yet, and parts of the text describe tooling that does not exist (e.g. `check-scorable-obligation-added.sh` accepting `centicolon: inv:<id>`). They are preserved verbatim here so the pick can adopt them as-is._
+_Antigravity proposed three requirements for `openspec/specs/methodology-accountability/spec.md` (req-ids e45b37c5, a1b71f16, 5ee5d6af). The coordinator did not merge them into the durable spec: 1447-9sne closes on the operator's pick among the recorded positions, Codex's review above now challenges their adoption as written, and parts of the text describe tooling that does not exist (e.g. `check-scorable-obligation-added.sh` accepting `centicolon: inv:<id>`). They are preserved verbatim here so the pick can adopt them as-is._
 
 ```markdown
 ### Requirement: Plan ledger models the distillation layer
@@ -402,4 +626,35 @@ SHALL track the invariant-yield ratio across closed bug-class packets.
 
 ## Synthesis
 
+The coordinator's baseline measures citation coverage, Antigravity proposes
+the distillation model, and Codex tests the attribution boundary. Preserve
+all three: the measurements do not prove preventive adequacy, the proposal
+does not prove implementation, and the counterexamples do not discredit
+pure evaluation as an architecture.
+
 ## Recommendation
+
+Codex recommends the six-stage program above, with reliable evidence
+attribution before expanded scoring and enforcement. Antigravity's original
+requirements remain proposals preserved below its position; this branch
+does not adopt new methodology policy. The operator authorized recording
+the review and performing Stockfish research, not a production
+implementation or an enforcement bar raise.
+
+## Review bootstrap and persistence
+
+- Intent: investigation_only plus explicitly authorized research/plan capture.
+- Host: macuahuitl; Linux; isolated linked worktree; branch work/1447-9sne.
+- MCP-first fallback: unavailable (no project-plan/forge-plan/project-info
+  tools exposed); recorded here rather than silently assuming grounded MCP
+  answers. OpenSpec CLI also unavailable in this host session.
+- Sources: methodology.yaml, bootstrap router, proximity, math-foundations,
+  convergence, multi-host-development, distributed-work, accountability and
+  litmus specs; shared skills; Lua grader/runtime sources; website checkout.
+- Fetched heads at start: linux-next 392a0c514, main 52e3bc32e,
+  windows-next b38f71052, osx-next 49731c152,
+  work/1447-9sne e7ef20ce9.
+- Merge resolution preserves the coordinator's baseline and verbatim
+  Antigravity position from origin/linux-next, then adds Codex's review.
+- Validation: research-source verification, fragment checks, diff checks,
+  and the operator-required ./build.sh --check before publication.
