@@ -90,6 +90,31 @@ Each message type is registered with the tray-side router at startup. Unrecogniz
 - **THEN** deserialization fails and the connection is closed
 - **AND** an error is logged (no crash)
 
+### Requirement: Login completion is a notification, not a poll
+
+<!-- @trace order:679-rp9m -->
+`tillandsias --github-login` SHALL send one `ControlMessage::GithubLoginStored { seq, ts_unix }`
+envelope to the control socket AFTER its Vault write is verified, and the tray SHALL answer
+`IssueAck { seq_acked: seq }`. The variant is a trailing, additive addition (no `WIRE_VERSION` bump);
+it is routed on the unix socket only and is `Unsupported` on vsock.
+
+A tray waiting for a login SHALL wait for that notification under ONE 120-second deadline and then
+settle the login state from ONE Vault presence check, whether the notification arrived or not. It
+SHALL NOT poll Vault periodically. The notification is best-effort: a login with no tray running, or
+with a tray too old to decode the variant, SHALL still succeed and exit 0, reporting the missing
+notification as a note.
+
+Consumers: the Linux tray (implemented). The macOS and Windows trays consume the same message on
+their own control surfaces (follow-up rows filed under 679-rp9m).
+
+#### Scenario: A login confirmed by the notification
+- **WHEN** the operator clicks GitHub login and completes `tillandsias --github-login`
+- **THEN** the tray receives `GithubLoginStored`, acks it, and logs the login-confirmed event within 5 s of the Vault write
+
+#### Scenario: No notification arrives
+- **WHEN** no `GithubLoginStored` reaches the tray (the login ran outside the tray, or the CLI could not connect)
+- **THEN** the tray's login wait ends at 120 s and one presence check decides the login state
+
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:

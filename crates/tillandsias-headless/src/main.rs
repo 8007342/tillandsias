@@ -12053,6 +12053,22 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "{provider_name} token stored in Vault at {}; containers read from Vault",
             config.provider.vault_path()
         );
+        // 679-rp9m: wake a waiting tray. Best-effort: no tray is a note.
+        #[cfg(unix)]
+        if matches!(config.provider, ProviderId::GitHub) {
+            match notify_tray_github_login_stored(&tray_control_socket_path()) {
+                TrayNotify::Acked => {
+                    if debug {
+                        eprintln!("[tillandsias] github-login: tray notified");
+                    }
+                }
+                TrayNotify::NoTray(why) => {
+                    eprintln!(
+                        "[tillandsias] github-login: no tray notified ({why}); the login itself succeeded"
+                    );
+                }
+            }
+        }
     }
     #[cfg(not(feature = "vault"))]
     {
@@ -15409,6 +15425,109 @@ fn build_project_browser_spec(
 /// transient one.
 ///
 /// @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
+/// What the login CLI's tray notify achieved (order 679-rp9m).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum TrayNotify {
+    /// The tray acked `GithubLoginStored`.
+    Acked,
+    /// Nothing to notify: no socket, nothing listening, or a tray too old to
+    /// know the message. The login is unaffected.
+    NoTray(String),
+}
+
+/// The tray's control socket, as the tray computes it.
+#[cfg(unix)]
+fn tray_control_socket_path() -> PathBuf {
+    let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
+        .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
+    PathBuf::from(runtime_dir).join("tillandsias/control.sock")
+}
+
+/// Tell the tray the GitHub token is stored (order 679-rp9m), so its login
+/// wait ends on an event instead of a Vault poll. BEST-EFFORT BY CONTRACT: a
+/// login with no tray running must still succeed and exit 0, so every failure
+/// here is a `NoTray` note, never an error the caller could propagate.
+#[cfg(unix)]
+pub(crate) fn notify_tray_github_login_stored(socket_path: &Path) -> TrayNotify {
+    let no = |why: String| TrayNotify::NoTray(why);
+    let mut stream = match UnixStream::connect(socket_path) {
+        Ok(s) => s,
+        Err(e) => return no(format!("{}: {e}", socket_path.display())),
+    };
+    let timeout = Duration::from_secs(2);
+    let _ = stream.set_read_timeout(Some(timeout));
+    let _ = stream.set_write_timeout(Some(timeout));
+    let ts_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq: 1,
+        body: ControlMessage::GithubLoginStored { seq: 1, ts_unix },
+    };
+    let Ok(encoded) = encode(&envelope) else {
+        return no("encode failed".into());
+    };
+    let mut frame = (encoded.len() as u32).to_be_bytes().to_vec();
+    frame.extend_from_slice(&encoded);
+    if let Err(e) = stream.write_all(&frame) {
+        return no(format!("write: {e}"));
+    }
+    let mut len_buf = [0_u8; 4];
+    if let Err(e) = stream.read_exact(&mut len_buf) {
+        // An older tray drops a frame it cannot decode: no ack.
+        return no(format!("no ack: {e}"));
+    }
+    let reply_len = u32::from_be_bytes(len_buf) as usize;
+    if reply_len == 0 || reply_len > MAX_MESSAGE_BYTES {
+        return no(format!("ack length {reply_len}"));
+    }
+    let mut reply = vec![0_u8; reply_len];
+    if let Err(e) = stream.read_exact(&mut reply) {
+        return no(format!("ack body: {e}"));
+    }
+    match decode(&reply).map(|e| e.body) {
+        Ok(ControlMessage::IssueAck { seq_acked: 1 }) => TrayNotify::Acked,
+        Ok(other) => no(format!("tray answered {}", other.kind())),
+        Err(e) => no(format!("ack decode: {e}")),
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tray_notify_tests {
+    use super::*;
+    use std::os::unix::net::UnixListener;
+
+    /// 679-rp9m (c): no tray running is a note, never an error.
+    #[test]
+    fn no_socket_is_no_tray_not_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        match notify_tray_github_login_stored(&dir.path().join("absent.sock")) {
+            TrayNotify::NoTray(_) => {}
+            other => panic!("expected NoTray, got {other:?}"),
+        }
+    }
+
+    /// An older tray that cannot decode the variant drops the connection
+    /// without an ack: still NoTray, still not an error.
+    #[test]
+    fn a_tray_that_does_not_ack_is_no_tray() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("control.sock");
+        let listener = UnixListener::bind(&path).unwrap();
+        let t = std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let mut len = [0u8; 4];
+            let _ = s.read_exact(&mut len);
+            // drop without replying
+        });
+        let out = notify_tray_github_login_stored(&path);
+        t.join().unwrap();
+        assert!(matches!(out, TrayNotify::NoTray(_)), "{out:?}");
+    }
+}
+
 #[cfg(unix)]
 fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Result<(), String> {
     // Get control socket path from XDG_RUNTIME_DIR or default.
