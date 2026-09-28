@@ -137,6 +137,15 @@ is_legacy_archive() {
 #                                      re-validated at graduation/merge.
 warn_if_outside_branch_grammar() {
     local refname="$1"
+    # A seed decides for itself (1443-uit6): its grammar includes work/ and
+    # salvage/ refs, advised is silent, and enforced was applied pre-relay.
+    if [ "${DISC_PRESENT:-0}" -eq 1 ]; then
+        [ "$DISC_ENF_GRAMMAR" = warn ] || return 0
+        discipline_ref_in_grammar "$refname" && return 0
+        log_msg "WARNING: new branch '$refname' is outside this project's branch grammar"
+        log_msg "WARNING: expected $DISC_INTEGRATION, work/<order> or salvage/<host>/<yyyymmdd>-<slug>; accepted (the grammar rule is warn)"
+        return 0
+    fi
     [ -n "${TILLANDSIAS_BRANCH_CREATION_REGEX:-}" ] || return 0
     case "$refname" in
         refs/heads/*) ;;
@@ -153,6 +162,130 @@ warn_if_outside_branch_grammar() {
     fi
     log_msg "WARNING: push accepted anyway — the branch-name grammar is warn-only at this rung"
     return 0
+}
+
+# --- Seeded branch discipline (order 1443-uit6) ---
+# @trace spec:git-mirror-service, spec:branch-discipline
+# The project's .tillandsias/branch-discipline.yaml (1443-w79y) is read from
+# the INTEGRATION branch's tree: the seed at the mirror's HEAD names the
+# integration branch (integration.forge), and the seed on that branch is the
+# one applied. No branch name is a constant here; they all come from the seed.
+#
+# Each rule applies at ITS OWN enforcement word:
+#   advised   silent
+#   warn      the push is accepted with a warning
+#   enforced  the push is rejected BEFORE the relay, so nothing reaches upstream
+#
+# ABSOLUTE FLOOR (1363-xp2v, 2026-09-22): a project with NO seed is level 0,
+# advised, and nothing is refused or warned about. A seed that is present but
+# cannot be parsed (no ruby, or invalid YAML) is reported and applies NOTHING:
+# discipline never blocks on a missing parser.
+#
+# The seed is parsed with ruby's YAML loader, never grepped (1459-mqvd class 5).
+DISC_PRESENT=0
+DISC_LEVEL=0
+DISC_ENF_DEFAULT=advised
+DISC_ENF_GRAMMAR=advised
+DISC_DEFAULT=""
+DISC_INTEGRATION=""
+DISC_WORK_RE=""
+DISC_MESSAGE=""
+DISC_SEED_PATH=".tillandsias/branch-discipline.yaml"
+
+discipline_parse() {   # <seed file>; prints key=value lines, rc 1 when unparseable
+    command -v ruby >/dev/null 2>&1 || { echo "reason=no-ruby"; return 1; }
+    ruby -ryaml -e '
+        d = YAML.safe_load(File.read(ARGV[0])) rescue (puts "reason=invalid-yaml"; exit 1)
+        (puts "reason=not-a-mapping"; exit 1) unless d.is_a?(Hash)
+        e = d["enforcement"].is_a?(Hash) ? d["enforcement"] : {}
+        i = d["integration"].is_a?(Hash) ? d["integration"] : {}
+        m = d["messages"].is_a?(Hash) ? d["messages"] : {}
+        one = lambda { |v| v.to_s.gsub(/[\r\n]+/, " ") }
+        puts "level=#{one.(d["level"] || 0)}"
+        puts "enf_default=#{one.(e["default_branch"] || "advised")}"
+        puts "enf_grammar=#{one.(e["ref_grammar"] || "advised")}"
+        puts "default=#{one.(d["default_branch"])}"
+        puts "integration=#{one.(i["forge"] || i["linux"])}"
+        puts "work_ref=#{one.(d["work_ref"])}"
+        puts "message=#{one.(m["default_branch_denied"])}"
+    ' "$1"
+}
+
+discipline_load_from() {   # <ref>; rc 0 when a seed was found at that ref
+    local ref="$1" seed="$TMPDIR_WORK/discipline-seed.yaml" out k v
+    git cat-file -e "$ref:$DISC_SEED_PATH" 2>/dev/null || return 1
+    git show "$ref:$DISC_SEED_PATH" > "$seed" 2>/dev/null || return 1
+    DISC_PRESENT=1
+    if ! out="$(discipline_parse "$seed" 2>/dev/null)"; then
+        log_msg "WARNING: $DISC_SEED_PATH at $ref is present but unreadable (${out#reason=}); no discipline rule is applied"
+        DISC_PRESENT=2
+        return 0
+    fi
+    while IFS='=' read -r k v; do
+        case "$k" in
+            level) DISC_LEVEL="$v" ;;
+            enf_default) DISC_ENF_DEFAULT="$v" ;;
+            enf_grammar) DISC_ENF_GRAMMAR="$v" ;;
+            default) DISC_DEFAULT="$v" ;;
+            integration) DISC_INTEGRATION="$v" ;;
+            work_ref) DISC_WORK_RE="$v" ;;
+            message) DISC_MESSAGE="$v" ;;
+        esac
+    done <<DISC_EOF
+$out
+DISC_EOF
+    return 0
+}
+
+discipline_load() {
+    discipline_load_from HEAD || return 0
+    [ "$DISC_PRESENT" -eq 1 ] || return 0
+    if [ -n "$DISC_INTEGRATION" ] && git rev-parse --verify --quiet "refs/heads/$DISC_INTEGRATION" >/dev/null; then
+        discipline_load_from "refs/heads/$DISC_INTEGRATION" || true
+    fi
+}
+
+discipline_message() {
+    local msg="${DISC_MESSAGE:-push to {default} denied: use {integration} for integration and {work_ref} for work}"
+    msg="$(printf '%s' "$msg" | sed -e "s|{default}|$DISC_DEFAULT|g" -e "s|{integration}|$DISC_INTEGRATION|g" -e "s|{work_ref}|work/<order>|g")"
+    printf '%s' "$msg"
+}
+
+# rc 1 = refuse this update; warnings are printed and return 0.
+discipline_check_update() {   # <oldsha> <refname>
+    local old="$1" ref="$2"
+    [ "$DISC_PRESENT" -eq 1 ] || return 0
+    if [ -n "$DISC_DEFAULT" ] && [ "$ref" = "refs/heads/$DISC_DEFAULT" ]; then
+        case "$DISC_ENF_DEFAULT" in
+            enforced)
+                log_msg "REJECT: $(discipline_message)"
+                log_msg "blocked:branch-discipline:default-branch:$DISC_DEFAULT:level=$DISC_LEVEL"
+                return 1 ;;
+            warn) log_msg "WARNING: $(discipline_message) (warn only: accepted)" ;;
+        esac
+        return 0
+    fi
+    [ "$old" = "$ZERO_SHA" ] || return 0
+    case "$ref" in refs/heads/*) ;; *) return 0 ;; esac
+    discipline_ref_in_grammar "$ref" && return 0
+    case "$DISC_ENF_GRAMMAR" in
+        enforced)
+            log_msg "REJECT: new branch '$ref' is outside this project's branch grammar"
+            log_msg "REJECT: use $DISC_INTEGRATION, work/<order> ($DISC_WORK_RE) or salvage/<host>/<yyyymmdd>-<slug>"
+            log_msg "blocked:branch-discipline:ref-grammar:${ref#refs/heads/}"
+            return 1 ;;
+    esac
+    return 0
+}
+
+discipline_ref_in_grammar() {   # <refname>
+    local b="${1#refs/heads/}"
+    [ "$b" = "$DISC_DEFAULT" ] && return 0
+    [ "$b" = "$DISC_INTEGRATION" ] && return 0
+    if [ -n "$DISC_WORK_RE" ] && printf '%s\n' "$b" | grep -Eqx -e "$DISC_WORK_RE"; then return 0; fi
+    case "$b" in salvage/*/*) return 0 ;; esac
+    if [ -n "${TILLANDSIAS_BRANCH_CREATION_REGEX:-}" ] && printf '%s\n' "$1" | grep -Eq -e "$TILLANDSIAS_BRANCH_CREATION_REGEX"; then return 0; fi
+    return 1
 }
 
 # --- CI workflow budget (order 598, operator directive 2026-08-03) ---
@@ -358,6 +491,7 @@ OID_LENGTH="${#OID_SAMPLE}"
 ZERO_SHA="$(printf '%*s' "$OID_LENGTH" '' | tr ' ' '0')"
 SEEN_REFS="$TMPDIR_WORK/seen-refs"
 : > "$SEEN_REFS"
+discipline_load
 
 # --- Validate transaction + enforce policy before privileged relay (order 579) ---
 # @trace spec:git-mirror-service
@@ -471,6 +605,12 @@ while read -r OLDSHA NEWSHA REFNAME EXTRA; do
             fi
             ;;
     esac
+
+    # Seeded branch discipline (1443-uit6): pre-relay, so an enforced refusal
+    # never reaches upstream.
+    if ! discipline_check_update "$OLDSHA" "$REFNAME"; then
+        RECEIVE_POLICY_REJECTED=1
+    fi
 done < "$UPDATES_FILE"
 
 if [ "$RECEIVE_POLICY_REJECTED" -eq 1 ]; then
