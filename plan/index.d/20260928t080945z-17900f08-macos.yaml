@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    event:
+      type: progress
+      ts: "2026-09-28T08:09:45Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t080945z
+      host: macos
+      summary: |
+        READY FOR RELAY after 1443-8pur: work/1260-2qgi at 9aba0d618, stacked on work/1443-8pur c634aeb09. The fixture now drives the agent door's agreed `run --json` vocabulary (code is an integer only for "exited"; signaled/timed_out/no_status/spawn_failed/policy_denied/policy_consent read as absent). DARWIN, fresh checkout, gate regime: ok:status-channel:absent-distinct-from-zero:3/3 skipped=1. Killed child -> absent:signaled; failed producer | tee -> red:1; exit 0 -> green. PRE-FIX on the improvised recipe it was 0/3 (killed -> rc=137 a substituted integer; failed producer | tee -> GREEN). Bound as gate step 283 with STEP_SECOND_REGIME; preflight-fixtures-default-target ok, and all deciders ok. advance-work §5's detached-gate recipe is switched to `tillandsias-plan run --json --timeout-ms 5400000 -- bash <script> > gate.status`, where the script writes its own gate.log so the Monitor still sees progress. Exercised exactly as written: the log grew mid-run and gate.status read ["exited",1]. `--timeout-ms` is made mandatory in the recipe because the door's default deadline (300 s) would kill every full gate. REMAINING FOR CLOSURE (4/4): arm 2 (the wsl.exe hop through scripts/lib-wsl-exec.sh's canary) runs only on Windows. yolanda: run `bash scripts/test-status-channel-absent-is-first-class.sh` on this ref from Git Bash. It passes when the canary either carries the status or refuses naming the drop.
