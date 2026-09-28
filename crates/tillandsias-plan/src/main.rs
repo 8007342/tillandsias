@@ -4667,6 +4667,14 @@ fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
     }
 }
 
+/// ORDER 1458-8y85 — the acknowledgement hash a deliberate `--replace` writes:
+/// sha256 of the replaced value exactly as `field-get` prints it once a shell
+/// command substitution has stripped its trailing newlines.
+fn replace_ack_sha256(replaced: &str) -> String {
+    tillandsias_plan::host_verbs::sha256_hex_reader(replaced.trim_end_matches('\n').as_bytes())
+        .unwrap_or_default()
+}
+
 fn main() {
     let start_time = std::time::Instant::now();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -9010,6 +9018,20 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             }
             let body =
                 fragments::set_field_fragment_body(&pid, &field, &value, &ts, &host, &event_blocks);
+            // ORDER 1458-8y85. A DELIBERATE --replace of long-form prose writes
+            // an acknowledgement into its own bytes: the sha256 of the exact
+            // folded value it read and replaced. check-append-vs-origin-fold.sh
+            // (1261-bn7v) admits the drop only when that hash equals ORIGIN's
+            // current fold of the field, so "I read these lines and drop them"
+            // is distinguishable from "I never saw them" (a peer's newer append
+            // that this host had not fetched still differs, and is still
+            // refused). Trailing newlines are trimmed on both sides: the guard
+            // reads origin's value through a shell command substitution.
+            let body = if want_replace && long_form && current != "<unset>" {
+                fragments::with_replace_acknowledgement(&body, &replace_ack_sha256(&current))
+            } else {
+                body
+            };
 
             if let Err(e) = std::fs::write(&path, body) {
                 eprintln!("error: write {}: {e}", path.display());
