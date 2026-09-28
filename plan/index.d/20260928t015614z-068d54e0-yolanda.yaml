@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: native-windows-clippy-deny-warnings-reds-tillandsias-podman-on-twelve-sites-so-headless-and-plan-cannot-be-linted-natively-either
+    event:
+      type: completed
+      ts: "2026-09-28T01:56:14Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        Landed in relay commit 76c97c012 (land80) on origin/linux-next, both commits. Verified by content: trunk check-windows-tray-clippy.sh carries TILLANDSIAS_WINDOWS_CLIPPY_CRATES_DIR (the widened arm) and tillandsias-podman carries the 1444-bzpu fixes. Coordinator on Linux: podman 177/0, plan 464/0. The two Windows-only podman image-cache test failures recorded on this row remain open as a separate finding.
