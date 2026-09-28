@@ -4410,6 +4410,101 @@ fn run_predicate_cli(args: &[String]) {
 /// `  remedy:` on stderr. Exit 0 allow, 1 deny, 4 consent, 2 usage. A refused
 /// seed is named on stderr (`refused:policy-seed:<reason>`) and the answer
 /// comes from the floor alone.
+/// ORDER 1443-8pur — `tillandsias-plan run [--cwd P] [--env K=V]…
+/// [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>`.
+///
+/// The policy decides on argv before anything spawns. In this (plain) form the
+/// child's stdout and stderr pass through byte for byte and the verb exits with
+/// the child's code: 124 for a deadline, 128+N for signal N, 127 when the
+/// program could not be started. A refusal prints refused:policy:<rule> (or
+/// consent:policy:<class>) with why:/remedy: on stderr and exits 1 (deny) or 4
+/// (consent); no child was spawned. A clipped capture is named on stderr.
+fn run_run_verb(args: &[String]) -> ! {
+    use tillandsias_plan::run_verb as rv;
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan run [--cwd P] [--env K=V]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>\n  argv is argv: there is no command-string form and no --shell."
+        );
+        std::process::exit(2);
+    };
+    let mut spec = rv::RunSpec::new(Vec::new());
+    let mut i = 0;
+    let mut saw_dd = false;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--" {
+            spec.argv = args[i + 1..].to_vec();
+            saw_dd = true;
+            break;
+        }
+        let Some(v) = args.get(i + 1) else { usage() };
+        match a {
+            "--cwd" => spec.cwd = Some(PathBuf::from(v)),
+            "--env" => {
+                let Some((k, val)) = v.split_once('=') else {
+                    usage()
+                };
+                if k.is_empty() {
+                    usage();
+                }
+                spec.env.push((k.to_string(), val.to_string()));
+            }
+            "--timeout-ms" => spec.timeout_ms = v.parse().unwrap_or_else(|_| usage()),
+            "--capture-bytes" => {
+                let n: usize = v.parse().unwrap_or_else(|_| usage());
+                if n == 0 {
+                    usage();
+                }
+                spec.capture_bytes = Some(n);
+            }
+            "--stdin-file" => match std::fs::read(v) {
+                Ok(b) => spec.stdin = Some(b),
+                Err(e) => {
+                    eprintln!("error: --stdin-file {v}: {e}");
+                    std::process::exit(2);
+                }
+            },
+            _ => usage(),
+        }
+        i += 2;
+    }
+    if !saw_dd || spec.argv.is_empty() {
+        usage();
+    }
+    match rv::execute(&spec, "run") {
+        rv::RunOutcome::Refused(d) => {
+            eprintln!("{}", d.token);
+            if let Some(w) = &d.why {
+                eprintln!("why: {w}");
+            }
+            if let Some(r) = &d.remedy {
+                eprintln!("remedy: {r}");
+            }
+            std::process::exit(d.exit_code());
+        }
+        rv::RunOutcome::SpawnFailed { error, .. } => {
+            eprintln!("error: {error}");
+            std::process::exit(127);
+        }
+        rv::RunOutcome::Ran { output, .. } => {
+            use std::io::Write;
+            let _ = std::io::stdout().write_all(&output.stdout);
+            let _ = std::io::stderr().write_all(&output.stderr);
+            if output.truncated {
+                eprintln!(
+                    "note:run:truncated dropped={} (raise --capture-bytes, or read the verdict from --json once available)",
+                    output.dropped
+                );
+            }
+            std::process::exit(match output.completion {
+                tillandsias_exec::Completion::Exited(c) => c,
+                tillandsias_exec::Completion::Signaled(s) => 128 + s,
+                tillandsias_exec::Completion::TimedOut { .. } => 124,
+            });
+        }
+    }
+}
+
 /// ORDER 1443-we89 — `policy classify-bash`: the Bash-tool bridge.
 ///   --hook       read Claude Code's PreToolUse JSON on stdin and answer in its
 ///                contract: deny = exit 2 with the refusal on stderr; ask =
@@ -4938,6 +5033,11 @@ fn main() {
     if args[0] == "lua" {
         run_lua_cli(&args[1..]);
         return;
+    }
+
+    // ORDER 1443-8pur — the agent door. Early: it reads no ledger.
+    if args[0] == "run" {
+        run_run_verb(&args[1..]);
     }
 
     if args[0] == "predicate" {
