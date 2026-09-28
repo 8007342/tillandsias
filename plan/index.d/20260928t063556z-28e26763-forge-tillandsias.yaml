@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-temporary-claude-code-pretooluse-hook-classifies-a-raw-bash-command-against-the-seven-measured-failure-shapes-through-the-policy-engine-refuses-with-why-and-remedy-asks-for-consent-on-destructive-classes-and-prints-its-own-retirement-condition
+    field: status
+    value: in_progress
+    ts: "2026-09-28T06:35:56Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: a-temporary-claude-code-pretooluse-hook-classifies-a-raw-bash-command-against-the-seven-measured-failure-shapes-through-the-policy-engine-refuses-with-why-and-remedy-asks-for-consent-on-destructive-classes-and-prints-its-own-retirement-condition
+    event:
+      type: note
+      ts: "2026-09-28T06:35:56Z"
+      host: forge-tillandsias
+      summary: |-
+        claimed by macuahuitl-forge on coordinator assignment; operator ruling 1 'Commit the hook to the project' (plan/issues/lua-bash-replacement-and-policies-design-2026-09-27.md §8). Built settings-free first (classifier, stub, fixture); the .claude/settings.json + forge-overlay entry is one final commit made only on the operator's direct confirmation in this session.
