@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-tests-share-one-env-lock-so-the-mcp-browser-family-test-survives-a-parallel-run
+    field: status
+    value: completed
+    ts: "2026-09-28T03:50:45Z"
+    host: macuahuitl
+
+events:
+  - packet_id: tray-tests-share-one-env-lock-so-the-mcp-browser-family-test-survives-a-parallel-run
+    event:
+      type: completed
+      ts: "2026-09-28T03:50:45Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 9f4ac6371 (land81, origin/linux-next): test-headless-env-lock-is-single.sh -> ok:headless-env-lock:1; arm 2 mcp_connection_serves_browser_family_over_the_socket --test-threads=8 passed 10/10 on 9f4ac6371
+  - packet_id: tray-tests-share-one-env-lock-so-the-mcp-browser-family-test-survives-a-parallel-run
+    event:
+      type: note
+      ts: "2026-09-28T03:50:45Z"
+      host: macuahuitl
+      summary: |-
+        closed by the coordinator on the author forge's behalf (lenovinha-forge is down); both arms measured on the landed commit
