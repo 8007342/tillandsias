@@ -30,7 +30,8 @@ trace_lifecycle() { :; }
 # through the plan binary's jq subset, per the jq call-site ratchet (1375-tsfu).
 command -v jq >/dev/null 2>&1 || { echo "skip:forge-project-trust-seeds:no-jq"; exit 0; }
 . "$ROOT/scripts/plan-binary-probe.sh"
-PLAN="$(resolve_plan_binary)" || { echo "skip:forge-project-trust-seeds:no-plan-binary"; exit 0; }
+PLAN="$(cd "$ROOT" && resolve_plan_binary)" || { echo "skip:forge-project-trust-seeds:no-plan-binary"; exit 0; }
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
 jget() { "$PLAN" json get "$@"; }
 for fn in seed_claude_project_trust seed_codex_project_trust seed_agy_workspace_trust; do
     eval "$(sed -n "/^$fn()/,/^}/p" "$LIB")"
@@ -176,7 +177,7 @@ if [ -n "$AGY" ] && [ -x "$AGY" ]; then
         bad "agy control: the map form was not rejected; the acceptance check proves nothing"
     fi
 else
-    echo "skip:forge-project-trust-seeds:real-agy-absent"
+    echo "note:forge-project-trust-seeds:optional-arm-skipped:real-agy-absent"
 fi
 
 # ── 6 (optional): the real codex parses and VALIDATES what the seed writes ───
@@ -201,7 +202,7 @@ if [ -n "$CODEX" ] && [ -x "$CODEX" ]; then
         bad "codex control: a wrong-typed trust_level was accepted; the key may be ignored"
     fi
 else
-    echo "skip:forge-project-trust-seeds:real-codex-absent"
+    echo "note:forge-project-trust-seeds:optional-arm-skipped:real-codex-absent"
 fi
 
 total=$((pass + fail))
