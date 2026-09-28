@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: initialize-bare-metal-host-says-exiting-the-lane-leaves-the-stack-running-but-the-last-lane-exit-tears-the-mirror-down-by-design
+    field: status
+    value: in_progress
+    ts: "2026-09-27T23:24:28Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: initialize-bare-metal-host-says-exiting-the-lane-leaves-the-stack-running-but-the-last-lane-exit-tears-the-mirror-down-by-design
+    event:
+      type: note
+      ts: "2026-09-27T23:24:28Z"
+      host: yoga-silverblue
+      summary: |-
+        claim: skill text fix on work/1448-yt96

@@ -70,6 +70,26 @@ esac
 # Export all agent-related variables so they're available to shell and tools
 export AGENT_PROFILE AGENT_SUPPORTS_WEB AGENT_DISPLAY_NAME
 
+# ORDER 1446-qkx4 — skills every project in a forge gets, not only Tillandsias
+# checkouts. The image copies the repo's skills/ to /opt/skills, but nothing
+# linked them anywhere a harness looks, so a forge on any other project saw
+# none of them. Link each GENERIC skill into every harness's USER-level skill
+# directory. Never overwrite an entry that is already there (a project or the
+# user may own that name), never fail: this file is sourced under set -e.
+TILLANDSIAS_FORGE_GENERIC_SKILLS="${TILLANDSIAS_FORGE_GENERIC_SKILLS:-project-discipline}"
+link_forge_generic_skills() {
+    local src_root="${TILLANDSIAS_SHARED_SKILLS_ROOT:-/opt/skills}" home="${HOME:-/home/forge}" skill dir
+    for skill in $TILLANDSIAS_FORGE_GENERIC_SKILLS; do
+        [ -f "$src_root/$skill/SKILL.md" ] || continue
+        for dir in "$home/.claude/skills" "$home/.codex/skills" "$home/.gemini/skills" "$home/.config/opencode/skill"; do
+            [ -e "$dir/$skill" ] || [ -L "$dir/$skill" ] && continue
+            mkdir -p "$dir" 2>/dev/null && ln -s "$src_root/$skill" "$dir/$skill" 2>/dev/null
+        done
+    done
+    return 0
+}
+link_forge_generic_skills || true
+
 # Log agent profile activation (optional, useful for debugging)
 if [ "${TRACE_LIFECYCLE:-0}" = "1" ]; then
     echo "[agent-profile] loaded: AGENT_PREFERENCE=${AGENT_PREFERENCE} AGENT_PROFILE=${AGENT_PROFILE}" >&2

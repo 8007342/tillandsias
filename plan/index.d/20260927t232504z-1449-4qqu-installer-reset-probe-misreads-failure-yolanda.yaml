@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-installer-reads-a-failed-reinit-in-its-reset-state-probe-as-an-old-tray-and-skips-the-wipe-exactly-when-the-guest-is-broken
+    order: 1449-4qqu
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, installer, reset-state, fail-loud]
+    estimated_hours: 2
+    owned_files: [scripts/install-windows.ps1]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds a fixture that runs the probe block against
+      stub trays (unknown flag / flag ran and failed / flag ran and succeeded), in the same commit.
+    title: |
+      install-windows.ps1's --reset-state probe treats ANY non-zero exit as "this tray predates --reset-state", so when the probe's own re-init fails on a broken guest it skips the wipe, the one repair that guest needed
+    verifiable_closure: |
+      The probe distinguishes "unsupported flag" (the parser refuses it, exit 2 naming the flag)
+      from "flag ran and failed" (the tray knows the flag; its re-init failed): the second case
+      proceeds to the destructive --reset-state instead of skipping it. A fixture drives the probe
+      block against three stub trays. Pre-fix result: FAILS, measured on yolanda 2026-09-27 in the
+      v56.9.27.2 smoke.
+    context: |
+      MEASURED (yolanda, 2026-09-27, the published v56.9.27.2 install-windows.ps1): the install ran
+      over a guest a dev tray had provisioned, which the release tray could not handshake with
+      ("peer sent no readable Noise frame, 0 bytes"). The probe (install-windows.ps1 ~911-937) runs
+      `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 tray --reset-state`, which re-provisions the EXISTING state;
+      that re-init failed with exit 1. The installer printed "probe: --reset-state not usable on
+      this tray (exit 1)", "probe said: [tillandsias] --reset-state: reset skipped by
+      TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 - reprovisioning through the platform's plain init instead."
+      and "this tray predates --reset-state (order 1286-4437); skipping the state reset", then
+      launched a tray against the broken guest. The probe output itself proves the tray KNOWS the
+      flag. Running the release tray's own --reset-state by hand then wiped and reached Ready
+      (reset_rc=0, wire reachable).
+      THE RULE THE PROBE WAS WRITTEN FOR still holds: a --help that mentions the flag is not
+      evidence (v56.9.20.1's headless refused it). The fix keeps "probe a refusal by asking for the
+      refusal", but reads WHICH outcome: an unknown-flag refusal (exit 2, names the flag) means
+      unsupported; the skip announcement from the binary means the parser accepted it, whatever the
+      re-init's exit code. Parse a line the binary emits, not an exit code that conflates the two.
+    events:
+      - type: filed
+        ts: "2026-09-27T23:30:00Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request, from the v56.9.27.2 Windows smoke.

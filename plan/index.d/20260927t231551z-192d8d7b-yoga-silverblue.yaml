@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-covering-specs-relay-scope-partition
+    field: status
+    value: completed
+    ts: "2026-09-27T23:15:51Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: litmus-covering-specs-relay-scope-partition
+    event:
+      type: completed
+      ts: "2026-09-27T23:15:51Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'completed' with evidence_refs: b01b25f8c
+  - packet_id: litmus-covering-specs-relay-scope-partition
+    event:
+      type: note
+      ts: "2026-09-27T23:15:51Z"
+      host: yoga-silverblue
+      summary: |-
+        landed in land78 b01b25f8c on origin/linux-next (work ref 49770f45d): --relay-scope, fixture 6/6 + catches 2/2, bound ci-release

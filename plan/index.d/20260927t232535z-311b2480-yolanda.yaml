@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-tray-shows-first-provision-progress-only-as-text-in-the-status-chip-with-no-icon-or-menu-progress-indicator
+    event:
+      type: finding
+      ts: "2026-09-27T23:25:35Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        SMOKE, yolanda 2026-09-27: cold GUI provision by a local tray (1443-bgbs merged), RUST_LOG=debug. Part (A) PASS: 101 typed "provisioning progress event" lines, 101 distinct percents 0..100, during the rootfs download phase (3.5 s). MEASURED LIMIT, part (B) NOT SEEN: the dev build's notification icon sat in the overflow flyout (^), not on the taskbar, so DPI-aware screen captures during the download window could not show the strip. The strip's pixels and the per-percent gate are unit-tested; seeing it live needs the icon promoted (an installed tray the operator has already pinned), which is the operator's next live install.

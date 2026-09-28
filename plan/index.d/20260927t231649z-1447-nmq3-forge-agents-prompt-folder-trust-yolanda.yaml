@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-agents-ask-the-operator-to-trust-the-checked-out-project-folder-because-nothing-pre-trusts-it-any-more
+    order: 1447-nmq3
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, agents, claude, codex, antigravity, opencode, ux, images]
+    estimated_hours: 3
+    owned_files:
+      - images/default/entrypoint-forge-claude.sh
+      - images/default/entrypoint-forge-codex.sh
+      - images/default/entrypoint-forge-antigravity.sh
+      - images/default/lib-common.sh
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds a fixture that runs each entrypoint's
+      seeding against a scratch HOME and asserts the checked-out path is trusted, in the same
+      commit (1136-n8sh).
+    title: |
+      launching an agent in a forge asks the operator to trust the checked-out project folder: Claude's pre-trust (seed_claude_project_trust) is defined but called nowhere since 892f2e46e, and Codex and Antigravity have no folder-trust seeding at all
+    verifiable_closure: |
+      For each of Claude, Codex and Antigravity, a fresh forge launched on a project the operator
+      has never opened starts WITHOUT a folder-trust prompt, and only the checked-out project path
+      is trusted (not /home/forge wholesale). A fixture runs each entrypoint's seeding against a
+      scratch HOME/config and asserts the exact PROJECT_DIR entry. Pre-fix result: FAILS:
+      git grep finds seed_claude_project_trust only at its definition (lib-common.sh:3652).
+    context: |
+      OPERATOR REPORT, 2026-09-27 (to yolanda): "When launching Claude I got prompted to trust the
+      folder checkout. I think Antigravity prompted as well. Codex lane has been broken for a lil'
+      while. OpenCode sometimes works, sometimes asks for permissions." Operator direction: "inject a
+      pre-built .claude or .codex or .opencode at /home/forge, since we own it already, and allowlist
+      the project we're checking out."
+      CLAUDE, A REGRESSION. b7cc60d8d (2026-08-30, "pre-trust the forge project folder — minted-session
+      blocker #2") added seed_claude_project_trust and its call. 892f2e46e the same day ("operator
+      approvals ride the vault rail — prompt once ever, restore every launch") replaced the call with
+      claude-approvals-vault restore, whose design is "first-ever launch prompts once". Every new
+      checkout path is a first launch, so it always prompts. The function body is intact
+      (lib-common.sh:3652, sets projects[PROJECT_DIR].hasTrustDialogAccepted); the fix is the call in
+      entrypoint-forge-claude.sh AFTER find_project_dir (it needs PROJECT_DIR), with the vault restore
+      kept for everything else. This reverses the "prompt once ever" choice for folder trust ONLY, on
+      the operator's direction above.
+      CODEX: no trust_level seeding anywhere in images/ or the headless. Seed the worker's
+      config.toml with [projects."<PROJECT_DIR>"] trust_level = "trusted". The operator reports the
+      Codex lane broken independently; that is its own defect, not this row.
+      ANTIGRAVITY: entrypoint-forge-antigravity.sh passes a skip-approvals flag (tool approvals) but
+      seeds no workspace trust; find agy's trust store and seed PROJECT_DIR the same way.
+      OPENCODE, OBSERVATION ONLY: "sometimes asks for permissions" despite the image's permission
+      overlay (/home/forge/.config/opencode/config.json). Intermittent, so likely an overlay that is
+      sometimes not applied or is overwritten; capture which prompt and when before fixing.
+    events:
+      - type: filed
+        ts: "2026-09-27T23:16:49Z"
+        host: yolanda
+        summary: Filed by yolanda from the operator's report and direction, 2026-09-27.

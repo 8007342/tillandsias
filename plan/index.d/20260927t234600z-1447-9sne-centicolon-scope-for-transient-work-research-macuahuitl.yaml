@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator request 2026-09-27: research whether CentiColon (or a sibling
+# metric) must also count TRANSIENT work — bug fixes, flake fixes, harness
+# regressions — which is not a spec but should PRODUCE one ("Y and Z prevent
+# bug X"). Codex and Antigravity will chime in on the design decisions.
+packets:
+  - packet_id: research-whether-the-centicolon-uncertainty-metric-must-also-count-transient-work-bug-fixes-and-regressions-that-should-produce-a-preventing-spec-requirement
+    order: 1447-9sne
+    status: ready
+    kind: research
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [centicolon, metrics, specs, litmus, methodology, research]
+    estimated_hours: 6
+    owned_files:
+      - plan/issues/centicolon-transient-work-scope-research-2026-09-27.md
+    title: |
+      RESEARCH (operator 2026-09-27): does CentiColon's Monotonic Reduction Of Uncertainty miss the transient work that dominates the ledger — "fix bug X" is not a spec, but should produce one ("Y and Z prevent X") — and should the same metric or a sibling one count it?
+    context: |
+      OPERATOR, verbatim: "As we make progress in our CentiColon metrics, to
+      better enforce our Monotonic Reduction Of Uncertainty and have this
+      delicious LUA layer and LITMUS TEST for our specs, there is a lot of
+      work filed as ./plan packets which might not necessarily be in the form
+      of a SPEC, and it doesn't have to. I just wonder if we need a similar
+      metric, or even the same, for transient work, like bug fixing which
+      isn't really a spec 'fix bug X' but would instead produce a spec 'Y and
+      Z prevent bug X', our centicolon metrics, even while still not as
+      meaningful as we want them, might still be missing some scope on them.
+      File research packet, and I'll have Codex and Antigravity chime in
+      design decisions."
+      TODAY: CentiColon's R line counts declared spec requirements and how
+      many are traced / positively tested (R=1409 at 2026-09-27, 0 satisfied;
+      design: plan/issues/centicolon-enforceable-metric-design-2026-09-26.md,
+      rows 1395-n7qd/88tp/ue3i/64r7). Plan packets of kind bug, finding,
+      optimization and regression are outside it, although they are most of
+      the ledger's churn (e.g. 2026-09-27 alone: a gate-stamp forgery
+      1442-22d2, a SIGPIPE non-determinism, four load flakes, a stale
+      cheatsheet staging revert, an MSYS regexp mangling that lost a
+      release's Windows assets). Each fix reduced uncertainty only if it
+      left a durable INVARIANT behind (a guard, a fixture with a pre-fix
+      FAIL, a spec requirement), and the fleet has no number for how often
+      that happens.
+      QUESTIONS for the design round (Codex and Antigravity to weigh in):
+      (1) One metric or two: extend CentiColon's denominator with
+          "invariants owed by closed transient packets", or a sibling
+          metric (e.g. an invariant-yield ratio) reported beside it?
+      (2) What counts as the durable residue of a transient fix: a spec
+          requirement with a litmus binding, a decider/guard, a fixture
+          whose pre-fix result FAILS, a methodology rule — and which of
+          these are machine-checkable today?
+      (3) Closure rule: should a bug-class packet be closable only when it
+          names the invariant it produced (or states unscoreable: why none)?
+          How does that interact with the existing verifiable_closure /
+          scorable-obligation gate (check-scorable-obligation-added.sh)?
+      (4) Monotonicity: CentiColon's regime is "monotone (advisory)"; can a
+          transient metric be monotone when new bugs arrive continuously,
+          or should it be a rate (invariants produced per defect closed)?
+      (5) Recurrence: can the Lua/litmus layer detect a RECURRING defect
+          shape (the same failure shape named twice — e.g. SIGPIPE,
+          unquoted heredocs, stale pins) and count it as uncertainty that
+          was NOT reduced?
+      (6) Cost: what the metric costs the gate and the agents (tokens), and
+          whether it can be computed from the ledger + git alone.
+    deliverable: |
+      plan/issues/centicolon-transient-work-scope-research-2026-09-27.md:
+      the measured baseline (how many closed bug/finding/regression packets
+      in the last 30 days left each residue class, computed from the ledger
+      and git, with the query shown), a side-by-side of the design options
+      for questions (1)-(6) with each contributor's position recorded by
+      name (Codex, Antigravity, Claude), a recommendation, and the follow-up
+      implementation packets it implies (not filed until the operator picks).
+    verifiable_closure: |
+      unscoreable: research deliverable — the output is a design document
+      and a recorded operator decision, not a behaviour a command can
+      assert; closure is the operator's pick among the documented options,
+      recorded as an event citing the document.
+    next_action: >
+      Compute the 30-day residue baseline from the ledger first (a number
+      the design round can argue about), then collect the three positions.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Design contributors named by the operator: Codex and Antigravity; the
+      coordinator (Claude) supplies the baseline and the synthesis.
