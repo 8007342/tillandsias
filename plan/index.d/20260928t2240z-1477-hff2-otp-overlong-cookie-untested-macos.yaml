@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: no-test-catches-otp-parse-cookie-value-accepting-an-over-long-cookie-by-truncating-it
+    order: 1477-hff2
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [security, tests, rust]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-otp/src/lib.rs
+    title: |
+      tillandsias-otp parse_cookie_value's exact-length check is untested on the LONG side: a seeded defect that accepts an over-long cookie by truncating it to 32 bytes passes every test in the workspace
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-28 while answering 1118-pifa.
+      parse_cookie_value (crates/tillandsias-otp/src/lib.rs) decodes a base64url
+      session cookie and returns None unless it decodes to exactly COOKIE_LEN
+      bytes. Its test, parse_cookie_value_rejects_invalid, covers the empty,
+      short and invalid-character cases, but not the over-long one.
+      SEEDED DEFECT (the pre-fix FAIL): change the length guard from
+      `bytes.len() != COOKIE_LEN` to `bytes.len() < COOKIE_LEN`, and copy
+      `&bytes[..COOKIE_LEN]`. The router-sidecar's /validate would then accept
+      any cookie whose first 32 bytes match a live token, with arbitrary
+      trailing bytes. Result: `cargo test --workspace --no-fail-fast` plus
+      check-test-baseline showed no new red from it, so nothing in the tree
+      notices.
+      Coordinator direction (macuahuitl-fedora, 2026-09-28): file it small, p2.
+    exit_criteria:
+      - 'a test asserts parse_cookie_value returns None for a well-formed base64url value decoding to COOKIE_LEN+1 (and a much longer) byte string (pre-fix result: FAILS to exist — the seeded truncating defect passes the whole workspace suite)'
+      - 'the seeded defect above, applied, reds that test (mutation check recorded on the row)'
+    unscoreable: |
+      the deliverable is the unit test itself in tillandsias-otp, run by the
+      workspace test step; the mutation check is its evidence.

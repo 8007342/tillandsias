@@ -284,3 +284,19 @@ the dedicated target on `/home` but moves scratch to `/var/tmp`; no runtime,
 fixture, known-red baseline, host/container reset or shared builder configuration
 was changed. The exact named test passes in that environment (1 passed,
 396 filtered out). This is a validation constraint, not a Lua defect.
+
+The subsequent full gate passed the 2,646-test workspace suite (zero new reds),
+then refused at the shared-metrics guard while
+`test-tool-materialize-litmus-surfaces-arm.sh` ran: the guard observed one new
+record in `/tmp/tillandsias-timing.jsonl`. The fixture itself reported 5/5 with
+one locale arm explicitly skipped. The counter does not identify the writer;
+the file was absent on follow-up inspection, so this is not attributed to a
+specific producer. Toolbox inspection showed host PID sharing and a host-root
+mount. Publication validation was restarted in a fresh disposable builder from
+the existing local builder image with private `/tmp`, a dedicated timing-log
+path and the separate Cargo target. The shared-log guard remains enabled.
+That timing-log override interfered with the default-discovery negative arms
+of `test-metrics-log-path-agreement.sh` (15 passed, 3 failed). The final
+validation configuration therefore keeps the private container PID namespace
+and `/tmp`, but leaves timing-log discovery at its normal default. No guard,
+runtime code, fixture or known-red baseline was edited for these retries.
