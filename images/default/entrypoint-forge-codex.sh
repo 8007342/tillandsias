@@ -89,6 +89,10 @@ find_project_dir
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
+# @trace order:1447-nmq3
+# Trust the checked-out project in the worker's (ephemeral) CODEX_HOME so Codex
+# does not ask; append-only, forge-gated inside the function.
+seed_codex_project_trust "$PROJECT_DIR" || true
 
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme

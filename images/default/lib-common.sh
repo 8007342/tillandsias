@@ -3649,18 +3649,126 @@ seed_claude_bypass_consent() {
 # Inside a forge the folder is a fresh clone from OUR OWN mirror into an
 # isolated container; the trust question is answered by the architecture,
 # not by a human at a dialog. Call AFTER find_project_dir with $PROJECT_DIR.
+#
+# ORDER 1447-nmq3: this function existed but NOTHING CALLED IT. b7cc60d8d added
+# the call; 892f2e46e replaced it the same day with the approvals-vault restore
+# ("first-ever launch prompts once"), and every new checkout path IS a first
+# launch, so the forge prompted on every project. The operator's direction
+# (2026-09-27): pre-seed /home/forge and allowlist the checked-out project, so
+# nothing prompts. entrypoint-forge-claude.sh now calls this right after
+# find_project_dir, after the vault restore, so a restored document cannot
+# undo it.
+#
+# THE KEY IS THE PATH CLAUDE USES: the absolute project directory with no
+# trailing slash (a live forge's ~/.claude.json holds "/home/forge/src/<p>").
+# find_project_dir returns "$HOME/src/<p>/", so the slash is stripped here; a
+# seeded "…/<p>/" key is one Claude never reads.
+#
+# hasTrustDialogAccepted is set to true UNCONDITIONALLY, unlike the bypass
+# seed's has()-guarded fields: Claude itself creates a project entry with
+# hasTrustDialogAccepted:false the first time it sees a path, so a false here
+# is Claude's "not yet asked", not an operator refusal. Every other key of the
+# entry, and every other project, is preserved. Forge-only: on bare metal this
+# writes nothing.
 seed_claude_project_trust() {
-    local project_dir="$1"
+    [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] || return 0
+    local project_dir="${1:-}"
     local user_cfg="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
     local tmp
+    while [ "${project_dir%/}" != "$project_dir" ] && [ "$project_dir" != "/" ]; do
+        project_dir="${project_dir%/}"
+    done
     [ -n "$project_dir" ] || return 0
-    [ -s "$user_cfg" ] || printf '{}
-' >"$user_cfg"
+    mkdir -p "$(dirname "$user_cfg")"
     tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
-    jq --arg dir "$project_dir"         '.projects = ((.projects // {}) | .[$dir] = ((.[$dir] // {}) + {hasTrustDialogAccepted: (.[$dir].hasTrustDialogAccepted // true)}))'         "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    if [ -s "$user_cfg" ] && jq -e 'type == "object"' "$user_cfg" >/dev/null 2>&1; then
+        jq --arg dir "$project_dir" \
+            '.projects = ((.projects // {}) | .[$dir] = ((.[$dir] // {}) + {hasTrustDialogAccepted: true}))' \
+            "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        jq -n --arg dir "$project_dir" '{projects: {($dir): {hasTrustDialogAccepted: true}}}' >"$tmp" ||
+            { rm -f "$tmp"; return 1; }
+    fi
     chmod 600 "$tmp"
     mv -f "$tmp" "$user_cfg"
-    trace_lifecycle "config" "claude project trust seeded for $project_dir"
+    trace_lifecycle "config" "claude project trust seeded for $project_dir (forge)"
+}
+
+# seed_codex_project_trust <project_dir> — order 1447-nmq3. Codex keeps folder
+# trust in $CODEX_HOME/config.toml as a `projects` table of ProjectConfig
+# {trust_level} (measured in codex-cli 0.157.1's binary: "projects table missing
+# after initialization", `projects."<path>".trust_level`, values
+# trusted/untrusted). The forge's CODEX_HOME is ephemeral per worker
+# (codex-safe-state.sh never persists config.toml), so without a seed every
+# launch asks again.
+#
+# APPEND-ONLY TOML. The same file carries `[mcp_servers.*]` tables written by
+# `codex mcp add` (config-overlay/codex/register-experts.sh), so it is never
+# rewritten: a `[projects."<path>"]` table is appended when none exists for this
+# path, and an existing one, whatever it says, is left alone. Forge-only.
+seed_codex_project_trust() {
+    [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] || return 0
+    local project_dir="${1:-}" cfg key
+    while [ "${project_dir%/}" != "$project_dir" ] && [ "$project_dir" != "/" ]; do
+        project_dir="${project_dir%/}"
+    done
+    [ -n "$project_dir" ] || return 0
+    cfg="${CODEX_HOME:-$HOME/.codex}/config.toml"
+    # TOML basic string: escape backslash and double quote.
+    key="$(printf '%s' "$project_dir" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+    mkdir -p "$(dirname "$cfg")" || return 1
+    if [ -f "$cfg" ] && grep -qF "[projects.\"$key\"]" "$cfg"; then
+        trace_lifecycle "config" "codex project trust already present for $project_dir"
+        return 0
+    fi
+    {
+        # A file that does not end in a newline would glue the header onto its
+        # last line.
+        if [ -s "$cfg" ] && [ -n "$(tail -c 1 "$cfg")" ]; then printf '\n'; fi
+        printf '\n[projects."%s"]\ntrust_level = "trusted"\n' "$key"
+    } >>"$cfg" || return 1
+    chmod 600 "$cfg" 2>/dev/null || true
+    trace_lifecycle "config" "codex project trust seeded for $project_dir (forge)"
+}
+
+# seed_agy_workspace_trust <project_dir> — order 1447-nmq3. The Antigravity CLI
+# (agy 1.2.12) keeps workspace trust in ~/.gemini/antigravity-cli/settings.json
+# as `trustedWorkspaces`, a LIST of absolute paths. MEASURED in a scratch HOME:
+# ["<path>"] is accepted (agy re-serialises it), while a map
+# {"<path>": true} is rejected with "invalid settings: trustedWorkspaces:
+# invalid value" and ALL settings fall back to defaults. Its published
+# settings reference does not document the key, which is why it was measured.
+#
+# The path is appended when absent; every other setting is preserved. A
+# settings file that is not a JSON object is left untouched: rewriting it would
+# discard settings agy cannot read either, and that is the operator's to fix.
+# Forge-only.
+seed_agy_workspace_trust() {
+    [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] || return 0
+    local project_dir="${1:-}" cfg tmp
+    while [ "${project_dir%/}" != "$project_dir" ] && [ "$project_dir" != "/" ]; do
+        project_dir="${project_dir%/}"
+    done
+    [ -n "$project_dir" ] || return 0
+    cfg="${AGY_SETTINGS_FILE:-$HOME/.gemini/antigravity-cli/settings.json}"
+    mkdir -p "$(dirname "$cfg")" || return 1
+    tmp="$(mktemp "${cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$cfg" ]; then
+        if ! jq -e 'type == "object"' "$cfg" >/dev/null 2>&1; then
+            rm -f "$tmp"
+            trace_lifecycle "config" "agy settings.json is not a JSON object; workspace trust NOT seeded"
+            return 0
+        fi
+        jq --arg dir "$project_dir" \
+            '.trustedWorkspaces = (((.trustedWorkspaces // []) | if type == "array" then . else [] end) as $t
+                | if ($t | index([$dir])) then $t else $t + [$dir] end)' \
+            "$cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        jq -n --arg dir "$project_dir" '{trustedWorkspaces: [$dir]}' >"$tmp" || { rm -f "$tmp"; return 1; }
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$cfg"
+    trace_lifecycle "config" "agy workspace trust seeded for $project_dir (forge)"
 }
 
 # ── Hot-path population ─────────────────────────────────────
