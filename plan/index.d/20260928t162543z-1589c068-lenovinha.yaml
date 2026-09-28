@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-credential-channel-reports-stop-and-report-on-a-host-whose-verified-host-push-lane-can-land-every-push
+    field: status
+    value: completed
+    ts: "2026-09-28T16:25:43Z"
+    host: lenovinha
+
+events:
+  - packet_id: check-credential-channel-reports-stop-and-report-on-a-host-whose-verified-host-push-lane-can-land-every-push
+    event:
+      type: completed
+      ts: "2026-09-28T16:25:43Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: e2b8fd755 (land83 relay of work/1456-ib6i ffa3bd86d, full gate 1290s) + scripts/test-credential-channel-host-push-lane.sh PASS 9 arms
+  - packet_id: check-credential-channel-reports-stop-and-report-on-a-host-whose-verified-host-push-lane-can-land-every-push
+    event:
+      type: note
+      ts: "2026-09-28T16:25:43Z"
+      host: lenovinha
+      summary: |-
+        landed on origin/linux-next in land83

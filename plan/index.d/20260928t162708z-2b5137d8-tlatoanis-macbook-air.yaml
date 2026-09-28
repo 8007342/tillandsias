@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: verify-closure-runs-a-packets-verifiable-closure-and-compares-the-printed-output-to-the-criterion
+    field: status
+    value: completed
+    ts: "2026-09-28T16:27:08Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: verify-closure-runs-a-packets-verifiable-closure-and-compares-the-printed-output-to-the-criterion
+    event:
+      type: completed
+      ts: "2026-09-28T16:27:08Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: e2b8fd755 (land83)
+  - packet_id: verify-closure-runs-a-packets-verifiable-closure-and-compares-the-printed-output-to-the-criterion
+    event:
+      type: note
+      ts: "2026-09-28T16:27:08Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Landed at e2b8fd755 (land83) with the acknowledged 8/8 replace. Re-measured there on darwin in the gate regime: scripts/test-verify-closure.sh gives ok:verify-closure:8/8, and scripts/verify-closure.sh 1443-qwpj gives ok:closure:1443-qwpj:ok:verify-closure:8/8, the row closing on its own declared closure.
