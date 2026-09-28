@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: per-run-consent-tokens-for-destructive-command-classes-minted-by-the-operator-on-the-host-consumed-once-never-grantable-in-a-forge-and-the-smoke-skills-env-authorisation-mapped-to-the-substrate-reset-class-with-its-source-recorded
+    field: status
+    value: completed
+    ts: "2026-09-28T18:42:16Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: per-run-consent-tokens-for-destructive-command-classes-minted-by-the-operator-on-the-host-consumed-once-never-grantable-in-a-forge-and-the-smoke-skills-env-authorisation-mapped-to-the-substrate-reset-class-with-its-source-recorded
+    event:
+      type: completed
+      ts: "2026-09-28T18:42:16Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: 25f800ec7 test-command-policy-consent:9/9-bare-metal(macuahuitl relay check),4/4+skip-in-forge
+  - packet_id: per-run-consent-tokens-for-destructive-command-classes-minted-by-the-operator-on-the-host-consumed-once-never-grantable-in-a-forge-and-the-smoke-skills-env-authorisation-mapped-to-the-substrate-reset-class-with-its-source-recorded
+    event:
+      type: note
+      ts: "2026-09-28T18:42:16Z"
+      host: forge-tillandsias
+      summary: |-
+        landed in land84 = 25f800ec7; bare-metal 9/9 on macuahuitl in the relay check (coordinator), forge re-run 4/4 with the bare-metal arms a named skip
