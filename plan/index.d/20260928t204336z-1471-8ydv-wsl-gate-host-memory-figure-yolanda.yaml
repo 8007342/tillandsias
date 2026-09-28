@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-side-hands-the-hosts-real-available-memory-into-the-wsl2-gate-so-the-memory-floor-judges-the-machine-that-reaps-it
+    order: 1471-8ydv
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    parent_order: 1337-7jr5
+    pickup_role: windows
+    capability_tags: [windows, wsl2, gate, memory, fail-loud]
+    estimated_hours: 2
+    owned_files: [scripts/with-wsl2-builder.sh, build.sh]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixture that feeds a synthetic host figure through the new channel and asserts the floor judges it (ok and refused arms) is written in the same commit as the exporter.
+    title: |
+      After 1337-7jr5, a WSL2 gate runs with the memory floor OFF (named could-not-run), because the only meminfo it can read is the utility VM's. Hand the Windows host's real available memory into the guest so the floor guards WSL gates again.
+    next_action: |
+      1. On the Windows side of the hop (scripts/with-wsl2-builder.sh, before re-exec), read the host's available memory once, e.g. Win32_OperatingSystem FreePhysicalMemory (KiB). Measure the cost of that call before adding it.
+      2. Pass it into the guest as an env var (e.g. TILLANDSIAS_GATE_HOST_MEMAVAILABLE_KB) carried through WSLENV, never through the wsl.exe argument string.
+      3. In build.sh, when that var is set, write a one-line synthetic meminfo (MemAvailable: n kB) to a temp file and call check-gate-memory-floor.sh --meminfo-from it. The floor script stays unchanged: --meminfo-from is already the judged path (1337-7jr5 arms 2 and 3).
+      4. State the staleness: the figure is sampled once at gate start, which is the START-state question this floor answers (1176-fn2p); the run state stays the OOM post-mortem's job.
+    verifiable_closure: |
+      On a Windows host gating through tillandsias-build, the gate log's memory line reads ok:gate-memory or refused:gate:insufficient-memory from the WINDOWS figure (matching FreePhysicalMemory within one sample), not could-not-run:gate-memory:wsl2-guest-meminfo-is-not-the-host. A fixture feeding a starved synthetic host figure through the channel is refused (rc 1). Pre-fix: the WSL gate prints the could-not-run line and proceeds unguarded.
+    events:
+      - type: filed
+        ts: "2026-09-28T20:43:37Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request, follow-up to 1337-7jr5.

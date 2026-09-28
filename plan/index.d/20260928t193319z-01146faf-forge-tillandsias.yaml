@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-forge-memory-ceiling-was-declared-closed-on-a-helper-nothing-calls
+    event:
+      type: note
+      ts: "2026-09-28T19:33:19Z"
+      agent_id: forge-forge-tillandsias-claude-20260928t193319z
+      host: forge-tillandsias
+      summary: |
+        OBSOLETED by coordinator ruling 2026-09-28: superseded by the 2026-09-26 forge memory/swap design (plan/issues/forge-memory-swap-architecture-design-2026-09-26.md; order 1375-xxzj; crates/tillandsias-core/src/forge_budget.rs).
+          - The forge is now a cgroup BUDGET: memory.max, memory.high, memory.low, memory.swap.max and pids.max.
+          - Each file is written deliberately, and --memory-swap is avoided because it measured differently across hosts (lenovinha 1 GiB, yoga 2 GiB, for the same flags).
+          - This row's criterion that "--memory-swap equals --memory" (zero swap) CONTRADICTS the adopted design, which gives a forge a swap allowance so a full HOT tmpfs spills instead of being OOM-killed.
+        This row's MECHANISM defect (a ceiling helper with zero production callers) is fixed: ForgeBudget::for_this_host() is called at every launch path found (headless main.rs argv builders and the ContainerSpec path, tray/mod.rs, podman launch.rs).
+        Its GUARD INTENT is NOT covered: nothing asserts the budget reaches a real launch argv or the live cgroup, only the pure podman_args(). That part is filed as 1469-q2r3.
