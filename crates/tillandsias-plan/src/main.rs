@@ -2656,7 +2656,14 @@ fn find_repo_root() -> Option<PathBuf> {
     // .../<checkout>/target/{debug,release}/tillandsias-plan -> pop to the file's dir
     dir.pop();
     loop {
-        if dir.join(".git").is_dir() {
+        // ORDER 1454-ssg3: `.git` is a DIRECTORY in a clone and a FILE in a
+        // linked worktree ("gitdir: …"). Requiring a directory made every binary
+        // built in a worktree answer `unknown:validator-surface` (no checkout
+        // above it), so the currency probe could not run there on any platform;
+        // it presented as a darwin red only because that host measures in
+        // worktrees. metrics_default_log keeps its own is_dir test on purpose
+        // (it mirrors the shell's `-d`), so it still falls back to /tmp there.
+        if dir.join(".git").exists() {
             return Some(dir);
         }
         if !dir.pop() {
