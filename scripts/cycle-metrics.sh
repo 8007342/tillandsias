@@ -361,8 +361,13 @@ if [ "$_tl_reporting" = 1 ] && [ -z "${TILLANDSIAS_TIMING_LOG:-}" ]; then
         *)      _tl_other="/tmp/$_tl_base" ;;
     esac
     if [ -n "$_tl_other" ] && [ "$_tl_other" != "$TIMING_LOG" ] && [ -s "$_tl_other" ]; then
-        _tl_n_here="$(wc -l < "$TIMING_LOG" 2>/dev/null || echo 0)"
-        _tl_n_there="$(wc -l < "$_tl_other" 2>/dev/null || echo 0)"
+        # ORDER 1455-d7hc: `2>/dev/null` BEFORE `<`. Redirections apply left to
+        # right, so with `< "$TIMING_LOG" 2>/dev/null` an ABSENT log (a fresh
+        # checkout that never wrote one) printed "No such file" to stderr before
+        # stderr was silenced, and that line, not the violation below, was the
+        # first thing a caller read. An absent log counts 0 records.
+        _tl_n_here="$(wc -l 2>/dev/null < "$TIMING_LOG" | tr -d ' ')"; _tl_n_here="${_tl_n_here:-0}"
+        _tl_n_there="$(wc -l 2>/dev/null < "$_tl_other" | tr -d ' ')"; _tl_n_there="${_tl_n_there:-0}"
         echo "violation:metrics-log-split:$TIMING_LOG=$_tl_n_here:$_tl_other=$_tl_n_there" >&2
         {
             echo "  TWO timing logs on this host. Every runs= and skippable:"

@@ -39,6 +39,7 @@ fail=0
 # bundle), so extract the two functions rather than sourcing it — the same
 # constraint that put the inference probe in its own lib.
 { sed -n '/^install_project_guard_hooks() {$/,/^}$/p' "$LIB"
+  sed -n '/^install_project_discipline_hooks() {$/,/^}$/p' "$LIB"
   sed -n '/^forge_hook_state_line() {$/,/^}$/p' "$LIB"; } > "$W/fns.sh"
 [ -s "$W/fns.sh" ] || { echo "FAIL: could not extract the guard functions from $LIB" >&2; exit 1; }
 trace_lifecycle() { :; }
@@ -133,11 +134,34 @@ fi
     || { echo "FAIL branch3: repo-local hooksPath shadows the global dir, so commits here lose agent attribution" >&2; fail=1; }
 
 # ── 4. a non-Tillandsias repo is left alone ─────────────────────────────────
+# Since 1446-xqi6 a non-Tillandsias project gets its DISCIPLINE hooks from the
+# plan binary (operator: the wiring is the desired state for any project a
+# forge checks out). So: 4a with no runnable plan binary it is untouched; 4b
+# with one, the hooks go REPO-LOCAL (its own .git/hooks), never the global dir.
 other="$W/other"; mkdir -p "$other"; git init -q "$other"
-install_project_guard_hooks "$other" >/dev/null 2>&1
+TILLANDSIAS_PLAN_BIN="$W/no-such-plan" PATH="/usr/bin:/bin" \
+    install_project_guard_hooks "$other" >/dev/null 2>&1
 [ -z "$(git -C "$other" config --get core.hooksPath || true)" ] \
-    && echo "ok: a repo with no scripts/install-hooks.sh is untouched" \
-    || { echo "FAIL branch4: a non-Tillandsias repo had its hooksPath rewritten" >&2; fail=1; }
+    && echo "ok: with no runnable plan binary a non-Tillandsias repo is untouched" \
+    || { echo "FAIL branch4a: a non-Tillandsias repo had its hooksPath rewritten with no plan binary" >&2; fail=1; }
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$ROOT/scripts/plan-binary-probe.sh"
+plan4="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null || true)"
+case "$plan4" in ./*) plan4="$ROOT/${plan4#./}" ;; esac
+if [ -n "$plan4" ] && "$plan4" capabilities >/dev/null 2>&1; then
+    other2="$W/other2"; mkdir -p "$other2"; git init -q "$other2"
+    TILLANDSIAS_PLAN_BIN="$plan4" install_project_guard_hooks "$other2" >/dev/null 2>&1
+    hp="$(git -C "$other2" config --get core.hooksPath || true)"
+    if [ "$hp" = "$other2/.git/hooks" ] && [ -x "$other2/.git/hooks/pre-push" ] &&
+        [ ! -e "$GLOBAL/pre-push" ]; then
+        echo "ok: with a plan binary a non-Tillandsias repo gets discipline hooks repo-local, global dir untouched"
+    else
+        echo "FAIL branch4b: hooksPath=[$hp] pre-push=$([ -x "$other2/.git/hooks/pre-push" ] && echo yes || echo no) global-pre-push=$([ -e "$GLOBAL/pre-push" ] && echo yes || echo no)" >&2
+        fail=1
+    fi
+else
+    echo "skip: branch4b needs a runnable tillandsias-plan (build it to exercise the discipline install)"
+fi
 
 # ── 5. not a checkout at all -> silent no-op, exit 0 ────────────────────────
 install_project_guard_hooks "$W/nope" >/dev/null 2>&1 \

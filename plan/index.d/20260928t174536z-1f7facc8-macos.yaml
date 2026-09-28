@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-build-path-validates-that-the-calver-date-is-today-so-a-build-silently-ships-a-version-encoding-a-date-days-in-the-past
+    event:
+      type: progress
+      ts: "2026-09-28T17:45:36Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t174536z
+      host: macos
+      summary: |
+        work/1238-b825 @ 610dc9dd8 ready for relay (tlatoanis-macbook-air, darwin). Ruling (macuahuitl-fedora, 2026-09-28): DERIVE, never write VERSION.
+        - scripts/lib-build-version.sh: build_version_label returns VERSION when its encoded date (56.M.D) is today's UTC date. Otherwise it returns <VERSION>+built.<today> plus a note:build-version:stale-date line. It never writes VERSION (criterion 4, 702-eusw).
+        - The label goes on the tray's --version (a new BUILD_VERSION_LABEL env; build.rs accepts it only when it starts with VERSION) and on the tray tarball name, so two UTC days give two names (criterion 3).
+        - VERSION is kept, by comment, on Info.plist CFBundleVersion (Apple's numeric form), on WORKSPACE_VERSION (the guest skew check and control channel compare it for equality), on the guest binaries' embedded version, and on image tags (the tray finds images by it, and + is not legal in OCI tags). The image and guest paths log the label.
+        - All three local paths (build-macos-tray, build-image, build-guest-binaries) answer --print-version before any toolchain or podman requirement (criterion 2, behavioural).
+        - A release build is exempt: release.yml's tray step sets TILLANDSIAS_RELEASE_BUILD=1 and stamps VERSION verbatim. Otherwise a cut crossing UTC midnight would publish a +built tarball, while release CI already refuses mismatches.
+        Fixture scripts/test-build-version-label.sh 7/7 with a stub clock: the measured case 56.9.13.1 on 56.9.17 gives 56.9.13.1+built.56.9.17 on all three paths; same-day is unchanged and silent; two days give two tar names; VERSION's bytes are unchanged; the real-clock computation; release verbatim with the workflow step checked; and one representation arm (tar name and Info.plist, which only a full build produces). Gate step 287 with a darwin STEP_SECOND_REGIME.
+        Real binary: with the label, `tillandsias-tray 56.9.27.2+built.56.9.28 (git …)`; without it, `tillandsias-tray 56.9.27.2 (…)`. Clean checkout: deciders ok, fmt, native clippy --all-targets -D warnings on tillandsias-macos-tray rc 0, musl zigbuild --tests rc 0, version_line tests 2/2.

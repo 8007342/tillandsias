@@ -1,0 +1,13 @@
+# Gate step 1455-d7hc — data, not code (order 1072-b7eq).
+#
+# The metrics writer (Rust) and reader (shell) must resolve the SAME log, in a
+# clone and in a linked worktree (whose `.git` is a file). This fixture existed
+# since 890-t9pu but no gate ran it, so it went red on 2026-09-20 (1268-m2ir)
+# and stayed red unseen.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the metrics writer and reader resolve one log (1455-d7hc)"
+STEP_SCRIPT="scripts/test-metrics-log-path-agreement.sh"
+STEP_ERROR="the Rust metrics writer and the shell reader resolve different logs, or the outside-a-checkout fallback broke (1455-d7hc) — see the FAIL lines above"
+STEP_OK="Metrics log path agreement passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:metrics-log-path-agreement:18"

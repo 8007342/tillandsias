@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: per-project-hook-templates-installed-on-demand-by-tillandsias-plan-discipline-install-hooks-for-the-projects-level-so-a-fresh-project-pushes-to-main-freely-and-raising-its-level-installs-the-hooks-whose-every-refusal-names-the-skill-that-explains-the-work
+    field: status
+    value: completed
+    ts: "2026-09-28T16:27:01Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: per-project-hook-templates-installed-on-demand-by-tillandsias-plan-discipline-install-hooks-for-the-projects-level-so-a-fresh-project-pushes-to-main-freely-and-raising-its-level-installs-the-hooks-whose-every-refusal-names-the-skill-that-explains-the-work
+    event:
+      type: completed
+      ts: "2026-09-28T16:27:01Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: e2b8fd755 test-discipline-install-hooks:18/18 test-discipline-derive:5/5
+  - packet_id: per-project-hook-templates-installed-on-demand-by-tillandsias-plan-discipline-install-hooks-for-the-projects-level-so-a-fresh-project-pushes-to-main-freely-and-raising-its-level-installs-the-hooks-whose-every-refusal-names-the-skill-that-explains-the-work
+    event:
+      type: note
+      ts: "2026-09-28T16:27:01Z"
+      host: forge-tillandsias
+      summary: |-
+        landed in land83 = e2b8fd755 on origin/linux-next (coordinator gate 1290 s, exit 0; incl. relay-fixes 07064c655, 7579e2fe7); closures re-run on trunk e2b8fd755 in the forge

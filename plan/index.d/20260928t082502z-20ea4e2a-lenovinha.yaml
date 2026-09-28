@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-idiomatic-command-executor-in-rust-argv-not-shell-strings-with-separately-captured-fds-concurrent-draining-and-a-run-identity-so-a-stale-marker-cannot-read-as-a-fresh-result
+    field: verifiable_closure
+    value: |-
+      a committed test module in which: stderr is readable when only stdout is
+      consumed; a 1 MiB/1 MiB dual-stream child completes without deadlock; the
+      200,000-line SIGPIPE reproducer returns the correct verdict 5/5 where the
+      shell pipeline returns rc=141 5/5; an argument containing a space, a quote
+      and a glob arrives at the child as one unaltered argv entry; two
+      invocations carry distinct run identities; and a SIGTERM-ignoring child is
+      reported as killed rather than as exited.
+
+
+      [2026-09-28T08:25:02Z lenovinha] RULING 2026-09-28 (coordinator): the Rust tests ARE the closure; no poc/01 shell script. A shell poc proves the BUG (rc=141 read as a verdict), already measured; the closure proves the FIX. The inversion is pinned from both sides in crates/tillandsias-exec/tests/executor_contract.rs: sigpipe_inversion_does_not_occur_through_the_executor (no early-exiting pipe, 5/5 correct), and a_sigpipe_killed_producer_keeps_its_own_status (work/1252-fg9e 98d8734dc: a producer killed by SIGPIPE reports Signaled(13), never a success, beside its consumer Exited(0) with distinct run identities; the shell-pipeline control fuses them into one status; mutation-verified red when Signaled is collapsed to Exited(128+sig)).
+    ts: "2026-09-28T08:25:02Z"
+    host: lenovinha
+
+events:
+  - packet_id: an-idiomatic-command-executor-in-rust-argv-not-shell-strings-with-separately-captured-fds-concurrent-draining-and-a-run-identity-so-a-stale-marker-cannot-read-as-a-fresh-result
+    event:
+      type: note
+      ts: "2026-09-28T08:25:02Z"
+      host: lenovinha
+      summary: |-
+        closure amended per the coordinator ruling: Rust tests, no shell poc

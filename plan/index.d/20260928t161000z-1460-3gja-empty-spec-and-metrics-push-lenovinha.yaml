@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-empty-spec-argument-runs-every-litmus-spec-and-a-metrics-record-cannot-ride-the-plan-only-lane
+    order: 1460-3gja
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, fail-loud, metrics, plan-lane]
+    estimated_hours: 2
+    owned_files:
+      - scripts/run-litmus-test.sh
+    title: |
+      run-litmus-test.sh given an explicit empty spec name runs EVERY spec (1h47m on lenovinha), and a plan/metrics record push needs a full gate because the plan-only lane cannot carry it
+    context: |
+      Filed at the macuahuitl coordinator's routing, 2026-09-28.
+
+      HALF ONE. On lenovinha 2026-09-28 a binding lookup returned nothing, and
+      the call scripts/run-litmus-test.sh "$spec" ran with an empty positional
+      argument. The runner stores it as FILTER_SPEC="", which means no filter,
+      so every spec ran for 1h47m until killed. A guard that widens to
+      everything on an empty argument should refuse instead.
+
+      HALF TWO. 1257-jxu9 moved the expert-accuracy series to the tracked
+      path plan/metrics/expert-accuracy.d/<host>.jsonl so other hosts can read
+      it. Appending a record is a data-only change, but the plan-only lane
+      accepts only new plan fragment files and attestation records, so each
+      metrics push pays a full gate. Either the lane learns the metrics
+      directory as append-only data, or the series rides a different channel.
+    exit_criteria:
+      - 'run-litmus-test.sh with an explicit empty positional spec argument exits non-zero with a named refusal and runs no test; the no-argument invocation is unchanged'
+      - 'a record appended to plan/metrics/expert-accuracy.d/<host>.jsonl can be pushed without a full gate, or the row records why that is refused and where the series goes instead'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: half one's fixture
+      (scripts/test-litmus-empty-spec-refused.sh) lands with the fix; half two
+      is a lane-policy decision for the coordinator.
+    events:
+      - type: filed
+        ts: "2026-09-28T16:10:00Z"
+        agent_id: linux-lenovinha-claude-20260928t161000z
+        host: lenovinha
+        summary: |-
+          Filed from lenovinha at the coordinator's request; both halves were
+          measured this session.

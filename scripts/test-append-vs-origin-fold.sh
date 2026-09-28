@@ -176,5 +176,51 @@ case "$out5" in
     *) echo "FAIL: ARM 5 expected could-not-run:append-vs-origin:deadline, got: $(printf '%s' "$out5" | head -2)"; fail=1 ;;
 esac
 
+# --- ORDER 1458-8y85: a DELIBERATE --replace is admitted, a stale one is not
+# `set-field --replace` writes `replaces_sha256:` = sha256 of the exact folded
+# value it read. The guard admits the drop only when that equals ORIGIN's
+# current fold; a replace written before a peer's append acknowledged a value
+# origin no longer holds, and is refused as the 1261-bn7v case it always was.
+_replace_fragment() { # $1 = repo, $2 = acknowledged sha
+    cat > "$1/plan/index.d/20260101t000002z-push-hostb.yaml" <<YAML
+status:
+  - packet_id: fixture-packet
+    field: next_action
+    value: |-
+      BASE LINE, REVIEWED AND REWRITTEN.
+    ts: "2026-01-01T00:00:02Z"
+    host: host-b
+    replaces_sha256: "$2"
+YAML
+}
+
+# ARM 6  the acknowledgement matches origin's current value -> ADMITTED.
+#        PRE-FIX: FAILS — every --replace was refused (1458-8y85).
+R6="$WORK/replace-current"; _build_repo "$R6" "with-l1"
+rm -f "$R6/$PUSHED"   # read ORIGIN's fold: the committed tree alone
+origin6="$(cd "$R6" && "$PLAN_ABS" field-get fixture-packet next_action 2>/dev/null)"
+sha6="$(printf '%s' "$origin6" | "$PLAN_ABS" hash sha256 -)"
+_replace_fragment "$R6" "$sha6"
+out6="$(cd "$R6" && TILLANDSIAS_PLAN_BIN="$PLAN_ABS" bash scripts/check-append-vs-origin-fold.sh "$PUSHED" 2>&1)"; rc6=$?
+case "$out6" in
+    *"ok:append-vs-origin:checked:1:admitted-replace:1"*)
+        [ "$rc6" -eq 0 ] && echo "ok:   ARM 6 a --replace acknowledging origin's current value is admitted" \
+                         || { echo "FAIL: ARM 6 admitted but exit was $rc6"; fail=1; } ;;
+    *) echo "FAIL: ARM 6 expected admitted-replace:1, got: $(printf '%s' "$out6" | tail -2)"; fail=1 ;;
+esac
+
+# ARM 7  NEGATIVE CONTROL: the replace acknowledged the value BEFORE the peer's
+#        append (sha of "BASE LINE."), so it is still refused, by name.
+R7="$WORK/replace-stale"; _build_repo "$R7" "with-l1"
+sha7="$(printf '%s' "BASE LINE." | "$PLAN_ABS" hash sha256 -)"
+_replace_fragment "$R7" "$sha7"
+out7="$(cd "$R7" && TILLANDSIAS_PLAN_BIN="$PLAN_ABS" bash scripts/check-append-vs-origin-fold.sh "$PUSHED" 2>&1)"; rc7=$?
+case "$out7" in
+    *"refused:append-drops-lines-vs-origin:fixture-packet:next_action:replace-against-stale-fold"*)
+        [ "$rc7" -ne 0 ] && echo "ok:   ARM 7 a --replace written against a stale fold is still refused" \
+                         || { echo "FAIL: ARM 7 refusal printed but exit was 0"; fail=1; } ;;
+    *) echo "FAIL: ARM 7 expected replace-against-stale-fold, got: $(printf '%s' "$out7" | head -2)"; fail=1 ;;
+esac
+
 [ "$fail" -eq 0 ] || { echo "violation:append-vs-origin-fixture"; exit 1; }
 echo "ok:append-vs-origin:refused-drop:${refused_drop}:admitted-current:${admitted_current}:scoped:3"

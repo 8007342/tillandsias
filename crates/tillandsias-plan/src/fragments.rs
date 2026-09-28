@@ -885,6 +885,28 @@ pub fn set_field_fragment_body(
     body
 }
 
+/// ORDER 1458-8y85 — insert `replaces_sha256: "<hex>"` into the FIRST status
+/// entry of a set-field body (the one row set-field writes), right after its
+/// `host:` line. The fold ignores the key; check-append-vs-origin-fold.sh reads it.
+pub fn with_replace_acknowledgement(body: &str, sha256: &str) -> String {
+    if sha256.is_empty() {
+        return body.to_string();
+    }
+    let mut out = String::with_capacity(body.len() + 90);
+    let mut in_status = false;
+    let mut done = false;
+    for line in body.split_inclusive('\n') {
+        out.push_str(line);
+        if line.starts_with("status:") {
+            in_status = true;
+        } else if in_status && !done && line.starts_with("    host: ") {
+            out.push_str(&format!("    replaces_sha256: \"{sha256}\"\n"));
+            done = true;
+        }
+    }
+    out
+}
+
 /// ORDER 775-b4qz, exit criterion 2 — the write-time half of the malformed-
 /// fragment defence. Re-parse a just-written fragment with the SAME parser the
 /// fold uses ([`load_all`]'s `serde_yaml::from_str`) and confirm the LWW row
@@ -5605,6 +5627,33 @@ plan_index:
 /// left to re-derive the higher rung from.
 #[cfg(test)]
 mod closure_ladder_compaction_tests {
+    /// ORDER 1458-8y85: the acknowledgement lands on the status row, after
+    /// `host:`, and nowhere in the events block that follows.
+    #[test]
+    fn replace_acknowledgement_goes_on_the_status_row_only() {
+        let body = set_field_fragment_body(
+            "p",
+            "next_action",
+            "new text",
+            "2026-09-28T00:00:00Z",
+            "h",
+            &[("note".to_string(), "why".to_string())],
+        );
+        let acked = with_replace_acknowledgement(&body, "abc123");
+        assert_eq!(acked.matches("replaces_sha256:").count(), 1);
+        let status_host = acked.find("    host: h\n").unwrap();
+        let ack = acked.find("    replaces_sha256: \"abc123\"\n").unwrap();
+        assert_eq!(ack, status_host + "    host: h\n".len());
+        assert!(ack < acked.find("events:").unwrap());
+        assert_eq!(with_replace_acknowledgement(&body, ""), body);
+        let doc: Value = serde_yaml::from_str(&acked).unwrap();
+        assert_eq!(
+            lww_entries(&doc).len(),
+            1,
+            "the fold still reads one LWW row"
+        );
+    }
+
     use super::*;
 
     const BASE: &str = "\

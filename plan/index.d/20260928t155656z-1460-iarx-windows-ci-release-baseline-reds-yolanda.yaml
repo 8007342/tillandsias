@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: eight-ci-release-litmus-tests-fail-on-a-windows-host-for-reasons-unrelated-to-yq-and-no-row-says-which-are-regime-limits-and-which-are-bugs
+    order: 1460-iarx
+    status: ready
+    kind: finding
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, litmus, ci-release, regime]
+    estimated_hours: 3
+    owned_files: [openspec/litmus-tests]
+    observed_by: yolanda
+    unscoreable: |
+      measurement-first: the deliverable is a per-test verdict (Windows-regime limit, declared by name; or a real defect, with its own row).
+    title: |
+      eight ci-release litmus tests fail on a Windows host and none calls yq, so 1297-2htc's shim does not explain them: decider-retirement-shape, scorable-obligation-splitter, added-test-is-referenced-shape, covering-relay-scope-shape, command-policy-evaluator-shape, guest-binary-embed-integrity, cycle-batch-triage-shape, harness-affinity-selection-shape
+    verifiable_closure: |
+      Each of the eight either passes on a Windows host, or skips by name as a declared Windows-regime limit, or has its own defect row. Pre-fix result: FAILS: all eight red in a yolanda ci-release run on 2026-09-28 (the run was cut short by a 1500 s budget, so the list may be incomplete; a full run takes longer than that here). Seen so far: command-policy-evaluator-shape step 2 "denied_ran=no premise=[exited]", guest-binary-embed-integrity step 1 rc=0 where a failure was expected, skills-canonical step 1 timing out at its 10 s budget.
+    events:
+      - type: filed
+        ts: "2026-09-28T15:56:55Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request, from gating 1297-2htc.

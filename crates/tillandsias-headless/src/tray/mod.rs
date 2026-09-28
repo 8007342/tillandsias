@@ -3020,7 +3020,13 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
                 TrayIconState::Building,
                 None,
             ));
-            if let Err(err) = launch_in_terminal(&title, &argv[0], &argv[1..]) {
+            // 828-h7kw: run the lane under the hold wrapper so its window
+            // survives the lane's exit until Enter.
+            let held: Vec<String> = crate::hold_window_prefix()
+                .into_iter()
+                .chain(argv)
+                .collect();
+            if let Err(err) = launch_in_terminal(&title, &held[0], &held[1..]) {
                 eprintln!("error: cloud launch failed for '{}': {err}", cloud.name);
                 let _ = futures::executor::block_on(service_for_emit.set_status(
                     format!("🥀 Launch failed: {err}"),

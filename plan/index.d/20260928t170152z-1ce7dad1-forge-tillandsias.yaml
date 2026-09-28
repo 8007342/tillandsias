@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-fixture-regime-scope-in-the-policy-engine-refuses-any-write-into-the-real-checkouts-git-dir-or-outside-the-declared-scratch-from-fs-write-and-proc-run-so-a-fixture-cannot-mint-a-green-stamp-as-a-class
+    field: status
+    value: in_progress
+    ts: "2026-09-28T17:01:52Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: a-fixture-regime-scope-in-the-policy-engine-refuses-any-write-into-the-real-checkouts-git-dir-or-outside-the-declared-scratch-from-fs-write-and-proc-run-so-a-fixture-cannot-mint-a-green-stamp-as-a-class
+    event:
+      type: note
+      ts: "2026-09-28T17:01:52Z"
+      host: forge-tillandsias
+      summary: |-
+        claim: fixture filesystem scope in the policy engine; runner exports the regime (coordinator NEXT); implementing on work/1443-fpck

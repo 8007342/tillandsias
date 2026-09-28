@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-two-smoke-skills-tell-an-agent-to-export-the-exact-env-the-consent-engine-honours-and-a-fixture-pins-the-skill-text-against-a-policy-eval-and-the-bash-bridge-under-that-env
+    order: 1462-qvxj
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [skills, policy, consent, docs, tests]
+    estimated_hours: 2
+    depends_on: [per-run-consent-tokens-for-destructive-command-classes-minted-by-the-operator-on-the-host-consumed-once-never-grantable-in-a-forge-and-the-smoke-skills-env-authorisation-mapped-to-the-substrate-reset-class-with-its-source-recorded]
+    owned_files:
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+      - skills/build-install-and-smoke-test-e2e/SKILL.md
+      - methodology.yaml
+      - scripts/test-smoke-skill-reset-env-matches-policy.sh
+    title: |
+      The two smoke skills (and methodology.yaml's destructive_reset_policy) say TILLANDSIAS_DESTRUCTIVE_RESET_OK "unset or 1" authorises the substrate reset, but the consent engine (1443-9f5w) honours only an explicit `=1` WITH `TILLANDSIAS_SKILL=<the skill's own name>`: an agent following the text on bare metal is asked, not pre-authorised. The skills must tell the agent to set both, and a fixture pins the text against the engine
+    context: |
+      1443-9f5w (work/1443-9f5w @ 88ef88a09, queued land84/85) maps the
+      smoke skills' pre-authorisation to consent_source=env only when
+      TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 AND TILLANDSIAS_SKILL names one of
+      the two registered smoke skills (command_policy.rs
+      REGISTERED_SMOKE_SKILLS), soft-reset only. The skill texts
+      (smoke-curl …/SKILL.md:46, build-install …/SKILL.md:41) and
+      methodology.yaml's destructive_reset_policy still say "unset or 1".
+      Unset is deliberately NOT honoured: a skill name alone must not
+      authorise a wipe.
+      A SECOND GAP, found while filing: an agent runs the reset through the
+      Bash tool, and the PreToolUse bridge (bash_policy.rs floor_on) consults
+      the FLOOR only, never resolve_consent. So even with both variables set
+      in the harness's environment, `tillandsias --reset-state` through the
+      Bash tool on bare metal is an ASK. The fix either routes the bridge's
+      consent answers through resolve_consent's env arm (never its token arm:
+      a token is spent by the run that proceeds, and the hook does not run
+      it), or has the skill text prescribe the `tillandsias-plan run --env …`
+      door. The implementer picks one and the fixture pins it.
+      Coordinator direction (macuahuitl-fedora, 2026-09-28): "file the skills
+      row (S, docs + env) … a fixture pins doc-vs-code (grep the skill text
+      for the exact env it tells an agent to set, then run policy eval under
+      that env)". The success token for the env path is
+      ok:policy:soft-reset:env-preauthorised (consent_source=env), NOT
+      ok:…:consented, which is the token path.
+    exit_criteria:
+      - 'each smoke SKILL.md tells the agent, in one greppable line, to set `TILLANDSIAS_DESTRUCTIVE_RESET_OK=1` and `TILLANDSIAS_SKILL=<that skill''s own directory name>` before the reset; "unset or 1" no longer appears in either skill or in methodology.yaml''s destructive_reset_policy; `=0` stays the documented opt-out (pre-fix: FAILS, both say "unset or 1")'
+      - 'the fixture extracts the variable assignments from each skill''s line and, on bare-metal evidence, runs `tillandsias-plan policy eval -- tillandsias --reset-state` under exactly those: ok:policy:soft-reset:env-preauthorised, and the audit line has consent_source=env; with the extracted TILLANDSIAS_SKILL changed to an unregistered name it answers consent:policy:soft-reset (pre-fix: FAILS, the text sets no TILLANDSIAS_SKILL)'
+      - 'the reset command exactly as the skill text prescribes it, given to the PreToolUse bridge (`policy classify-bash --hook`) under that env, is allowed, not asked; the same with TILLANDSIAS_DESTRUCTIVE_RESET_OK unset is asked (pre-fix: FAILS, the bridge asks either way)'
+      - 'hard-reset stays untouched: under the same env, a hard-reset argv (`wsl --unregister x`) still answers consent:policy:hard-reset through eval and the bridge'
+    verifiable_closure: |
+      bash scripts/test-smoke-skill-reset-env-matches-policy.sh
+      exits 0 on a bare-metal host (in a forge the eval arms are a NAMED skip,
+      as in test-command-policy-consent.sh; a forge can verify them with
+      `unshare -rm` + a tmpfs over /run). Pre-fix: FAILS at arm 1.
+    notes: |
+      size: S (docs + env), plus the bridge routing named in context.
+      Leave pickup open; the coordinator routes it.
+    provenance: |
+      Filed 2026-09-28 by macuahuitl-forge (forge-tillandsias) on the
+      coordinator's direction, from the gap it named while implementing
+      1443-9f5w.
+    events:
+      - type: filed
+        ts: "2026-09-28T16:48:22Z"
+        agent_id: "forge-forge-tillandsias-claude-20260928"
+        host: forge-tillandsias
+        summary: |-
+          The smoke skills' "unset or 1" disagrees with the consent engine's
+          explicit =1 + TILLANDSIAS_SKILL; the Bash bridge never consults the
+          env mapping.

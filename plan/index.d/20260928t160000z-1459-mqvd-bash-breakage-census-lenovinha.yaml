@@ -1,0 +1,83 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-census-of-shell-specific-breakages-72-recorded-instances-in-8-classes-and-which-classes-a-gate-guard-actually-prevents
+    order: 1459-mqvd
+    status: ready
+    kind: research
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [bash, guard, fail-loud, lua-migration, evidence]
+    estimated_hours: 6
+    owned_files:
+      - plan/issues/bash-breakage-census-2026-09-28.md
+    title: |
+      census of breakages whose root cause is shell as an implementation language: about 72 recorded instances in 8 classes; three classes are guarded in the gate, two are guarded nowhere
+    context: |
+      Filed at the operator's request (lenovinha session, 2026-09-28), after
+      1283-tpd5 (a quoted YAML scalar invisible to grep readers): track the
+      breaking entries as evidence for the Lua migration question, and make
+      sure every class that has broken is prevented, not only fixed where it
+      broke. Census taken by sweeping plan/index.d, plan/archive, plan/issues
+      and git log; statuses from tillandsias-plan status.
+
+      "Guarded" means a blocking decider that runs in the gate (inline in
+      build.sh or a gate-steps.d step running the decider over the tree, not
+      only its fixture). "Fixed at the instance" does not count.
+
+      1 SIGPIPE / pipefail / if-not verdicts, 9: 702-pwhc 795-imz3 1069-c9w6
+        1070-a4gc 1084-nzqc 1075-yuxt 1293-wka4 1307-ermc 1339-had5.
+        GUARDED: check-sigpipe-verdict-pipelines-added, check-no-spawn-in-if-not.
+      2 quoting / expansion / backticks, 7: 1256-t3w8 (ready) 1215-8jui
+        (in_progress) 773-fx3u 627-wtrp 875-v7hv 1117-66qv (ready), plus three
+        backtick-in-double-quoted ledger arguments from one lenovinha session.
+        UNGUARDED. Structural fix proposed: the argv door, 1443-8pur.
+      3 bash-3.2 dialect, 9: 196 761-g36m 805-pr3p 813-9n54 1373-sr9g
+        1374-4u6i 1413-8bee 1399-wtpq 964-zgga (ready). GUARDED:
+        check-bash-dialect, rules added per incident.
+      4 BSD vs GNU tools, about 14: 766-tdij 784-dwkh 803-bqte 812-64j7
+        841-ruh9 886-yizb 923-mp4w 1279-a7b6 1454-ssg3 1375-8g5t 1352-vmbc
+        1353-ryhq (ready) 1135-z8gn (ready, 37 standing idioms) 1130-i6xj.
+        PARTIAL: check-portability-idioms warns only; check-macos-stock-binaries
+        is not in the gate.
+      5 grep/sed over YAML or JSON, 10: 1283-tpd5 (in_progress) 1287-myx8
+        (ready) 1238-u84w (blocked) 1303-2d5g 1370-tjme 870-fv7k 925-erjs
+        773-f5ma 1375-tsfu 914-ahsy. PARTIAL: the jq ratchet runs only as a
+        fixture in the gate; check-plan-ledger-readers is not in the gate.
+      6 exit status lost or misread, 11: 1260-2qgi (ready) 1256-cqsy (ready)
+        923-ys2t (ready) 1175-wuwr 731-pc5r 316 256 643-bnag 1155-jurn
+        1018-5f5a 1354-dw8x. PARTIAL: only backgrounded-job stderr is guarded.
+        1384-ddua proposes porting these deciders to Lua.
+      7 process liveness / pkill self-match, 4: 1098-q7bk 943-3xyf 1266-75tr
+        (in_progress) 1365-tjav (ready). UNGUARDED.
+      8 exec bits / CRLF, 8: 731-d89b 770-dyqr 1116-vps5 889-8tcb 1321-2ixp
+        1049-s35z 1393-aa7v 752-8hqx. Exec bits GUARDED
+        (check-script-exec-bits); CRLF PARTIAL (fixture only).
+
+      Interpretation for the Lua question: classes 1, 2, 3, 6 and 7 do not
+      exist in a language with real argv vectors, typed exit values and no
+      pipeline status. Class 5 does not go away by changing language alone;
+      it needs a parser, and a pure-shell or pure-Lua host has none built in.
+      Classes 4 and 8 are platform differences any language meets at the
+      process boundary.
+    exit_criteria:
+      - 'the census is written to plan/issues/bash-breakage-census-2026-09-28.md with every order above, its class, its status, and the guard (or UNGUARDED) for its class'
+      - 'every UNGUARDED class (2 quoting, 7 pkill self-match) has a blocking decider running in the gate, or a filed child row naming why it cannot'
+      - 'every PARTIAL class names the missing half as a filed child row: the decider over the tree, not only its fixture, in the gate'
+      - 'the open instance rows listed above are each either closed or confirmed still claimable, so the census does not quote a stale status'
+    unscoreable: |
+      research-census: the deliverable is a written census and filed child
+      rows. Each child that adds a guard carries its own litmus pin; this row
+      has no single test of its own.
+    verifiable_closure: |
+      each class line in the census names a gate-resident guard by path, or a
+      filed row; grep the gate roster for each named guard.
+    events:
+      - type: filed
+        ts: "2026-09-28T16:00:00Z"
+        agent_id: linux-lenovinha-claude-20260928t160000z
+        host: lenovinha
+        summary: |-
+          Filed from lenovinha at the operator's request, as evidence for the
+          bash-to-Lua migration case and a sweep for unguarded failure classes.

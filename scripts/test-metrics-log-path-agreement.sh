@@ -92,7 +92,7 @@ rust_bin=""
 if [ -f "$ROOT/scripts/plan-binary-probe.sh" ]; then
     # shellcheck source=scripts/plan-binary-probe.sh
     . "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
-    command -v resolve_plan_binary >/dev/null 2>&1 && rust_bin="$(resolve_plan_binary 2>/dev/null || true)"
+    command -v resolve_plan_binary >/dev/null 2>&1 && rust_bin="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null || true)"
 fi
 # ABSOLUTISE IT. The probe answers with a repo-relative path ("./target/release/…"),
 # and arm 1c below runs the binary from a scratch checkout — a relative path
@@ -236,10 +236,22 @@ fi
 # ── arm 3: NEGATIVE CONTROL — outside a checkout it must still work ───────────
 # A forge or a bare invocation has no repo to write into. Falling back to /tmp
 # there is correct; failing there would be a regression this fix must not cause.
+# ORDER 1455-d7hc: "outside a checkout" means the LIBRARY is outside one. Since
+# 1268-m2ir the shell rule falls back to the checkout its own library lives in,
+# by design, so naming a nonexistent root while sourcing the library from THIS
+# checkout resolves to this checkout: the arm could no longer fail the way it
+# meant, and it failed everywhere from 2026-09-20 unseen because no gate ran it.
+# Source a copy of the library from a scratch directory outside any checkout.
+_outside_lib="$(mktemp -d "${TMPDIR:-/tmp}/metrics-outside.XXXXXX")"
+mkdir -p "$_outside_lib/scripts"
+cp "$ROOT/scripts/metrics-log-path.sh" "$_outside_lib/scripts/"
 outside="$(
-    . "$ROOT/scripts/metrics-log-path.sh" 2>/dev/null || true
-    metrics_default_log tillandsias-timing.jsonl "/nonexistent-checkout-$$"
+    cd "$_outside_lib" || exit 1
+    unset PROJECT_ROOT
+    . "$_outside_lib/scripts/metrics-log-path.sh" 2>/dev/null || true
+    metrics_default_log tillandsias-timing.jsonl "/nonexistent-checkout-$$" 2>/dev/null
 )"
+rm -rf "$_outside_lib"
 case "$outside" in
     /tmp/tillandsias-timing.jsonl) ok "outside a checkout it falls back to /tmp (forge path preserved)" ;;
     *) bad "no-checkout fallback broke: $outside" ;;
@@ -261,7 +273,21 @@ esac
 # Fedora CONTAINER IMAGE and ships no `hostname`. /etc/hostname had the answer
 # the whole time. Simulated by shadowing `hostname` with a failing stub.
 tdir="$(mktemp -d)"
-trap 'rm -rf "$tdir"' EXIT
+# Arms 9 and 9c must create the REAL /tmp/tillandsias-timing.jsonl (the split
+# guard names that path). A fixture killed between the create and its own rm
+# (preflight-fixtures-default-target bounds it; measured on the land83 relay)
+# left the file behind, and every cycle-metrics report on the host then refused
+# with violation:metrics-log-split. Clean it on ANY exit, but only while it still
+# holds nothing except this fixture's record, so a real log is never deleted.
+_rm_fixture_tmp_log() {
+    local f=/tmp/tillandsias-timing.jsonl
+    [ -f "$f" ] || return 0
+    grep -qv '"host":"fixture"' "$f" && return 0
+    rm -f "$f"
+}
+trap 'rm -rf "$tdir" "${_FIXTURE_METRICS:-}"; _rm_fixture_tmp_log' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 mkdir -p "$tdir/bin"
 printf '#!/bin/sh\nexit 127\n' > "$tdir/bin/hostname"
 chmod +x "$tdir/bin/hostname"

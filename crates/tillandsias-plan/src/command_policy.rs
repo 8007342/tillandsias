@@ -327,6 +327,35 @@ pub fn is_shell_string_call(argv: &[String]) -> bool {
 /// reaches a refusal line (spec: every decision is audited with secrets
 /// redacted; the refusal text obeys the same rule).
 pub fn redact(s: &str) -> String {
+    // ORDER 1443-w9hf: a PEM block (`-----BEGIN … PRIVATE KEY-----`) is
+    // redacted from its header to the end of the text: a key's body spans
+    // lines and has no single-token shape to stop at.
+    if let Some(i) = s.find("-----BEGIN") {
+        return format!("{}<redacted:pem>", redact(&s[..i]));
+    }
+    // AWS-style access key ids: AKIA/ASIA + 16 upper-case alphanumerics.
+    let aws_redacted = {
+        let mut out = String::with_capacity(s.len());
+        let b = s.as_bytes();
+        let mut i = 0;
+        while i < b.len() {
+            let is_key = (s[i..].starts_with("AKIA") || s[i..].starts_with("ASIA"))
+                && b.len() >= i + 20
+                && b[i + 4..i + 20]
+                    .iter()
+                    .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
+            if is_key {
+                out.push_str("<redacted:token>");
+                i += 20;
+                continue;
+            }
+            let ch = s[i..].chars().next().unwrap();
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+        out
+    };
+    let s: &str = &aws_redacted;
     const PREFIXES: &[&str] = &[
         "github_pat_",
         "ghp_",
@@ -926,7 +955,18 @@ pub fn load_seed(
 
 /// The answer for one request: the strictest of the floor's and every matching
 /// seed rule's; the seed's default when nothing matched. Ties go to the floor.
+/// Decide one request AND append the decision to the per-host audit log
+/// (order 1443-w9hf). Every caller goes through here, so the log is complete
+/// by construction: `policy eval`, proc.run's pre-spawn check, and whatever
+/// door calls the evaluator next.
 pub fn evaluate(req: &Request, seed: Option<&Seed>, protected: &[String]) -> Decision {
+    let d = decide(req, seed, protected);
+    audit_decision(req, &d, None);
+    d
+}
+
+/// The decision alone, with no side effect.
+pub fn decide(req: &Request, seed: Option<&Seed>, protected: &[String]) -> Decision {
     let mut best = floor_decide(req, protected);
     if let Some(seed) = seed {
         for r in seed.rules.iter().filter(|r| r.matches(req)) {
@@ -968,6 +1008,173 @@ pub fn evaluate(req: &Request, seed: Option<&Seed>, protected: &[String]) -> Dec
         ),
         _ => Decision::allow("default", "ok:policy:allow:default".into()),
     }
+}
+
+// ── the audit log (order 1443-w9hf) ─────────────────────────────────────────
+//
+// One JSONL line per decision, so the bridge hook's retirement condition
+// (1443-we89: zero deny/ask from caller=pretooluse for 14 fleet days) and the
+// "refusal storm" of a wrong rule are numbers. Per host, under .cache
+// (gitignored); NEVER the shared timing path (1204-3s2s). The argv itself is
+// not recorded: argv_digest is its sha256, and argv_shown is the argv passed
+// through redact() first, so a line cannot carry a token.
+
+pub const AUDIT_BASENAME: &str = "command-policy-audit.jsonl";
+
+/// TILLANDSIAS_POLICY_AUDIT_LOG, else <checkout>/.cache/metrics/ when
+/// `workspace` is a checkout (a `.git` directory), else
+/// $HOME/.cache/tillandsias/metrics/.
+pub fn audit_log_path(workspace: &Path) -> PathBuf {
+    if let Ok(p) = std::env::var("TILLANDSIAS_POLICY_AUDIT_LOG")
+        && !p.is_empty()
+    {
+        return PathBuf::from(p);
+    }
+    if workspace.join(".git").is_dir() {
+        return workspace
+            .join(".cache")
+            .join("metrics")
+            .join(AUDIT_BASENAME);
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    PathBuf::from(home)
+        .join(".cache")
+        .join("tillandsias")
+        .join("metrics")
+        .join(AUDIT_BASENAME)
+}
+
+fn audit_append(path: &Path, line: &serde_json::Value) {
+    if cfg!(test) || std::env::var("TILLANDSIAS_POLICY_AUDIT").as_deref() == Ok("off") {
+        return;
+    }
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = writeln!(f, "{line}");
+    }
+}
+
+fn decision_word(s: Strictness) -> &'static str {
+    match s {
+        Strictness::Allow => "allow",
+        Strictness::Deny => "deny",
+        Strictness::Consent => "consent",
+    }
+}
+
+/// Append one evaluator decision. `run_id` is the executor's run identity when
+/// the decision guarded a spawn that happened.
+pub fn audit_decision(req: &Request, d: &Decision, run_id: Option<&str>) {
+    let argv_digest = crate::host_verbs::sha256_hex(req.argv.join("\0").as_bytes());
+    let consent_source = if d.token == "ok:policy:soft-reset:forge-preauthorised" {
+        Some("forge-policy")
+    } else {
+        None
+    };
+    let line = serde_json::json!({
+        "ts": crate::host_verbs::now_rfc3339(),
+        "run_id": run_id,
+        "host_kind": req.host_kind.as_str(),
+        "regime": req.regime,
+        "caller": req.caller,
+        "program": req.argv.first().map(|p| program_name(p)),
+        "argv_digest": argv_digest,
+        "argv_shown": shown(&req.argv),
+        "rule_id": d.rule_id,
+        "decision": decision_word(d.strictness),
+        "consent_source": consent_source,
+    });
+    audit_append(&audit_log_path(&req.workspace), &line);
+}
+
+/// Append one Bash-tool bridge decision (order 1443-we89, caller=pretooluse).
+/// The raw command is never recorded: only its digest (a command can carry a
+/// secret no shape catches). `decision` is allow | consent | deny.
+pub fn audit_bridge(
+    workspace: &Path,
+    host_kind: HostKind,
+    command: &str,
+    rule_id: &str,
+    decision: &str,
+    kill_switch: bool,
+) {
+    let line = serde_json::json!({
+        "ts": crate::host_verbs::now_rfc3339(),
+        "run_id": serde_json::Value::Null,
+        "host_kind": host_kind.as_str(),
+        "regime": "hook",
+        "caller": "pretooluse",
+        "program": "bash",
+        "argv_digest": crate::host_verbs::sha256_hex(command.as_bytes()),
+        "argv_shown": serde_json::Value::Null,
+        "rule_id": rule_id,
+        "decision": decision,
+        "consent_source": serde_json::Value::Null,
+        "kill_switch": if kill_switch { 1 } else { 0 },
+    });
+    audit_append(&audit_log_path(workspace), &line);
+}
+
+/// One summary row: (rule_id, decision) -> count.
+pub type AuditRow = ((String, String), usize);
+
+/// Count the log's lines per (rule_id, decision), optionally only those newer
+/// than `since`, and optionally for one caller. `None` when there is no log.
+pub fn audit_summary(
+    path: &Path,
+    since: Option<chrono::Duration>,
+    caller: Option<&str>,
+) -> Option<Vec<AuditRow>> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let cutoff = since.map(|d| chrono::Utc::now() - d);
+    let mut counts: std::collections::BTreeMap<(String, String), usize> =
+        std::collections::BTreeMap::new();
+    for line in text.lines() {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if let Some(c) = caller
+            && v.get("caller").and_then(|x| x.as_str()) != Some(c)
+        {
+            continue;
+        }
+        if let Some(cut) = cutoff {
+            let ts = v
+                .get("ts")
+                .and_then(|x| x.as_str())
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok());
+            match ts {
+                Some(t) if t >= cut => {}
+                _ => continue,
+            }
+        }
+        let rule = v.get("rule_id").and_then(|x| x.as_str()).unwrap_or("?");
+        let dec = v.get("decision").and_then(|x| x.as_str()).unwrap_or("?");
+        *counts
+            .entry((rule.to_string(), dec.to_string()))
+            .or_default() += 1;
+    }
+    Some(counts.into_iter().collect())
+}
+
+/// `24h`, `7d`, `30m`, `90s` -> a duration.
+pub fn parse_since(s: &str) -> Option<chrono::Duration> {
+    let (n, unit) = s.split_at(s.len().checked_sub(1)?);
+    let n: i64 = n.parse().ok()?;
+    Some(match unit {
+        "s" => chrono::Duration::seconds(n),
+        "m" => chrono::Duration::minutes(n),
+        "h" => chrono::Duration::hours(n),
+        "d" => chrono::Duration::days(n),
+        _ => return None,
+    })
 }
 
 #[cfg(test)]

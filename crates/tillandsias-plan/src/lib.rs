@@ -29,6 +29,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 pub mod answer;
+pub mod bash_policy;
 /// ORDER 801-g9nn — the commit-DAG plumbing behind a citation's `commit` and
 /// the envelope's `caller_relation`. Derives `same | behind | ahead | diverged`
 /// honestly and refuses to synthesise a total order git cannot give.
@@ -36,6 +37,7 @@ pub mod branch_discipline;
 /// Order 1443-isrk: the command policy evaluator (allow | deny | consent for an
 /// argv) behind `policy eval` and proc.run / sh.run.
 pub mod command_policy;
+pub mod discipline_hooks;
 /// ORDER 920-pxg6 — the OpenAI-compatible loopback front-end over
 /// `pipeline::run_grounded`. One grounded pipeline, two front-ends.
 pub mod expert_serve;
