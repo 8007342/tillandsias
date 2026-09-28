@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: verify-closure-runs-a-packets-verifiable-closure-and-compares-the-printed-output-to-the-criterion
+    event:
+      type: progress
+      ts: "2026-09-28T02:38:53Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t023853z
+      host: macos
+      summary: |
+        Implementation complete on work/1443-qwpj at ab5ec206c (feature ba5ee5216, merged over origin/linux-next). scripts/verify-closure.sh reads the FOLDED closure through the query --json projection (verifiable_closure is now projected). It extracts leading clauses of the 977-448j scorable grammar (bash/sh scripts/*.sh, scripts/*.sh, ./build.sh, cargo test|run, litmus:<name> via the runner), each with optional `prints <token>` and `[and] exits <n>`, chained by `and`. It runs them as argv (never eval'd; shell metacharacters refused) under a watchdog timeout, and compares the printed token (<placeholder> = any non-space token). Refusals (exit 2, never ok): no-command-grammar, declared, unsafe-command, and uncovered-criterion (prose after the clauses that is not an explanation, or a standalone AND). The rc-only-plus-skip case is unmet. --claim is ignored. On real closures: 1437-gbwi uncovered-criterion (the motivating misreport is now unacceptable by construction); 1437-khnx two clauses, both ok; 1443-w79y and 1446-664f ok; 1420-inak no-command-grammar. BUG FOUND AND FIXED: the watchdog's sleep inherited stdout, so a $(…) caller waited out the full timeout after a 3 s fixture returned. Evidence from a clean checkout: 12 deciders rc=0; ratchet 6/6; fixture ok:verify-closure:8/8; crate 464/0. litmus:verify-closure-shape is bound under ci-release and runs [OK] on darwin. CLOSURE MISMATCH, OPEN: this row's closure says `prints ok:verify-closure:6/6`, but the fixture proves 8 arms and prints 8/8. The 2 extras are arm 7, the gbwi uncovered-criterion shape, and arm 8, an rc-only closure satisfied by a skip. So verify-closure.sh would score its own packet unmet as written; that is the tool behaving correctly. A set-field --replace to 8/8 was REFUSED by the plan lane's drop guard (refused:append-drops-lines-vs-origin, 1261-bn7v), and that fragment was deleted before any push. With a scratch fold carrying the 8/8 text, the tool answered ok:closure:1443-qwpj:ok:verify-closure:8/8 rc=0. Coordinator: either land the closure correction through a gated lane, or rule that the fixture should print 6/6 by folding arms 7-8 into existing arms. NOTE (not caused by this change): on unmodified trunk 392a0c514 on darwin, five ci-release litmus tests fail: validator-surface-currency, fragment-ts-skew (BSD wc padding), fragment-closure-evidence-gate-shape, fragment-status-loss-attribution-shape and added-fragment-parse-gate-shape.
