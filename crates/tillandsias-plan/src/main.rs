@@ -426,7 +426,13 @@ const USAGE: &str = concat!(
     "                                     transcript (message.usage, deduplicated by message.id), plus the\n",
     "                                     sub-agent totals; source=absent or absent:schema-drift:<field>\n",
     "                                     with zeros when it cannot measure. Never a guess.\n",
-    "           discipline show [--json] | target --platform <p> | check-ref <ref>  [--root D] [--seed F]\n",
+    "           discipline show [--json] | target --platform <p> | check-ref <ref> | derive [--json]  [--root D] [--seed F]\n",
+    "                                     ORDER 1446-664f: derive observes the project (origin HEAD, integration\n",
+    "                                     branches, work refs, author emails, PR merges, hooks) and prints\n",
+    "                                     derived=<n> seed=<n|none> effective=<n>; an enforced rule refuses only\n",
+    "                                     when its qualifier is observed, else warns :seed-ahead-of-reality.\n",
+    "                                     Observations read the checkout's refs as of its LAST FETCH:\n",
+    "                                     `git fetch origin` first (a note: line says when nothing was fetched).\n",
     "                                     ORDER 1443-w79y. The branch-discipline seed\n",
     "                                     (.tillandsias/branch-discipline.yaml): level, per-rule\n",
     "                                     enforcement, integration branch per platform, ref grammar.\n",
@@ -4110,11 +4116,38 @@ fn print_lua_returns(vals: mlua::MultiValue) {
     }
 }
 
+/// ORDER 1393-aa7v: put the C runtime's stdout in BINARY mode on Windows.
+///
+/// Lua's `print` and `io.write` write through C stdio, and on Windows the CRT
+/// opens stdout in TEXT mode, which turns every "\n" into "\r\n". So one script
+/// printed different bytes per platform (measured: "nil\ttrue\r\n" on native
+/// Windows against "nil\ttrue\n" on Linux), against the determinism rule that
+/// a script is one byte stream everywhere (1384-bp6t). Binary mode is a no-op
+/// for Rust's own writers, which go to the handle directly, so println! output
+/// was always LF and still is.
+#[cfg(windows)]
+fn lua_stdout_binary_mode() {
+    unsafe extern "C" {
+        fn _setmode(fd: i32, mode: i32) -> i32;
+    }
+    const STDOUT_FD: i32 = 1;
+    const O_BINARY: i32 = 0x8000;
+    // SAFETY: _setmode on the process's own stdout descriptor; a failure
+    // (-1, e.g. no stdout) leaves the mode unchanged and is harmless.
+    unsafe {
+        _setmode(STDOUT_FD, O_BINARY);
+    }
+}
+
+#[cfg(not(windows))]
+fn lua_stdout_binary_mode() {}
+
 fn run_lua_cli(args: &[String]) {
     if args.is_empty() {
         eprintln!("usage: tillandsias-plan lua <script.lua | -e code> [args...]");
         std::process::exit(2);
     }
+    lua_stdout_binary_mode();
 
     if std::env::var_os("TILLANDSIAS_PLAN_BIN").is_none()
         && let Ok(exe) = std::env::current_exe()
@@ -4365,7 +4398,7 @@ fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
     use tillandsias_plan::branch_discipline as bd;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan discipline show [--json] | target --platform <linux|forge|windows|macos> | check-ref <ref>   [--root <dir>] [--seed <path>]"
+            "usage: tillandsias-plan discipline show [--json] | target --platform <linux|forge|windows|macos> | check-ref <ref> | derive [--json]   [--root <dir>] [--seed <path>]\n  derive and check-ref observe the checkout's refs as of its last fetch: run `git fetch origin` first."
         );
         std::process::exit(2);
     };
@@ -4453,8 +4486,29 @@ fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
             println!("{} {}", d.target(&p), d.provenance(None));
             std::process::exit(0);
         }
+        Some("derive") if positional.len() == 1 => {
+            // ORDER 1446-664f — the discipline the project's history shows,
+            // beside the seed, and the drift between them.
+            let r = bd::derive(&root, &d);
+            let (lines, j) = bd::derive_report(&d, r.as_ref());
+            if json {
+                println!("{j}");
+            } else {
+                for l in lines {
+                    println!("{l}");
+                }
+            }
+            std::process::exit(0);
+        }
         Some("check-ref") if positional.len() == 2 => {
-            let a = bd::check_ref(&d, &positional[1]);
+            // ORDER 1446-664f — an enforced rule refuses only where the seed
+            // and the observed qualifier agree.
+            let reality = if d.level > 0 {
+                bd::derive(&root, &d)
+            } else {
+                None
+            };
+            let a = bd::check_ref_observed(&d, &positional[1], reality.as_ref());
             println!("{}", a.verdict);
             if let Some(w) = &a.why {
                 println!("why: {w}");

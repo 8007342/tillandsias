@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-tests-share-one-env-lock-so-the-mcp-browser-family-test-survives-a-parallel-run
+    field: context
+    value: "T6 of the 2026-09-27 trims. The test uses UnixStream::pair (no path\nor port to collide on). Its shared state is the process environment:\nwith_known_demo_project sets TILLANDSIAS_HOST_PROJECT_ROOT and\nTILLANDSIAS_CLOUD_PROJECT_CACHE under its own ENV_LOCK, while\nwith_no_known_projects uses ENV_LOCK2 and local_projects::tests,\nremote_projects and vault_bootstrap each keep their own. Five locks on\none resource is no lock. The gate's feature pass is serial\n(--test-threads=1) which is why it is only seen in ./build.sh --test's\nparallel feature pass and in the workspace run; the structural arm\nmakes the criterion deterministic, the stress arm shows the symptom.\n\n\n[2026-09-28T00:28:02Z forge-tillandsias] \n\nInvestigation (forge-tillandsias, 2026-09-28, from 1242-4x53's parallel-only\nresource_lock::tests::is_held_reflects_lock_lifecycle failure): resource_lock\ntests share process state with the sibling tests this packet targets. Every\nresource_lock test calls lock_dir(), which reads the process-global\nXDG_RUNTIME_DIR env var — the SAME variable local_projects/remote_projects/\nvault_bootstrap/tray::mod's five ENV_LOCK/ENV_LOCK2 sites mutate. resource_lock's\nown tests take NONE of those locks; they only pick unique resource NAMES\n(format!(\"test-held-{pid}\") etc.), which serializes them against each other\nbut does nothing against a sibling test elsewhere in the crate concurrently\ncalling std::env::set_var(\"XDG_RUNTIME_DIR\", ...) under its own ENV_LOCK.\n\nConsolidating the five existing mutexes into one test_support::env_lock()\n(this packet's stated fix) does NOT by itself cover resource_lock.rs, because\nresource_lock.rs is not in this packet's owned_files and its tests would\nstill take no lock at all. To also fix 1242-4x53's failure, resource_lock.rs's\ntests need to acquire the same env_lock() around their lock_dir()-touching\nassertions (at minimum is_held_reflects_lock_lifecycle and\nheld_resources_with_prefix_lists_only_live_matching_locks, which both probe\nstate derived from XDG_RUNTIME_DIR). Recommending owned_files widen to include\ncrates/tillandsias-headless/src/resource_lock.rs; claiming and implementing\nboth under this order since it is the same lock and the same root cause."
+    ts: "2026-09-28T00:28:02Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: tray-tests-share-one-env-lock-so-the-mcp-browser-family-test-survives-a-parallel-run
+    event:
+      type: note
+      ts: "2026-09-28T00:28:02Z"
+      host: forge-tillandsias
+      summary: |-
+        1242-4x53 investigation: resource_lock.rs shares the XDG_RUNTIME_DIR state this packet's fix targets but is outside owned_files

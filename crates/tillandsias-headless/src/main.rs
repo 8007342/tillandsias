@@ -38,7 +38,9 @@
 use signal_hook::flag;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::io::{self, IsTerminal, Read, Write};
+#[cfg(unix)] // 1444-bzpu: every reader is on the Unix path
+use std::io::Read;
+use std::io::{self, IsTerminal, Write};
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 #[cfg(unix)]
@@ -49,6 +51,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tempfile::Builder as TempDirBuilder;
+#[cfg(unix)] // 1444-bzpu: the control-wire server is Unix-only
 use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
 };

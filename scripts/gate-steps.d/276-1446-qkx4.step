@@ -1,0 +1,12 @@
+# Gate step 1446-qkx4 — data, not code (order 1072-b7eq).
+#
+# The skill every discipline refusal names must exist, be single-sourced,
+# answer each hook-template refusal family, and reach a forge on ANY project
+# (agent-profile.sh links it from /opt/skills into each harness's skill dir).
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the /project-discipline skill and its forge wiring (1446-qkx4)"
+STEP_SCRIPT="scripts/test-project-discipline-skill.sh"
+STEP_ERROR="/project-discipline stopped existing, lost a hook refusal family's section, or stopped reaching a forge on a non-Tillandsias project (1446-qkx4) — see the verdict line above"
+STEP_OK="Project-discipline skill passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:project-discipline-skill:4/4"
