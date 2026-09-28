@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: claude-forge-launches-with-bypass-permissions-consent-pre-accepted-never-prompting
+    field: status
+    value: completed
+    ts: "2026-09-27T21:58:02Z"
+    host: lenovinha
+
+events:
+  - packet_id: claude-forge-launches-with-bypass-permissions-consent-pre-accepted-never-prompting
+    event:
+      type: completed
+      ts: "2026-09-27T21:58:02Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 9e0a6a8ce (land77 relay of work/1437-y2wu f1eb4337e on origin/linux-next, 1244s gate) + scripts/test-claude-forge-bypass-preaccepted.sh PASS 6 arms (restore-merge and entrypoint-order arms mutation-verified) + full build.sh --check rc=0 2877s on f1eb4337e + check-jq-callsite-ratchet ok:344:floor:344
+  - packet_id: claude-forge-launches-with-bypass-permissions-consent-pre-accepted-never-prompting
+    event:
+      type: note
+      ts: "2026-09-27T21:58:02Z"
+      host: lenovinha
+      summary: |-
+        closed on the coordinator's ruling: criteria 1-3 met; criterion 4 (a live no-dialog observation on a fresh Claude forge) is NOT observed and stays open as a named gap
