@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-temporary-claude-code-pretooluse-hook-classifies-a-raw-bash-command-against-the-seven-measured-failure-shapes-through-the-policy-engine-refuses-with-why-and-remedy-asks-for-consent-on-destructive-classes-and-prints-its-own-retirement-condition
+    event:
+      type: note
+      ts: "2026-09-28T07:14:07Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t071407z
+      host: macos
+      summary: |
+        DARWIN bash 3.2 CLOSURE EVIDENCE (tlatoanis-macbook-air, 2026-09-28). Ref: work/1443-we89 at df6e76a31, detached worktree; the plan binary was built from that ref; GATE regime (TILLANDSIAS_PLAN_BIN and CARGO_TARGET_DIR unset); run under /bin/bash, whose `bash --version` is GNU bash, version 3.2.57(1)-release (arm64-apple-darwin26). TMPDIR is the real darwin /var/folders/lm/krdnbsm56j13fy8vn_r0t47h0000gn/T/, the case Linux cannot simulate. Verdict: `PASS: pretooluse-command-policy 37/37 (1443-we89)`, rc=0. Arm 4 in detail: rm -rf /tmp/pretooluse-scratch-x needs no consent; rm -rf <the real /var/folders TMPDIR>/pretooluse-scratch-y needs no consent; the scratch ROOTS themselves (/tmp, /private/tmp, the /var/folders .../T) each ASK; rm -rf "$HOME" is judged as the expanded path and asks; an rm target with an unset variable asks; rm -rf "${TMPDIR:-/tmp}/…" expands and needs no consent. The earlier 29/30 red (arm 4 hardcoding /tmp against a /var/folders TMPDIR) is resolved.
