@@ -473,6 +473,32 @@ else
     rm -f /tmp/tillandsias-timing.jsonl
 fi
 
+# ── arm W: a LINKED WORKTREE is a checkout on both sides (1455-d7hc) ─────────
+# A linked worktree's .git is a FILE ("gitdir: ..."). The shell rule accepts it
+# (-e, 1268-m2ir); the Rust writer used is_dir and fell back to /tmp, so in any
+# worktree the writer and the reader disagreed. Built in a SCRATCH repo so the
+# real checkout's worktree list is never touched.
+if [ -n "$rust_bin" ] && [ -x "$rust_bin" ] && command -v git >/dev/null 2>&1; then
+    _wt="$(mktemp -d "${TMPDIR:-/tmp}/metrics-worktree.XXXXXX")"
+    git -C "$_wt" init -q main 2>/dev/null
+    git -C "$_wt/main" -c user.email=f@x -c user.name=f commit -q --allow-empty -m init 2>/dev/null
+    git -C "$_wt/main" worktree add -q --detach "$_wt/linked" 2>/dev/null
+    if [ -f "$_wt/linked/.git" ]; then
+        w_rust="$("$rust_bin" metrics-log-path wt-probe.jsonl "$_wt/linked" 2>/dev/null)"
+        w_shell="$(unset PROJECT_ROOT; . "$ROOT/scripts/metrics-log-path.sh" 2>/dev/null; metrics_default_log wt-probe.jsonl "$_wt/linked" 2>/dev/null)"
+        if [ "$w_rust" = "$w_shell" ] && [ "$w_rust" = "$_wt/linked/.cache/metrics/wt-probe.jsonl" ]; then
+            ok "in a linked worktree (.git is a file) the Rust writer and the shell reader agree on the worktree"
+        else
+            bad "linked worktree: rust=$w_rust shell=$w_shell (want $_wt/linked/.cache/metrics/wt-probe.jsonl)"
+        fi
+    else
+        bad "premise: the scratch linked worktree has no .git FILE"
+    fi
+    rm -rf "$_wt"
+else
+    printf 'skip: linked-worktree arm: no runnable plan binary or git\n'
+fi
+
 printf 'metrics-log-path-agreement: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
 printf 'ok:metrics-log-path-agreement:%d\n' "$pass"
