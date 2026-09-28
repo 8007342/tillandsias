@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    field: status
+    value: ready
+    ts: "2026-09-28T07:46:03Z"
+    host: macos
+
+events:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    event:
+      type: note
+      ts: "2026-09-28T07:46:03Z"
+      host: macos
+      summary: |-
+        released at cycle end: rule + red-by-design fixture checkpointed on work/1260-2qgi 427c1ef1d; waits on 1443-8pur slice 2 (run --json)

@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-stable-and-unstable-moving-tags-diverge-silently-between-a-clone-and-origin-because-git-fetch-refuses-to-clobber-them-so-a-host-resolving-a-release-channel-locally-can-read-a-months-old-commit-and-be-told-nothing
+    field: notes
+    value: |-
+      yoga-silverblue 2026-09-28 - CRITERION 3 ANSWERED (writer and consumers named), and a conflict with criterion 1. REPRODUCED on a second host: yoga's clone has stable^{}=341ab0010 and unstable^{}=0bba6525f while origin has both at 52e3bc32e (compared PEELED to peeled; origin's un-peeled refs are the annotated tag objects).
+      WRITERS: unstable <- .github/workflows/release.yml:406-407 (CI `git tag -f -a unstable` + `git push origin refs/tags/unstable --force`, every release). stable <- scripts/promote-stable.sh:128/:382 (the operator's promotion actor) and the manual line methodology/versioning.yaml:513.
+      CONSUMERS: (1) the public installer URLs /releases/download/{stable,unstable}/... (README.md:73-85, release.yml:454-460) - resolved by GitHub SERVER-SIDE against origin's tags; (2) scripts/release-preflight.sh:277 and scripts/promote-stable.sh:388 - read origin with `git ls-remote origin 'refs/tags/stable^{}'`, never the local tag; (3) scripts/test-promote-stable-evidence-gate.sh:500/505 reads the LOCAL tag, but only to compare before/after a promotion (local vs local), so staleness cannot mislead it.
+      CONCLUSION: the tags are LIVE (they back the public installers), so retiring them is out. NO in-tree tooling resolves a channel from a LOCAL clone's tag, so criterion 1's "release tooling REFUSES when local disagrees with origin" would guard nothing and would block releases on a harmless stale clone. The real hazard is a human or agent reading `git log stable` / `git rev-parse stable` in a clone and trusting it. Options for the owner: (a) close on this map as "no consumer at risk"; (b) an ADVISORY note in release-preflight/promote-stable when local != origin (not a refusal); (c) document `git fetch origin '+refs/tags/stable:refs/tags/stable' '+refs/tags/unstable:refs/tags/unstable'` as the sync, since plain `git fetch --tags` refuses to clobber moving tags. Not built pending that choice.
+    ts: "2026-09-28T13:03:12Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: the-stable-and-unstable-moving-tags-diverge-silently-between-a-clone-and-origin-because-git-fetch-refuses-to-clobber-them-so-a-host-resolving-a-release-channel-locally-can-read-a-months-old-commit-and-be-told-nothing
+    event:
+      type: progress
+      ts: "2026-09-28T13:03:12Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'yoga-silverblue 2026-09-28 - CRITERION 3 ANSWERED (writer and consumers named), and a conflict with criterion 1. REPRODUCED on a second host: yoga's clone has stable^{}=341ab0010 and unstable^{}=0bba6525f while origin has both at 52e3bc32e (compared PEELED to peeled; origin's un-peeled refs are the annotated tag objects).
+        WRITERS: unstable <- .github/workflows/release.yml:406-407 (CI `git tag -f -a unstable` + `git push origin refs/tags/unstable --force`, every release). stable <- scripts/promote-stable.sh:128/:382 (the operator's promotion actor) and the manual line methodology/versioning.yaml:513.
+        CONSUMERS: (1) the public installer URLs /releases/download/{stable,unstable}/... (README.md:73-85, release.yml:454-460) - resolved by GitHub SERVER-SIDE against origin's tags; (2) scripts/release-preflight.sh:277 and scripts/promote-stable.sh:388 - read origin with `git ls-remote origin 'refs/tags/stable^{}'`, never the local tag; (3) scripts/test-promote-stable-evidence-gate.sh:500/505 reads the LOCAL tag, but only to compare before/after a promotion (local vs local), so staleness cannot mislead it.
+        CONCLUSION: the tags are LIVE (they back the public installers), so retiring them is out. NO in-tree tooling resolves a channel from a LOCAL clone's tag, so criterion 1's "release tooling REFUSES when local disagrees with origin" would guard nothing and would block releases on a harmless stale clone. The real hazard is a human or agent reading `git log stable` / `git rev-parse stable` in a clone and trusting it. Options for the owner: (a) close on this map as "no consumer at risk"; (b) an ADVISORY note in release-preflight/promote-stable when local != origin (not a refusal); (c) document `git fetch origin '+refs/tags/stable:refs/tags/stable' '+refs/tags/unstable:refs/tags/unstable'` as the sync, since plain `git fetch --tags` refuses to clobber moving tags. Not built pending that choice.' (not terminal) with evidence_refs: 52e3bc32e
+  - packet_id: the-stable-and-unstable-moving-tags-diverge-silently-between-a-clone-and-origin-because-git-fetch-refuses-to-clobber-them-so-a-host-resolving-a-release-channel-locally-can-read-a-months-old-commit-and-be-told-nothing
+    event:
+      type: note
+      ts: "2026-09-28T13:03:12Z"
+      host: yoga-silverblue
+      summary: |-
+        criterion 3 answered; conflict with criterion 1

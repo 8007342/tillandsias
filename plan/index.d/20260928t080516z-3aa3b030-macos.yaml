@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-agent-door-tillandsias-plan-run-json-takes-named-flags-and-an-argv-never-a-string-evaluates-the-policy-before-spawning-starts-the-child-from-the-base-env-only-and-reads-argv-as-json-on-windows-so-nothing-crosses-msys-or-wsl-as-a-string
+    event:
+      type: note
+      ts: "2026-09-28T08:05:16Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t080516z
+      host: macos
+      summary: |
+        DARWIN CLOSURE MEASUREMENT (tlatoanis-macbook-air, 2026-09-28). Ref: work/1443-8pur at c634aeb09, detached worktree; the plan binary was built from that ref; gate regime (TILLANDSIAS_PLAN_BIN and CARGO_TARGET_DIR unset); macOS arm64.
+        FIXTURE: `bash scripts/test-run-verb-agent-door.sh` gives PASS: run-verb-agent-door 29/29, rc 0. Arm 7's physical-cwd fix holds on darwin (/var -> /private/var).
+        ARGV INTEGRITY, byte-exact probe on both paths, plain `run -- …` and `run --argv-json -`, using a script that prints each argument bracketed plus the count. Arguments: 'a b', "'q'", '"d"', '$HOME' (literal), 'x\y', 'end.', '' (empty), ' lead', 'tail ', 'C:\x\.'. Both paths deliver all 10 byte-identical (string compare of the raw captures): n=10, the empty string preserved as [], $HOME unexpanded, backslashes and the trailing dot intact. The fixture's own arm 3 separately passes the C:\x\. and space/quote/* cases.
+        RE-PROBE OF MY EARLIER FINDINGS (both FIXED):
+         3a (a background grandchild keeps the inherited stdout, the leader exits 0): plain run -> rc 0 in 36 ms with 0 survivors (was: rc 124 after the full 3000 ms deadline). `run --json` -> status "exited", code 0, wall_ms 25. Success is no longer reported as a timeout.
+         3b (a background grandchild detaches its stdio, the leader exits 0): plain run -> rc 0 in 557 ms, 0 survivors after `run` returns (was: rc 0 in 15 ms with the grandchild SURVIVING). Nothing started through the door outlives it.
+        JSON SHAPE observed: {"run_id","status","code","ok","stdout","stderr","truncated","wall_ms","argv","policy"}; exited 1 gives status "exited", code 1, ok false, and the verb exits 0 having reported a child.
