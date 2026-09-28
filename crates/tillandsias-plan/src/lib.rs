@@ -1832,6 +1832,78 @@ pub mod edit {
         Ok(lines.join("\n") + "\n")
     }
 
+    /// [`push_event`] for MANY events in one pass (order 1476-5dfy).
+    ///
+    /// Compaction appended each new event with its own `push_event`, and every
+    /// call split the whole text, rescanned every item for the target and
+    /// re-joined it: O(events x text). On the live ledger (748 events into a
+    /// 5.9 MB candidate) that loop was ~10 s of every compaction. This splits
+    /// once, maps every packet_id to its item span in one scan (first item
+    /// containing the id, exactly as [`item_span`] resolves it), groups each
+    /// packet's blocks in the given order, and inserts bottom-up so an earlier
+    /// span is never shifted by a later insertion.
+    ///
+    /// The result is BYTE-IDENTICAL to calling `push_event` once per entry in
+    /// order. Appending a packet's k-th event after its (k-1)-th is exactly
+    /// appending the concatenation once, and creating `events:` on the first
+    /// push and then appending under it is exactly creating it with the
+    /// concatenation. Pinned by `push_events_equals_sequential_push_event`.
+    pub fn push_events(raw: &str, events: &[(String, String)]) -> Result<String, String> {
+        let mut lines: Vec<String> = raw.lines().map(String::from).collect();
+
+        let item_starts: Vec<usize> = (0..lines.len())
+            .filter(|&i| lines[i].starts_with("    - "))
+            .collect();
+        let mut span_of: std::collections::HashMap<String, (usize, usize)> =
+            std::collections::HashMap::new();
+        for (n, &st) in item_starts.iter().enumerate() {
+            let en = item_starts.get(n + 1).copied().unwrap_or(lines.len());
+            for line in &lines[st..en] {
+                let t = line.trim();
+                let t = t.strip_prefix("- ").unwrap_or(t);
+                if let Some(id) = t.strip_prefix("packet_id: ") {
+                    span_of.entry(id.to_string()).or_insert((st, en));
+                }
+            }
+        }
+
+        // Group blocks per packet, keeping each packet's events in order.
+        let mut order: Vec<(usize, usize, Vec<String>)> = Vec::new();
+        let mut slot: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+        for (pid, block) in events {
+            let (st, en) = *span_of
+                .get(pid.as_str())
+                .ok_or_else(|| format!("packet_id '{pid}' not found"))?;
+            let bl: Vec<String> = block.lines().map(String::from).collect();
+            if bl.is_empty() {
+                return Err("empty event block".to_string());
+            }
+            match slot.get(pid.as_str()) {
+                Some(&k) => order[k].2.extend(bl),
+                None => {
+                    slot.insert(pid.as_str(), order.len());
+                    order.push((st, en, bl));
+                }
+            }
+        }
+
+        // Bottom-up, so no insertion shifts a span still to be processed.
+        order.sort_by(|a, b| b.0.cmp(&a.0));
+        for (start, end, block) in order {
+            let at = match (start..end).find(|&i| lines[i] == "      events:") {
+                Some(ei) => (ei + 1..end)
+                    .find(|&i| lines[i].starts_with("      ") && !lines[i].starts_with("        "))
+                    .unwrap_or(end),
+                None => {
+                    lines.insert(end, "      events:".to_string());
+                    end + 1
+                }
+            };
+            lines.splice(at..at, block);
+        }
+        Ok(lines.join("\n") + "\n")
+    }
+
     /// The FLUSH GUARD. Returns the violations that would make `candidate` a
     /// broken ledger (empty = safe to write). Catches malformed YAML +
     /// DUPLICATE KEYS (via `Ledger::parse`, which serde_yaml rejects) and
