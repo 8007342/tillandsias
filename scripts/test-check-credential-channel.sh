@@ -181,6 +181,12 @@ case "$out" in
                         || bad "4e: reverify exited 0 on a refused store probe: $out" ;;
 esac
 
+# ── 4f. A REFUSED probe must not erase the credential (1004-8p76) ─────────
+# Needs a local server that answers 401, and scripts may not run a python
+# runtime (check-no-python-scripts), so this arm lives in Rust:
+# crates/tillandsias-core/tests/credential_probe_never_erases.rs (premise: a
+# plain refused push erases the store; property: the guard's does not).
+
 # ── 5. MUTATION CONTROL: the pre-fix guard must FAIL this suite ─────────────
 # Reconstruct the old arm (bare ok:gh-keyring on gh auth status alone) and
 # assert scenario 1 would have passed it — proving the suite detects the

@@ -506,10 +506,44 @@ credential_channel_verdict() {
   # token was already dead, so nothing usable is lost, but the NEXT run reads
   # an empty store and falls through to the arms below; the refusal this run
   # prints is the one to act on.
+  # A CHECK MUST NOT BE ABLE TO DESTROY WHAT IT CHECKS (1004-8p76, coordinator
+  # 2026-09-28). A refused push makes git run `credential reject`, and the store
+  # helper ERASES the entry: one transient refusal (network, proxy, a hook)
+  # would delete a GOOD credential and leave the operator to re-seed by hand.
+  # So every probe runs with the helper chain REPLACED: the credential is
+  # resolved once, read-only (`git credential fill`, bounded, never prompting),
+  # and the probe's only helper answers `get` from that answer and drops
+  # `store` and `erase`. The generic list AND every URL-scoped helper
+  # (credential.<url>.helper, e.g. gh's) are cleared, since either could erase.
+  _ccc_ro_git_args() {
+    local _url _k _cred
+    _ccc_ro=(-c credential.helper=)
+    while read -r _k _; do
+      [ -n "$_k" ] && _ccc_ro+=(-c "$_k=")
+    done < <(git config --get-regexp '^credential\..+\.helper$' 2>/dev/null)
+    _ccc_ro+=(-c 'credential.helper=!f() { cat >/dev/null; [ "$1" = get ] || exit 0; [ -n "${CCC_PROBE_PASS:-}" ] || exit 0; printf "username=%s\npassword=%s\n" "${CCC_PROBE_USER:-x-access-token}" "$CCC_PROBE_PASS"; }; f')
+    CCC_PROBE_USER=""; CCC_PROBE_PASS=""
+    _url="$(git remote get-url origin 2>/dev/null)"
+    case "$_url" in
+      http://*|https://*)
+        _cred="$(printf 'url=%s\n\n' "$_url" | GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never \
+                 GIT_ASKPASS=/bin/false _ccc_timeout 20 git credential fill 2>/dev/null)"
+        CCC_PROBE_USER="$(printf '%s\n' "$_cred" | sed -n 's/^username=//p' | head -n 1)"
+        CCC_PROBE_PASS="$(printf '%s\n' "$_cred" | sed -n 's/^password=//p' | head -n 1)"
+        ;;
+    esac
+    export CCC_PROBE_USER CCC_PROBE_PASS
+  }
   _ccc_push_probe() {
+      local _ccc_ro
+      _ccc_ro_git_args
       _probe_cmd="${TILLANDSIAS_CRED_PROBE_CMD:-git push --dry-run origin HEAD}"
+      # `git …` gets the read-only helper chain spliced in after `git`; a
+      # fixture stub (true/false) runs as given.
+      set -- $_probe_cmd
+      if [ "$1" = git ]; then shift; set -- git "${_ccc_ro[@]}" "$@"; fi
       if GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never GIT_ASKPASS=/bin/false \
-         _ccc_timeout 45 $_probe_cmd >/dev/null 2>&1; then
+         _ccc_timeout 45 "$@" >/dev/null 2>&1; then
         echo ""
         return 0
       fi
@@ -551,7 +585,7 @@ credential_channel_verdict() {
       # below.
       if [ -z "${TILLANDSIAS_CRED_PROBE_CMD:-}" ]; then
         if GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never GIT_ASKPASS=/bin/false \
-           _ccc_timeout 45 git push --dry-run --no-verify origin HEAD >/dev/null 2>&1; then
+           _ccc_timeout 45 git "${_ccc_ro[@]}" push --dry-run --no-verify origin HEAD >/dev/null 2>&1; then
           # The credential authenticated. The refusal was ours.
           echo "  note: the push probe was refused by this checkout's own pre-push" >&2
           echo "  hook, not by the remote — the credential authenticated fine with" >&2
@@ -610,7 +644,7 @@ credential_channel_verdict() {
       if [ -z "${TILLANDSIAS_CRED_PROBE_CMD:-}" ]; then
         _cred_probe_ref="refs/tillandsias/cred-probe/$(hostname -s 2>/dev/null | tr "A-Z" "a-z" || echo host)-$$"
         if GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never GIT_ASKPASS=/bin/false \
-           _ccc_timeout 45 git push --dry-run --no-verify origin "HEAD:$_cred_probe_ref" >/dev/null 2>&1; then
+           _ccc_timeout 45 git "${_ccc_ro[@]}" push --dry-run --no-verify origin "HEAD:$_cred_probe_ref" >/dev/null 2>&1; then
           # The credential authenticated. The refusal was this branch's ref state.
           echo "  note: the push probe was refused by the REMOTE's ref state, not by" >&2
           echo "  the credential — a create to a fresh ref authenticated fine. Usually" >&2
@@ -623,6 +657,7 @@ credential_channel_verdict() {
         fi
       fi
     # END-OF-PROBE-RETRIES (the fixture's mutation controls cut to this line)
+    unset CCC_PROBE_USER CCC_PROBE_PASS
     return 1
   }
   # _ccc_probe_arm <arm>: the verdict for a presence-detected channel.
