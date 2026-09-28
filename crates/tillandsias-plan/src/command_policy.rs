@@ -422,10 +422,8 @@ fn reset_class(req: &Request) -> Option<&'static str> {
                 return Some("soft-reset");
             }
         }
-        "wsl" => {
-            if has("--unregister") {
-                return Some("hard-reset");
-            }
+        "wsl" if has("--unregister") => {
+            return Some("hard-reset");
         }
         _ => {}
     }
@@ -725,10 +723,10 @@ impl SeedRule {
     fn synth_argv(&self) -> Vec<String> {
         let mut v = vec![self.program.clone()];
         v.extend(self.args.iter().cloned());
-        if let Some(a) = self.any_arg.first() {
-            if !v.contains(a) {
-                v.push(a.clone());
-            }
+        if let Some(a) = self.any_arg.first()
+            && !v.contains(a)
+        {
+            v.push(a.clone());
         }
         v
     }
@@ -884,10 +882,10 @@ pub fn check_cannot_loosen(
                 regime: "interactive".into(),
                 caller: "seed-load".into(),
             };
-            if let Some(f) = floor_decide(&req, protected) {
-                if f.strictness > r.decision {
-                    return Err(format!("cannot-loosen:{}", f.rule_id));
-                }
+            if let Some(f) = floor_decide(&req, protected)
+                && f.strictness > r.decision
+            {
+                return Err(format!("cannot-loosen:{}", f.rule_id));
             }
         }
         if FLOOR_RULES.contains(&r.id.as_str()) && r.decision == Strictness::Allow {
