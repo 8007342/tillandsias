@@ -1027,10 +1027,11 @@ impl FoldedIdentities {
 }
 
 /// Thin wrapper preserving the original signature for one-shot callers.
-fn fragment_coverage_gaps(result: &Value, frag: &Fragment) -> Vec<String> {
-    fragment_coverage_gaps_in(result, &FoldedIdentities::of(result), frag)
-}
-
+// 1476-5dfy: the convenience wrapper that rebuilt FoldedIdentities on every
+// call is GONE. 964-tzmp hoisted the index for `check` and left compact_text
+// calling the wrapper once per fragment, which cost ~45 s of every live-ledger
+// compaction. With no wrapper, a caller must build the index itself, so it
+// cannot be rebuilt per fragment by accident.
 /// `result` is still taken for the CHEAP top-level lookups (`capabilities`);
 /// only the packet walk, which is the expensive part, comes from `known`.
 fn fragment_coverage_gaps_in(
@@ -1731,8 +1732,14 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
         .map_err(|e| format!("compaction candidate does not parse: {e}"))?;
     let mut consumed = Vec::new();
     let mut refused = Vec::new();
+    // 1476-5dfy: index the written document ONCE. The old wrapper rebuilt
+    // FoldedIdentities over the whole candidate per call, and this
+    // loop runs once per fragment: on the live ledger (~3,000 fragments, a
+    // 5.9 MB base) that was ~45 s of a ~58 s compaction. Same answer; the
+    // index is a pure function of `written`.
+    let known = FoldedIdentities::of(&written);
     for f in &fragments {
-        let gaps = fragment_coverage_gaps(&written, f);
+        let gaps = fragment_coverage_gaps_in(&written, &known, f);
         if gaps.is_empty() {
             consumed.push(f.path.clone());
         } else {

@@ -125,5 +125,8 @@ codegen-units = 1
 #   clean rebuild of the plan test binary   5.3s (opt 0) -> 18.4s (opt 2)
 # opt-level 1 buys almost nothing here; 2 halves the run for ~13s of compile
 # that is paid only when the plan crate itself changes.
+# The same row then fixed the algorithm: compact_text rebuilt the folded
+# index once PER FRAGMENT (~45 s of it). With that fixed, the live test is
+# 57.7s at opt 0 and 15.5s at opt 2, so the two changes compound.
 [profile.test.package.tillandsias-plan]
 opt-level = 2
