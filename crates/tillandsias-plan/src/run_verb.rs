@@ -87,6 +87,88 @@ pub fn base_env(additions: &[(String, String)]) -> Vec<(String, String)> {
     env
 }
 
+/// The `--json` result (slice 2): exactly one object with the keys run_id,
+/// status, code, ok, stdout, stderr, truncated, wall_ms, argv, policy — and the
+/// verb's exit code. THE VERB EXITS 0 WHENEVER IT REPORTED what happened to a
+/// child (any code, a signal, a deadline, a spawn failure); it exits 1 only for
+/// a policy refusal and 4 for a consent requirement, and a usage error is 2. So
+/// "the policy refused", "the child failed" and "this binary could not answer"
+/// are three different things to a caller, which the plain form cannot promise
+/// (a refusal and a child's own exit 1 share a code there).
+///
+/// status: exited | signaled | timed_out | spawn_failed | policy_denied |
+/// policy_consent. ok is true only for exited with code 0 and nothing clipped.
+/// policy: {decision, rule_id, why, remedy}. argv is echoed through redact().
+pub fn outcome_json(spec: &RunSpec, outcome: &RunOutcome) -> (serde_json::Value, i32) {
+    use serde_json::{Value, json};
+    let argv: Vec<String> = spec.argv.iter().map(|a| cp::redact(a)).collect();
+    let policy = |decision: &str, d_rule: &str, why: Option<&str>, remedy: Option<&str>| json!({"decision": decision, "rule_id": d_rule, "why": why, "remedy": remedy});
+    match outcome {
+        RunOutcome::Refused(d) => {
+            let (status, decision) = match d.strictness {
+                cp::Strictness::Consent => ("policy_consent", "consent"),
+                _ => ("policy_denied", "deny"),
+            };
+            (
+                json!({
+                    "run_id": Value::Null,
+                    "status": status,
+                    "code": Value::Null,
+                    "ok": false,
+                    "stdout": "",
+                    "stderr": "",
+                    "truncated": false,
+                    "wall_ms": 0,
+                    "argv": argv,
+                    "policy": policy(decision, &d.rule_id, d.why.as_deref(), d.remedy.as_deref()),
+                }),
+                d.exit_code(),
+            )
+        }
+        RunOutcome::SpawnFailed { error, wall_ms } => (
+            json!({
+                "run_id": Value::Null,
+                "status": "spawn_failed",
+                "code": Value::Null,
+                "ok": false,
+                "stdout": "",
+                "stderr": cp::redact(error),
+                "truncated": false,
+                "wall_ms": wall_ms,
+                "argv": argv,
+                "policy": policy("allow", "default", None, None),
+            }),
+            0,
+        ),
+        RunOutcome::Ran {
+            output,
+            wall_ms,
+            rule_id,
+        } => {
+            let (status, code) = match output.completion {
+                tillandsias_exec::Completion::Exited(c) => ("exited", json!(c)),
+                tillandsias_exec::Completion::Signaled(_) => ("signaled", Value::Null),
+                tillandsias_exec::Completion::TimedOut { .. } => ("timed_out", Value::Null),
+            };
+            (
+                json!({
+                    "run_id": output.run.as_str(),
+                    "status": status,
+                    "code": code,
+                    "ok": output.completion.is_success() && !output.truncated,
+                    "stdout": String::from_utf8_lossy(&output.stdout),
+                    "stderr": String::from_utf8_lossy(&output.stderr),
+                    "truncated": output.truncated,
+                    "wall_ms": wall_ms,
+                    "argv": argv,
+                    "policy": policy("allow", rule_id, None, None),
+                }),
+                0,
+            )
+        }
+    }
+}
+
 /// Decide, then (only on allow) spawn. `caller` names the door in the audit.
 pub fn execute(spec: &RunSpec, caller: &str) -> RunOutcome {
     let cwd = spec

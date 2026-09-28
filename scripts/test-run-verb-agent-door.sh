@@ -12,7 +12,12 @@
 #      --env additions: an exported GH_TOKEN does not reach it
 #   7  the plain form mirrors the child: its bytes pass through, its exit code
 #      is the verb's, a deadline is 124, an unknown program is 127
-#   (arms 1 and 6 arrive with the --json slice, arm 3 with --argv-json)
+#   1  --json: exactly one object with the ten keys; a child's non-zero exit,
+#      a deadline and a spawn failure are reported with the verb exiting 0
+#   6  a capture past --capture-bytes is truncated:true and ok:false
+#   8  the plain form's limitation, pinned: a refusal and a child's exit 1 share
+#      rc 1 there; --json tells them apart; a usage error is 2
+#   (arm 3, --argv-json, arrives with the next slice)
 #
 # Pre-fix: FAILS at arm 2 (`run` is an unknown subcommand).
 set -uo pipefail
@@ -83,6 +88,67 @@ out="$("$PLAN" run --cwd "$W" -- pwd 2>&1)"
 [ "$out" = "$W" ] && ok "arm 7: --cwd sets the child's working directory" || bad "arm 7 cwd: [$out]"
 "$PLAN" run 'echo hi' >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 2 ] && ok "arm 7: there is no command-string form (a positional string is a usage error)" || bad "arm 7 string: rc=$rc"
+
+# ── 1 (slice 2: --json) ──────────────────────────────────────────────────────
+out="$("$PLAN" run --json --timeout-ms 5000 -- printf "a b" 2>/dev/null)"; rc=$?
+keys="$(jget -c 'keys' <<<"$out" 2>/dev/null)"
+if [ "$rc" -eq 0 ] && [ "$(grep -c . <<<"$out")" = 1 ] &&
+    [ "$keys" = '["argv","code","ok","policy","run_id","status","stderr","stdout","truncated","wall_ms"]' ] &&
+    [ "$(jget -r '.stdout' <<<"$out")" = "a b" ] && [ "$(jget -r '.status' <<<"$out")" = exited ] &&
+    [ "$(jget -r '.ok' <<<"$out")" = true ] && [ "$(jget -r '.run_id' <<<"$out")" != null ]; then
+    ok "arm 1: --json prints exactly one object with the ten keys, exit 0"
+else
+    bad "arm 1: rc=$rc keys=[$keys] out=[$out]"
+fi
+
+out="$("$PLAN" run --json -- false 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 0 ] && [ "$(jget -r '.code' <<<"$out")" = 1 ] && [ "$(jget -r '.ok' <<<"$out")" = false ] &&
+    [ "$(jget -r '.status' <<<"$out")" = exited ]; then
+    ok "arm 1: a non-zero child exit is reported as code, with the verb exiting 0"
+else
+    bad "arm 1 nonzero: rc=$rc [$out]"
+fi
+out="$("$PLAN" run --json --timeout-ms 300 -- sleep 5 2>/dev/null)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(jget -r '.status' <<<"$out")" = timed_out ] && [ "$(jget -r '.code' <<<"$out")" = null ] &&
+    ok "arm 1: a deadline is status timed_out with no invented code, exit 0" || bad "arm 1 timeout: rc=$rc [$out]"
+out="$("$PLAN" run --json -- no-such-program-8pur 2>/dev/null)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(jget -r '.status' <<<"$out")" = spawn_failed ] &&
+    ok "arm 1: an unknown program is status spawn_failed, exit 0" || bad "arm 1 spawn: rc=$rc [$out]"
+
+# ── 4 (JSON half) ────────────────────────────────────────────────────────────
+out="$("$PLAN" run --json -- bash -c "touch $W/marker2" 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 1 ] && [ ! -e "$W/marker2" ] && [ "$(jget -r '.status' <<<"$out")" = policy_denied ] &&
+    [ "$(jget -r '.run_id' <<<"$out")" = null ] && [ "$(jget -r '.policy.rule_id' <<<"$out")" = no-shell-strings ] &&
+    [ -n "$(jget -r '.policy.why' <<<"$out")" ] && [ -n "$(jget -r '.policy.remedy' <<<"$out")" ]; then
+    ok "arm 4: --json refusal is status policy_denied with rule_id/why/remedy and no run_id, exit 1, nothing spawned"
+else
+    bad "arm 4 json: rc=$rc [$out]"
+fi
+
+# ── 6 (slice 2) ─────────────────────────────────────────────────────────────
+out="$("$PLAN" run --json --capture-bytes 1024 -- head -c 4096 /dev/zero 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 0 ] && [ "$(jget -r '.truncated' <<<"$out")" = true ] && [ "$(jget -r '.ok' <<<"$out")" = false ] &&
+    [ "$(jget -r '.code' <<<"$out")" = 0 ]; then
+    ok "arm 6: stdout past --capture-bytes is truncated:true and ok:false (code 0)"
+else
+    bad "arm 6: rc=$rc [$(cut -c1-200 <<<"$out")]"
+fi
+
+# ── 8: THE PLAIN FORM'S LIMITATION, PINNED ──────────────────────────────────
+# Without --json the verb mirrors the child's exit code, so a refusal and a
+# child that exits 1 are the same rc. --json is the interface that tells them
+# apart. Both halves are asserted so the limitation is tested, not just stated.
+"$PLAN" run -- false >/dev/null 2>&1; rc_child=$?
+"$PLAN" run -- bash -c true >/dev/null 2>&1; rc_refused=$?
+st_child="$("$PLAN" run --json -- false 2>/dev/null | "$PLAN" json get -r '.status')"
+st_refused="$("$PLAN" run --json -- bash -c true 2>/dev/null | "$PLAN" json get -r '.status')"
+if [ "$rc_child" -eq 1 ] && [ "$rc_refused" -eq 1 ] && [ "$st_child" = exited ] && [ "$st_refused" = policy_denied ]; then
+    ok "arm 8: plain form cannot tell a refusal from a child's exit 1 by rc (both 1); --json can (exited vs policy_denied)"
+else
+    bad "arm 8: plain rc child=$rc_child refused=$rc_refused; json status child=[$st_child] refused=[$st_refused]"
+fi
+"$PLAN" run --bogus-flag -- true >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 2 ] && ok "arm 8: a usage error is 2, never 1 or 4 (so a binary without a flag is not a refusal)" || bad "arm 8 usage: rc=$rc"
 
 total=$((pass + fail))
 if [ "$fail" -eq 0 ]; then

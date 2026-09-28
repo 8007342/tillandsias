@@ -4423,11 +4423,17 @@ fn run_run_verb(args: &[String]) -> ! {
     use tillandsias_plan::run_verb as rv;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan run [--cwd P] [--env K=V]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>\n  argv is argv: there is no command-string form and no --shell."
+            "usage: tillandsias-plan run [--json] [--cwd P] [--env K=V]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>\n\
+             \x20 argv is argv: there is no command-string form and no --shell.\n\
+             \x20 --json prints one object (run_id,status,code,ok,stdout,stderr,truncated,wall_ms,argv,policy) and\n\
+             \x20 exits 0 whenever a child ran, 1 for a policy refusal, 4 for consent, 2 for usage.\n\
+             \x20 WITHOUT --json the verb mirrors the child's exit code, so a refusal (1) and a child's own exit 1\n\
+             \x20 cannot be told apart by the code: a caller that must tell them apart uses --json."
         );
         std::process::exit(2);
     };
     let mut spec = rv::RunSpec::new(Vec::new());
+    let mut json = false;
     let mut i = 0;
     let mut saw_dd = false;
     while i < args.len() {
@@ -4436,6 +4442,11 @@ fn run_run_verb(args: &[String]) -> ! {
             spec.argv = args[i + 1..].to_vec();
             saw_dd = true;
             break;
+        }
+        if a == "--json" {
+            json = true;
+            i += 1;
+            continue;
         }
         let Some(v) = args.get(i + 1) else { usage() };
         match a {
@@ -4471,7 +4482,13 @@ fn run_run_verb(args: &[String]) -> ! {
     if !saw_dd || spec.argv.is_empty() {
         usage();
     }
-    match rv::execute(&spec, "run") {
+    let outcome = rv::execute(&spec, "run");
+    if json {
+        let (value, code) = rv::outcome_json(&spec, &outcome);
+        println!("{value}");
+        std::process::exit(code);
+    }
+    match outcome {
         rv::RunOutcome::Refused(d) => {
             eprintln!("{}", d.token);
             if let Some(w) = &d.why {
@@ -4492,7 +4509,7 @@ fn run_run_verb(args: &[String]) -> ! {
             let _ = std::io::stderr().write_all(&output.stderr);
             if output.truncated {
                 eprintln!(
-                    "note:run:truncated dropped={} (raise --capture-bytes, or read the verdict from --json once available)",
+                    "note:run:truncated dropped={} (raise --capture-bytes; --json reports truncated:true and ok:false)",
                     output.dropped
                 );
             }
