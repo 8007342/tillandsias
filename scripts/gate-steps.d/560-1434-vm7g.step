@@ -1,0 +1,23 @@
+# Gate step 1434-vm7g — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. scripts/check-windows-tray-clippy.sh, which the pre-push hook
+# runs natively on a Windows host (the only gate that reaches the real
+# cfg(windows) sources: ./build.sh re-execs inside the WSL2 builder there).
+# This step runs its fixture, which is portable: scratch crates through the
+# decider's manifest seam and a faked uname, so it runs on every host with
+# cargo clippy, Linux gates included.
+#
+# ARMS: a clippy warning is refused by name (ARM 1) and the same crate without
+# it is clean (ARM 2, the negative control); off Windows it skips by name and
+# never runs cargo (ARM 3); an untouched crate skips and a changed one runs
+# (ARM 4). Real subject, measured on yolanda 2026-09-27: the tray at its
+# pre-fix sources is refused with 4 findings (main.rs:290 items after a test
+# module; hvsocket.rs:138; notify_icon.rs:422; tray_phase_icon.rs:134), and
+# clean after the fix.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the Windows tray clippy decider refuses a new warning (1434-vm7g)"
+STEP_SCRIPT="scripts/test-windows-tray-clippy.sh"
+STEP_ERROR="the Windows tray clippy decider no longer refuses a clippy warning, or runs off Windows (1434-vm7g); see which arm failed above"
+STEP_OK="Windows tray clippy decider refuses warnings and skips off Windows"
+STEP_SECOND_REGIME="yolanda 2026-09-27 msys ok:windows-tray-clippy-fixture:4"

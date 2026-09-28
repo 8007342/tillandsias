@@ -131,7 +131,7 @@ mod windows_impl {
         // tiny-skia's premultiplied pixmap in build.rs), so no un-premultiply.
         for y in (0..h as usize).rev() {
             let row = &rgba[y * w as usize * 4..(y + 1) * w as usize * 4];
-            for px in row.chunks_exact(4) {
+            for px in row.as_chunks::<4>().0 {
                 res.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
             }
         }
