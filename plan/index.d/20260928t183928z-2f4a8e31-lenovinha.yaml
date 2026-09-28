@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-expert-accuracy-recorder-loses-provenance-two-silent-ways-an-ollama-native-show-path-appended-to-an-openai-base-and-a-series-written-under-gitignored-cache
+    field: status
+    value: completed
+    ts: "2026-09-28T18:39:28Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-expert-accuracy-recorder-loses-provenance-two-silent-ways-an-ollama-native-show-path-appended-to-an-openai-base-and-a-series-written-under-gitignored-cache
+    event:
+      type: completed
+      ts: "2026-09-28T18:39:28Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 25f800ec7 (land84 relay of work/1257-jxu9 81c24d279) + scripts/test-expert-accuracy-provenance.sh PASS 5 arms, gate step 580 with darwin regime
+  - packet_id: the-expert-accuracy-recorder-loses-provenance-two-silent-ways-an-ollama-native-show-path-appended-to-an-openai-base-and-a-series-written-under-gitignored-cache
+    event:
+      type: note
+      ts: "2026-09-28T18:39:28Z"
+      host: lenovinha
+      summary: |-
+        landed on origin/linux-next in land84 25f800ec7
