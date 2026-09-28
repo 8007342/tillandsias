@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-enclave-git-mirror-enforces-the-seeded-branch-discipline-at-pre-receive-refuses-the-protected-default-branch-with-the-seeded-message-and-publishes-refs-tillandsias-discipline-digest-epoch-so-a-client-can-read-the-enforced-level-without-pushing
+    field: context
+    value: |-
+      Spec deltas: openspec/changes/lua-command-runtime-and-policies/specs/git-mirror-service/spec.md
+      and specs/branch-discipline/spec.md.
+      MEASURED PREMISE THAT REDIRECTS THE OPERATOR'S PROPOSAL: a `git push
+      --dry-run` sends no ref commands, so the server's pre-receive never
+      runs and cannot answer it. The mirror's answer is therefore a
+      PUBLISHED ref in the same family as refs/tillandsias/upstream-auth/*
+      (probe-upstream-auth.sh, read by check-credential-channel.sh) and
+      refs/tillandsias/sync-state/* (publish-sync-state.sh): ls-remote reads
+      the digest in the ref name; a fetch of the ref yields the seed bytes
+      themselves. For a client that wants the server's own wording without
+      a real ref change, a push to refs/tillandsias/discipline-probe/<epoch>
+      is ALWAYS rejected and the rejection carries the discipline lines —
+      a rejected push mutates nothing, and the local pre-push gate already
+      exempts refs/tillandsias/* (1176-9vqn).
+      TODAY the hook never pre-refuses a protected branch (GitHub does,
+      after the relay, as GH006 → ADVICE), its grammar is warn-only and its
+      env-var regex lacks work/<order> while the methodology admits it.
+      FREEZE: the same reconcile tick that publishes the discipline ref
+      exports refs/tillandsias/freeze/* from upstream (1429-4y9f owns that
+      fix; this row depends on it and does not duplicate it).
+
+
+      [2026-09-28T17:29:13Z lenovinha] OPERATOR RULING (relayed by the macuahuitl coordinator, 2026-09-28): Drop the probe-push namespace, but keep the document. The refs/tillandsias/discipline-probe/* rejection path and its exit criterion (a push there is always rejected carrying the four discipline lines) are OUT of this row. The published refs/tillandsias/discipline/* ref (the document) stays. Ref shape to be agreed with macuahuitl-forge, whose z3vb reads the first 64-hex path segment.
+
+      [2026-09-28T17:43:50Z lenovinha] FAILS OPEN WITHOUT RUBY (coordinator request, 2026-09-28). The mirror parses the seed with ruby, verified present by running localhost/tillandsias-git (latest and v56.9.27.2: ruby 3.3.10 with YAML and Digest). Where ruby is absent, the hook reports the seed as unreadable (no-ruby) and applies NO rule: an enforced default-branch rule is then not enforced, and the push is accepted rather than every push being rejected. This fail-open is deliberate and lasts until the plan binary ships in the git image (which also unblocks a real derived level). Pinned by test-mirror-discipline.sh arm 11; the fail-closed mutant trips arms 6 and 11.
+    ts: "2026-09-28T17:43:50Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-enclave-git-mirror-enforces-the-seeded-branch-discipline-at-pre-receive-refuses-the-protected-default-branch-with-the-seeded-message-and-publishes-refs-tillandsias-discipline-digest-epoch-so-a-client-can-read-the-enforced-level-without-pushing
+    event:
+      type: note
+      ts: "2026-09-28T17:43:50Z"
+      host: lenovinha
+      summary: |-
+        name fail-open behaviour

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    field: status
+    value: in_progress
+    ts: "2026-09-28T17:38:17Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    event:
+      type: note
+      ts: "2026-09-28T17:38:17Z"
+      host: forge-tillandsias
+      summary: |-
+        claim: plan-only merge stales the code digest (coordinator NEXT); reproducing first, implementing on work/1276-mugq
