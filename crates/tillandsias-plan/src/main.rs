@@ -4123,11 +4123,38 @@ fn print_lua_returns(vals: mlua::MultiValue) {
     }
 }
 
+/// ORDER 1393-aa7v: put the C runtime's stdout in BINARY mode on Windows.
+///
+/// Lua's `print` and `io.write` write through C stdio, and on Windows the CRT
+/// opens stdout in TEXT mode, which turns every "\n" into "\r\n". So one script
+/// printed different bytes per platform (measured: "nil\ttrue\r\n" on native
+/// Windows against "nil\ttrue\n" on Linux), against the determinism rule that
+/// a script is one byte stream everywhere (1384-bp6t). Binary mode is a no-op
+/// for Rust's own writers, which go to the handle directly, so println! output
+/// was always LF and still is.
+#[cfg(windows)]
+fn lua_stdout_binary_mode() {
+    unsafe extern "C" {
+        fn _setmode(fd: i32, mode: i32) -> i32;
+    }
+    const STDOUT_FD: i32 = 1;
+    const O_BINARY: i32 = 0x8000;
+    // SAFETY: _setmode on the process's own stdout descriptor; a failure
+    // (-1, e.g. no stdout) leaves the mode unchanged and is harmless.
+    unsafe {
+        _setmode(STDOUT_FD, O_BINARY);
+    }
+}
+
+#[cfg(not(windows))]
+fn lua_stdout_binary_mode() {}
+
 fn run_lua_cli(args: &[String]) {
     if args.is_empty() {
         eprintln!("usage: tillandsias-plan lua <script.lua | -e code> [args...]");
         std::process::exit(2);
     }
+    lua_stdout_binary_mode();
 
     if std::env::var_os("TILLANDSIAS_PLAN_BIN").is_none()
         && let Ok(exe) = std::env::current_exe()

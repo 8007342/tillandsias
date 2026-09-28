@@ -432,6 +432,7 @@ fn parse_podman_event(json_line: &str, prefix: &str) -> Option<PodmanEvent> {
     parse_podman_lifecycle_record(json_line, prefix).map(PodmanEvent::from)
 }
 
+#[cfg_attr(target_os = "windows", allow(dead_code))] // 1444-bzpu: Unix path and tests only
 fn parse_podman_lifecycle_record(
     json_line: &str,
     prefix: &str,
@@ -495,6 +496,7 @@ fn parse_podman_lifecycle_record(
 /// Returns `None` if neither field is present or convertible to `i32`.
 /// Exit codes outside `i32` are clamped to `None` rather than silently
 /// truncated.
+#[cfg_attr(target_os = "windows", allow(dead_code))] // 1444-bzpu: Unix path and tests only
 fn extract_podman_exit_code(value: &serde_json::Value) -> Option<i32> {
     if let Some(n) = value.get("ContainerExitCode").and_then(|v| v.as_i64()) {
         return i32::try_from(n).ok();
@@ -568,6 +570,8 @@ enum PodmanEventError {
     #[error("Failed to spawn podman events: {0}")]
     SpawnFailed(String),
     #[error("No stdout from podman events")]
+    #[cfg_attr(target_os = "windows", allow(dead_code))]
+    // 1444-bzpu: raised on the Unix event path only
     NoStdout,
     #[error("Event stream ended")]
     StreamEnded,
