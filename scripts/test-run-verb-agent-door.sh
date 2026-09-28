@@ -85,10 +85,43 @@ out="$("$PLAN" run --stdin-file "$W/in.txt" -- cat 2>&1)"
 [ "$rc" -eq 124 ] && ok "arm 7: a deadline is exit 124" || bad "arm 7 timeout: rc=$rc"
 "$PLAN" run -- no-such-program-8pur >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 127 ] && ok "arm 7: an unknown program is exit 127" || bad "arm 7 missing: rc=$rc"
-out="$("$PLAN" run --cwd "$W" -- pwd 2>&1)"
-[ "$out" = "$W" ] && ok "arm 7: --cwd sets the child's working directory" || bad "arm 7 cwd: [$out]"
+out="$("$PLAN" run --cwd "$W" -- pwd -P 2>&1)"
+# darwin's /var is /private/var: compare the PHYSICAL path (macbookair).
+[ "$out" = "$(cd "$W" && pwd -P)" ] && ok "arm 7: --cwd sets the child's working directory" || bad "arm 7 cwd: [$out]"
 "$PLAN" run 'echo hi' >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 2 ] && ok "arm 7: there is no command-string form (a positional string is a usage error)" || bad "arm 7 string: rc=$rc"
+
+# ── 3a / 3b (slice 1b): NOTHING AN AGENT STARTS THROUGH THE DOOR OUTLIVES IT ─
+# Measured on darwin by macbookair against 397c5f3ff (POSIX, so Linux too):
+# 3a a grandchild keeping stdout made an exit 0 read as the deadline (124);
+# 3b a grandchild detaching its stdio survived the door. Script FILES, because
+# the door refuses shell strings.
+printf '#!/bin/sh\nsleep 30 &\necho started\nexit 0\n' >"$W/keep.sh"
+printf '#!/bin/sh\nsleep 30 >/dev/null 2>&1 </dev/null &\necho $!\nexit 0\n' >"$W/detach.sh"
+t0="$(date +%s)"
+out="$("$PLAN" run --timeout-ms 10000 -- sh "$W/keep.sh" 2>&1)"; rc=$?
+t1="$(date +%s)"
+if [ "$rc" -eq 0 ] && [ "$out" = started ] && [ $((t1 - t0)) -lt 4 ]; then
+    ok "arm 3a: a grandchild holding stdout: the leader's exit 0 is reported as 0, promptly, not 124"
+else
+    bad "arm 3a: rc=$rc in $((t1 - t0))s [$out]"
+fi
+st="$("$PLAN" run --json --timeout-ms 10000 -- sh "$W/keep.sh" 2>/dev/null | "$PLAN" json get -r '.status')"
+[ "$st" = exited ] && ok "arm 3a: --json says status exited (the reap does not turn success into a signal)" || bad "arm 3a json: [$st]"
+gpid="$("$PLAN" run --timeout-ms 10000 -- sh "$W/detach.sh" 2>/dev/null)"
+alive_pid() {
+    if [ -r "/proc/$1/stat" ]; then
+        case "$(sed 's/.*) //' "/proc/$1/stat" | cut -c1)" in Z) return 1 ;; *) return 0 ;; esac
+    fi
+    s="$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')"
+    [ -n "$s" ] && [ "${s#Z}" = "$s" ]
+}
+if [ -n "$gpid" ] && ! alive_pid "$gpid"; then
+    ok "arm 3b: a grandchild that detached its stdio does not outlive the door (pid $gpid gone)"
+else
+    bad "arm 3b: grandchild [$gpid] survived the door"
+    [ -n "$gpid" ] && kill "$gpid" 2>/dev/null
+fi
 
 # ── 1 (slice 2: --json) ──────────────────────────────────────────────────────
 out="$("$PLAN" run --json --timeout-ms 5000 -- printf "a b" 2>/dev/null)"; rc=$?

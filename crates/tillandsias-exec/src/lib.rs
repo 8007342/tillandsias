@@ -168,6 +168,31 @@ pub struct Command {
 /// the parent's memory hostage (order 1443-esm5).
 pub const DEFAULT_CAPTURE_BYTES: usize = 8 * 1024 * 1024;
 
+/// After a group leader exits: how long the rest of its group gets between TERM
+/// and KILL, and how long the drain then gets to reach EOF (order 1443-8pur 1b).
+pub const GROUP_TERM_GRACE: std::time::Duration = std::time::Duration::from_millis(200);
+pub const GROUP_DRAIN_GRACE: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// TERM whatever is left in the leader's process group, give it
+/// GROUP_TERM_GRACE, then KILL the rest. ESRCH (an empty group) is the common
+/// case and costs one syscall.
+#[cfg(unix)]
+async fn reap_group(pgid: libc::pid_t) {
+    // SAFETY: killpg takes no pointers; a stale or empty pgid fails with ESRCH.
+    let alive = |sig| unsafe { libc::killpg(pgid, sig) == 0 };
+    if !alive(libc::SIGTERM) {
+        return;
+    }
+    let deadline = std::time::Instant::now() + GROUP_TERM_GRACE;
+    while std::time::Instant::now() < deadline {
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        if !alive(0) {
+            return;
+        }
+    }
+    alive(libc::SIGKILL);
+}
+
 /// Read `r` to EOF, keeping at most `cap` bytes and COUNTING the rest.
 ///
 /// It keeps READING past the cap. Stopping would leave the child blocked on a
@@ -384,13 +409,56 @@ impl Command {
             source,
         };
 
-        match self.timeout {
-            None => {
+        // NOTHING STARTED IN A GROUP OUTLIVES THE RUN (order 1443-8pur slice 1b,
+        // measured on darwin by macbookair; POSIX, so Linux too). Two defects
+        // followed from waiting for pipe EOF instead of the LEADER:
+        //   3a  a grandchild that keeps the leader's stdout held the drain open,
+        //       so a leader that exited 0 was reported as the DEADLINE (124);
+        //   3b  a grandchild that detached its stdio let the run return at once
+        //       and SURVIVED it: a command could leave a daemon past the policy.
+        // So in a group: drain while waiting for the leader; when the leader
+        // exits, TERM the group, a short grace, then KILL; finish the drain
+        // with a bounded grace; report the LEADER's status. (A descendant that
+        // setsid()s out of the group escapes this, as it escapes the deadline.)
+        let group = self.group;
+        let both = async {
+            tokio::pin!(drain);
+            if !group {
                 // Drain and wait CONCURRENTLY. Waiting first would deadlock for
                 // the same reason draining serially does.
-                let (drained, status) = tokio::join!(drain, child.wait());
-                let (stdout, stderr, dropped) = drained.map_err(io_err)?;
-                let status = status.map_err(io_err)?;
+                let (drained, status) = tokio::join!(&mut drain, child.wait());
+                return Ok::<_, std::io::Error>((drained?, status?));
+            }
+            let mut drained = None;
+            let status = loop {
+                tokio::select! {
+                    r = &mut drain, if drained.is_none() => drained = Some(r),
+                    st = child.wait() => break st?,
+                }
+            };
+            #[cfg(unix)]
+            if let Some(pgid) = group_leader {
+                reap_group(pgid as libc::pid_t).await;
+            }
+            #[cfg(windows)]
+            if let Some(j) = &job {
+                j.terminate();
+            }
+            let drained = match drained {
+                Some(r) => r?,
+                None => match tokio::time::timeout(GROUP_DRAIN_GRACE, &mut drain).await {
+                    Ok(r) => r?,
+                    // Only a descendant that left the group can still hold the
+                    // pipe now; its output is not the leader's to wait for.
+                    Err(_) => (Vec::new(), Vec::new(), 0),
+                },
+            };
+            Ok((drained, status))
+        };
+
+        match self.timeout {
+            None => {
+                let ((stdout, stderr, dropped), status) = both.await.map_err(io_err)?;
                 Ok(Output {
                     completion: completion_of(status),
                     stdout,
@@ -403,10 +471,6 @@ impl Command {
             }
             Some(d) => {
                 let started = std::time::Instant::now();
-                let both = async {
-                    let (drained, status) = tokio::join!(drain, child.wait());
-                    Ok::<_, std::io::Error>((drained?, status?))
-                };
                 match tokio::time::timeout(d, both).await {
                     Ok(joined) => {
                         let ((stdout, stderr, dropped), status) = joined.map_err(io_err)?;

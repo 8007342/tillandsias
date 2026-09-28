@@ -4533,6 +4533,11 @@ fn run_run_verb(args: &[String]) -> ! {
             eprintln!("error: {error}");
             std::process::exit(127);
         }
+        // Started, but no status could be collected: 125, never a child code.
+        rv::RunOutcome::NoStatus { reason, .. } => {
+            eprintln!("no_status: {reason}");
+            std::process::exit(125);
+        }
         rv::RunOutcome::Ran { output, .. } => {
             use std::io::Write;
             let _ = std::io::stdout().write_all(&output.stdout);

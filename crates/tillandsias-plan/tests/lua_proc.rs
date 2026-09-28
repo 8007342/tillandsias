@@ -323,3 +323,42 @@ fn capture_bytes_a_clipped_capture_is_not_ok() {
         "{err}"
     );
 }
+
+/// ORDER 1443-8pur slice 1b, the proc.run half: proc.run shares the executor's
+/// group run, so a grandchild that keeps stdout neither turns the leader's
+/// exit 0 into a timeout nor survives the call.
+/// PRE-FIX: FAILS — the call waited for the deadline and reported timed_out.
+#[test]
+fn a_grandchild_neither_times_out_nor_outlives_proc_run() {
+    if !bash_available() {
+        eprintln!("skip:lua_proc:group-exit:no-bash");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let script = dir.path().join("keep.sh");
+    std::fs::write(&script, "sleep 30 &\necho $!\nexit 0\n").unwrap();
+    let t0 = Instant::now();
+    let (status, code, pid): (String, i64, String) = observing(&format!(
+        r#"local r = proc.run{{argv = {{"bash", "{p}"}}, timeout_ms = 10000}}
+           return r.status, r.code, r.stdout"#,
+        p = lua_path(&script)
+    ))
+    .unwrap();
+    assert_eq!((status.as_str(), code), ("exited", 0));
+    assert!(
+        t0.elapsed() < Duration::from_secs(4),
+        "took {:?}",
+        t0.elapsed()
+    );
+    let pid = pid.trim();
+    std::thread::sleep(Duration::from_millis(50));
+    let alive = std::fs::read_to_string(format!("/proc/{pid}/stat"))
+        .map(|s| {
+            s.rsplit(')')
+                .next()
+                .map(|r| r.trim_start().chars().next() != Some('Z'))
+                .unwrap_or(false)
+        })
+        .unwrap_or(false);
+    assert!(!alive, "grandchild {pid} outlived proc.run");
+}

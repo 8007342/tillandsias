@@ -59,6 +59,10 @@ pub enum RunOutcome {
     Refused(cp::Decision),
     /// The program could not be started.
     SpawnFailed { error: String, wall_ms: u64 },
+    /// It started, but its status could not be collected (a wait or drain
+    /// failure). THE FIRST-CLASS ABSENT: no code is invented for it
+    /// (macbookair, under 1260-2qgi: a substituted integer is the defect).
+    NoStatus { reason: String, wall_ms: u64 },
     /// The child ran; its completion, output and identity.
     Ran {
         output: tillandsias_exec::Output,
@@ -96,7 +100,7 @@ pub fn base_env(additions: &[(String, String)]) -> Vec<(String, String)> {
 /// are three different things to a caller, which the plain form cannot promise
 /// (a refusal and a child's own exit 1 share a code there).
 ///
-/// status: exited | signaled | timed_out | spawn_failed | policy_denied |
+/// status: exited | signaled | timed_out | spawn_failed | no_status | policy_denied |
 /// policy_consent. ok is true only for exited with code 0 and nothing clipped.
 /// policy: {decision, rule_id, why, remedy}. argv is echoed through redact().
 pub fn outcome_json(spec: &RunSpec, outcome: &RunOutcome) -> (serde_json::Value, i32) {
@@ -133,6 +137,21 @@ pub fn outcome_json(spec: &RunSpec, outcome: &RunOutcome) -> (serde_json::Value,
                 "ok": false,
                 "stdout": "",
                 "stderr": cp::redact(error),
+                "truncated": false,
+                "wall_ms": wall_ms,
+                "argv": argv,
+                "policy": policy("allow", "default", None, None),
+            }),
+            0,
+        ),
+        RunOutcome::NoStatus { reason, wall_ms } => (
+            json!({
+                "run_id": Value::Null,
+                "status": "no_status",
+                "code": Value::Null,
+                "ok": false,
+                "stdout": "",
+                "stderr": cp::redact(reason),
                 "truncated": false,
                 "wall_ms": wall_ms,
                 "argv": argv,
@@ -244,10 +263,17 @@ pub fn execute(spec: &RunSpec, caller: &str) -> RunOutcome {
                 rule_id: d.rule_id,
             }
         }
-        Err(e) => {
+        Err(e @ tillandsias_exec::ExecError::Spawn { .. }) => {
             cp::audit_decision(&req, &d, None);
             RunOutcome::SpawnFailed {
                 error: e.to_string(),
+                wall_ms,
+            }
+        }
+        Err(e) => {
+            cp::audit_decision(&req, &d, None);
+            RunOutcome::NoStatus {
+                reason: e.to_string(),
                 wall_ms,
             }
         }
