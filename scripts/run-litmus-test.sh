@@ -2644,7 +2644,7 @@ parse_args() {
                 # (1h47m on lenovinha 2026-09-28). Omit the argument to run all.
                 if [[ -z "$1" ]]; then
                     log_fail "empty spec name: a lookup produced nothing; refusing to run every spec"
-                    echo "refused:litmus:empty-spec-argument" >&2
+                    echo "refused:empty-litmus-spec-argument" >&2
                     exit 3
                 fi
                 if [[ -z "$FILTER_SPEC" ]]; then

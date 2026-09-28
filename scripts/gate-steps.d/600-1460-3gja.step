@@ -3,7 +3,7 @@
 # WHAT IT GUARDS. run-litmus-test.sh given an explicit empty spec name used to
 # store it as "no filter" and run every spec (1h47m on lenovinha 2026-09-28,
 # after a binding lookup came back empty). It now refuses with
-# refused:litmus:empty-spec-argument, exit 3. Pre-fix, arm 1 times out
+# refused:empty-litmus-spec-argument, exit 3. Pre-fix, arm 1 times out
 # running the suite.
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
