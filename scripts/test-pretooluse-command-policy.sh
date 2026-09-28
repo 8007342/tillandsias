@@ -163,6 +163,44 @@ out="$(printf '{"tool_name":"Bash","tool_input":{"command":"gh auth refresh"}}' 
 [ "$rc" -eq 0 ] && [ -z "$out" ] && grep -q '^note:pretooluse:no-plan-binary' "$W/err" &&
     ok "arm 8: with no runnable plan binary the bridge allows, with a note" || bad "arm 8 no-binary: rc=$rc [$out] [$(cat "$W/err")]"
 
+# ── 9: the wiring (operator ruling 1: commit the hook to the project) ───────
+jget() { "$PLAN" json get "$@"; }
+repo_cmd="$(jget -r '.hooks.PreToolUse[0].hooks[0].command' "$ROOT/.claude/settings.json" 2>/dev/null)"
+repo_match="$(jget -r '.hooks.PreToolUse[0].matcher' "$ROOT/.claude/settings.json" 2>/dev/null)"
+[ "$repo_match" = Bash ] && [ "$repo_cmd" = '"$CLAUDE_PROJECT_DIR"/scripts/hooks/claude-pretooluse-command-policy.sh' ] &&
+    ok "arm 9: .claude/settings.json runs the stub for Bash, anchored on \$CLAUDE_PROJECT_DIR (any mount prefix)" ||
+    bad "arm 9: repo settings matcher=[$repo_match] command=[$repo_cmd]"
+OVERLAY="$ROOT/images/default/config-overlay/claude/settings.json"
+ov_cmd="$(jget -r '.hooks.PreToolUse[0].hooks[0].command' "$OVERLAY" 2>/dev/null)"
+[ "$(jget -r '.hooks.PreToolUse[0].matcher' "$OVERLAY" 2>/dev/null)" = Bash ] &&
+    [ "$ov_cmd" = "tillandsias-plan policy classify-bash --hook" ] &&
+    ok "arm 9: the forge overlay runs the classifier directly (projects without the stub)" ||
+    bad "arm 9: overlay command=[$ov_cmd]"
+if command -v jq >/dev/null 2>&1; then
+    trace_lifecycle() { :; }
+    eval "$(sed -n '/^seed_claude_pretooluse_hook()/,/^}/p' "$ROOT/images/default/lib-common.sh")"
+    mkdir -p "$W/overlay/claude"
+    cp "$OVERLAY" "$W/overlay/claude/settings.json"
+    SETTINGS="$W/home/.claude/settings.json"
+    mkdir -p "$(dirname "$SETTINGS")"
+    printf '{"skipDangerousModePermissionPrompt":true,"hooks":{"PostToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"true"}]}]}}\n' >"$SETTINGS"
+    for _ in 1 2; do
+        TILLANDSIAS_HOST_KIND=forge TILLANDSIAS_CONFIG_OVERLAY_ROOT="$W/overlay" CLAUDE_SETTINGS_FILE="$SETTINGS" \
+            seed_claude_pretooluse_hook
+    done
+    got="$(jget -c '[.skipDangerousModePermissionPrompt, .hooks.PostToolUse[0].matcher, .hooks.PreToolUse[0].hooks[0].command]' "$SETTINGS" 2>/dev/null)"
+    n="$(grep -o 'classify-bash' "$SETTINGS" | wc -l | tr -d ' ')"
+    [ "$got" = '[true,"Edit","tillandsias-plan policy classify-bash --hook"]' ] && [ "$n" = 1 ] &&
+        ok "arm 9: the forge seed merges the hook once, keeping every other setting and hook" ||
+        bad "arm 9: seed merge got=[$got] copies=$n"
+    rm -f "$W/home/.claude/settings.json"
+    TILLANDSIAS_HOST_KIND= TILLANDSIAS_CONFIG_OVERLAY_ROOT="$W/overlay" CLAUDE_SETTINGS_FILE="$SETTINGS" \
+        seed_claude_pretooluse_hook
+    [ ! -e "$SETTINGS" ] && ok "arm 9: outside a forge the seed writes nothing" || bad "arm 9: non-forge seed wrote $SETTINGS"
+else
+    echo "note:pretooluse-command-policy:no-jq — the forge seed arm needs jq (it ships in the forge image)"
+fi
+
 total=$((pass + fail))
 if [ "$fail" -eq 0 ]; then
     echo "PASS: pretooluse-command-policy $pass/$total (1443-we89)"

@@ -94,6 +94,11 @@ seed_claude_first_run_defaults
 # already carries the consent and a stale/absent vault doc can never bring
 # the dialog back.
 seed_claude_bypass_consent
+# @trace order:1443-we89
+# The Bash-tool bridge: merge the image's PreToolUse hook into
+# ~/.claude/settings.json (additive, idempotent, forge-gated). The approvals
+# restore below only touches ~/.claude.json, so it cannot undo this.
+seed_claude_pretooluse_hook || true
 # Operator-approved interactive dialogs, restored from vault (2026-08-31):
 # first-ever launch prompts once — those are valid prompts — the watcher
 # below harvests the approval, and every later forge launch restores it.
