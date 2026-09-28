@@ -27,6 +27,6 @@ critical_path:
     expected_behavior: "ok: rotation-fixture-parses"
 
   - step: "every arm passes by name, including the single-exchange-under-concurrency arm and the not-due negative control"
-    command: "out=$(bash scripts/test-github-token-auto-rotation.sh 2>&1); rc=$?; case \"$out\" in (*'ok:github-token-auto-rotation:7/7'*) [ \"$rc\" = 0 ] && echo 'ok: rotation 7/7' ;; (*) printf '%s\\n' \"$out\" | tail -8; exit 1 ;; esac"
+    command: "out=$(bash scripts/test-github-token-auto-rotation.sh 2>&1); rc=$?; case \"$out\" in (*'ok:github-token-auto-rotation:8/8'*) [ \"$rc\" = 0 ] && echo 'ok: rotation 8/8' ;; (*) printf '%s\\n' \"$out\" | tail -8; exit 1 ;; esac"
     timeout_ms: 900000
-    expected_behavior: "ok: rotation 7/7"
+    expected_behavior: "ok: rotation 8/8"

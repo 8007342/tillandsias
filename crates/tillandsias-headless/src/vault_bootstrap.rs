@@ -1395,13 +1395,16 @@ pub const GITHUB_ROTATION_CHECK_EVERY: std::time::Duration =
 #[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DueCheck {
-    /// Rotated; the new access token expires at this time.
+    /// Rotated; the new access token expires at this time. The refresh token's
+    /// own expiry rides along for the 14-day warning.
     Rotated {
         expires_at: u64,
+        refresh_expires_at: Option<u64>,
     },
     /// The stored token has more than the window left.
     NotDue {
         expires_at: u64,
+        refresh_expires_at: Option<u64>,
     },
     /// A stored token with no expiry (a token-only login): nothing to schedule.
     NoExpiry,
@@ -1416,10 +1419,10 @@ pub enum DueCheck {
 impl DueCheck {
     pub fn verdict(&self) -> String {
         match self {
-            DueCheck::Rotated { expires_at } => {
+            DueCheck::Rotated { expires_at, .. } => {
                 format!("ok:github-token-rotation:rotated:expires_at={expires_at}")
             }
-            DueCheck::NotDue { expires_at } => {
+            DueCheck::NotDue { expires_at, .. } => {
                 format!("ok:github-token-rotation:not-due:expires_at={expires_at}")
             }
             DueCheck::NoExpiry => "ok:github-token-rotation:no-expiry".into(),
@@ -1475,11 +1478,15 @@ pub fn rotate_github_token_if_due(
         return Ok(DueCheck::NoExpiry);
     };
     if !github_token_rotation_due(expires_at, now) {
-        return Ok(DueCheck::NotDue { expires_at });
+        return Ok(DueCheck::NotDue {
+            expires_at,
+            refresh_expires_at: bundle.refresh_token_expires_at,
+        });
     }
     match rotate_github_token(store, refresh, now) {
         Ok((RotationOutcome::Rotated, Some(b))) => Ok(DueCheck::Rotated {
             expires_at: b.expires_at.unwrap_or(0),
+            refresh_expires_at: b.refresh_token_expires_at,
         }),
         Ok((RotationOutcome::NoToken, _)) => Ok(DueCheck::NoToken),
         Ok((RotationOutcome::NoRefreshToken, _)) => Ok(DueCheck::NoRefreshToken),
@@ -1535,6 +1542,44 @@ pub fn github_rotation_next_delay(
     }
 }
 
+/// Warn this many days before the refresh token expires (gh-auth-script:
+/// "Fourteen days before refresh_token_expires_at the tray MUST tell the
+/// operator to run tillandsias --github-login").
+pub const GITHUB_REFRESH_WARN_DAYS: u64 = 14;
+
+/// Days left on the refresh token when it is inside the warning window, else
+/// None. An expired refresh token answers Some(0): only a new login fixes it.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_refresh_expiry_warning(refresh_expires_at: Option<u64>, now: u64) -> Option<u64> {
+    let exp = refresh_expires_at?;
+    let left = exp.saturating_sub(now);
+    (left <= GITHUB_REFRESH_WARN_DAYS * 86_400).then_some(left / 86_400)
+}
+
+/// The operator-facing line for the warning.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_refresh_expiry_message(days_left: u64) -> String {
+    if days_left == 0 {
+        "GitHub sign-in has EXPIRED: run `tillandsias --github-login` to keep pushes working".into()
+    } else {
+        format!(
+            "GitHub sign-in expires in {days_left} day(s): run `tillandsias --github-login` before then to keep pushes working"
+        )
+    }
+}
+
+/// True at most once per UTC day: the scheduler checks every 15 minutes and a
+/// warning every 15 minutes would be noise the operator learns to ignore.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn should_warn_today(last_warned_day: &mut Option<u64>, now: u64) -> bool {
+    let today = now / 86_400;
+    if *last_warned_day == Some(today) {
+        return false;
+    }
+    *last_warned_day = Some(today);
+    true
+}
+
 /// The accountability event the spec requires for every rotation
 /// (gh-auth-script "Token Rotation and Expiration Management" ->
 /// spec:secret-rotation). Its own operation name, so an audit can tell an
@@ -1578,7 +1623,10 @@ fn claim_github_rotation_scheduler_slot() -> bool {
 /// due-check decides under the host-wide rotation lock, so one exchange
 /// happens per due window. Never effective in a forge (the check refuses and
 /// the thread ends).
-pub fn spawn_github_token_rotation_scheduler(debug: bool) {
+pub fn spawn_github_token_rotation_scheduler(
+    debug: bool,
+    on_refresh_expiring: Option<Box<dyn Fn(String) + Send + 'static>>,
+) {
     if !claim_github_rotation_scheduler_slot() {
         return;
     }
@@ -1586,8 +1634,33 @@ pub fn spawn_github_token_rotation_scheduler(debug: bool) {
         .name("github-token-rotation".into())
         .spawn(move || {
             let mut backoff = std::time::Duration::ZERO;
+            let mut last_warned_day: Option<u64> = None;
             loop {
                 let out = github_token_due_check_live(debug);
+                // The 14-day refresh-expiry warning, at most once a day.
+                if let Ok(
+                    DueCheck::Rotated {
+                        refresh_expires_at, ..
+                    }
+                    | DueCheck::NotDue {
+                        refresh_expires_at, ..
+                    },
+                ) = &out
+                {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    if let Some(days) = github_refresh_expiry_warning(*refresh_expires_at, now)
+                        && should_warn_today(&mut last_warned_day, now)
+                    {
+                        let msg = github_refresh_expiry_message(days);
+                        eprintln!("[tillandsias] warn:github-refresh-expiring:{days}d: {msg}");
+                        if let Some(cb) = &on_refresh_expiring {
+                            cb(msg);
+                        }
+                    }
+                }
                 match &out {
                     Ok(DueCheck::RefusedInForge) => return,
                     Ok(v @ DueCheck::Rotated { .. }) => {
@@ -5923,7 +5996,8 @@ mod tests {
         assert_eq!(
             out,
             DueCheck::Rotated {
-                expires_at: NOW + 28_800
+                expires_at: NOW + 28_800,
+                refresh_expires_at: Some(NOW + 15_811_200),
             }
         );
         assert_eq!(
@@ -6009,7 +6083,8 @@ mod tests {
         assert_eq!(
             out,
             DueCheck::NotDue {
-                expires_at: NOW + 2 * 3600
+                expires_at: NOW + 2 * 3600,
+                refresh_expires_at: Some(1_000_000),
             }
         );
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
@@ -6108,6 +6183,40 @@ mod tests {
             .unwrap();
         let body = &main_src[start..start + main_src[start..].find("\n}\n").unwrap()];
         assert!(body.contains(&["spawn_github_token_", "rotation_scheduler("].concat()));
+    }
+
+    /// The 14-day refresh-expiry warning: fires inside the window (not
+    /// outside), says "expired" at zero, names the remedy, and fires at most
+    /// once per day however often the scheduler asks.
+    #[test]
+    fn github_token_auto_rotation_refresh_expiry_warns_once_a_day() {
+        let day = 86_400;
+        assert_eq!(
+            github_refresh_expiry_warning(Some(NOW + 15 * day), NOW),
+            None
+        );
+        assert_eq!(
+            github_refresh_expiry_warning(Some(NOW + 14 * day), NOW),
+            Some(14)
+        );
+        assert_eq!(
+            github_refresh_expiry_warning(Some(NOW + 3 * day + 5), NOW),
+            Some(3)
+        );
+        assert_eq!(github_refresh_expiry_warning(Some(NOW - 1), NOW), Some(0));
+        assert_eq!(github_refresh_expiry_warning(None, NOW), None);
+        assert!(github_refresh_expiry_message(3).contains("tillandsias --github-login"));
+        assert!(github_refresh_expiry_message(0).contains("EXPIRED"));
+        let mut last = None;
+        assert!(should_warn_today(&mut last, NOW));
+        assert!(
+            !should_warn_today(&mut last, NOW + 15 * 60),
+            "same day: silent"
+        );
+        assert!(
+            should_warn_today(&mut last, NOW + day),
+            "next day: warns again"
+        );
     }
 
     /// The scheduler backs off after a failure (1 min doubling, capped) and

@@ -16646,7 +16646,7 @@ pub(crate) fn ensure_enclave_for_project(
     // the mirror) otherwise had nothing rotating it, and its pushes died at
     // 8 h. Idempotent per process; the tray's own start is deduplicated.
     #[cfg(feature = "vault")]
-    crate::vault_bootstrap::spawn_github_token_rotation_scheduler(debug);
+    crate::vault_bootstrap::spawn_github_token_rotation_scheduler(debug, None);
 
     Ok((certs_dir, mirror_identity))
 }
@@ -18160,7 +18160,7 @@ fn maybe_spawn_vsock_listener(
     // token alive: a due-check at start and every 15 min, rotating inside the
     // 30-minute window. The Linux tray starts the same scheduler.
     #[cfg(feature = "vault")]
-    crate::vault_bootstrap::spawn_github_token_rotation_scheduler(false);
+    crate::vault_bootstrap::spawn_github_token_rotation_scheduler(false, None);
     Some(tokio::spawn(async move {
         // One VmStateHandle drives three concurrent tasks below — the
         // accept loop (reads it on every VmStatusRequest), the phase

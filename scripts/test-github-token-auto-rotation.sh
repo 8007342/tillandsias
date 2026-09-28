@@ -15,6 +15,7 @@
 #   + the failure backoff is bounded (1 min doubling, capped at 15 min)
 #   + one scheduler per process, and every lane launch starts it (a Linux
 #     host with no tray still rotates while a lane runs)
+#   + the 14-day refresh-expiry warning: window, expired case, once a day
 # EACH ARM MUST APPEAR AS `... ok` BY NAME: a filter that selects zero tests
 # prints "0 passed" and exits 0, which is not a pass.
 #
@@ -29,7 +30,8 @@ github_token_auto_rotation_not_due_makes_no_exchange
 github_token_auto_rotation_rejected_refresh_keeps_the_old_pair
 github_token_auto_rotation_needs_no_session_and_refuses_in_a_forge
 github_token_auto_rotation_backoff_is_bounded
-github_token_auto_rotation_scheduler_starts_once_per_process"
+github_token_auto_rotation_scheduler_starts_once_per_process
+github_token_auto_rotation_refresh_expiry_warns_once_a_day"
 
 if ! command -v cargo >/dev/null 2>&1; then
     echo "skip:github-token-auto-rotation:no-cargo"

@@ -953,6 +953,26 @@ pub(crate) async fn idle_until_shutdown<N, F, Fut>(
     }
 }
 
+/// The 14-day GitHub refresh-expiry warning on the Linux desktop (1461-8tyy):
+/// a standard freedesktop notification, argv only, never a shell. The shared
+/// login-row state is NOT extended for this: it is matched in all three trays,
+/// and a variant added here would reach the macOS and Windows trays unbuilt.
+/// Best-effort: without notify-send the warning is still on stderr.
+fn notify_github_refresh_expiring(message: String) {
+    let _ = std::process::Command::new("notify-send")
+        .args([
+            "--app-name=Tillandsias",
+            "--urgency=normal",
+            "Tillandsias: GitHub sign-in",
+        ])
+        .arg(&message)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .and_then(|mut c| c.wait());
+}
+
 /// "The GitHub token is in Vault" as an EVENT (order 679-rp9m).
 ///
 /// The login click used to poll Vault once a second for two minutes. Now
@@ -4928,7 +4948,10 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // 15 min, rotating inside the 30-minute window). No desktop-session gate:
     // that stays on the explicit `--refresh-github-token`.
     #[cfg(feature = "vault")]
-    crate::vault_bootstrap::spawn_github_token_rotation_scheduler(debug);
+    crate::vault_bootstrap::spawn_github_token_rotation_scheduler(
+        debug,
+        Some(Box::new(notify_github_refresh_expiring)),
+    );
     // Order 363: the NDJSON MCP tool socket for in-forge agents. A bind
     // failure degrades the tray to no-agent-publish rather than killing
     // it — the control socket above is load-bearing, this one is not
