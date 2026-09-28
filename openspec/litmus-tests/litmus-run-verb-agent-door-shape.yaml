@@ -1,0 +1,42 @@
+# @trace spec:command-runtime
+name: litmus:run-verb-agent-door-shape
+spec: command-runtime
+phase: pre-build
+description: >
+  Order 1443-8pur, THE AGENT DOOR. `tillandsias-plan run … -- <argv…>` puts one
+  child through the command-policy engine and then tillandsias-exec: argv is
+  argv (no command-string form), a refusal spawns nothing and is audited, the
+  child sees only the proc.run base environment plus --env, and the plain form
+  mirrors the child's bytes and exit code.
+severity: normal
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-run-verb-agent-door.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-run-verb-agent-door.sh && test -x scripts/test-run-verb-agent-door.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "argv integrity, policy-before-spawn, base environment, plain-form exit mapping"
+    command: "bash scripts/test-run-verb-agent-door.sh 2>&1 | tail -n 1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: run-verb-agent-door"
+
+observability:
+  traces:
+    - "@trace spec:command-runtime"
+  expected_log: "PASS: run-verb-agent-door"
+  log_fields:
+    spec: "command-runtime"
+    test: "run-verb-agent-door-shape"
+    artifact: "crates/tillandsias-plan/src/run_verb.rs + tillandsias-plan run"
+
+rollback:
+  on_failure: >
+    A door that spawns before the policy decides, or forwards the caller's
+    environment, is the defect this verb exists to remove: restore
+    decide-then-spawn and the base environment first.
+  command: "bash scripts/test-run-verb-agent-door.sh"
