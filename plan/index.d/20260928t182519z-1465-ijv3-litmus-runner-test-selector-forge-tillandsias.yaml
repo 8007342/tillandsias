@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: run-litmus-test-sh-takes-test-litmus-name-and-runs-exactly-one-bound-test-with-its-specs-preflights-and-regime-refusing-by-name-a-test-no-spec-binds-so-a-floor-tier-host-can-measure-one-test-without-running-a-whole-spec
+    order: 1465-ijv3
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, runner, floor-tier, windows, tests]
+    estimated_hours: 2
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/test-litmus-test-selector.sh
+    title: |
+      scripts/run-litmus-test.sh --test litmus:<name> runs EXACTLY ONE test through the spec that binds it (same preflights, fixture regime and verdict grammar), and refuses by name (refused:litmus:test-not-bound:<name>, exit 3) a test no spec binds; a spec run without --test is unchanged
+    context: |
+      Coordinator direction (macuahuitl-fedora, 2026-09-28): yolanda's host
+      was reaped for memory running a whole spec just to measure one test
+      (1293-krrp's Windows closure), and a floor-tier host cannot measure
+      any single test otherwise. The POSITIONAL filter deliberately refuses a
+      test name (order 764-8m5j / 300 / 642, pinned by
+      litmus:litmus-name-filter-hint-shape: an explicit filter matching zero
+      tests must fail loud); --test is a separate, explicit flag and leaves
+      that contract untouched.
+      STACKED on work/1464-v3xq (which is on work/1443-fpck): all three
+      change run-litmus-test.sh.
+    exit_criteria:
+      - '`run-litmus-test.sh --test litmus:<name>` executes that test and no other test of its spec (Total: 1), with the fixture regime and the podman preflight applied exactly as in a spec run (pre-fix: FAILS, "Unknown option: --test", exit 3)'
+      - 'a name no spec binds is refused:litmus:test-not-bound:<name> on stderr with exit 3, naming the bindings file (pre-fix: FAILS)'
+      - 'NEGATIVE CONTROL: the same spec run without --test executes all of its bound tests, and litmus:litmus-name-filter-hint-shape (a positional test name still fails loud) stays green'
+    verifiable_closure: |
+      bash scripts/test-litmus-test-selector.sh exits 0 against synthetic
+      bindings. Pre-fix: FAILS at arm 1.
+    notes: |
+      size: S
+      Filed and taken by forge-tillandsias on the coordinator's direction.
+    provenance: |
+      Coordinator request 2026-09-28, from yolanda's reaped host.
+    events:
+      - type: filed
+        ts: "2026-09-28T18:25:19Z"
+        agent_id: "forge-forge-tillandsias-claude-20260928"
+        host: forge-tillandsias
+        summary: |-
+          --test selector for the litmus runner.

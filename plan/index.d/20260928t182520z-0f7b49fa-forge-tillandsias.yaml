@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: run-litmus-test-sh-takes-test-litmus-name-and-runs-exactly-one-bound-test-with-its-specs-preflights-and-regime-refusing-by-name-a-test-no-spec-binds-so-a-floor-tier-host-can-measure-one-test-without-running-a-whole-spec
+    field: status
+    value: in_progress
+    ts: "2026-09-28T18:25:20Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: run-litmus-test-sh-takes-test-litmus-name-and-runs-exactly-one-bound-test-with-its-specs-preflights-and-regime-refusing-by-name-a-test-no-spec-binds-so-a-floor-tier-host-can-measure-one-test-without-running-a-whole-spec
+    event:
+      type: note
+      ts: "2026-09-28T18:25:20Z"
+      host: forge-tillandsias
+      summary: |-
+        claim: implementing on work/1465-ijv3, stacked on work/1464-v3xq
