@@ -2794,7 +2794,7 @@ fn append_container_start_stream(repo_root: &Path, log_file: &Path, s: &mut Stri
             stage_state_matches.push(m);
         }
     }
-    let stage_states = sort_unique_via_coreutil(&stage_state_matches);
+    let stage_states = sort_unique_bytes(&stage_state_matches);
 
     s.push_str("\n## Container-Start Stream (from .stderr.log companion)\n\n");
     s.push_str(&format!(
@@ -2916,42 +2916,15 @@ fn append_container_start_stream(repo_root: &Path, log_file: &Path, s: &mut Stri
     }
 }
 
-/// Reproduce `... | sort -u` using the same coreutils binary the original
-/// pipeline used, so the locale-dependent collation is byte-identical to the
-/// shell. Falls back to a byte-order dedup if `sort` is unavailable.
-fn sort_unique_via_coreutil(lines: &[String]) -> Vec<String> {
-    if lines.is_empty() {
-        return Vec::new();
-    }
-    let input = {
-        let mut buf = lines.join("\n");
-        buf.push('\n');
-        buf
-    };
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-    let child = Command::new("sort")
-        .arg("-u")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn();
-    if let Ok(mut child) = child {
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(input.as_bytes());
-        }
-        if let Ok(output) = child.wait_with_output() {
-            return String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .map(|l| l.to_string())
-                .collect();
-        }
-    }
-    // Fallback: byte-order unique.
-    let mut set: BTreeSet<String> = BTreeSet::new();
-    for l in lines {
-        set.insert(l.clone());
-    }
-    set.into_iter().collect()
+/// ORDER 1459-b5fh: `sort -u` in BYTE order, the same on every host. Replaces
+/// two helpers that piped through an external `sort -u` for locale
+/// collation; see `sort_by_key_bytes` for why that made output depend on the
+/// host's C library and why a bare `sort` on Windows ran System32's sort.exe.
+fn sort_unique_bytes(items: &[String]) -> Vec<String> {
+    let mut v: Vec<String> = items.to_vec();
+    v.sort();
+    v.dedup();
+    v
 }
 
 /// Extract `event:container_launch stage=<x> state=<y>` (matching grep -oE).
@@ -3338,7 +3311,7 @@ fn fetch_extract_source_urls(text: &str) -> Vec<String> {
 /// The shell pipes the URLs through `sort -u`, so we must use the same locale
 /// collation for byte-for-byte parity.
 fn fetch_bundled_cache_key(max_age: &str, urls: &[String]) -> String {
-    let sorted = locale_sort_unique(urls);
+    let sorted = sort_unique_bytes(urls);
     let mut buf = String::new();
     for u in &sorted {
         buf.push_str(u);
@@ -3347,47 +3320,6 @@ fn fetch_bundled_cache_key(max_age: &str, urls: &[String]) -> String {
     buf.push_str(&format!("max-age-days={max_age}\n"));
     let hex = sha256_hex(buf.as_bytes());
     hex.chars().take(16).collect()
-}
-
-/// Equivalent to `printf '%s\n' "${items[@]}" | sort -u`: locale-collated,
-/// de-duplicated. Falls back to a byte-wise sort+dedup if `sort` is missing.
-fn locale_sort_unique(items: &[String]) -> Vec<String> {
-    use std::io::Write;
-    if items.is_empty() {
-        return Vec::new();
-    }
-    let mut input = String::new();
-    for it in items {
-        input.push_str(it);
-        input.push('\n');
-    }
-    let child = std::process::Command::new("sort")
-        .arg("-u")
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .spawn();
-    let byte_fallback = || {
-        let mut v: Vec<String> = items.to_vec();
-        v.sort();
-        v.dedup();
-        v
-    };
-    let Ok(mut child) = child else {
-        return byte_fallback();
-    };
-    if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(input.as_bytes());
-    }
-    let Ok(output) = child.wait_with_output() else {
-        return byte_fallback();
-    };
-    if !output.status.success() {
-        return byte_fallback();
-    }
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(|l| l.to_string())
-        .collect()
 }
 
 fn fetch_bundled_tier_main(cfg: &FetchConfig, max_age_days: &str, dry_run: bool) {
@@ -3461,7 +3393,7 @@ fn fetch_bundled_tier_main(cfg: &FetchConfig, max_age_days: &str, dry_run: bool)
 
     if dry_run {
         fetch_info("[dry-run] would fetch the following URLs:");
-        for u in locale_sort_unique(&all_urls) {
+        for u in sort_unique_bytes(&all_urls) {
             fetch_info(&format!("  {u}"));
         }
         println!("key={key}");
@@ -4567,7 +4499,7 @@ fn regen_build_verify_lookup(
             Some("INDEX.md") | Some("TEMPLATE.md")
         )
     });
-    locale_sort_by(&mut files, |p| p.display().to_string());
+    sort_by_key_bytes(&mut files, |p| p.display().to_string());
 
     for cs_file in files {
         let rel = cs_file
@@ -4838,7 +4770,7 @@ fn regen_process_file(
         // match's field — i.e. a substring match. Reproduce: first key that
         // contains category_rel (sorted for determinism, matching file order).
         let mut keys: Vec<String> = verify_lookup.keys().cloned().collect();
-        locale_sort_by(&mut keys, |k| k.clone());
+        sort_by_key_bytes(&mut keys, |k| k.clone());
         if let Some(k) = keys.into_iter().find(|k| k.contains(&category_rel)) {
             let raw = &verify_lookup[&k];
             if let Some(sha) = raw.strip_prefix("verified:") {
@@ -4893,73 +4825,28 @@ fn regen_process_file(
     })
 }
 
-/// Sort `items` by the locale collation that the system `sort` binary uses
-/// (the shell pipes `find` output through `sort`/`sort -z`). We defer to the
-/// real `sort` binary so the result is byte-for-byte identical to the shell
-/// regardless of how glibc collation orders punctuation like `-` vs `.`. The
-/// `key` closure yields the string `sort` would see for each item. Falls back
-/// to a stable Rust sort if the `sort` binary is unavailable.
-fn locale_sort_by<T, F>(items: &mut Vec<T>, key: F)
+/// ORDER 1459-b5fh: sort by `key` in BYTE order, the same on every host.
+///
+/// This used to pipe NUL-separated keys through an external `sort -z` so the
+/// order matched the shell's locale collation. That made a generated,
+/// committed file (cheatsheets/INDEX.md) depend on the host's C LIBRARY: glibc
+/// en_US ignores punctuation on its first pass (podman-control-plane.md before
+/// podman.md), the MSYS/Cygwin runtime does not, and a C locale is a third
+/// order. Measured on yolanda 2026-09-28: a Windows regeneration reordered 9
+/// lines against a Linux one even with LC_ALL=en_US.UTF-8.
+///
+/// ALSO, and it will recur elsewhere: `Command::new("sort")` on Windows goes
+/// through CreateProcess, which searches the SYSTEM directory before PATH, so
+/// it ran `C:\Windows\System32\sort.exe` (a different program; it rejects
+/// `-z` with "The system cannot find the file specified"), not Git Bash's
+/// coreutils. Never spawn a bare coreutils name from Rust on Windows.
+///
+/// The sort is stable, so items with equal keys keep their input order.
+fn sort_by_key_bytes<T, F>(items: &mut [T], key: F)
 where
-    T: Clone,
     F: Fn(&T) -> String,
 {
-    use std::io::Write;
-    if items.len() < 2 {
-        return;
-    }
-    // Map key -> list of items (handles duplicate keys deterministically).
-    let mut buckets: std::collections::HashMap<String, std::collections::VecDeque<T>> =
-        std::collections::HashMap::new();
-    let mut input = Vec::new();
-    for item in items.iter() {
-        let k = key(item);
-        input.extend_from_slice(k.as_bytes());
-        input.push(0);
-        buckets.entry(k).or_default().push_back(item.clone());
-    }
-
-    let child = std::process::Command::new("sort")
-        .arg("-z")
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .spawn();
-
-    let Ok(mut child) = child else {
-        // Fallback: byte-wise sort by key.
-        items.sort_by_key(|a| key(a));
-        return;
-    };
-    if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(&input);
-    }
-    let Ok(output) = child.wait_with_output() else {
-        items.sort_by_key(|a| key(a));
-        return;
-    };
-    if !output.status.success() {
-        items.sort_by_key(|a| key(a));
-        return;
-    }
-
-    let mut sorted: Vec<T> = Vec::with_capacity(items.len());
-    for part in output.stdout.split(|&b| b == 0) {
-        if part.is_empty() {
-            continue;
-        }
-        let k = String::from_utf8_lossy(part).to_string();
-        if let Some(bucket) = buckets.get_mut(&k)
-            && let Some(item) = bucket.pop_front()
-        {
-            sorted.push(item);
-        }
-    }
-    // Safety: only replace if we recovered every item.
-    if sorted.len() == items.len() {
-        *items = sorted;
-    } else {
-        items.sort_by_key(|a| key(a));
-    }
+    items.sort_by_cached_key(|a| key(a));
 }
 
 /// Build the full INDEX.md text (post canonicalisation), matching the shell.
@@ -4982,7 +4869,7 @@ fn regen_render_index(
     }
     // Categories: `find -printf '%f\n' | sort` — sort by basename using the
     // system locale collation (matches the committed INDEX.md exactly).
-    locale_sort_by(&mut categories, |p| {
+    sort_by_key_bytes(&mut categories, |p| {
         p.file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("")
@@ -5004,7 +4891,7 @@ fn regen_render_index(
             }
         }
         // `find ... -print0 | sort -z` sorts by full path with locale collation.
-        locale_sort_by(&mut direct, |p| p.display().to_string());
+        sort_by_key_bytes(&mut direct, |p| p.display().to_string());
         for file in &direct {
             if let Some(row) = regen_process_file(file, "", verify_lookup) {
                 rows.push(row);
@@ -5020,7 +4907,7 @@ fn regen_render_index(
                 }
             }
         }
-        locale_sort_by(&mut subdirs, |p| p.display().to_string());
+        sort_by_key_bytes(&mut subdirs, |p| p.display().to_string());
         for subdir in &subdirs {
             let sub = subdir.file_name().and_then(|n| n.to_str()).unwrap_or("");
             let mut subfiles: Vec<PathBuf> = Vec::new();
@@ -5032,7 +4919,7 @@ fn regen_render_index(
                     }
                 }
             }
-            locale_sort_by(&mut subfiles, |p| p.display().to_string());
+            sort_by_key_bytes(&mut subfiles, |p| p.display().to_string());
             for file in &subfiles {
                 if let Some(row) = regen_process_file(file, sub, verify_lookup) {
                     rows.push(row);
@@ -5873,5 +5760,78 @@ trailing"#;
     fn plan_orders_missing_steps_is_a_parse_failure() {
         let yaml: serde_yaml::Value = serde_yaml::from_str("unrelated: true").unwrap();
         assert!(plan_orders_check(&yaml).is_err());
+    }
+
+    /// 1459-b5fh: byte order, pinned on the exact pairs that glibc en_US and
+    /// the MSYS/Cygwin runtime collate differently. '-' (0x2D) sorts before '.'
+    /// (0x2E), so every host puts the hyphenated name first.
+    #[test]
+    fn sort_unique_bytes_is_byte_order_and_dedups() {
+        let input: Vec<String> = [
+            "podman.md",
+            "podman-control-plane.md",
+            "curl.md",
+            "curl-http.md",
+            "gh.md",
+            "gh-cli.md",
+            "podman.md",
+            "Zeta.md",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert_eq!(
+            sort_unique_bytes(&input),
+            vec![
+                "Zeta.md",
+                "curl-http.md",
+                "curl.md",
+                "gh-cli.md",
+                "gh.md",
+                "podman-control-plane.md",
+                "podman.md",
+            ]
+        );
+    }
+
+    /// 1459-b5fh: the keyed sort is byte order on the key and STABLE, so items
+    /// with equal keys keep their input order on every host (the INDEX
+    /// generator relies on this for duplicate names across directories).
+    #[test]
+    fn sort_by_key_bytes_is_byte_order_and_stable() {
+        let mut items = vec![
+            ("podman.md", 1),
+            ("podman-control-plane.md", 2),
+            ("podman.md", 3),
+            ("curl.md", 4),
+        ];
+        sort_by_key_bytes(&mut items, |(k, _)| k.to_string());
+        assert_eq!(
+            items,
+            vec![
+                ("curl.md", 4),
+                ("podman-control-plane.md", 2),
+                ("podman.md", 1),
+                ("podman.md", 3),
+            ]
+        );
+    }
+
+    /// 1459-b5fh: no external `sort` is spawned any more (on Windows a bare
+    /// "sort" resolves to System32's sort.exe). Needles assembled at runtime so
+    /// this test does not match itself.
+    #[test]
+    fn no_external_sort_is_spawned() {
+        let src = include_str!("main.rs");
+        let needle = format!("Command::new({}sort{})", '"', '"');
+        let code: String = src
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            !code.contains(&needle),
+            "{needle} is back in tillandsias-policy"
+        );
     }
 }
