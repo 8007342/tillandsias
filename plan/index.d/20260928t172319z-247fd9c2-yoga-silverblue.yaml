@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-github-token-in-vault-rotates-itself-before-its-8-hour-expiry-through-a-resident-due-check-so-no-host-needs-an-operator-reseed
+    field: notes
+    value: |-
+      size: M
+      implementer_tier: sonnet
+      p0: every host's push lane goes dark every 8 hours until the operator
+      re-seeds by hand.
+
+
+      [2026-09-28T17:23:19Z yoga-silverblue] yoga-silverblue 2026-09-28 - COVERAGE, stated so nobody expects rotation on an idle host. The scheduler runs in the Linux tray, the guest's resident service, and every lane process (ensure_enclave_for_project). A Linux host with NOTHING open (no tray, no lane) rotates nothing, so its access token lapses after 8 h - and recovers on first use: an already-expired token is due (github_token_rotation_due: expires_at.saturating_sub(now) = 0 <= the 30-minute window), so the first due-check when a lane opens rotates it through the locked exchange. That holds for as long as the refresh token lives (~6 months, refresh_token_expires_at), which the 14-day warning covers. Work ref b40acf7e4 (land84).
+    ts: "2026-09-28T17:23:19Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: the-github-token-in-vault-rotates-itself-before-its-8-hour-expiry-through-a-resident-due-check-so-no-host-needs-an-operator-reseed
+    event:
+      type: progress
+      ts: "2026-09-28T17:23:19Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'size: M
+        implementer_tier: sonnet
+        p0: every host's push lane goes dark every 8 hours until the operator
+        re-seeds by hand.
+        
+        
+        [2026-09-28T17:23:19Z yoga-silverblue] yoga-silverblue 2026-09-28 - COVERAGE, stated so nobody expects rotation on an idle host. The scheduler runs in the Linux tray, the guest's resident service, and every lane process (ensure_enclave_for_project). A Linux host with NOTHING open (no tray, no lane) rotates nothing, so its access token lapses after 8 h - and recovers on first use: an already-expired token is due (github_token_rotation_due: expires_at.saturating_sub(now) = 0 <= the 30-minute window), so the first due-check when a lane opens rotates it through the locked exchange. That holds for as long as the refresh token lives (~6 months, refresh_token_expires_at), which the 14-day warning covers. Work ref b40acf7e4 (land84).' (not terminal) with evidence_refs: b40acf7e4
+  - packet_id: the-github-token-in-vault-rotates-itself-before-its-8-hour-expiry-through-a-resident-due-check-so-no-host-needs-an-operator-reseed
+    event:
+      type: note
+      ts: "2026-09-28T17:23:19Z"
+      host: yoga-silverblue
+      summary: |-
+        state idle-host recovery
