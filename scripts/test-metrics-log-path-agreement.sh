@@ -92,7 +92,7 @@ rust_bin=""
 if [ -f "$ROOT/scripts/plan-binary-probe.sh" ]; then
     # shellcheck source=scripts/plan-binary-probe.sh
     . "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
-    command -v resolve_plan_binary >/dev/null 2>&1 && rust_bin="$(resolve_plan_binary 2>/dev/null || true)"
+    command -v resolve_plan_binary >/dev/null 2>&1 && rust_bin="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null || true)"
 fi
 # ABSOLUTISE IT. The probe answers with a repo-relative path ("./target/release/…"),
 # and arm 1c below runs the binary from a scratch checkout — a relative path

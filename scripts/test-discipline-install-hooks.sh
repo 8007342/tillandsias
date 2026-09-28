@@ -38,6 +38,11 @@ case "$PLAN" in /*) ;; *) PLAN="$ROOT/${PLAN#./}" ;; esac
 # A scratch HOME, so no real global git config (a forge's global hooksPath
 # included) reaches these repositories.
 export HOME="$W/home" GIT_CONFIG_NOSYSTEM=1 TILLANDSIAS_PLAN_BIN="$PLAN"
+# HOSTILE AMBIENT ENV, on purpose: the litmus runner exports PROJECT_ROOT (this
+# checkout), and a hook that trusted it read THIS repo's level-2 discipline for
+# the scratch project (4/18 arms red under the runner, green standalone). Every
+# arm now runs with it set, so a hook that reads the wrong repo fails here too.
+export PROJECT_ROOT="$ROOT"
 unset GIT_CONFIG_GLOBAL TILLANDSIAS_HOST_KIND
 # A forge exports its (anonymised) identity in these, and they override
 # `-c user.name`; arm 3 needs two DIFFERENT committers, so the fixture owns them.

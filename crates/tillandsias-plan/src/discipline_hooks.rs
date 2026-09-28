@@ -312,6 +312,14 @@ pub fn run_hook(root: &Path, event: &str, git_args: &[String]) -> i32 {
         Err(_) => (embedded.to_string(), format!("embedded:{event}")),
     };
     let _ = std::env::set_current_dir(root);
+    // A git hook's subject is the repository git runs it in. The Lua
+    // environment finds its repo through locate_repo_root, which prefers
+    // TILLANDSIAS_REPO_ROOT and then PROJECT_ROOT, so an inherited value naming
+    // another checkout made a scratch project's push read THAT checkout's
+    // discipline (measured on the land83 relay: the litmus runner exports
+    // PROJECT_ROOT, and 4 of 18 install-hooks arms read level 2).
+    // SAFETY: single-threaded at this point, as below.
+    unsafe { std::env::set_var("TILLANDSIAS_REPO_ROOT", root) };
     if std::env::var_os("TILLANDSIAS_PLAN_BIN").is_none()
         && let Ok(exe) = std::env::current_exe()
     {
