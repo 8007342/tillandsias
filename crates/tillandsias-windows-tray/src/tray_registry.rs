@@ -78,7 +78,7 @@ pub fn classify_entry(entry_path: &str, current_exe: &str, target_exists: bool) 
 /// Is this entry one of ours? Matched on the executable FILE NAME rather than a
 /// directory, because the whole defect is that the same binary appears under
 /// many different directories.
-fn is_tillandsias_tray(entry_path: &str) -> bool {
+pub fn is_tillandsias_tray(entry_path: &str) -> bool {
     entry_path
         .rsplit(['\\', '/'])
         .next()
@@ -89,6 +89,37 @@ fn is_tillandsias_tray(entry_path: &str) -> bool {
 fn paths_equal_ignoring_case(a: &str, b: &str) -> bool {
     let norm = |s: &str| s.replace('/', "\\").to_ascii_lowercase();
     norm(a) == norm(b)
+}
+
+/// ORDER 1450-23if: the promotion state of the running tray's own entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct OwnPromotion {
+    /// `IsPromoted == 1`: the icon already shows on the taskbar.
+    pub is_promoted: bool,
+    /// `TillandsiasPromotionCarried == 1`: this tray has carried an approval
+    /// into this entry before.
+    pub carried: bool,
+}
+
+/// Should the running tray promote its own `NotifyIconSettings` entry?
+///
+/// Windows keys the "show on the taskbar" approval on the executable PATH, so a
+/// tray at a new path, or one whose entry was pruned and recreated, comes up
+/// hidden in the overflow although the operator already approved Tillandsias
+/// (measured on yolanda 2026-09-27; the version is NOT part of the key). The
+/// approval is carried from `another_promoted` (a live entry of another
+/// Tillandsias tray is promoted) or `pruned_promoted` (the installer or the
+/// startup reconcile removed a promoted entry and left the marker).
+///
+/// AT MOST ONCE PER ENTRY: once carried, an entry the operator later demotes on
+/// purpose stays demoted. And never when already promoted, which is a no-op.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub fn should_carry_promotion(
+    own: OwnPromotion,
+    another_promoted: bool,
+    pruned_promoted: bool,
+) -> bool {
+    !own.is_promoted && !own.carried && (another_promoted || pruned_promoted)
 }
 
 /// The tooltip the running build should publish into the Settings list.
@@ -179,5 +210,48 @@ mod tests {
     #[test]
     fn settings_tooltip_carries_the_version() {
         assert_eq!(settings_tooltip("0.4.260826.1"), "Tillandsias 0.4.260826.1");
+    }
+
+    /// 1450-23if: carry an approval from a live promoted sibling or from the
+    /// prune marker into an entry that is neither promoted nor carried before.
+    #[test]
+    fn a_new_entry_inherits_an_existing_approval() {
+        let fresh = OwnPromotion::default();
+        assert!(
+            should_carry_promotion(fresh, true, false),
+            "live promoted sibling"
+        );
+        assert!(
+            should_carry_promotion(fresh, false, true),
+            "pruned promoted entry"
+        );
+        assert!(
+            !should_carry_promotion(fresh, false, false),
+            "nothing to inherit"
+        );
+    }
+
+    /// 1450-23if NEGATIVE CONTROLS: never re-promote an entry the operator hid
+    /// after a carry, and never touch one that is already promoted.
+    #[test]
+    fn a_carried_or_promoted_entry_is_left_alone() {
+        let hidden_after_carry = OwnPromotion {
+            is_promoted: false,
+            carried: true,
+        };
+        assert!(!should_carry_promotion(hidden_after_carry, true, true));
+        let already = OwnPromotion {
+            is_promoted: true,
+            carried: false,
+        };
+        assert!(!should_carry_promotion(already, true, true));
+    }
+
+    /// The name match that decides which entries count as siblings.
+    #[test]
+    fn only_tillandsias_tray_entries_are_siblings() {
+        assert!(is_tillandsias_tray(r"C:\old\TILLANDSIAS-TRAY.EXE"));
+        assert!(!is_tillandsias_tray(r"C:\x\tillandsias-windows-tray.exe"));
+        assert!(!is_tillandsias_tray(r"C:\x\explorer.exe"));
     }
 }

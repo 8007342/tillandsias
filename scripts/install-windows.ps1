@@ -995,6 +995,14 @@ try {
             Get-ChildItem $nis | ForEach-Object {
                 $p = (Get-ItemProperty -Path $_.PSPath -Name 'ExecutablePath' -ErrorAction SilentlyContinue).ExecutablePath
                 if ($p -and ($p -like '*tillandsias-tray.exe') -and (($p -ne $InstalledExe) -or -not (Test-Path $p))) {
+                    # ORDER 1450-23if: an approval ("show on the taskbar") must
+                    # outlive the entry it lived in. Windows keys it on the exe
+                    # PATH, and this prune runs before the new tray ever has, so
+                    # remember it; the tray carries it into its own entry.
+                    if ((Get-ItemProperty -Path $_.PSPath -Name 'IsPromoted' -ErrorAction SilentlyContinue).IsPromoted -eq 1) {
+                        New-Item -Path 'HKCU:\Software\Tillandsias' -Force | Out-Null
+                        New-ItemProperty -Path 'HKCU:\Software\Tillandsias' -Name 'TrayIconPromoted' -Value 1 -PropertyType DWord -Force | Out-Null
+                    }
                     Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
                     Say "  removed stale tray-icon entry: $p"
                 }
