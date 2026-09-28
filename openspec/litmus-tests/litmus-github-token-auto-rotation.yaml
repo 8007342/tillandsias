@@ -1,0 +1,32 @@
+# @trace order:1461-8tyy, spec:gh-auth-script
+#
+# The GitHub token in Vault rotates itself inside the 30-minute window before
+# its 8-hour expiry, from the resident process (Linux tray; the guest service on
+# macOS/Windows). Wraps scripts/test-github-token-auto-rotation.sh, whose arms
+# run over a stub Vault store and a stub token endpoint.
+name: litmus:github-token-auto-rotation
+spec: ci-release
+phase: pre-build
+description: >
+  A due token rotates exactly once with the refresh record written first; two
+  concurrent due-checks make one exchange; a token with 2 h left is untouched;
+  a rejected refresh keeps the old pair and names the failure; no desktop
+  session is consulted and a forge refuses; the failure backoff is bounded.
+severity: critical
+size: long
+
+preconditions:
+  - workspace contains scripts/test-github-token-auto-rotation.sh
+  - workspace contains crates/tillandsias-headless/src/vault_bootstrap.rs
+  - cargo is available in PATH
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-github-token-auto-rotation.sh && test -x scripts/test-github-token-auto-rotation.sh && echo 'ok: rotation-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: rotation-fixture-parses"
+
+  - step: "every arm passes by name, including the single-exchange-under-concurrency arm and the not-due negative control"
+    command: "out=$(bash scripts/test-github-token-auto-rotation.sh 2>&1); rc=$?; case \"$out\" in (*'ok:github-token-auto-rotation:6/6'*) [ \"$rc\" = 0 ] && echo 'ok: rotation 6/6' ;; (*) printf '%s\\n' \"$out\" | tail -8; exit 1 ;; esac"
+    timeout_ms: 900000
+    expected_behavior: "ok: rotation 6/6"

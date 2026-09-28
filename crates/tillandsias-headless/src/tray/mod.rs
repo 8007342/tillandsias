@@ -4923,6 +4923,12 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // @trace spec:graceful-shutdown, spec:app-lifecycle
     service.attach_signal_shutdown(Arc::clone(&shutdown));
     start_control_socket_server(Arc::clone(&shutdown))?;
+    // Order 1461-8tyy: the Linux tray is this host's resident process, so it
+    // keeps the GitHub token in Vault alive (due-check at start, then every
+    // 15 min, rotating inside the 30-minute window). No desktop-session gate:
+    // that stays on the explicit `--refresh-github-token`.
+    #[cfg(feature = "vault")]
+    crate::vault_bootstrap::spawn_github_token_rotation_scheduler(debug);
     // Order 363: the NDJSON MCP tool socket for in-forge agents. A bind
     // failure degrades the tray to no-agent-publish rather than killing
     // it — the control socket above is load-bearing, this one is not
