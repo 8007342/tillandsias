@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: research-whether-the-centicolon-uncertainty-metric-must-also-count-transient-work-bug-fixes-and-regressions-that-should-produce-a-preventing-spec-requirement
+    event:
+      type: progress
+      ts: "2026-09-28T00:17:18Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t001718z
+      host: macos
+      summary: |
+        BASELINE written: the first write of plan/issues/centicolon-transient-work-scope-research-2026-09-27.md, commit 49731c152 on origin/osx-next (plan lane; relay to linux-next pending). Measured on origin/linux-next ca1bf26c3 with the plan binary and git only; every query is in the doc's "How it was measured". Headlines: (1) 'finding', 'optimization' and 'regression' occur on no closed packet. Bug work is spelled bug 182, bugfix 23, defect 22, fix 10, infra+fix 1, so a kind-keyed rule misses 56 of 238 (24%). (2) 225 bug-class closures in the 30-day window, which is 95% of all such closures. (3) Residue, n=225, classes overlapping: litmus-bound spec 75 (33%); decider or guard 90 (40%); fixture 153 (68%), of which only 30 (13%) state a pre-fix FAIL; methodology 15 (7%); NONE 40 (18%). Of those 40, 28 are cited in Rust and 12 are cited nowhere outside plan/. defect is the weakest kind (9 of 22 with none). (4) Recurring shapes named in 2 or more packets: 11 of 13 have a decider. The unguarded ones are the unquoted heredoc (9 packets; 1443-we89 filed, not landed) and the verdict read through a pipe (14 packets; fixture only). Positions, synthesis and recommendation are left as empty headings for Codex, Antigravity and the coordinator. Claim released: my part (the baseline) is done; the packet stays open for the rest of the design round.
