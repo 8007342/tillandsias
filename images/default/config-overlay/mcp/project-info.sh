@@ -1333,7 +1333,7 @@ ${preview}"
                             error_code=-32603
                             error_msg="run_command: no runnable tillandsias-plan binary on this server"
                         else
-                            _rargs=(run --json)
+                            _rargs=(run --json --caller mcp)
                             _v=$(jq -r '.cwd // empty' <<<"$args")
                             [ -n "$_v" ] && _rargs+=(--cwd "$_v")
                             _v=$(jq -r '.timeout_ms // empty' <<<"$args")

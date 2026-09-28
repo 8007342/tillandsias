@@ -8,7 +8,7 @@
 #      env, timeout_ms, stdin, capture_bytes
 #   2  run_command {argv:["git","status","--porcelain"]} returns the object
 #      `run --json` prints (the same eleven keys, a run_id, policy allow) and
-#      the same stdout as the verb run directly
+#      the same stdout as the verb run directly; the audit says caller=mcp
 #   3  a denied argv (gh auth token) is a RESULT with status=policy_denied, a
 #      why and a remedy — not a JSON-RPC error
 #   4  no eval and no `bash -c` in the run_command arm, and argv reaches the
@@ -78,6 +78,15 @@ if [ "$(jget -c '.error' <<<"$resp")" = null ] && [ -n "$keys" ] &&
     ok "arm 2: git status --porcelain returns the verb's object (keys $keys) with its stdout"
 else
     bad "arm 2: resp=[$resp] direct=[$direct]"
+fi
+# The direct run above audited last as caller=run; the MCP call just before it
+# must have audited as caller=mcp (so the audit tells the doors apart).
+mcp_line="$(grep -F '"caller":"mcp"' "$TILLANDSIAS_POLICY_AUDIT_LOG" | tail -n 1)"
+run_line="$(tail -n 1 "$TILLANDSIAS_POLICY_AUDIT_LOG")"
+if [ "$(jget -r '.program' <<<"$mcp_line" 2>/dev/null)" = git ] && [ "$(jget -r '.caller' <<<"$run_line")" = run ]; then
+    ok "arm 2: the MCP call is audited as caller=mcp, the direct verb as caller=run"
+else
+    bad "arm 2 audit: mcp=[$mcp_line] run=[$run_line]"
 fi
 
 # ── 3 ───────────────────────────────────────────────────────────────────────
