@@ -36,7 +36,8 @@ declared-closures
 declared-closures-check
 decompose
 dependencies-of
-# discipline: order 1443-w79y — branch-discipline seed (show|target|check-ref).
+# discipline: order 1443-w79y — branch-discipline seed (show|target|check-ref);
+#   order 1446-xqi6 adds install-hooks|raise|hook (per-project hook templates).
 discipline
 expert-serve
 experts-probe

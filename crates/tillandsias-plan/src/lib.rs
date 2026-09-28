@@ -36,6 +36,7 @@ pub mod branch_discipline;
 /// Order 1443-isrk: the command policy evaluator (allow | deny | consent for an
 /// argv) behind `policy eval` and proc.run / sh.run.
 pub mod command_policy;
+pub mod discipline_hooks;
 /// ORDER 920-pxg6 — the OpenAI-compatible loopback front-end over
 /// `pipeline::run_grounded`. One grounded pipeline, two front-ends.
 pub mod expert_serve;

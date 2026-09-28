@@ -4545,25 +4545,43 @@ fn run_policy(args: &[String]) -> ! {
 
 fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
     use tillandsias_plan::branch_discipline as bd;
+    use tillandsias_plan::discipline_hooks as dh;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan discipline show [--json] | target --platform <linux|forge|windows|macos> | check-ref <ref> | derive [--json]   [--root <dir>] [--seed <path>]\n  derive and check-ref observe the checkout's refs as of its last fetch: run `git fetch origin` first."
+            "usage: tillandsias-plan discipline show [--json] | target --platform <linux|forge|windows|macos> | check-ref <ref> | derive [--json]\n\
+             \x20      | install-hooks | raise --to <1|2> [--integration <branch>]   [--root <dir>] [--seed <path>]\n\
+             \x20      | hook <event> [git hook args...]   (run by the installed hook stubs, order 1446-xqi6)\n\
+             \x20 derive and check-ref observe the checkout's refs as of its last fetch: run `git fetch origin` first."
         );
         std::process::exit(2);
     };
+    // ORDER 1446-xqi6. `hook` is what an installed stub execs; its arguments are
+    // git's, passed through untouched, so it is dispatched before flag parsing.
+    if args.first().map(String::as_str) == Some("hook") {
+        let Some(event) = args.get(1) else { usage() };
+        let root = std::env::current_dir()
+            .ok()
+            .and_then(|cwd| bd::find_root(&cwd))
+            .unwrap_or_else(|| PathBuf::from("."));
+        std::process::exit(dh::run_hook(&root, event, &args[2..]));
+    }
     let mut root: Option<PathBuf> = None;
     let mut seed: Option<PathBuf> = None;
     let mut platform: Option<String> = None;
+    let mut raise_to: Option<String> = None;
+    let mut integration: Option<String> = None;
     let mut json = false;
     let mut positional: Vec<String> = Vec::new();
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "--root" | "--seed" | "--platform" => {
+            "--root" | "--seed" | "--platform" | "--to" | "--integration" => {
                 let Some(v) = args.get(i + 1) else { usage() };
                 match args[i].as_str() {
                     "--root" => root = Some(PathBuf::from(v)),
                     "--seed" => seed = Some(PathBuf::from(v)),
+                    "--to" => raise_to = Some(v.clone()),
+                    "--integration" => integration = Some(v.clone()),
                     _ => platform = Some(v.clone()),
                 }
                 i += 2;
@@ -4667,6 +4685,57 @@ fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
             }
             println!("{}", d.provenance(a.rule));
             std::process::exit(if a.refused { 1 } else { 0 });
+        }
+        // ORDER 1446-xqi6 — install the level's hook stubs for this project.
+        Some("install-hooks") if positional.len() == 1 => match dh::install(&root, d.level) {
+            Ok(done) => {
+                for (event, path) in &done.not_ours {
+                    eprintln!(
+                        "skip:discipline:hook-not-ours:{event} ({}) — left untouched",
+                        path.display()
+                    );
+                }
+                eprintln!(
+                    "  hooks dir {} (core.hooksPath, repo-local); {} written this run",
+                    done.dir.display(),
+                    done.changed
+                );
+                println!(
+                    "ok:discipline:hooks-installed:level={}:{} hooks",
+                    done.level,
+                    done.ours.len()
+                );
+                std::process::exit(0);
+            }
+            Err(verdict) => {
+                println!("{verdict}");
+                std::process::exit(3);
+            }
+        },
+        // ORDER 1446-xqi6 — move the level forward, then reinstall its hooks.
+        Some("raise") if positional.len() == 1 => {
+            let Some(to) = raise_to.as_deref().and_then(|t| t.parse::<u8>().ok()) else {
+                usage()
+            };
+            match dh::raise(&root, to, integration.as_deref()) {
+                Ok(verdict) => {
+                    println!("{verdict}");
+                    let d = bd::load(&root, None);
+                    match dh::install(&root, d.level) {
+                        Ok(done) => println!(
+                            "ok:discipline:hooks-installed:level={}:{} hooks",
+                            done.level,
+                            done.ours.len()
+                        ),
+                        Err(v) => println!("{v}"),
+                    }
+                    std::process::exit(0);
+                }
+                Err(verdict) => {
+                    println!("{verdict}");
+                    std::process::exit(1);
+                }
+            }
         }
         _ => usage(),
     }

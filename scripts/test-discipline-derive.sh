@@ -22,6 +22,11 @@
 # PRE-FIX RESULT: FAILS at arm 1 — there was no derive verb, and the seed alone
 # decided every refusal.
 set -uo pipefail
+# A forge exports its anonymised identity in these, and they override the
+# per-commit identities the arms construct, so every author collapsed into one
+# unattributed bucket and arm 3 failed in every forge (measured by
+# macuahuitl-forge, 1446-xqi6: 4/5 with them set, 5/5 without).
+unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pass=0; total=5
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
