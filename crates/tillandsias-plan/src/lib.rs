@@ -72,6 +72,7 @@ pub mod lua_predicate;
 pub mod lua_runtime;
 pub mod lua_std;
 pub mod methodology;
+pub mod run_verb;
 
 /// Order 977-56fd — the seven-state obligation lattice, the product order over
 /// spec and project states, and the refinement operator that

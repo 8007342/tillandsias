@@ -1266,7 +1266,8 @@ specs:
   last_verified: '2026-08-28'
 - spec_id: command-runtime
   status: draft
-  litmus_tests: []
+  litmus_tests:
+  - litmus:run-verb-agent-door-shape
   coverage_ratio: 0
   last_verified: '2026-09-27'
 - spec_id: command-policies
