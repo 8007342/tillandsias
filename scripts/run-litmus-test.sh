@@ -19,6 +19,7 @@
 # Usage:
 #   ./scripts/run-litmus-test.sh --spec SPEC   # Scope by spec ladder shorthand
 #   ./scripts/run-litmus-test.sh [spec-name]       # Run single spec's litmus tests
+#   ./scripts/run-litmus-test.sh --test litmus:NAME  # Run exactly ONE bound test (1465-ijv3)
 #   ./scripts/run-litmus-test.sh                     # Run all specs' tests
 #   ./scripts/run-litmus-test.sh --list              # List all test suites
 #   ./scripts/run-litmus-test.sh --timeout 60        # Custom timeout in seconds
@@ -602,6 +603,8 @@ STRICT_MODE=0
 STRICT_SPEC_LIST=""
 IGNORE_SPEC_LIST=""
 SPEC_SHORTHAND=""
+# ORDER 1465-ijv3: --test litmus:<name> runs exactly that bound test.
+TEST_SELECTOR=""
 
 # Test result tracking
 TESTS_PASSED=0
@@ -828,6 +831,21 @@ get_litmus_tests_for_spec() {
             in_current && /^- spec_id/ { exit }
         ' "$LITMUS_BINDINGS"
     fi
+}
+
+# ORDER 1465-ijv3. Every spec whose litmus_tests binds <test>, one per line,
+# read from the bindings file with the same line grammar as the awk fallback
+# above (no yq, no plan binary: the selector must answer on any host).
+get_specs_binding_test() {
+    awk -v t="$1" '
+        /^- spec_id: / { s = $0; sub(/^- spec_id: /, "", s); in_tests = 0; next }
+        /^  litmus_tests:/ { in_tests = 1; next }
+        /^  [A-Za-z_]+:/ { in_tests = 0 }
+        in_tests && /^  - / {
+            x = $0; sub(/^  - /, "", x); gsub(/["\047[:space:]]/, "", x)
+            if (x == t) print s
+        }
+    ' "$LITMUS_BINDINGS"
 }
 
 # Get all active spec IDs from bindings
@@ -2188,6 +2206,11 @@ run_tests_for_spec() {
     local spec_skipped=0
     while IFS= read -r test_name; do
         [[ -z "$test_name" ]] && continue
+        # ORDER 1465-ijv3: under --test, the spec's other tests are not part
+        # of this run at all (not skips, not not-run).
+        if [[ -n "$TEST_SELECTOR" && "$test_name" != "$TEST_SELECTOR" ]]; then
+            continue
+        fi
 
         # Skip if already executed globally (same test bound to multiple specs)
         if litmus_global_seen "$test_name"; then
@@ -2728,6 +2751,18 @@ parse_args() {
                 COMPACT=1
                 shift
                 ;;
+            --test|--test=*)
+                if [[ "$1" == *=* ]]; then
+                    TEST_SELECTOR="${1#*=}"
+                    shift
+                elif [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                    TEST_SELECTOR="$2"
+                    shift 2
+                else
+                    log_fail "--test needs a test name, e.g. --test litmus:expert-groundtruth-harness"
+                    exit 3
+                fi
+                ;;
             --phase)
                 FILTER_PHASE="${2:-all}"
                 shift 2
@@ -2929,6 +2964,30 @@ main() {
         fi
     fi
 
+    # ORDER 1465-ijv3 — --test litmus:<name>: run EXACTLY that test, through
+    # the spec that binds it, so its preflights, the fixture regime and the
+    # verdict grammar are the ones a spec run applies. A floor-tier host was
+    # reaped for memory running a whole spec to measure one test (yolanda,
+    # 1293-krrp's closure). The POSITIONAL filter still refuses a test name
+    # (764-8m5j, litmus:litmus-name-filter-hint-shape): this is a separate,
+    # explicit flag, and the two never mix.
+    if [[ -n "$TEST_SELECTOR" ]]; then
+        [[ "$TEST_SELECTOR" == litmus:* ]] || TEST_SELECTOR="litmus:${TEST_SELECTOR#litmus-}"
+        local _sel_spec
+        _sel_spec="$(get_specs_binding_test "$TEST_SELECTOR" | head -n 1)"
+        if [[ -z "$_sel_spec" ]]; then
+            printf 'refused:litmus-runner:test-not-bound:%s\n' "$TEST_SELECTOR" >&2
+            printf '  why: --test runs a test through the spec that binds it, and no spec in %s binds this one\n' "$LITMUS_BINDINGS" >&2
+            printf '  remedy: bind it under its spec in openspec/litmus-bindings.yaml, or check the name (scripts/run-litmus-test.sh --list)\n' >&2
+            exit 3
+        fi
+        if [[ -n "$FILTER_SPEC" && "$FILTER_SPEC" != "$_sel_spec" ]]; then
+            log_fail "--test $TEST_SELECTOR is bound under spec $_sel_spec, not $FILTER_SPEC"
+            exit 3
+        fi
+        FILTER_SPEC="$_sel_spec"
+    fi
+
     log_info "Tillandsias Litmus Test Runner"
     log_info "Environment: ${PROJECT_ROOT}"
 
@@ -3009,6 +3068,7 @@ main() {
     local specs_to_test
     if [[ -n "$FILTER_SPEC" ]]; then
         log_info "Running tests for spec: $FILTER_SPEC"
+        [[ -n "$TEST_SELECTOR" ]] && log_info "Selected test (--test): $TEST_SELECTOR — the spec's other tests are not run"
         specs_to_test="$(normalize_spec_list "$FILTER_SPEC")"
         if [[ "$STRICT_MODE" == "1" && -z "$STRICT_SPEC_LIST" ]]; then
             STRICT_SPEC_LIST="$FILTER_SPEC"
