@@ -269,6 +269,50 @@ if ! command -v yq &>/dev/null && command -v toolbox &>/dev/null; then
     fi
 fi
 
+# ── ORDER 1297-2htc: the Windows host class's toolbox is the WSL builder ─────
+# A Windows host has no `toolbox`; its builder is the tillandsias-build WSL2
+# distro (scripts/with-wsl2-builder.sh), which carries yq (measured on yolanda
+# 2026-09-28: /usr/sbin/yq, v4.53.3, and the checkout is visible under
+# /mnt/c). Its Linux binary cannot run natively here, so instead of copying it
+# the runner writes a SHIM that runs it through wsl.exe: relative paths work
+# because wsl.exe maps the cwd, absolute /c/... and C:\... paths are rewritten
+# to /mnt/c/..., stdin passes through. Measured cost: ~0.84 s per call against
+# ~0.29 s for `toolbox run` on Linux, the price of a toolbox-first answer on
+# this host class rather than a host install. The shim is written only after a
+# live probe through it returns the right answer, so a missing or broken
+# builder still ends in the degraded warning below.
+case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*)
+        # TILLANDSIAS_LITMUS_NO_WSL_YQ=1 skips the shim (a seam for measuring
+        # the degraded path on a host where the builder exists).
+        if [[ "${TILLANDSIAS_LITMUS_NO_WSL_YQ:-0}" != 1 ]] \
+           && ! command -v yq &>/dev/null && command -v wsl.exe &>/dev/null \
+           && [[ ! -x "$LITMUS_RUNTIME_DIR/bin/yq" ]]; then
+            _yq_shim="$LITMUS_RUNTIME_DIR/bin/yq"
+            cat >"$_yq_shim" <<'SHIM'
+#!/usr/bin/env bash
+# yq through the tillandsias-build WSL2 distro (order 1297-2htc), written by
+# scripts/run-litmus-test.sh. Absolute Windows-side paths become /mnt/<drive>/.
+args=()
+for a in "$@"; do
+    case "$a" in
+        /[A-Za-z]/*) args+=("/mnt/$(printf '%s' "${a:1:1}" | tr 'A-Z' 'a-z')${a:2}") ;;
+        [A-Za-z]:[\\/]*) args+=("/mnt/$(printf '%s' "${a:0:1}" | tr 'A-Z' 'a-z')/$(printf '%s' "${a:3}" | tr '\\' '/')") ;;
+        *) args+=("$a") ;;
+    esac
+done
+MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' exec wsl.exe -d "${TILLANDSIAS_WSL_BUILD_DISTRO:-tillandsias-build}" -- yq "${args[@]}"
+SHIM
+            chmod 755 "$_yq_shim"
+            _yq_probe="$(printf 'a: 1\n' | "$_yq_shim" '.a' 2>/dev/null | tr -d '\r')"
+            if [[ "$_yq_probe" != "1" ]]; then
+                rm -f "$_yq_shim"
+            fi
+            unset _yq_probe
+        fi
+        ;;
+esac
+
 # ── Say so when yq is still missing (order 799-tb7q) ────────────────────────
 # A run without yq is DEGRADED and used to be indistinguishable from a clean
 # one. Measured on this host: with yq absent,
@@ -281,7 +325,15 @@ fi
 # A warning, never a refusal: a host without yq must still be able to run its
 # suite, and the metadata fallbacks are real fallbacks. The point is only that
 # the reader can tell which kind of green they are holding.
+# ORDER 1297-2htc: the degradation is also COUNTED. A banner at the top of a
+# long run is not a control: the summary names how many executed steps called
+# yq, so a reader can tell a sound green from a partial one. One line per such
+# step goes to a file (steps may run in a subshell), truncated at each run.
+LITMUS_YQ_DEGRADED_LOG="$LITMUS_RUNTIME_DIR/yq-degraded-steps"
+LITMUS_YQ_DEGRADED=0
+: >"$LITMUS_YQ_DEGRADED_LOG" 2>/dev/null || true
 if ! command -v yq &>/dev/null && [[ ! -x "$LITMUS_RUNTIME_DIR/bin/yq" ]]; then
+    LITMUS_YQ_DEGRADED=1
     printf 'warn:litmus-degraded-no-yq — yq is not on PATH and could not be provisioned from the tillandsias-builder toolbox. Steps whose commands call yq will fail or return empty. (The runner'\''s OWN metadata reads use the compiled tillandsias-plan reader when one resolves — order 746-htj9 — and fall back to grep only without it.) Install yq on the host, or create the toolbox (see scripts/with-tillandsias-builder.sh), before trusting a verdict from this run.\n' >&2
 fi
 
@@ -1922,6 +1974,11 @@ run_litmus_test_file() {
            && step_pipeline_swallows_status "${step_command}"; then
             step_shell_prelude="set -o pipefail; "
         fi
+        # 1297-2htc: count every executed step whose command calls yq on a run
+        # that has none, so the summary can say how much of the green is partial.
+        if [[ "$LITMUS_YQ_DEGRADED" == 1 ]] && grep -qwE 'yq' <<<"$step_command"; then
+            printf '%s#%s\n' "$test_file" "$step_index" >>"$LITMUS_YQ_DEGRADED_LOG" 2>/dev/null || true
+        fi
         # ORDER 1443-fpck: the fixture regime and scope for this step, and the
         # real git dir's gate files snapshotted around it.
         local _lt_gsnap=""
@@ -2421,6 +2478,17 @@ print_summary() {
             "${YELLOW}" "${NC}" "$TESTS_BUDGET_KILLED" >&2
     fi
     printf '  %bSKIP%b:  %d (excluded from coverage)\n' "${YELLOW}" "${NC}" "$TESTS_SKIPPED" >&2
+    # 1297-2htc: printed only on a degraded run, and as a count of EXECUTED steps
+    # whose command called yq with none available: their verdicts are not
+    # trustworthy, whatever PASS says.
+    local _yq_touched=0
+    if [[ -s "$LITMUS_YQ_DEGRADED_LOG" ]]; then
+        _yq_touched="$(grep -c . "$LITMUS_YQ_DEGRADED_LOG")" || true
+    fi
+    if [[ "$LITMUS_YQ_DEGRADED" == 1 ]]; then
+        printf '  %bDEGRADED%b: %d executed step(s) mention yq with no yq available; their verdicts are not trustworthy (1297-2htc)\n' \
+            "${YELLOW}" "${NC}" "$_yq_touched" >&2
+    fi
     printf '  %bTotal%b: %d (executed: %d, skipped: %d)\n' "${BOLD}" "${NC}" "$TESTS_RUN" "$total_executed" "$TESTS_SKIPPED" >&2
     echo "" >&2
 
