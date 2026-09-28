@@ -65,6 +65,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - poetry.md                             — project-style Python with strict dep management — alternative to `pip + venv` o… [pull-on-demand: stub]
 - uv.md                                 — you want a faster `pip` replacement or a reproducible Python project workflow (… [pull-on-demand: stub]
 - validation-ci.md [DRAFT]              — Understanding CI validation and annotation enforcement. [bundled, partial-verify]
+- windows-wsl-hop.md                    — you run shell in a WSL guest (`tillandsias`, `tillandsias-build`) from Git Bash… [bundled, partial-verify]
 - yarn.md                               — an existing project chose yarn — otherwise npm/pnpm are usually preferred. [bundled, partial-verify]
 
 ## concurrent-git
