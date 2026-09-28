@@ -1,0 +1,40 @@
+# @trace spec:ci-release, order:1247-3e64, order:1247-amcu
+name: litmus:plan-fragments-lane-refusals-carry-affordance
+spec: ci-release
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Every refused:fragments-to-trunk:* verdict of
+  scripts/push-plan-fragments-to-trunk.sh (the plan-only lane every host uses
+  to claim and close rows) is followed by "  why:" / "  remedy:" lines naming
+  the rule and what clears it, with the verdict line unchanged (1247-amcu
+  slice 3). A hook refusal is reported by its REAL cause: for a stale plan
+  binary the verdict names the stale binary and the remedy carries the cargo
+  build, never the generic stamp line that sent readers to a full gate. For
+  missing and the stale-binary push the fixture EXECUTES the stated remedy and
+  shows it clears; a static arm fails any refusal site added later without an
+  affordance.
+
+preconditions:
+  - workspace contains scripts/push-plan-fragments-to-trunk.sh
+  - workspace contains scripts/test-plan-fragments-lane-affordance.sh
+
+critical_path:
+  - step: "lane refusals carry why and remedy, the stale-binary push names its real cause, two executed remedies clear, and no refusal site lacks an affordance"
+    command: "bash scripts/test-plan-fragments-lane-affordance.sh 2>&1 | tail -1"
+    timeout_ms: 180000
+    expected_behavior: "ok:plan-fragments-lane-affordance:5"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "a plan-lane refusal names its rule, its real cause, and how to clear it"
+  log_fields:
+    spec: "ci-release"
+    test: "plan-fragments-lane-refusals-carry-affordance"
+
+failure_modes:
+  - "a new refused:fragments-to-trunk:* verdict ships without why/remedy"
+  - "the push verdict quotes the generic stamp line instead of the lane's own refusal"
+  - "a stated remedy no longer clears its refusal"

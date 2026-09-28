@@ -152,6 +152,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:land-refusals-carry-affordance
+  - litmus:plan-fragments-lane-refusals-carry-affordance
   - litmus:decider-retirement-shape
   - litmus:cosign-arrives-verified
   - litmus:scorable-obligation-splitter
