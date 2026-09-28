@@ -145,6 +145,8 @@ fn live_client_mutex()
 /// next paint reflects it.
 pub struct TrayProgress {
     hwnd: HwndHandle,
+    /// 1443-bgbs: repaint the icon strip and the menu row once per percent.
+    gate: std::sync::Mutex<crate::tray_phase_icon::PercentGate>,
 }
 
 #[derive(Clone, Copy)]
@@ -191,6 +193,7 @@ impl TrayProgress {
     pub fn new(hwnd: HWND) -> Self {
         Self {
             hwnd: HwndHandle(hwnd),
+            gate: std::sync::Mutex::new(crate::tray_phase_icon::PercentGate::default()),
         }
     }
 }
@@ -202,6 +205,8 @@ impl ProvisionProgress for TrayProgress {
         // how far provisioning got even when the tray UI is gone.
         // @trace spec:windows-event-logging
         tracing::info!(phase = phase.status_text(), "provisioning phase");
+        // 1443-bgbs: a new phase ends the previous step's progress strip.
+        self.clear_progress();
         update_status_text(phase.status_text(), self.hwnd.0);
     }
     fn report_message(&self, message: &str) {
@@ -214,6 +219,49 @@ impl ProvisionProgress for TrayProgress {
         // (slice 7, `f5443276`). Each subsequent `report_phase` call replaces
         // the chip with the next phase, so transitions are clean.
         update_status_text(message, self.hwnd.0);
+    }
+    /// ORDER 1443-bgbs (Windows half of 1420-v3zt): a typed step draws a
+    /// palette strip on the tray icon and turns the status chip into the menu
+    /// progress row ("<label> <bar> <n>%"), both once per whole percent, and
+    /// clears them when the step ends. A step with no known fraction keeps the
+    /// plain one-line summary the default adapter would have shown.
+    fn report_event(&self, event: &tillandsias_control_wire::ProgressEvent) {
+        use tillandsias_control_wire::ProgressKind;
+        tracing::debug!(summary = %event.summary_line(), "provisioning progress event");
+        if event.kind.is_terminal() {
+            if let ProgressKind::Failed { reason } = &event.kind {
+                tracing::warn!(task = %event.task, %reason, "provisioning step failed");
+            }
+            self.clear_progress();
+            return;
+        }
+        match event.kind.fraction() {
+            Some(f) => {
+                let repaint = self
+                    .gate
+                    .lock()
+                    .map(|mut g| g.changed(&event.task, f))
+                    .unwrap_or(true);
+                if repaint {
+                    crate::tray_phase_icon::apply_progress_icon(Some(f), self.hwnd.0);
+                    update_status_text(
+                        &crate::tray_phase_icon::menu_row_text(&event.label, f),
+                        self.hwnd.0,
+                    );
+                }
+            }
+            None => update_status_text(&event.summary_line(), self.hwnd.0),
+        }
+    }
+}
+
+impl TrayProgress {
+    /// 1443-bgbs: drop the icon strip and forget the last percent.
+    fn clear_progress(&self) {
+        if let Ok(mut g) = self.gate.lock() {
+            g.reset();
+        }
+        crate::tray_phase_icon::apply_progress_icon(None, self.hwnd.0);
     }
 }
 
