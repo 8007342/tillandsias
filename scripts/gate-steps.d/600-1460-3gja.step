@@ -11,3 +11,4 @@ STEP_DESC="Checking an empty litmus spec name is refused, not read as run-everyt
 STEP_SCRIPT="scripts/test-litmus-empty-spec-refused.sh"
 STEP_ERROR="run-litmus-test.sh again treats an explicit empty spec as no filter and runs every spec (1460-3gja)"
 STEP_OK="an empty litmus spec name is refused"
+STEP_SECOND_REGIME="yolanda 2026-09-28 msys PASS: litmus-empty-spec-refused (1460-3gja) at 450020f66, checkout clean"
