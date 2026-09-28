@@ -139,9 +139,11 @@ while IFS= read -r f; do
             echo "REFUSED: $f:$ln adds a refusal with no affordance: $tok"
             echo "  why: a bare verdict tells an agent it is stuck without telling it how to stop"
             echo "       being stuck (operator ruling 2026-09-17, 1247-amcu)."
-            echo "  remedy: within $WINDOW lines after it, say WHY (the rule that refused) and the"
-            echo "       REMEDY (what clears it) — e.g. _afford \"<why>\" \"<remedy>\" — or, for a"
-            echo "       token only a program reads, mark it: # affordance-ok: <who prints it>."
+            echo "  remedy: within $BACK lines before it or $WINDOW after, say WHY (the rule that"
+            echo "       refused) and the REMEDY (what clears it). The fleet helper, if the script"
+            echo "       lacks it: _afford() { printf '  why: %s\\n  remedy: %s\\n' \"\$1\" \"\$2\" >&2; }"
+            echo "       then: _afford \"<why>\" \"<remedy>\". For a token only a PROGRAM reads,"
+            echo "       mark the line instead: # affordance-ok: <which caller prints the remedy>."
         } >&2
     done <<EOF
 $added
