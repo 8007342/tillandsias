@@ -408,6 +408,77 @@ _yaml_jq() {
 export TILLANDSIAS_NO_SINGLETON=1
 export LITMUS_PODMAN_CALLS_FILE="${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/target/litmus-podman/calls.log}"
 
+# ORDER 1443-fpck — EVERY STEP IS A FIXTURE, AND A FIXTURE MAY NOT MINT A STAMP.
+# Each step runs with TILLANDSIAS_POLICY_REGIME=fixture, TILLANDSIAS_FIXTURE_SCOPE
+# (the checkout and TMPDIR: the git dir is carved out below, not listed) and
+# TILLANDSIAS_FIXTURE_GIT_DIRS (this checkout's git dir and common dir), so the
+# policy engine refuses a Lua fs.write/fs.mkdir or a proc.run/`run` of
+# gate-stamp.sh write, git update-ref, git push or rm into the real git dir
+# BEFORE it happens. A bash step is not an argv the engine sees, so the runner
+# also compares this checkout's `tillandsias-gate-*` files around every step:
+# a step that changed them FAILS naming refused:policy:fixture-gate-stamp-write,
+# and the bytes are restored (1442-22d2: a fixture minted a full-scope stamp
+# and four relay lands adopted it). A fixture that snapshots and restores those
+# files itself (test-gate-stamp-memoization.sh) leaves them byte-identical and
+# passes. NOT COVERED, by name: a second gate writing this checkout's stamp
+# WHILE the suite runs reads as the step's write (never gate while a
+# measurement batch is live, cheatsheets/test/litmus-fixture-writing.md).
+LITMUS_REAL_GIT_DIRS=""
+_lt_gd="$(git -C "$PROJECT_ROOT" rev-parse --absolute-git-dir 2>/dev/null)" || _lt_gd=""
+_lt_cd="$(cd "$PROJECT_ROOT" 2>/dev/null && _c="$(git rev-parse --git-common-dir 2>/dev/null)" && cd "$_c" 2>/dev/null && pwd -P)" || _lt_cd=""
+[[ -n "$_lt_gd" ]] && _lt_gd="$(cd "$_lt_gd" 2>/dev/null && pwd -P)"
+for _lt_d in "$_lt_gd" "$_lt_cd"; do
+    [[ -n "$_lt_d" ]] || continue
+    case ":$LITMUS_REAL_GIT_DIRS:" in *":$_lt_d:"*) continue ;; esac
+    LITMUS_REAL_GIT_DIRS="${LITMUS_REAL_GIT_DIRS:+$LITMUS_REAL_GIT_DIRS:}$_lt_d"
+done
+unset _lt_gd _lt_cd _lt_d
+LITMUS_FIXTURE_SCOPE="$PROJECT_ROOT:${TMPDIR:-/tmp}"
+
+# The real git dirs' gate files, one per line.
+_lt_gate_files() {
+    local d f
+    local IFS=:
+    for d in $LITMUS_REAL_GIT_DIRS; do
+        for f in "$d"/tillandsias-gate-*; do
+            [[ -f "$f" ]] && printf '%s\n' "$f"
+        done
+    done
+}
+# _lt_gate_snapshot <dir>: copy every gate file into <dir> with an index.
+_lt_gate_snapshot() {
+    local snap="$1" f i=0
+    : >"$snap/index"
+    while IFS= read -r f; do
+        i=$((i + 1))
+        cp -p "$f" "$snap/$i" 2>/dev/null && printf '%s\t%s\n' "$i" "$f" >>"$snap/index"
+    done < <(_lt_gate_files)
+}
+# _lt_gate_restore <dir>: print every gate file the step created, changed or
+# deleted, and put the snapshot's bytes back.
+_lt_gate_restore() {
+    local snap="$1" i f rc known=$'\n'
+    while IFS=$'\t' read -r i f; do
+        known+="$f"$'\n'
+        # 0 same, 1 differs, 2 gone: anything but 0 is a change.
+        cmp -s "$snap/$i" "$f" 2>/dev/null
+        rc=$?
+        if [[ $rc -ne 0 ]]; then
+            printf '%s\n' "$f"
+            cp -p "$snap/$i" "$f" 2>/dev/null
+        fi
+    done <"$snap/index"
+    while IFS= read -r f; do
+        case "$known" in
+            *$'\n'"$f"$'\n'*) ;;
+            *)
+                printf '%s\n' "$f"
+                rm -f "$f"
+                ;;
+        esac
+    done < <(_lt_gate_files)
+}
+
 # Default timeout in seconds (can be overridden via --timeout)
 # Increased from 30s to 600s (10 min) to handle slow tray feature compilation
 # @trace spec:spec-traceability
@@ -1784,11 +1855,29 @@ run_litmus_test_file() {
            && step_pipeline_swallows_status "${step_command}"; then
             step_shell_prelude="set -o pipefail; "
         fi
-        LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>&1 || exit_code=$?
+        # ORDER 1443-fpck: the fixture regime and scope for this step, and the
+        # real git dir's gate files snapshotted around it.
+        local _lt_gsnap=""
+        _lt_gsnap="$(mktemp -d "${TMPDIR:-/tmp}/litmus-gate-snap.XXXXXX")" && _lt_gate_snapshot "$_lt_gsnap"
+        TILLANDSIAS_POLICY_REGIME=fixture TILLANDSIAS_FIXTURE_SCOPE="$LITMUS_FIXTURE_SCOPE" \
+            TILLANDSIAS_FIXTURE_GIT_DIRS="$LITMUS_REAL_GIT_DIRS" \
+            LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>&1 || exit_code=$?
+        local _lt_tampered=""
+        if [[ -n "$_lt_gsnap" ]]; then
+            _lt_tampered="$(_lt_gate_restore "$_lt_gsnap")"
+            rm -rf "$_lt_gsnap"
+        fi
         step_output="$(cat "$step_capture")"
         rm -f "$step_capture"
         _lt_step_record "$test_file" "$step_index" "$step_timeout_ms" "$_lt_t0_ms" "$exit_code"
         combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"
+
+        if [[ -n "$_lt_tampered" ]]; then
+            printf ' %b[FAIL]%b rc=%s refused:policy:fixture-gate-stamp-write\n' "${RED}" "${NC}" "$exit_code" >&2
+            printf '         why: the step changed the real checkout'"'"'s gate files (%s), which the pre-push hook and the land tool trust; restored\n' "$(tr '\n' ' ' <<<"$_lt_tampered")" >&2
+            printf '         remedy: run the stamp writer in a scratch repository inside the fixture scope, or snapshot and restore the files yourself as test-gate-stamp-memoization.sh does\n' >&2
+            return 1
+        fi
 
         if [[ $exit_code -eq 124 ]]; then
             printf ' %b[TIMEOUT]%b\n' "${RED}" "${NC}" >&2

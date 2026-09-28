@@ -699,6 +699,264 @@ pub fn floor_decide(req: &Request, protected: &[String]) -> Option<Decision> {
     None
 }
 
+// ── the fixture filesystem scope (order 1443-fpck) ──────────────────────────
+//
+// Under regime=fixture (TILLANDSIAS_POLICY_REGIME, which run-litmus-test.sh
+// exports for every step) a fixture may not write into the REAL checkout's git
+// dir, nor outside its declared scope (TILLANDSIAS_FIXTURE_SCOPE, a PATH-style
+// list). 1442-22d2 fixed ONE fixture that minted a full-scope gate stamp in the
+// real git dir; this makes the class unconstructible for every Lua write verb
+// and every door that decides through here. The protected git dirs come from
+// TILLANDSIAS_FIXTURE_GIT_DIRS (the runner exports `git rev-parse
+// --absolute-git-dir` and `--git-common-dir`), else from the workspace's own
+// `.git`, read without spawning git. A bash step is not an argv this engine
+// sees; the runner guards those by comparing the real git dir's gate files
+// around each step.
+
+/// Rule ids that exist only under the fixture regime; a seed may not name
+/// one with `allow`, exactly as for FLOOR_RULES.
+pub const FIXTURE_RULES: [&str; 2] = ["fixture-writes-outside-scope", "fixture-gate-stamp-write"];
+pub const FIXTURE_SCOPE_ENV: &str = "TILLANDSIAS_FIXTURE_SCOPE";
+pub const FIXTURE_GIT_DIRS_ENV: &str = "TILLANDSIAS_FIXTURE_GIT_DIRS";
+
+/// A path for comparison: lexically absolute, then the nearest EXISTING
+/// ancestor canonicalized (so a symlink cannot walk a write into the git dir),
+/// with the not-yet-existing tail re-appended.
+fn resolve_for_compare(p: &Path) -> PathBuf {
+    let abs = lexical_abs(Path::new("/"), &p.to_string_lossy());
+    let mut probe = abs.clone();
+    let mut tail: Vec<std::ffi::OsString> = Vec::new();
+    while !probe.exists() {
+        match (probe.file_name().map(|n| n.to_os_string()), probe.parent()) {
+            (Some(name), Some(parent)) => {
+                tail.push(name);
+                probe = parent.to_path_buf();
+            }
+            _ => return abs,
+        }
+    }
+    let mut out = probe.canonicalize().unwrap_or(probe);
+    for n in tail.iter().rev() {
+        out.push(n);
+    }
+    out
+}
+
+/// The git dir and common dir of the repository whose worktree contains
+/// `start` (walking up to the first `.git`), read from the filesystem: a
+/// `.git` directory, or a `.git` file's `gitdir:` line plus that dir's
+/// `commondir`. Empty when `start` is in no repository.
+pub fn git_dirs_of(start: &Path) -> Vec<PathBuf> {
+    let mut dir = resolve_for_compare(start);
+    loop {
+        let dotgit = dir.join(".git");
+        if dotgit.is_dir() {
+            return vec![resolve_for_compare(&dotgit)];
+        }
+        if dotgit.is_file() {
+            let Some(gd) = std::fs::read_to_string(&dotgit).ok().and_then(|s| {
+                s.lines()
+                    .find_map(|l| l.strip_prefix("gitdir:").map(|v| v.trim().to_string()))
+            }) else {
+                return Vec::new();
+            };
+            let gd = resolve_for_compare(&dir.join(gd));
+            let mut out = vec![gd.clone()];
+            if let Ok(c) = std::fs::read_to_string(gd.join("commondir")) {
+                let common = resolve_for_compare(&gd.join(c.trim()));
+                if !out.contains(&common) {
+                    out.push(common);
+                }
+            }
+            return out;
+        }
+        if !dir.pop() {
+            return Vec::new();
+        }
+    }
+}
+
+/// What a fixture may write: inside `roots` (when any are declared) and never
+/// under `git_dirs`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FixtureScope {
+    pub roots: Vec<PathBuf>,
+    pub git_dirs: Vec<PathBuf>,
+}
+
+impl FixtureScope {
+    pub fn from_env(workspace: &Path) -> FixtureScope {
+        let list = |var: &str| -> Vec<PathBuf> {
+            std::env::var_os(var)
+                .map(|v| {
+                    std::env::split_paths(&v)
+                        .filter(|p| p.is_absolute())
+                        .map(|p| resolve_for_compare(&p))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let mut git_dirs = list(FIXTURE_GIT_DIRS_ENV);
+        if git_dirs.is_empty() {
+            git_dirs = git_dirs_of(workspace);
+        }
+        FixtureScope {
+            roots: list(FIXTURE_SCOPE_ENV),
+            git_dirs,
+        }
+    }
+
+    fn shown_roots(&self) -> String {
+        if self.roots.is_empty() {
+            "a scratch directory (mktemp -d)".into()
+        } else {
+            self.roots
+                .iter()
+                .map(|r| r.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+    }
+}
+
+/// A fixture's WRITE to `target` (fs.write, fs.mkdir, an rm target): refused
+/// under the real git dir, or outside the declared scope.
+pub fn fixture_write_decision(target: &Path, scope: &FixtureScope) -> Option<Decision> {
+    let t = resolve_for_compare(target);
+    let remedy = format!(
+        "write inside the fixture's scratch scope ({}); a fixture that needs a git dir makes \
+         its own there (git init, or git worktree add) and points the write at THAT one",
+        scope.shown_roots()
+    );
+    if let Some(g) = scope.git_dirs.iter().find(|g| t.starts_with(g)) {
+        return Some(Decision::deny(
+            "fixture-writes-outside-scope",
+            "refused:policy:fixture-writes-outside-scope".into(),
+            &format!(
+                "{} is inside the real checkout's git dir {}, where the gate stamp and pass \
+                 token live; a fixture that writes there can mint a stamp no gate earned \
+                 (1442-22d2)",
+                t.display(),
+                g.display()
+            ),
+            remedy,
+        ));
+    }
+    if !scope.roots.is_empty() && !scope.roots.iter().any(|r| t.starts_with(r)) {
+        return Some(Decision::deny(
+            "fixture-writes-outside-scope",
+            "refused:policy:fixture-writes-outside-scope".into(),
+            &format!(
+                "{} is outside the fixture's declared scope ({FIXTURE_SCOPE_ENV})",
+                t.display()
+            ),
+            remedy,
+        ));
+    }
+    None
+}
+
+/// The fixture regime's argv rules: `gate-stamp.sh write`, `git update-ref`,
+/// `git push` and `rm` aimed at the real git dir.
+pub fn fixture_decide(req: &Request, scope: &FixtureScope) -> Option<Decision> {
+    if req.argv.is_empty() {
+        return None;
+    }
+    let touches_real = |cwd: &Path| git_dirs_of(cwd).iter().any(|g| scope.git_dirs.contains(g));
+    // gate-stamp.sh write, run directly or as a script argument to a shell.
+    let prog = program_name(&req.argv[0]);
+    let script_at = if prog == "gate-stamp.sh" {
+        Some(0)
+    } else if ["bash", "sh", "zsh"].contains(&prog.as_str()) {
+        req.argv
+            .iter()
+            .position(|a| a.ends_with("gate-stamp.sh"))
+            .filter(|&i| i > 0)
+    } else {
+        None
+    };
+    if let Some(i) = script_at
+        && req.argv.get(i + 1).map(String::as_str) == Some("write")
+        && touches_real(&req.cwd)
+    {
+        return Some(Decision::deny(
+            "fixture-gate-stamp-write",
+            "refused:policy:fixture-gate-stamp-write".into(),
+            "a fixture ran `gate-stamp.sh write` against the real checkout, which mints the \
+             stamp the pre-push hook and the land tool trust (1442-22d2: four relay lands \
+             adopted a fixture's stamp and ran no gate)",
+            format!(
+                "run it with cwd in a scratch repository inside the fixture scope ({})",
+                scope.shown_roots()
+            ),
+        ));
+    }
+    if prog == "git" {
+        let args = &req.argv[1..];
+        let mut cwd = req.cwd.clone();
+        let mut git_dir: Option<PathBuf> = None;
+        let mut i = 0;
+        let mut sub: Option<&str> = None;
+        while i < args.len() {
+            let a = args[i].as_str();
+            match a {
+                "-C" => {
+                    if let Some(p) = args.get(i + 1) {
+                        cwd = lexical_abs(&cwd, p);
+                    }
+                    i += 2;
+                }
+                "-c" | "--namespace" | "--exec-path" => i += 2,
+                _ if a.starts_with("--git-dir=") => {
+                    git_dir = Some(lexical_abs(&cwd, &a["--git-dir=".len()..]));
+                    i += 1;
+                }
+                _ if a.starts_with('-') => i += 1,
+                _ => {
+                    sub = Some(a);
+                    break;
+                }
+            }
+        }
+        if let Some(s @ ("update-ref" | "push")) = sub {
+            let real = match &git_dir {
+                Some(g) => scope.git_dirs.contains(&resolve_for_compare(g)),
+                None => touches_real(&cwd),
+            };
+            if real {
+                return Some(Decision::deny(
+                    "fixture-writes-outside-scope",
+                    "refused:policy:fixture-writes-outside-scope".into(),
+                    &format!(
+                        "a fixture ran `git {s}` against the real checkout's repository; \
+                         refs are shared state every other host and gate reads"
+                    ),
+                    format!(
+                        "run it in a scratch repository inside the fixture scope ({}), \
+                         e.g. `git -C \"$scratch\" {s} …`",
+                        scope.shown_roots()
+                    ),
+                ));
+            }
+        }
+    }
+    if prog == "rm" {
+        for a in req.argv[1..].iter().filter(|a| !a.starts_with('-')) {
+            let t = lexical_abs(&req.cwd, a);
+            if let Some(d) = fixture_write_decision(
+                &t,
+                &FixtureScope {
+                    roots: Vec::new(),
+                    git_dirs: scope.git_dirs.clone(),
+                },
+            ) {
+                return Some(d);
+            }
+        }
+    }
+    None
+}
+
 // ── the seed ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -917,7 +1175,9 @@ pub fn check_cannot_loosen(
                 return Err(format!("cannot-loosen:{}", f.rule_id));
             }
         }
-        if FLOOR_RULES.contains(&r.id.as_str()) && r.decision == Strictness::Allow {
+        if (FLOOR_RULES.contains(&r.id.as_str()) || FIXTURE_RULES.contains(&r.id.as_str()))
+            && r.decision == Strictness::Allow
+        {
             // Naming a floor rule and allowing it is a loosening whether or not
             // the synthesised argv happens to reach that rule.
             return Err(format!("cannot-loosen:{}", r.id));
@@ -967,6 +1227,13 @@ pub fn evaluate(req: &Request, seed: Option<&Seed>, protected: &[String]) -> Dec
 
 /// The decision alone, with no side effect.
 pub fn decide(req: &Request, seed: Option<&Seed>, protected: &[String]) -> Decision {
+    // The fixture regime's rules are denies and nothing is stricter, so they
+    // answer first (1443-fpck).
+    if req.regime == "fixture"
+        && let Some(d) = fixture_decide(req, &FixtureScope::from_env(&req.workspace))
+    {
+        return d;
+    }
     let mut best = floor_decide(req, protected);
     if let Some(seed) = seed {
         for r in seed.rules.iter().filter(|r| r.matches(req)) {
@@ -1446,5 +1713,115 @@ mod tests {
         let r = d.remedy.unwrap();
         assert!(!r.contains("ghp_abc"), "{r}");
         assert!(r.contains("<redacted:token>"), "{r}");
+    }
+
+    // ── fixture scope (order 1443-fpck) ─────────────────────────────────────
+
+    fn fixture_repo() -> (tempfile::TempDir, PathBuf, FixtureScope) {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path().canonicalize().unwrap();
+        std::fs::create_dir_all(root.join("repo/.git")).unwrap();
+        std::fs::create_dir_all(root.join("repo/scratch/inner/.git")).unwrap();
+        let scope = FixtureScope {
+            roots: vec![root.join("repo/scratch")],
+            git_dirs: vec![root.join("repo/.git")],
+        };
+        (t, root, scope)
+    }
+    fn freq(argv: &[&str], cwd: &Path) -> Request {
+        Request {
+            argv: argv.iter().map(|s| s.to_string()).collect(),
+            cwd: cwd.to_path_buf(),
+            workspace: cwd.to_path_buf(),
+            host_kind: HostKind::BareMetal,
+            regime: "fixture".into(),
+            caller: "test".into(),
+        }
+    }
+
+    #[test]
+    fn a_fixture_write_into_the_git_dir_or_out_of_scope_is_refused() {
+        let (_t, root, scope) = fixture_repo();
+        let d =
+            fixture_write_decision(&root.join("repo/.git/tillandsias-gate-stamp"), &scope).unwrap();
+        assert_eq!(d.token, "refused:policy:fixture-writes-outside-scope");
+        assert!(d.why.unwrap().contains("real checkout's git dir"));
+        // `..` cannot walk back into it.
+        let sneaky = root.join("repo/scratch/../.git/x");
+        assert!(fixture_write_decision(&sneaky, &scope).is_some());
+        assert!(fixture_write_decision(&root.join("repo/elsewhere"), &scope).is_some());
+        assert!(fixture_write_decision(&root.join("repo/scratch/new/file"), &scope).is_none());
+        // A scratch repo's own git dir inside the scope is the fixture's own.
+        assert!(
+            fixture_write_decision(&root.join("repo/scratch/inner/.git/stamp"), &scope).is_none()
+        );
+    }
+
+    #[test]
+    fn fixture_argv_rules_target_the_real_repo_only() {
+        let (_t, root, scope) = fixture_repo();
+        let repo = root.join("repo");
+        let inner = root.join("repo/scratch/inner");
+        let stamp = ["bash", "scripts/gate-stamp.sh", "write", "--scope", "full"];
+        assert_eq!(
+            fixture_decide(&freq(&stamp, &repo), &scope)
+                .unwrap()
+                .rule_id,
+            "fixture-gate-stamp-write"
+        );
+        assert!(fixture_decide(&freq(&stamp, &inner), &scope).is_none());
+        assert!(
+            fixture_decide(
+                &freq(&["bash", "scripts/gate-stamp.sh", "verify"], &repo),
+                &scope
+            )
+            .is_none()
+        );
+        for g in [
+            &["git", "update-ref", "refs/heads/x", "HEAD"][..],
+            &["git", "-c", "a=b", "push", "origin", "x"],
+        ] {
+            assert_eq!(
+                fixture_decide(&freq(g, &repo), &scope).unwrap().rule_id,
+                "fixture-writes-outside-scope",
+                "{g:?}"
+            );
+            assert!(fixture_decide(&freq(g, &inner), &scope).is_none(), "{g:?}");
+        }
+        // -C redirects to the real repo from inside the scope.
+        let via_c = ["git", "-C", "../..", "update-ref", "refs/heads/x", "HEAD"];
+        assert!(fixture_decide(&freq(&via_c, &inner), &scope).is_some());
+        assert!(fixture_decide(&freq(&["git", "status"], &repo), &scope).is_none());
+        assert!(fixture_decide(&freq(&["rm", "-f", ".git/index.lock"], &repo), &scope).is_some());
+        assert!(fixture_decide(&freq(&["rm", "-rf", "scratch/tmp"], &repo), &scope).is_none());
+    }
+
+    #[test]
+    fn a_seed_may_not_allow_a_fixture_rule() {
+        let seed = parse_seed(
+            "version: 1\nrules:\n  - id: fixture-gate-stamp-write\n    program: bash\n    decision: allow\n",
+        )
+        .unwrap();
+        assert_eq!(
+            check_cannot_loosen(&seed, &[], Path::new("/work/repo")),
+            Err("cannot-loosen:fixture-gate-stamp-write".into())
+        );
+    }
+
+    #[test]
+    fn git_dirs_of_reads_a_linked_worktree_without_git() {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path().canonicalize().unwrap();
+        let common = root.join("main/.git");
+        let wt_gd = common.join("worktrees/wt");
+        std::fs::create_dir_all(&wt_gd).unwrap();
+        std::fs::write(wt_gd.join("commondir"), "../..\n").unwrap();
+        std::fs::create_dir_all(root.join("wt/sub")).unwrap();
+        std::fs::write(
+            root.join("wt/.git"),
+            format!("gitdir: {}\n", wt_gd.display()),
+        )
+        .unwrap();
+        assert_eq!(git_dirs_of(&root.join("wt/sub")), vec![wt_gd, common]);
     }
 }
