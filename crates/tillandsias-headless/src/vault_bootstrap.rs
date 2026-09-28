@@ -1553,12 +1553,35 @@ fn audit_github_token_auto_rotation(outcome: &str) {
     );
 }
 
+/// One scheduler per process (1461-8tyy): the tray starts it, and so does every
+/// lane launch through `ensure_enclave_for_project`; a long-lived tray that
+/// launches many lanes must not accumulate a thread per launch. Returns true
+/// exactly once per process.
+fn claim_github_rotation_scheduler_slot() -> bool {
+    static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    !STARTED.swap(true, std::sync::atomic::Ordering::SeqCst)
+}
+
 /// Start the resident rotation scheduler on its own thread: a check at start,
-/// then per [`github_rotation_next_delay`]. Called by the Linux tray and by
-/// the guest's resident service (macOS/Windows). Never by a forge (the check
-/// refuses there and the thread ends) and never by one-shot CLI commands.
-#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+/// then per [`github_rotation_next_delay`]. Idempotent per process.
+///
+/// WHO STARTS IT, and why that covers every regime that pushes:
+/// - the Linux tray, at start;
+/// - the guest's resident service on macOS/Windows;
+/// - EVERY LANE LAUNCH (`ensure_enclave_for_project`), so a bare-metal Linux
+///   host with no tray — one that only runs `tillandsias --bash <project>` and
+///   the mirror — rotates too. The mirror lives only while a lane is open
+///   (1448-yt96), and the lane process lives exactly that long, so the thread
+///   is alive whenever something can push.
+///
+/// Concurrent schedulers (a tray plus lanes, several lanes) are safe: the
+/// due-check decides under the host-wide rotation lock, so one exchange
+/// happens per due window. Never effective in a forge (the check refuses and
+/// the thread ends).
 pub fn spawn_github_token_rotation_scheduler(debug: bool) {
+    if !claim_github_rotation_scheduler_slot() {
+        return;
+    }
     let _ = std::thread::Builder::new()
         .name("github-token-rotation".into())
         .spawn(move || {
@@ -6064,6 +6087,27 @@ mod tests {
         let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
         assert!(!body.contains(&["github_refresh_", "gate"].concat()));
         assert!(!body.contains(&["has_graphical_", "session"].concat()));
+    }
+
+    /// One scheduler per process: the tray and every lane launch call the
+    /// spawn, and only the first may start a thread.
+    #[test]
+    fn github_token_auto_rotation_scheduler_starts_once_per_process() {
+        let first = claim_github_rotation_scheduler_slot();
+        let second = claim_github_rotation_scheduler_slot();
+        assert!(
+            first,
+            "the first claim in this process starts the scheduler"
+        );
+        assert!(!second, "a later claim must not start a second thread");
+        // And every lane launch reaches it: the call sits in the enclave
+        // funnel both the tray and the CLI lanes go through.
+        let main_src = include_str!("main.rs");
+        let start = main_src
+            .find(&["pub(crate) fn ensure_enclave_", "for_project("].concat())
+            .unwrap();
+        let body = &main_src[start..start + main_src[start..].find("\n}\n").unwrap()];
+        assert!(body.contains(&["spawn_github_token_", "rotation_scheduler("].concat()));
     }
 
     /// The scheduler backs off after a failure (1 min doubling, capped) and

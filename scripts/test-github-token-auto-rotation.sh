@@ -13,6 +13,8 @@
 #   5 no desktop-session input is consulted; a forge refuses without touching
 #     the store
 #   + the failure backoff is bounded (1 min doubling, capped at 15 min)
+#   + one scheduler per process, and every lane launch starts it (a Linux
+#     host with no tray still rotates while a lane runs)
 # EACH ARM MUST APPEAR AS `... ok` BY NAME: a filter that selects zero tests
 # prints "0 passed" and exits 0, which is not a pass.
 #
@@ -26,7 +28,8 @@ github_token_auto_rotation_concurrent_checks_exchange_once
 github_token_auto_rotation_not_due_makes_no_exchange
 github_token_auto_rotation_rejected_refresh_keeps_the_old_pair
 github_token_auto_rotation_needs_no_session_and_refuses_in_a_forge
-github_token_auto_rotation_backoff_is_bounded"
+github_token_auto_rotation_backoff_is_bounded
+github_token_auto_rotation_scheduler_starts_once_per_process"
 
 if ! command -v cargo >/dev/null 2>&1; then
     echo "skip:github-token-auto-rotation:no-cargo"

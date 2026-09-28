@@ -16641,6 +16641,13 @@ pub(crate) fn ensure_enclave_for_project(
         Ok::<Option<String>, String>(mirror_identity)
     })?;
 
+    // Order 1461-8tyy: every lane keeps the GitHub token alive while it runs.
+    // A bare-metal host with NO tray (only `tillandsias --bash <project>` and
+    // the mirror) otherwise had nothing rotating it, and its pushes died at
+    // 8 h. Idempotent per process; the tray's own start is deduplicated.
+    #[cfg(feature = "vault")]
+    crate::vault_bootstrap::spawn_github_token_rotation_scheduler(debug);
+
     Ok((certs_dir, mirror_identity))
 }
 /// Ensure the project's git mirror and the shared inference container for a
