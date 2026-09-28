@@ -54,12 +54,15 @@ extract() {   # <name>: print a function (or array) definition from lib-common.s
 
 # ── ARM 1: the launcher passes no GIT_* and never reads the host gitconfig ──
 builders_clean() {   # <main.rs>: 0 when no forge arg builder exports GIT_* identity
-    awk '
+    # Captured first, never piped into grep -q: under pipefail an early-exiting
+    # grep can SIGPIPE the producer and turn a match into a failure (792-ksr8).
+    local bodies
+    bodies="$(awk '
         /^fn append_git_identity_env_args\(/ || /^fn forge_git_identity_env\(/ ||
         /^pub\(crate\) fn forge_git_identity_env\(/ { p = 1 }
         p { print }
-        p && /^}/ { p = 0 }' "$1" |
-        grep -qE '"GIT_(AUTHOR|COMMITTER)_|read_git_identity_defaults' && return 1
+        p && /^}/ { p = 0 }' "$1")"
+    grep -qE '"GIT_(AUTHOR|COMMITTER)_|read_git_identity_defaults' <<<"$bodies" && return 1
     grep -qE '^fn append_git_identity_env_args\(args: &mut Vec<String>, project_name: &str\)' "$1" || return 1
     return 0
 }
@@ -120,7 +123,7 @@ export GIT_CONFIG_NOSYSTEM=1
         || bad "ARM4 Tillandsias-Host trailer = '$trailer'"
     mkdir -p scripts; cp "$ROOT/scripts/fleet-activity.sh" scripts/
     report="$(bash scripts/fleet-activity.sh --ref HEAD --since '1.day' 2>&1)"
-    if printf '%s\n' "$report" | grep -qE '^[[:space:]]*lenovinha[[:space:]]'; then
+    if grep -qE '^[[:space:]]*lenovinha[[:space:]]' <<<"$report"; then
         ok "ARM4 fleet-activity.sh attributes the noreply commit to lenovinha"
     else bad "ARM4 fleet-activity.sh did not attribute it to lenovinha: $(printf '%s' "$report" | tr '\n' '|')"; fi
     exit "$FAIL"
