@@ -220,15 +220,29 @@ fn is_pgrep_f(n: Node, src: &[u8]) -> bool {
         if ch.kind() == "command_name" || text(ch, src).starts_with('-') {
             return false;
         }
-        match ch.kind() {
+        let lit = match ch.kind() {
             "word" | "raw_string" => true,
             "string" => named_kids(ch)
                 .into_iter()
                 .all(|g| g.kind() == "string_content"),
             _ => false,
-        }
+        };
+        // THE BRACKET IDIOM IS THE FIX, not a hazard (order 1459-mqvd).
+        // `pkill -f 'expert-serv[e]'` matches the process but never the shell
+        // whose argv carries the pattern text, because the text `serv[e]` is
+        // not matched by the regex `serv[e]`. Litmus steps run under `bash -c`,
+        // so an unbracketed literal matches the step's own shell (1266-75tr).
+        lit && !is_bracket_guarded(text(ch, src))
     });
     has_f && has_literal
+}
+
+/// True when the pattern carries a one-character class such as `[e]`, which
+/// cannot match its own literal spelling.
+fn is_bracket_guarded(pat: &str) -> bool {
+    let b = pat.as_bytes();
+    b.windows(3)
+        .any(|w| w[0] == b'[' && w[1] != b']' && w[1] != b'^' && w[2] == b']')
 }
 
 fn first_line(n: Node, src: &[u8]) -> String {
@@ -379,6 +393,17 @@ mod tests {
     fn pgrep_needs_a_literal_not_a_variable() {
         assert_eq!(shapes("pgrep -f 'ollama serve'\n"), vec!["pgrep-f-literal"]);
         assert!(shapes("pgrep -f -- \"$1\"\n").is_empty());
+    }
+
+    #[test]
+    fn bracketed_pattern_cannot_match_its_own_shell() {
+        // 1459-mqvd: the self-exclusion idiom is the fix, not a finding.
+        assert!(shapes("pkill -f 'expert-serv[e] --port 21436'\n").is_empty());
+        assert!(shapes("pgrep -f \"openai-stu[b]\"\n").is_empty());
+        // NEGATIVE CONTROL: the unbracketed spelling is still reported, and a
+        // negated or multi-char class does not count as the idiom.
+        assert_eq!(shapes("pkill -f tillandsias\n"), vec!["pgrep-f-literal"]);
+        assert_eq!(shapes("pkill -f 'serv[^x]e'\n"), vec!["pgrep-f-literal"]);
     }
 
     #[test]
