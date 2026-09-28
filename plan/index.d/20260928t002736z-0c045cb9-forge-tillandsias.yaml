@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    event:
+      type: note
+      ts: "2026-09-28T00:27:36Z"
+      agent_id: forge-forge-tillandsias-claude-20260928t002746z
+      host: forge-tillandsias
+      summary: |-
+        resource_lock::tests::is_held_reflects_lock_lifecycle: same parallel-only shape as mcp_connection_serves_browser_family_over_the_socket. resource_lock's tests read the process-global XDG_RUNTIME_DIR env var via lock_dir() but take NO env lock; ~15+ other tests in main.rs mutate that same var under env_lock()/ENV_LOCK/ENV_LOCK2 (five independent mutexes per 1437-5czv). 1437-5czv's owned_files do not include resource_lock.rs, so consolidating the five existing mutexes alone would not cover this failure — resource_lock.rs's tests would also need to take the new single env_lock(). Appended detail to 1437-5czv's context; scope may need to widen to include crates/tillandsias-headless/src/resource_lock.rs.
