@@ -84,8 +84,7 @@ run "$R"
     || bad "arm 4: rc=$RC [$OUT]"
 
 # 5 — NEGATIVE CONTROL: a pin already in the base is not re-litigated.
-R="$(repo five '#!/bin/bash
-jq -e ".schema_version == 2" doc.json')"
+R="$(repo five "$(printf '#!/bin/bash\njq -e ".schema_version == 2" doc.json')")"
 printf '#!/bin/bash\njq -e ".schema_version == 2" doc.json\necho unrelated addition\n' > "$R/scripts/v.sh"
 run "$R"
 [ "$RC" -eq 0 ] && ok "arm 5: a pre-existing exact pin is not re-litigated (diff-scoped)" \
