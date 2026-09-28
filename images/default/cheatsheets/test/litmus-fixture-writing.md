@@ -846,8 +846,8 @@ trunk clean afterwards). Rules:
    builds exactly that, and it fabricates `refs/remotes/origin/*` with
    `update-ref` when the tool must OBSERVE a remote it never contacts.
 2. No config override "disables" a multi-valued key: `remote.<n>.url`,
-   `remote.<n>.fetch`, `remote.<n>.push` and `core.hooksPath`-style lists
-   append. Removing a remote means `git remote remove` in a clone you own,
+   `remote.<n>.fetch` and `remote.<n>.push` (and every other multi-valued
+   key) append. Removing a remote means `git remote remove` in a clone you own,
    or a scratch clone.
 3. A bound (`timeout`) is a ceiling, not a guard: it limits how long the
    mistake runs, not which step it reaches. Judge a "safe" invocation by the
