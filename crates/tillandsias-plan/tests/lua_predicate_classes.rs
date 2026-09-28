@@ -226,12 +226,21 @@ fn the_shell_verb_refuses_an_empty_argv() {
 /// carries, surfaced into Lua so a predicate cannot confuse them.
 #[test]
 fn a_timed_out_shell_call_is_distinguishable_in_lua() {
+    // A script FILE, not `sh -c <string>`: the command policy refuses shell
+    // strings in expert.shell too since 1443-isrk.
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../scripts/fixtures/ignore-term-and-sleep.sh")
+        .display()
+        .to_string()
+        .replace('\\', "/");
     let mut reg = PredicateRegistry::new();
     reg.register(
         "slow",
         PredicateClass::Observing,
-        "function slow(arg) local r = expert.shell{'sh','-c',\"trap '' TERM; sleep 60\", \
-         timeout_ms=400}; return r.status == 'timed_out' and r.code == nil end",
+        &format!(
+            "function slow(arg) local r = expert.shell{{'sh','{script}', \
+             timeout_ms=400}}; return r.status == 'timed_out' and r.code == nil end"
+        ),
     )
     .expect("register");
     assert!(

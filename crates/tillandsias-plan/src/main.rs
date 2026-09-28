@@ -89,6 +89,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "dependencies-of",
     "decompose",
     "discipline",
+    "policy",
     "expert-serve",
     "expire-claims",
     "plan-events",
@@ -438,6 +439,14 @@ const USAGE: &str = concat!(
     "                                     enforcement, integration branch per platform, ref grammar.\n",
     "                                     No seed = level 0 advised: nothing is refused. check-ref exits\n",
     "                                     1 only when an ENFORCED rule refuses the ref.\n",
+    "           policy eval [--host-kind bare-metal|forge|ci] [--regime R] [--caller C] [--cwd D]\n",
+    "                       [--root D] [--seed F] -- <argv...>  |  policy show [--root D] [--seed F]\n",
+    "                                     ORDER 1443-isrk. The command policy: allow | deny | consent for\n",
+    "                                     one argv, from a compiled-in floor (no-shell-strings,\n",
+    "                                     no-credential-mutation, soft-/hard-reset, workspace-destroy,\n",
+    "                                     force-push) plus .tillandsias/command-policies.yaml, which can\n",
+    "                                     only tighten it. Token on stdout, why:/remedy: on stderr;\n",
+    "                                     exit 0 allow, 1 deny, 4 consent.\n",
     "           metrics-log-path <basename> [repo-root]\n",
     "                                     ORDER 1125-92xa. Where THIS BINARY would put a metrics log:\n",
     "                                     <checkout>/.cache/metrics/<basename>, falling back to /tmp when\n",
@@ -4394,6 +4403,127 @@ fn run_predicate_cli(args: &[String]) {
 /// check-ref <ref>`, each accepting `--root <dir>` and `--seed <path>`.
 /// Every answer names its source, level and the rule's enforcement. Exit 0
 /// on every answer except a check-ref the seed REFUSES (exit 1); 2 on usage.
+/// ORDER 1443-isrk. `policy eval [--host-kind k] [--regime r] [--caller c]
+/// [--cwd d] [--root dir] [--seed path] -- <argv...>` and `policy show`.
+///
+/// eval: the verdict token on stdout; for a deny or consent, `  why:` and
+/// `  remedy:` on stderr. Exit 0 allow, 1 deny, 4 consent, 2 usage. A refused
+/// seed is named on stderr (`refused:policy-seed:<reason>`) and the answer
+/// comes from the floor alone.
+fn run_policy(args: &[String]) -> ! {
+    use tillandsias_plan::command_policy as cp;
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan policy eval [--host-kind bare-metal|forge|ci] [--regime interactive|gate|fixture|hook|relay] [--caller c] [--cwd dir] [--root dir] [--seed path] -- <argv...>\n       tillandsias-plan policy show [--root dir] [--seed path]"
+        );
+        std::process::exit(2);
+    };
+    let Some(verb) = args.first() else { usage() };
+    let mut host_kind: Option<cp::HostKind> = None;
+    let mut regime = "interactive".to_string();
+    let mut caller = "cli".to_string();
+    let mut cwd: Option<PathBuf> = None;
+    let mut root: Option<PathBuf> = None;
+    let mut seed: Option<PathBuf> = None;
+    let mut argv: Vec<String> = Vec::new();
+    let mut i = 1;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--" {
+            argv = args[i + 1..].to_vec();
+            break;
+        }
+        let Some(v) = args.get(i + 1) else { usage() };
+        match a {
+            "--host-kind" => match cp::HostKind::parse(v) {
+                Some(k) => host_kind = Some(k),
+                None => usage(),
+            },
+            "--regime" => {
+                if !cp::REGIMES.contains(&v.as_str()) {
+                    usage()
+                }
+                regime = v.clone();
+            }
+            "--caller" => caller = v.clone(),
+            "--cwd" => cwd = Some(PathBuf::from(v)),
+            "--root" => root = Some(PathBuf::from(v)),
+            "--seed" => seed = Some(PathBuf::from(v)),
+            _ => usage(),
+        }
+        i += 2;
+    }
+    let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let root = root
+        .or_else(|| tillandsias_plan::branch_discipline::find_root(&here))
+        .unwrap_or_else(|| here.clone());
+    let protected = cp::protected_refs(&root);
+    let (loaded, load) = cp::load_seed(&root, seed.as_deref(), &protected);
+    match verb.as_str() {
+        "show" => {
+            println!("{}", load.verdict());
+            for r in cp::FLOOR_RULES {
+                println!("floor:{r}");
+            }
+            if let Some(s) = &loaded {
+                let d = match &s.default {
+                    cp::DefaultPolicy::Allow => "allow".to_string(),
+                    cp::DefaultPolicy::Deny => "deny".to_string(),
+                    cp::DefaultPolicy::DenyAfterQuietDays(n) => format!(
+                        "deny_after_quiet_days={n} (not active: the flip reads the audit, 1443-w9hf)"
+                    ),
+                };
+                println!("default:{d}");
+                for r in &s.rules {
+                    println!("seed:{}", r.id);
+                }
+            }
+            std::process::exit(if matches!(load, cp::SeedLoad::Refused(_)) {
+                1
+            } else {
+                0
+            });
+        }
+        "eval" => {
+            if argv.is_empty() {
+                usage()
+            }
+            if let cp::SeedLoad::Refused(_) = load {
+                eprintln!("{}", load.verdict());
+            }
+            let reading = match host_kind {
+                Some(k) => cp::HostKindReading {
+                    kind: k,
+                    source: "flag",
+                    disagreement: None,
+                },
+                None => cp::read_host_kind(&root),
+            };
+            if let Some(dis) = &reading.disagreement {
+                eprintln!("  host_kind: {} ({dis})", reading.kind.as_str());
+            }
+            let req = cp::Request {
+                argv,
+                cwd: cwd.unwrap_or(here),
+                workspace: root,
+                host_kind: reading.kind,
+                regime,
+                caller,
+            };
+            let d = cp::evaluate(&req, loaded.as_ref(), &protected);
+            println!("{}", d.token);
+            if let Some(w) = &d.why {
+                eprintln!("  why: {w}");
+            }
+            if let Some(r) = &d.remedy {
+                eprintln!("  remedy: {r}");
+            }
+            std::process::exit(d.exit_code());
+        }
+        _ => usage(),
+    }
+}
+
 fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
     use tillandsias_plan::branch_discipline as bd;
     let usage = || -> ! {
@@ -4614,6 +4744,11 @@ fn main() {
     // checkout, else the nearest ancestor of the cwd holding .git.
     if args[0] == "discipline" {
         run_discipline(&args[1..], index_explicit.then_some(index.as_path()));
+    }
+    // ORDER 1443-isrk — the command policy evaluator. Early, like discipline: it
+    // reads a seed and the host's evidence, never the ledger.
+    if args[0] == "policy" {
+        run_policy(&args[1..]);
     }
     if args[0] == "metrics-log-path" {
         let base = args.get(1).map(String::as_str).unwrap_or("");

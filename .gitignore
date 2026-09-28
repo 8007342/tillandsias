@@ -96,6 +96,7 @@ build-git.log
 /.tillandsias/*
 # ORDER 1443-w79y: the branch-discipline seed is project data, not local state.
 !/.tillandsias/branch-discipline.yaml
+!/.tillandsias/command-policies.yaml
 
 # Session-local cron scheduler runtime state (not source)
 .claude/scheduled_tasks.lock

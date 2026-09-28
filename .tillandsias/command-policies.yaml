@@ -1,0 +1,39 @@
+# Command policy seed for this project (order 1443-isrk).
+#
+# The FLOOR is compiled into tillandsias-plan (crates/tillandsias-plan/src/command_policy.rs):
+# no-shell-strings, no-credential-mutation, soft-reset, hard-reset, workspace-destroy,
+# force-push. This file may ADD rules and may make a floor answer STRICTER; it can never
+# make one looser. A rule that would loosen the floor makes the whole file refused at load
+# (refused:policy-seed:cannot-loosen:<floor-rule>) and the engine answers from the floor alone.
+#
+# The three rules below restate the first slice's floor classes at the floor's own
+# strictness, so the project's policy is readable here; removing them loosens nothing.
+#
+# Read it with:  tillandsias-plan policy show
+# Ask it with:   tillandsias-plan policy eval -- <argv...>
+#
+# default: allow until the operator flips it. The measured flip
+# ({deny_after_quiet_days: N}) is parsed but not active until the audit (1443-w9hf) exists
+# and the operator confirms N.
+version: 1
+default: allow
+rules:
+  - id: no-shell-strings
+    program: bash
+    any_arg: ["-c"]
+    decision: deny
+    why: a shell given a command STRING reintroduces quoting, globbing and pipes
+    remedy: pass the program's own argv; a pipeline becomes two proc.run calls joined in Lua
+  - id: no-credential-mutation
+    program: gh
+    args: [auth, login]
+    decision: deny
+    why: GitHub tokens are the operator's; a re-auth on one host evicts the token on every other (1025-a896)
+    remedy: the operator seeds tokens with `tillandsias --github-login --with-token` on stdin
+  - id: soft-reset
+    program: podman
+    args: [system, reset]
+    decision: consent
+    host_kinds: [bare-metal, ci]
+    why: a SOFT reset destroys containers, images and build state on this host (host-state-lifecycle)
+    remedy: the operator runs it, or grants this one run with `tillandsias-plan policy consent grant soft-reset`

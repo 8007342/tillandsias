@@ -73,6 +73,8 @@ next-order
 parked-blocks
 pipeline
 plan-events
+# policy: order 1443-isrk — command policy evaluator (eval|show).
+policy
 predicate
 query
 # reader.
