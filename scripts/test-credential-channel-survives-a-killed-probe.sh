@@ -28,6 +28,9 @@
 # Usage: scripts/test-credential-channel-survives-a-killed-probe.sh
 
 set -uo pipefail
+# Order 1456-ib6i: this fixture pins the KEYRING path; keep the host's real
+# host-push lane (if one is wired here) from answering instead.
+export TILLANDSIAS_CCC_NO_LANE=1
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
 

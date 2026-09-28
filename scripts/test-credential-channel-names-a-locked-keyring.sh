@@ -29,6 +29,9 @@
 # the lock probe has begun firing on unlocked hosts, which would block every
 # cycle in the fleet on a working credential.
 set -uo pipefail
+# Order 1456-ib6i: this fixture pins the KEYRING path; keep the host's real
+# host-push lane (if one is wired here) from answering instead.
+export TILLANDSIAS_CCC_NO_LANE=1
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 3
