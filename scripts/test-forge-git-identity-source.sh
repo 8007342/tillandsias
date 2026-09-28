@@ -86,10 +86,17 @@ eval "$(extract configure_git_identity)"
 declare -F configure_git_identity >/dev/null || { echo "FAIL: configure_git_identity not found"; exit 1; }
 
 export GIT_CONFIG_NOSYSTEM=1
+# NEVER RUN THE FUNCTION IN THE REAL CHECKOUT. Before 1453-7rzd it wrote
+# repo-local `git config user.*` from the exported identity, and this fixture,
+# run test-first from the repo root, wrote "Host Person <host@example.test>"
+# into lenovinha's real .git/config: 37 trunk commits went out under it
+# (macuahuitl, 2026-09-28). Each arm runs from the scratch dir, outside any
+# repo, and ARM 6 fails if the real checkout's local config changed.
+real_cfg_before="$(git -C "$ROOT" config --local --list 2>/dev/null | grep -E '^(user|core\.hookspath)' || true)"
 
 # ── ARMS 2–4: App user, in a scratch HOME ───────────────────────────────────
 (
-    export HOME="$scratch/home-app"; mkdir -p "$HOME"
+    export HOME="$scratch/home-app"; mkdir -p "$HOME"; cd "$scratch" || exit 1
     # An OLDER launcher's exported identity: must not survive.
     export GIT_AUTHOR_NAME="Host Person" GIT_AUTHOR_EMAIL="host@example.test"
     export GIT_COMMITTER_NAME="Host Person" GIT_COMMITTER_EMAIL="host@example.test"
@@ -131,7 +138,7 @@ export GIT_CONFIG_NOSYSTEM=1
 
 # ── ARM 5: NEGATIVE CONTROL, no identity passed ─────────────────────────────
 (
-    export HOME="$scratch/home-none"; mkdir -p "$HOME"
+    export HOME="$scratch/home-none"; mkdir -p "$HOME"; cd "$scratch" || exit 1
     export GIT_AUTHOR_NAME="Host Person" GIT_AUTHOR_EMAIL="host@example.test"
     unset TILLANDSIAS_GIT_NAME TILLANDSIAS_GIT_EMAIL TILLANDSIAS_GIT_HOST
     configure_git_identity
@@ -141,6 +148,11 @@ export GIT_CONFIG_NOSYSTEM=1
     else bad "ARM5 user.name='$name' GIT_AUTHOR_NAME='${GIT_AUTHOR_NAME:-}'"; fi
     exit "$FAIL"
 ) || FAIL=1
+
+# ── ARM 6: the real checkout's config is untouched ──────────────────────────
+real_cfg_after="$(git -C "$ROOT" config --local --list 2>/dev/null | grep -E '^(user|core\.hookspath)' || true)"
+[ "$real_cfg_after" = "$real_cfg_before" ] && ok "ARM6 the real checkout's local user.*/hooksPath config is unchanged" \
+    || { bad "ARM6 the fixture wrote the REAL repo's config: '$real_cfg_after'"; }
 
 [ "$FAIL" -eq 0 ] && { echo "PASS: forge-git-identity-source (1453-7rzd)"; exit 0; }
 echo "FAILED: forge-git-identity-source (1453-7rzd)"; exit 1
