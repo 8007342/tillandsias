@@ -1888,7 +1888,7 @@ pub mod edit {
         }
 
         // Bottom-up, so no insertion shifts a span still to be processed.
-        order.sort_by(|a, b| b.0.cmp(&a.0));
+        order.sort_by_key(|entry| std::cmp::Reverse(entry.0));
         for (start, end, block) in order {
             let at = match (start..end).find(|&i| lines[i] == "      events:") {
                 Some(ei) => (ei + 1..end)
