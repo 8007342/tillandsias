@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-git-identity-derives-from-the-github-app-login-plus-host-and-a-tillandsia-name-written-as-config-not-exported-env
+    event:
+      type: progress
+      ts: "2026-09-28T04:18:33Z"
+      agent_id: linux-lenovinha-claude-20260928t035047z
+      host: lenovinha
+      summary: |
+        Implementation on work/1453-7rzd at 4242a6dca (stated defaults; the open questions remain in the change dir). The App user (id, login, name) comes from the existing /user probe and is cached host-side; forges receive TILLANDSIAS_GIT_* carriers, never GIT_*; the guest writes global git config "<name> (<host> · tillandsia-<species>)" with <id>+<login>@users.noreply.github.com and a per-forge species; a Tillandsias-Host trailer goes on every commit; fleet-activity.sh and discipline derive read the trailer first. Spec updated from the delta. Fixture 5 arms PASS (pre-fix FAILS at 1; arm 3 reproduced the original override), litmus:forge-git-identity-source bound. Full gate running.

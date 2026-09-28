@@ -172,6 +172,7 @@ specs:
   # would be a file rather than a gate.
   - litmus:land-verdict-through-a-pipe
   - litmus:covering-relay-scope-shape
+  - litmus:command-policy-evaluator-shape
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
   - litmus:smoke-release-channel-shape
@@ -255,6 +256,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:opencode-render-probe-shape
+  - litmus:forge-project-trust-seeds-shape
   - litmus:forge-standalone-traceability
   - litmus:forge-tool-affordances
   - litmus:forge-diagnostics-e2e

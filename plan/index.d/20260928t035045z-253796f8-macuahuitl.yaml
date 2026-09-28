@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-agents-ask-the-operator-to-trust-the-checked-out-project-folder-because-nothing-pre-trusts-it-any-more
+    field: status
+    value: implemented
+    ts: "2026-09-28T03:50:45Z"
+    host: macuahuitl
+
+events:
+  - packet_id: forge-agents-ask-the-operator-to-trust-the-checked-out-project-folder-because-nothing-pre-trusts-it-any-more
+    event:
+      type: progress
+      ts: "2026-09-28T03:50:45Z"
+      host: macuahuitl
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: 9f4ac6371 (land81, origin/linux-next) incl. relay-fix 00255d6a6: scripts/test-forge-project-trust-seeds.sh PASS 17/17 on 9f4ac6371 (the fixture arm of the closure)
+  - packet_id: forge-agents-ask-the-operator-to-trust-the-checked-out-project-folder-because-nothing-pre-trusts-it-any-more
+    event:
+      type: note
+      ts: "2026-09-28T03:50:45Z"
+      host: macuahuitl
+      summary: |-
+        coordinator records the landed fixture arm at the forge's request (its mirror cannot resolve land81 and its push credential is dead); the LIVE arm (a fresh forge launch starts without a folder-trust prompt for Claude, Codex and Antigravity) is NOT verified here and stays with macuahuitl-forge for completed

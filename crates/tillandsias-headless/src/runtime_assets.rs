@@ -299,19 +299,12 @@ fn hex_digest(bytes: &[u8]) -> String {
 /// Process-wide lock for tests that mutate environment variables.
 ///
 /// `std::env::set_var` is process-global and unsound to race with `getenv`,
-/// so EVERY env-mutating test in this crate must serialise on the SAME lock.
-/// Two independent mutexes would not serialise anything — which is why this
-/// lives at module level rather than inside one test module (order 434).
+/// so EVERY env-mutating test in this crate must serialise on the SAME lock
+/// (order 434). Moved to `crate::test_support::env_lock` (order 1437-5czv) so
+/// every OTHER independent env mutex in the crate could be retired onto it
+/// too; re-exported here so this call site keeps working unchanged.
 #[cfg(test)]
-pub(crate) fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-    use std::sync::{Mutex, OnceLock};
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    // A poisoned lock only means some other env test panicked; the guard is
-    // still usable and failing here would mask the real failure.
-    LOCK.get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-}
+pub(crate) use crate::test_support::env_lock;
 
 /// Process-wide lock for tests that repoint the `TILLANDSIAS_PODMAN_BIN` seam.
 ///

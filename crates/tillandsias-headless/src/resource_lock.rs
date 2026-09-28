@@ -250,10 +250,19 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
+    // Every test below resolves lock_dir(), which reads the PROCESS-GLOBAL
+    // XDG_RUNTIME_DIR env var. Cargo runs tests as threads in one process, so
+    // a sibling test elsewhere in this crate calling std::env::set_var on
+    // that same var mid-test can transiently redirect where a lock file
+    // lands — is_held_reflects_lock_lifecycle failed exactly this way in a
+    // full parallel run and passed 3/3 alone (1242-4x53). Each test takes
+    // crate::test_support::env_lock() (order 1437-5czv) for its duration.
+
     /// Two threads contending for the same resource serialize: the critical
     /// sections never overlap.
     #[test]
     fn same_resource_serializes_check_and_act() {
+        let _env = crate::test_support::env_lock();
         let resource = format!("test-serialize-{}", std::process::id());
         let inside = Arc::new(AtomicBool::new(false));
         let overlaps = Arc::new(AtomicUsize::new(0));
@@ -286,6 +295,7 @@ mod tests {
     /// on resource A never blocks resource B.
     #[test]
     fn distinct_resources_do_not_contend() {
+        let _env = crate::test_support::env_lock();
         let pid = std::process::id();
         let a = format!("test-distinct-a-{pid}");
         let b = format!("test-distinct-b-{pid}");
@@ -302,6 +312,7 @@ mod tests {
     /// A contended lock times out loudly instead of proceeding unserialized.
     #[test]
     fn contended_lock_times_out_loudly() {
+        let _env = crate::test_support::env_lock();
         let resource = format!("test-timeout-{}", std::process::id());
         let _held = acquire(&resource, Duration::from_secs(5), false).unwrap();
         // flock is per open-file-description: a second open in the SAME
@@ -317,6 +328,7 @@ mod tests {
     /// Dropping the guard releases the lock for the next waiter.
     #[test]
     fn drop_releases_for_next_acquirer() {
+        let _env = crate::test_support::env_lock();
         let resource = format!("test-release-{}", std::process::id());
         let guard = acquire(&resource, Duration::from_secs(5), false).unwrap();
         drop(guard);
@@ -329,6 +341,7 @@ mod tests {
     /// Two shared holders coexist without waiting.
     #[test]
     fn shared_holders_coexist() {
+        let _env = crate::test_support::env_lock();
         let resource = format!("test-sh-coexist-{}", std::process::id());
         let _a = acquire_shared(&resource, Duration::from_secs(5), false).unwrap();
         let started = Instant::now();
@@ -344,6 +357,7 @@ mod tests {
     /// per open-file-description), free again after the guard drops.
     #[test]
     fn is_held_reflects_lock_lifecycle() {
+        let _env = crate::test_support::env_lock();
         let resource = format!("test-held-{}", std::process::id());
         assert!(!is_held(&resource), "never-acquired resource must be free");
         let guard = acquire(&resource, Duration::from_secs(5), false).unwrap();
@@ -359,6 +373,7 @@ mod tests {
     /// prefix: released locks and other prefixes are invisible.
     #[test]
     fn held_resources_with_prefix_lists_only_live_matching_locks() {
+        let _env = crate::test_support::env_lock();
         let pid = std::process::id();
         let prefix = format!("test-launch-{pid}-");
         let held_name = format!("{prefix}alpha");
@@ -399,6 +414,7 @@ mod tests {
     /// for in-flight lease holders).
     #[test]
     fn exclusive_and_shared_mutually_exclude() {
+        let _env = crate::test_support::env_lock();
         let resource = format!("test-rw-excl-{}", std::process::id());
         {
             let _ex = acquire(&resource, Duration::from_secs(5), false).unwrap();

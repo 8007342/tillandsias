@@ -110,6 +110,12 @@ find_project_dir
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
+# @trace order:1447-nmq3
+# Trust the checked-out project so Claude does not ask (forge-gated inside the
+# function). It needs PROJECT_DIR, so it runs here: after first-run defaults,
+# the bypass seed and the approvals restore above, which a restored document
+# therefore cannot undo.
+seed_claude_project_trust "$PROJECT_DIR" || true
 
 # ── Export project environment ───────────────────────────────
 # @trace spec:forge-environment-discoverability
