@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-two-smoke-skills-tell-an-agent-to-export-the-exact-env-the-consent-engine-honours-and-a-fixture-pins-the-skill-text-against-a-policy-eval-and-the-bash-bridge-under-that-env
+    field: status
+    value: completed
+    ts: "2026-09-28T21:49:17Z"
+    host: yoga
+
+events:
+  - packet_id: the-two-smoke-skills-tell-an-agent-to-export-the-exact-env-the-consent-engine-honours-and-a-fixture-pins-the-skill-text-against-a-policy-eval-and-the-bash-bridge-under-that-env
+    event:
+      type: completed
+      ts: "2026-09-28T21:49:17Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 2b1446057
+  - packet_id: the-two-smoke-skills-tell-an-agent-to-export-the-exact-env-the-consent-engine-honours-and-a-fixture-pins-the-skill-text-against-a-policy-eval-and-the-bash-bridge-under-that-env
+    event:
+      type: note
+      ts: "2026-09-28T21:49:17Z"
+      host: yoga
+      summary: |-
+        landed in land85 2b1446057 on origin/linux-next (relay fix: indexed array for bash-3 portability); fixture test-smoke-skill-reset-env-matches-policy.sh bound as litmus:smoke-skill-reset-env-matches-policy
