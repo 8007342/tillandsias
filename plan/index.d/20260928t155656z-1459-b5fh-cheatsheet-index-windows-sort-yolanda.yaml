@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-cheatsheet-index-regenerator-reorders-unrelated-lines-when-run-on-windows-so-a-one-sheet-change-becomes-a-22-line-diff
+    order: 1459-b5fh
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, cheatsheets, determinism]
+    estimated_hours: 1
+    owned_files: [scripts/regenerate-cheatsheet-index.sh]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds a fixture that regenerates twice and on a copy and asserts byte-identical output, in the same commit.
+    title: |
+      scripts/regenerate-cheatsheet-index.sh on Windows (Git Bash) prints "-zThe system cannot find the file specified." and reorders unrelated INDEX.md lines, so adding one cheatsheet produced a 22-line diff (measured on yolanda 2026-09-28 during 1215-8jui)
+    verifiable_closure: |
+      Run on a Windows host against trunk, the regenerator's output is byte-identical to the Linux output (no reordering, no sort error). Pre-fix result: FAILS: 12 insertions / 10 deletions for one added sheet; the stray "-z" message suggests a sort -z call resolving to Windows' sort.exe instead of GNU sort.
+    events:
+      - type: filed
+        ts: "2026-09-28T15:56:55Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request.

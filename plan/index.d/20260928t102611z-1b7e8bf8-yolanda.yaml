@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-litmus-runner-on-a-windows-host-cannot-provision-yq-from-the-builder-toolbox-so-every-verdict-from-that-host-carries-a-degraded-warning
+    field: status
+    value: in_progress
+    ts: "2026-09-28T10:26:11Z"
+    host: yolanda
+
+events:
+  - packet_id: the-litmus-runner-on-a-windows-host-cannot-provision-yq-from-the-builder-toolbox-so-every-verdict-from-that-host-carries-a-degraded-warning
+    event:
+      type: note
+      ts: "2026-09-28T10:26:11Z"
+      host: yolanda
+      summary: |-
+        claimed for cycle 2026-09-28T09:10Z by windows-yolanda-claude-20260926t151137z

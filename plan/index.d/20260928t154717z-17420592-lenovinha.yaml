@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-census-of-shell-specific-breakages-72-recorded-instances-in-8-classes-and-which-classes-a-gate-guard-actually-prevents
+    field: status
+    value: in_progress
+    ts: "2026-09-28T15:47:17Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-census-of-shell-specific-breakages-72-recorded-instances-in-8-classes-and-which-classes-a-gate-guard-actually-prevents
+    event:
+      type: note
+      ts: "2026-09-28T15:47:17Z"
+      host: lenovinha
+      summary: |-
+        claimed by linux-lenovinha-claude-20260928t154716z

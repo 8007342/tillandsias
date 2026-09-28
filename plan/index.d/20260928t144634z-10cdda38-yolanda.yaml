@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-to-wsl-hop-mangles-dollar-expansions-and-the-one-line-compliant-recipe-is-recorded-in-no-cheatsheet
+    event:
+      type: note
+      ts: "2026-09-28T14:46:34Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        Criterion 3 DECISION (yolanda, 2026-09-28): the base64_script_injection_ban wording is NOT narrowed. Reason: the compliant transport is stdin (cheatsheets/build/windows-wsl-hop.md: cat <<EOS | MSYS_NO_PATHCONV=1 wsl.exe -d <distro> -- bash -s), which needs no encoding at all, so the absolute ban costs nothing; a scope exception for "interactive transport" would only open a door no one needs and blur a rule written against deliberate circumvention. The cheatsheet says why base64 is not needed. Work is on work/1215-8jui cde1c5b92.

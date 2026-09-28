@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: progress
+      ts: "2026-09-28T12:53:45Z"
+      agent_id: linux-lenovinha-claude-20260928t125345z
+      host: lenovinha
+      summary: |
+        Operator ruling relayed from the lenovinha session, 2026-09-28: the gnome-keyring-daemon SIGABRT is a known GNOME keyring bug, fixed upstream; locating which of our call paths hits the edge case is not worth the investigation. Mitigation is already in flight: 1456-ib6i makes the credential guard accept the host-push mirror lane (operator Vault credential) as a push path, so a crashed or locked keyring no longer stops a wired host. Proposed disposition: close as won't-investigate (upstream fix), superseded in practice by 1456-ib6i. Coordinator to ratify.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: validators-pinned-to-an-exact-version-block-the-first-bump
+    field: status
+    value: in_progress
+    ts: "2026-09-28T15:38:40Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: validators-pinned-to-an-exact-version-block-the-first-bump
+    event:
+      type: note
+      ts: "2026-09-28T15:38:40Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        claimed by macos-tlatoanis-macbook-air-claude-20260928t153840z (selector pick while waiting on land83)
