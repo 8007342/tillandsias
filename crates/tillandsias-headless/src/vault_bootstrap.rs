@@ -5606,8 +5606,6 @@ mod tests {
         assert!(classify_keyring_delete(Err(platform)).is_err());
     }
 
-    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
     // ---- order 803-49re: the self-heal's Shamir share sources ----
 
     /// The guest's own podman secret must LEAD the candidate list, and a stale
@@ -5874,12 +5872,12 @@ mod tests {
         own: Option<Vec<u8>>,
         tag: u32,
     ) -> (DeliverCredentialsOutcome, bool) {
-        let _serialized = ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
+        let _serialized = crate::test_support::env_lock();
         let cache_root =
             std::env::temp_dir().join(format!("tillandsias-1200-{}-{}", std::process::id(), tag));
         let _ = std::fs::remove_dir_all(&cache_root);
         std::fs::create_dir_all(&cache_root).expect("temp cache root");
-        // SAFETY: env mutation is serialized by ENV_LOCK for the whole call.
+        // SAFETY: env mutation is serialized by crate::test_support::env_lock() for the whole call.
         unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
         TEST_OWN_UNSEAL_SECRET.with(|s| *s.borrow_mut() = own);
         let outcome = set_in_vm_credentials(
@@ -5905,7 +5903,7 @@ mod tests {
     /// predicate false.
     #[test]
     fn a_mismatched_share_keeps_the_wipe_predicate_true() {
-        let _serialized = ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
+        let _serialized = crate::test_support::env_lock();
         let cache_root = std::env::temp_dir().join(format!(
             "tillandsias-1200-wipe-{}-{}",
             std::process::id(),
@@ -5913,7 +5911,7 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&cache_root);
         std::fs::create_dir_all(&cache_root).expect("temp cache root");
-        // SAFETY: env mutation is serialized by ENV_LOCK for the whole test.
+        // SAFETY: env mutation is serialized by crate::test_support::env_lock() for the whole test.
         unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
         // The GUEST's predicate is the fallback half alone (no keychain in a
         // guest); asserting through the full predicate was vacuous on a host
@@ -5998,7 +5996,7 @@ mod tests {
     /// verified where it runs" — reproduced in the test for the fix against it.
     #[test]
     fn host_delivered_share_is_persisted_not_only_the_token() {
-        let _serialized = ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
+        let _serialized = crate::test_support::env_lock();
 
         let cache_root = std::env::temp_dir().join(format!(
             "tillandsias-701-delivered-{}-{}",
@@ -6006,7 +6004,7 @@ mod tests {
             line!()
         ));
         std::fs::create_dir_all(&cache_root).expect("temp cache root");
-        // SAFETY: env mutation is serialized by ENV_LOCK for the whole test.
+        // SAFETY: env mutation is serialized by crate::test_support::env_lock() for the whole test.
         unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
 
         set_in_vm_credentials(
@@ -6411,7 +6409,7 @@ mod tests {
 
     #[test]
     fn vault_api_base_url_honors_env_override() {
-        let _guard = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let _guard = crate::test_support::env_lock();
         unsafe {
             std::env::set_var(VAULT_API_BASE_URL_ENV, vault_service_base_url());
         }

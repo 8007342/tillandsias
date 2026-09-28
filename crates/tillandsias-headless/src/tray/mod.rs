@@ -5746,8 +5746,7 @@ mod tests {
     /// tests pass or fail based on which test mutated the env first and on
     /// whether the host's real ~/src happens to be empty.
     fn with_known_demo_project<T>(f: impl FnOnce() -> T) -> T {
-        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _guard = crate::test_support::env_lock();
         let dir = std::env::temp_dir().join(format!(
             "tillandsias-known-demo-project-{}",
             std::process::id()
@@ -5782,8 +5781,7 @@ mod tests {
 
     /// The same fixture with NOTHING known, for the arm that must be denied.
     fn with_no_known_projects<T>(f: impl FnOnce() -> T) -> T {
-        static ENV_LOCK2: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _guard = ENV_LOCK2.lock().unwrap_or_else(|p| p.into_inner());
+        let _guard = crate::test_support::env_lock();
         let dir = std::env::temp_dir().join(format!(
             "tillandsias-no-known-projects-{}",
             std::process::id()

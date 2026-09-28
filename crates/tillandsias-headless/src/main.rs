@@ -119,6 +119,9 @@ compile_error!(
 mod vault_bootstrap;
 // Advisory per-resource flocks for container check+act sections (order 232, R4).
 mod resource_lock;
+// The crate-wide env_lock() every env-mutating test serializes on (1437-5czv).
+#[cfg(test)]
+mod test_support;
 // Process-global VmPhase mirror gating container mutations (order 234, R6).
 mod agent_result;
 mod catalog;
@@ -20225,14 +20228,12 @@ mod tests {
         );
     }
 
-    /// Serializes every test in this module that mutates a process-global
-    /// environment variable.
-    ///
-    /// ORDER 639-d2bc. Five tests here `set_var("HOME", …)`. Each already saves
-    /// and restores the previous value, which is good hygiene and does NOT make
-    /// them parallel-safe: cargo runs a binary's tests as threads in ONE
-    /// process, so while any of them holds the temp HOME, every other test in
-    /// the binary sees it. Save/restore bounds the damage in TIME; it does not
+    /// ORDER 639-d2bc, retired onto the crate-wide lock (1437-5czv). Five
+    /// tests here `set_var("HOME", …)`. Each already saves and restores the
+    /// previous value, which is good hygiene and does NOT make them
+    /// parallel-safe: cargo runs a binary's tests as threads in ONE process,
+    /// so while any of them holds the temp HOME, every other test in the
+    /// binary sees it. Save/restore bounds the damage in TIME; it does not
     /// bound it across THREADS.
     ///
     /// This is not theoretical — the same shape has already cost two real gate
@@ -20241,14 +20242,18 @@ mod tests {
     /// `spawn_terminal_and_reap` precondition, which asserted a process-global
     /// zombie count that a neighbour could trip.
     ///
-    /// Poison-tolerant on purpose: a panicking test poisons the mutex, and
-    /// propagating that turns ONE real failure into a cascade of misleading
-    /// secondary failures that bury the defect which caused them.
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
+    /// This USED TO be its own `static ENV_LOCK` reached through `env_guard()`
+    /// — a SECOND independent mutex alongside the canonical
+    /// `crate::test_support::env_lock()` (order 434 unified five OTHER such
+    /// locks once already; this one survived that pass because every one of
+    /// its 7 callers also happened to take the canonical lock right after,
+    /// which hid that env_guard() itself serialised nothing on its own).
+    /// Retired: every former env_guard() call site now takes only
+    /// `env_lock()`.
+    ///
     /// ORDER 1119-w2rj. `set_current_dir` is PROCESS-GLOBAL and Rust runs tests
     /// as threads in one process, so a test that moves the CWD races every other
-    /// test that touches a relative path. Serialised the same way ENV_LOCK
+    /// test that touches a relative path. Serialised the same way `env_lock()`
     /// serialises environment mutation. Any test that changes the working
     /// directory must hold this and restore the original before releasing it.
     static CWD_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -20269,8 +20274,8 @@ mod tests {
     /// `accel_probe` repointed the same var under a mutex of its own. The
     /// scope of the guarantee was the bug, not its wording.
     ///
-    /// LOCK ORDER: seam-users take this guard FIRST, before env_lock/
-    /// env_guard, consistently — a consistent order cannot deadlock.
+    /// LOCK ORDER: seam-users take this guard FIRST, before env_lock,
+    /// consistently — a consistent order cannot deadlock.
     fn podman_seam_lock() -> std::sync::MutexGuard<'static, ()> {
         crate::runtime_assets::podman_seam_lock()
     }
@@ -20294,12 +20299,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
-        ENV_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// Order 620-ca7g. EVERY site that starts the inference container must sit
@@ -20417,7 +20416,6 @@ mod tests {
 
     #[test]
     fn nvidia_cdi_available_honors_user_config_dir() {
-        let _env = env_guard();
         // Order 408: a user-level ~/.config/cdi/nvidia.yaml (generatable with
         // NO sudo once the toolkit is installed) must count as "CDI available",
         // so GPU passthrough can be auto-enabled without a second root step.
@@ -20536,16 +20534,11 @@ mod tests {
         // diff while the real HOME appeared in the script side. It also reded a
         // land gate on this host, having passed the attempt 20 minutes earlier.
         //
-        // `env_lock()` IS THE RIGHT LOCK AND `env_guard()` IS NOT ENOUGH. There
-        // are two distinct mutexes here: ENV_LOCK (:18115, reached by
-        // env_guard, 7 call sites) and the canonical crate-wide lock (:20001,
-        // delegating to runtime_assets::env_lock, whose own comment says "two
-        // independent locks serialise nothing" — order 434 unified them once
-        // already). Every one of the 7 env_guard callers ALSO takes env_lock,
-        // so the canonical lock is the one every HOME writer in this binary
-        // holds, and taking it is what makes a READER safe. Taking env_guard
-        // instead would serialise this against seven writers and leave it
-        // racing the rest.
+        // `env_lock()` (crate::test_support::env_lock, 1437-5czv) is the ONE
+        // canonical crate-wide lock every HOME writer in this binary holds
+        // (the second, redundant `env_guard()`/`ENV_LOCK` mutex that used to
+        // sit alongside it is retired — see the ENV_LOCK/env_guard doc above
+        // CWD_LOCK), so taking it here is what makes a READER safe.
         let _env = env_lock();
         let script_path = concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -28237,7 +28230,6 @@ esac
     /// known_hosts — while FETCH stays on the anonymous git:// insteadOf.
     #[test]
     fn write_forge_gitconfig_wires_ssh_push_lane_when_enabled() {
-        let _env = env_guard();
         let _guard = crate::runtime_assets::env_lock();
         let temp = tempfile::tempdir().expect("tempdir");
         let old_home = std::env::var_os("HOME");
@@ -28330,7 +28322,6 @@ esac
     /// pushes to an unverifiable host would be worse than the fallback).
     #[test]
     fn write_forge_gitconfig_ssh_lane_missing_ca_is_loud_not_silent() {
-        let _env = env_guard();
         let _guard = crate::runtime_assets::env_lock();
         let temp = tempfile::tempdir().expect("tempdir");
         let old_home = std::env::var_os("HOME");
@@ -28435,7 +28426,6 @@ esac
     /// drift is invisible until someone enables the lane.
     #[test]
     fn git_run_args_pass_the_ssh_lane_flag_into_the_mirror() {
-        let _env = env_guard();
         let _guard = crate::runtime_assets::env_lock();
         let old_flag = std::env::var_os("TILLANDSIAS_MIRROR_SSHD");
         struct Restore(Option<std::ffi::OsString>);
@@ -28604,7 +28594,6 @@ esac
     /// genuinely misread the former as the latter.
     #[test]
     fn write_forge_gitconfig_states_why_no_redirect_was_written() {
-        let _env = env_guard();
         let _guard = crate::runtime_assets::env_lock();
         let temp = tempfile::tempdir().expect("tempdir");
         let old_home = std::env::var_os("HOME");
@@ -28662,7 +28651,6 @@ esac
 
     #[test]
     fn write_forge_gitconfig_produces_valid_config_with_origin_redirect() {
-        let _env = env_guard();
         // This test mutates HOME: serialize with every other env-mutating
         // test or a parallel thread's set_var races the read inside
         // write_forge_gitconfig (first fired in gate run 20260710T062345Z).
@@ -28765,7 +28753,6 @@ esac
 
     #[test]
     fn write_forge_gitconfig_handles_ssh_origin_with_https_redirect() {
-        let _env = env_guard();
         // HOME-mutating: same serialization requirement as the sibling test.
         let _guard = env_lock();
         let tmp = tempfile::tempdir().expect("temp dir");
@@ -28992,7 +28979,6 @@ esac
     #[test]
     fn forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts() {
         let _pseam = podman_false_seam();
-        let _env = env_guard();
         let _guard = env_lock();
         // Order 437: the gitdir facade/quarantine is the OPT-IN host-mount
         // feature; exercise it in host-mount mode.
