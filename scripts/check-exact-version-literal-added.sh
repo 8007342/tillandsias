@@ -104,6 +104,8 @@ EOF
 
 if [ "$violations" -gt 0 ]; then
     echo "violation:exact-version-literal-added:$violations"
+    echo "  why: each site above pins a version to a bare number exactly, so the first bump fails (968-uhzg)" >&2
+    echo "  remedy: use a floor (>=), a named constant, or an exact-version: <reason> marker, as each REFUSED block says" >&2
     exit 1
 fi
 echo "ok:exact-version-literal-added:$checked checked"
