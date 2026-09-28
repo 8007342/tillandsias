@@ -93,6 +93,72 @@ async fn sigpipe_inversion_does_not_occur_through_the_executor() {
     eprintln!("shell pipeline inverted on {shell_wrong}/5 trials");
 }
 
+/// THE INVERSION CASE, pinned the other way round (ruling 2026-09-28 on
+/// 1252-fg9e: the closure proves the FIX, not the bug). A producer that DIES
+/// OF SIGPIPE keeps its OWN status, separate from its consumer's, so the kill
+/// can never read as a fresh result. Through the executor producer and
+/// consumer are separate runs with separate `Completion`s and run identities;
+/// the producer's `Signaled(13)` survives next to the consumer's `Exited(0)`.
+///
+/// The control is the shell pipeline, where both facts share ONE exit status:
+/// without pipefail the producer's SIGPIPE disappears into the consumer's 0;
+/// with pipefail it becomes 141 and the consumer's MATCH disappears. Either
+/// way one number carries two facts and one is lost, which is exactly what
+/// separate capture prevents.
+#[tokio::test]
+async fn a_sigpipe_killed_producer_keeps_its_own_status() {
+    const SIGPIPE: i32 = 13;
+    let producer = Command::new(["sh", "-c", "echo NEEDLE; kill -PIPE $$"])
+        .run()
+        .await
+        .expect("spawn producer");
+    let consumer = Command::new(["grep", "-q", "NEEDLE"])
+        .stdin_bytes(producer.stdout.clone())
+        .run()
+        .await
+        .expect("spawn consumer");
+
+    assert_eq!(
+        producer.completion,
+        Completion::Signaled(SIGPIPE),
+        "the producer's SIGPIPE death is its own, reported as a signal"
+    );
+    assert!(
+        !producer.completion.is_success(),
+        "a killed producer is never a success"
+    );
+    assert_eq!(
+        consumer.completion,
+        Completion::Exited(0),
+        "the consumer found the match"
+    );
+    assert_ne!(producer.run, consumer.run, "two runs, two identities");
+
+    // CONTROL: the same two programs as one shell pipeline yield ONE status.
+    let fused = |pipefail: bool| {
+        let opt = if pipefail { "set -o pipefail; " } else { "" };
+        format!("{opt}sh -c 'echo NEEDLE; kill -PIPE $$' | grep -q NEEDLE; echo rc=$?")
+    };
+    let plain = Command::new(["sh", "-c", &fused(false)])
+        .run()
+        .await
+        .expect("spawn");
+    let strict = Command::new(["sh", "-c", &fused(true)])
+        .run()
+        .await
+        .expect("spawn");
+    assert!(
+        plain.stdout_contains("rc=0"),
+        "without pipefail the producer's kill is invisible: {}",
+        String::from_utf8_lossy(&plain.stdout)
+    );
+    assert!(
+        strict.stdout_contains("rc=141"),
+        "with pipefail the match is invisible: {}",
+        String::from_utf8_lossy(&strict.stdout)
+    );
+}
+
 /// CRITERION 4. argv only — a literal containing a space, a quote and a glob
 /// reaches the child as ONE unaltered argument.
 /// PRE-FIX: FAILS — no such API exists; every call site builds a shell string.
