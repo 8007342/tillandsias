@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-temporary-claude-code-pretooluse-hook-classifies-a-raw-bash-command-against-the-seven-measured-failure-shapes-through-the-policy-engine-refuses-with-why-and-remedy-asks-for-consent-on-destructive-classes-and-prints-its-own-retirement-condition
+    event:
+      type: note
+      ts: "2026-09-28T07:01:16Z"
+      agent_id: forge-forge-tillandsias-claude-20260927t163026z
+      host: forge-tillandsias
+      summary: |
+        READING OF THE SOFT-RESET CRITERION (coordinator ruling, 2026-09-28): the exit criterion's "`podman system reset --force`, `tillandsias --reset-state` … print the ask JSON … never allow" is superseded for those two commands by operator ruling 3 (plan/issues/lua-bash-replacement-and-policies-design-2026-09-27.md §8: "Forges should keep pre-authorizing SOFT RESET always. HARD RESET should require explicit approval each time"). The bridge follows the policy floor (1443-isrk): a SOFT reset is ALLOWED in a forge and ASKS on bare metal; a HARD reset (--reset-guest on a guest regime, wsl --unregister, the VM dir wipe) always asks, and is refused in a forge. scripts/test-pretooluse-command-policy.sh asserts both regimes: the hook path against the engine's own host-kind reading, and `policy classify-bash --command … --host-kind bare-metal` exiting 4 with consent:bash-policy:soft-reset. rm -rf outside cwd/TMPDIR/scratch and a force-push to linux-next ask in every regime, as the criterion says.
+        DOUBLE LOG, BY DESIGN: in a forge on THIS repository both the project entry (.claude/settings.json -> the stub) and the forge overlay entry (~/.claude/settings.json -> tillandsias-plan policy classify-bash --hook) run, so each Bash decision is logged twice. Harmless for the retirement condition, which counts ZERO deny and ask decisions over 14 fleet days; a count of decisions is not a signal it uses.

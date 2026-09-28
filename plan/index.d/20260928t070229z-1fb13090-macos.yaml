@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-temporary-claude-code-pretooluse-hook-classifies-a-raw-bash-command-against-the-seven-measured-failure-shapes-through-the-policy-engine-refuses-with-why-and-remedy-asks-for-consent-on-destructive-classes-and-prints-its-own-retirement-condition
+    event:
+      type: note
+      ts: "2026-09-28T07:02:29Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t070229z
+      host: macos
+      summary: |
+        DARWIN bash 3.2 MEASUREMENT (tlatoanis-macbook-air, 2026-09-28, at the coordinator's request). Ref: work/1443-we89 at 8f2bf0ea9, detached worktree; the plan binary was built from that ref; GATE regime (TILLANDSIAS_PLAN_BIN and CARGO_TARGET_DIR unset); run under /bin/bash, whose `bash --version` is GNU bash, version 3.2.57(1)-release (arm64-apple-darwin26). Verdict: `FAIL: pretooluse-command-policy 29/30 (1443-we89)`, rc=1. The stub ITSELF runs under bash 3.2 (29 arms pass, including arm 9's forge seed and the deny arms), so the bash-3.2 exit criterion holds. The one red is a REGIME difference in arm 4 (scripts/test-pretooluse-command-policy.sh:118-119). The arm is named "rm -rf under TMPDIR needs no consent" but hardcodes `rm -rf /tmp/pretooluse-scratch-x`. On darwin, TMPDIR is /var/folders/lm/.../T/, not /tmp, so the policy classifies /tmp as outside the workspace and answers consent:bash-policy:workspace-destroy (rc 4). On Linux TMPDIR is unset and defaults to /tmp, so the two coincide and the arm passes. One of two fixes, the owner's call: (a) the policy treats /tmp (and darwin's /private/tmp) as scratch alongside $TMPDIR, since /tmp is world-scratch on both platforms; or (b) the arm uses "${TMPDIR:-/tmp}". (a) matches the arm's intent and the operator-visible behaviour: an agent on a Mac running `rm -rf /tmp/x` would otherwise be asked for consent. Expected on Linux: PASS 30/30 (not re-measured here).

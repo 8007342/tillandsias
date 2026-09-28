@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-windows-tray-icon-loses-its-show-on-taskbar-approval-whenever-it-runs-from-a-new-path-so-the-operator-must-re-approve-it
+    event:
+      type: completed
+      ts: "2026-09-28T07:07:06Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        Landed in relay commit 976931d2e (land82, real gate 1139 s) on origin/linux-next. Verified by content: trunk tray_registry.rs carries should_carry_promotion and windows-native-tray spec carries "The taskbar approval follows the tray across executable paths". Live evidence (yolanda 2026-09-28): a tray at a never-seen path came up on the taskbar (IsPromoted=1, Carried=1); an operator-style demote stuck across a relaunch; a pruned promoted entry was carried via the marker and the marker consumed. tray_registry 10/10, tray 125/125.

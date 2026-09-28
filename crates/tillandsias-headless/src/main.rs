@@ -3569,7 +3569,7 @@ fn build_stack_common_args(
             certs_dir.join("intermediate.crt").display()
         ),
     ]);
-    append_git_identity_env_args(&mut args);
+    append_git_identity_env_args(&mut args, project_name);
     args
 }
 
@@ -8349,7 +8349,7 @@ fn build_opencode_forge_args(
             ),
         ]);
     }
-    append_git_identity_env_args(&mut args);
+    append_git_identity_env_args(&mut args, project_name);
     if let Some(prompt) = prompt {
         args.extend([
             "--env".into(),
@@ -10108,19 +10108,21 @@ fn run_reset_state(_debug: bool) -> Result<(), String> {
 /// this flag is the stronger sibling, not a redefinition.
 #[cfg(target_os = "linux")]
 fn run_reset_state(debug: bool) -> Result<(), String> {
-    // Order 1437-qza3. Operator directive 2026-09-27 (host-state-lifecycle): a
-    // reset destroys DERIVED state; the Vault store and its unseal share are
-    // operator data. Operator ruling the same day: "the presence of an
-    // unlocking keyring should be a requirement to survive the vault store."
-    // So the store survives when the keychain holds the share, and a
-    // keyring-less host's store and fallback files are cleared, loudly. This
-    // supersedes 900-z3kv option (a) and the premise of 1118-fqfk.
-    let disposition = vault_bootstrap::reset_vault_disposition(
-        vault_bootstrap::probe_keyring_share(),
-        vault_bootstrap::fallback_share_present(),
-    );
+    // Order 1437-qza3, aligned to host-state-lifecycle as amended by 1443-bs9z.
+    // A SOFT reset destroys DERIVED state only and deletes NO store under any
+    // disposition: it asks the keyring before destroying anything and
+    // ANNOUNCES one of three named dispositions. For Absent:REINIT-AT-INIT the
+    // next --init's partial-init guard re-initialises the store, with its own
+    // loud line. Supersedes 900-z3kv option (a) and the premise of 1118-fqfk.
+    let disposition =
+        vault_bootstrap::reset_vault_disposition(vault_bootstrap::probe_keyring_share());
+    eprintln!("[tillandsias] reset: SOFT");
     let (destroyed, preserved) = reset_state_plan(disposition);
     announce_reset_plan(&destroyed, &preserved);
+    eprintln!("[tillandsias] {}", disposition.announcement());
+    if debug {
+        eprintln!("[tillandsias] reset disposition={}", disposition.token());
+    }
     if std::env::var_os("TILLANDSIAS_RESET_KEEP_MODELS").is_some() {
         eprintln!(
             "[tillandsias] TILLANDSIAS_RESET_KEEP_MODELS is ignored: a reset always \
@@ -10155,97 +10157,49 @@ fn run_reset_state(debug: bool) -> Result<(), String> {
     run_podman_command(reset_cmd, debug)
         .map_err(|e| format!("podman system reset --force failed: {e}"))?;
 
-    // AFTER the podman reset: clearing vault-data may need `podman unshare`.
-    reset_vault_store_per_disposition(disposition)?;
-
+    // No credential clearer and no store deletion: the store is a host
+    // directory the podman reset cannot reach.
     eprintln!("[tillandsias] --reset-state: local state reset \u{2713} — reprovisioning ...");
     run_init(debug, false)
 }
 
-/// Act on the reset's Vault disposition (order 1437-qza3). NEVER touches the
-/// keychain entries: those belong to uninstall alone.
-#[cfg(target_os = "linux")]
-fn reset_vault_store_per_disposition(
-    disposition: vault_bootstrap::ResetVaultDisposition,
-) -> Result<(), String> {
-    use vault_bootstrap::ResetVaultDisposition as D;
-    match disposition {
-        D::Keep => Ok(()),
-        D::KeepUnverified => {
-            eprintln!(
-                "[tillandsias] the keyring could not be read and no fallback share exists, so \
-                 the unseal share can only be in a keyring that is locked right now; the Vault \
-                 store is KEPT. Unlock the keyring before the next launch so it can be unsealed."
-            );
-            Ok(())
-        }
-        D::ClearKeyringless => {
-            eprintln!(
-                "[tillandsias] NO KEYRING HOLDS THE UNSEAL SHARE on this host, so the Vault \
-                 store does not survive a reset: clearing it now. Every stored sign-in is \
-                 lost; sign in again after the reset. A host with an unlocking keyring keeps \
-                 its sign-ins across resets."
-            );
-            let (cleared, failed) = vault_bootstrap::clear_vault_store_and_fallbacks();
-            eprintln!("[tillandsias] --reset-state: cleared {}", cleared.join(" "));
-            if failed.is_empty() {
-                Ok(())
-            } else {
-                // REFUSE, do not warn (1284-jf86): a half-cleared store with
-                // no share is exactly the partial-init state.
-                Err(format!(
-                    "--reset-state could not clear the keyring-less Vault store: {}. \
-                     Nothing further was attempted.",
-                    failed.join(" ")
-                ))
-            }
-        }
-    }
-}
-
-/// The two announced sets for a Linux `--reset-state`, per disposition
-/// (order 1437-qza3). Pure, so each branch's wording is tested directly.
+/// The two announced sets for a Linux SOFT reset, per disposition (order
+/// 1437-qza3). The store is on the PRESERVED side under every disposition,
+/// because a SOFT reset deletes no store; what differs is what the entry says
+/// happens to it next. Pure, so each branch's wording is tested directly.
 #[cfg(target_os = "linux")]
 fn reset_state_plan(
     disposition: vault_bootstrap::ResetVaultDisposition,
 ) -> (Vec<&'static str>, Vec<&'static str>) {
     use vault_bootstrap::ResetVaultDisposition as D;
-    let mut destroyed = vec![
+    let destroyed = vec![
         "every Tillandsias podman container, volume, secret and network",
         "ALL podman images on this host (podman system reset --force)",
         "the build and provision markers under <cache>/tillandsias",
     ];
-    let mut preserved = vec![
+    let store = match disposition {
+        D::VerifiedKeep => {
+            "<cache>/tillandsias/vault-data (the Vault store) and <cache>/tillandsias/vault-audit \
+             — Verified:KEEP, your sign-ins survive the reset"
+        }
+        D::UnverifiedKeep => {
+            "<cache>/tillandsias/vault-data (the Vault store) and <cache>/tillandsias/vault-audit \
+             — Unverified:KEEP, kept; the keyring could not be asked"
+        }
+        D::AbsentReinitAtInit => {
+            "<cache>/tillandsias/vault-data (the Vault store) and <cache>/tillandsias/vault-audit \
+             — kept by this reset, but Absent:REINIT-AT-INIT: no unlocking keyring holds the share, \
+             so the next init re-initialises it"
+        }
+    };
+    let preserved = vec![
+        store,
+        "the keyring entries vault-shamir-share-v1 and vault-root-token-v1 — never cleared by a reset",
         "installation-uuid-v1 in the keychain — the INSTALLATION anchor; the in-guest \
          Vault derives its master key from it (803-49re)",
         "<cache>/tillandsias/models and every other download in the cache",
         "the installed tillandsias binary itself",
     ];
-    match disposition {
-        D::Keep | D::KeepUnverified => {
-            preserved.insert(
-                0,
-                "<cache>/tillandsias/vault-data (the Vault store) and \
-                 <cache>/tillandsias/vault-audit — your sign-ins survive the reset",
-            );
-            preserved.insert(
-                1,
-                "the keyring entries vault-shamir-share-v1 and vault-root-token-v1 — a \
-                 freshly built Vault unseals the preserved store with them",
-            );
-        }
-        D::ClearKeyringless => {
-            destroyed.push(
-                "<cache>/tillandsias/vault-data (the Vault store) — NO KEYRING holds the \
-                 unseal share on this host, so the store does not survive a reset",
-            );
-            destroyed.push(
-                "the fallback files fallback_vault-shamir-share-v1 and \
-                 fallback_vault-root-token-v1",
-            );
-            preserved.insert(0, "<cache>/tillandsias/vault-audit");
-        }
-    }
     (destroyed, preserved)
 }
 
@@ -10257,9 +10211,21 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
                 .to_string(),
         );
     }
+    // Order 1437-qza3 aligned to host-state-lifecycle (1443-bs9z): Linux
+    // --reset-guest keeps the Vault store (reset_guest_wipe_paths is empty)
+    // and, like --reset-state, announces the keyring disposition BEFORE
+    // destroying anything. It deletes no store under any disposition. Linux is
+    // not a guest regime, so the HARD-only refusal for an unreachable keyring
+    // does not apply here; it belongs to the macOS and Windows trays.
+    #[cfg(all(target_os = "linux", feature = "vault"))]
+    eprintln!(
+        "[tillandsias] {}",
+        vault_bootstrap::reset_vault_disposition(vault_bootstrap::probe_keyring_share())
+            .announcement()
+    );
     // Order 1437-qza3: this line used to promise the Vault and the cached
     // credentials were discarded. Whether they survive now depends on the
-    // keyring (see reset_vault_store_per_disposition, which says which), so
+    // keyring (the disposition line above says which), so
     // this line claims neither.
     eprintln!(
         "[tillandsias] EPHEMERAL RESET: this discards the local guest (containers, volumes, \
@@ -10325,14 +10291,6 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
                 .map_err(|e| format!("failed to remove {}: {e}", path.display()))?;
         }
     }
-
-    // Order 1437-qza3: the same keyring rule as --reset-state. The store
-    // survives only where a keychain holds the share.
-    #[cfg(all(target_os = "linux", feature = "vault"))]
-    reset_vault_store_per_disposition(vault_bootstrap::reset_vault_disposition(
-        vault_bootstrap::probe_keyring_share(),
-        vault_bootstrap::fallback_share_present(),
-    ))?;
 
     eprintln!("[tillandsias] guest substrate wiped \u{2014} re-initializing from scratch\u{2026}");
 
@@ -12095,6 +12053,22 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "{provider_name} token stored in Vault at {}; containers read from Vault",
             config.provider.vault_path()
         );
+        // 679-rp9m: wake a waiting tray. Best-effort: no tray is a note.
+        #[cfg(unix)]
+        if matches!(config.provider, ProviderId::GitHub) {
+            match notify_tray_github_login_stored(&tray_control_socket_path()) {
+                TrayNotify::Acked => {
+                    if debug {
+                        eprintln!("[tillandsias] github-login: tray notified");
+                    }
+                }
+                TrayNotify::NoTray(why) => {
+                    eprintln!(
+                        "[tillandsias] github-login: no tray notified ({why}); the login itself succeeded"
+                    );
+                }
+            }
+        }
     }
     #[cfg(not(feature = "vault"))]
     {
@@ -12398,34 +12372,123 @@ fn read_git_identity_defaults() -> GitIdentity {
     identity
 }
 
-fn git_identity_env_pairs(identity: &GitIdentity) -> Vec<(&'static str, String)> {
-    let Some(name) = identity
-        .name
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-    else {
-        return Vec::new();
-    };
-    let Some(email) = identity
-        .email
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-    else {
-        return Vec::new();
-    };
+/// The GitHub App's authenticated user, as `/user` reports it (order 1453-7rzd).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AppUser {
+    pub id: u64,
+    pub login: String,
+    pub name: Option<String>,
+}
 
+/// Parse `<id>\t<login>\t<name>` (name may be empty), the shape
+/// `remote_projects::probe_github_username` caches.
+pub(crate) fn parse_app_user(tsv: &str) -> Option<AppUser> {
+    let line = tsv.lines().next()?.trim_end_matches('\r');
+    let mut parts = line.splitn(3, '\t');
+    let id = parts.next()?.trim().parse::<u64>().ok()?;
+    let login = parts.next()?.trim().to_string();
+    if login.is_empty() {
+        return None;
+    }
+    let name = parts
+        .next()
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .map(str::to_string);
+    Some(AppUser { id, login, name })
+}
+
+/// Where the App user is cached on the host: `<cache>/github-app-user.tsv`.
+/// Not a secret (a public id, login and display name), and not the token.
+pub(crate) fn app_user_cache_path() -> Option<PathBuf> {
+    init_cache_dir().ok().map(|d| d.join("github-app-user.tsv"))
+}
+
+fn read_cached_app_user() -> Option<AppUser> {
+    std::fs::read_to_string(app_user_cache_path()?)
+        .ok()
+        .and_then(|s| parse_app_user(&s))
+}
+
+/// The forge's git identity BASE (order 1453-7rzd, spec
+/// forge-git-identity-anonymization): the GitHub App user's name with the
+/// GitHub noreply address `<id>+<login>@users.noreply.github.com`, or, with no
+/// App login, a project-scoped identity. NEVER the host's gitconfig. The guest
+/// appends ` (<host> · tillandsia-<species>)` to the name when it writes the
+/// config, because the species is chosen per forge, inside it.
+pub(crate) fn forge_git_identity(app: Option<&AppUser>, project_name: &str) -> (String, String) {
+    match app {
+        Some(u) => (
+            u.name.clone().unwrap_or_else(|| u.login.clone()),
+            format!("{}+{}@users.noreply.github.com", u.id, u.login),
+        ),
+        None => (
+            format!("Tillandsias forge ({project_name})"),
+            format!("forge+{project_name}@users.noreply.tillandsias.invalid"),
+        ),
+    }
+}
+
+/// The carrier variables the guest's `configure_git_identity` reads to WRITE
+/// git config (order 1453-7rzd). Deliberately NOT `GIT_AUTHOR_*` /
+/// `GIT_COMMITTER_*`: exported, those override every scratch repository's own
+/// `-c user.name` inside the forge, which is how test-discipline-derive went
+/// 4/5 red in every forge.
+pub(crate) fn forge_git_identity_env(
+    app: Option<&AppUser>,
+    project_name: &str,
+    host: &str,
+) -> Vec<(&'static str, String)> {
+    let (name, email) = forge_git_identity(app, project_name);
     vec![
-        ("GIT_AUTHOR_NAME", name.to_string()),
-        ("GIT_AUTHOR_EMAIL", email.to_string()),
-        ("GIT_COMMITTER_NAME", name.to_string()),
-        ("GIT_COMMITTER_EMAIL", email.to_string()),
+        ("TILLANDSIAS_GIT_NAME", name),
+        ("TILLANDSIAS_GIT_EMAIL", email),
+        ("TILLANDSIAS_GIT_HOST", host.to_string()),
+        (
+            "TILLANDSIAS_GIT_IDENTITY_SOURCE",
+            if app.is_some() {
+                "github-app"
+            } else {
+                "project"
+            }
+            .to_string(),
+        ),
     ]
 }
 
-fn append_git_identity_env_args(args: &mut Vec<String>) {
-    for (name, value) in git_identity_env_pairs(&read_git_identity_defaults()) {
+/// This host's short name for the `Tillandsias-Host:` trailer.
+fn forge_host_name() -> String {
+    std::fs::read_to_string("/etc/hostname")
+        .ok()
+        .or_else(|| std::env::var("HOSTNAME").ok())
+        .map(|h| h.trim().split('.').next().unwrap_or("").to_lowercase())
+        .filter(|h| !h.is_empty())
+        .unwrap_or_else(|| "unknown-host".to_string())
+}
+
+/// The App user for a forge launch: the cache, else one probe (which writes
+/// the cache). No App login yields `None`, which is the project-scoped
+/// identity, never the host gitconfig.
+fn forge_app_user() -> Option<AppUser> {
+    #[cfg(all(any(feature = "tray", feature = "listen-vsock"), not(test)))]
+    {
+        read_cached_app_user().or_else(|| {
+            remote_projects::probe_github_username(false)?;
+            read_cached_app_user()
+        })
+    }
+    // Without the probe (a build with neither feature), and in unit tests, which
+    // must never run a real container: the cache alone.
+    #[cfg(any(not(any(feature = "tray", feature = "listen-vsock")), test))]
+    {
+        read_cached_app_user()
+    }
+}
+
+fn append_git_identity_env_args(args: &mut Vec<String>, project_name: &str) {
+    for (name, value) in
+        forge_git_identity_env(forge_app_user().as_ref(), project_name, &forge_host_name())
+    {
         args.push("--env".into());
         args.push(format!("{name}={value}"));
     }
@@ -15362,6 +15425,122 @@ fn build_project_browser_spec(
 /// transient one.
 ///
 /// @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
+/// What the login CLI's tray notify achieved (order 679-rp9m).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum TrayNotify {
+    /// The tray acked `GithubLoginStored`.
+    Acked,
+    /// Nothing to notify: no socket, nothing listening, or a tray too old to
+    /// know the message. The login is unaffected.
+    NoTray(String),
+}
+
+#[cfg(unix)]
+/// Read one length-prefixed (u32 big-endian) control-wire frame body from a
+/// blocking stream, bounded by `MAX_MESSAGE_BYTES`. The single hand-rolled
+/// frame decode for the CLI-to-tray acks in this file (framing ratchet,
+/// 795-5itp): callers map the error into their own verdict.
+fn read_control_frame_blocking(stream: &mut impl Read) -> Result<Vec<u8>, String> {
+    let mut len_buf = [0_u8; 4];
+    stream
+        .read_exact(&mut len_buf)
+        .map_err(|e| format!("length prefix: {e}"))?;
+    let len = u32::from_be_bytes(len_buf) as usize;
+    if len == 0 || len > MAX_MESSAGE_BYTES {
+        return Err(format!("invalid length {len} (max {MAX_MESSAGE_BYTES})"));
+    }
+    let mut body = vec![0_u8; len];
+    stream
+        .read_exact(&mut body)
+        .map_err(|e| format!("body: {e}"))?;
+    Ok(body)
+}
+
+/// The tray's control socket, as the tray computes it.
+#[cfg(unix)]
+fn tray_control_socket_path() -> PathBuf {
+    let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
+        .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
+    PathBuf::from(runtime_dir).join("tillandsias/control.sock")
+}
+
+/// Tell the tray the GitHub token is stored (order 679-rp9m), so its login
+/// wait ends on an event instead of a Vault poll. BEST-EFFORT BY CONTRACT: a
+/// login with no tray running must still succeed and exit 0, so every failure
+/// here is a `NoTray` note, never an error the caller could propagate.
+#[cfg(unix)]
+pub(crate) fn notify_tray_github_login_stored(socket_path: &Path) -> TrayNotify {
+    let no = |why: String| TrayNotify::NoTray(why);
+    let mut stream = match UnixStream::connect(socket_path) {
+        Ok(s) => s,
+        Err(e) => return no(format!("{}: {e}", socket_path.display())),
+    };
+    let timeout = Duration::from_secs(2);
+    let _ = stream.set_read_timeout(Some(timeout));
+    let _ = stream.set_write_timeout(Some(timeout));
+    let ts_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq: 1,
+        body: ControlMessage::GithubLoginStored { seq: 1, ts_unix },
+    };
+    let Ok(encoded) = encode(&envelope) else {
+        return no("encode failed".into());
+    };
+    let mut frame = (encoded.len() as u32).to_be_bytes().to_vec();
+    frame.extend_from_slice(&encoded);
+    if let Err(e) = stream.write_all(&frame) {
+        return no(format!("write: {e}"));
+    }
+    // An older tray drops a frame it cannot decode: no ack.
+    let reply = match read_control_frame_blocking(&mut stream) {
+        Ok(reply) => reply,
+        Err(e) => return no(format!("no ack: {e}")),
+    };
+    match decode(&reply).map(|e| e.body) {
+        Ok(ControlMessage::IssueAck { seq_acked: 1 }) => TrayNotify::Acked,
+        Ok(other) => no(format!("tray answered {}", other.kind())),
+        Err(e) => no(format!("ack decode: {e}")),
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tray_notify_tests {
+    use super::*;
+    use std::os::unix::net::UnixListener;
+
+    /// 679-rp9m (c): no tray running is a note, never an error.
+    #[test]
+    fn no_socket_is_no_tray_not_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        match notify_tray_github_login_stored(&dir.path().join("absent.sock")) {
+            TrayNotify::NoTray(_) => {}
+            other => panic!("expected NoTray, got {other:?}"),
+        }
+    }
+
+    /// An older tray that cannot decode the variant drops the connection
+    /// without an ack: still NoTray, still not an error.
+    #[test]
+    fn a_tray_that_does_not_ack_is_no_tray() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("control.sock");
+        let listener = UnixListener::bind(&path).unwrap();
+        let t = std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let mut len = [0u8; 4];
+            let _ = s.read_exact(&mut len);
+            // drop without replying
+        });
+        let out = notify_tray_github_login_stored(&path);
+        t.join().unwrap();
+        assert!(matches!(out, TrayNotify::NoTray(_)), "{out:?}");
+    }
+}
+
 #[cfg(unix)]
 fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Result<(), String> {
     // Get control socket path from XDG_RUNTIME_DIR or default.
@@ -15425,24 +15604,8 @@ fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Resul
     // Read one envelope back on the same connection. The tray writes
     // `IssueAck { seq_acked: 1 }` after broadcasting; anything else (or a
     // timeout) is treated as a failed handshake.
-    let mut len_buf = [0_u8; 4];
-    stream.read_exact(&mut len_buf).map_err(|e| {
-        format!(
-            "Failed to read ack length prefix from control socket: {}",
-            e
-        )
-    })?;
-    let reply_len = u32::from_be_bytes(len_buf) as usize;
-    if reply_len == 0 || reply_len > MAX_MESSAGE_BYTES {
-        return Err(format!(
-            "Control socket ack has invalid length {} (max {})",
-            reply_len, MAX_MESSAGE_BYTES
-        ));
-    }
-    let mut reply = vec![0_u8; reply_len];
-    stream
-        .read_exact(&mut reply)
-        .map_err(|e| format!("Failed to read ack body from control socket: {}", e))?;
+    let reply = read_control_frame_blocking(&mut stream)
+        .map_err(|e| format!("Failed to read ack from control socket: {e}"))?;
     let reply_envelope =
         decode(&reply).map_err(|e| format!("Failed to decode control socket ack: {}", e))?;
 
@@ -17156,7 +17319,9 @@ fn build_forge_agent_run_args_with_vault(
         spec = spec.env("TILLANDSIAS_CLAUDE_PROMPT", prompt);
     }
 
-    for (name, value) in git_identity_env_pairs(&read_git_identity_defaults()) {
+    for (name, value) in
+        forge_git_identity_env(forge_app_user().as_ref(), project_name, &forge_host_name())
+    {
         spec = spec.env(name, value);
     }
 
@@ -27177,11 +27342,24 @@ esac
         // top), so the host-mount claim IS present here.
         assert!(has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
+        // Order 1453-7rzd: the identity arrives as TILLANDSIAS_GIT_* carriers
+        // for the guest to WRITE as config, never as exported GIT_* env.
         assert!(
-            args.iter().any(|arg| arg.starts_with("GIT_AUTHOR_NAME="))
-                == args.iter().any(|arg| arg.starts_with("GIT_AUTHOR_EMAIL=")),
-            "git identity env should be injected as a complete name/email pair"
+            !args
+                .iter()
+                .any(|arg| arg.starts_with("GIT_AUTHOR_") || arg.starts_with("GIT_COMMITTER_")),
+            "no exported GIT_* identity may reach a forge: {args:?}"
         );
+        for key in [
+            "TILLANDSIAS_GIT_NAME=",
+            "TILLANDSIAS_GIT_EMAIL=",
+            "TILLANDSIAS_GIT_HOST=",
+        ] {
+            assert!(
+                args.iter().any(|arg| arg.starts_with(key)),
+                "the forge must carry {key}: {args:?}"
+            );
+        }
         assert!(
             args.iter()
                 .any(|arg| arg == "/tmp/project:/home/forge/src/alpha:rw")
@@ -27371,18 +27549,57 @@ esac
     }
 
     #[test]
-    fn git_identity_env_pairs_cover_author_and_committer() {
-        let identity = GitIdentity {
-            name: Some("Big Pickle".to_string()),
-            email: Some("big.pickle@example.test".to_string()),
-        };
-        let pairs = git_identity_env_pairs(&identity);
+    fn forge_identity_comes_from_the_app_user_never_the_host_gitconfig() {
+        // Order 1453-7rzd arm 1 (unit half): the App user's name, with the
+        // GitHub noreply address; the carrier is TILLANDSIAS_GIT_*, never
+        // GIT_AUTHOR_*/GIT_COMMITTER_*, which would override a scratch repo's
+        // own `-c user.name`.
+        let app = parse_app_user("7\tappuser\tApp User").expect("tsv parses");
+        assert_eq!(
+            app,
+            AppUser {
+                id: 7,
+                login: "appuser".into(),
+                name: Some("App User".into())
+            }
+        );
+        let env = forge_git_identity_env(Some(&app), "alpha", "lenovinha");
+        assert!(env.contains(&("TILLANDSIAS_GIT_NAME", "App User".to_string())));
+        assert!(env.contains(&(
+            "TILLANDSIAS_GIT_EMAIL",
+            "7+appuser@users.noreply.github.com".to_string()
+        )));
+        assert!(env.contains(&("TILLANDSIAS_GIT_HOST", "lenovinha".to_string())));
+        assert!(env.contains(&("TILLANDSIAS_GIT_IDENTITY_SOURCE", "github-app".to_string())));
+        assert!(
+            env.iter().all(|(k, _)| !k.starts_with("GIT_")),
+            "the forge must never receive exported GIT_* identity: {env:?}"
+        );
+    }
 
-        assert_eq!(pairs.len(), 4);
-        assert!(pairs.contains(&("GIT_AUTHOR_NAME", "Big Pickle".to_string())));
-        assert!(pairs.contains(&("GIT_AUTHOR_EMAIL", "big.pickle@example.test".to_string())));
-        assert!(pairs.contains(&("GIT_COMMITTER_NAME", "Big Pickle".to_string())));
-        assert!(pairs.contains(&("GIT_COMMITTER_EMAIL", "big.pickle@example.test".to_string())));
+    #[test]
+    fn app_user_without_a_display_name_uses_the_login() {
+        let app = parse_app_user("7\tappuser\t").expect("empty name is allowed");
+        assert_eq!(app.name, None);
+        assert_eq!(forge_git_identity(Some(&app), "alpha").0, "appuser");
+        assert_eq!(parse_app_user("not-a-number\tx\ty"), None);
+        assert_eq!(parse_app_user("7\t\tname"), None, "a login is required");
+    }
+
+    /// Arm 5 (NEGATIVE CONTROL, unit half): no App login yields a
+    /// project-scoped identity, and still nothing from the host gitconfig.
+    #[test]
+    fn no_app_login_yields_a_project_scoped_identity() {
+        let env = forge_git_identity_env(None, "alpha", "lenovinha");
+        assert!(env.contains(&(
+            "TILLANDSIAS_GIT_NAME",
+            "Tillandsias forge (alpha)".to_string()
+        )));
+        assert!(env.contains(&(
+            "TILLANDSIAS_GIT_EMAIL",
+            "forge+alpha@users.noreply.tillandsias.invalid".to_string()
+        )));
+        assert!(env.contains(&("TILLANDSIAS_GIT_IDENTITY_SOURCE", "project".to_string())));
     }
 
     /// ORDER 1052-984i. The refusal must name the FILE, and must not send the
@@ -31681,14 +31898,15 @@ esac
     /// storage dir and NEVER the inference model cache (the operator's
     /// ephemeral doctrine covers the guest+vault, not the downloaded
     /// models) nor the cache dir itself (build-state, images metadata).
-    /// Order 1437-qza3, criterion 4, KEYRING BRANCH: with the share in the
-    /// keychain the store, the audit log, the models and the keyring entries
-    /// are announced as preserved and none as destroyed.
+    /// Order 1437-qza3 aligned to 1443-bs9z: a SOFT reset deletes NO store
+    /// under any disposition, so the store, the audit log, the models and the
+    /// keyring entries are on the PRESERVED side for all three, and none is on
+    /// the destroyed side.
     #[cfg(target_os = "linux")]
     #[test]
-    fn reset_plan_with_a_keyring_preserves_the_store_and_the_share() {
+    fn soft_reset_plan_preserves_the_store_under_every_disposition() {
         use vault_bootstrap::ResetVaultDisposition as D;
-        for d in [D::Keep, D::KeepUnverified] {
+        for d in [D::VerifiedKeep, D::UnverifiedKeep, D::AbsentReinitAtInit] {
             let (destroyed, preserved) = reset_state_plan(d);
             let (destroyed, preserved) = (destroyed.join("\n"), preserved.join("\n"));
             for kept in [
@@ -31704,35 +31922,23 @@ esac
                     "{d:?}: {kept} must not be destroyed"
                 );
             }
+            assert!(
+                preserved.contains(d.token()),
+                "{d:?}: the store entry names its token"
+            );
         }
+        let (_, absent) = reset_state_plan(D::AbsentReinitAtInit);
+        assert!(
+            absent.join("\n").contains("re-initialises"),
+            "Absent:REINIT-AT-INIT says what happens at the next init"
+        );
     }
 
-    /// Order 1437-qza3, KEYRING-LESS BRANCH (operator ruling 2026-09-27): the
-    /// store and the fallback files are announced as destroyed, with the
-    /// reason; models and the audit log are still preserved.
-    #[cfg(target_os = "linux")]
+    /// Both reset bodies decide by the keyring alone, print the disposition,
+    /// and neither calls a credential clearer nor the store clearer: a SOFT
+    /// reset (and Linux --reset-guest) deletes no store.
     #[test]
-    fn reset_plan_without_a_keyring_destroys_the_store_and_says_why() {
-        let (destroyed, preserved) =
-            reset_state_plan(vault_bootstrap::ResetVaultDisposition::ClearKeyringless);
-        let (destroyed, preserved) = (destroyed.join("\n"), preserved.join("\n"));
-        assert!(destroyed.contains("vault-data"), "{destroyed}");
-        assert!(
-            destroyed.contains("NO KEYRING"),
-            "the reason is named: {destroyed}"
-        );
-        assert!(
-            destroyed.contains("fallback_vault-shamir-share-v1"),
-            "{destroyed}"
-        );
-        assert!(!preserved.contains("vault-data"), "{preserved}");
-        assert!(preserved.contains("models") && preserved.contains("vault-audit"));
-    }
-
-    /// Both reset bodies route through the keyring disposition, and neither
-    /// calls the keychain clearer, which is uninstall's alone.
-    #[test]
-    fn reset_bodies_decide_by_keyring_and_never_clear_the_keychain() {
+    fn reset_bodies_announce_the_disposition_and_delete_no_store() {
         let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         for opener in [
             "fn run_reset_state(debug: bool)",
@@ -31745,9 +31951,15 @@ esac
                 "{opener} must decide by keyring"
             );
             assert!(
-                !body.contains(&["clear_host", "_vault_credentials("].concat()),
-                "{opener} must not clear the keychain"
+                body.contains(".announcement()"),
+                "{opener} must announce the disposition"
             );
+            for clearer in [
+                ["clear_host", "_vault_credentials("].concat(),
+                ["clear_vault_store", "_and_fallbacks("].concat(),
+            ] {
+                assert!(!body.contains(&clearer), "{opener} must not call {clearer}");
+            }
         }
     }
 
