@@ -4424,15 +4424,332 @@ fn run_predicate_cli(args: &[String]) {
 /// `  remedy:` on stderr. Exit 0 allow, 1 deny, 4 consent, 2 usage. A refused
 /// seed is named on stderr (`refused:policy-seed:<reason>`) and the answer
 /// comes from the floor alone.
+/// ORDER 1443-8pur — `tillandsias-plan run [--cwd P] [--env K=V]…
+/// [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>`.
+///
+/// The policy decides on argv before anything spawns. In this (plain) form the
+/// child's stdout and stderr pass through byte for byte and the verb exits with
+/// the child's code: 124 for a deadline, 128+N for signal N, 127 when the
+/// program could not be started. A refusal prints refused:policy:<rule> (or
+/// consent:policy:<class>) with why:/remedy: on stderr and exits 1 (deny) or 4
+/// (consent); no child was spawned. A clipped capture is named on stderr.
+fn run_run_verb(args: &[String]) -> ! {
+    use tillandsias_plan::run_verb as rv;
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan run [--json] [--cwd P] [--env K=V]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>\n\
+             \x20 argv is argv: there is no command-string form and no --shell.\n\
+             \x20 --json prints one object (run_id,status,code,ok,stdout,stderr,truncated,wall_ms,argv,policy) and\n\
+             \x20 exits 0 whenever a child ran, 1 for a policy refusal, 4 for consent, 2 for usage.\n\
+             \x20 WITHOUT --json the verb mirrors the child's exit code, so a refusal (1) and a child's own exit 1\n\
+             \x20 cannot be told apart by the code: a caller that must tell them apart uses --json."
+        );
+        std::process::exit(2);
+    };
+    let mut spec = rv::RunSpec::new(Vec::new());
+    let mut json = false;
+    let mut i = 0;
+    let mut saw_dd = false;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--" {
+            if !spec.argv.is_empty() && i + 1 < args.len() {
+                eprintln!("error: argv came from --argv-json; do not also pass it after --");
+                std::process::exit(2);
+            }
+            if spec.argv.is_empty() {
+                spec.argv = args[i + 1..].to_vec();
+            }
+            saw_dd = true;
+            break;
+        }
+        if a == "--json" {
+            json = true;
+            i += 1;
+            continue;
+        }
+        // Slice 3: `--argv-json -` reads argv as a JSON array of strings on
+        // stdin, so NO argument is on the command line for MSYS or wsl.exe to
+        // convert (1425-8wir's `\.` → `/.`, the smoke-e2e poweroff).
+        if a == "--argv-json" {
+            if args.get(i + 1).map(String::as_str) != Some("-") {
+                eprintln!("error: --argv-json takes `-` (the array is read from stdin)");
+                std::process::exit(2);
+            }
+            let mut input = String::new();
+            let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input);
+            let parsed: Result<Vec<String>, _> = serde_json::from_str(&input);
+            match parsed {
+                Ok(v) if !v.is_empty() => spec.argv = v,
+                _ => {
+                    eprintln!(
+                        "error: --argv-json - expects a non-empty JSON array of strings on stdin, e.g. [\"git\",\"status\"]"
+                    );
+                    std::process::exit(2);
+                }
+            }
+            saw_dd = true;
+            i += 2;
+            continue;
+        }
+        let Some(v) = args.get(i + 1) else { usage() };
+        match a {
+            "--cwd" => spec.cwd = Some(PathBuf::from(v)),
+            "--env" => {
+                let Some((k, val)) = v.split_once('=') else {
+                    usage()
+                };
+                if k.is_empty() {
+                    usage();
+                }
+                spec.env.push((k.to_string(), val.to_string()));
+            }
+            "--timeout-ms" => spec.timeout_ms = v.parse().unwrap_or_else(|_| usage()),
+            "--capture-bytes" => {
+                let n: usize = v.parse().unwrap_or_else(|_| usage());
+                if n == 0 {
+                    usage();
+                }
+                spec.capture_bytes = Some(n);
+            }
+            "--stdin-file" => match std::fs::read(v) {
+                Ok(b) => spec.stdin = Some(b),
+                Err(e) => {
+                    eprintln!("error: --stdin-file {v}: {e}");
+                    std::process::exit(2);
+                }
+            },
+            _ => usage(),
+        }
+        i += 2;
+    }
+    if !saw_dd || spec.argv.is_empty() {
+        usage();
+    }
+    let outcome = rv::execute(&spec, "run");
+    if json {
+        let (value, code) = rv::outcome_json(&spec, &outcome);
+        println!("{value}");
+        std::process::exit(code);
+    }
+    match outcome {
+        rv::RunOutcome::Refused(d) => {
+            eprintln!("{}", d.token);
+            if let Some(w) = &d.why {
+                eprintln!("why: {w}");
+            }
+            if let Some(r) = &d.remedy {
+                eprintln!("remedy: {r}");
+            }
+            std::process::exit(d.exit_code());
+        }
+        rv::RunOutcome::SpawnFailed { error, .. } => {
+            eprintln!("error: {error}");
+            std::process::exit(127);
+        }
+        // Started, but no status could be collected: 125, never a child code.
+        rv::RunOutcome::NoStatus { reason, .. } => {
+            eprintln!("no_status: {reason}");
+            std::process::exit(125);
+        }
+        rv::RunOutcome::Ran { output, .. } => {
+            use std::io::Write;
+            let _ = std::io::stdout().write_all(&output.stdout);
+            let _ = std::io::stderr().write_all(&output.stderr);
+            if output.truncated {
+                eprintln!(
+                    "note:run:truncated dropped={} (raise --capture-bytes; --json reports truncated:true and ok:false)",
+                    output.dropped
+                );
+            }
+            std::process::exit(match output.completion {
+                tillandsias_exec::Completion::Exited(c) => c,
+                tillandsias_exec::Completion::Signaled(s) => 128 + s,
+                tillandsias_exec::Completion::TimedOut { .. } => 124,
+            });
+        }
+    }
+}
+
+/// ORDER 1443-we89 — `policy classify-bash`: the Bash-tool bridge.
+///   --hook       read Claude Code's PreToolUse JSON on stdin and answer in its
+///                contract: deny = exit 2 with the refusal on stderr; ask =
+///                stdout {"hookSpecificOutput":{…"permissionDecision":"ask"…}};
+///                allow = exit 0, silent. TILLANDSIAS_PRETOOLUSE_HOOK=off allows
+///                everything and logs kill_switch=1.
+///   --status     decisions=<deny>/<ask>/<allow> and the retirement condition
+///   --command C  classify C directly: the verdict line (and why:/remedy:),
+///                exit 0 allow, 1 deny, 4 ask. [--cwd D] [--host-kind K]
+fn run_classify_bash(args: &[String]) -> ! {
+    use tillandsias_plan::bash_policy as bp;
+    use tillandsias_plan::command_policy as cp;
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan policy classify-bash --hook | --status | --command <cmd> [--cwd dir] [--host-kind bare-metal|forge|ci]"
+        );
+        std::process::exit(2);
+    };
+    match args.first().map(String::as_str) {
+        Some("--status") => {
+            let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let root = tillandsias_plan::branch_discipline::find_root(&cwd).unwrap_or(cwd);
+            let (d, a, al, k) = bp::status_counts(&root);
+            println!("decisions={d}/{a}/{al} (deny/ask/allow) kill_switch_uses={k}");
+            println!("log: {} (caller=pretooluse)", bp::log_path(&root).display());
+            println!("retirement condition (all three):");
+            for line in bp::RETIREMENT_CONDITION {
+                println!("  {line}");
+            }
+            std::process::exit(0);
+        }
+        Some("--hook") => {
+            let mut input = String::new();
+            let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input);
+            let v: serde_json::Value = serde_json::from_str(&input).unwrap_or_default();
+            let tool = v.get("tool_name").and_then(|x| x.as_str()).unwrap_or("");
+            let cmd = v
+                .pointer("/tool_input/command")
+                .and_then(|x| x.as_str())
+                .unwrap_or("");
+            let cwd = v
+                .get("cwd")
+                .and_then(|x| x.as_str())
+                .map(PathBuf::from)
+                .or_else(|| std::env::current_dir().ok())
+                .unwrap_or_else(|| PathBuf::from("."));
+            let ctx = bp::context_for(&cwd);
+            if std::env::var("TILLANDSIAS_PRETOOLUSE_HOOK").as_deref() == Ok("off") {
+                bp::log_decision(&ctx, cmd, "allow", "kill-switch", true);
+                std::process::exit(0);
+            }
+            // Anything that is not a Bash command is not this bridge's business.
+            if tool != "Bash" || cmd.is_empty() {
+                std::process::exit(0);
+            }
+            let c = bp::classify(cmd, &ctx);
+            bp::log_decision(&ctx, cmd, c.verdict.as_str(), &c.rule, false);
+            match c.verdict {
+                bp::Verdict::Allow => std::process::exit(0),
+                bp::Verdict::Deny => {
+                    eprintln!("{}", c.token);
+                    if let Some(w) = &c.why {
+                        eprintln!("why: {w}");
+                    }
+                    if let Some(r) = &c.remedy {
+                        eprintln!("remedy: {r}");
+                    }
+                    std::process::exit(2);
+                }
+                bp::Verdict::Ask => {
+                    let reason = format!(
+                        "{} — {} — {}",
+                        c.token,
+                        c.why.unwrap_or_default(),
+                        c.remedy.unwrap_or_default()
+                    );
+                    println!(
+                        "{}",
+                        serde_json::json!({"hookSpecificOutput": {
+                            "hookEventName": "PreToolUse",
+                            "permissionDecision": "ask",
+                            "permissionDecisionReason": reason,
+                        }})
+                    );
+                    std::process::exit(0);
+                }
+            }
+        }
+        Some("--command") => {
+            let Some(cmd) = args.get(1) else { usage() };
+            let mut cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let mut host: Option<cp::HostKind> = None;
+            let mut i = 2;
+            while i < args.len() {
+                let Some(v) = args.get(i + 1) else { usage() };
+                match args[i].as_str() {
+                    "--cwd" => cwd = PathBuf::from(v),
+                    "--host-kind" => host = cp::HostKind::parse(v).or_else(|| usage()),
+                    _ => usage(),
+                }
+                i += 2;
+            }
+            let mut ctx = bp::context_for(&cwd);
+            if let Some(h) = host {
+                ctx.host_kind = h;
+            }
+            let c = bp::classify(cmd, &ctx);
+            println!("{}", c.token);
+            if let Some(w) = &c.why {
+                println!("why: {w}");
+            }
+            if let Some(r) = &c.remedy {
+                println!("remedy: {r}");
+            }
+            std::process::exit(match c.verdict {
+                bp::Verdict::Allow => 0,
+                bp::Verdict::Deny => 1,
+                bp::Verdict::Ask => 4,
+            });
+        }
+        _ => usage(),
+    }
+}
+
 fn run_policy(args: &[String]) -> ! {
     use tillandsias_plan::command_policy as cp;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan policy eval [--host-kind bare-metal|forge|ci] [--regime interactive|gate|fixture|hook|relay] [--caller c] [--cwd dir] [--root dir] [--seed path] -- <argv...>\n       tillandsias-plan policy show [--root dir] [--seed path]"
+            "usage: tillandsias-plan policy eval [--host-kind bare-metal|forge|ci] [--regime interactive|gate|fixture|hook|relay] [--caller c] [--cwd dir] [--root dir] [--seed path] -- <argv...>\n       tillandsias-plan policy show [--root dir] [--seed path]\n       tillandsias-plan policy audit [--since 24h|7d|30m] [--caller c] [--root dir]\n       tillandsias-plan policy classify-bash --hook | --status | --command <cmd>"
         );
         std::process::exit(2);
     };
     let Some(verb) = args.first() else { usage() };
+    if verb == "classify-bash" {
+        run_classify_bash(&args[1..]);
+    }
+    // ORDER 1443-w9hf — `policy audit [--since 24h|7d|…] [--caller c] [--root dir]`:
+    // one line per (rule_id, decision) with its count, then the total. With no
+    // log: ok:policy-audit:empty, exit 0.
+    if verb == "audit" {
+        let mut since: Option<chrono::Duration> = None;
+        let mut caller: Option<String> = None;
+        let mut root: Option<PathBuf> = None;
+        let mut i = 1;
+        while i < args.len() {
+            let Some(v) = args.get(i + 1) else { usage() };
+            match args[i].as_str() {
+                "--since" => since = Some(cp::parse_since(v).unwrap_or_else(|| usage())),
+                "--caller" => caller = Some(v.clone()),
+                "--root" => root = Some(PathBuf::from(v)),
+                _ => usage(),
+            }
+            i += 2;
+        }
+        let root = root
+            .or_else(|| {
+                std::env::current_dir()
+                    .ok()
+                    .and_then(|c| tillandsias_plan::branch_discipline::find_root(&c))
+            })
+            .unwrap_or_else(|| PathBuf::from("."));
+        let path = cp::audit_log_path(&root);
+        match cp::audit_summary(&path, since, caller.as_deref()) {
+            None => {
+                println!("ok:policy-audit:empty");
+                eprintln!("  no audit log at {}", path.display());
+            }
+            Some(rows) if rows.is_empty() => println!("ok:policy-audit:empty"),
+            Some(rows) => {
+                let mut total = 0;
+                for ((rule, decision), n) in &rows {
+                    println!("{n} {rule} {decision}");
+                    total += n;
+                }
+                println!("total={total}");
+            }
+        }
+        std::process::exit(0);
+    }
     let mut host_kind: Option<cp::HostKind> = None;
     let mut regime = "interactive".to_string();
     let mut caller = "cli".to_string();
@@ -4782,6 +5099,11 @@ fn main() {
     if args[0] == "lua" {
         run_lua_cli(&args[1..]);
         return;
+    }
+
+    // ORDER 1443-8pur — the agent door. Early: it reads no ledger.
+    if args[0] == "run" {
+        run_run_verb(&args[1..]);
     }
 
     if args[0] == "predicate" {

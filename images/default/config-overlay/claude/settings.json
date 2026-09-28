@@ -1,8 +1,4 @@
 {
-  "enabledMcpjsonServers": [
-    "forge-plan",
-    "project-info"
-  ],
   "hooks": {
     "PreToolUse": [
       {
@@ -10,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/hooks/claude-pretooluse-command-policy.sh"
+            "command": "tillandsias-plan policy classify-bash --hook"
           }
         ]
       }

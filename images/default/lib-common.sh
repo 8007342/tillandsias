@@ -3704,6 +3704,49 @@ seed_claude_bypass_consent() {
     trace_lifecycle "config" "claude bypass-permissions consent seeded (forge)"
 }
 
+# seed_claude_pretooluse_hook — order 1443-we89, THE TEMPORARY BRIDGE. Merge the
+# image's PreToolUse (matcher Bash) entry, which runs `tillandsias-plan policy
+# classify-bash --hook`, into ~/.claude/settings.json, so every Claude session
+# in a forge on ANY project has its Bash commands checked (operator ruling 1,
+# 2026-09-27: "Commit the hook to the project"; the forge overlay carries it
+# for projects that are not Tillandsias). Additive: every other setting and
+# hook is kept, and the entry is added once (idempotent). Forge-only.
+# TILLANDSIAS_PRETOOLUSE_HOOK=off disables the classifier without editing this.
+seed_claude_pretooluse_hook() {
+    [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] || return 0
+    local overlay_root="${TILLANDSIAS_CONFIG_OVERLAY_ROOT:-/home/forge/.config-overlay}"
+    local overlay_cfg="$overlay_root/claude/settings.json"
+    local settings_cfg="${CLAUDE_SETTINGS_FILE:-$HOME/.claude/settings.json}"
+    local tmp
+    [ -f "$overlay_cfg" ] || return 0
+    jq -e '.hooks.PreToolUse | type == "array"' "$overlay_cfg" >/dev/null 2>&1 || {
+        trace_lifecycle "config" "claude PreToolUse overlay invalid; hook NOT seeded"
+        return 1
+    }
+    mkdir -p "$(dirname "$settings_cfg")"
+    tmp="$(mktemp "${settings_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$settings_cfg" ]; then
+        if ! jq -e 'type == "object"' "$settings_cfg" >/dev/null 2>&1; then
+            rm -f "$tmp"
+            trace_lifecycle "config" "claude settings.json is not a JSON object; PreToolUse hook NOT seeded"
+            return 1
+        fi
+        # Already present (any hook running classify-bash): leave the file alone.
+        if jq -e '[.hooks.PreToolUse[]?.hooks[]?.command // empty] | any(test("classify-bash"))' \
+            "$settings_cfg" >/dev/null 2>&1; then
+            rm -f "$tmp"
+            return 0
+        fi
+        jq -s '.[0] * {hooks: ((.[0].hooks // {}) + {PreToolUse: ((.[0].hooks.PreToolUse // []) + .[1].hooks.PreToolUse)})}' \
+            "$settings_cfg" "$overlay_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        cp "$overlay_cfg" "$tmp" || { rm -f "$tmp"; return 1; }
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$settings_cfg"
+    trace_lifecycle "config" "claude PreToolUse Bash bridge seeded (forge)"
+}
+
 # Pre-trust the forge project folder (2026-08-31, minted-session blocker #2:
 # after the theme picker was seeded away, claude's workspace-trust dialog —
 # "Yes, I trust this folder / Enter to confirm" — blocked the prompt next).
