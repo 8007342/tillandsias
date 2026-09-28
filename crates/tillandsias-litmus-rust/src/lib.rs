@@ -283,11 +283,11 @@ fn collect_commands<'a>(v: &'a serde_yaml::Value, out: &mut Vec<&'a str>) {
     match v {
         serde_yaml::Value::Mapping(m) => {
             for (k, val) in m {
-                if k.as_str() == Some("command") {
-                    if let Some(s) = val.as_str() {
-                        out.push(s);
-                        continue;
-                    }
+                if k.as_str() == Some("command")
+                    && let Some(s) = val.as_str()
+                {
+                    out.push(s);
+                    continue;
                 }
                 collect_commands(val, out);
             }
