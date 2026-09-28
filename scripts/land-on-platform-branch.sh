@@ -191,7 +191,8 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         _nl_out="$(bash scripts/check-native-lint-attested.sh --base "origin/$BRANCH" 2>&1)" || _nl_rc=$?
         printf '%s\n' "$_nl_out" | sed "s/^/land: attempt $attempt — /"
         if [ "$_nl_rc" -ne 0 ]; then
-            echo "refused:land:native-lint — $(printf '%s\n' "$_nl_out" | grep -m1 '^refused:' || printf '%s\n' "$_nl_out" | tail -1)" >&2
+            _nl_verdict="$(grep -m1 '^refused:' <<<"$_nl_out")" || _nl_verdict="$_nl_out"
+            echo "refused:land:native-lint — ${_nl_verdict%%$'\n'*}" >&2
             _afford "this change touches a cfg-gated platform crate that this gate cannot lint, and no host attested a native lint of this content (1235-rfub)" \
                 "on the crate's platform, run scripts/attest-native-lint.sh on this ref, push it, then re-run"
             exit 9
