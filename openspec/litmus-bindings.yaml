@@ -401,6 +401,7 @@ specs:
 - spec_id: forge-environment-discoverability
   status: active
   litmus_tests:
+  - litmus:mcp-plan-resolver-pinning-shape
   - litmus:forge-environment-discoverability-shape
   - litmus:lane-observed-startup-log
   - litmus:onboarding-cold-start-discovery
