@@ -590,6 +590,13 @@ pub fn host_of_email(email: &str) -> Option<String> {
     domain.split('.').next().map(str::to_string)
 }
 
+/// The host a `Tillandsias-Host:` trailer names (order 1453-7rzd): the first
+/// value, trimmed and lowercased, or `None` when the commit carries none.
+pub fn trailer_host(trailer_values: &str) -> Option<String> {
+    let host = trailer_values.split(',').next()?.trim().to_lowercase();
+    (!host.is_empty()).then_some(host)
+}
+
 /// How many commits the committer qualifier looks back over.
 pub const COMMIT_WINDOW: usize = 50;
 const DEFAULT_WORK_REF: &str = "work/[0-9]{3,4}-[a-z0-9]{4}";
@@ -723,26 +730,45 @@ pub fn derive(root: &Path, d: &Discipline) -> Option<Derived> {
         refs.push("HEAD".to_string());
     }
     let n = COMMIT_WINDOW.to_string();
-    let mut log_args = vec!["log", "-n", n.as_str(), "--format=%ae"];
+    // Order 1453-7rzd: a forge commit's author email is a GitHub noreply address
+    // with no host domain, so the host rides in a `Tillandsias-Host:` trailer.
+    // The trailer wins; the email-domain rule stays for older commits.
+    let mut log_args = vec![
+        "log",
+        "-n",
+        n.as_str(),
+        "--format=%ae%x09%(trailers:key=Tillandsias-Host,valueonly,separator=%x2C)",
+    ];
     log_args.extend(refs.iter().map(String::as_str));
-    let emails: std::collections::BTreeSet<String> = git(root, &log_args)
+    let authors: std::collections::BTreeSet<(String, Option<String>)> = git(root, &log_args)
         .unwrap_or_default()
         .lines()
-        .map(|l| l.trim().to_lowercase())
-        .filter(|l| !l.is_empty())
+        .filter_map(|l| {
+            let (email, trailer) = l.split_once('\t').unwrap_or((l, ""));
+            let email = email.trim().to_lowercase();
+            (!email.is_empty()).then(|| (email, trailer_host(trailer)))
+        })
         .collect();
-    let hosts: std::collections::BTreeSet<String> =
-        emails.iter().filter_map(|e| host_of_email(e)).collect();
-    let buckets = emails.iter().filter(|e| host_of_email(e).is_none()).count();
+    let host_of = |(email, trailer): &(String, Option<String>)| {
+        trailer.clone().or_else(|| host_of_email(email))
+    };
+    let hosts: std::collections::BTreeSet<String> = authors.iter().filter_map(host_of).collect();
+    let buckets = authors.iter().filter(|a| host_of(a).is_none()).count();
     obs.push(Observation {
         name: "unattributed_bucket_emails",
         value: json!(buckets),
-        command: format!("git log -n {COMMIT_WINDOW} --format=%ae {}", refs.join(" ")),
+        command: format!(
+            "git log -n {COMMIT_WINDOW} --format=%ae%x09%(trailers:key=Tillandsias-Host,valueonly) {}",
+            refs.join(" ")
+        ),
     });
     obs.push(Observation {
         name: "distinct_committer_hosts",
         value: json!(hosts),
-        command: format!("git log -n {COMMIT_WINDOW} --format=%ae {}", refs.join(" ")),
+        command: format!(
+            "git log -n {COMMIT_WINDOW} --format=%ae%x09%(trailers:key=Tillandsias-Host,valueonly) {}",
+            refs.join(" ")
+        ),
     });
 
     let default_ref = if heads.contains(&default) {
@@ -921,6 +947,13 @@ messages:
         );
         assert_eq!(host_of_email("bulloncito@gmail.com"), None);
         assert_eq!(host_of_email("no-domain"), None);
+        // Order 1453-7rzd: the trailer names the host a noreply email cannot.
+        assert_eq!(trailer_host("lenovinha").as_deref(), Some("lenovinha"));
+        assert_eq!(trailer_host(" Yoga ,macuahuitl").as_deref(), Some("yoga"));
+        assert_eq!(trailer_host(""), None);
+        // A noreply author is a shared-provider BUCKET, never a host: that is
+        // exactly why the host has to ride in the trailer.
+        assert_eq!(host_of_email("7+appuser@users.noreply.github.com"), None);
     }
 
     #[test]

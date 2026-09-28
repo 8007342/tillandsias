@@ -1278,3 +1278,9 @@ specs:
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-09-27'
+- spec_id: forge-git-identity-anonymization
+  status: active
+  litmus_tests:
+  - litmus:forge-git-identity-source
+  coverage_ratio: 1
+  last_verified: '2026-09-28'

@@ -383,12 +383,32 @@ if [ -z "$TOKEN" ]; then
   exit 2
 fi
 printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null 2>&1
-gh api user --jq .login
+gh api user --jq '[(.id|tostring), .login, (.name // "")] | @tsv'
 "#;
     match run_git_image_shell(script, &[], debug) {
+        // Order 1453-7rzd: the same one `/user` call now also yields the id and
+        // display name the forge git identity is built from. The result is
+        // cached on the host (public fields only, never the token) so a forge
+        // launch reads it without a second container run.
         Ok(out) => {
-            let name = out.trim().to_string();
-            if name.is_empty() { None } else { Some(name) }
+            let user = crate::parse_app_user(out.trim())?;
+            if let Some(path) = crate::app_user_cache_path() {
+                let line = format!(
+                    "{}\t{}\t{}\n",
+                    user.id,
+                    user.login,
+                    user.name.as_deref().unwrap_or("")
+                );
+                if let Err(e) = std::fs::write(&path, line)
+                    && debug
+                {
+                    eprintln!(
+                        "[tillandsias] could not cache the App user at {}: {e}",
+                        path.display()
+                    );
+                }
+            }
+            Some(user.login)
         }
         Err(e) => {
             if debug {

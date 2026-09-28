@@ -103,7 +103,7 @@ _rows="$(mktemp)" || exit 2
 trap 'rm -f "$_rows"' EXIT INT TERM
 
 total=0
-while IFS='|' read -r sha email; do
+while IFS='|' read -r sha email trailer_host; do
     [ -n "$sha" ] || continue
     total=$((total + 1))
     # A commit is PLAN-ONLY when every path it touches is under plan/. That is
@@ -111,6 +111,16 @@ while IFS='|' read -r sha email; do
     # gate cost each class actually pays.
     nonplan="$(git -C "$ROOT" show --name-only --format= "$sha" 2>/dev/null | grep -vcE '^plan/')"
     kind="code"; [ "${nonplan:-0}" -eq 0 ] && kind="plan"
+    # Order 1453-7rzd: a forge commit's author email is a GitHub noreply
+    # address with no host domain, so the host rides in a Tillandsias-Host
+    # trailer. It wins when present; the domain rule below stays for every
+    # commit made before the trailer existed.
+    trailer_host="${trailer_host%%,*}"
+    trailer_host="$(printf '%s' "$trailer_host" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+    if [ -n "$trailer_host" ]; then
+        printf 'host\t%s\t%s\n' "$trailer_host" "$kind" >> "$_rows"
+        continue
+    fi
     domain="${email#*@}"
     shared=0
     for _sp in $SHARED_PROVIDERS; do [ "$domain" = "$_sp" ] && { shared=1; break; }; done
@@ -122,7 +132,7 @@ while IFS='|' read -r sha email; do
         host="${domain%%.*}"
         printf 'host\t%s\t%s\n' "$host" "$kind" >> "$_rows"
     fi
-done < <(git -C "$ROOT" log --since="$WINDOW" --format='%H|%ae' "$REF" 2>/dev/null)
+done < <(git -C "$ROOT" log --since="$WINDOW" --format='%H|%ae|%(trailers:key=Tillandsias-Host,valueonly,separator=%x2C)' "$REF" 2>/dev/null)
 
 if [ "$total" -eq 0 ]; then
     echo "  no commits on $REF in the last $WINDOW. That is a fact about the WINDOW," >&2
