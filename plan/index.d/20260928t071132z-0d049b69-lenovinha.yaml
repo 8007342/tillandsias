@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-forge-hot-src-tmpfs-budget-lands-on-its-256m-floor-while-the-tillandsias-git-dir-is-167m-so-a-working-forge-fills-it-and-git-dies-mid-write
+    field: status
+    value: completed
+    ts: "2026-09-28T07:11:32Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-forge-hot-src-tmpfs-budget-lands-on-its-256m-floor-while-the-tillandsias-git-dir-is-167m-so-a-working-forge-fills-it-and-git-dies-mid-write
+    event:
+      type: completed
+      ts: "2026-09-28T07:11:32Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 976931d2e (land82 relay of work/1445-7u63 c2c3c9a75; criteria 1-2 landed earlier at b01b25f8c) + scripts/test-forge-src-budget-report.sh PASS 4 arms + litmus-forge-hot-cold-split-tmpfs-shape PASS + full build.sh --check rc=0 3136s on c2c3c9a75
+  - packet_id: the-forge-hot-src-tmpfs-budget-lands-on-its-256m-floor-while-the-tillandsias-git-dir-is-167m-so-a-working-forge-fills-it-and-git-dies-mid-write
+    event:
+      type: note
+      ts: "2026-09-28T07:11:32Z"
+      host: lenovinha
+      summary: |-
+        closed: the budget is measured in the mirror container with loose objects included, and a full source tmpfs is named instead of blamed on the mirror; the commit-hook warning half follows now that 7rzd landed
