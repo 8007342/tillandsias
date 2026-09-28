@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# the-litmus-runners-podman-preflight-fires-on-the-word-podman-inside-a-quoted-string-so-a-test-that-only-mentions-podman-in-prose-env-fails-on-a-host-without-a-working-podman-and-never-runs.status was ALREADY 'in_progress', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: the-litmus-runners-podman-preflight-fires-on-the-word-podman-inside-a-quoted-string-so-a-test-that-only-mentions-podman-in-prose-env-fails-on-a-host-without-a-working-podman-and-never-runs
+    event:
+      type: note
+      ts: "2026-09-28T18:06:38Z"
+      host: forge-tillandsias
+      summary: |-
+        claim: filed and taken on coordinator direction; work/1464-v3xq based on work/1443-fpck
