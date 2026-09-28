@@ -48,7 +48,7 @@ packets:
       bash scripts/test-centicolon-grader-attribution.sh prints its ok summary
       with four arms, one per counterexample, each built exactly as the
       research doc's recipe describes (extractor doc with
-      cc:aaaa0001:scenario-a / scenario-b under req aaaa0001, litmus:one
+      cc:aaaa0001:scenario-a / scenario-b under req aaaa0001, the in-memory binding `one`
       bound under spec alpha, the graders run through `tillandsias-plan lua`):
       (1) a pass whose step names only scenario-a credits scenario-a and NOT
       scenario-b; (2) a pass without spec/implementation digests credits
