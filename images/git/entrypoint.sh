@@ -134,12 +134,12 @@ export GIT_TERMINAL_PROMPT GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 
 # All three defaults are UNSET-ONLY: a launcher serving a non-Tillandsias
 # project may export them EMPTY to disable grammar warnings and gate
 # exemptions entirely — the hook is silent when they are empty or absent.
-TILLANDSIAS_DEFAULT_BRANCH_CREATION_REGEX='^refs/heads/(main|gh-pages|(linux|windows|osx)-next|release/[A-Za-z0-9._/-]+|revert-[A-Za-z0-9-]+|claude/[A-Za-z0-9._-]+|agent/[a-z0-9][a-z0-9-]{0,31}/[a-z0-9][a-z0-9._-]{0,47}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}|salvage/[a-z0-9][a-z0-9-]{0,31}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47})$'
+TILLANDSIAS_DEFAULT_BRANCH_CREATION_REGEX='^refs/heads/(main|gh-pages|(linux|windows|osx)-next|release/[A-Za-z0-9._/-]+|revert-[A-Za-z0-9-]+|claude/[A-Za-z0-9._-]+|agent/[a-z0-9][a-z0-9-]{0,31}/[a-z0-9][a-z0-9._-]{0,47}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}|work/[0-9]{3,4}-[a-z0-9]{4}|salvage/[a-z0-9][a-z0-9-]{0,31}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47})$'
 if [ "${TILLANDSIAS_BRANCH_CREATION_REGEX+set}" != "set" ]; then
     TILLANDSIAS_BRANCH_CREATION_REGEX="$TILLANDSIAS_DEFAULT_BRANCH_CREATION_REGEX"
 fi
 if [ "${TILLANDSIAS_BRANCH_GRAMMAR_HINT+set}" != "set" ]; then
-    TILLANDSIAS_BRANCH_GRAMMAR_HINT='main | linux-next | windows-next | osx-next | gh-pages | release/* | claude/* | revert-* | agent/<host>/<base>/<yyyymmdd>-<slug> | salvage/<host>/<yyyymmdd>-<slug>'
+    TILLANDSIAS_BRANCH_GRAMMAR_HINT='main | linux-next | windows-next | osx-next | gh-pages | release/* | claude/* | revert-* | agent/<host>/<base>/<yyyymmdd>-<slug> | work/<order> | salvage/<host>/<yyyymmdd>-<slug>'
 fi
 if [ "${TILLANDSIAS_YAML_GATE_EXEMPT_REFS+set}" != "set" ]; then
     TILLANDSIAS_YAML_GATE_EXEMPT_REFS='refs/heads/salvage/*'
