@@ -14,13 +14,15 @@
 #   4. edit the crate AFTER attesting: REFUSED as stale (bound to content);
 #   5. a hand-written trailer for the wrong platform does not count;
 #   6. NEGATIVE CONTROL: a change outside the gated crates is not in scope;
-#   7. land-on-platform-branch.sh runs the check after its integrate (wired).
+#   7. land-on-platform-branch.sh runs the check after its integrate (wired);
+#   8. NO HOST AVAILABLE: a named TILLANDSIAS_NATIVE_LINT_UNATTESTED reason
+#      admits as override:… carrying the reason; an EMPTY one does not.
 #
 # PRE-FIX RESULT: FAILS — neither script existed, and the relay landed
 # d44909353 with the clippy error (trunk red for macOS for hours).
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-pass=0; total=7
+pass=0; total=8
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; }
 
@@ -122,6 +124,17 @@ if [ -n "$ln_nl" ] && [ -n "$ln_alloc" ] && [ -n "$ln_gate" ] && [ "$ln_alloc" -
     ok "arm 7: land-on-platform-branch.sh runs the check after the integrate, before the gate (line $ln_nl)"
 else
     bad "arm 7: alloc=$ln_alloc native-lint=$ln_nl gate=$ln_gate"
+fi
+
+# 8 — the named override, and an empty one.
+R="$(repo d)"; incident "$R"
+OUT="$(cd "$R" && TILLANDSIAS_NATIVE_LINT_UNATTESTED="no mac awake; tray refactor" bash scripts/check-native-lint-attested.sh 2>&1)"; RC=$?
+OUT2="$(cd "$R" && TILLANDSIAS_NATIVE_LINT_UNATTESTED="" bash scripts/check-native-lint-attested.sh 2>&1)"; RC2=$?
+if [ "$RC" -eq 0 ] && grep -q '^override:native-lint:unattested:tillandsias-macos-tray:no mac awake; tray refactor$' <<<"$OUT" \
+   && [ "$RC2" -eq 1 ] && grep -q 'the land WAITS' <<<"$OUT2" && grep -q 'Native-Lint-Unattested:' "$L"; then
+    ok "arm 8: a named override lands as recorded debt; an empty one waits"
+else
+    bad "arm 8: rc=$RC [$OUT] / empty rc=$RC2"
 fi
 
 if [ "$pass" -eq "$total" ]; then

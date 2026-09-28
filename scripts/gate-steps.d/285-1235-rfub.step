@@ -13,4 +13,4 @@ STEP_DESC="Checking a cfg-gated platform crate cannot relay without a native-lin
 STEP_SCRIPT="scripts/test-native-lint-attested.sh"
 STEP_ERROR="a change to a cfg-gated platform crate can again reach trunk with no host having linted it natively (1235-rfub); see which arm failed above"
 STEP_OK="cfg-gated crates relay only with a content-bound native-lint attestation"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:native-lint-attested-fixture:7/7"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:native-lint-attested-fixture:8/8"

@@ -37,6 +37,15 @@
 #   refused:native-lint:unattested:<crate>            (rc 1)
 #   refused:native-lint:stale:<crate>                 (rc 1) attested content != HEAD
 #   ok:native-lint:base-unavailable                   no base ref; nothing judged
+#   override:native-lint:unattested:<pkg>:<reason>    (rc 0) see NO HOST AVAILABLE
+#
+# NO HOST AVAILABLE (coordinator, 2026-09-28). A crate may have to move with no
+# host of its platform awake, e.g. a Linux-side refactor touching the tray.
+# Then TILLANDSIAS_NATIVE_LINT_UNATTESTED="<reason>" lets it land UNLINTED, as
+# a NAMED DEBT and never silently: the verdict carries the reason, and
+# land-on-platform-branch.sh records it as a `Native-Lint-Unattested:` trailer
+# on the landed history, so the next attestation on that platform pays it. An
+# empty value is not an override. Without it, the land waits.
 #
 # Usage: check-native-lint-attested.sh [--base REF]    (default origin/linux-next)
 #        check-native-lint-attested.sh --list          print the gated crates
@@ -92,6 +101,8 @@ EOF
             echo "  $seen attested a native $platform lint of $path, but not of the content being"
             echo "  landed: the crate changed after the attestation ($path=$head_tree now)."
             echo "  remedy: on a $platform host, re-run scripts/attest-native-lint.sh on this ref."
+            echo "  no $platform host available? the land WAITS, or set"
+            echo "  TILLANDSIAS_NATIVE_LINT_UNATTESTED=\"<reason>\" to land it as recorded debt."
         } >&2
     else
         refused=1
@@ -101,11 +112,24 @@ EOF
             echo "  cannot lint (1235-rfub: a useless_format landed that way and reddened trunk)."
             echo "  accountable: the AUTHORING $platform host. remedy: on that host run"
             echo "  scripts/attest-native-lint.sh, which lints natively and records the result."
+            echo "  no $platform host available? the land WAITS, or set"
+            echo "  TILLANDSIAS_NATIVE_LINT_UNATTESTED=\"<reason>\" to land it as recorded debt."
         } >&2
     fi
 done
 
-[ "$refused" -eq 0 ] || exit 1
+if [ "$refused" -ne 0 ]; then
+    reason="${TILLANDSIAS_NATIVE_LINT_UNATTESTED:-}"
+    if [ -n "$reason" ]; then
+        for entry in $GATED_CRATES; do
+            rest="${entry#*:}"
+            echo "override:native-lint:unattested:${rest%%:*}:$reason"
+        done
+        echo "  DEBT: landing an UNLINTED cfg-gated crate on the operator's named reason; recorded, not excused" >&2
+        exit 0
+    fi
+    exit 1
+fi
 if [ "$in_scope" -eq 0 ]; then
     echo "ok:native-lint:not-in-scope"
 else
