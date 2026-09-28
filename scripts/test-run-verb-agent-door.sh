@@ -12,7 +12,8 @@
 #      --env additions: an exported GH_TOKEN does not reach it
 #   7  the plain form mirrors the child: its bytes pass through, its exit code
 #      is the verb's, a deadline is 124, an unknown program is 127
-#   1  --json: exactly one object with the ten keys; a child's non-zero exit,
+#   1  --json: exactly one object with the eleven keys (signal: the number for
+#      a signaled child, else null); a child's non-zero exit,
 #      a deadline and a spawn failure are reported with the verb exiting 0
 #   6  a capture past --capture-bytes is truncated:true and ok:false
 #   8  the plain form's limitation, pinned: a refusal and a child's exit 1 share
