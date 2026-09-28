@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-codex-forge-lane-has-been-broken-for-a-while-per-the-operator-and-no-row-tracks-it
+    field: status
+    value: ready
+    ts: "2026-09-28T21:11:18Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-codex-forge-lane-has-been-broken-for-a-while-per-the-operator-and-no-row-tracks-it
+    event:
+      type: note
+      ts: "2026-09-28T21:11:18Z"
+      host: macuahuitl
+      summary: |-
+        yielded after launch attempt exposed project-name collision and shared-stack cleanup; Codex entrypoint was not reached; next retry requires an isolated project identity and operator-confirmed runtime recovery
