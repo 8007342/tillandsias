@@ -91,6 +91,7 @@ Each message type is registered with the tray-side router at startup. Unrecogniz
 - **AND** an error is logged (no crash)
 
 ### Requirement: Login completion is a notification, not a poll
+<!-- req-id: 75fdec30 -->
 
 <!-- @trace order:679-rp9m -->
 `tillandsias --github-login` SHALL send one `ControlMessage::GithubLoginStored { seq, ts_unix }`
