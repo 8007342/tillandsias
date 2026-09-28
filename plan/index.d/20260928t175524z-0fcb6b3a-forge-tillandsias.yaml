@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    field: notes
+    value: |-
+      IMPLEMENTED on work/1276-mugq (forge-tillandsias, 2026-09-28). Two findings: (1) the ORIGINAL 2026-09-19 case (a merge of four fast-lane plan paths staling the digest) did NOT reproduce. A real 3-way merge of a plan-only trunk commit onto a branch with a code commit leaves compute() byte-identical; fixture arm 6 pins that. Its cause stays unestablished, as the row said. (2) The mechanism macneo isolated on 2026-09-20 is FIXED: an untracked path now records the exec bit `git add` will give it (the worktree user-x bit where bits are git's truth; `-` under core.fileMode=false, MSYS or drvfs, so the Windows digest does not move). Tracked paths keep the index mode, so test-mode-only-regression-887-bz88.sh stays green unchanged: an unstaged chmod is still invisible, and a staged one still stales. `movers` names `mode<TAB><path>`, which meets criterion 3 for the mode case. A first draft took ALL bits from the worktree; it broke 887-bz88's pins (index-only chmod must move, unstaged must not) and was narrowed rather than rewriting that contract.
+
+      [2026-09-28T17:55:24Z forge-tillandsias] CRITERION 1 SPLIT (coordinator ruling 2026-09-28) into 1463-7kb6, the observation of the 2026-09-19 plan-only staling: unreproduced once, three suspects, arm 6 as the standing pin, re-open with a captured movers line. This row closes on criteria 2 and 3 (the exec-bit fix plus mode movers) once land85 is on origin/linux-next.
+    ts: "2026-09-28T17:55:24Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    event:
+      type: note
+      ts: "2026-09-28T17:55:24Z"
+      host: forge-tillandsias
+      summary: |-
+        split criterion 1 into 1463-7kb6

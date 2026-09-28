@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: observation-a-2026-09-19-merge-of-only-fast-lane-plan-paths-staled-the-gate-stamp-and-one-reproduction-did-not-reproduce-it-re-open-with-a-captured-movers-line-if-it-recurs
+    order: 1463-7kb6
+    status: ready
+    kind: observation
+    priority: p3
+    desired_release: v0.6
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [gate, convergence, multi-host, observation]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
+    title: |
+      OBSERVATION, split from 1276-mugq criterion 1 by coordinator ruling: on 2026-09-19 (macneo) a merge whose diff against its first parent was four fast-lane plan paths moved the code digest (verify stale:tree-changed-since-gate, recorded 0d66a53759a9 vs computed f52dd6977cf0, both untracked enumerations empty). One deliberate reproduction on 2026-09-28 did NOT reproduce it. The observation stands; re-open with a captured movers line if it recurs
+    context: |
+      Reproduction attempt (forge-tillandsias, 2026-09-28, scratch clone): a
+      real 3-way merge of a plan-only trunk commit onto a branch carrying a
+      code commit left `gate-stamp.sh compute` byte-identical. 1276-mugq's
+      fixture arm 6 (scripts/test-gate-stamp-does-not-memoize-guard-owned-
+      paths.sh) now pins exactly that across a merge touching plan/index.d,
+      plan/loop_status.d and top-level plan/issues, and is the standing pin.
+      SUSPECTS NOT RULED OUT, in the order to check them if it recurs:
+        1. an UNTRACKED EXECUTABLE present at gate time, later staged —
+           1276-mugq FIXED this mechanism (work/1276-mugq @ 112f0e1ae, land85):
+           an untracked path now records the bit `git add` will give it. It may
+           BE the explanation of the 2026-09-19 event, which recorded neither
+           the untracked set at gate time nor a manifest;
+        2. FIRST PARENT versus WHAT WAS STAMPED: the four paths were the merge's
+           diff against its first parent; if the stamp described a tree other
+           than that first parent (a later edit, a rebase, a stash), the real
+           delta was larger than four plan paths;
+        3. a CONCURRENT GATE on the same checkout during the measurements (the
+           row said so itself).
+    exit_criteria:
+      - 'IF IT RECURS: the reporter captures, before any other action, `scripts/gate-stamp.sh movers` output (which since 1276-mugq names content AND mode movers), `git log -1 --format=%H` of the stamped tree if known, the merge commit''s parents, and `git status --porcelain --untracked-files=all`; the row is re-opened with those lines, and a reproduction is attempted from them'
+      - 'fixture arm 6 of scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh stays green on trunk (the standing pin: a plan-only merge leaves verify ok:gate-fresh)'
+      - 'IF NO RECURRENCE with a captured movers line by the end of v0.6: close as not-reproduced, citing arm 6 and 1276-mugq''s exec-bit fix as the likely explanation'
+    verifiable_closure: |
+      bash scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
+      exits 0 with arm 6 green; closure is by the time-boxed rule in the third
+      exit criterion or by a captured recurrence, never by assertion.
+    notes: |
+      size: S (watch row)
+      Coordinator ruling 2026-09-28 (macuahuitl-fedora): "The observation
+      doesn't go away just because one reproduction attempt failed."
+    provenance: |
+      Filed 2026-09-28 by macuahuitl-forge (forge-tillandsias) on the
+      coordinator's ruling splitting 1276-mugq criterion 1.
+    events:
+      - type: filed
+        ts: "2026-09-28T17:55:23Z"
+        agent_id: "forge-forge-tillandsias-claude-20260928"
+        host: forge-tillandsias
+        summary: |-
+          Split from 1276-mugq: the 2026-09-19 plan-only staling, unreproduced
+          once; three suspects; arm 6 is the standing pin.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-litmus-runners-podman-preflight-fires-on-the-word-podman-inside-a-quoted-string-so-a-test-that-only-mentions-podman-in-prose-env-fails-on-a-host-without-a-working-podman-and-never-runs
+    field: status
+    value: ready
+    ts: "2026-09-28T18:07:01Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: the-litmus-runners-podman-preflight-fires-on-the-word-podman-inside-a-quoted-string-so-a-test-that-only-mentions-podman-in-prose-env-fails-on-a-host-without-a-working-podman-and-never-runs
+    event:
+      type: note
+      ts: "2026-09-28T18:07:01Z"
+      host: forge-tillandsias
+      summary: |-
+        filed as in_progress, which writes no claim; resetting so the claim is a status write

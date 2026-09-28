@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-expert-groundtruth-harness-step-22-parses-the-mcp-server-s-json-rpc-responses-by-stdout-line-number-so-one-extra-line-on-a-host-shifts-every-projection-and-reads-as-an-empty-release-query
+    field: status
+    value: in_progress
+    ts: "2026-09-28T17:55:48Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: litmus-expert-groundtruth-harness-step-22-parses-the-mcp-server-s-json-rpc-responses-by-stdout-line-number-so-one-extra-line-on-a-host-shifts-every-projection-and-reads-as-an-empty-release-query
+    event:
+      type: note
+      ts: "2026-09-28T17:55:48Z"
+      host: forge-tillandsias
+      summary: |-
+        claim: groundtruth harness step 22 selects JSON-RPC responses by id (coordinator NEXT); implementing on work/1293-krrp

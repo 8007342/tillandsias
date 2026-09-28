@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: land-queue-resolves-its-plan-binary-from-the-callers-cwd-so-its-fixture-fails-12-of-14-on-darwin
+    event:
+      type: progress
+      ts: "2026-09-28T17:31:24Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t173123z
+      host: macos
+      summary: |
+        work/1461-5rm6 @ aaab0012c ready for relay (tlatoanis-macbook-air, darwin). land-queue.sh now resolves the plan binary inside its own checkout root (cd "$root" && resolve_plan_binary) and makes a relative result absolute, so a later cd cannot orphan it. An exported TILLANDSIAS_PLAN_BIN still wins (the probe's first arm).
+        MEASURED on darwin with env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR: before the fix (same tree, change stashed) blocked:land-queue:12-failed-of-14; after, ok:land-queue:16/16 from the repo root, from / (an absolute path to the script), and on a clean detached checkout. Deciders ok: dialect, sigpipe, probe-usage, litmus-pins, exec-bits, stock-binaries, plan-binary-current, jq 344/344 plus ratchet 6/6, gate-step-regimes, preflight-fixtures-default-target. test-land-queue is not a gate step, so there is no STEP_SECOND_REGIME to update.
