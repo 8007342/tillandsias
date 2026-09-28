@@ -1,0 +1,35 @@
+# Append-only publication evidence. No runtime readiness or policy adoption claim.
+events:
+  - packet_id: research-modern-stockfish-techniques-for-centicolon-evidence-and-convergence
+    event:
+      type: note
+      ts: "2026-09-28T18:11:13Z"
+      agent_id: codex-stockfish-review-20260928
+      host: macuahuitl
+      summary: |
+        Publication evidence: runtime work/1447-9sne advanced from e7ef20ce9
+        to bb2afd03a; website main advanced from b3f3091 to 46969b7.
+        Normal pre-push hook accepted the runtime research via the plan-only
+        lane and explicitly marked the merge union UN-GATED. No hook bypass,
+        fabricated stamp, runtime implementation or adoption of the proposed
+        enforcement policy was performed.
+        Strict-fragment ledger check, fragment parse, scorable-obligation,
+        status-loss and diff checks passed. Website checked build passed,
+        all 51 Level 5 citations resolved, 941 unique HTML ids and 375 fragment
+        links resolved (including tab routes), 16 slides retained. Repeated
+        final HTML SHA256: 5b6ccaea6746f91a865cc4d222c089b84b31e51b822570898cb4b5da09650979.
+        Full ./build.sh --check on the merged runtime tree FAILED, exit 1:
+          FAIL: a second live timing log was not refused: '' (rc=0)
+          FAIL: the reporting path stopped refusing a split
+          metrics-log-path-agreement: 16 passed, 2 failed
+        The build banner attributes this fixture to 1455-d7hc. Cause was not
+        diagnosed in this research task. This is not a green runtime gate;
+        coordinator landing must resolve and rerun it. The earlier run also
+        failed a corpus-count comparison in the parse-only duplicate-key
+        fixture; that observation remains recorded in the completion event.
+        Logs retained locally: /tmp/tillandsias-centicolon-check-current.log
+        and /tmp/tillandsias-centicolon-check.log. The decisive verdicts are
+        copied here so the remote record survives those temporary logs.
+        Research deliverables are complete; parent 1447-9sne stays open for
+        the operator's design choice. The website OpenSpec proposal remains
+        unarchived for review; deployment itself was not independently tested.
