@@ -356,7 +356,7 @@ fn a_grandchild_neither_times_out_nor_outlives_proc_run() {
         .map(|s| {
             s.rsplit(')')
                 .next()
-                .map(|r| r.trim_start().chars().next() != Some('Z'))
+                .map(|r| !r.trim_start().starts_with('Z'))
                 .unwrap_or(false)
         })
         .unwrap_or(false);

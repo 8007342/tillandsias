@@ -19,7 +19,7 @@ fn alive(pid: i32) -> bool {
             Ok(s) => s
                 .rsplit(')')
                 .next()
-                .map(|r| r.trim_start().chars().next() != Some('Z'))
+                .map(|r| !r.trim_start().starts_with('Z'))
                 .unwrap_or(false),
         }
     }
