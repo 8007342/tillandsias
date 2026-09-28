@@ -68,13 +68,14 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
 . "$REPO_ROOT/scripts/metrics-log-path.sh"
-LOG="${TILLANDSIAS_EXPERT_ACCURACY_LOG:-$(metrics_default_log expert-accuracy.jsonl "$REPO_ROOT")}"
+# LOG is resolved after HOST below (order 1257-jxu9): the default is per-host.
 
 DRY=0
+PRINT_PATH=0
 for a in "$@"; do
     case "$a" in
         --dry-run) DRY=1 ;;
-        --path) printf '%s\n' "$LOG"; exit 0 ;;
+        --path) PRINT_PATH=1 ;;
         -h|--help)
             echo "usage: record-expert-accuracy.sh [--dry-run|--path]"
             echo "  appends one JSONL record of the groundtruth grade to \$LOG"
@@ -91,6 +92,20 @@ ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 # the same scripts/ directory; that is not repeated here.
 host="$(scripts/derive-host-identity.sh 2>/dev/null | head -1)"
 [ -n "$host" ] || host="unknown"
+
+# THE SERIES IS HARVESTABLE (order 1257-jxu9). It used to default to
+# <repo>/.cache/metrics/expert-accuracy.jsonl, which is gitignored, so no other
+# host could ever read it, and yoga's criterion-6 record for 917-6iwv had to
+# travel as a ledger EVENT instead. It now defaults to a TRACKED, PER-HOST file:
+# plan/metrics/expert-accuracy.d/<host>.jsonl. One file per host means two hosts
+# appending on the same day never touch the same file, so the fleet's series is
+# the concatenation `cat plan/metrics/expert-accuracy.d/*.jsonl` and a merge is
+# never a conflict. A normal pull carries every host's records; commit the file
+# with the cycle. TILLANDSIAS_EXPERT_ACCURACY_LOG still overrides the path.
+host_file="$(tr -c 'A-Za-z0-9._+-' '_' <<<"$host")"
+LOG="${TILLANDSIAS_EXPERT_ACCURACY_LOG:-$REPO_ROOT/plan/metrics/expert-accuracy.d/${host_file%_}.jsonl}"
+mkdir -p "$(dirname "$LOG")" 2>/dev/null || true
+[ "$PRINT_PATH" -eq 1 ] && { printf '%s\n' "$LOG"; exit 0; }
 
 commit="$(git rev-parse HEAD 2>/dev/null)" || commit="unknown"
 [ -n "$commit" ] || commit="unknown"
@@ -194,14 +209,33 @@ if [ -n "$idx_root" ] && [ -f "$idx_root/current" ]; then
 fi
 [ -n "$idx_model" ]  || idx_model="unknown"
 [ -n "$idx_commit" ] || idx_commit="unknown"
+# FIXTURE SEAM (order 1257-jxu9), like TILLANDSIAS_EXPERT_ACCURACY_GRADE_LINE:
+# the served model a record is asked about, so a fixture can reach the show
+# lookup without a real spec index.
+[ -n "${TILLANDSIAS_EXPERT_ACCURACY_INDEX_MODEL:-}" ] && idx_model="$TILLANDSIAS_EXPERT_ACCURACY_INDEX_MODEL"
 
 # QUANTISATION is a property of the served model, not of our config, so it is
 # asked of the endpoint rather than assumed from the tag. An endpoint that will
 # not say leaves `unknown` standing.
+#
+# TWO API SHAPES, ONE VARIABLE (order 1257-jxu9). TILLANDSIAS_EMBED_ENDPOINT is
+# the OPENAI-COMPATIBLE base — scripts/spec-index-ensure.sh appends
+# /embeddings to it, so a correctly configured host sets it to
+# http://127.0.0.1:11434/v1. `/api/show` is OLLAMA-NATIVE and lives on the
+# base WITHOUT /v1. Appending /api/show to the /v1 base asked
+# .../v1/api/show, a 404, and every record on a correctly configured host
+# read quantisation and engine as unknown while the values were one path away
+# (measured on yoga 2026-09-18: F16 / bert). So the native base is DERIVED by
+# stripping a trailing /v1; TILLANDSIAS_OLLAMA_BASE, when set, names it
+# outright. A base that still cannot answer leaves `unknown` standing: the
+# fields are never inferred from the model tag.
 endpoint="${TILLANDSIAS_EMBED_ENDPOINT:-http://127.0.0.1:11434}"
+native_base="${endpoint%/}"
+native_base="${native_base%/v1}"
+native_base="${TILLANDSIAS_OLLAMA_BASE:-$native_base}"
 quant="unknown"; engine="unknown"
 if command -v curl >/dev/null 2>&1 && [ "$idx_model" != "unknown" ]; then
-    _show="$(curl -sS -m 10 "${endpoint%/}/api/show" \
+    _show="$(curl -sS -m 10 "${native_base%/}/api/show" \
         -H 'Content-Type: application/json' \
         -d "{\"name\":\"$idx_model\"}" 2>/dev/null)"
     if [ -n "$_show" ] && command -v jq >/dev/null 2>&1; then
