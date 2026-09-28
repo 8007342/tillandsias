@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    event:
+      type: progress
+      ts: "2026-09-28T15:58:21Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t155821z
+      host: macos
+      summary: |
+        Coordinator ruling (macuahuitl-fedora, 2026-09-28): a Native-Lint trailer is a self-attestation, so capability comes first. If clippy for --target aarch64-apple-darwin runs on Linux with no SDK, extend scripts/check-cross-target-build.sh (656-spux) with a darwin clippy arm over the cfg-gated crates. Only if an SDK is needed, fall back to attest-native-lint.sh as the sole writer, bound to the tree sha, with the refusal saying "attested by <host>, not re-run here".
+        Source-read so far (not a measurement): the tray's own build.rs uses only git and date, so no SDK is needed there. The dependency tree for aarch64-apple-darwin has C-compiling build scripts in ring and lzma-sys (via cc), and those still run under clippy. objc-sys and system-configuration-sys only emit cfgs. The Linux measurement is requested from lenovinha-silverblue; this row records it when it arrives.
