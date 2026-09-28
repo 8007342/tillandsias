@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: literal-source-pins-break-correct-refactors
+    event:
+      type: progress
+      ts: "2026-09-28T21:38:23Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t213809z
+      host: macos
+      summary: |
+        work/827-d3dc @ c4da22c7d ready for relay (tlatoanis-macbook-air): plan/issues/source-literal-pin-survey-2026-09-28.md. It is a survey, not a sweep.
+        INVENTORY, heuristic, measured at 3c8f8ced2: 1,640 pin sites (1,473 litmus, 75 shell fixtures, 92 Rust include_str+contains). (a) presence: 635 expression, 295 identifier, 531 other, 98 comment/prose, 27 flag. (b) absence scans: 48. (c) target gone: 6 (three retired litmus files grep scripts/build.sh, which does not exist).
+        TEN WORST, ranked by repair-labelled commits over 45 days and each read against the tree: run_init source_window (headless main.rs); a tray absence-of-one-spelling (silent, see 04ade3b56); vz.rs fetch-unit After= (stale, hides a product defect, filed as 1472-3d29); accel_probe comment-anchored Metal scan; macos diagnose login-order spellings (b for now); wsl_lifecycle comment-bounded window; the plan-only-push-lane function-name grep (c; a later step already tests behaviourally); the cycle-batch-triage step that cannot fail off-route; the metrics WIRE_VERSION premise (a golden encode frame instead); the forge-expert-base awk ORDER pin (extract and stub). Each names a behavioural replacement built from an existing function or const.
+        Recommendation: repair in that order; retire the scripts/build.sh steps and the comment pins opportunistically; extend 634-39ik's new-pin guard to Rust include_str!+contains, which produced 4 of the 10.
+        Caveat: the awk ORDER pin passes here on linux-next tip and on 957d48faf, so the land85 red the coordinator reported was not reproduced from this checkout.

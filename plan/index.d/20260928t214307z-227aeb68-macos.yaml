@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-guest-fetch-unit-is-ordered-after-the-retired-src-mount-not-the-guest-bin-mount-that-carries-the-binary-and-a-stale-pin-keeps-it-green
+    event:
+      type: progress
+      ts: "2026-09-28T21:43:07Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t214307z
+      host: macos
+      summary: |
+        work/1472-3d29 @ b63a7763c ready for relay (tlatoanis-macbook-air, darwin). Criteria 1-2 are met; criterion 3 is pending operator consent.
+        - vz.rs provision_user_data: the fetch unit is now After=var-lib-tillandsias-guest\x2dbin.mount (the systemd mount unit for GUEST_BIN_MOUNT), replacing the stale After=home-forge-src.mount. RequiresMountsFor= is still absent (the nofail/no-share boot stays alive).
+        - vz_cloud_init_headless_fetch_unit_is_idempotent (runs on every host) now DERIVES the expected unit from GUEST_BIN_MOUNT through a systemd path-escape helper, which has its own test, and refuses the old share. A new macOS-only test, built_user_data_orders_fetch_after_guest_bin_mount, asserts the ordering on the user-data provision_user_data actually builds.
+        - MUTATION: reverting the product line to After=home-forge-src.mount reds BOTH tests; restoring it greens them. vm-layer lib: 130 passed. fmt, clippy --all-targets -D warnings, and musl zigbuild --tests with the macos-tray consumer are all clean.
+        CRITERION 3 IS NOT RUN: the unit is written by cloud-init at PROVISION, so proving it on a cold boot needs a fresh provision of the macOS guest, i.e. a VM wipe, which needs the operator's per-run OK on this workstation. It has been asked for.
