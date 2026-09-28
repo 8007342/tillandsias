@@ -32302,3 +32302,163 @@ mod flag_surface_tests {
         );
     }
 }
+
+/// ORDER 1469-q2r3 — the forge cgroup budget reaches the REAL launch argv.
+///
+/// 981-n5vx found the old memory ceiling computed by a helper nothing called,
+/// with every test on the pure helper. ForgeBudget (1375-xxzj) is wired, but
+/// its tests are all on `podman_args()`; these assert the argv each real
+/// builder returns, and a source scan enumerates the builders so a new forge
+/// launch site without the budget fails here rather than shipping green.
+#[cfg(test)]
+mod forge_budget_argv_tests {
+    use super::*;
+    use tillandsias_core::forge_budget::ForgeBudget;
+
+    /// Every budget flag, in the builder's argv. The exact strings come from
+    /// the budget itself, so a tier change cannot desynchronise the test; the
+    /// named-flag checks keep the list from being vacuously empty.
+    fn assert_budget(what: &str, args: &[String]) {
+        let budget = ForgeBudget::for_this_host().podman_args();
+        assert!(
+            budget.iter().any(|a| a.starts_with("--memory="))
+                && budget.iter().any(|a| a.contains("memory.high="))
+                && budget.iter().any(|a| a.contains("memory.swap.max=")),
+            "ForgeBudget::podman_args() no longer names --memory / memory.high / memory.swap.max: {budget:?}"
+        );
+        for flag in &budget {
+            assert!(
+                args.contains(flag),
+                "{what}: forge launch argv is missing budget flag {flag}; argv={args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn status_check_forge_argv_carries_the_budget() {
+        let args = build_status_check_forge_args(
+            &PathBuf::from("/tmp/workspace"),
+            "alpha",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+        );
+        assert_budget("build_status_check_forge_args", &args);
+    }
+
+    #[test]
+    fn opencode_forge_argv_carries_the_budget_in_both_modes() {
+        for mode in [ForgeMode::Cli, ForgeMode::Web] {
+            let args = build_opencode_forge_args(
+                std::path::Path::new("/tmp/probe-project"),
+                Some(std::path::Path::new("/tmp/probe-project")),
+                None,
+                "probe-project",
+                None,
+                None,
+                std::path::Path::new("/tmp/probe-certs"),
+                "0.0.0-test",
+                mode,
+                None,
+                false,
+                false,
+            );
+            assert_budget(&format!("build_opencode_forge_args({mode:?})"), &args);
+        }
+    }
+
+    #[test]
+    fn agent_forge_argv_carries_the_budget_for_every_agent() {
+        for mode in [
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Antigravity,
+            ForgeAgentMode::Maintenance,
+        ] {
+            for host_mount in [false, true] {
+                let args = build_forge_agent_run_args(
+                    &PathBuf::from("/tmp/project"),
+                    "alpha",
+                    None,
+                    &PathBuf::from("/tmp/ca"),
+                    "1.2.3",
+                    mode,
+                    false,
+                    host_mount,
+                    &test_cache_root(),
+                );
+                assert_budget(
+                    &format!("build_forge_agent_run_args({mode:?}, host_mount={host_mount})"),
+                    &args,
+                );
+            }
+        }
+    }
+
+    /// The enumeration, so the list above cannot silently fall behind: every
+    /// top-level function in the non-test part of main.rs that names the forge
+    /// image must carry the budget itself or through the shared common args.
+    #[test]
+    fn every_function_that_launches_the_forge_image_carries_the_budget() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs");
+        let src = std::fs::read_to_string(&path).expect("read main.rs");
+        let prod = src
+            .split("\n#[cfg(test)]\nmod tests")
+            .next()
+            .unwrap_or(&src);
+        let is_fn_start = |l: &str| {
+            [
+                "fn ",
+                "pub fn ",
+                "pub(crate) fn ",
+                "async fn ",
+                "pub(crate) async fn ",
+                "pub async fn ",
+            ]
+            .iter()
+            .any(|p| l.starts_with(p))
+        };
+        let lines: Vec<&str> = prod.lines().collect();
+        let starts: Vec<usize> = (0..lines.len())
+            .filter(|&i| is_fn_start(lines[i]))
+            .collect();
+        let mut launchers = Vec::new();
+        let mut missing = Vec::new();
+        for (k, &s) in starts.iter().enumerate() {
+            let e = starts.get(k + 1).copied().unwrap_or(lines.len());
+            let body = lines[s..e].join("\n");
+            let name = lines[s]
+                .split("fn ")
+                .nth(1)
+                .and_then(|r| r.split(['(', '<']).next())
+                .unwrap_or("?")
+                .to_string();
+            if name == "forge_image_tag" || !body.contains("forge_image_tag(") {
+                continue;
+            }
+            launchers.push(name.clone());
+            let budgeted = body.contains("ForgeBudget::for_this_host()")
+                || body.contains("build_forge_common_args(")
+                || body.contains("build_stack_common_args(");
+            if !budgeted {
+                missing.push(name);
+            }
+        }
+        // Vacuity floor: the builders this order was filed about must be found.
+        for known in [
+            "build_status_check_forge_args",
+            "build_opencode_forge_args",
+            "build_forge_agent_run_args_with_vault",
+        ] {
+            assert!(
+                launchers.iter().any(|n| n == known),
+                "the scan no longer finds {known}; it is asserting over the wrong set: {launchers:?}"
+            );
+        }
+        assert!(
+            missing.is_empty(),
+            "forge launch builder(s) naming the forge image without the ForgeBudget flags: {missing:?}"
+        );
+    }
+}
