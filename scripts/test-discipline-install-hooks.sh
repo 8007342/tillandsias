@@ -97,6 +97,18 @@ else
 fi
 printf 'two\n' >> "$P1/README"
 git -C "$P1" commit -qam two >/dev/null 2>&1
+# SEED AHEAD OF REALITY (1446-664f): until an integration branch is observed on
+# origin, the level-1 rule warns instead of refusing, and the hook says so.
+push_out="$(git -C "$P1" push origin main 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && grep -q 'warn: refs/heads/main — default-branch-protected:seed-ahead-of-reality' <<<"$push_out"; then
+    ok "arm 2: before an integration branch exists on origin, level 1 warns (seed ahead of reality)"
+else
+    bad "arm 2: seed-ahead push rc=$rc [$push_out]"
+fi
+git -C "$P1" push -q origin HEAD:develop >/dev/null 2>&1
+git -C "$P1" fetch -q origin
+printf 'three\n' >> "$P1/README"
+git -C "$P1" commit -qam three >/dev/null 2>&1
 push_out="$(git -C "$P1" push origin main 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] &&
     grep -qx 'refused:hook:pre-push:default-branch-protected:enforced' <<<"$push_out" &&

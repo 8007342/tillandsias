@@ -73,9 +73,13 @@ for line in io.lines() do
     if token and not refused then
       refused = { ref = remote_ref, token = token }
     end
-    local soft = verdict:match("^warn:discipline:([%w%-]+)")
+    -- A warn is shown, never refused: the seed warns for this rule, or its
+    -- enforced rule is ahead of what the project shows yet (1446-664f).
+    local soft = verdict:match("^warn:discipline:(.+)$")
     if soft then
-      err("warn: " .. remote_ref .. " — " .. soft .. " (this project's seed warns but does not refuse)")
+      err("warn: " .. remote_ref .. " — " .. soft)
+      local remedy = out:match("\nremedy: ([^\n]*)")
+      if remedy then err("  " .. remedy) end
     end
   end
 end
