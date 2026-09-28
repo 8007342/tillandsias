@@ -1935,48 +1935,67 @@ pub fn probe_keyring_share() -> KeyringShare {
         .unwrap_or(KeyringShare::Unreachable)
 }
 
-/// Whether a valid fallback share file exists under `<cache>`: the host has
-/// been running WITHOUT a keychain for this share.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-#[cfg(feature = "vault")]
-pub fn fallback_share_present() -> bool {
-    crate::init_cache_dir()
-        .map(|c| fallback_share_counts(&c))
-        .unwrap_or(false)
-}
-
-/// What a destructive reset does with the Vault store (order 1437-qza3).
+/// The reset's Vault disposition, one of the three named tokens in
+/// host-state-lifecycle (order 1437-qza3, aligned to 1443-bs9z). The tokens
+/// are an INTERFACE: fixtures and the tray read them, so do not respell them.
+///
+/// A SOFT reset never deletes the store under ANY disposition. The
+/// disposition only decides what the reset ANNOUNCES; for
+/// `AbsentReinitAtInit` the next `--init`'s partial-init guard is what
+/// re-initialises the store, with its own loud line.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResetVaultDisposition {
-    /// The keychain holds the share: the store and the share survive.
-    Keep,
-    /// The keychain could not be asked and no fallback share exists, so the
-    /// share can only be in a keychain that is locked right now. Clearing
-    /// would destroy sign-ins the ruling means to keep; the store is kept
-    /// and the reset says it could not verify the keychain.
-    KeepUnverified,
-    /// No keychain holds the share (keyring-less host, or none anywhere):
-    /// the store and the fallback files are cleared, loudly.
-    ClearKeyringless,
+    /// `Verified:KEEP` — the keyring answered and holds a 32-byte share.
+    VerifiedKeep,
+    /// `Unverified:KEEP` — the keyring could not be asked. Not evidence of an
+    /// absent share, so the store is kept unverified (operator 2026-09-27:
+    /// "Unverified:KEEP is ok for a soft reset").
+    UnverifiedKeep,
+    /// `Absent:REINIT-AT-INIT` — the keyring answered and holds no share, so
+    /// the store cannot be unsealed and is re-initialised at the next init.
+    AbsentReinitAtInit,
+}
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+impl ResetVaultDisposition {
+    /// The token, exactly as the spec spells it.
+    pub fn token(self) -> &'static str {
+        match self {
+            Self::VerifiedKeep => "Verified:KEEP",
+            Self::UnverifiedKeep => "Unverified:KEEP",
+            Self::AbsentReinitAtInit => "Absent:REINIT-AT-INIT",
+        }
+    }
+
+    /// The announcement line, verbatim from the host-state-lifecycle table.
+    pub fn announcement(self) -> &'static str {
+        match self {
+            Self::VerifiedKeep => {
+                "reset: Vault store kept (Verified:KEEP) — share vault-shamir-share-v1 present"
+            }
+            Self::UnverifiedKeep => {
+                "reset: keyring unreachable — Vault store kept unverified (Unverified:KEEP); it \
+                 unseals at next init if the share is there, else init re-initialises it and \
+                 says so"
+            }
+            Self::AbsentReinitAtInit => {
+                "reset: no unlocking keyring holds vault-shamir-share-v1 — the Vault store cannot \
+                 survive this reset and will be re-initialised at next init"
+            }
+        }
+    }
 }
 
 /// Operator ruling 2026-09-27: "the presence of an unlocking keyring should be
-/// a requirement to survive the vault store." A keyring-less host keeps its
-/// share in the fallback file, so an unreachable keychain WITH a fallback share
-/// is a keyring-less host; an unreachable keychain WITHOUT one is a keychain
-/// that is merely locked at reset time, which is not the case the ruling
-/// clears.
+/// a requirement to survive the vault store." Decided by asking the keyring
+/// alone: an unreachable keyring is not evidence of an absent share.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-pub fn reset_vault_disposition(
-    keyring: KeyringShare,
-    fallback_share: bool,
-) -> ResetVaultDisposition {
-    match (keyring, fallback_share) {
-        (KeyringShare::Present, _) => ResetVaultDisposition::Keep,
-        (KeyringShare::Absent, _) => ResetVaultDisposition::ClearKeyringless,
-        (KeyringShare::Unreachable, true) => ResetVaultDisposition::ClearKeyringless,
-        (KeyringShare::Unreachable, false) => ResetVaultDisposition::KeepUnverified,
+pub fn reset_vault_disposition(keyring: KeyringShare) -> ResetVaultDisposition {
+    match keyring {
+        KeyringShare::Present => ResetVaultDisposition::VerifiedKeep,
+        KeyringShare::Unreachable => ResetVaultDisposition::UnverifiedKeep,
+        KeyringShare::Absent => ResetVaultDisposition::AbsentReinitAtInit,
     }
 }
 
@@ -7668,19 +7687,43 @@ mod tests {
         );
     }
 
-    /// Order 1437-qza3, the operator ruling of 2026-09-27 as a table: the
-    /// store survives only where a keychain holds the share. An unreachable
-    /// keychain with a fallback share is a keyring-less host (clear); without
-    /// one, it is a locked keychain at reset time (keep, unverified).
+    /// Order 1437-qza3 aligned to 1443-bs9z: the keyring answer maps to
+    /// exactly one named disposition, and each token and line is the spec's,
+    /// verbatim. The tokens are an interface: this test fails on a respelling.
     #[test]
-    fn reset_disposition_follows_the_keyring_ruling() {
+    fn reset_disposition_follows_the_keyring_ruling_and_spec_tokens() {
         use KeyringShare::*;
         use ResetVaultDisposition::*;
-        assert_eq!(reset_vault_disposition(Present, false), Keep);
-        assert_eq!(reset_vault_disposition(Present, true), Keep);
-        assert_eq!(reset_vault_disposition(Absent, false), ClearKeyringless);
-        assert_eq!(reset_vault_disposition(Absent, true), ClearKeyringless);
-        assert_eq!(reset_vault_disposition(Unreachable, true), ClearKeyringless);
-        assert_eq!(reset_vault_disposition(Unreachable, false), KeepUnverified);
+        assert_eq!(reset_vault_disposition(Present), VerifiedKeep);
+        assert_eq!(reset_vault_disposition(Unreachable), UnverifiedKeep);
+        assert_eq!(reset_vault_disposition(Absent), AbsentReinitAtInit);
+        assert_eq!(VerifiedKeep.token(), "Verified:KEEP");
+        assert_eq!(UnverifiedKeep.token(), "Unverified:KEEP");
+        assert_eq!(AbsentReinitAtInit.token(), "Absent:REINIT-AT-INIT");
+        for d in [VerifiedKeep, UnverifiedKeep, AbsentReinitAtInit] {
+            assert!(d.announcement().starts_with("reset: "), "{d:?}");
+            assert!(
+                d.announcement().contains(d.token()) || d == AbsentReinitAtInit,
+                "{d:?}"
+            );
+        }
+        // The spec file carries each line verbatim, so a respelling on either
+        // side fails here instead of drifting.
+        let spec = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../openspec/specs/host-state-lifecycle/spec.md"
+        ));
+        let spec_flat = spec.split_whitespace().collect::<Vec<_>>().join(" ");
+        for d in [VerifiedKeep, UnverifiedKeep, AbsentReinitAtInit] {
+            let line = d
+                .announcement()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            assert!(
+                spec_flat.contains(&line),
+                "not in the spec verbatim: {line}"
+            );
+        }
     }
 }
