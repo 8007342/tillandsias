@@ -29,6 +29,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 pub mod answer;
+pub mod bash_policy;
 /// ORDER 801-g9nn — the commit-DAG plumbing behind a citation's `commit` and
 /// the envelope's `caller_relation`. Derives `same | behind | ahead | diverged`
 /// honestly and refuses to synthesise a total order git cannot give.

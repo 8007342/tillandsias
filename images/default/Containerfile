@@ -152,6 +152,11 @@ COPY config-overlay/mcp/ /home/forge/.config-overlay/mcp/
 # Claude keeps OAuth and project state in ~/.claude.json, so its entrypoint
 # merges this forge-only MCP manifest rather than replacing that file.
 COPY config-overlay/claude/mcp.json /home/forge/.config-overlay/claude/mcp.json
+# @trace order:1443-we89
+# The Bash-tool bridge (PreToolUse hook), merged into ~/.claude/settings.json at
+# launch by seed_claude_pretooluse_hook so every forge session on any project
+# runs it (operator ruling 1, 2026-09-27).
+COPY config-overlay/claude/settings.json /home/forge/.config-overlay/claude/settings.json
 
 # ── Shell configs ──────────────────────────────────────────────
 RUN mkdir -p /etc/skel/.config/fish
