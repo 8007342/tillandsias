@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-policy-decision-is-appended-to-a-per-host-audit-log-with-token-shaped-literals-redacted-and-tillandsias-plan-policy-audit-summarises-it-so-the-bridge-hooks-retirement-condition-and-a-refusal-storm-are-both-readable-numbers
+    field: status
+    value: in_progress
+    ts: "2026-09-28T07:02:39Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: every-policy-decision-is-appended-to-a-per-host-audit-log-with-token-shaped-literals-redacted-and-tillandsias-plan-policy-audit-summarises-it-so-the-bridge-hooks-retirement-condition-and-a-refusal-storm-are-both-readable-numbers
+    event:
+      type: note
+      ts: "2026-09-28T07:02:39Z"
+      host: forge-tillandsias
+      summary: |-
+        claimed by macuahuitl-forge on coordinator assignment; work ref work/1443-w9hf stacked on work/1443-we89 (the bridge's decision log is the handoff point)

@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: metrics-log-path-writer-and-reader-disagree-in-a-linked-worktree-because-the-rust-root-rule-requires-git-to-be-a-directory
+    field: notes
+    value: |-
+      size: S
+      implementer_tier: haiku
+
+
+      [2026-09-28T08:08:30Z yoga-silverblue] yoga-silverblue 2026-09-28 - CLAIM RELEASED to tlatoanis-macbook-air, whose fix (995e3e32a, in land83) holds this row; the coordinator offered the row to both hosts. yoga's contribution rides land84 as two commits on work/1455-d7hc (now 5d7f241ba): fc6d33958 adds the linked-worktree arm the next_action asks for (a scratch repo + git worktree add; restoring .is_dir() reds it alone, 18/19); 5d7f241ba resolves the plan binary from inside the checkout - resolve_plan_binary searched relative to the cwd, so from outside the checkout five Rust-side arms passed WITHOUT RUNNING (14 of 19 ran) and preflight-fixtures-default-target refused the fixture. Now 19/19 in both regimes.
+    ts: "2026-09-28T08:08:30Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: metrics-log-path-writer-and-reader-disagree-in-a-linked-worktree-because-the-rust-root-rule-requires-git-to-be-a-directory
+    event:
+      type: progress
+      ts: "2026-09-28T08:08:30Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'size: S
+        implementer_tier: haiku
+        
+        
+        [2026-09-28T08:08:30Z yoga-silverblue] yoga-silverblue 2026-09-28 - CLAIM RELEASED to tlatoanis-macbook-air, whose fix (995e3e32a, in land83) holds this row; the coordinator offered the row to both hosts. yoga's contribution rides land84 as two commits on work/1455-d7hc (now 5d7f241ba): fc6d33958 adds the linked-worktree arm the next_action asks for (a scratch repo + git worktree add; restoring .is_dir() reds it alone, 18/19); 5d7f241ba resolves the plan binary from inside the checkout - resolve_plan_binary searched relative to the cwd, so from outside the checkout five Rust-side arms passed WITHOUT RUNNING (14 of 19 ran) and preflight-fixtures-default-target refused the fixture. Now 19/19 in both regimes.' (not terminal) with evidence_refs: 5d7f241ba
+  - packet_id: metrics-log-path-writer-and-reader-disagree-in-a-linked-worktree-because-the-rust-root-rule-requires-git-to-be-a-directory
+    event:
+      type: note
+      ts: "2026-09-28T08:08:30Z"
+      host: yoga-silverblue
+      summary: |-
+        claim released to macbookair; worktree arm + resolution fix

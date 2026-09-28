@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    field: status
+    value: completed
+    ts: "2026-09-28T07:11:33Z"
+    host: lenovinha
+
+events:
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    event:
+      type: completed
+      ts: "2026-09-28T07:11:33Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 976931d2e (land82, alignment 516323436) + 9e0a6a8ce (land77, 7bf46265e) + yoga live SOFT reset: sign-ins survived + contract ARM8 PASS + full build.sh --check rc=0 2757s on 516323436
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    event:
+      type: note
+      ts: "2026-09-28T07:11:33Z"
+      host: lenovinha
+      summary: |-
+        closed: Linux resets keep the Vault store and the share where a keyring holds it, announce the spec disposition, and delete no store; macOS/Windows halves are 1437-av8u / 1437-3iux

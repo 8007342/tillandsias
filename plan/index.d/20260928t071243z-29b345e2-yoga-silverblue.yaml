@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-tray-login-vault-poll-to-event
+    field: status
+    value: completed
+    ts: "2026-09-28T07:12:43Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: linux-tray-login-vault-poll-to-event
+    event:
+      type: completed
+      ts: "2026-09-28T07:12:43Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'completed' with evidence_refs: 976931d2e
+  - packet_id: linux-tray-login-vault-poll-to-event
+    event:
+      type: note
+      ts: "2026-09-28T07:12:43Z"
+      host: yoga-silverblue
+      summary: |-
+        landed in land82 976931d2e (work ref b5e071c29 + relay-fixes: req-id stamp, shared read_control_frame_blocking for the ack, cfg(unix) restore); GithubLoginStored on trunk, login wait is one deadline + one presence check

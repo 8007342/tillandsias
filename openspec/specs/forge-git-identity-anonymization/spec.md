@@ -22,16 +22,62 @@ declared identity (856/864/874-idnt) exists to replace.
 ### Requirement: The guest never inherits the host's git identity
 <!-- req-id: f257a89a -->
 
-Guest git identity (user.name / user.email) is configured inside the
-container at entry, from Tillandsias-provided values — never mounted,
-copied, or leaked from the host's global git config.
+Guest git identity (user.name / user.email) SHALL be derived from the GitHub
+App's authenticated user plus a host component and a Tillandsias-name
+component, and SHALL be configured inside the container at entry. It SHALL
+NOT be read from, mounted from, or copied from the host's global git config.
+(Order 1453-7rzd, operator 2026-09-28: "now that we login with a GitHub app we
+should have access to the user's name and email. We just need to juggle host
+names, and append some tillandsias names for randomness".)
 
-#### Scenario: Host identity absent in the guest
+The shape, until the operator answers the open questions in
+`openspec/changes/forge-git-identity-from-github-app/`: display name
+`<GitHub name> (<host> · tillandsia-<species>)`, email
+`<id>+<login>@users.noreply.github.com`, the species chosen once per forge.
 
-- **WHEN** a forge container starts on a host whose global git config names
-  the operator
-- **THEN** commits made inside the guest carry the project-scoped identity,
-  not the operator's
+@trace spec:forge-git-identity-anonymization, order:1453-7rzd
+
+#### Scenario: Host gitconfig does not reach the guest
+
+- **WHEN** a forge starts on a host whose global git config names someone
+  other than the GitHub App's authenticated user
+- **THEN** commits made inside the guest carry the App-derived identity, and
+  no field of the host gitconfig's user.name or user.email
+
+#### Scenario: No App login yields no borrowed identity
+
+- **WHEN** no GitHub App login is stored for the project
+- **THEN** the forge falls back to a project-scoped identity and says so in
+  its lifecycle trace, and still does not read the host gitconfig
+
+### Requirement: Guest identity is config, not exported environment
+<!-- req-id: b997e711 -->
+
+The forge SHALL write the identity as git configuration and SHALL NOT export
+GIT_AUTHOR_* or GIT_COMMITTER_* into agent shells, so a scratch repository
+that sets its own identity (`-c user.name`, a local config) commits as that
+identity. The launcher passes the values as `TILLANDSIAS_GIT_NAME`,
+`TILLANDSIAS_GIT_EMAIL` and `TILLANDSIAS_GIT_HOST` for the guest to write.
+
+#### Scenario: A fixture's scratch identity wins inside a forge
+
+- **WHEN** a fixture inside a forge runs `git -c user.name=fixture -c
+  user.email=f@x commit` in a scratch repository
+- **THEN** the commit's author is `fixture <f@x>`
+
+### Requirement: Committer host stays derivable
+<!-- req-id: f3c9b423 -->
+
+Every commit made in a forge SHALL carry its host in a `Tillandsias-Host:`
+trailer, which `scripts/fleet-activity.sh` and `tillandsias-plan discipline
+derive` read before falling back to the author email's domain, so attributing
+a commit to a host does not depend on that domain.
+
+#### Scenario: Host attribution survives a noreply email
+
+- **WHEN** a forge commit's author email is a users.noreply.github.com address
+- **THEN** the fleet activity report attributes it to the forge's host, not
+  to the unattributed bucket
 
 ### Requirement: Agentic commits carry attribution trailers
 <!-- req-id: 621c8801 -->

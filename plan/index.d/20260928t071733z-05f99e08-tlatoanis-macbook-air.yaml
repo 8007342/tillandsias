@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-origin-fold-drop-guard-has-no-path-for-a-deliberate-set-field-replace-so-a-reviewed-correction-of-a-long-form-field-can-never-land
+    field: status
+    value: in_progress
+    ts: "2026-09-28T07:17:33Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-origin-fold-drop-guard-has-no-path-for-a-deliberate-set-field-replace-so-a-reviewed-correction-of-a-long-form-field-can-never-land
+    event:
+      type: note
+      ts: "2026-09-28T07:17:33Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        claimed by macos-tlatoanis-macbook-air-claude-20260928t071730z on coordinator routing

@@ -1,0 +1,31 @@
+# @trace spec:forge-git-identity-anonymization, order:1453-7rzd
+name: litmus:forge-git-identity-source
+spec: forge-git-identity-anonymization
+phase: pre-build
+description: The forge git identity comes from the GitHub App login plus host and a tillandsia name, is written as config (never exported GIT_*), and every commit carries a Tillandsias-Host trailer
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-forge-git-identity-source.sh
+  - workspace contains images/default/lib-common.sh
+  - workspace contains scripts/fleet-activity.sh
+
+critical_path:
+  - step: "order 1453-7rzd: App identity as config, scratch -c wins, Tillandsias-Host trailer attributed, no host identity leaks (5 arms, negative controls)"
+    command: "bash scripts/test-forge-git-identity-source.sh"
+    timeout_ms: 60000
+    success_pattern: "PASS: forge-git-identity-source"
+    failure_pattern: "FAIL:"
+
+observability:
+  traces:
+    - "@trace spec:forge-git-identity-anonymization"
+  expected_log: "forge git identity is App-derived config with a host trailer"
+  log_fields:
+    spec: "forge-git-identity-anonymization"
+    test: "forge-git-identity-source"
+
+rollback:
+  on_failure: "restore configure_git_identity writing config from TILLANDSIAS_GIT_* and the Tillandsias-Host trailer; never export GIT_AUTHOR_*/GIT_COMMITTER_* into a forge"
+  command: "bash scripts/test-forge-git-identity-source.sh"

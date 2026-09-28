@@ -1526,6 +1526,13 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
         // would report "no rows are marked" — the answer that looks like
         // success.
         "must_ship",
+        // ORDER 1443-qwpj. scripts/verify-closure.sh runs a packet's OWN
+        // closure command and compares the printed output — the acceptance
+        // an orchestrator runs instead of reading a delegate's "met". It
+        // needs the FOLDED closure (a set-field correction wins), and this
+        // projection is the only surface that folds; without the key the
+        // tool would have to re-implement the fold in shell.
+        "verifiable_closure",
     ] {
         if let Some(value) = packet.get(key) {
             obj.insert(
@@ -2656,7 +2663,14 @@ fn find_repo_root() -> Option<PathBuf> {
     // .../<checkout>/target/{debug,release}/tillandsias-plan -> pop to the file's dir
     dir.pop();
     loop {
-        if dir.join(".git").is_dir() {
+        // ORDER 1454-ssg3: `.git` is a DIRECTORY in a clone and a FILE in a
+        // linked worktree ("gitdir: …"). Requiring a directory made every binary
+        // built in a worktree answer `unknown:validator-surface` (no checkout
+        // above it), so the currency probe could not run there on any platform;
+        // it presented as a darwin red only because that host measures in
+        // worktrees. metrics_default_log keeps its own is_dir test on purpose
+        // (it mirrors the shell's `-d`), so it still falls back to /tmp there.
+        if dir.join(".git").exists() {
             return Some(dir);
         }
         if !dir.pop() {

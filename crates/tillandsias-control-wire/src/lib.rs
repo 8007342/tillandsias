@@ -748,6 +748,22 @@ pub enum ControlMessage {
     ///
     /// @trace order:1420-r2sn
     ProgressPush { seq: u64, event: ProgressEvent },
+    /// Login CLI → tray, unix control socket only (order 679-rp9m): sent by
+    /// `tillandsias --github-login` AFTER its Vault write is verified, so the
+    /// tray's login wait ends on an event instead of polling Vault once a
+    /// second. The tray answers `IssueAck { seq_acked }`.
+    ///
+    /// Best-effort by contract: a login with no tray running still succeeds,
+    /// and a tray that never hears this falls back to ONE presence check at its
+    /// 120 s deadline. Consumers: the Linux tray today; the macOS and Windows
+    /// trays per their follow-up rows.
+    ///
+    /// New trailing variant: additive per the `WIRE_VERSION` doc (does not
+    /// bump the version). An older tray rejects it with `UnknownVariant`,
+    /// which the sender treats as "no tray listening".
+    ///
+    /// @trace order:679-rp9m, spec:tray-host-control-socket
+    GithubLoginStored { seq: u64, ts_unix: u64 },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -1102,6 +1118,7 @@ impl ControlMessage {
             ControlMessage::SetVsockForwardTarget { .. } => "SetVsockForwardTarget",
             ControlMessage::FlowStatePush { .. } => "FlowStatePush",
             ControlMessage::ProgressPush { .. } => "ProgressPush",
+            ControlMessage::GithubLoginStored { .. } => "GithubLoginStored",
         }
     }
 }
@@ -2816,6 +2833,13 @@ mod tests {
                 },
                 "ProgressPush",
             ),
+            (
+                ControlMessage::GithubLoginStored {
+                    seq: 1,
+                    ts_unix: 1_790_000_000,
+                },
+                "GithubLoginStored",
+            ),
         ]
     }
 
@@ -3088,6 +3112,8 @@ mod tests {
             ControlMessage::SetVsockForwardTarget { .. } => 32,
             ControlMessage::FlowStatePush { .. } => 33,
             ControlMessage::ProgressPush { .. } => 34,
+            // 679-rp9m: trailing addition.
+            ControlMessage::GithubLoginStored { .. } => 35,
         }
     }
 
@@ -3122,7 +3148,7 @@ mod tests {
         /// The number of `ControlMessage` variants. An independent literal for
         /// the same reason the discriminants are: anything computed from the
         /// enum agrees with the enum by construction.
-        const DECLARED_VARIANTS: usize = 35;
+        const DECLARED_VARIANTS: usize = 36;
 
         let samples = one_sample_per_variant();
         assert_eq!(

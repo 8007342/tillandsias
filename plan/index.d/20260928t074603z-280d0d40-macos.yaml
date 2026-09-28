@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    event:
+      type: progress
+      ts: "2026-09-28T07:46:03Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t074603z
+      host: macos
+      summary: |
+        CHECKPOINT on work/1260-2qgi at 427c1ef1d (a WIP ref; do NOT relay yet). (1) The MUST rule is in methodology/convergence.yaml -> status_channel_policy: a ternary verdict (green/red/absent); every channel preserves the status or DECLARES it absent, never a substituted integer; a consumer that reads absent re-runs or refuses and never reports green; the fleet's channel is `tillandsias-plan run --json`. It resolves through the methodology expert at convergence.yaml:353-363. (2) The fixture scripts/test-status-channel-absent-is-first-class.sh drives the fleet's detached-command recipe: the door once `run --json` exists, the improvised `nohup … & disown` + `echo rc=$?` until then. PRE-FIX on darwin: fail 0/3 run, arm 2 (wsl.exe) a named skip. Arm 1: a detached child killed mid-run reads `rc=137`, a substituted integer. Arm 3: a failing producer piped to tee reads GREEN, tee's 0; this is the PUSH_RC=0 incident, reproduced only after running the recipe in a fresh shell, because the fixture's own pipefail had lent it a guard it lacks. Arm 4: killed -> red:137. Controls hold (exit 0 -> green, exit 1 -> red:1). No leaked processes. (3) The --json status vocabulary was sent to macuahuitl-forge for agreement: `code` only when exited; signal/timeout/policy_denied/spawn_failed/no_status as named statuses; the JSON status is the verdict, never derived from the process exit code; one terminal record is always written. REMAINING: slice 2 lands -> arms flip onto the door and go green; bind the fixture to the gate; switch the runbook recipes (advance-work §5, meta-orchestration's detached gate) to `tillandsias-plan run --json -- <argv> > log`. The fixture is deliberately unbound until then (it would red every land).
