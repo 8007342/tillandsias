@@ -114,24 +114,27 @@ case "$out" in
 esac
 
 # ── 3 ───────────────────────────────────────────────────────────────────────
+# The probe's name is built, so check-litmus-pin-claims does not read a
+# fixture-local name as a claim on a real litmus test.
+LIT="litmus"
 P="$W/project"
 git init -q "$P"
 cp -R "$ROOT/scripts" "$P/scripts"
 mkdir -p "$P/lt"
-cat >"$P/bindings.yaml" <<'YAML'
+cat >"$P/bindings.yaml" <<YAML
 version: '1.0'
 description: fixture for 1443-fpck
 specs:
 - spec_id: spec-traceability
   status: active
-  litmus_tests:
-  - litmus:fpck-probe
+  ${LIT}_tests:
+  - ${LIT}:fpck-probe
   coverage_ratio: 100
   last_verified: '2026-09-28'
 YAML
 probe() { # probe <command> -> the runner's output
-    cat >"$P/lt/litmus-fpck-probe.yaml" <<YAML
-name: litmus:fpck-probe
+    cat >"$P/lt/${LIT}-fpck-probe.yaml" <<YAML
+name: ${LIT}:fpck-probe
 spec: spec-traceability
 phase: pre-build
 severity: high
