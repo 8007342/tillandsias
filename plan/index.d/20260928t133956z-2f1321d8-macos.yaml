@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-vm-memory-ceiling-is-8gib-regardless-of-host-ram-operator-ruling
+    field: status
+    value: completed
+    ts: "2026-09-28T13:39:56Z"
+    host: macos
+
+events:
+  - packet_id: guest-vm-memory-ceiling-is-8gib-regardless-of-host-ram-operator-ruling
+    event:
+      type: completed
+      ts: "2026-09-28T13:39:56Z"
+      host: macos
+      summary: |-
+        status 'completed' with evidence_refs: e331f83a6 (fix(vm-layer): cap the guest at 8 GiB regardless of host RAM) is on origin/linux-next and in every published release from v56.9.19.1 through v56.9.27.2 (criterion 4: the ruling reached a published app update). At trunk HEAD on darwin, cargo test -p tillandsias-vm-layer guest_sizing -> 6 passed, 0 failed. Criteria 1-2: guest_sizing_obeys_the_2026_09_16_memory_ruling asserts an 8 GiB host yields 4 GiB and SWEEPS every host from 16 to 1024 GiB to exactly 8 GiB (vz.rs GUEST_MAX_MEMORY_BYTES 8 GiB, HOST_RESERVED_MEMORY_BYTES 4 GiB). Criterion 3: guest_sizing_never_exceeds_the_host sweeps 1-64 GiB and proves no over-allocation; with the 4 GiB reserve a host of 5 GiB or less sizes below GUEST_MIN_VIABLE_MEMORY_BYTES (2 GiB), which is the unchanged loud-refusal branch in start() (vz.rs ~2653). That refusal is pinned through the sizing, not by a direct test of start(), which needs VZ.
+  - packet_id: guest-vm-memory-ceiling-is-8gib-regardless-of-host-ram-operator-ruling
+    event:
+      type: note
+      ts: "2026-09-28T13:39:56Z"
+      host: macos
+      summary: |-
+        audit-close of a shipped row: implemented 2026-09-17 by this host, landed, released; it was never closed
