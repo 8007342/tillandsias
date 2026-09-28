@@ -10964,6 +10964,53 @@ pub fn render_terminal_qr(url: &str) -> Result<String, String> {
     render_terminal_qr_in(url, qr_tier())
 }
 
+// Order 1475-uif4. OpenAI documents the device flow, but not a machine-readable
+// CLI output format or a permanent URL. Recognize only the currently observed
+// verification page as a complete whitespace-delimited token in Codex's own
+// stream. A changed or decorated URL leaves the CLI instructions untouched and
+// produces no QR; in particular, a query or path carrying a device code is
+// never encoded. This scanner retains at most one URL-sized window; it never
+// logs or persists the login output.
+const CODEX_DEVICE_VERIFICATION_URI: &str = "https://auth.openai.com/codex/device";
+
+struct CodexDeviceQrScanner {
+    tail: Vec<u8>,
+    displayed: bool,
+}
+
+impl CodexDeviceQrScanner {
+    fn new() -> Self {
+        Self {
+            tail: Vec::with_capacity(CODEX_DEVICE_VERIFICATION_URI.len() + 2),
+            displayed: false,
+        }
+    }
+
+    fn feed(&mut self, chunk: &[u8], tier: tillandsias_progress_tty::Tier) -> Option<String> {
+        if self.displayed {
+            return None;
+        }
+        let width = CODEX_DEVICE_VERIFICATION_URI.len() + 2;
+        for &byte in chunk {
+            self.tail.push(byte);
+            if self.tail.len() > width {
+                self.tail.remove(0);
+            }
+            if self.tail.len() == width
+                && self.tail[0].is_ascii_whitespace()
+                && self.tail[width - 1].is_ascii_whitespace()
+                && &self.tail[1..width - 1] == CODEX_DEVICE_VERIFICATION_URI.as_bytes()
+            {
+                self.displayed = true;
+                return render_terminal_qr_in(CODEX_DEVICE_VERIFICATION_URI, tier)
+                    .ok()
+                    .map(|qr| format!("\n{qr}\n"));
+            }
+        }
+        None
+    }
+}
+
 /// The one-time code, in blush on a colour tier and plain otherwise.
 fn styled_user_code(code: &str, tier: tillandsias_progress_tty::Tier) -> String {
     let open = qr_sgr(tier, tillandsias_progress_tty::palette::TIP_BLUSH, None);
@@ -11791,6 +11838,42 @@ fn provider_login_tool_cache_mount(provider: &ProviderId) -> Option<String> {
     None
 }
 
+/// Stream Codex's own device instructions byte-for-byte and add a QR only when
+/// the complete, code-free verification URI appears. The existing bounded
+/// Podman stream keeps the container PTY and its deadline; Codex needs no stdin
+/// for `login --device-auth`. No output chunk enters tracing or an argv/env.
+fn run_codex_device_login_with_qr(
+    mut login: tillandsias_podman::SyncPodmanCommand,
+    debug: bool,
+) -> Result<(), String> {
+    use std::io::Write;
+
+    if debug {
+        eprintln!("[tillandsias] running: {:?}", login.as_std());
+    }
+    let tier = qr_tier();
+    let mut scanner = CodexDeviceQrScanner::new();
+    let status = login
+        .status_bounded_with_stdin_streaming(
+            &[],
+            tillandsias_podman::OperationKind::Container.default_budget(),
+            move |chunk| {
+                let mut out = std::io::stdout().lock();
+                let _ = out.write_all(chunk);
+                if let Some(qr) = scanner.feed(chunk, tier) {
+                    let _ = out.write_all(qr.as_bytes());
+                }
+                let _ = out.flush();
+            },
+        )
+        .map_err(|e| format!("Failed to run Codex device login: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("Codex device login exited with status {status}"))
+    }
+}
+
 fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), String> {
     let provider_name = config.provider.name();
     let flag = format!("--{}-login", config.provider.id_str());
@@ -11996,7 +12079,13 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &config.token_script,
             config.input_mode,
         ));
-        run_podman_command(login, debug)?;
+        if matches!(config.provider, ProviderId::Codex)
+            && matches!(config.input_mode, LoginInputMode::Terminal)
+        {
+            run_codex_device_login_with_qr(login, debug)?;
+        } else {
+            run_podman_command(login, debug)?;
+        }
     }
 
     if matches!(config.provider, ProviderId::GitHub) {
@@ -24749,6 +24838,81 @@ mod tests {
         assert_eq!(spec.vault_field, "credentials_b64");
         assert_eq!(spec.login_script(), "exec /usr/local/bin/codex-device-auth");
         assert_eq!(ProviderId::Codex.secret_field(), "credentials_b64");
+    }
+
+    #[test]
+    fn codex_device_qr_recognizes_every_stream_split_and_only_once() {
+        use tillandsias_progress_tty::{EnvView, Tier};
+
+        let non_tty = Tier::detect(&EnvView {
+            is_tty: false,
+            term: Some("xterm-256color".into()),
+            ..EnvView::default()
+        });
+        let no_color = Tier::detect(&EnvView {
+            is_tty: true,
+            term: Some("xterm-256color".into()),
+            no_color: Some(String::new()),
+            ..EnvView::default()
+        });
+        assert_eq!(non_tty, Tier::Plain);
+        assert_eq!(no_color, Tier::Plain);
+        let uri = CODEX_DEVICE_VERIFICATION_URI.as_bytes();
+        for tier in [non_tty, no_color] {
+            for split in 0..=uri.len() {
+                let mut scanner = CodexDeviceQrScanner::new();
+                let mut first = b"Open: \r\n  ".to_vec();
+                first.extend_from_slice(&uri[..split]);
+                assert!(scanner.feed(&first, tier).is_none(), "split={split}");
+                let mut second = uri[split..].to_vec();
+                second.extend_from_slice(b" \r\nEnter code: SECRET-1234\r\n");
+                let qr = scanner
+                    .feed(&second, tier)
+                    .expect("complete URI must render");
+                assert!(qr.lines().count() >= 10, "split={split}");
+                assert!(!qr.contains('\x1b'), "plain QR must have no escapes");
+                assert!(!qr.contains("SECRET-1234"), "code must not reach QR output");
+                assert!(scanner.tail.len() <= uri.len() + 2);
+                assert!(
+                    scanner
+                        .feed(b"\nhttps://auth.openai.com/codex/device \n", tier)
+                        .is_none(),
+                    "a login renders at most one QR"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn codex_device_qr_rejects_spoofed_or_code_bearing_urls() {
+        use tillandsias_progress_tty::Tier;
+
+        for output in [
+            "device code: SECRET-1234\n",
+            "\nhttp://auth.openai.com/codex/device \n",
+            "\nhttps://auth.openai.com.evil.invalid/codex/device \n",
+            "\nhttps://auth.openai.com/codex/device?user_code=SECRET-1234 \n",
+            "\nhttps://auth.openai.com/codex/device/SECRET-1234 \n",
+            "\nhttps://evil.invalid/?next=https://auth.openai.com/codex/device \n",
+        ] {
+            let mut scanner = CodexDeviceQrScanner::new();
+            assert!(
+                scanner.feed(output.as_bytes(), Tier::Plain).is_none(),
+                "{output:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn codex_device_qr_uses_the_existing_terminal_palette() {
+        use tillandsias_progress_tty::Tier;
+
+        let mut scanner = CodexDeviceQrScanner::new();
+        let output = format!("\r\n{CODEX_DEVICE_VERIFICATION_URI}\r\n");
+        let qr = scanner
+            .feed(output.as_bytes(), Tier::TrueColor)
+            .expect("verified URL must render");
+        assert!(qr.contains("\x1b[38;2;30;74;50;48;2;157;187;165m"));
     }
 
     #[test]
