@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Contributed by Antigravity in response to order 1447-9sne and operator direction.
+events:
+  - packet_id: research-whether-the-centicolon-uncertainty-metric-must-also-count-transient-work-bug-fixes-and-regressions-that-should-produce-a-preventing-spec-requirement
+    event:
+      type: note
+      ts: "2026-09-28T00:50:00Z"
+      agent_id: calmecac-antigravity-20260928t005000z
+      host: calmecac
+      summary: |
+        ANTIGRAVITY RESEARCH & DESIGN DELIVERABLE (order 1447-9sne):
+        Filed design doc plan/issues/centicolon-transient-work-scope-research-2026-09-27.md
+        and updated openspec/specs/methodology-accountability/spec.md with three formal requirements
+        and invariants (req-ids: e45b37c5, a1b71f16, 5ee5d6af).
+
+        Key design positions:
+        1. Ontology: ./plan is the epistemic distillation middle layer. Transient dev-box
+           fixes (e.g. macOS bash 3.2, Windows CRLF, Forge tmpfs) do not belong in user-facing
+           product specs; they distill into Systemic Invariants (cc:inv:*) and Platform
+           Preconditions (cc:env:*).
+        2. Decomposed Residual Vector: R is decomposed as <R_spec, R_inv, R_env> with a
+           single scalar ranking projection R. Backlog queue length Q is tracked orthogonally
+           to preserve ranking function monotonicity and prevent dimensional confusion.
+        3. Verifiable Closures: check-scorable-obligation-added.sh is expanded to accept
+           centicolon: <req-id>, centicolon: inv:<id>, centicolon: env:<id>, and
+           maintenance: <cmd> (for neutral operational maintenance where delta R = 0).
+        4. Lua Litmus Execution: Pure Cacheable Lua Litmus predicates execute directly
+           inside ./build.sh --check in milliseconds, ensuring pre-push gates witness
+           active invariant verification without shell pipe fragility.
