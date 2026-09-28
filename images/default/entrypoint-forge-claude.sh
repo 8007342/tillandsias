@@ -37,8 +37,14 @@ exit_pause() {
         echo "ERROR: forge agent launch failed (exit code: $exit_code)"
         echo "═══════════════════════════════════════════════════════"
         echo ""
-        echo "Press any key to exit..."
-        read -r -n 1 -s 2>/dev/null || true
+        # 1457-r8yi: when the host holds the window (tillandsias --hold-window
+        # passes TILLANDSIAS_HOST_HOLDS_WINDOW=1 by name), it asks for the one
+        # keypress; pausing here too asked for two. Other lanes (macOS, Windows,
+        # an operator's own terminal) do not set it and still pause here.
+        if [ "${TILLANDSIAS_HOST_HOLDS_WINDOW:-}" != 1 ]; then
+            echo "Press any key to exit..."
+            read -r -n 1 -s 2>/dev/null || true
+        fi
     fi
 }
 trap 'exit_pause' EXIT
