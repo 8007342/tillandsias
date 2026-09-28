@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    event:
+      type: finding
+      ts: "2026-09-28T08:37:24Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        WINDOWS RUN (yolanda, 2026-09-28, Git Bash), tillandsias-plan.exe built natively from work/1260-2qgi 9aba0d618: `bash scripts/test-status-channel-absent-is-first-class.sh` -> fail:status-channel:absent-distinct-from-zero:1/4 (channel: agent door).
+        ARM 2 (the wsl.exe hop, Windows-only) PASSES: "the drop is DECLARED (refused, rc=1), not substituted".
+        ARMS 1, 3, 4 FAIL, one cause: a child killed mid-run is reported as {"status":"exited","code":2304,...} instead of absent. 2304 = 9 << 8: the MSYS runtime hands a SIGKILL death to a NATIVE Windows parent as an ordinary exit code, so the exe sees Some(2304) and cannot tell killed from exited. (rc1 -> red:1 and exit 0 -> green are right in every arm; only the killed case substitutes an integer.) Evidence: arm 4 JSON "status":"exited","code":2304 for bash killme.sh.
+        So this row does NOT close at 4/4 on Windows. The fix belongs where the status is decided (tillandsias-exec / the run verb on Windows), not in the fixture: a Windows child has no signal channel, so either an MSYS-shaped (sig<<8) code from a child the verb itself killed is reported absent, or the killed arms are declared a Windows-regime limit by name. Deciding which is the subsystem's call.

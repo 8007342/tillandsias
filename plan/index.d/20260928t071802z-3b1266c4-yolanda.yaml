@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-tray-consumes-github-login-stored-instead-of-polling-for-the-login
+    event:
+      type: note
+      ts: "2026-09-28T07:18:02Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        READ-ONLY ANSWER (yolanda, 2026-09-28, trunk source): YES, the WSL guest runs the same order-276 path. The sentinel writer (--github-login, main.rs ~12146) and the resident service 2 s tick that stats /run/tillandsias/login-transition and pushes login state at once (main.rs ~18103, vsock_server.rs login_transition_sentinel_path) are both gated only on #[cfg(feature = "listen-vsock")], not on platform; the WSL guest headless is built with --features listen-vsock (build-windows-tray.ps1 staging, and the 2026-09-27 smoke build). --github-login runs as its own process in the same distro, so both see the same /run tmpfs. Precondition: the tick runs only while the VM is Ready and a LoginState subscriber exists, which the Windows tray is. So nothing to build for Windows; this row is ONE operator measurement: sign in to GitHub from the Windows tray and count seconds from the QR confirmation to the tray showing the handle (expected ~2 s).
