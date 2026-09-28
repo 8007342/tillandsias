@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    field: context
+    value: |-
+      FIVE INSTANCES, 2026-09-18, ONE SHAPE: a status READ from something other
+      than the thing that produced it, with nothing marking the substitution.
+        1. 1256-cqsy (macneo): a backgrounded ./build.sh --check that exited 1
+           was reported `[exited with code 0]` by the wrapper.
+        2. 1155-jurn (esme, yolanda): `wsl.exe … bash -lc` drops the child's rc;
+           `false; echo $?` prints 0 on two Windows hosts. rc is decoration.
+        3. esme: `git push` whose real exit was 1 reported PUSH_RC=0 — `$?`
+           after a pipeline is the last stage's.
+        4. macbookair (via macneo): a gate KILLED at 7% produced no verdict and
+           the wrapper supplied 144, indistinguishable from a red to anyone
+           reading the wrapper. Verdicts are TERNARY: green, red, ABSENT.
+        5. macneo: a delete script printed a scripted "empty above = both
+           deleted" line while both refs were still listed — a sentence that
+           reads like a result, produced by nothing that checked.
+      THE SHARED REMEDY, which none of the child rows states: every channel that
+      carries a status must PRESERVE it or DECLARE that it cannot, and the
+      consumer must be able to tell `rc=0` from `no rc reached me`. That is the
+      fleet's source=absent discipline for missing data, applied to exit
+      status. And the rule must say what to DO on absence — re-run, or refuse
+      to push — because "treat it as unresolved" is read as "use your
+      judgement", which in practice means using the wrapper's integer.
+      Framing: macneo-macos and macbookair-macos, 2026-09-18; instances from
+      esmeraldinha and yolanda the same day.
+
+
+      [2026-09-28T07:42:52Z macos] RE-SCOPED (coordinator ruling 2026-09-28, from macbookair's scope question):
+      ONE channel the fleet uses, plus the MUST rule; NO new bash helper. The channel
+      is macuahuitl-forge's agent door `tillandsias-plan run` (1443-8pur): its slice 2
+      (`--json`) emits a status that tells "exited n" from "signal N" from "timeout"
+      from "policy_denied", with ABSENT a first-class value (proposed
+      status:"no_status" with a reason), never a substituted integer. Vocabulary sent
+      to macuahuitl-forge for agreement before slice 2 is written; the proposal's
+      load-bearing rules: `code` appears only when status is "exited"; the JSON status
+      is the verdict, never derived back from the process exit code; one terminal
+      record is always written, and its absence is itself absent.
+      depends_on: 1443-8pur (the agent door; arms 1/3/4 flip onto `run --json` when
+      its slice 2 lands).
+      Deliverable: the MUST rule in methodology/convergence.yaml (a status is
+      preserved or declared absent; the verdict is ternary green/red/absent; the
+      consumer must handle absent and say what to DO: re-run, or refuse to push);
+      the runbook recipes (advance-work §5, meta-orchestration's detached gate)
+      switched to `tillandsias-plan run --json -- <argv> > log` once slice 2 lands;
+      and the fixture. Arms: (1) the door's detached JSON terminal line; (2) the
+      wsl.exe canary, a named skip on darwin (yolanda runs it); (3) `producer | tee`
+      through the door; (4) a child killed mid-run -> absent/signal, each with the
+      rc=1 and exit-0 controls. Until slice 2 lands, arms 1/3/4 FAIL against the
+      improvised recipes: that is the pre-fix evidence.
+    ts: "2026-09-28T07:42:52Z"
+    host: macos
+
+events:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    event:
+      type: note
+      ts: "2026-09-28T07:42:52Z"
+      host: macos
+      summary: |-
+        re-scope to the agent door as the one status channel; depends_on 1443-8pur (coordinator ruling)

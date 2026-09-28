@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: validators-pinned-to-an-exact-version-block-the-first-bump
+    event:
+      type: progress
+      ts: "2026-09-28T15:47:46Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t154746z
+      host: macos
+      summary: |
+        work/968-uhzg @ 1c1ff6b89 ready for relay (tlatoanis-macbook-air, darwin).
+        Enumeration of exact version compares in tree:
+        - scripts/host-capability-probe.sh:183 already a floor (.schema_version >= 2) — fixture arm 6 proves schema 4 validates, 1 refused.
+        - WIRE_VERSION compares (x10): exact against a named const, protocol — admitted.
+        - vm-layer qcow2.rs:106 `version != 2 && version != 3`: on-disk format, now carries an exact-version: reason.
+        - accel_probe `== SCHEMA_VERSION` (cache freshness) and groundtruth `!= QUERY_SET_VERSION` (foreign schema): named consts — admitted.
+        - headless policy_router.rs `self.version != 1`: the one bare literal — moved to POLICY_TABLE_VERSION.
+        - policy/main.rs:2538: not a version comparison.
+        Guard: scripts/check-exact-version-literal-added.sh (diff-scoped; floors, named consts, and exact-version: markers admitted). Fixture scripts/test-exact-version-literal-added.sh 6/6, gate step 284 with darwin STEP_SECOND_REGIME.
+        Siblings of the class (a guard that stops observing what it guards): core.hooksPath hiding a spy hook; a mutation arm that stopped mutating; a fixture inheriting ambient TILLANDSIAS_BREW_AUTOINSTALL=0; this exact pin.
+        Clean-checkout deciders: all ok (jq 344/floor 344 + ratchet fixture 6/6, sigpipe 2 checked, gate-step regimes 126, prefix no-collision); fmt, clippy -D warnings, musl zigbuild --tests green.
