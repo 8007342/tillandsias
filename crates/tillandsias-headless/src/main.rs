@@ -15435,7 +15435,6 @@ pub(crate) enum TrayNotify {
     NoTray(String),
 }
 
-/// The tray's control socket, as the tray computes it.
 #[cfg(unix)]
 /// Read one length-prefixed (u32 big-endian) control-wire frame body from a
 /// blocking stream, bounded by `MAX_MESSAGE_BYTES`. The single hand-rolled
@@ -15457,6 +15456,8 @@ fn read_control_frame_blocking(stream: &mut impl Read) -> Result<Vec<u8>, String
     Ok(body)
 }
 
+/// The tray's control socket, as the tray computes it.
+#[cfg(unix)]
 fn tray_control_socket_path() -> PathBuf {
     let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
         .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
