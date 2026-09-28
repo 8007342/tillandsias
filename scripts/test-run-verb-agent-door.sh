@@ -127,10 +127,10 @@ fi
 out="$("$PLAN" run --json --timeout-ms 5000 -- printf "a b" 2>/dev/null)"; rc=$?
 keys="$(jget -c 'keys' <<<"$out" 2>/dev/null)"
 if [ "$rc" -eq 0 ] && [ "$(grep -c . <<<"$out")" = 1 ] &&
-    [ "$keys" = '["argv","code","ok","policy","run_id","status","stderr","stdout","truncated","wall_ms"]' ] &&
+    [ "$keys" = '["argv","code","ok","policy","run_id","signal","status","stderr","stdout","truncated","wall_ms"]' ] &&
     [ "$(jget -r '.stdout' <<<"$out")" = "a b" ] && [ "$(jget -r '.status' <<<"$out")" = exited ] &&
     [ "$(jget -r '.ok' <<<"$out")" = true ] && [ "$(jget -r '.run_id' <<<"$out")" != null ]; then
-    ok "arm 1: --json prints exactly one object with the ten keys, exit 0"
+    ok "arm 1: --json prints exactly one object with the eleven keys, exit 0"
 else
     bad "arm 1: rc=$rc keys=[$keys] out=[$out]"
 fi
@@ -145,6 +145,16 @@ fi
 out="$("$PLAN" run --json --timeout-ms 300 -- sleep 5 2>/dev/null)"; rc=$?
 [ "$rc" -eq 0 ] && [ "$(jget -r '.status' <<<"$out")" = timed_out ] && [ "$(jget -r '.code' <<<"$out")" = null ] &&
     ok "arm 1: a deadline is status timed_out with no invented code, exit 0" || bad "arm 1 timeout: rc=$rc [$out]"
+# A script file, not a shell string: the policy refuses bash -c.
+printf '#!/usr/bin/env bash\nkill -TERM $$\n' >"$W/self-term.sh"
+chmod +x "$W/self-term.sh"
+out="$("$PLAN" run --json --timeout-ms 5000 -- "$W/self-term.sh" 2>/dev/null)"; rc=$?
+[ "$rc" -eq 0 ] && [ "$(jget -r '.status' <<<"$out")" = signaled ] && [ "$(jget -r '.signal' <<<"$out")" = 15 ] &&
+    [ "$(jget -r '.code' <<<"$out")" = null ] &&
+    ok "arm 1: a signaled child carries signal=15 and code=null, exit 0" || bad "arm 1 signal: rc=$rc [$out]"
+out="$("$PLAN" run --json -- false 2>/dev/null)"
+[ "$(jget -r '.signal' <<<"$out")" = null ] &&
+    ok "arm 1: an exited child carries signal=null" || bad "arm 1 signal-null: [$out]"
 out="$("$PLAN" run --json -- no-such-program-8pur 2>/dev/null)"; rc=$?
 [ "$rc" -eq 0 ] && [ "$(jget -r '.status' <<<"$out")" = spawn_failed ] &&
     ok "arm 1: an unknown program is status spawn_failed, exit 0" || bad "arm 1 spawn: rc=$rc [$out]"

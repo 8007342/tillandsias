@@ -92,7 +92,9 @@ pub fn base_env(additions: &[(String, String)]) -> Vec<(String, String)> {
 }
 
 /// The `--json` result (slice 2): exactly one object with the keys run_id,
-/// status, code, ok, stdout, stderr, truncated, wall_ms, argv, policy — and the
+/// status, code, signal, ok, stdout, stderr, truncated, wall_ms, argv, policy
+/// (signal added by coordinator ruling 2026-09-28: `code` is an integer only
+/// for exited, `signal` only for signaled; null otherwise) — and the
 /// verb's exit code. THE VERB EXITS 0 WHENEVER IT REPORTED what happened to a
 /// child (any code, a signal, a deadline, a spawn failure); it exits 1 only for
 /// a policy refusal and 4 for a consent requirement, and a usage error is 2. So
@@ -118,6 +120,7 @@ pub fn outcome_json(spec: &RunSpec, outcome: &RunOutcome) -> (serde_json::Value,
                     "run_id": Value::Null,
                     "status": status,
                     "code": Value::Null,
+                    "signal": Value::Null,
                     "ok": false,
                     "stdout": "",
                     "stderr": "",
@@ -134,6 +137,7 @@ pub fn outcome_json(spec: &RunSpec, outcome: &RunOutcome) -> (serde_json::Value,
                 "run_id": Value::Null,
                 "status": "spawn_failed",
                 "code": Value::Null,
+                "signal": Value::Null,
                 "ok": false,
                 "stdout": "",
                 "stderr": cp::redact(error),
@@ -149,6 +153,7 @@ pub fn outcome_json(spec: &RunSpec, outcome: &RunOutcome) -> (serde_json::Value,
                 "run_id": Value::Null,
                 "status": "no_status",
                 "code": Value::Null,
+                "signal": Value::Null,
                 "ok": false,
                 "stdout": "",
                 "stderr": cp::redact(reason),
@@ -164,16 +169,20 @@ pub fn outcome_json(spec: &RunSpec, outcome: &RunOutcome) -> (serde_json::Value,
             wall_ms,
             rule_id,
         } => {
-            let (status, code) = match output.completion {
-                tillandsias_exec::Completion::Exited(c) => ("exited", json!(c)),
-                tillandsias_exec::Completion::Signaled(_) => ("signaled", Value::Null),
-                tillandsias_exec::Completion::TimedOut { .. } => ("timed_out", Value::Null),
+            // code is an integer ONLY for exited; signal ONLY for signaled.
+            let (status, code, signal) = match output.completion {
+                tillandsias_exec::Completion::Exited(c) => ("exited", json!(c), Value::Null),
+                tillandsias_exec::Completion::Signaled(s) => ("signaled", Value::Null, json!(s)),
+                tillandsias_exec::Completion::TimedOut { .. } => {
+                    ("timed_out", Value::Null, Value::Null)
+                }
             };
             (
                 json!({
                     "run_id": output.run.as_str(),
                     "status": status,
                     "code": code,
+                    "signal": signal,
                     "ok": output.completion.is_success() && !output.truncated,
                     "stdout": String::from_utf8_lossy(&output.stdout),
                     "stderr": String::from_utf8_lossy(&output.stderr),
