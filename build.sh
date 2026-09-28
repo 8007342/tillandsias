@@ -1323,13 +1323,10 @@ _bump_build_version() {
         #   * a local-only commit, which the meta-orchestration exit contract
         #     forbids outright.
         #
-        # The deadlock itself is NOT fixed here and 643-64bx stays open: a local
-        # build still writes to a tracked file, so `./build.sh --install` followed
-        # by a normal push still needs a manual revert. Fixing that means deciding
-        # whether the local build counter should touch tracked files at all, which
-        # has release-path consequences and is the packet's own first exit
-        # criterion. What is fixed is the packet's second criterion — the
-        # instruction that actively steers toward --no-verify.
+        # The deadlock itself was closed later (2026-09-28): the operator ruled
+        # the counter a tracked monotonic counter (2026-09-17), and the guard's
+        # exception 5 accepts a strictly-greater bump committed alone, so
+        # `./build.sh --install` then a bump-only commit pushes normally.
         local branch main_version
         branch="$(git -C "$SCRIPT_DIR" symbolic-ref --short HEAD 2>/dev/null || echo "")"
         main_version="$(git -C "$SCRIPT_DIR" show origin/main:VERSION 2>/dev/null \
@@ -1346,11 +1343,16 @@ _bump_build_version() {
             _warn "  This matches origin/main (${main_version}) — a sync-forward, which the pre-push guard allows."
             _warn "  Commit them with your change: git add VERSION Cargo.toml crates/*/Cargo.toml"
         else
-            _warn "  Do NOT commit VERSION on '${branch}': the pre-push guard refuses it (main's is ${main_version:-unknown})."
-            _warn "  Revert the bump to keep the tree clean:"
-            _warn "    git checkout -- VERSION Cargo.toml Cargo.lock crates/*/Cargo.toml"
-            _warn "  Or skip it next time: TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh …"
-            _warn "  Do NOT reach for 'git push --no-verify' — it disables the only remaining gate (643-64bx)."
+            # ORDER 643-64bx, closed by the operator's 2026-09-17 ruling: the
+            # build counter is a monotonic YEAR_FROM_EPOCH.MONTH.DAY.BUILD
+            # counter that travels on any branch. The pre-push guard accepts a
+            # well-formed, strictly-greater bump committed ALONE (exception 5),
+            # so the advice is to commit it by itself, never swept into work
+            # (702-eusw), and never to revert it.
+            _warn "  Commit the bump ALONE (the pre-push guard accepts a strictly-greater bump that touches only these files):"
+            _warn "    git commit -m 'build: VERSION ${after}' -- VERSION Cargo.toml Cargo.lock crates/*/Cargo.toml"
+            _warn "  Never sweep it into another commit (702-eusw refuses that), and do NOT reach for"
+            _warn "  'git push --no-verify' — it disables the only remaining gate (643-64bx)."
         fi
     fi
 }

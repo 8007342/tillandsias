@@ -51,6 +51,7 @@ branch="$(git symbolic-ref --short HEAD 2>/dev/null)" || {
 # available we allow rather than guess.
 version_touched=false
 ranges=""
+target_versions=""
 if [[ ! -t 0 ]]; then
     while read -r _lref lsha _rref rsha; do
         [[ -n "${lsha:-}" ]] || continue
@@ -62,6 +63,8 @@ if [[ ! -t 0 ]]; then
             [[ -n "$base" ]] && ranges+="$base..$lsha "
         else
             ranges+="$rsha..$lsha "
+            _tv="$(git show "$rsha:VERSION" 2>/dev/null)" || _tv=""
+            [[ -n "$_tv" ]] && target_versions+="$_tv "
         fi
     done
 fi
@@ -158,6 +161,70 @@ if [[ -n "$release_tag_version" && "$current_version" == "$release_tag_version" 
     version_sync_forward=true
 fi
 
+#   5. MONOTONIC LOCAL BUILD BUMP (order 643-64bx; operator ruling 2026-09-17:
+#      "YEAR_FROM_EPOCH.MONTH.DAY.LOCAL_BUILD_NUMBER … +1 whichever is the
+#      largest, monotonic increments always"). A local build's counter bump is
+#      a CRDT-style monotonic counter, not a release decision, so it may travel
+#      on any branch — but ONLY when all three hold, and each is checked:
+#        - WELL-FORMED: four numeric fields, month 1-12, day 1-31, build >= 1;
+#        - STRICTLY GREATER than every reference this push can see: the target
+#          ref's previous VERSION, origin/linux-next, origin/main, and the newest
+#          release tag reachable from HEAD (a lower or equal value is a
+#          regression or a replay, and stays refused);
+#        - ISOLATED (702-eusw): every NON-MERGE commit in the pushed range that
+#          changes VERSION changes only VERSION and its Cargo companions.
+#      This supersedes the 2026-08-13 reading that a platform branch's own bump
+#      must be refused; the release identity is still main's, and main still
+#      moves only by PR.
+_vg_wellformed() { # well-formed epoch-CalVer?
+    [[ "$1" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || return 1
+    local m=$((10#${BASH_REMATCH[2]})) d=$((10#${BASH_REMATCH[3]})) b=$((10#${BASH_REMATCH[4]}))
+    (( m >= 1 && m <= 12 && d >= 1 && d <= 31 && b >= 1 ))
+}
+_vg_greater() { # $1 > $2, numerically field by field (both well-formed)
+    local IFS=. a b i
+    read -r -a a <<<"$1"; read -r -a b <<<"$2"
+    for i in 0 1 2 3; do
+        (( 10#${a[i]} > 10#${b[i]} )) && return 0
+        (( 10#${a[i]} < 10#${b[i]} )) && return 1
+    done
+    return 1
+}
+monotonic_bump=false
+monotonic_why=""
+if [[ "$version_touched" == true && "$version_sync_forward" == false ]]; then
+    if ! _vg_wellformed "$current_version"; then
+        monotonic_why="VERSION '$current_version' is not a well-formed YEAR_FROM_EPOCH.MONTH.DAY.BUILD"
+    else
+        monotonic_bump=true
+        for _ref in $target_versions "$integration_version" "$main_version" "$release_tag_version"; do
+            [[ -n "$_ref" ]] || continue
+            _vg_wellformed "$_ref" || continue   # a legacy-shaped reference cannot order against this one
+            if ! _vg_greater "$current_version" "$_ref"; then
+                monotonic_bump=false
+                monotonic_why="VERSION $current_version is not strictly greater than $_ref"
+                break
+            fi
+        done
+        if [[ "$monotonic_bump" == true ]]; then
+            for r in $ranges; do
+                for _c in $(git rev-list --no-merges "$r" -- VERSION 2>/dev/null); do
+                    _cf="$(git diff-tree --no-commit-id --name-only -r "$_c" 2>/dev/null)"
+                    while IFS= read -r _f; do
+                        case "$_f" in
+                            ''|VERSION|Cargo.lock|Cargo.toml|crates/*/Cargo.toml) ;;
+                            *) monotonic_bump=false
+                               monotonic_why="commit ${_c:0:12} changes VERSION alongside $_f (702-eusw: a bump lands alone)"
+                               break 3 ;;
+                        esac
+                    done <<<"$_cf"
+                done
+            done
+        fi
+    fi
+fi
+[[ "$monotonic_bump" == true ]] && version_sync_forward=true
+
 version_bump_branch=false
 case "$branch" in
     release/version-bump-*) version_bump_branch=true ;;
@@ -172,13 +239,14 @@ if [[ "$version_touched" == true && "$version_sync_forward" == false \
         echo "" >&2
         echo "  Current VERSION: $current_version" >&2
         echo "  Main VERSION:    $main_version" >&2
+        [[ -n "$monotonic_why" ]] && echo "  Not a monotonic build bump: $monotonic_why" >&2
         echo "" >&2
         echo "  The commits being pushed CHANGE VERSION. That belongs on main," >&2
         echo "  which is where a release bump lands." >&2
-        echo "  If you intended to bump VERSION, either:" >&2
-        echo "    1. Push to main (allowed)" >&2
-        echo "    2. Drop the VERSION change from these commits" >&2
-        echo "    3. Use 'git push --no-verify' to bypass (also skips the local gate)" >&2
+        echo "  A local build bump pushes when it is well-formed, strictly greater than" >&2
+        echo "  every reference (target, linux-next, main, newest tag), and committed" >&2
+        echo "  ALONE (VERSION + Cargo files). Otherwise drop the VERSION change from" >&2
+        echo "  these commits. Do not reach for --no-verify: it also skips the gate." >&2
         echo "" >&2
         exit 1
     fi
