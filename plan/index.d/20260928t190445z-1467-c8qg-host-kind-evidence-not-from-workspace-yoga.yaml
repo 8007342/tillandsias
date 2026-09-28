@@ -1,0 +1,45 @@
+packets:
+  - packet_id: host-kind-evidence-never-comes-from-a-file-in-the-workspace-so-a-planted-forge-marker-in-a-writable-cwd-reads-bare-metal-and-a-real-forge-still-reads-forge
+    order: 1467-c8qg
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [policy, consent, security, tests]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/command_policy.rs
+      - scripts/test-host-kind-evidence-not-from-workspace.sh
+    title: |
+      Host-kind evidence must not come from a file in the workspace: read_host_kind (command_policy.rs) takes `.forge-startup-context.md` under the ROOT (the caller's cwd) as physical forge evidence, so any writable directory can manufacture a forge
+    context: |
+      MEASURED on yoga (bare metal), 2026-09-28, plan binary built from land84+:
+      `tillandsias-plan policy eval --cwd /tmp -- tillandsias --reset-state`
+      answered ok:policy:soft-reset:forge-preauthorised (rc=0); the same eval from
+      the checkout answered consent:policy:soft-reset. Cause: a stray
+      /tmp/.forge-startup-context.md (19402 bytes, mtime 2026-09-27 08:22:05
+      -0700, owner tlatoani, first line "# Forge Startup Context", body
+      "Project: tmp", sha256 prefix e5d55e7b7c26179b) left by a forge launched
+      against /tmp. read_host_kind(root) (command_policy.rs:95) ORs that marker
+      into evidence_forge.
+      Today's impact is small (it only pre-authorises soft reset, which the
+      operator allows in forges, and otherwise makes answers stricter), but the
+      evidence rule is what 1443-9f5w's "tokens only with bare-metal evidence"
+      and no-self-consent stand on, so it must be unforgeable from the workspace.
+      Direction (coordinator macuahuitl-fedora, 2026-09-28): forge evidence comes
+      from what the container runtime provides (/run/.containerenv, an image
+      marker at a fixed root-owned path, or the entrypoint env var TOGETHER with
+      a container marker), never from a file in cwd. Found while implementing
+      1462-qvxj; the stray file was deleted after this row quoted it.
+    exit_criteria:
+      - 'on bare metal, a `.forge-startup-context.md` planted in a scratch cwd does not change the reading: `policy eval --cwd <scratch> -- tillandsias --reset-state` answers consent:policy:soft-reset, not forge-preauthorised (pre-fix: FAILS, forge-preauthorised)'
+      - 'the same planted marker does not make `policy classify-bash` or `consent grant` treat the host as a forge'
+      - 'a real forge still reads forge (by /run/.containerenv or the fixed-path image marker); the unit tests of read_host_kind_from cover every evidence combination'
+    verifiable_closure: |
+      bash scripts/test-host-kind-evidence-not-from-workspace.sh exits 0 on bare
+      metal and in a forge (each regime's arms named). Pre-fix: FAILS at arm 1.
+    provenance: |
+      Filed 2026-09-28 by yoga on the coordinator's direction (macuahuitl-fedora),
+      from a finding while implementing 1462-qvxj. Claimed by yoga at filing.
