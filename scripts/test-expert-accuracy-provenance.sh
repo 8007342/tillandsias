@@ -30,6 +30,7 @@ REC="$ROOT/scripts/record-expert-accuracy.sh"
 FAIL=0
 ok()  { printf 'ok:   %s\n' "$1"; }
 bad() { printf 'FAIL: %s\n' "$1"; FAIL=1; }
+# jq is needed by the SCRIPT under test (it composes the record), not by this fixture.
 command -v jq >/dev/null 2>&1 || { echo "skip:expert-accuracy-provenance:jq-absent"; exit 0; }
 
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/ea-prov.XXXXXX")"
@@ -58,24 +59,28 @@ record() {   # extra env assignments...; prints the dry-run record
         TILLANDSIAS_EXPERT_ACCURACY_INDEX_MODEL=all-minilm \
         "$REC" --dry-run 2>/dev/null
 }
-field() { jq -r "$1" <<<"$2" 2>/dev/null; }
+field() {   # <key> <record-json>: the string value of "key", read without jq (1375 ratchet)
+    local v
+    v="$(grep -oE "\"$1\":\"[^\"]*\"" <<<"$2" | head -1)"
+    v="${v#*:\"}"; printf '%s' "${v%\"}"
+}
 
 rec="$(record TILLANDSIAS_EMBED_ENDPOINT=http://127.0.0.1:11434/v1)"
 asked="$(head -1 "$CURL_LOG")"
-q="$(field '.model.quantisation' "$rec")"; e="$(field '.model.engine' "$rec")"
+q="$(field quantisation "$rec")"; e="$(field engine "$rec")"
 if [ "$asked" = "http://127.0.0.1:11434/api/show" ] && [ "$q" = F16 ] && [ "$e" = bert ]; then
     ok "ARM1 a /v1 endpoint asks the native base ($asked): quantisation=$q engine=$e"
 else bad "ARM1 asked='$asked' quantisation='$q' engine='$e'"; fi
 
 rec="$(record TILLANDSIAS_EMBED_ENDPOINT=http://nowhere.test:11434/v1)"
-q="$(field '.model.quantisation' "$rec")"; e="$(field '.model.engine' "$rec")"
+q="$(field quantisation "$rec")"; e="$(field engine "$rec")"
 [ "$q" = unknown ] && [ "$e" = unknown ] \
     && ok "ARM2 an endpoint that cannot answer leaves both unknown (no guess from the tag)" \
     || bad "ARM2 quantisation='$q' engine='$e'"
 
 rec="$(record TILLANDSIAS_EMBED_ENDPOINT=http://127.0.0.1:11434/v1 TILLANDSIAS_OLLAMA_BASE=http://native.test:11434)"
 asked="$(head -1 "$CURL_LOG")"
-[ "$asked" = "http://native.test:11434/api/show" ] && [ "$(field '.model.quantisation' "$rec")" = F16 ] \
+[ "$asked" = "http://native.test:11434/api/show" ] && [ "$(field quantisation "$rec")" = F16 ] \
     && ok "ARM3 TILLANDSIAS_OLLAMA_BASE names the native base: $asked" \
     || bad "ARM3 asked='$asked'"
 
