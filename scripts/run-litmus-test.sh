@@ -2638,6 +2638,15 @@ parse_args() {
                 exit 3
                 ;;
             *)
+                # ORDER 1460-3gja. An EXPLICIT empty spec is a caller whose
+                # lookup came back empty, not a request for everything: stored
+                # as FILTER_SPEC="" it meant "no filter" and ran every spec
+                # (1h47m on lenovinha 2026-09-28). Omit the argument to run all.
+                if [[ -z "$1" ]]; then
+                    log_fail "empty spec name: a lookup produced nothing; refusing to run every spec"
+                    echo "refused:litmus:empty-spec-argument" >&2
+                    exit 3
+                fi
                 if [[ -z "$FILTER_SPEC" ]]; then
                     FILTER_SPEC="$1"
                 else
