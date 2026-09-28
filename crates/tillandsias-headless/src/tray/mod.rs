@@ -822,6 +822,85 @@ impl TrayPhaseHandle {
     }
 }
 
+/// "The GitHub token is in Vault" as an EVENT (order 679-rp9m).
+///
+/// The login click used to poll Vault once a second for two minutes. Now
+/// `tillandsias --github-login` sends `GithubLoginStored` to the control socket
+/// after its Vault write is verified, the socket handler calls
+/// [`LoginSignal::notify`] on [`GITHUB_LOGIN_SIGNAL`], and the login task waits
+/// on it. A generation counter, not a flag: a waiter snapshots it first, so a
+/// notify that lands between the click and the wait is not lost, and one from
+/// an earlier login does not satisfy a later one.
+pub(crate) struct LoginSignal {
+    generation: std::sync::Mutex<u64>,
+    cv: std::sync::Condvar,
+}
+
+impl LoginSignal {
+    pub(crate) const fn new() -> Self {
+        Self {
+            generation: std::sync::Mutex::new(0),
+            cv: std::sync::Condvar::new(),
+        }
+    }
+
+    pub(crate) fn generation(&self) -> u64 {
+        *self.generation.lock().expect("login signal lock")
+    }
+
+    pub(crate) fn notify(&self) {
+        *self.generation.lock().expect("login signal lock") += 1;
+        self.cv.notify_all();
+    }
+
+    /// Wait until the generation moves past `seen` or `deadline` passes.
+    /// True when a notify arrived. No timer tick: one timed condvar wait.
+    fn wait_past(&self, seen: u64, deadline: std::time::Duration) -> bool {
+        let guard = self.generation.lock().expect("login signal lock");
+        let (guard, _) = self
+            .cv
+            .wait_timeout_while(guard, deadline, |g| *g <= seen)
+            .expect("login signal lock");
+        *guard > seen
+    }
+}
+
+/// The process-wide signal the control socket fires. Tests use their own.
+pub(crate) static GITHUB_LOGIN_SIGNAL: LoginSignal = LoginSignal::new();
+
+/// How a login wait ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LoginWait {
+    /// `GithubLoginStored` arrived; the presence check confirmed it.
+    Notified { present: bool },
+    /// No notify within the deadline; ONE presence check decided.
+    TimedOut { present: bool },
+}
+
+/// The one login wait deadline (679-rp9m): the old poll's two minutes, as a
+/// single deadline instead of 120 wakeups.
+pub(crate) const GITHUB_LOGIN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Wait for the login CLI's notify, then settle with ONE presence check either
+/// way — so a login run outside the tray (no notify) still lands at the
+/// deadline, and a notify is still confirmed against Vault.
+pub(crate) fn await_github_login_confirmation(
+    signal: &LoginSignal,
+    seen: u64,
+    deadline: std::time::Duration,
+    presence: impl Fn() -> bool,
+) -> LoginWait {
+    if signal.wait_past(seen, deadline) {
+        LoginWait::Notified {
+            present: presence(),
+        }
+    } else {
+        LoginWait::TimedOut {
+            present: presence(),
+        }
+    }
+}
+
 /// Attribution identity bound to an MCP listener context (order 505).
 ///
 /// Identity `(project, instance)` is kernel/filesystem-enforced and derived
@@ -1424,6 +1503,21 @@ fn handle_control_connection(
                         body: ControlMessage::IssueAck {
                             seq_acked: first.seq,
                         },
+                    };
+                    let _ = write_control_envelope(&mut stream, &ack);
+                }
+                ControlMessage::GithubLoginStored { seq, .. } => {
+                    // 679-rp9m: the login CLI stored the token; wake the
+                    // tray's login wait, then ack the sender.
+                    GITHUB_LOGIN_SIGNAL.notify();
+                    info!(
+                        spec = "tray-host-control-socket",
+                        "github-login: GithubLoginStored received on the control socket"
+                    );
+                    let ack = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: first.seq,
+                        body: ControlMessage::IssueAck { seq_acked: seq },
                     };
                     let _ = write_control_envelope(&mut stream, &ack);
                 }
@@ -4309,6 +4403,9 @@ impl DbusMenuIface {
                     return Ok(());
                 }
                 let _ = self.0.rebuild_after_state_change().await;
+                // 679-rp9m: snapshot the login signal BEFORE launching the
+                // flow, so a notify that lands before the wait starts counts.
+                let login_seen = GITHUB_LOGIN_SIGNAL.generation();
                 // GitHubLogin click: launch the gh login flow AND refresh
                 // the cached auth state. This is the only path that
                 // re-reads `gh auth status` outside tray launch.
@@ -4322,25 +4419,37 @@ impl DbusMenuIface {
                         // secret, not host `gh auth status`. The login flow
                         // stores the token in Vault, never in host gh, so the
                         // host keyring is the wrong source of truth.
+                        // 679-rp9m: wait for the login CLI's GithubLoginStored
+                        // notify under ONE 120 s deadline, then ONE presence
+                        // check (no container launch, no value read). It was
+                        // a 1 s Vault poll, 120 times.
                         let debug = service_for_task.snapshot().debug;
-                        let mut authed = false;
-                        // Poll silently — debug=false suppresses per-iteration
-                        // Vault log noise during the 2-minute wait window.
-                        // The login flow's own output is already on stderr.
-                        for i in 0..120 {
-                            // Fast presence-only check (no container launch, no value read).
-                            authed = crate::vault_bootstrap::is_github_key_present();
-                            if authed {
-                                break;
-                            }
-                            if debug && i % 15 == 0 {
-                                eprintln!(
-                                    "[tillandsias] github-login: waiting for token in Vault ({}s elapsed)",
-                                    i
+                        let t0 = std::time::Instant::now();
+                        let outcome = await_github_login_confirmation(
+                            &GITHUB_LOGIN_SIGNAL,
+                            login_seen,
+                            GITHUB_LOGIN_DEADLINE,
+                            crate::vault_bootstrap::is_github_key_present,
+                        );
+                        let authed = match outcome {
+                            LoginWait::Notified { present } => {
+                                info!(
+                                    spec = "tray-host-control-socket",
+                                    elapsed_ms = t0.elapsed().as_millis() as u64,
+                                    present,
+                                    "github-login: login-confirmed event"
                                 );
+                                present
                             }
-                            std::thread::sleep(std::time::Duration::from_secs(1));
-                        }
+                            LoginWait::TimedOut { present } => {
+                                info!(
+                                    spec = "tray-host-control-socket",
+                                    present,
+                                    "github-login: no notify within 120 s; settled by one presence check"
+                                );
+                                present
+                            }
+                        };
                         service_for_task.with_state(|state| {
                             state.is_authenticated = authed;
                             // windows-260719-2: the probe settled — clear
@@ -6251,6 +6360,115 @@ mod tests {
             h.current_phase(),
             tillandsias_control_wire::VmPhase::Draining
         ));
+    }
+
+    /// 679-rp9m: a notify wakes the login wait promptly, and the wait then
+    /// consults presence exactly once.
+    #[test]
+    fn login_wait_ends_on_the_notify() {
+        use std::sync::atomic::AtomicUsize;
+        use std::time::{Duration, Instant};
+        let signal = Arc::new(LoginSignal::new());
+        let seen = signal.generation();
+        let s2 = Arc::clone(&signal);
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            s2.notify();
+        });
+        let checks = AtomicUsize::new(0);
+        let t0 = Instant::now();
+        let out = await_github_login_confirmation(&signal, seen, Duration::from_secs(30), || {
+            checks.fetch_add(1, Ordering::SeqCst);
+            true
+        });
+        assert_eq!(out, LoginWait::Notified { present: true });
+        assert!(t0.elapsed() < Duration::from_secs(5), "{:?}", t0.elapsed());
+        assert_eq!(checks.load(Ordering::SeqCst), 1);
+    }
+
+    /// 679-rp9m NEGATIVE CONTROL: with no notify the wait ends AT its deadline
+    /// (not before) and settles by ONE presence check; a notify from an earlier
+    /// login does not satisfy this one.
+    #[test]
+    fn login_wait_without_a_notify_times_out_with_one_presence_check() {
+        use std::sync::atomic::AtomicUsize;
+        use std::time::{Duration, Instant};
+        let signal = LoginSignal::new();
+        signal.notify(); // an EARLIER login's notify
+        let seen = signal.generation();
+        let checks = AtomicUsize::new(0);
+        let t0 = Instant::now();
+        let out =
+            await_github_login_confirmation(&signal, seen, Duration::from_millis(300), || {
+                checks.fetch_add(1, Ordering::SeqCst);
+                false
+            });
+        assert_eq!(out, LoginWait::TimedOut { present: false });
+        assert!(
+            t0.elapsed() >= Duration::from_millis(290),
+            "ended early: {:?}",
+            t0.elapsed()
+        );
+        assert_eq!(
+            checks.load(Ordering::SeqCst),
+            1,
+            "exactly one presence check"
+        );
+        assert_eq!(GITHUB_LOGIN_DEADLINE, Duration::from_secs(120));
+    }
+
+    /// 679-rp9m end to end: the login CLI's sender, the tray's real socket
+    /// handler and the login wait. The wait ends on the event within 5 s.
+    #[test]
+    fn github_login_stored_over_the_control_socket_wakes_the_login_wait() {
+        use std::time::{Duration, Instant};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("control.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
+        let subscribers: ControlSubscribers = Arc::new(Mutex::new(Vec::new()));
+        let server = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            handle_control_connection(stream, subscribers, TrayPhaseHandle::ready_for_test());
+        });
+        let seen = GITHUB_LOGIN_SIGNAL.generation();
+        let t0 = Instant::now();
+        let waiter = std::thread::spawn(move || {
+            await_github_login_confirmation(
+                &GITHUB_LOGIN_SIGNAL,
+                seen,
+                Duration::from_secs(30),
+                || true,
+            )
+        });
+        std::thread::sleep(Duration::from_millis(50));
+        assert_eq!(
+            crate::notify_tray_github_login_stored(&path),
+            crate::TrayNotify::Acked
+        );
+        server.join().unwrap();
+        assert_eq!(
+            waiter.join().unwrap(),
+            LoginWait::Notified { present: true }
+        );
+        assert!(t0.elapsed() < Duration::from_secs(5), "{:?}", t0.elapsed());
+    }
+
+    /// 679-rp9m criterion 3: the login confirmation path has no per-second
+    /// sleep-poll. Patterns are assembled so this test cannot match itself.
+    #[test]
+    fn the_login_confirmation_path_has_no_sleep_poll() {
+        let src = include_str!("mod.rs");
+        let start = src
+            .find(&["pub(crate) fn await_github_login_", "confirmation("].concat())
+            .expect("premise: the login wait function exists");
+        let end = src[start..].find("\n}\n").expect("fn end");
+        let body = &src[start..start + end];
+        assert!(
+            !body.contains(&["sleep", "("].concat()),
+            "a sleep in the login wait: {body}"
+        );
+        let old_loop = ["for i in 0", "..120"].concat();
+        assert!(!src.contains(&old_loop), "the 120 x 1 s Vault poll is back");
     }
 
     /// `VmShutdownRequest` over the unix socket flips the shared
