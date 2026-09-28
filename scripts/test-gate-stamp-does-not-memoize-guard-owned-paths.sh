@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1127-waxf, order:930-i6x4, order:1036-e5w9
+# @trace order:1127-waxf, order:930-i6x4, order:1036-e5w9, order:1276-mugq
 #
 # test-gate-stamp-does-not-memoize-guard-owned-paths.sh — pin that the gate memo
 # can tell "nothing moved" from "only the plan ledger moved", so a plan-only
@@ -235,6 +235,108 @@ if grep -q 'check-issue-citation-convention.sh' <<<"$_arm"; then
     ok "arm5b: the partial-memo arm also runs the issue guard, whose subject joined the lane"
 else
     bad "arm5b: plan/issues is in the fast lane but its guard does not run there (1142-85zx)"
+fi
+
+# ── ARMS 6-9 (order 1276-mugq): ACROSS A MERGE, AND STAGING IS INVISIBLE ────
+# The single-fragment property above held while the fleet kept measuring stale
+# stamps after merges and commits. The mechanism macneo isolated (2026-09-20)
+# was the exec bit's SOURCE: compute read it from the INDEX, so staging a new
+# executable (untracked `-` -> 100755) or a staged chmod moved the digest with
+# zero content change, and movers could name nothing.
+V() { local o; o="$(S verify 2>/dev/null)"; printf '%s' "${o%% *}"; }
+_stamp_manifest() { ( cd "$W/wc" && GATE_STAMP_REQUIRE_TOKEN=0 bash scripts/gate-stamp.sh write --dispatch check >/dev/null ); }
+G checkout -q -b m6-side
+printf 'packets: []\n' > "$W/wc/plan/index.d/20260928t000001z-side.yaml"
+printf 'loop\n' > "$W/wc/plan/loop_status.d/20260928-side.md"
+printf 'drill\n' > "$W/wc/plan/issues/side-drill-2026-09-28.md"
+G add -A >/dev/null 2>&1; G commit -q -m "side: plan-only"
+G checkout -q linux-next
+printf 'code v2\n' > "$W/wc/scripts/some-code.sh"
+G add -A >/dev/null 2>&1; G commit -q -m "code"
+_stamp_manifest
+G merge -q --no-edit m6-side >/dev/null 2>&1
+_m6_diff="$(G diff --name-only HEAD^1 HEAD)"
+_m6="$(V)"
+if [ -n "$_m6_diff" ] && [ -z "$(grep -v "^plan/" <<<"$_m6_diff")" ] &&
+    [ "$_m6" = ok:gate-fresh ]; then
+    ok "arm6: a real merge whose diff is only fast-lane plan paths leaves verify ok:gate-fresh"
+else
+    bad "arm6: after a plan-only merge verify said [$_m6]; merge diff [$_m6_diff]"
+fi
+
+# ARM 7: a NEW executable, stamped while untracked, then staged and committed.
+printf '#!/bin/sh\necho new\n' > "$W/wc/scripts/new-guard.sh"
+chmod +x "$W/wc/scripts/new-guard.sh"
+_stamp_manifest
+G add scripts/new-guard.sh; G commit -q -m "new guard"
+_m7="$(V)"
+[ "$_m7" = ok:gate-fresh ] &&
+    ok "arm7: staging and committing a new executable after the gate leaves the stamp fresh (staging is invisible)" ||
+    bad "arm7: staging a new executable staled the stamp [$_m7] — the gate-then-add-then-push sequence pays a second gate"
+
+# ARM 8: a TRACKED file's mode is still its index record (887-bz88, unchanged):
+# an unstaged chmod does not move the stamp, STAGING it does — that is the mode
+# a commit will carry — and movers now NAMES it instead of printing nothing.
+chmod -x "$W/wc/scripts/new-guard.sh"
+_m8u="$(V)"
+G add scripts/new-guard.sh
+_m8="$(V)"
+_m8_movers="$(S movers)"
+if [ "$_m8u" = ok:gate-fresh ] && [ "${_m8%%:*}" = stale ] &&
+    [ "$_m8_movers" = "$(printf 'mode\tscripts/new-guard.sh')" ]; then
+    ok "arm8: a tracked file's staged chmod -x stales the stamp (887-bz88) and movers says mode<TAB>scripts/new-guard.sh"
+else
+    bad "arm8: unstaged [$_m8u], staged [$_m8], movers [$_m8_movers]"
+fi
+chmod +x "$W/wc/scripts/new-guard.sh"
+G add scripts/new-guard.sh
+[ "$(V)" = ok:gate-fresh ] && ok "arm8: restoring the staged bit restores ok:gate-fresh (the digest tracked the mode and nothing else)" ||
+    bad "arm8: restoring the bit did not restore the stamp"
+
+# ARM 9: core.fileMode=false (the Windows regime) keeps the INDEX as the
+# source, byte for byte: git records a new file 100644 there whatever the
+# worktree says, so staging it is invisible too; an explicit
+# `update-index --chmod=+x` is an edit, and movers names it.
+G config core.fileMode false
+_stamp_manifest
+printf '#!/bin/sh\necho win\n' > "$W/wc/scripts/win-new.sh"
+chmod +x "$W/wc/scripts/win-new.sh"
+_stamp_manifest
+G add scripts/win-new.sh; G commit -q -m "win new"
+_m9a="$(V)"
+G update-index --chmod=+x scripts/win-new.sh
+_m9b="$(V)"
+_m9_movers="$(S movers)"
+G config core.fileMode true
+if [ "$_m9a" = ok:gate-fresh ] && [ "${_m9b%%:*}" = stale ] &&
+    [ "$_m9_movers" = "$(printf 'mode\tscripts/win-new.sh')" ]; then
+    ok "arm9: under core.fileMode=false a staged new file is invisible and update-index --chmod is named as mode"
+else
+    bad "arm9: fileMode=false: after add [$_m9a], after --chmod [$_m9b], movers [$_m9_movers]"
+fi
+G commit -q -m "win chmod" >/dev/null 2>&1
+
+# ARM 9b: THE MUTATION CONTROL, by content as in arm 3d. Untracked-is-`-` is the
+# pre-fix exec source; rebuilt, arm 7's sequence must go STALE, or arm 7 cannot
+# tell fixed from broken.
+_mutant7="$W/prefix-exec-gate-stamp.sh"
+sed -e 's/^        if \[\[ "\$fm" != false \]\]; then$/        if false; then/' "$STAMPER" > "$_mutant7"
+if cmp -s "$STAMPER" "$_mutant7"; then
+    bad "arm9b: the untracked-is-dash reconstruction changed NOTHING — it would certify anything"
+else
+    cp "$_mutant7" "$W/wc/scripts/gate-stamp.sh"
+    G commit -qam "mutant stamper" >/dev/null 2>&1
+    printf '#!/bin/sh\necho mut\n' > "$W/wc/scripts/mut-guard.sh"
+    chmod +x "$W/wc/scripts/mut-guard.sh"
+    _stamp_manifest
+    G add scripts/mut-guard.sh
+    _m9c="$(V)"
+    case "$_m9c" in
+        stale:*) ok "arm9b: the pre-fix (untracked-is-dash) stamp DOES go stale on arm 7's sequence — arm 7 reds without the fix" ;;
+        *) bad "arm9b: the pre-fix stamp stayed [$_m9c] on arm 7's sequence — arm 7 proves nothing" ;;
+    esac
+    G reset -q
+    cp "$STAMPER" "$W/wc/scripts/gate-stamp.sh"
 fi
 
 echo "test-gate-stamp-does-not-memoize-guard-owned-paths: ${pass} passed, ${fail} failed"
