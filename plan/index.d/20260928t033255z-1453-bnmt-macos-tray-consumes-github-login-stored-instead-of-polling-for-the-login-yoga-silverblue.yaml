@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: macos-tray-consumes-github-login-stored-instead-of-polling-for-the-login
+    order: 1453-bnmt
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: socket-audit-master
+    pickup_role: macos
+    capability_tags: [macos, tray, login, control-socket]
+    estimated_hours: 2
+    depends_on: [linux-tray-login-vault-poll-to-event]
+    observed_by: yoga-silverblue
+    title: |
+      macOS tray: consume ControlMessage::GithubLoginStored (679-rp9m, spec tray-host-control-socket) to end its GitHub login wait on the event, with one 120 s deadline and one presence check, instead of polling.
+    unscoreable: |
+      the closure is platform-native (a macos tray build answering the new message); the pin is
+      named by the implementer in the same commit, against the tray-host-control-socket
+      requirement "Login completion is a notification, not a poll" (679-rp9m).

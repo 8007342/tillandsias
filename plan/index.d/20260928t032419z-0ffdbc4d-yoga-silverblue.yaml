@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-tray-login-vault-poll-to-event
+    field: verifiable_closure
+    value: 'AMENDMENT 2026-09-28 (yoga-silverblue, on the coordinator''s ruling). Exit criterion 2 named "a tokio::sync::watch (or Notify) fed by the Vault blocking-watch (vault-blocking-watch / SC-14)". That mechanism cannot exist: 158 is recorded unimplementable because community Vault 1.18 KV v2 has no blocking GET ?wait= (Consul has it; Vault event subscribe is Enterprise). Waiting on the login terminal''s exit is no substitute: a server-based terminal emulator returns immediately, so the child''s exit says nothing about the login. CRITERION 2 NOW NAMES THE OUTPUT, not a mechanism. (a) After `tillandsias --github-login` writes the token to Vault it notifies the tray''s control socket (one new control-socket message, named in the spec), and the tray logs the login-confirmed event within 5 s of that write, with no periodic Vault poll in between. (b) NEGATIVE CONTROL: with no notify arriving, the tray''s login wait ends at its single 120 s deadline and settles the state from ONE presence check (a login run outside the tray still lands). (c) The notify is best-effort: `--github-login` with no tray running succeeds and exits 0, a missing socket being a note, not an error. Verified by tests in crates/tillandsias-headless: the tray side under the tray feature, the sender against a scratch socket.'
+    ts: "2026-09-28T03:24:19Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: linux-tray-login-vault-poll-to-event
+    event:
+      type: progress
+      ts: "2026-09-28T03:24:19Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'AMENDMENT 2026-09-28 (yoga-silverblue, on the coordinator's ruling). Exit criterion 2 named "a tokio::sync::watch (or Notify) fed by the Vault blocking-watch (vault-blocking-watch / SC-14)". That mechanism cannot exist: 158 is recorded unimplementable because community Vault 1.18 KV v2 has no blocking GET ?wait= (Consul has it; Vault event subscribe is Enterprise). Waiting on the login terminal's exit is no substitute: a server-based terminal emulator returns immediately, so the child's exit says nothing about the login. CRITERION 2 NOW NAMES THE OUTPUT, not a mechanism. (a) After `tillandsias --github-login` writes the token to Vault it notifies the tray's control socket (one new control-socket message, named in the spec), and the tray logs the login-confirmed event within 5 s of that write, with no periodic Vault poll in between. (b) NEGATIVE CONTROL: with no notify arriving, the tray's login wait ends at its single 120 s deadline and settles the state from ONE presence check (a login run outside the tray still lands). (c) The notify is best-effort: `--github-login` with no tray running succeeds and exits 0, a missing socket being a note, not an error. Verified by tests in crates/tillandsias-headless: the tray side under the tray feature, the sender against a scratch socket.' (not terminal) with evidence_refs: 158
+  - packet_id: linux-tray-login-vault-poll-to-event
+    event:
+      type: note
+      ts: "2026-09-28T03:24:19Z"
+      host: yoga-silverblue
+      summary: |-
+        criterion 2 named an unimplementable mechanism; amended to the output per coordinator
