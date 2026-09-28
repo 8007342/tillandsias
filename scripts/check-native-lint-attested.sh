@@ -98,7 +98,7 @@ EOF
         refused=1
         echo "refused:native-lint:stale:$pkg"
         {
-            echo "  $seen attested a native $platform lint of $path, but not of the content being"
+            echo "  why: $seen attested a native $platform lint of $path, but not of the content being"
             echo "  landed: the crate changed after the attestation ($path=$head_tree now)."
             echo "  remedy: on a $platform host, re-run scripts/attest-native-lint.sh on this ref."
             echo "  no $platform host available? the land WAITS, or set"
@@ -108,7 +108,7 @@ EOF
         refused=1
         echo "refused:native-lint:unattested:$pkg"
         {
-            echo "  this change touches $path, a cfg-gated crate this gate compiles as STUBS and"
+            echo "  why: this change touches $path, a cfg-gated crate this gate compiles as STUBS and"
             echo "  cannot lint (1235-rfub: a useless_format landed that way and reddened trunk)."
             echo "  accountable: the AUTHORING $platform host. remedy: on that host run"
             echo "  scripts/attest-native-lint.sh, which lints natively and records the result."

@@ -35,7 +35,8 @@ platform="${TILLANDSIAS_NATIVE_LINT_PLATFORM:-$platform}"
 
 if ! git diff --quiet || ! git diff --cached --quiet; then
     echo "refused:attest-native-lint:dirty-tree"
-    echo "  the attestation names committed content; commit first, then attest" >&2
+    echo "  why: the attestation names committed content, and this tree has uncommitted changes" >&2
+    echo "  remedy: commit (or stash) them, then re-run scripts/attest-native-lint.sh" >&2
     exit 2
 fi
 
