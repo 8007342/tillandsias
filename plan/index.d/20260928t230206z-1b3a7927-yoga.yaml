@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: transport-negligible-overhead-audit
+    field: pickup_role
+    value: macos
+    ts: "2026-09-28T23:02:06Z"
+    host: yoga
+
+events:
+  - packet_id: transport-negligible-overhead-audit
+    event:
+      type: progress
+      ts: "2026-09-28T23:02:06Z"
+      host: yoga
+      summary: |-
+        status 'macos' (not terminal) with evidence_refs: cad8ec21e
+  - packet_id: transport-negligible-overhead-audit
+    event:
+      type: note
+      ts: "2026-09-28T23:02:06Z"
+      host: yoga
+      summary: |-
+        coordinator ruling 2026-09-28: needs a live guest VM wire; Linux runs no guest (148's own 2026-07-21 slip event)
