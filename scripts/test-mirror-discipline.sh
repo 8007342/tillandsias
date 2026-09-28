@@ -32,6 +32,12 @@
 #                  with NO 64-hex segment anywhere (never sha256 of "")
 #  10 NEIGHBOURS   (negative control) the publisher leaves other
 #                  refs/tillandsias/* namespaces untouched
+#  11 NO RUBY      with ruby absent from PATH (746-htj9: ruby is not present
+#                  in every environment), an ENFORCED seed is reported as
+#                  unreadable and applies nothing: the push to main is
+#                  ACCEPTED, never rejected by a crash. Enforcement FAILS OPEN
+#                  there, by design, until the plan binary ships in the git
+#                  image. The publisher still publishes one ref (digest none).
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/images/git/pre-receive-hook.sh"
@@ -202,6 +208,28 @@ if git -C "$d/mirror.git" rev-parse --verify --quiet refs/tillandsias/upstream-a
    && [ "$(disc_refs "$d" | grep -c .)" -eq 1 ]; then
     ok "ARM10 the publisher leaves refs/tillandsias/upstream-auth/* untouched"
 else bad "ARM10 a neighbour namespace was touched"; fi
+
+# ── ARM 11 ───────────────────────────────────────────────────────────────
+noruby="$tmp/noruby-bin"; mkdir -p "$noruby"
+IFS=: read -r -a _dirs <<<"$PATH"
+for _dir in "${_dirs[@]}"; do
+    [ -d "$_dir" ] || continue
+    for _f in "$_dir"/*; do
+        _n="${_f##*/}"
+        [ "$_n" = ruby ] && continue
+        [ -e "$noruby/$_n" ] || { [ -x "$_f" ] && ln -s "$_f" "$noruby/$_n" 2>/dev/null; }
+    done
+done
+d="$(new_mirror_seeded a11 "$(seed enforced enforced)")"
+commit "$d" c11
+rm -f "$d/relayed"
+out="$(PATH="$noruby" git -C "$d/work" push --no-verify origin main 2>&1)"; rc=$?
+PATH="$noruby" sh "$PUB" "$d/mirror.git" >/dev/null 2>&1
+refs="$(disc_refs "$d")"
+if ! PATH="$noruby" command -v ruby >/dev/null 2>&1 && [ "$rc" -eq 0 ] && [ -e "$d/relayed" ] \
+   && grep -q 'present but unreadable (no-ruby)' <<<"$out" && [ "$(grep -c . <<<"$refs")" -eq 1 ]; then
+    ok "ARM11 no ruby: the enforced seed is reported unreadable, the push is accepted (fails open), one ref published"
+else bad "ARM11 rc=$rc refs='$(tr '\n' ' ' <<<"$refs")' out='$(tr '\n' '|' <<<"$out")'"; fi
 
 [ "$FAIL" -eq 0 ] && { echo "PASS: mirror-discipline (1443-uit6)"; exit 0; }
 echo "FAILED: mirror-discipline (1443-uit6)"; exit 1
