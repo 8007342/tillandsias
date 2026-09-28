@@ -155,7 +155,17 @@ else
     BIN="$(resolve_target_binary tillandsias debug "$PWD" 2>/dev/null)"
     [ -n "$BIN" ] || BIN="$PWD/target/debug/tillandsias"
 fi
-if [ ! -x "$BIN" ]; then
+# `--swap` is LINUX-ONLY by design (swap_cmd.rs is #[cfg(target_os = "linux")];
+# macOS and Windows print what governs swap there). And on Windows
+# target/debug/tillandsias.exe is the TRAY, not tillandsias-headless, so the
+# arms resolved the wrong program and failed "Unsupported option: --swap"
+# (yolanda, 2026-09-28, 1462-trch). Name the skip rather than resolve harder:
+# there is no --swap to test on those platforms. On Linux a binary without
+# --swap stays a FAIL — the gate builds it fresh, so that is a regression.
+_os="$(uname -s 2>/dev/null || echo unknown)"
+if [ "$_os" != Linux ]; then
+    skp "swap-is-linux-only: --swap arms not run on $_os"
+elif [ ! -x "$BIN" ]; then
     skp "no tillandsias binary at $BIN: the --swap arms did not run (./build.sh builds it)"
 else
     # The binary's VERDICTS are on stdout; its host warnings are on stderr. In a
