@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator request 2026-09-28: the GitHub token in Vault expires every 8 hours
+# and nothing rotates it.
+packets:
+  - packet_id: the-github-token-in-vault-rotates-itself-before-its-8-hour-expiry-through-a-resident-due-check-so-no-host-needs-an-operator-reseed
+    order: 1461-8tyy
+    status: ready
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [github-app, vault, token-rotation, credential-channel, git-mirror, tray]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/tray/mod.rs
+      - openspec/changes/github-token-auto-rotation/
+    title: |
+      The GitHub token in Vault expires every 8 hours and NOTHING rotates it (operator 2026-09-28): the spec already requires automatic rotation and the single-use-safe exchange exists, but its only caller is the explicit --refresh-github-token, which refuses without a desktop session — add the resident due-check
+    context: |
+      OPERATOR, verbatim: "The vault's token keeps expiring every 8 hours as
+      expected, looks like we're missing the automatic token rotation. Make
+      sure to file ./plan and specs to keep that token alive automatically".
+      MEASURED 2026-09-28: macuahuitl-forge's pushes were refused upstream
+      twice in one day (blocked:upstream-push-unauthorized, GitHub 401
+      "Invalid username or token"); each time the operator re-seeded by hand.
+      WHAT EXISTS (do not rebuild it): spec gh-auth-script "Token Rotation and
+      Expiration Management" already says rotate within 30 minutes of expiry;
+      vault_bootstrap::rotate_github_token_locked does the single-use-safe
+      exchange (exclusive lock; refresh written before access; failed write
+      leaves the old pair) — 1383-5hpk. The device login stores expires_at and
+      refresh_token_expires_at. WHAT IS MISSING: any caller on a schedule. The
+      only caller is `tillandsias --refresh-github-token`, gated to a desktop
+      session by github_refresh_gate.
+      DESIGN (openspec/changes/github-token-auto-rotation): a due-check in the
+      resident process that holds the Vault client — the Linux tray; on macOS
+      and Windows the guest's resident service loop (the order-276 tick) — at
+      start and every <=15 min, rotating when expires_at - now <= 30 min via
+      the existing locked exchange; the desktop-session gate stays on the
+      EXPLICIT command only; forges never rotate. Consumers read the token at
+      use time. Failure retries with backoff and is named
+      (blocked:github-token-rotation-failed:<reason>); the tray warns 14 days
+      before refresh_token_expires_at.
+      RELATED DEFECT (same incident, file separately or fold in): the mirror's
+      published upstream-auth verdict is not overwritten by a later success,
+      so scripts/check-credential-channel.sh kept reporting
+      upstream-push-unauthorized after the operator's fix and after a
+      verified push (macuahuitl-forge).
+    verifiable_closure: |
+      A fixture (scripts/test-github-token-auto-rotation.sh) with a stub Vault
+      store and a stub token endpoint: (1) expires_at = now+20 min -> one
+      due-check rotates exactly once, the new expires_at is later and the
+      refresh record was written first; (2) two concurrent due-checks -> the
+      stub endpoint sees exactly ONE exchange; (3) NEGATIVE CONTROL:
+      expires_at = now+2 h -> no exchange; (4) the endpoint rejects the
+      refresh token -> the old records are intact and the verdict names
+      github-token-rotation-failed; (5) the due-check runs with no desktop
+      session and refuses inside a forge (TILLANDSIAS_HOST_KIND=forge).
+      LIVE: on one bare-metal host, a mirror push succeeds more than 8 hours
+      after the last operator login or re-seed, with the rotation audit
+      events in between. PRE-FIX RESULT: FAILS at (1) — nothing calls the
+      exchange unless an operator runs --refresh-github-token.
+    unscoreable: "unpinnable-until-the-guard-exists: litmus-github-token-auto-rotation.yaml wraps the new fixture and is written with the fix (1136-n8sh); the live arm is an 8-hour measurement"
+    next_action: >
+      Wire a due-check into the resident loop that already holds the Vault
+      client (tray on Linux; the guest service tick on macOS/Windows) calling
+      rotate_github_token_locked when due; keep github_refresh_gate on the
+      explicit command only; write the fixture; then run the live 8-hour arm.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      p0: every host's push lane goes dark every 8 hours until the operator
+      re-seeds by hand.
