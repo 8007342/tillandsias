@@ -57,11 +57,13 @@ while IFS= read -r sheet; do
         fi
 
         # DECLARATION, not mention. `^ *order: <id>` is how a packet declares
-        # itself; a bare id in prose is a reference to it.
-        grep -qE "^ *order: *${ord}( |$)" "$file"
+        # itself; a bare id in prose is a reference to it. The value may be a
+        # QUOTED scalar (nine yoga fragments, 2026-09-18/19): same YAML value,
+        # so both spellings declare. @trace order:1283-tpd5
+        grep -qE "^ *order: *\"?${ord}\"?( |$)" "$file"
         declared=$?
         if [ "$declared" -ne 0 ]; then
-            found="$(grep -rlE "^ *order: *${ord}( |$)" plan/index.yaml plan/archive/*.yaml 2>/dev/null | head -1)"
+            found="$(grep -rlE "^ *order: *\"?${ord}\"?( |$)" plan/index.yaml plan/archive/*.yaml 2>/dev/null | head -1)"
             if [ -n "$found" ]; then
                 echo "violation:cheatsheet-source-anchor:$sheet:$entry — declared in $found, not the anchored file"
             else

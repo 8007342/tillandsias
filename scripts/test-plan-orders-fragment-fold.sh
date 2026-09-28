@@ -150,4 +150,23 @@ printf '%s' "$out" | grep -q 'duplicate-order:700-aaaa' \
     || fail "case 5: without the status override the duplicate must violate: $out"
 echo "case 5 ok: removing the override restores the violation"
 
+# ---------------------------------------------------------------------------
+# Case 6 — order 1283-tpd5. The SAME order spelled once unquoted (base) and
+# once QUOTED (fragment) is one YAML value, so it must be a duplicate. Nine
+# yoga fragments quoted the field on 2026-09-18/19. PRE-FIX this already
+# passed (the gate parses rather than greps), so this is a regression guard:
+# a future grep-based uniqueness check would read two different keys here.
+# ---------------------------------------------------------------------------
+new_tree "$WORK/c6"
+cat > "$WORK/c6/plan/index.d/quoted.yaml" <<'EOF'
+packets:
+  - packet_id: gamma
+    order: "700-aaaa"
+    status: ready
+EOF
+out="$(run_orders "$WORK/c6")"
+grep -q 'duplicate-order:700-aaaa' <<<"$out" \
+    || fail "case 6: a quoted spelling of a base order was not caught as a duplicate: $out"
+echo "case 6 ok: a quoted and an unquoted spelling of one order collide"
+
 echo "PASS: plan-orders fragment-fold fixture (order 832-q4mn)"

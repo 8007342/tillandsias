@@ -54,8 +54,8 @@ case "$out3" in
 esac
 
 # ── ARM 4: an ARCHIVED order still resolves, never a ghost ─────────────────
-arch="$(/usr/bin/grep -rhoE '^[[:space:]]*-?[[:space:]]*order: [0-9]{3,4}-[a-z0-9]{4}' "$ROOT/plan/archive/" 2>/dev/null \
-        | sed -E 's/.*order: //' | sort -u | head -1)"
+arch="$(/usr/bin/grep -rhoE '^[[:space:]]*-?[[:space:]]*order: "?[0-9]{3,4}-[a-z0-9]{4}"?' "$ROOT/plan/archive/" 2>/dev/null \
+        | sed -E 's/.*order: //; s/"//g' | sort -u | head -1)"
 if [ -z "$arch" ]; then
     echo "skip: ARM 4 — no archived orders present to test with"
 else
@@ -77,6 +77,37 @@ case "$out5" in
     blocked:*|ok:*|violation:*) ok "ARM 5: run from outside the repo the guard still anchors on its own ROOT and does not report a phantom sweep ($out5)" ;;
     *) bad "ARM 5: unexpected '$out5' rc=$rc5" ;;
 esac
+
+# ── ARM 6: a QUOTED declaration resolves (order 1283-tpd5) ────────────────
+# `order: "X"` and `order: X` are one YAML value. Before 1274-cbk7 the guard
+# keyed on the unquoted spelling, and this fixture built only unquoted ledgers,
+# so it could not express the defect that hid nine packets. Hermetic: a scratch
+# tree with the guard copied in, one order declared each way, both cited.
+T="$W/tree"; mkdir -p "$T/scripts" "$T/plan/index.d" "$T/plan/archive"
+cp "$G" "$T/scripts/"
+printf 'plan_index:\n  steps:\n    - packet_id: u\n      order: 1998-uuuu\n' > "$T/plan/index.yaml"
+# The copied guard carries its own @trace citations; declare them so the only
+# orders under test are the two below.
+for _own in $(grep -oE 'order:[0-9]{3,4}-[a-z0-9]{4}' "$G" | sort -u); do
+    printf '    - packet_id: own\n      order: %s\n' "${_own#order:}" >> "$T/plan/index.yaml"
+done
+_q='"1999-qqqq"'
+printf 'packets:\n  - packet_id: q\n    order: %s\n' "$_q" > "$T/plan/index.d/q.yaml"
+printf '# %s order:%s\n# %s order:%s\n' "$_at" "1998-""uuuu" "$_at" "1999-""qqqq" > "$T/scripts/cite.sh"
+out6="$(bash "$T/scripts/check-order-citations-resolve.sh" 2>/dev/null)"; rc6=$?
+case "$out6" in
+    ok:order-citations-resolve:*) [ "$rc6" -eq 0 ] \
+        && ok "ARM 6: a QUOTED order declaration resolves beside an unquoted one ($out6)" \
+        || bad "ARM 6: verdict ok but rc=$rc6" ;;
+    *) bad "ARM 6: a quoted declaration did not resolve: '$out6' rc=$rc6" ;;
+esac
+# NEGATIVE CONTROL: drop the quoted declaration and the same citation must fail,
+# so arm 6 passed because the quoted line was READ, not because nothing is checked.
+rm "$T/plan/index.d/q.yaml"
+err7="$(bash "$T/scripts/check-order-citations-resolve.sh" 2>&1 >/dev/null)"; rc7=$?
+if [ "$rc7" -ne 0 ] && grep -q '1999-qqqq' <<<"$err7"; then
+    ok "ARM 7: without the quoted declaration the citation is unresolvable, by name"
+else bad "ARM 7: rc=$rc7, the removed order was not named"; fi
 
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then echo "ok:order-citations-resolve"; echo "PASS: order-citations-resolve $pass/$total (1234-zade)"; exit 0; fi
