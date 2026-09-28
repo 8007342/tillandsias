@@ -30,7 +30,21 @@ TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia \
 `--ensure-enclave` is the documented restore path after a reboot or a stopped
 proxy. The second command launches a lane, which brings up the **per-project**
 mirror `tillandsias-git-<project>` (order 659-8faj: mirrors do not share an
-alias). It opens an interactive shell; exiting it leaves the stack running.
+alias). It opens an interactive shell.
+
+**The mirror lives only while a lane of that project is open** (order
+1448-yt96). Exiting the LAST lane of a project tears down the project half of
+the stack, the mirror included; the lane log says so in one line:
+`no active lane containers; cleaning project + shared stack for <project>
+(... keeping application-lifetime: tillandsias-vault, tillandsias-proxy,
+tillandsias-router, ...)`. Vault, proxy and router survive; the mirror does
+not, so §2's checker answers `todo:initialize-bare-metal-host:mirror` again
+the moment you leave the shell. This is the refcounted teardown in
+`crates/tillandsias-headless/src/main.rs` working as designed (a sibling
+launch in flight keeps the stack), not a failure. Keep a lane open for as
+long as you need the mirror: pushes through it, a forge, or a §2 reading.
+MEASURED on yoga 2026-09-27: exited at once, `mirror=` todo; held open, the
+checker answered `ok:bare-metal-host:… mirror=up … github=seeded`.
 
 `TILLANDSIAS_HOST_PROJECT_ROOT` defaults to `$HOME/src`. Set it to the parent of
 your checkout.
