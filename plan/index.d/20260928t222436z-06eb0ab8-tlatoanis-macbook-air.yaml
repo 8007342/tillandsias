@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-check-is-red-on-any-mac-running-the-tray-because-exec-guest-stdin-tests-refuse-a-live-tray-and-the-ratchet-reads-that-as-new-red
+    field: status
+    value: completed
+    ts: "2026-09-28T22:24:36Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: macos-check-is-red-on-any-mac-running-the-tray-because-exec-guest-stdin-tests-refuse-a-live-tray-and-the-ratchet-reads-that-as-new-red
+    event:
+      type: completed
+      ts: "2026-09-28T22:24:36Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: duplicate of 1224-zpek; fix at work/1224-zpek @ a4dea7c1e
+  - packet_id: macos-check-is-red-on-any-mac-running-the-tray-because-exec-guest-stdin-tests-refuse-a-live-tray-and-the-ratchet-reads-that-as-new-red
+    event:
+      type: note
+      ts: "2026-09-28T22:24:36Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        DUPLICATE, filed in error by tlatoanis-macbook-air on 2026-09-28: 1224-zpek (same host, 2026-09-16) already covers this exact failure, with a stronger closure. The work is delivered and tracked there.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-running-tray-fails-two-integration-tests-instead-of-skipping-them-so-the-gate-cannot-pass-while-the-product-runs
+    event:
+      type: progress
+      ts: "2026-09-28T22:24:35Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t222434z
+      host: macos
+      summary: |
+        work/1224-zpek @ a4dea7c1e ready for relay (tlatoanis-macbook-air, darwin, operator tray RUNNING as pid 70523 throughout; it was not quit).
+        FIX: crates/tillandsias-macos-tray/tests/exec_guest_stdin.rs runs the --exec-guest child with HOME set to a scratch dir (IsolatedHome) that holds a placeholder rootfs.img. The child takes its own singleton lock, so the live-tray refusal cannot fire; is_provisioned() passes, so the stdin read is reached; the VM start after it fails fast and harmlessly (an unsigned test binary lacks the virtualization entitlement; ~6 s, 136 KB). Both tests assert only on pre-boot behaviour. The real VM and the tray are never touched. Previously, on a tray-less host, the child used the REAL image root.
+        MEASURED, tray running: exec_guest_stdin 2 passed (7.6 s). MUTATION: an unbounded stdin read (recv in place of recv_timeout) reds stdin_that_never_eofs_does_not_block_the_boot_forever at 60 s with the 663-69kp message; restored. Workspace step: cargo test --workspace rc 0, and check-test-baseline gives ok:test-baseline:ran=2767 new-red=0 tolerated=0 stale=0 (it was new-red=2 on trunk). fmt, clippy --all-targets -D warnings, and musl zigbuild --tests are clean.
+        HISTORY: this row's context records that these two tests were diagnosed twice before (gate concurrency, retracted; 1043-kvvn's bin-name collision). So the darwin reds on these tests from 2026-09-16 on, whenever the operator's tray was up, are explained by this cause. I found no other darwin relay red citing them in plan/.
