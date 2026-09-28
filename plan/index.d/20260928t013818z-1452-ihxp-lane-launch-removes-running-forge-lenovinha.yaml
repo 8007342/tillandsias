@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-bash-lane-launch-force-removes-a-running-forge-of-the-same-project-and-its-agent-session-dies-with-no-warning
+    order: 1452-ihxp
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, lanes, lifecycle, fail-loud, bare-metal]
+    estimated_hours: 3
+    observed_by: lenovinha
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - skills/initialize-bare-metal-host/SKILL.md
+    title: |
+      `tillandsias --bash <project>` (skills/initialize-bare-metal-host §6.1, the lane launch) force-removes the project's running containers before it starts, including a DIFFERENT harness's live forge (tillandsias-tillandsias-forge-claude), so an agent session inside it dies mid-work with no prompt and no warning
+    context: |
+      MEASURED on lenovinha 2026-09-28 ~01:25Z. Following §6.1 verbatim to wire the host-push lane, the launch log shows
+      `podman rm -f <redacted>` three times and `podman volume rm -f <redacted>` before "keeping shared stack alive;
+      launch in flight". lenovinha-forge (a Claude forge with a Remote Control session, tillandsias-tillandsias-forge-claude)
+      vanished; its terminal closed and its session went offline. The durable volumes (mirror, forge-cache, spec-index)
+      survived; the forge's /home/forge/src tmpfs and any unpushed work did not. Its finished packets were already on
+      origin, so the loss was only in-flight state; that was luck, not design.
+      §6.1 does not mention it. It says only that exiting the shell leaves the stack up, which 1448-yt96 separately
+      corrects. The two are siblings: yt96 is the teardown at the last lane's EXIT; this row is the teardown at a
+      lane's LAUNCH, of a forge that is not the one being launched.
+    exit_criteria:
+      - 'launching a lane of project P while a forge of P for a different harness is running either leaves that forge running or refuses by name before removing anything (pre-fix result: FAILS — it is force-removed silently)'
+      - 'skills/initialize-bare-metal-host §6.1 states the behaviour, so an agent following it knows whether a running forge will survive (pre-fix result: FAILS — it is not mentioned)'
+    unscoreable: |
+      unpinnable-until-measured: a launch-path test lands with the fix.
+    events:
+      - type: filed
+        ts: "2026-09-28T01:38:18Z"
+        agent_id: "linux-lenovinha-claude-20260928t013818z"
+        host: lenovinha
+        summary: |-
+          Filed by the agent whose §6.1 launch removed lenovinha-forge; the operator confirmed the forge is gone and asked for no replacement.
