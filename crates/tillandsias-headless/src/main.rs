@@ -88,6 +88,8 @@ mod local_projects;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 pub mod remote_projects;
 mod runtime_assets;
+#[cfg(target_os = "linux")]
+mod swap_cmd;
 mod unified_deps;
 // 701-iu9b. The in-VM guest binary must never be built without `vault`.
 //
@@ -288,6 +290,29 @@ fn main() {
     if user_args.iter().any(|a| a == "--help" || a == "-h") {
         print_usage(version);
         return;
+    }
+
+    // Order 1448-kmyn: `--swap on|off|status`. Dispatched early and exits: it
+    // installs or removes the per-launch swap service and never starts a lane.
+    if user_args.first().map(String::as_str) == Some("--swap") {
+        #[cfg(target_os = "linux")]
+        std::process::exit(swap_cmd::run(&user_args));
+        #[cfg(target_os = "macos")]
+        {
+            println!("skip:swap:platform:macos");
+            eprintln!(
+                "  each forge VM gets its own vm-swap.img, created and deleted per launch (1377-hcnv); nothing to install"
+            );
+            std::process::exit(0);
+        }
+        #[cfg(target_os = "windows")]
+        {
+            println!("skip:swap:platform:windows");
+            eprintln!(
+                "  WSL2 swap is set by the swap / swapFile keys in %UserProfile%\\.wslconfig"
+            );
+            std::process::exit(0);
+        }
     }
 
     // Order 270: hidden helper mode — run ONE image ensure in its own session
@@ -671,6 +696,8 @@ fn main() {
         "--record-measurement",
         "--status-check",
         "--ensure-enclave",
+        // Order 1448-kmyn: dispatched early, listed here too (see --sync below).
+        "--swap",
         // Order 1350-ku7v (T1). Listed HERE as well as parsed above, because
         // this allow-list is what decides at runtime: the first draft of this
         // flag was dispatched, helped and documented, and still answered
@@ -1546,6 +1573,7 @@ fn print_usage(version: &str) {
     println!("Usage: tillandsias [--headless|--tray] [config_path]");
     println!("       tillandsias --init [--force] [--debug]");
     println!("       tillandsias --status-check [--debug]");
+    println!("       tillandsias --swap on|off|status [--prefix DIR] [--user NAME]");
     println!("       tillandsias --github-login [--with-token] [--debug]");
     println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
