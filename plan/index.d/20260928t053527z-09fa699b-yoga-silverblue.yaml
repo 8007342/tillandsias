@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-window-closes-on-clean-exit-and-five-exit-pause-copies-cannot-fire
+    field: notes
+    value: |-
+      yoga-silverblue 2026-09-28 - SECOND PREMISE CORRECTION: ALL SIX exit_pause TRAPS ARE LIVE, not five inert / one live. The 2026-09-01 count read each entrypoint's OWN lines for `exit` after the trap; it missed exits inside sourced lib-common.sh functions. Every entrypoint (antigravity, claude, codex, opencode, opencode-web, terminal) calls clone_project_from_mirror, and its _clone_project_from_mirror_impl has `exit 1` at lib-common.sh:855, :935, :949, :1000, :1023 (failed clone). The `|| _clone_rc=$?` in the wrapper does not contain it: an exit inside a function ends the script. MEASURED with a replica - `impl(){ exit 1; }; wrap(){ impl || rc=$?; }; trap exit_pause EXIT; wrap` printed TRAP FIRED rc=1 and never reached the line after. Four entrypoints (claude, codex, opencode, opencode-web) also call harness_missing_fatal, which `exit 1`s after a failed harness install. (Also measured: a FAILED final exec does NOT run the trap - bash exits 127 without it - so the exec path is truly trap-free, as lenovinha said.) So every trap guards a failure path where reading the error matters most, and they are ALSO the only hold on the macOS and Windows lanes, which do not run the Linux wrapper. NONE WAS DELETED; the deliverable's "the five inert exit_pause copies are then deleted" is refused on this evidence.
+      DONE on work/828-h7kw 7928f6d2c: the operator's $TERMINAL-side route. Both Linux lane launches run `tillandsias --hold-window -- <lane>`, which holds the window on EVERY exit (clean, failed, signal, unstartable) until Enter, returns the lane's code, writes nothing. tests/hold_window.rs drives the real binary; dropping the Enter wait reds all three arms.
+      NOT MEASURED: a live window on a desktop session (the acceptance test lenovinha named). KNOWN INTERACTION: on a Linux lane that fails inside the container, the trap pauses first ("Press any key") and then the wrapper ("Press Enter") - two keypresses. Removing the in-container pause on Linux alone (e.g. the launcher passing an env the trap honours) is a follow-up choice, not made here.
+    ts: "2026-09-28T05:35:27Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: forge-window-closes-on-clean-exit-and-five-exit-pause-copies-cannot-fire
+    event:
+      type: progress
+      ts: "2026-09-28T05:35:27Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'yoga-silverblue 2026-09-28 - SECOND PREMISE CORRECTION: ALL SIX exit_pause TRAPS ARE LIVE, not five inert / one live. The 2026-09-01 count read each entrypoint's OWN lines for `exit` after the trap; it missed exits inside sourced lib-common.sh functions. Every entrypoint (antigravity, claude, codex, opencode, opencode-web, terminal) calls clone_project_from_mirror, and its _clone_project_from_mirror_impl has `exit 1` at lib-common.sh:855, :935, :949, :1000, :1023 (failed clone). The `|| _clone_rc=$?` in the wrapper does not contain it: an exit inside a function ends the script. MEASURED with a replica - `impl(){ exit 1; }; wrap(){ impl || rc=$?; }; trap exit_pause EXIT; wrap` printed TRAP FIRED rc=1 and never reached the line after. Four entrypoints (claude, codex, opencode, opencode-web) also call harness_missing_fatal, which `exit 1`s after a failed harness install. (Also measured: a FAILED final exec does NOT run the trap - bash exits 127 without it - so the exec path is truly trap-free, as lenovinha said.) So every trap guards a failure path where reading the error matters most, and they are ALSO the only hold on the macOS and Windows lanes, which do not run the Linux wrapper. NONE WAS DELETED; the deliverable's "the five inert exit_pause copies are then deleted" is refused on this evidence.
+        DONE on work/828-h7kw 7928f6d2c: the operator's $TERMINAL-side route. Both Linux lane launches run `tillandsias --hold-window -- <lane>`, which holds the window on EVERY exit (clean, failed, signal, unstartable) until Enter, returns the lane's code, writes nothing. tests/hold_window.rs drives the real binary; dropping the Enter wait reds all three arms.
+        NOT MEASURED: a live window on a desktop session (the acceptance test lenovinha named). KNOWN INTERACTION: on a Linux lane that fails inside the container, the trap pauses first ("Press any key") and then the wrapper ("Press Enter") - two keypresses. Removing the in-container pause on Linux alone (e.g. the launcher passing an env the trap honours) is a follow-up choice, not made here.' (not terminal) with evidence_refs: 7928f6d2c
+  - packet_id: forge-window-closes-on-clean-exit-and-five-exit-pause-copies-cannot-fire
+    event:
+      type: note
+      ts: "2026-09-28T05:35:27Z"
+      host: yoga-silverblue
+      summary: |-
+        all six traps live; wrapper built; deletion refused
