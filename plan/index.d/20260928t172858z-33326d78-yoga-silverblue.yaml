@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-linux-lane-that-fails-inside-the-container-asks-for-two-keypresses-the-in-container-exit-pause-and-the-host-hold-window
+    field: status
+    value: in_progress
+    ts: "2026-09-28T17:28:58Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: a-linux-lane-that-fails-inside-the-container-asks-for-two-keypresses-the-in-container-exit-pause-and-the-host-hold-window
+    event:
+      type: note
+      ts: "2026-09-28T17:28:58Z"
+      host: yoga-silverblue
+      summary: |-
+        claim: host hold wrapper exports TILLANDSIAS_HOST_HOLDS_WINDOW; exit_pause skips its own pause when held
