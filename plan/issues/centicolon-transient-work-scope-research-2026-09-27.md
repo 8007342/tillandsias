@@ -271,6 +271,16 @@ allows a file-level PASS containing both passing and skipped steps: a
 file pass therefore cannot witness an unexecuted assertion. The latter is
 a source-reviewed implication, not a separately executed probe.
 
+The website follow-up independently rechecked the same boundary at stable
+v56.9.27.2 (52e3bc32e). `scripts/run-litmus-test.sh`, `_lt_verdict` mapping,
+also serializes advisory verdict 3 as status=pass; `_pt_files`/`_pt_digests`
+hash test/spec files at suite emission, not implementation dependencies.
+Neither an advisory file verdict nor a skipped assertion is strict success.
+These are additional source findings, not additional executed counterexamples.
+`scripts/check-centicolon-ratchet.sh` advances last.txt even after lost
+credit: the following unchanged run can appear monotone without repair.
+Keep an accepted baseline distinct from the latest observed snapshot.
+
 #### Purity, memo validity and semantic adequacy are different contracts
 
 The operator suggested the findings might be predicate-purity refinements.

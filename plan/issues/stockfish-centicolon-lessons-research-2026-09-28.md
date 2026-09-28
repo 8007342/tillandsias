@@ -56,7 +56,7 @@ scorer or new platform machinery to this design.
 ### 1. Calibrated evaluation: useful only as a separate prediction layer
 
 Upstream fact: the
-[WDL model](https://github.com/official-stockfish/WDL_model/blob/04c11f08293667d1394000034549d9d880441934/README.md)
+[WDL model](https://github.com/official-stockfish/WDL_model/blob/04c11f08293667d1394000034549d9d880441934/Readme.md)
 fits game outcomes from Fishtest data. Evaluation and material remaining
 condition the win/draw/loss estimates. Since SF17 the displayed 1.0 is
 normalized to the internal evaluation associated with a 50% win rate at
@@ -288,12 +288,20 @@ Neither score is a monotonic certificate of eventual success. Modern
 Stockfish's calibrated WDL layer illustrates an optional future prediction
 layer, not a probability interpretation of today's cc.
 
-At inspection, website main was b4af7a7 with level pins v56.9.21.1; the
-published Tillandsias release was v56.9.27.2. The website was not changed.
-Once refreshed, cite released functionality separately from this proposed
-design, identify the advisory ratchet, and distinguish validator stability
-from R=0. Source-pure evaluation is a technical enabler, not the missing
-strict-progress premise of a finite-time theorem.
+At the initial inspection, website main was b4af7a7 with level pins
+v56.9.21.1. On resumption, BigPickle's b3f3091 refresh pins v56.9.27.2.
+The operator authorized the website follow-up. Its scoped change lives in
+the website repository under openspec/changes/level-5-centicolon-guarantee:
+separate released functionality from proposals, identify the advisory
+ratchet, and distinguish validator stability from R=0. Source-pure
+evaluation is a technical enabler, not the missing strict-progress premise
+of a finite-time theorem. No website files belong to this runtime branch.
+
+The follow-up is published in website commit
+[46969b7](https://github.com/8007342/tillandsias.org/commit/46969b7).
+Its release-pinned checked build passed, including all 51 Level 5 footnotes;
+the scoped audit and reasoned retraction are recorded there. This is a
+source/publication check, not a claim of live deployment verification.
 
 ## Verification and limits
 
