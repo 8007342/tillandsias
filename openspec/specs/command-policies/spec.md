@@ -29,7 +29,9 @@ real checkout, a destructive reset run on an orchestrator's say-so.
 
 The policy engine SHALL compile in a floor of rules: `no-shell-strings`,
 `no-credential-mutation` (`gh auth login|refresh|logout|token`,
-`git credential approve|reject`, `vault login`), and the consent classes
+`git credential approve|reject`, `vault login`), `no-self-consent`
+(`tillandsias-plan policy consent grant` through any agent door), and the
+consent classes
 `soft-reset` (`--reset-state` on every platform, `--reset-guest` on Linux,
 the `podman system reset --force` a platform reset uses —
 `host-state-lifecycle`'s SOFT set), `hard-reset` (`--reset-guest` on a
@@ -120,10 +122,21 @@ the regime and scope for every step.
 ### Requirement: Consent is per run; soft reset is pre-authorised in forges, hard reset never is
 <!-- req-id: 277e8b40 -->
 
-`tillandsias-plan policy consent grant <class> [--ttl]` SHALL write a token
-bound to host, class and expiry (mode 0600). An evaluation of a consent
-class SHALL succeed once against a valid token and consume it. An expired,
-foreign-host or consumed token SHALL answer `refused:consent:invalid:<reason>`.
+`tillandsias-plan policy consent grant <class> [--ttl 30m] -- <argv…>`
+SHALL write a token bound to host, class, the EXACT argv (its sha256) and
+expiry (mode 0600; `--ttl` at most 24h); a grant with no argv, or for an
+argv that is not of that class on this host, SHALL be refused by name. An
+evaluation of a consent class SHALL succeed once against a valid token and
+spend it (an atomic rename, so two racing runs cannot both spend it), with
+`consent_source=token`; the spent token is gone, so a replay answers
+`consent:policy:<class>` again and its `why` says the token was already
+spent. An expired or foreign-host token SHALL answer
+`refused:consent:invalid:<reason>` and be deleted; a token for a different
+argv SHALL answer `refused:consent:invalid:argv-mismatch` and be kept for
+its own run. Tokens SHALL be honoured only where the host-kind EVIDENCE says
+bare metal, never on a claimed kind. Minting through any agent door SHALL be
+refused by the floor rule `no-self-consent` (`refused:policy:no-self-consent`):
+a consent is the operator's approval, typed in the operator's own terminal.
 The grant verb SHALL refuse in a forge. Operator ruling 2026-09-27,
 verbatim: "Forges should keep pre-authorizing SOFT RESET always. HARD
 RESET should require explicit approval each time." Therefore the
@@ -146,7 +159,8 @@ grantable in a forge.
 
 #### Scenario: A token is consumed by its first use
 
-- **WHEN** a token for `hard-reset` exists and `tillandsias-tray --reset-guest`
+- **WHEN** the operator minted a `hard-reset` token for exactly
+  `tillandsias-tray --reset-guest`, and that argv
   is evaluated twice on a guest regime
 - **THEN** the first answer is `ok:policy:hard-reset:consented`
 - **AND** the second is `consent:policy:hard-reset`

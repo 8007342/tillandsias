@@ -1,0 +1,48 @@
+# @trace spec:command-policies
+name: litmus:command-policy-consent-shape
+spec: command-policies
+phase: pre-build
+description: >
+  Order 1443-9f5w, operator ruling 3 (2026-09-27): SOFT reset is pre-authorised
+  in a forge always, and on bare metal by a registered smoke skill's
+  TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 (consent_source=env); HARD reset takes a
+  per-run operator token every time, with no env override and never from a
+  forge. `tillandsias-plan policy consent grant <class> -- <argv…>` mints a
+  0600 token bound to the host, the class, the exact argv and an expiry; the
+  first matching eval or run spends it (consent_source=token). A replay asks
+  again, a different argv is refused:consent:invalid:argv-mismatch, and minting
+  through an agent door is refused:policy:no-self-consent. In a forge the
+  bare-metal arms are a NAMED skip (the unit tests cover them).
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-command-policy-consent.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-command-policy-consent.sh && test -x scripts/test-command-policy-consent.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "grant refused in a forge, no self-consent, one run per token, env mapping for soft-reset only"
+    command: "bash scripts/test-command-policy-consent.sh 2>&1 | tail -n 1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: command-policy-consent"
+
+observability:
+  traces:
+    - "@trace spec:command-policies"
+  expected_log: "PASS: command-policy-consent"
+  log_fields:
+    spec: "command-policies"
+    test: "command-policy-consent-shape"
+    artifact: "crates/tillandsias-plan/src/command_policy.rs (consent section) + policy consent grant"
+
+rollback:
+  on_failure: >
+    A consent that a forge can grant, an env that authorises a hard reset, or a
+    token that approves more than one run of its own argv is the defect: restore
+    the evidence check, the soft-reset-only env mapping and the atomic spend
+    first.
+  command: "bash scripts/test-command-policy-consent.sh"

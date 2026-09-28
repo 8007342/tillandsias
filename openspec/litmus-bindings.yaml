@@ -1275,6 +1275,7 @@ specs:
   litmus_tests:
   - litmus:pretooluse-command-policy-shape
   - litmus:command-policy-audit-shape
+  - litmus:command-policy-consent-shape
   coverage_ratio: 0
   last_verified: '2026-09-27'
 - spec_id: branch-discipline

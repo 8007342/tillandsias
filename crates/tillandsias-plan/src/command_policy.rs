@@ -24,10 +24,11 @@
 // the host-kind evidence, so the same argv gives the same answer on every host
 // that shares those.
 //
-// OUT OF THIS SLICE, by name, so nobody reads a green as more: consent TOKENS
-// (`policy consent grant`) and the smoke-skill env authorisation, the audit log
-// and `policy audit`, the fixture-regime filesystem scope, and the measured
-// default flip. `deny_after_quiet_days` is PARSED and validated here, but the
+// Landed since this slice: the audit log and `policy audit` (1443-w9hf), and
+// consent TOKENS with the smoke-skill env authorisation (1443-9f5w, the consent
+// section below). STILL OUT, by name, so nobody reads a green as more: the
+// fixture-regime filesystem scope and the measured default flip.
+// `deny_after_quiet_days` is PARSED and validated here, but the
 // default never flips in this slice: the flip reads the audit (1443-w9hf) and
 // the operator confirms N before it flips anywhere.
 
@@ -411,9 +412,10 @@ fn shown(argv: &[String]) -> String {
 /// Every floor rule id, in evaluation order. A seed rule naming one of these as
 /// its `id` is a statement about that floor rule and is held to the same
 /// cannot-loosen check.
-pub const FLOOR_RULES: [&str; 6] = [
+pub const FLOOR_RULES: [&str; 7] = [
     "no-shell-strings",
     "no-credential-mutation",
+    "no-self-consent",
     "hard-reset",
     "soft-reset",
     "workspace-destroy",
@@ -421,7 +423,8 @@ pub const FLOOR_RULES: [&str; 6] = [
 ];
 
 const CONSENT_GRANT: &str = "the operator runs it themselves, or grants this one run with \
-    `tillandsias-plan policy consent grant <class>` on the host (never in a forge)";
+    `tillandsias-plan policy consent grant <class> -- <this exact argv>` in their own terminal \
+    on the host (never in a forge)";
 
 /// The class of reset an argv is, if any. `--reset-guest` is SOFT on the Linux
 /// launcher (`tillandsias`) and HARD on a guest regime (the Windows/macOS tray,
@@ -457,6 +460,17 @@ fn reset_class(req: &Request) -> Option<&'static str> {
         _ => {}
     }
     None
+}
+
+/// `tillandsias-plan [--index p] policy consent grant …`: minting a consent
+/// token (order 1443-9f5w). Only the operator mints, in their own terminal; an
+/// agent door that could mint would make every consent class self-granted.
+fn is_consent_grant(argv: &[String]) -> bool {
+    if program_name(&argv[0]) != "tillandsias-plan" {
+        return false;
+    }
+    let w = positional_words(&argv[1..], &["--index"]);
+    w.len() >= 3 && w[0] == "policy" && w[1] == "consent" && w[2] == "grant"
 }
 
 fn is_credential_mutation(argv: &[String]) -> Option<&'static str> {
@@ -641,6 +655,18 @@ pub fn floor_decide(req: &Request, protected: &[String]) -> Option<Decision> {
             "a credential mutation changes the operator's identity on this host \
              (credential channel, 982-sguu)",
             remedy.to_string(),
+        ));
+    }
+    if is_consent_grant(&req.argv) {
+        return Some(Decision::deny(
+            "no-self-consent",
+            "refused:policy:no-self-consent".into(),
+            "a consent token is the OPERATOR's approval of one run; minted through an agent \
+             door it would approve itself (operator ruling 3, 2026-09-27; order 1443-9f5w)",
+            "ask the operator to run `tillandsias-plan policy consent grant <class> -- <argv…>` \
+             in their own terminal on the host (in Claude Code the operator can prefix it \
+             with `!`); never from a forge"
+                .into(),
         ));
     }
     if let Some(class) = reset_class(req) {
@@ -961,6 +987,15 @@ pub fn load_seed(
 /// door calls the evaluator next.
 pub fn evaluate(req: &Request, seed: Option<&Seed>, protected: &[String]) -> Decision {
     let d = decide(req, seed, protected);
+    // A consent is resolved HERE, where the request then proceeds: a token is
+    // spent only by a decision that is acted on (1443-9f5w). Never under unit
+    // tests, which must not spend a real token on a developer's host: those
+    // call resolve_consent with a scratch ConsentCtx.
+    let d = if d.strictness == Strictness::Consent && !cfg!(test) {
+        resolve_consent(req, d, &ConsentCtx::from_env(&req.workspace))
+    } else {
+        d
+    };
     audit_decision(req, &d, None);
     d
 }
@@ -1007,6 +1042,375 @@ pub fn decide(req: &Request, seed: Option<&Seed>, protected: &[String]) -> Decis
             ),
         ),
         _ => Decision::allow("default", "ok:policy:allow:default".into()),
+    }
+}
+
+// ── consent (order 1443-9f5w) ───────────────────────────────────────────────
+//
+// Operator ruling 3, 2026-09-27: "Forges should keep pre-authorizing SOFT RESET
+// always. HARD RESET should require explicit approval each time." A consent
+// answer becomes an allow in exactly three ways, and the audit records which
+// (`consent_source`):
+//   forge-policy  soft-reset in a forge (floor_decide answers allow itself);
+//   env           soft-reset on bare metal when TILLANDSIAS_DESTRUCTIVE_RESET_OK=1
+//                 AND TILLANDSIAS_SKILL names a registered smoke skill
+//                 (methodology.yaml destructive_reset_policy): never hard-reset,
+//                 never any other class;
+//   token         a per-run token the OPERATOR minted on this host with
+//                 `policy consent grant <class> -- <argv…>`: bound to the host,
+//                 the class, the EXACT argv (its sha256) and an expiry, spent by
+//                 the first matching run through an atomic rename, so two racing
+//                 runs cannot both spend it.
+// Tokens count only where the host-kind EVIDENCE says bare metal, never on the
+// strength of `--host-kind` or the variable alone. Minting is refused in a
+// forge or CI, and the floor denies `policy consent grant` through every agent
+// door (no-self-consent), so an agent cannot approve itself.
+//
+// NOT A SECRET, BY NAME: a token is a file in the operator's runtime dir, and a
+// process running as the same uid could write one. The gate stops an agent's
+// mistake and a peer's instruction, not a hostile process on the operator's
+// account.
+
+/// The floor's consent classes, the only ones a token or the env can satisfy.
+/// A project seed's own consent rules stay consent: the operator runs those.
+pub const CONSENT_CLASSES: [&str; 4] = [
+    "soft-reset",
+    "hard-reset",
+    "workspace-destroy",
+    "force-push",
+];
+
+/// methodology.yaml, the skills whose `destructive_reset_policy` pre-authorises
+/// the substrate reset.
+pub const REGISTERED_SMOKE_SKILLS: [&str; 2] = [
+    "smoke-curl-install-and-test-e2e",
+    "build-install-and-smoke-test-e2e",
+];
+
+pub const CONSENT_DEFAULT_TTL_SECS: i64 = 30 * 60;
+pub const CONSENT_MAX_TTL_SECS: i64 = 24 * 60 * 60;
+const CONSUMED_LEDGER: &str = "consumed.jsonl";
+
+/// TILLANDSIAS_CONSENT_DIR, else $XDG_RUNTIME_DIR/tillandsias/consent, else
+/// $HOME/.cache/tillandsias/consent.
+pub fn consent_dir() -> PathBuf {
+    for (var, tail) in [
+        ("TILLANDSIAS_CONSENT_DIR", None),
+        ("XDG_RUNTIME_DIR", Some(["tillandsias", "consent"])),
+    ] {
+        if let Ok(p) = std::env::var(var)
+            && !p.is_empty()
+        {
+            let mut out = PathBuf::from(p);
+            for t in tail.into_iter().flatten() {
+                out.push(t);
+            }
+            return out;
+        }
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    PathBuf::from(home)
+        .join(".cache")
+        .join("tillandsias")
+        .join("consent")
+}
+
+/// This host's name, lowercased, with no process spawned.
+pub fn this_host() -> String {
+    #[cfg(unix)]
+    {
+        let mut buf = [0u8; 256];
+        // SAFETY: `buf` is valid for `buf.len()` bytes; a truncated name is cut
+        // at the first NUL or the buffer's end below.
+        let rc = unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) };
+        if rc == 0 {
+            let n = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+            if n > 0 {
+                return String::from_utf8_lossy(&buf[..n]).to_lowercase();
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        if let Ok(h) = std::env::var("COMPUTERNAME")
+            && !h.is_empty()
+        {
+            return h.to_lowercase();
+        }
+    }
+    "unknown-host".into()
+}
+
+pub fn argv_digest(argv: &[String]) -> String {
+    crate::host_verbs::sha256_hex(argv.join("\0").as_bytes())
+}
+
+/// Everything consent reads, gathered once so the rules are testable without
+/// the process environment.
+#[derive(Debug, Clone)]
+pub struct ConsentCtx {
+    pub dir: PathBuf,
+    pub host: String,
+    pub now: chrono::DateTime<chrono::Utc>,
+    /// The host kind from EVIDENCE (read_host_kind), never from a flag.
+    pub evidence: HostKind,
+    pub skill: Option<String>,
+    pub reset_ok: Option<String>,
+}
+
+impl ConsentCtx {
+    pub fn from_env(workspace: &Path) -> ConsentCtx {
+        ConsentCtx {
+            dir: consent_dir(),
+            host: this_host(),
+            now: chrono::Utc::now(),
+            evidence: read_host_kind(workspace).kind,
+            skill: std::env::var("TILLANDSIAS_SKILL").ok(),
+            reset_ok: std::env::var("TILLANDSIAS_DESTRUCTIVE_RESET_OK").ok(),
+        }
+    }
+}
+
+/// Why minting is refused here, or None. `env_kind` is TILLANDSIAS_HOST_KIND
+/// as set: a forge is refused on the variable OR the evidence, the stricter of
+/// the two, because refusing is the safe error.
+pub fn grant_refusal(env_kind: Option<&str>, evidence: HostKind) -> Option<&'static str> {
+    let env = env_kind.and_then(HostKind::parse);
+    if evidence == HostKind::Forge || env == Some(HostKind::Forge) {
+        return Some("refused:consent:not-grantable-in-forge");
+    }
+    if evidence == HostKind::Ci || env == Some(HostKind::Ci) {
+        return Some("refused:consent:not-grantable-in-ci");
+    }
+    None
+}
+
+/// Mint one token. Returns its path and expiry. The caller has checked
+/// [`grant_refusal`] and that `argv` is of `class` on this host.
+pub fn consent_grant(
+    ctx: &ConsentCtx,
+    class: &str,
+    argv: &[String],
+    ttl_secs: i64,
+) -> std::io::Result<(PathBuf, chrono::DateTime<chrono::Utc>)> {
+    let until = ctx.now + chrono::Duration::seconds(ttl_secs);
+    std::fs::create_dir_all(&ctx.dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&ctx.dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    let id = format!(
+        "{class}-{}-{}",
+        ctx.now.format("%Y%m%dT%H%M%S%.9fZ"),
+        std::process::id()
+    );
+    let token = serde_json::json!({
+        "version": 1,
+        "id": id,
+        "class": class,
+        "host": ctx.host,
+        "argv_digest": argv_digest(argv),
+        "argv_shown": shown(argv),
+        "granted_at": ctx.now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        "expires_at": until.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+    });
+    let path = ctx.dir.join(format!("{id}.json"));
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    use std::io::Write;
+    let mut f = opts.open(&path)?;
+    writeln!(f, "{token}")?;
+    Ok((path, until))
+}
+
+/// What the store held for one request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TokenCheck {
+    /// A matching token was spent; its id.
+    Consumed(String),
+    /// Only unusable tokens: foreign-host, expired and malformed ones were
+    /// deleted; argv-mismatch ones are kept (they approve a different run).
+    Invalid(&'static str),
+    /// No token of this class. `replayed_at` when this exact argv already
+    /// spent one, so the answer can say a token is single-use.
+    NoToken { replayed_at: Option<String> },
+}
+
+/// Spend a token for `class` and `argv`, if one is valid. SIDE EFFECT: only on
+/// a path that then proceeds (evaluate, the run door).
+pub fn consent_consume(ctx: &ConsentCtx, class: &str, argv: &[String]) -> TokenCheck {
+    let digest = argv_digest(argv);
+    let mut paths: Vec<PathBuf> = match std::fs::read_dir(&ctx.dir) {
+        Ok(rd) => rd
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.extension().is_some_and(|x| x == "json")
+                    && p.file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n.starts_with(&format!("{class}-")))
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    paths.sort();
+    let mut invalid: Option<&'static str> = None;
+    for p in paths {
+        let t: Option<serde_json::Value> = std::fs::read_to_string(&p)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok());
+        let field = |k: &str| {
+            t.as_ref()
+                .and_then(|t| t.get(k))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string()
+        };
+        let expires = chrono::DateTime::parse_from_rfc3339(&field("expires_at"))
+            .ok()
+            .map(|d| d.with_timezone(&chrono::Utc));
+        let unusable = if t.is_none() || field("class") != class || expires.is_none() {
+            Some("malformed")
+        } else if field("host") != ctx.host {
+            Some("foreign-host")
+        } else if expires.is_some_and(|e| e <= ctx.now) {
+            Some("expired")
+        } else {
+            None
+        };
+        if let Some(reason) = unusable {
+            let _ = std::fs::remove_file(&p);
+            invalid.get_or_insert(reason);
+            continue;
+        }
+        if field("argv_digest") != digest {
+            invalid.get_or_insert("argv-mismatch");
+            continue;
+        }
+        // Spend it: the rename is the claim, so a racing run that loses finds
+        // no file and moves on.
+        let claimed = p.with_extension(format!("spent-{}", std::process::id()));
+        if std::fs::rename(&p, &claimed).is_err() {
+            continue;
+        }
+        let _ = std::fs::remove_file(&claimed);
+        let id = field("id");
+        let line = serde_json::json!({
+            "id": id,
+            "class": class,
+            "argv_digest": digest,
+            "consumed_at": ctx.now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        });
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(ctx.dir.join(CONSUMED_LEDGER))
+        {
+            use std::io::Write;
+            let _ = writeln!(f, "{line}");
+        }
+        return TokenCheck::Consumed(id);
+    }
+    if let Some(reason) = invalid {
+        return TokenCheck::Invalid(reason);
+    }
+    let replayed_at = std::fs::read_to_string(ctx.dir.join(CONSUMED_LEDGER))
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+                .rfind(|v| {
+                    v.get("argv_digest").and_then(|x| x.as_str()) == Some(digest.as_str())
+                        && v.get("class").and_then(|x| x.as_str()) == Some(class)
+                })
+                .and_then(|v| {
+                    v.get("consumed_at")
+                        .and_then(|x| x.as_str())
+                        .map(String::from)
+                })
+        });
+    TokenCheck::NoToken { replayed_at }
+}
+
+/// Turn a floor consent answer into an allow when the env mapping or a token
+/// satisfies it; otherwise the same consent (never a new ASK: only the floor's
+/// classes reach here, and a failed token is a refusal, not a question).
+pub fn resolve_consent(req: &Request, d: Decision, ctx: &ConsentCtx) -> Decision {
+    if d.strictness != Strictness::Consent || !CONSENT_CLASSES.contains(&d.rule_id.as_str()) {
+        return d;
+    }
+    if req.host_kind != HostKind::BareMetal || ctx.evidence != HostKind::BareMetal {
+        return d;
+    }
+    let class = d.rule_id.clone();
+    if class == "soft-reset"
+        && ctx.reset_ok.as_deref() == Some("1")
+        && ctx
+            .skill
+            .as_deref()
+            .is_some_and(|s| REGISTERED_SMOKE_SKILLS.contains(&s))
+    {
+        return Decision::allow(
+            "soft-reset",
+            "ok:policy:soft-reset:env-preauthorised".into(),
+        );
+    }
+    match consent_consume(ctx, &class, &req.argv) {
+        TokenCheck::Consumed(_) => Decision::allow(&class, format!("ok:policy:{class}:consented")),
+        TokenCheck::Invalid(reason) => Decision::deny(
+            &class,
+            format!("refused:consent:invalid:{reason}"),
+            match reason {
+                "argv-mismatch" => {
+                    "the consent token for this class approves a DIFFERENT argv; a token \
+                     approves exactly the run it was minted for"
+                }
+                "expired" => "the consent token for this class expired unused and was deleted",
+                "foreign-host" => {
+                    "the consent token was minted on another host and was deleted; consent \
+                     is per host"
+                }
+                _ => "an unreadable consent token was deleted",
+            },
+            format!(
+                "the operator mints a fresh one for exactly this run: `tillandsias-plan policy \
+                 consent grant {class} -- {}`",
+                shown(&req.argv)
+            ),
+        ),
+        TokenCheck::NoToken {
+            replayed_at: Some(ts),
+        } => Decision {
+            why: Some(format!(
+                "{}; a consent token for this exact argv was already spent at {ts}, and each \
+                 run needs its own",
+                d.why.as_deref().unwrap_or("consent required")
+            )),
+            ..d
+        },
+        TokenCheck::NoToken { replayed_at: None } => d,
+    }
+}
+
+/// `consent_source` for the audit, read off the decision's verdict token.
+pub fn consent_source(d: &Decision) -> Option<&'static str> {
+    if d.strictness != Strictness::Allow {
+        return None;
+    }
+    if d.token.ends_with(":forge-preauthorised") {
+        Some("forge-policy")
+    } else if d.token.ends_with(":env-preauthorised") {
+        Some("env")
+    } else if d.token.ends_with(":consented") {
+        Some("token")
+    } else {
+        None
     }
 }
 
@@ -1073,11 +1477,7 @@ fn decision_word(s: Strictness) -> &'static str {
 /// the decision guarded a spawn that happened.
 pub fn audit_decision(req: &Request, d: &Decision, run_id: Option<&str>) {
     let argv_digest = crate::host_verbs::sha256_hex(req.argv.join("\0").as_bytes());
-    let consent_source = if d.token == "ok:policy:soft-reset:forge-preauthorised" {
-        Some("forge-policy")
-    } else {
-        None
-    };
+    let consent_source = consent_source(d);
     let line = serde_json::json!({
         "ts": crate::host_verbs::now_rfc3339(),
         "run_id": run_id,
@@ -1446,5 +1846,237 @@ mod tests {
         let r = d.remedy.unwrap();
         assert!(!r.contains("ghp_abc"), "{r}");
         assert!(r.contains("<redacted:token>"), "{r}");
+    }
+
+    // ── consent (order 1443-9f5w) ───────────────────────────────────────────
+
+    fn ctx(dir: &Path, evidence: HostKind) -> ConsentCtx {
+        ConsentCtx {
+            dir: dir.to_path_buf(),
+            host: "hosta".into(),
+            now: chrono::DateTime::parse_from_rfc3339("2026-09-28T12:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::Utc),
+            evidence,
+            skill: None,
+            reset_ok: None,
+        }
+    }
+    fn sv(a: &[&str]) -> Vec<String> {
+        a.iter().map(|s| s.to_string()).collect()
+    }
+    const HARD: &[&str] = &["wsl", "--unregister", "tillandsias"];
+    const SOFT: &[&str] = &["podman", "system", "reset", "--force"];
+
+    fn resolve(argv: &[&str], c: &ConsentCtx) -> Decision {
+        let r = req(argv, HostKind::BareMetal);
+        let d = decide(&r, None, &prot());
+        resolve_consent(&r, d, c)
+    }
+
+    #[test]
+    fn a_token_approves_one_run_of_its_exact_argv_and_a_replay_asks_again() {
+        let t = tempfile::tempdir().unwrap();
+        let c = ctx(t.path(), HostKind::BareMetal);
+        assert_eq!(resolve(HARD, &c).token, "consent:policy:hard-reset");
+        let (path, until) = consent_grant(&c, "hard-reset", &sv(HARD), 1800).unwrap();
+        assert_eq!(until.to_rfc3339(), "2026-09-28T12:30:00+00:00");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600);
+        }
+        let d = resolve(HARD, &c);
+        assert_eq!(d.token, "ok:policy:hard-reset:consented");
+        assert_eq!(consent_source(&d), Some("token"));
+        assert!(!path.exists(), "a spent token is gone");
+        let again = resolve(HARD, &c);
+        assert_eq!(again.token, "consent:policy:hard-reset");
+        assert_eq!(again.exit_code(), EXIT_CONSENT);
+        assert!(
+            again
+                .why
+                .unwrap()
+                .contains("already spent at 2026-09-28T12:00:00Z")
+        );
+    }
+
+    #[test]
+    fn a_different_argv_is_refused_by_name_and_the_token_survives_for_its_own_run() {
+        let t = tempfile::tempdir().unwrap();
+        let c = ctx(t.path(), HostKind::BareMetal);
+        let (path, _) = consent_grant(&c, "hard-reset", &sv(HARD), 1800).unwrap();
+        let d = resolve(&["wsl", "--unregister", "other-distro"], &c);
+        assert_eq!(d.token, "refused:consent:invalid:argv-mismatch");
+        assert_eq!(d.exit_code(), EXIT_DENY);
+        assert!(
+            d.remedy
+                .unwrap()
+                .contains("consent grant hard-reset -- wsl --unregister other-distro")
+        );
+        assert!(path.exists());
+        assert_eq!(resolve(HARD, &c).token, "ok:policy:hard-reset:consented");
+    }
+
+    #[test]
+    fn a_foreign_host_or_expired_token_is_refused_and_deleted() {
+        let t = tempfile::tempdir().unwrap();
+        let mut other = ctx(t.path(), HostKind::BareMetal);
+        other.host = "hostb".into();
+        let (p1, _) = consent_grant(&other, "hard-reset", &sv(HARD), 1800).unwrap();
+        let c = ctx(t.path(), HostKind::BareMetal);
+        assert_eq!(
+            resolve(HARD, &c).token,
+            "refused:consent:invalid:foreign-host"
+        );
+        assert!(!p1.exists());
+
+        let (p2, _) = consent_grant(&c, "hard-reset", &sv(HARD), 60).unwrap();
+        let mut later = c.clone();
+        later.now += chrono::Duration::seconds(61);
+        assert_eq!(
+            resolve(HARD, &later).token,
+            "refused:consent:invalid:expired"
+        );
+        assert!(!p2.exists());
+    }
+
+    #[test]
+    fn a_token_is_never_honoured_without_bare_metal_evidence() {
+        let t = tempfile::tempdir().unwrap();
+        let bare = ctx(t.path(), HostKind::BareMetal);
+        let (path, _) = consent_grant(
+            &bare,
+            "workspace-destroy",
+            &sv(&["rm", "-rf", "/srv/x"]),
+            1800,
+        )
+        .unwrap();
+        let in_forge = ctx(t.path(), HostKind::Forge);
+        let r = req(&["rm", "-rf", "/srv/x"], HostKind::BareMetal);
+        let d = resolve_consent(&r, decide(&r, None, &prot()), &in_forge);
+        assert_eq!(d.token, "consent:policy:workspace-destroy");
+        // Nor on the strength of a CLAIMED kind: the evidence says bare metal
+        // but the request says ci.
+        let r_ci = req(&["rm", "-rf", "/srv/x"], HostKind::Ci);
+        let d = resolve_consent(&r_ci, decide(&r_ci, None, &prot()), &bare);
+        assert_eq!(d.strictness, Strictness::Consent);
+        assert!(path.exists(), "an unhonoured token is not spent");
+        // Hard reset in a forge is a floor DENY, which no token reaches.
+        let r_f = req(HARD, HostKind::Forge);
+        let d = resolve_consent(&r_f, decide(&r_f, None, &prot()), &in_forge);
+        assert_eq!(d.token, "refused:policy:hard-reset:not-grantable-in-forge");
+    }
+
+    #[test]
+    fn the_smoke_skill_env_preauthorises_soft_reset_only() {
+        let t = tempfile::tempdir().unwrap();
+        let mut c = ctx(t.path(), HostKind::BareMetal);
+        c.reset_ok = Some("1".into());
+        assert_eq!(
+            resolve(SOFT, &c).token,
+            "consent:policy:soft-reset",
+            "no skill: asks"
+        );
+        c.skill = Some("some-other-skill".into());
+        assert_eq!(resolve(SOFT, &c).token, "consent:policy:soft-reset");
+        for s in REGISTERED_SMOKE_SKILLS {
+            c.skill = Some(s.into());
+            let d = resolve(SOFT, &c);
+            assert_eq!(d.token, "ok:policy:soft-reset:env-preauthorised");
+            assert_eq!(consent_source(&d), Some("env"));
+            assert_eq!(
+                resolve(HARD, &c).token,
+                "consent:policy:hard-reset",
+                "never hard-reset"
+            );
+            assert_eq!(
+                resolve(&["rm", "-rf", "/srv/x"], &c).token,
+                "consent:policy:workspace-destroy"
+            );
+        }
+        c.reset_ok = Some("0".into());
+        assert_eq!(
+            resolve(SOFT, &c).token,
+            "consent:policy:soft-reset",
+            "=0 opts out"
+        );
+    }
+
+    #[test]
+    fn minting_is_refused_in_a_forge_or_ci_by_variable_or_evidence() {
+        assert_eq!(
+            grant_refusal(Some("forge"), HostKind::BareMetal),
+            Some("refused:consent:not-grantable-in-forge")
+        );
+        assert_eq!(
+            grant_refusal(None, HostKind::Forge),
+            Some("refused:consent:not-grantable-in-forge")
+        );
+        assert_eq!(
+            grant_refusal(Some("bare-metal"), HostKind::Forge),
+            Some("refused:consent:not-grantable-in-forge")
+        );
+        assert_eq!(
+            grant_refusal(Some("ci"), HostKind::Ci),
+            Some("refused:consent:not-grantable-in-ci")
+        );
+        assert_eq!(grant_refusal(None, HostKind::BareMetal), None);
+    }
+
+    #[test]
+    fn an_agent_door_cannot_mint_consent() {
+        for a in [
+            &[
+                "tillandsias-plan",
+                "policy",
+                "consent",
+                "grant",
+                "hard-reset",
+                "--",
+                "wsl",
+            ][..],
+            &[
+                "/x/target/release/tillandsias-plan",
+                "--index",
+                "p",
+                "policy",
+                "consent",
+                "grant",
+            ],
+        ] {
+            for k in HostKind::ALL {
+                assert_eq!(tok(a, k), "refused:policy:no-self-consent", "{a:?} {k:?}");
+            }
+        }
+        assert_eq!(
+            tok(
+                &["tillandsias-plan", "policy", "eval", "--", "git", "status"],
+                HostKind::BareMetal
+            ),
+            "ok:policy:allow:default"
+        );
+    }
+
+    #[test]
+    fn consent_source_names_all_three_ways_and_nothing_else() {
+        let t = tempfile::tempdir().unwrap();
+        let c = ctx(t.path(), HostKind::Forge);
+        let r = req(SOFT, HostKind::Forge);
+        let d = resolve_consent(&r, decide(&r, None, &prot()), &c);
+        assert_eq!(consent_source(&d), Some("forge-policy"));
+        assert_eq!(
+            consent_source(&decide(
+                &req(&["git", "status"], HostKind::Forge),
+                None,
+                &prot()
+            )),
+            None
+        );
+        assert_eq!(
+            consent_source(&decide(&req(HARD, HostKind::BareMetal), None, &prot())),
+            None
+        );
     }
 }
