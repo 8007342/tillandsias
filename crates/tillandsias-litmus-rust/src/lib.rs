@@ -219,14 +219,89 @@ pub fn run_cli(args: Vec<String>) -> Result<String, String> {
             }
             Ok(out)
         }
+        // BLOCKING (order 1459-mqvd). A litmus step runs its `command:` under
+        // `bash -c`, so a hard-coded `pkill -f`/`pgrep -f` pattern also sits
+        // in that shell's own argv and can match -- and kill -- the step
+        // running it (1266-75tr). Unlike the advisory scan above, this reads
+        // only litmus YAML, whose population is small enough to own.
+        "litmus-self-match" => {
+            let paths: Vec<PathBuf> = args[1..].iter().map(PathBuf::from).collect();
+            if paths.is_empty() || args[1..].iter().any(|a| a.starts_with("--")) {
+                return Err(usage());
+            }
+            let mut out = String::new();
+            let (mut scanned, mut commands, mut hits) = (0usize, 0usize, 0usize);
+            for path in &paths {
+                let text = std::fs::read_to_string(path).map_err(|e| {
+                    format!(
+                        "blocked:litmus-self-match:unreadable:{}:{e}\n",
+                        path.display()
+                    )
+                })?;
+                let doc: serde_yaml::Value = serde_yaml::from_str(&text).map_err(|e| {
+                    format!(
+                        "blocked:litmus-self-match:unparseable:{}:{e}\n",
+                        path.display()
+                    )
+                })?;
+                scanned += 1;
+                let mut cmds = Vec::new();
+                collect_commands(&doc, &mut cmds);
+                for c in cmds {
+                    commands += 1;
+                    for f in bash_hazards::scan(c.as_bytes()) {
+                        if f.shape == bash_hazards::Shape::PgrepFLiteral {
+                            hits += 1;
+                            out.push_str(&format!(
+                                "violation:litmus-self-match:{}: {}\n",
+                                path.display(),
+                                f.text
+                            ));
+                        }
+                    }
+                }
+            }
+            if commands == 0 {
+                return Err(format!(
+                    "blocked:litmus-self-match:no-commands:scanned={scanned}\n"
+                ));
+            }
+            if hits > 0 {
+                out.push_str(&format!("violation:litmus-self-match:{hits}\n"));
+                return Err(out);
+            }
+            Ok(format!(
+                "ok:litmus-self-match:scanned={scanned}:commands={commands}\n"
+            ))
+        }
         _ => Err(usage()),
+    }
+}
+
+/// Every string value under a `command` key, at any depth.
+fn collect_commands<'a>(v: &'a serde_yaml::Value, out: &mut Vec<&'a str>) {
+    match v {
+        serde_yaml::Value::Mapping(m) => {
+            for (k, val) in m {
+                if k.as_str() == Some("command") {
+                    if let Some(s) = val.as_str() {
+                        out.push(s);
+                        continue;
+                    }
+                }
+                collect_commands(val, out);
+            }
+        }
+        serde_yaml::Value::Sequence(seq) => seq.iter().for_each(|x| collect_commands(x, out)),
+        _ => {}
     }
 }
 
 fn usage() -> String {
     concat!(
         "usage: tillandsias-litmus-rust check --litmus <path> [--json]\n",
-        "       tillandsias-litmus-rust bash-hazards [--show] <script.sh>...",
+        "       tillandsias-litmus-rust bash-hazards [--show] <script.sh>...\n",
+        "       tillandsias-litmus-rust litmus-self-match <litmus.yaml>...",
     )
     .to_string()
 }

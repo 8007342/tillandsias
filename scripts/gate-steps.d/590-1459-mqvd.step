@@ -1,0 +1,15 @@
+# Gate step 1459-mqvd — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. A litmus step runs its command under bash -c, so a
+# hard-coded pkill -f / pgrep -f pattern is also in that shell's own argv and
+# can kill the step running it (1266-75tr). This is one of the two shell
+# failure classes the 1459-mqvd census found guarded nowhere. The decision is
+# tillandsias-litmus-rust litmus-self-match (parsed YAML and bash, not grep);
+# the fixture proves an unbracketed pattern is refused, the bracket idiom
+# passes, and the live litmus tree is clean outside the rows it DECLARES.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking no litmus step can pkill/pgrep -f its own shell (1459-mqvd)"
+STEP_SCRIPT="scripts/test-litmus-self-match.sh"
+STEP_ERROR="a litmus step matches its own bash -c argv with pkill/pgrep -f (1459-mqvd); bracket one character of the pattern, e.g. 'name[s]'"
+STEP_OK="no litmus step can kill its own shell"
