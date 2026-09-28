@@ -314,24 +314,52 @@ configure_git_identity() {
     # function after find_project_dir, so hooking here covers them all without
     # touching five entrypoints.
     ensure_forge_git_index "${PROJECT_DIR:-$PWD}" || true
-    local name="${GIT_AUTHOR_NAME:-${GIT_COMMITTER_NAME:-}}"
-    local email="${GIT_AUTHOR_EMAIL:-${GIT_COMMITTER_EMAIL:-}}"
+
+    # Order 1453-7rzd (spec forge-git-identity-anonymization): the identity is
+    # the GitHub App user (or a project-scoped fallback) plus this host and a
+    # per-forge tillandsia name, written as git CONFIG. It is NEVER exported as
+    # GIT_AUTHOR_*/GIT_COMMITTER_*: exported, those override a scratch repo's
+    # own `-c user.name`, which is how test-discipline-derive went 4/5 red in
+    # every forge. Anything an older launcher still passes is dropped here.
+    unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+    local name="${TILLANDSIAS_GIT_NAME:-}"
+    local email="${TILLANDSIAS_GIT_EMAIL:-}"
+    local host="${TILLANDSIAS_GIT_HOST:-unknown-host}"
 
     if [[ -z "$name" || -z "$email" ]]; then
-        trace_lifecycle "git-identity" "not configured (missing name or email)"
+        trace_lifecycle "git-identity" "not configured (the launcher passed no TILLANDSIAS_GIT_NAME/EMAIL)"
+        _install_agent_trailer_hook
+        _install_expert_refresh_hook
         return 0
     fi
 
-    export GIT_AUTHOR_NAME="$name"
-    export GIT_AUTHOR_EMAIL="$email"
-    export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-$name}"
-    export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-$email}"
-
-    git config user.name "$name" 2>/dev/null || true
-    git config user.email "$email" 2>/dev/null || true
-    trace_lifecycle "git-identity" "configured"
+    local species
+    species="$(forge_tillandsia_species)"
+    git config --global user.name "$name ($host · tillandsia-$species)" 2>/dev/null || true
+    git config --global user.email "$email" 2>/dev/null || true
+    trace_lifecycle "git-identity" "configured from ${TILLANDSIAS_GIT_IDENTITY_SOURCE:-unknown} as tillandsia-$species on $host"
     _install_agent_trailer_hook
     _install_expert_refresh_hook
+}
+
+# The forge's tillandsia species (order 1453-7rzd): chosen ONCE per forge and
+# stable for its life, so every commit a forge makes carries the same name. The
+# choice is kept under $HOME, which dies with the container.
+TILLANDSIA_SPECIES=(
+    xerographica ionantha bulbosa caput-medusae usneoides aeranthos
+    brachycaulos capitata stricta tectorum juncea harrisii funckiana
+    streptophylla velutina fasciculata cyanea abdita
+)
+forge_tillandsia_species() {
+    local f="$HOME/.cache/tillandsias/tillandsia-species"
+    if [ -s "$f" ]; then
+        cat "$f"
+        return 0
+    fi
+    local s="${TILLANDSIA_SPECIES[RANDOM % ${#TILLANDSIA_SPECIES[@]}]}"
+    mkdir -p "$(dirname "$f")" 2>/dev/null || true
+    printf '%s\n' "$s" >"$f" 2>/dev/null || true
+    printf '%s\n' "$s"
 }
 
 # install_project_guard_hooks — ORDER 969-nhh7. Give the PROJECT CHECKOUT the
@@ -443,8 +471,10 @@ _install_agent_trailer_hook() {
     local hook_file="$hooks_dir/prepare-commit-msg"
     mkdir -p "$hooks_dir" 2>/dev/null || return 0
 
-    # Idempotent: skip if hook already installed
-    if [ -f "$hook_file" ] && grep -q "TILLANDSIAS_AGENT" "$hook_file" 2>/dev/null; then
+    # Idempotent: skip if THIS version of the hook is installed. The marker is
+    # the host trailer (order 1453-7rzd), so a forge holding the older
+    # agent-only hook gets the new one.
+    if [ -f "$hook_file" ] && grep -q "Tillandsias-Host" "$hook_file" 2>/dev/null; then
         return 0
     fi
 
@@ -452,19 +482,28 @@ _install_agent_trailer_hook() {
 #!/usr/bin/env bash
 # prepare-commit-msg hook — Tillandsias forge attribution (auto-installed)
 # @trace spec:forge-git-identity-anonymization
-# Appends Co-Authored-By and Generated-By trailers for agentic commits.
+# Every commit gets a Tillandsias-Host trailer (order 1453-7rzd): the fleet's
+# host attribution reads it, because a noreply author email has no host domain.
+# Agentic commits (TILLANDSIAS_AGENT) also get Co-Authored-By and Generated-By.
 COMMIT_MSG_FILE="$1"
 COMMIT_SOURCE="${2:-}"
-
-[ -n "${TILLANDSIAS_AGENT_NAME:-}" ] || exit 0
 
 case "${COMMIT_SOURCE}" in
     merge|squash|commit) exit 0 ;;
 esac
 
+if [ -n "${TILLANDSIAS_GIT_HOST:-}" ] && ! grep -q "^Tillandsias-Host:" "$COMMIT_MSG_FILE" 2>/dev/null; then
+    git interpret-trailers --in-place --trailer "Tillandsias-Host: ${TILLANDSIAS_GIT_HOST}" "$COMMIT_MSG_FILE" 2>/dev/null \
+        || printf '\nTillandsias-Host: %s\n' "${TILLANDSIAS_GIT_HOST}" >> "$COMMIT_MSG_FILE"
+fi
+
+[ -n "${TILLANDSIAS_AGENT_NAME:-}" ] || exit 0
 grep -q "^Generated-By:" "$COMMIT_MSG_FILE" 2>/dev/null && exit 0
 
-{
+git interpret-trailers --in-place \
+    --trailer "Co-Authored-By: ${TILLANDSIAS_AGENT_NAME} <noreply@tillandsias>" \
+    --trailer "Generated-By: ${TILLANDSIAS_GENERATED_BY:-tool=${TILLANDSIAS_AGENT_NAME}}" \
+    "$COMMIT_MSG_FILE" 2>/dev/null || {
     echo ""
     echo "Co-Authored-By: ${TILLANDSIAS_AGENT_NAME} <noreply@tillandsias>"
     echo "Generated-By: ${TILLANDSIAS_GENERATED_BY:-tool=${TILLANDSIAS_AGENT_NAME}}"

@@ -3569,7 +3569,7 @@ fn build_stack_common_args(
             certs_dir.join("intermediate.crt").display()
         ),
     ]);
-    append_git_identity_env_args(&mut args);
+    append_git_identity_env_args(&mut args, project_name);
     args
 }
 
@@ -8349,7 +8349,7 @@ fn build_opencode_forge_args(
             ),
         ]);
     }
-    append_git_identity_env_args(&mut args);
+    append_git_identity_env_args(&mut args, project_name);
     if let Some(prompt) = prompt {
         args.extend([
             "--env".into(),
@@ -12398,34 +12398,123 @@ fn read_git_identity_defaults() -> GitIdentity {
     identity
 }
 
-fn git_identity_env_pairs(identity: &GitIdentity) -> Vec<(&'static str, String)> {
-    let Some(name) = identity
-        .name
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-    else {
-        return Vec::new();
-    };
-    let Some(email) = identity
-        .email
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-    else {
-        return Vec::new();
-    };
+/// The GitHub App's authenticated user, as `/user` reports it (order 1453-7rzd).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AppUser {
+    pub id: u64,
+    pub login: String,
+    pub name: Option<String>,
+}
 
+/// Parse `<id>\t<login>\t<name>` (name may be empty), the shape
+/// `remote_projects::probe_github_username` caches.
+pub(crate) fn parse_app_user(tsv: &str) -> Option<AppUser> {
+    let line = tsv.lines().next()?.trim_end_matches('\r');
+    let mut parts = line.splitn(3, '\t');
+    let id = parts.next()?.trim().parse::<u64>().ok()?;
+    let login = parts.next()?.trim().to_string();
+    if login.is_empty() {
+        return None;
+    }
+    let name = parts
+        .next()
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .map(str::to_string);
+    Some(AppUser { id, login, name })
+}
+
+/// Where the App user is cached on the host: `<cache>/github-app-user.tsv`.
+/// Not a secret (a public id, login and display name), and not the token.
+pub(crate) fn app_user_cache_path() -> Option<PathBuf> {
+    init_cache_dir().ok().map(|d| d.join("github-app-user.tsv"))
+}
+
+fn read_cached_app_user() -> Option<AppUser> {
+    std::fs::read_to_string(app_user_cache_path()?)
+        .ok()
+        .and_then(|s| parse_app_user(&s))
+}
+
+/// The forge's git identity BASE (order 1453-7rzd, spec
+/// forge-git-identity-anonymization): the GitHub App user's name with the
+/// GitHub noreply address `<id>+<login>@users.noreply.github.com`, or, with no
+/// App login, a project-scoped identity. NEVER the host's gitconfig. The guest
+/// appends ` (<host> · tillandsia-<species>)` to the name when it writes the
+/// config, because the species is chosen per forge, inside it.
+pub(crate) fn forge_git_identity(app: Option<&AppUser>, project_name: &str) -> (String, String) {
+    match app {
+        Some(u) => (
+            u.name.clone().unwrap_or_else(|| u.login.clone()),
+            format!("{}+{}@users.noreply.github.com", u.id, u.login),
+        ),
+        None => (
+            format!("Tillandsias forge ({project_name})"),
+            format!("forge+{project_name}@users.noreply.tillandsias.invalid"),
+        ),
+    }
+}
+
+/// The carrier variables the guest's `configure_git_identity` reads to WRITE
+/// git config (order 1453-7rzd). Deliberately NOT `GIT_AUTHOR_*` /
+/// `GIT_COMMITTER_*`: exported, those override every scratch repository's own
+/// `-c user.name` inside the forge, which is how test-discipline-derive went
+/// 4/5 red in every forge.
+pub(crate) fn forge_git_identity_env(
+    app: Option<&AppUser>,
+    project_name: &str,
+    host: &str,
+) -> Vec<(&'static str, String)> {
+    let (name, email) = forge_git_identity(app, project_name);
     vec![
-        ("GIT_AUTHOR_NAME", name.to_string()),
-        ("GIT_AUTHOR_EMAIL", email.to_string()),
-        ("GIT_COMMITTER_NAME", name.to_string()),
-        ("GIT_COMMITTER_EMAIL", email.to_string()),
+        ("TILLANDSIAS_GIT_NAME", name),
+        ("TILLANDSIAS_GIT_EMAIL", email),
+        ("TILLANDSIAS_GIT_HOST", host.to_string()),
+        (
+            "TILLANDSIAS_GIT_IDENTITY_SOURCE",
+            if app.is_some() {
+                "github-app"
+            } else {
+                "project"
+            }
+            .to_string(),
+        ),
     ]
 }
 
-fn append_git_identity_env_args(args: &mut Vec<String>) {
-    for (name, value) in git_identity_env_pairs(&read_git_identity_defaults()) {
+/// This host's short name for the `Tillandsias-Host:` trailer.
+fn forge_host_name() -> String {
+    std::fs::read_to_string("/etc/hostname")
+        .ok()
+        .or_else(|| std::env::var("HOSTNAME").ok())
+        .map(|h| h.trim().split('.').next().unwrap_or("").to_lowercase())
+        .filter(|h| !h.is_empty())
+        .unwrap_or_else(|| "unknown-host".to_string())
+}
+
+/// The App user for a forge launch: the cache, else one probe (which writes
+/// the cache). No App login yields `None`, which is the project-scoped
+/// identity, never the host gitconfig.
+fn forge_app_user() -> Option<AppUser> {
+    #[cfg(all(any(feature = "tray", feature = "listen-vsock"), not(test)))]
+    {
+        read_cached_app_user().or_else(|| {
+            remote_projects::probe_github_username(false)?;
+            read_cached_app_user()
+        })
+    }
+    // Without the probe (a build with neither feature), and in unit tests, which
+    // must never run a real container: the cache alone.
+    #[cfg(any(not(any(feature = "tray", feature = "listen-vsock")), test))]
+    {
+        read_cached_app_user()
+    }
+}
+
+fn append_git_identity_env_args(args: &mut Vec<String>, project_name: &str) {
+    for (name, value) in
+        forge_git_identity_env(forge_app_user().as_ref(), project_name, &forge_host_name())
+    {
         args.push("--env".into());
         args.push(format!("{name}={value}"));
     }
@@ -17156,7 +17245,9 @@ fn build_forge_agent_run_args_with_vault(
         spec = spec.env("TILLANDSIAS_CLAUDE_PROMPT", prompt);
     }
 
-    for (name, value) in git_identity_env_pairs(&read_git_identity_defaults()) {
+    for (name, value) in
+        forge_git_identity_env(forge_app_user().as_ref(), project_name, &forge_host_name())
+    {
         spec = spec.env(name, value);
     }
 
@@ -27177,11 +27268,24 @@ esac
         // top), so the host-mount claim IS present here.
         assert!(has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
+        // Order 1453-7rzd: the identity arrives as TILLANDSIAS_GIT_* carriers
+        // for the guest to WRITE as config, never as exported GIT_* env.
         assert!(
-            args.iter().any(|arg| arg.starts_with("GIT_AUTHOR_NAME="))
-                == args.iter().any(|arg| arg.starts_with("GIT_AUTHOR_EMAIL=")),
-            "git identity env should be injected as a complete name/email pair"
+            !args
+                .iter()
+                .any(|arg| arg.starts_with("GIT_AUTHOR_") || arg.starts_with("GIT_COMMITTER_")),
+            "no exported GIT_* identity may reach a forge: {args:?}"
         );
+        for key in [
+            "TILLANDSIAS_GIT_NAME=",
+            "TILLANDSIAS_GIT_EMAIL=",
+            "TILLANDSIAS_GIT_HOST=",
+        ] {
+            assert!(
+                args.iter().any(|arg| arg.starts_with(key)),
+                "the forge must carry {key}: {args:?}"
+            );
+        }
         assert!(
             args.iter()
                 .any(|arg| arg == "/tmp/project:/home/forge/src/alpha:rw")
@@ -27371,18 +27475,57 @@ esac
     }
 
     #[test]
-    fn git_identity_env_pairs_cover_author_and_committer() {
-        let identity = GitIdentity {
-            name: Some("Big Pickle".to_string()),
-            email: Some("big.pickle@example.test".to_string()),
-        };
-        let pairs = git_identity_env_pairs(&identity);
+    fn forge_identity_comes_from_the_app_user_never_the_host_gitconfig() {
+        // Order 1453-7rzd arm 1 (unit half): the App user's name, with the
+        // GitHub noreply address; the carrier is TILLANDSIAS_GIT_*, never
+        // GIT_AUTHOR_*/GIT_COMMITTER_*, which would override a scratch repo's
+        // own `-c user.name`.
+        let app = parse_app_user("7\tappuser\tApp User").expect("tsv parses");
+        assert_eq!(
+            app,
+            AppUser {
+                id: 7,
+                login: "appuser".into(),
+                name: Some("App User".into())
+            }
+        );
+        let env = forge_git_identity_env(Some(&app), "alpha", "lenovinha");
+        assert!(env.contains(&("TILLANDSIAS_GIT_NAME", "App User".to_string())));
+        assert!(env.contains(&(
+            "TILLANDSIAS_GIT_EMAIL",
+            "7+appuser@users.noreply.github.com".to_string()
+        )));
+        assert!(env.contains(&("TILLANDSIAS_GIT_HOST", "lenovinha".to_string())));
+        assert!(env.contains(&("TILLANDSIAS_GIT_IDENTITY_SOURCE", "github-app".to_string())));
+        assert!(
+            env.iter().all(|(k, _)| !k.starts_with("GIT_")),
+            "the forge must never receive exported GIT_* identity: {env:?}"
+        );
+    }
 
-        assert_eq!(pairs.len(), 4);
-        assert!(pairs.contains(&("GIT_AUTHOR_NAME", "Big Pickle".to_string())));
-        assert!(pairs.contains(&("GIT_AUTHOR_EMAIL", "big.pickle@example.test".to_string())));
-        assert!(pairs.contains(&("GIT_COMMITTER_NAME", "Big Pickle".to_string())));
-        assert!(pairs.contains(&("GIT_COMMITTER_EMAIL", "big.pickle@example.test".to_string())));
+    #[test]
+    fn app_user_without_a_display_name_uses_the_login() {
+        let app = parse_app_user("7\tappuser\t").expect("empty name is allowed");
+        assert_eq!(app.name, None);
+        assert_eq!(forge_git_identity(Some(&app), "alpha").0, "appuser");
+        assert_eq!(parse_app_user("not-a-number\tx\ty"), None);
+        assert_eq!(parse_app_user("7\t\tname"), None, "a login is required");
+    }
+
+    /// Arm 5 (NEGATIVE CONTROL, unit half): no App login yields a
+    /// project-scoped identity, and still nothing from the host gitconfig.
+    #[test]
+    fn no_app_login_yields_a_project_scoped_identity() {
+        let env = forge_git_identity_env(None, "alpha", "lenovinha");
+        assert!(env.contains(&(
+            "TILLANDSIAS_GIT_NAME",
+            "Tillandsias forge (alpha)".to_string()
+        )));
+        assert!(env.contains(&(
+            "TILLANDSIAS_GIT_EMAIL",
+            "forge+alpha@users.noreply.tillandsias.invalid".to_string()
+        )));
+        assert!(env.contains(&("TILLANDSIAS_GIT_IDENTITY_SOURCE", "project".to_string())));
     }
 
     /// ORDER 1052-984i. The refusal must name the FILE, and must not send the
