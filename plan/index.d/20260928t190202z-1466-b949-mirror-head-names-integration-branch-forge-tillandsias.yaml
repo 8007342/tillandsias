@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-git-mirrors-head-sticks-to-whatever-branch-the-first-launch-passed-often-a-host-work-branch-so-a-plain-git-clone-from-the-mirror-lands-on-another-hosts-work-branch
+    order: 1466-b949
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.6
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [git-mirror, branching, forge]
+    estimated_hours: 2
+    owned_files:
+      - images/git/ensure-mirror-head.sh
+      - images/git/entrypoint.sh
+    title: |
+      THE CHEAP HALF of 1362-u8ww: the git mirror's HEAD should name the project's integration branch (the discipline seed's, else upstream's default, else main), not the host checkout's current branch that the first launch happened to pass, so a plain `git clone` from the mirror outside a forge lands somewhere sane
+    context: |
+      1362-u8ww (work/1362-u8ww @ aba2a83b9, queued land85) made the FORGE
+      resolve its seed branch explicitly and never read the mirror's HEAD. The
+      mirror's HEAD itself is unchanged: images/git/ensure-mirror-head.sh prefers
+      $2 / TILLANDSIAS_PROJECT_DEFAULT_BRANCH, which "the launcher passes the
+      host checkout's current branch", and it only repairs a HEAD that does not
+      resolve — so the first launch's branch STICKS (pirria 2026-09-22:
+      /srv/git/tillandsias HEAD -> work/1325-ygq5). Anything that clones the
+      mirror outside the forge's resolver (a fixture, a host tool, an operator
+      doing `git clone git://…`) still lands on another host's work branch.
+      Coordinator ruling 2026-09-28: file as its own row, p3.
+    exit_criteria:
+      - 'a mirror whose HEAD names a work/<order> branch is repointed at the integration branch on the next ensure-mirror-head run: the discipline seed''s integration branch for this host kind, else upstream''s default (ls-remote --symref), else main (pre-fix: FAILS, a valid HEAD is never touched)'
+      - 'a HEAD that already names the integration branch or the default branch is left alone (no churn), and a mirror with no seed and no upstream keeps today''s order'
+      - 'the launcher no longer passes the host checkout''s current branch as the mirror''s preferred HEAD (the forge''s own seed resolution, 1362-u8ww, is what lands a forge on the working branch)'
+    verifiable_closure: |
+      a scratch bare mirror with HEAD -> refs/heads/work/1325-ygq5 and a seed
+      naming linux-next: after ensure-mirror-head, `git clone` of it checks out
+      linux-next; a mirror already on linux-next is not rewritten.
+    notes: |
+      size: S
+      POSIX sh (the git image runs busybox sh).
+    provenance: |
+      Filed 2026-09-28 by forge-tillandsias on the coordinator's ruling, as the
+      remainder named in 1362-u8ww's report.
+    events:
+      - type: filed
+        ts: "2026-09-28T19:02:02Z"
+        agent_id: "forge-forge-tillandsias-claude-20260928"
+        host: forge-tillandsias
+        summary: |-
+          The mirror's sticky HEAD, split from 1362-u8ww as the cheap half.
