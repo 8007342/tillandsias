@@ -300,3 +300,31 @@ of `test-metrics-log-path-agreement.sh` (15 passed, 3 failed). The final
 validation configuration therefore keeps the private container PID namespace
 and `/tmp`, but leaves timing-log discovery at its normal default. No guard,
 runtime code, fixture or known-red baseline was edited for these retries.
+
+Final publication attempt (2026-09-28T23:00:58Z), fresh private builder:
+the execution door recorded `status=exited`, `code=1`, `wall_ms=662407`
+for `./build.sh --check`. Workspace tests again passed (2,646, zero new
+reds), but `test-litmus-parse-only-duplicate-key.sh` ARM 6 reported
+`corpus changed (478 -> 477)` and
+`blocked:litmus-parse-only-duplicate-key:1-failed-of-9`. These are counts
+from the neutralised runner versus the live runner, NOT a direct count of
+documents accepted by a YAML loader. The fixture's diagnostic attributes the
+difference to the detector; that attribution is not independently established.
+Its baseline disables both the document loader and the duplicate detector.
+No script or litmus corpus file differs from the research source snapshot.
+
+The required full gate is therefore **not green**, and this research work ref
+and packet have **not been pushed**. The smallest reproduction is
+`bash scripts/test-litmus-parse-only-duplicate-key.sh` inside the builder with
+the same plan binary/target and default timing-log discovery. Investigate its
+two corpus outputs before attributing the difference or changing the parser.
+A separate direct corpus diagnostic also encountered environment-probe noise
+and existing extractability refusals; it did not isolate the one-file delta
+and is not evidence for a specific root cause. Repairing unrelated gate code
+is outside this research-only request. The ready implementation slice remains
+unclaimed; publication must wait for the gate to pass, not bypass it.
+
+Local evidence is retained at
+`/home/tlatoani/codex/lua-research-gate-20260928-run6.log` and its sibling
+`.status` file. These are host-local troubleshooting artifacts, not portable
+worker inputs; the measured result above is the durable report content.
