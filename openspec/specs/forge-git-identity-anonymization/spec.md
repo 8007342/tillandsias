@@ -51,6 +51,7 @@ The shape, until the operator answers the open questions in
   its lifecycle trace, and still does not read the host gitconfig
 
 ### Requirement: Guest identity is config, not exported environment
+<!-- req-id: b997e711 -->
 
 The forge SHALL write the identity as git configuration and SHALL NOT export
 GIT_AUTHOR_* or GIT_COMMITTER_* into agent shells, so a scratch repository
@@ -65,6 +66,7 @@ identity. The launcher passes the values as `TILLANDSIAS_GIT_NAME`,
 - **THEN** the commit's author is `fixture <f@x>`
 
 ### Requirement: Committer host stays derivable
+<!-- req-id: f3c9b423 -->
 
 Every commit made in a forge SHALL carry its host in a `Tillandsias-Host:`
 trailer, which `scripts/fleet-activity.sh` and `tillandsias-plan discipline
