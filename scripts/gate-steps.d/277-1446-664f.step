@@ -1,0 +1,13 @@
+# Gate step 1446-664f — data, not code (order 1072-b7eq).
+#
+# The discipline is derived AND checked against reality: an enforced rule
+# refuses only where the seed and the observed qualifier agree, a seed ahead
+# of reality warns naming the missing qualifier, a seed behind reality names
+# `discipline raise`, and this repository keeps refusing main.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking discipline derive and the reality check (1446-664f)"
+STEP_SCRIPT="scripts/test-discipline-derive.sh"
+STEP_ERROR="discipline derive disagreed with a scratch project's observed facts, a seed ahead of reality refused, or this repository stopped refusing main (1446-664f) — see the verdict line above"
+STEP_OK="Discipline derive passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:discipline-derive:5/5"
