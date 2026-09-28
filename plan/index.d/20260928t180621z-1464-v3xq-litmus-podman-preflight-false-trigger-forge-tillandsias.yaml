@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-litmus-runners-podman-preflight-fires-on-the-word-podman-inside-a-quoted-string-so-a-test-that-only-mentions-podman-in-prose-env-fails-on-a-host-without-a-working-podman-and-never-runs
+    order: 1464-v3xq
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, runner, podman, instrument-defect, tests]
+    estimated_hours: 2
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/test-litmus-podman-preflight-trigger.sh
+    title: |
+      scripts/run-litmus-test.sh's podman preflight triggers on any `command:` line where the word podman follows a space, including prose inside a quoted string (litmus:expert-groundtruth-harness grades the question "how do I run podman rootless"), so a test that never runs podman is ENV-FAILed whole on a host where `podman ps` fails; detection must key on podman in COMMAND position, outside quoted prose
+    context: |
+      Found by forge-tillandsias on 2026-09-28 while verifying 1293-krrp: the
+      whole expert-groundtruth-harness test ENV-FAILed in a forge ("'podman
+      ps' FAILED IMMEDIATELY", podman resolved to the runner's litmus-runtime
+      shim) before running a step, although no step invokes podman. The
+      trigger (run-litmus-test.sh ~:1335) is
+      grep -qE '^[[:space:]]*command:.*(^|[ ;|&(])podman[[:space:]]', which
+      matches `query: how do I run podman rootless` inside a printf'd
+      single-quoted YAML body. The preflight exists to turn a stalled-podman
+      TIMEOUT into a named ENV-FAIL (2026-07-15); a false trigger instead
+      hides a whole test's verdict on every podman-broken host.
+      BASED ON work/1443-fpck (queued in land85), which also changes
+      run-litmus-test.sh, to avoid a merge conflict (coordinator direction
+      2026-09-28); this row's ref lands after or with fpck.
+    exit_criteria:
+      - 'a test whose only podman mention is prose inside a quoted string (single- or double-quoted, as in the groundtruth harness) RUNS its steps on a host where `podman ps` fails, and passes (pre-fix: FAILS, the whole test is [ENV-FAIL] before step 1)'
+      - 'a test that invokes podman in command position (at the start, after ; | && ( $( or a wrapper such as timeout/env/sudo, or by absolute path) still ENV-FAILs on that host, naming podman (the preflight keeps its purpose)'
+      - 'across the litmus corpus the set of tests that trigger the preflight is measured before and after, and every test that stops triggering is named with the reason it is prose, so no true positive is lost silently'
+    verifiable_closure: |
+      bash scripts/test-litmus-podman-preflight-trigger.sh
+      exits 0: under a fake failing `podman` on PATH, the prose-only probe test
+      PASSes and the command-position probe ENV-FAILs. Pre-fix: FAILS at arm 1.
+    notes: |
+      size: S
+      Filed and taken by forge-tillandsias on the coordinator's direction
+      (macuahuitl-fedora, 2026-09-28).
+    provenance: |
+      Measured while verifying 1293-krrp in a forge (podman absent; the
+      runner's shim answers `podman ps` with exit 1).
+    events:
+      - type: filed
+        ts: "2026-09-28T18:06:21Z"
+        agent_id: "forge-forge-tillandsias-claude-20260928"
+        host: forge-tillandsias
+        summary: |-
+          Filed and claimed: the podman preflight's substring trigger.
+      - type: claimed
+        ts: "2026-09-28T18:06:21Z"
+        agent_id: "forge-forge-tillandsias-claude-20260928"
+        host: forge-tillandsias
+        summary: |-
+          Implementing on work/1464-v3xq, based on work/1443-fpck.
