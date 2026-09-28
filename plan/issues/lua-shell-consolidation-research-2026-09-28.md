@@ -273,6 +273,14 @@ does not depend on the v0.6 runner program or change its release assignment.
 
 Publication gate results belong in the packet event/handoff, not inferred from
 the runtime API probes. The first isolated `./build.sh --check` exited 101
-because its `/tmp` target exceeded the user quota. A second run uses a dedicated
-target and temporary directory on `/home`; no host/container reset or shared
-builder mutation was used to resolve that environmental failure.
+because its `/tmp` target exceeded the user quota. The second run moved target
+and scratch to `/home` and reached 2,646 workspace tests with one new red:
+`spec_index::tests::the_repo_relative_rung_anchors_to_the_checkout_not_to_home`.
+In `spec_index.rs::tests::the_repo_relative_rung_anchors_to_the_checkout_not_to_home`,
+the test asserts its resolved fixture path is outside
+HOME, although its fixture is created under TMPDIR. Choosing TMPDIR under HOME
+therefore violates this fixture's environmental assumption. The corrected run keeps
+the dedicated target on `/home` but moves scratch to `/var/tmp`; no runtime,
+fixture, known-red baseline, host/container reset or shared builder configuration
+was changed. The exact named test passes in that environment (1 passed,
+396 filtered out). This is a validation constraint, not a Lua defect.
