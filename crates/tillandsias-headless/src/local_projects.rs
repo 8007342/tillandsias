@@ -277,11 +277,9 @@ mod tests {
     // === ORDER 505 FAIL-CLOSED VALIDATION (1031-q4pb) ==========================
     //
     // ENV IS PROCESS-GLOBAL AND CARGO RUNS TESTS IN THREADS, so these tests
-    // serialize on one mutex. Without it they pass alone and fail in a full run,
-    // which is the flaky-test shape that gets a suite ignored rather than fixed.
-    #[cfg(feature = "tray")]
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
+    // serialize on the crate-wide lock (crate::test_support::env_lock,
+    // 1437-5czv). Without it they pass alone and fail in a full run, which is
+    // the flaky-test shape that gets a suite ignored rather than fixed.
     #[cfg(feature = "tray")]
     struct EnvScope {
         _g: std::sync::MutexGuard<'static, ()>,
@@ -304,7 +302,7 @@ mod tests {
     /// confirmed-cloud cache.
     #[cfg(feature = "tray")]
     fn scoped(locals: &[&str], cloud: Option<&[&str]>) -> EnvScope {
-        let g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let g = crate::test_support::env_lock();
         let tmp = std::env::temp_dir().join(format!(
             "tillandsias-1031-{}-{:?}",
             std::process::id(),
