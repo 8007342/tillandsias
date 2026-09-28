@@ -3510,6 +3510,11 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         generation_before.as_deref(),
         ca_generation(&certs_dir).as_deref(),
     ) {
+        // Order 472 criterion 1: only a declared transition may reach the wire.
+        debug_assert!(
+            flow_sink::ca_transition_declared(&from, &to, reason),
+            "undeclared CA transition {from} -> {to} ({reason})"
+        );
         flow_sink::emit(
             tillandsias_control_wire::FlowSource::DependencyNode {
                 node: flow_sink::CA_BUNDLE_NODE.to_string(),
