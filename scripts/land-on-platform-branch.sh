@@ -205,8 +205,12 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
                     _nl_trailers+=(--trailer "Native-Lint-Unattested: ${_l#override:native-lint:unattested:}") ;;
                 esac
             done <<<"$_nl_out"
-            git commit -q --allow-empty -m "native-lint: landed UNATTESTED on a named override (1235-rfub)" "${_nl_trailers[@]}" \
-                || { echo "refused:land:native-lint-debt-unrecorded — the override's debt commit failed" >&2; exit 9; }
+            if ! git commit -q --allow-empty -m "native-lint: landed UNATTESTED on a named override (1235-rfub)" "${_nl_trailers[@]}"; then
+                echo "refused:land:native-lint-debt-unrecorded — the override's debt commit failed" >&2
+                _afford "an override may land an unlinted gated crate only with its debt written into the landed history, and that commit failed" \
+                    "fix what git commit reported (identity, hooks), then re-run with the same TILLANDSIAS_NATIVE_LINT_UNATTESTED"
+                exit 9
+            fi
             echo "land: attempt $attempt — native-lint DEBT recorded on the landed history: TILLANDSIAS_NATIVE_LINT_UNATTESTED=$TILLANDSIAS_NATIVE_LINT_UNATTESTED"
         fi
     fi
