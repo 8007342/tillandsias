@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-linux-lane-that-fails-inside-the-container-asks-for-two-keypresses-the-in-container-exit-pause-and-the-host-hold-window
+    order: 1457-r8yi
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [forge, tty, ux, entrypoints]
+    estimated_hours: 1
+    depends_on: [forge-window-closes-on-clean-exit-and-five-exit-pause-copies-cannot-fire]
+    observed_by: yoga-silverblue
+    title: |
+      On Linux a lane that fails inside the container asks for two keypresses: the entrypoint's exit_pause trap ("Press any key") and then the host --hold-window wrapper ("Press Enter") from 828-h7kw.
+    unscoreable: |
+      the fix is a launcher-to-entrypoint signal (for example an env the Linux launcher sets and exit_pause honours) whose pin the implementer names in the same commit. The traps must STAY for the macOS and Windows lanes, which do not run the wrapper (828-h7kw note, 2026-09-28): do not delete them.
