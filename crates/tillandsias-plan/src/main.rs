@@ -4425,10 +4425,11 @@ fn run_run_verb(args: &[String]) -> ! {
         eprintln!(
             "usage: tillandsias-plan run [--json] [--cwd P] [--env K=V]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>\n\
              \x20 argv is argv: there is no command-string form and no --shell.\n\
-             \x20 --json prints one object (run_id,status,code,ok,stdout,stderr,truncated,wall_ms,argv,policy) and\n\
+             \x20 --json prints one object (run_id,status,code,signal,ok,stdout,stderr,truncated,wall_ms,argv,policy) and\n\
              \x20 exits 0 whenever a child ran, 1 for a policy refusal, 4 for consent, 2 for usage.\n\
              \x20 WITHOUT --json the verb mirrors the child's exit code, so a refusal (1) and a child's own exit 1\n\
-             \x20 cannot be told apart by the code: a caller that must tell them apart uses --json."
+             \x20 cannot be told apart by the code: a caller that must tell them apart uses --json.\n\
+             \x20 --timeout-ms defaults to 300000 (300 s); a long run (a full gate) MUST pass its own, or 0 for none."
         );
         std::process::exit(2);
     };
