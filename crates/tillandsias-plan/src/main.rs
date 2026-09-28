@@ -2615,15 +2615,20 @@ pub fn metrics_default_log(basename: &str, repo_root: Option<&Path>) -> PathBuf 
     // Mirrors metrics_default_log() in scripts/metrics-log-path.sh: a writable
     // checkout wins, /tmp is the documented fallback for a forge or an
     // out-of-repo call. `.git` may be a directory (normal clone) or a file (a
-    // worktree or submodule), and the shell's `-d` test accepts only the first;
-    // `exists()` here would answer differently inside a linked worktree, so this
-    // deliberately matches the shell's is_dir check rather than improving on it.
+    // linked worktree or submodule).
+    //
+    // ORDER 1455-d7hc: the shell rule's predicate is `[ -e "$1/.git" ]`
+    // (_metrics_is_checkout, since 1268-m2ir), which ACCEPTS a worktree's `.git`
+    // file. This side used to say the shell tested `-d` and kept is_dir to match
+    // it; that premise went stale when the shell moved to -e, and from then on
+    // a linked worktree's writer went to /tmp while its reader read the
+    // checkout, so metrics written there were read by nobody.
     let root = match repo_root {
         Some(r) => Some(r.to_path_buf()),
         None => find_repo_root(),
     };
     if let Some(root) = root
-        && root.join(".git").is_dir()
+        && root.join(".git").exists()
     {
         let dir = root.join(".cache").join("metrics");
         if std::fs::create_dir_all(&dir).is_ok() {

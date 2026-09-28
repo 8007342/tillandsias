@@ -236,10 +236,22 @@ fi
 # ── arm 3: NEGATIVE CONTROL — outside a checkout it must still work ───────────
 # A forge or a bare invocation has no repo to write into. Falling back to /tmp
 # there is correct; failing there would be a regression this fix must not cause.
+# ORDER 1455-d7hc: "outside a checkout" means the LIBRARY is outside one. Since
+# 1268-m2ir the shell rule falls back to the checkout its own library lives in,
+# by design, so naming a nonexistent root while sourcing the library from THIS
+# checkout resolves to this checkout: the arm could no longer fail the way it
+# meant, and it failed everywhere from 2026-09-20 unseen because no gate ran it.
+# Source a copy of the library from a scratch directory outside any checkout.
+_outside_lib="$(mktemp -d "${TMPDIR:-/tmp}/metrics-outside.XXXXXX")"
+mkdir -p "$_outside_lib/scripts"
+cp "$ROOT/scripts/metrics-log-path.sh" "$_outside_lib/scripts/"
 outside="$(
-    . "$ROOT/scripts/metrics-log-path.sh" 2>/dev/null || true
-    metrics_default_log tillandsias-timing.jsonl "/nonexistent-checkout-$$"
+    cd "$_outside_lib" || exit 1
+    unset PROJECT_ROOT
+    . "$_outside_lib/scripts/metrics-log-path.sh" 2>/dev/null || true
+    metrics_default_log tillandsias-timing.jsonl "/nonexistent-checkout-$$" 2>/dev/null
 )"
+rm -rf "$_outside_lib"
 case "$outside" in
     /tmp/tillandsias-timing.jsonl) ok "outside a checkout it falls back to /tmp (forge path preserved)" ;;
     *) bad "no-checkout fallback broke: $outside" ;;
