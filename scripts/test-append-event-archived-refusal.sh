@@ -55,8 +55,8 @@ fi
 # An order that is archived-only. Derived from the archive rather than pinned as
 # a literal, so the fixture survives the archive growing: a hardcoded token that
 # later gets re-minted live would silently invert this test's meaning.
-ARCHIVED_ORDER="$(grep -hoE '^      order: [0-9]+-[a-z0-9]+' "$ROOT"/plan/archive/*.yaml 2>/dev/null \
-    | awk '{print $2}' | head -1)"
+ARCHIVED_ORDER="$(grep -hoE '^      order: "?[0-9]+-[a-z0-9]+' "$ROOT"/plan/archive/*.yaml 2>/dev/null \
+    | sed -E 's/.*order: "?//' | head -1)"
 if [ -z "$ARCHIVED_ORDER" ]; then
     echo "skip:append-event-archived-refusal:no-archived-order-found"
     exit 0
@@ -184,10 +184,10 @@ fi
 LIVE_ORDER=""
 for _f in "$ROOT"/plan/index.d/*.yaml; do
     [ -e "$_f" ] || continue
-    _o="$(grep -m1 -oE '^    order: [0-9]+-[a-z0-9]+' "$_f" 2>/dev/null | awk '{print $2}')"
+    _o="$(grep -m1 -oE '^    order: "?[0-9]+-[a-z0-9]+' "$_f" 2>/dev/null | sed -E 's/.*order: "?//')"
     _s="$(grep -m1 -oE '^    status: [a-z_]+' "$_f" 2>/dev/null | awk '{print $2}')"
     [ -n "$_o" ] && [ "$_s" = "ready" ] || continue
-    grep -qE "^      order: ${_o}$" "$ROOT/plan/index.yaml" 2>/dev/null && continue
+    grep -qE "^      order: \"?${_o}\"?$" "$ROOT/plan/index.yaml" 2>/dev/null && continue
     LIVE_ORDER="$_o"; break
 done
 if [ -z "$LIVE_ORDER" ]; then
