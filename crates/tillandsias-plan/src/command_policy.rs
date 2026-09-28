@@ -84,44 +84,63 @@ pub struct HostKindReading {
     pub disagreement: Option<String>,
 }
 
-/// Derive the host kind from the three sources the spec names TOGETHER:
-/// `TILLANDSIAS_HOST_KIND`, `/run/.containerenv` and the
-/// `.forge-startup-context.md` marker under `root`.
+/// Derive the host kind from `TILLANDSIAS_HOST_KIND` and the container
+/// runtime's record of the image this process runs in (`image="…"` in
+/// `/run/.containerenv`, written root-owned by podman; a forge agent runs
+/// non-root and cannot rewrite it).
+///
+/// `root` is accepted for the callers' convenience and deliberately NOT
+/// consulted: evidence never comes from a file in the workspace, which any
+/// writer of a directory can plant (1467-c8qg: a stray
+/// `/tmp/.forge-startup-context.md` made cwd=/tmp read as a forge on bare
+/// metal). And the FILE'S PRESENCE is not evidence either: every podman
+/// container has one, so the builder toolbox (where bare-metal gates run) and
+/// a distrobox read as a forge by presence alone. Only the forge image names a
+/// forge; any other container is `container-other`, treated as bare metal.
 ///
 /// A FORGE NEEDS PHYSICAL EVIDENCE. The environment variable alone cannot
 /// declare one, because a forge is where `soft-reset` is pre-authorised: a
 /// variable that could claim it would be a way round the consent. Evidence
 /// wins over the variable, and a disagreement between them is reported.
-pub fn read_host_kind(root: &Path) -> HostKindReading {
+pub fn read_host_kind(_root: &Path) -> HostKindReading {
     let env = std::env::var("TILLANDSIAS_HOST_KIND").ok();
-    let containerenv = Path::new("/run/.containerenv").exists();
-    let marker = root.join(".forge-startup-context.md").exists();
-    read_host_kind_from(env.as_deref(), containerenv, marker)
+    let containerenv = std::fs::read_to_string("/run/.containerenv").ok();
+    read_host_kind_from(env.as_deref(), containerenv.as_deref())
 }
 
-/// Pure half of [`read_host_kind`], so the rule is testable without a container.
-pub fn read_host_kind_from(env: Option<&str>, containerenv: bool, marker: bool) -> HostKindReading {
-    let evidence_forge = containerenv || marker;
+/// The `image="…"` value of a `/run/.containerenv` record.
+pub fn containerenv_image(record: &str) -> Option<&str> {
+    record.lines().find_map(|l| {
+        l.trim()
+            .strip_prefix("image=")
+            .map(|v| v.trim_matches('"'))
+            .filter(|v| !v.is_empty())
+    })
+}
+
+/// Whether an image reference is the Tillandsias forge image
+/// (`[registry/…/]tillandsias-forge[:tag][@digest]`), and nothing else:
+/// `tillandsias-forge-base` is a build stage, never a running forge.
+pub fn is_forge_image(image: &str) -> bool {
+    let no_digest = image.split('@').next().unwrap_or("");
+    let last = no_digest.rsplit('/').next().unwrap_or("");
+    last.split(':').next() == Some("tillandsias-forge")
+}
+
+/// Pure half of [`read_host_kind`], so the rule is testable without a
+/// container. `containerenv` is the record's content, `None` when absent.
+pub fn read_host_kind_from(env: Option<&str>, containerenv: Option<&str>) -> HostKindReading {
     let env_kind = env.and_then(HostKind::parse);
-    let evidence_names = || {
-        let mut v = Vec::new();
-        if containerenv {
-            v.push("/run/.containerenv");
-        }
-        if marker {
-            v.push(".forge-startup-context.md");
-        }
-        v.join("+")
-    };
-    if evidence_forge {
+    let image = containerenv.and_then(containerenv_image);
+    if image.is_some_and(is_forge_image) {
+        let image = image.unwrap_or_default();
         let disagreement = match (env, env_kind) {
             (Some(e), Some(k)) if k != HostKind::Forge => Some(format!(
-                "TILLANDSIAS_HOST_KIND={e} but {} present",
-                evidence_names()
+                "TILLANDSIAS_HOST_KIND={e} but /run/.containerenv names the forge image {image}"
             )),
             (Some(e), None) => Some(format!(
-                "TILLANDSIAS_HOST_KIND={e} is not a host kind; {} present",
-                evidence_names()
+                "TILLANDSIAS_HOST_KIND={e} is not a host kind; /run/.containerenv names the \
+                 forge image {image}"
             )),
             _ => None,
         };
@@ -131,13 +150,19 @@ pub fn read_host_kind_from(env: Option<&str>, containerenv: bool, marker: bool) 
             disagreement,
         };
     }
+    let fallback = if containerenv.is_some() {
+        "container-other"
+    } else {
+        "default"
+    };
     match (env, env_kind) {
         (Some(e), Some(HostKind::Forge)) => HostKindReading {
             kind: HostKind::BareMetal,
-            source: "default",
+            source: fallback,
             disagreement: Some(format!(
-                "TILLANDSIAS_HOST_KIND={e} but neither /run/.containerenv nor \
-                 .forge-startup-context.md is present; a forge is not self-declared"
+                "TILLANDSIAS_HOST_KIND={e} but no container record names the forge image \
+                 (image={}); a forge is not self-declared",
+                image.unwrap_or("none")
             )),
         },
         (Some(_), Some(k)) => HostKindReading {
@@ -147,12 +172,12 @@ pub fn read_host_kind_from(env: Option<&str>, containerenv: bool, marker: bool) 
         },
         (Some(e), None) => HostKindReading {
             kind: HostKind::BareMetal,
-            source: "default",
+            source: fallback,
             disagreement: Some(format!("TILLANDSIAS_HOST_KIND={e} is not a host kind")),
         },
         (None, _) => HostKindReading {
             kind: HostKind::BareMetal,
-            source: "default",
+            source: fallback,
             disagreement: None,
         },
     }
@@ -2021,18 +2046,34 @@ mod tests {
 
     #[test]
     fn a_forge_is_not_self_declared() {
-        let r = read_host_kind_from(Some("forge"), false, false);
+        const FORGE: &str = "engine=\"podman-5.8.7\"\nname=\"forge-x\"\nimage=\"localhost/tillandsias-forge:v0.5.1\"\nrootless=1\n";
+        const TOOLBOX: &str = "engine=\"podman-5.8.7\"\nname=\"tillandsias-builder\"\nimage=\"registry.fedoraproject.org/fedora-toolbox:44\"\nrootless=1\n";
+        let r = read_host_kind_from(Some("forge"), None);
         assert_eq!(r.kind, HostKind::BareMetal);
         assert!(r.disagreement.is_some());
-        let r = read_host_kind_from(Some("bare-metal"), true, false);
+        let r = read_host_kind_from(Some("bare-metal"), Some(FORGE));
         assert_eq!(r.kind, HostKind::Forge);
         assert!(r.disagreement.is_some());
-        let r = read_host_kind_from(None, false, true);
+        let r = read_host_kind_from(None, Some(FORGE));
         assert_eq!((r.kind, r.disagreement.is_none()), (HostKind::Forge, true));
+        assert_eq!(read_host_kind_from(None, None).kind, HostKind::BareMetal);
+        // Presence is not evidence: a toolbox, an empty record, a base stage.
+        let r = read_host_kind_from(None, Some(TOOLBOX));
+        assert_eq!((r.kind, r.source), (HostKind::BareMetal, "container-other"));
+        let r = read_host_kind_from(Some("forge"), Some(TOOLBOX));
+        assert_eq!(r.kind, HostKind::BareMetal);
+        assert!(r.disagreement.is_some());
         assert_eq!(
-            read_host_kind_from(Some("ci"), false, false).kind,
-            HostKind::Ci
+            read_host_kind_from(None, Some("")).kind,
+            HostKind::BareMetal
         );
+        assert!(is_forge_image("tillandsias-forge"));
+        assert!(is_forge_image(
+            "localhost/tillandsias-forge:latest@sha256:ab"
+        ));
+        assert!(!is_forge_image("localhost/tillandsias-forge-base:v1"));
+        assert!(!is_forge_image("docker.io/evil/not-tillandsias-forge:v1"));
+        assert_eq!(read_host_kind_from(Some("ci"), None).kind, HostKind::Ci);
     }
 
     #[test]
