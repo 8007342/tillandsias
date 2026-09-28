@@ -145,6 +145,8 @@ fn live_client_mutex()
 /// next paint reflects it.
 pub struct TrayProgress {
     hwnd: HwndHandle,
+    /// 1443-bgbs: repaint the icon strip and the menu row once per percent.
+    gate: std::sync::Mutex<crate::tray_phase_icon::PercentGate>,
 }
 
 #[derive(Clone, Copy)]
@@ -191,6 +193,7 @@ impl TrayProgress {
     pub fn new(hwnd: HWND) -> Self {
         Self {
             hwnd: HwndHandle(hwnd),
+            gate: std::sync::Mutex::new(crate::tray_phase_icon::PercentGate::default()),
         }
     }
 }
@@ -202,6 +205,8 @@ impl ProvisionProgress for TrayProgress {
         // how far provisioning got even when the tray UI is gone.
         // @trace spec:windows-event-logging
         tracing::info!(phase = phase.status_text(), "provisioning phase");
+        // 1443-bgbs: a new phase ends the previous step's progress strip.
+        self.clear_progress();
         update_status_text(phase.status_text(), self.hwnd.0);
     }
     fn report_message(&self, message: &str) {
@@ -214,6 +219,49 @@ impl ProvisionProgress for TrayProgress {
         // (slice 7, `f5443276`). Each subsequent `report_phase` call replaces
         // the chip with the next phase, so transitions are clean.
         update_status_text(message, self.hwnd.0);
+    }
+    /// ORDER 1443-bgbs (Windows half of 1420-v3zt): a typed step draws a
+    /// palette strip on the tray icon and turns the status chip into the menu
+    /// progress row ("<label> <bar> <n>%"), both once per whole percent, and
+    /// clears them when the step ends. A step with no known fraction keeps the
+    /// plain one-line summary the default adapter would have shown.
+    fn report_event(&self, event: &tillandsias_control_wire::ProgressEvent) {
+        use tillandsias_control_wire::ProgressKind;
+        tracing::debug!(summary = %event.summary_line(), "provisioning progress event");
+        if event.kind.is_terminal() {
+            if let ProgressKind::Failed { reason } = &event.kind {
+                tracing::warn!(task = %event.task, %reason, "provisioning step failed");
+            }
+            self.clear_progress();
+            return;
+        }
+        match event.kind.fraction() {
+            Some(f) => {
+                let repaint = self
+                    .gate
+                    .lock()
+                    .map(|mut g| g.changed(&event.task, f))
+                    .unwrap_or(true);
+                if repaint {
+                    crate::tray_phase_icon::apply_progress_icon(Some(f), self.hwnd.0);
+                    update_status_text(
+                        &crate::tray_phase_icon::menu_row_text(&event.label, f),
+                        self.hwnd.0,
+                    );
+                }
+            }
+            None => update_status_text(&event.summary_line(), self.hwnd.0),
+        }
+    }
+}
+
+impl TrayProgress {
+    /// 1443-bgbs: drop the icon strip and forget the last percent.
+    fn clear_progress(&self) {
+        if let Ok(mut g) = self.gate.lock() {
+            g.reset();
+        }
+        crate::tray_phase_icon::apply_progress_icon(None, self.hwnd.0);
     }
 }
 
@@ -419,8 +467,10 @@ fn read_reg_string(key: windows::Win32::System::Registry::HKEY, value: &str) -> 
         return None;
     }
     let wide: Vec<u16> = buf
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
         .take_while(|&c| c != 0)
         .collect();
     Some(String::from_utf16_lossy(&wide))
@@ -1026,18 +1076,12 @@ pub fn help_text() -> String {
 /// live-provision dress rehearsal. Does NOT hold a keepalive — it provisions to
 /// Ready, reports, and exits (the VM idles down normally afterward).
 pub fn provision_once() -> i32 {
-    struct ConsoleProgress;
-    impl ProvisionProgress for ConsoleProgress {
-        fn report_phase(&self, phase: ProvisionPhase) {
-            println!("[provision] phase: {}", phase.status_text());
-            tracing::info!(?phase, "provision phase");
-        }
-        fn report_message(&self, message: &str) {
-            println!("[provision] {message}");
-        }
-    }
+    use crate::provision_console::{PhaseConsole, process_tier, render_line};
 
     init_tracing();
+    // ORDER 1420-ev7i: phases drive the tillandsia renderer, coloured bars on a
+    // console and plain ASCII lines when piped (the installer's capture).
+    let tier = process_tier();
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -1048,15 +1092,24 @@ pub fn provision_once() -> i32 {
             return 1;
         }
     };
-    println!("[provision] starting recipe provisioning (live dress rehearsal)\u{2026}");
+    println!(
+        "{}",
+        render_line(
+            tier,
+            "provision",
+            "starting recipe provisioning (live dress rehearsal)\u{2026}"
+        )
+    );
     runtime.block_on(async {
         let lifecycle = WslLifecycle::new();
-        match lifecycle
-            .provision_via_recipe(std::sync::Arc::new(ConsoleProgress))
-            .await
-        {
+        let console = std::sync::Arc::new(PhaseConsole::for_process("provision"));
+        match lifecycle.provision_via_recipe(console.clone()).await {
             Ok(()) => {
-                println!("[provision] RESULT: VM Ready \u{2014} control wire up \u{2713}");
+                console.finish_ok();
+                println!(
+                    "{}",
+                    console.line("RESULT: VM Ready \u{2014} control wire up \u{2713}")
+                );
                 tracing::info!("provision-once: VM Ready");
                 // ORDER 1004-5f7p. Record that this installation reached Ready,
                 // because in about a minute it will stop being true and nothing
@@ -1075,7 +1128,11 @@ pub fn provision_once() -> i32 {
                 0
             }
             Err(err) => {
-                eprintln!("[provision] RESULT: FAILED \u{2014} {err}");
+                console.finish_err(&err);
+                eprintln!(
+                    "{}",
+                    console.line(&format!("RESULT: FAILED \u{2014} {err}"))
+                );
                 tracing::error!(%err, "provision-once failed");
                 1
             }
@@ -1116,18 +1173,12 @@ pub fn provision_once() -> i32 {
 ///
 /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
 pub fn reset_state_once() -> i32 {
-    struct ConsoleProgress;
-    impl ProvisionProgress for ConsoleProgress {
-        fn report_phase(&self, phase: ProvisionPhase) {
-            println!("[reset-state] phase: {}", phase.status_text());
-            tracing::info!(?phase, "reset-state provision phase");
-        }
-        fn report_message(&self, message: &str) {
-            println!("[reset-state] {message}");
-        }
-    }
+    use crate::provision_console::{PhaseConsole, process_tier, render_line};
 
     init_tracing();
+    // ORDER 1420-ev7i: see provision_once. The console itself is created only
+    // when provisioning starts, after the wipe's own lines.
+    let tier = process_tier();
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -1195,7 +1246,10 @@ pub fn reset_state_once() -> i32 {
         let lifecycle = WslLifecycle::new();
         if wipe {
             if let Err(err) = lifecycle.wipe_guest().await {
-                eprintln!("[reset-state] RESULT: FAILED \u{2014} wipe: {err}");
+                eprintln!(
+                    "{}",
+                    render_line(tier, "reset-state", &format!("RESULT: FAILED \u{2014} wipe: {err}"))
+                );
                 tracing::error!(%err, "reset-state wipe failed");
                 return 1;
             }
@@ -1252,19 +1306,32 @@ pub fn reset_state_once() -> i32 {
                     tracing::warn!(%err, "reset-state could not remove download cache");
                 }
             }
-            println!("[reset-state] state wiped \u{2014} reprovisioning from scratch\u{2026}");
+            println!(
+                "{}",
+                render_line(
+                    tier,
+                    "reset-state",
+                    "state wiped \u{2014} reprovisioning from scratch\u{2026}"
+                )
+            );
         }
-        match lifecycle
-            .provision_via_recipe(std::sync::Arc::new(ConsoleProgress))
-            .await
-        {
+        let console = std::sync::Arc::new(PhaseConsole::for_process("reset-state"));
+        match lifecycle.provision_via_recipe(console.clone()).await {
             Ok(()) => {
-                println!("[reset-state] RESULT: VM Ready \u{2014} control wire up \u{2713}");
+                console.finish_ok();
+                println!(
+                    "{}",
+                    console.line("RESULT: VM Ready \u{2014} control wire up \u{2713}")
+                );
                 tracing::info!("reset-state: VM Ready");
                 0
             }
             Err(err) => {
-                eprintln!("[reset-state] RESULT: FAILED \u{2014} provision: {err}");
+                console.finish_err(&err);
+                eprintln!(
+                    "{}",
+                    console.line(&format!("RESULT: FAILED \u{2014} provision: {err}"))
+                );
                 tracing::error!(%err, "reset-state provision failed");
                 1
             }
@@ -2017,12 +2084,12 @@ fn should_poll_vm_status(push_stream_healthy: bool) -> bool {
 /// wearing the name of one. It was kept until this commit deliberately — the
 /// pin and the fallback die WITH the variant, not before it, or the wire
 /// loses its guard while a consumer still exists.
+///
+/// ORDER 1439-p853: this is the BASE list. The listener subscribes to it plus
+/// `Progress` only when the guest advertises progress.push@v1, via
+/// `provision_console::push_subscribe_topics`; the list itself lives there.
 fn vm_status_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
-    vec![
-        tillandsias_control_wire::SubscriptionTopic::VmStatus,
-        tillandsias_control_wire::SubscriptionTopic::LoginState,
-        tillandsias_control_wire::SubscriptionTopic::CloudProjects,
-    ]
+    crate::provision_console::base_push_topics()
 }
 
 /// SC-07 extension (order 154 slice 2): the slow-cadence
@@ -2223,7 +2290,7 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         // decode the topic list (postcard unknown-discriminant) may tear the
         // connection down rather than reply, so the fallback list must not
         // reuse the first stream.
-        let try_subscribe = |topics: Vec<tillandsias_control_wire::SubscriptionTopic>| async {
+        let try_subscribe = || async {
             let stream = crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT)
                 .await
                 .map_err(|e| format!("connect: {e}"))?;
@@ -2238,6 +2305,10 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
                 .handshake()
                 .await
                 .map_err(|e| format!("handshake: {e}"))?;
+            // ORDER 1439-p853: the topics come from the guest's HelloAck, so
+            // Progress is asked for only by a guest that advertised it; an
+            // older guest gets exactly the pre-change Subscribe.
+            let topics = crate::provision_console::push_subscribe_topics(client.server_caps());
             let seq = client.allocate_seq();
             let sub = ControlEnvelope {
                 wire_version: WIRE_VERSION,
@@ -2264,7 +2335,7 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         // identical list buys nothing and hides a real connect failure behind
         // a duplicate attempt. Reconnect is handled by the backoff loop below,
         // which is where it belonged all along.
-        let established = try_subscribe(vm_status_subscribe_topics()).await;
+        let established = try_subscribe().await;
 
         let mut client = match established {
             Ok(c) => c,
@@ -2296,6 +2367,11 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         refresh_github_login(hwnd).await;
         refresh_cloud_projects(hwnd).await;
 
+        // ORDER 1439-p853: guest progress through the 1420-9vpk renderer. The
+        // GUI tray has no console, so its sink is plain lines into tray.log;
+        // per connection, so a resubscribe starts a fresh task list.
+        let mut guest_progress = crate::provision_console::GuestProgress::to_tray_log();
+
         loop {
             match client.next_envelope().await {
                 Ok(env) => match env.body {
@@ -2321,6 +2397,9 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
                     ControlMessage::CloudProjectsPush { projects, .. } => {
                         let n = apply_cloud_projects(&projects, true);
                         tracing::debug!(count = n, "cloud projects pushed");
+                    }
+                    ControlMessage::ProgressPush { event, .. } => {
+                        guest_progress.observe(&event);
                     }
                     other => {
                         tracing::debug!("push stream: ignoring frame {}", other.kind());

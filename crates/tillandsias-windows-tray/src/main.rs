@@ -38,6 +38,10 @@ mod wsl_probe_policy;
 // including the negative control that a live portable build survives — are
 // exercised on every host rather than only where a registry exists.
 mod tray_registry;
+// ORDER 1420-ev7i: the --provision-once / --reset-state console. The tier rule
+// and phase mapping are portable and tested everywhere; only enabling VT on
+// the console is Win32, inside.
+mod provision_console;
 // ORDER 1335-jz8c: VmPhase -> tray glyph. Mapping is platform-independent
 // (and unit-tested everywhere); the HICON construction inside is cfg-gated.
 mod tray_phase_icon;
@@ -286,6 +290,99 @@ fn main() {
     std::process::exit(1);
 }
 
+#[cfg(target_os = "windows")]
+/// `--forge <project> [--shell|--claude|--codex|--opencode]` — open a forge
+/// PTY without a tray click. 945-vpg3.
+///
+/// Exit codes are the contract a smoke harness consumes:
+///   0  the PTY was spawned
+///   2  usage error (no project, or two agent flags)
+///   1  the launch itself was refused or failed
+///
+/// The agent flag is OPTIONAL and defaults to `--shell`, the maintenance
+/// intent, because that launch needs no agent installed in the guest and is
+/// therefore the one a blessing round can always run.
+///
+/// REFUSES rather than guesses on two inputs. A missing project name is a
+/// usage error, not "attach to something reasonable": the tray's own refusal
+/// comment says a silently rewritten name launches a DIFFERENT project than
+/// the one asked for, and inventing one headlessly is the same defect with
+/// nobody watching. Two agent flags is refused rather than last-one-wins,
+/// because a harness passing both has a bug and should be told, not served.
+fn forge_launch_once() -> i32 {
+    use tillandsias_host_shell::menu_state::SelectedAgent;
+    use tillandsias_host_shell::pty::PtyIntent;
+
+    // ORDER 823-u5zf. THE TRACING SUBSCRIBER MUST BE INITIALISED HERE, and the
+    // reason is that this path is the ONLY headless way to reach `launch_pty`.
+    //
+    // `launch_pty` emits `terminal=<windows-terminal|conhost>` from the same
+    // branch that selects the spawn, and its comment states the purpose: the
+    // packet's closure asks for a lane "OBSERVED opening in Windows Terminal
+    // rather than conhost", three other observables were measured incapable of
+    // answering it, and "one line makes it checkable by any host forever,
+    // including headless ones and CI".
+    //
+    // It was not. `--forge` exits at the early-flag block in `main`, which runs
+    // BEFORE `notify_icon::init_tracing()`, so on the one path a harness or a
+    // headless host can use, that line was written to an uninitialised
+    // subscriber and went nowhere. MEASURED on yolanda: a successful
+    // `--forge tillandsias --shell` returned `ok:forge-launch:tillandsias`,
+    // exit 0, and tray.log did not grow by a single byte — 45534 before and
+    // after, with no `spawning in-VM PTY` record.
+    //
+    // So the observable installed to make the closure checkable was inert on
+    // exactly the path that would check it: a GUI click wrote the line, and
+    // every automated caller silently did not. `init_tracing` ends in
+    // `try_init()` with the result discarded, so calling it here is safe and
+    // cannot conflict with the tray's own later call — this path exits before
+    // that one is reached.
+    notify_icon::init_tracing();
+
+    let args: Vec<String> = std::env::args().collect();
+    let project = match args.iter().position(|a| a == "--forge") {
+        Some(i) => match args.get(i + 1) {
+            Some(p) if !p.starts_with("--") && !p.is_empty() => p.clone(),
+            _ => {
+                eprintln!("refused: --forge needs a project name, e.g. --forge myproject");
+                return 2;
+            }
+        },
+        None => return 2,
+    };
+
+    let mut intent: Option<PtyIntent> = None;
+    for (flag, agent) in [
+        ("--claude", Some(SelectedAgent::Claude)),
+        ("--codex", Some(SelectedAgent::Codex)),
+        ("--opencode", Some(SelectedAgent::OpenCode)),
+        ("--shell", None),
+    ] {
+        if args.iter().any(|a| a == flag) {
+            if intent.is_some() {
+                eprintln!("refused: pass at most one of --shell/--claude/--codex/--opencode");
+                return 2;
+            }
+            intent = Some(match agent {
+                Some(a) => PtyIntent::Agent(a),
+                None => PtyIntent::Shell,
+            });
+        }
+    }
+    let intent = intent.unwrap_or(PtyIntent::Shell);
+
+    match notify_icon::launch_pty(&intent, Some(project.as_str())) {
+        Ok(()) => {
+            println!("ok:forge-launch:{project}");
+            0
+        }
+        Err(err) => {
+            eprintln!("failed:forge-launch:{project}: {err}");
+            1
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{KNOWN_FLAGS, unknown_flag};
@@ -505,16 +602,20 @@ mod tests {
     #[test]
     fn headless_forge_launch_initialises_tracing_before_spawning() {
         let main_src = include_str!("main.rs");
-        // rsplit_once, NOT split_once, AND THE REASON IS THIS TEST ITSELF.
-        // The marker below is a string literal in this very function, and this
-        // function sits EARLIER in the file than the definition it looks for —
-        // so a forward search matches the test's own source and then asserts
-        // about it. Measured: the first draft failed with the real call present
-        // three lines into the real function. A search that returns cleanly is
-        // not a search that answered the question, and a source-scanning test
-        // is inside its own haystack.
+        // THE MARKER STARTS WITH A NEWLINE, AND THE REASON IS THIS TEST ITSELF.
+        // The marker is a string literal in this very function, so a bare
+        // "fn forge_launch_once..." search matches the test's own source and
+        // then asserts about it. Measured twice: the first draft (split_once,
+        // test before the definition) failed with the real call present three
+        // lines into the real function; then rsplit_once broke the same way
+        // when 1434-vm7g moved the test module below the definition
+        // (clippy::items_after_test_module). In this file the literal's newline
+        // is spelled as an escape, so only the real definition, at the start of
+        // a line, can match, whichever side of it this test sits on. A search
+        // that returns cleanly is not a search that answered the question, and
+        // a source-scanning test is inside its own haystack.
         let (_, body) = main_src
-            .rsplit_once("fn forge_launch_once() -> i32 {")
+            .split_once("\nfn forge_launch_once() -> i32 {")
             .expect("forge_launch_once must exist; it is the headless launch contract");
         // Bound the window to this function so a call anywhere else in the file
         // cannot satisfy the assertion — the defect was precisely that the only
@@ -861,98 +962,5 @@ fn ",
             body.contains("rc=${PIPESTATUS[0]}"),
             "the login's own exit code must survive the pipeline, not tee's"
         );
-    }
-}
-
-#[cfg(target_os = "windows")]
-/// `--forge <project> [--shell|--claude|--codex|--opencode]` — open a forge
-/// PTY without a tray click. 945-vpg3.
-///
-/// Exit codes are the contract a smoke harness consumes:
-///   0  the PTY was spawned
-///   2  usage error (no project, or two agent flags)
-///   1  the launch itself was refused or failed
-///
-/// The agent flag is OPTIONAL and defaults to `--shell`, the maintenance
-/// intent, because that launch needs no agent installed in the guest and is
-/// therefore the one a blessing round can always run.
-///
-/// REFUSES rather than guesses on two inputs. A missing project name is a
-/// usage error, not "attach to something reasonable": the tray's own refusal
-/// comment says a silently rewritten name launches a DIFFERENT project than
-/// the one asked for, and inventing one headlessly is the same defect with
-/// nobody watching. Two agent flags is refused rather than last-one-wins,
-/// because a harness passing both has a bug and should be told, not served.
-fn forge_launch_once() -> i32 {
-    use tillandsias_host_shell::menu_state::SelectedAgent;
-    use tillandsias_host_shell::pty::PtyIntent;
-
-    // ORDER 823-u5zf. THE TRACING SUBSCRIBER MUST BE INITIALISED HERE, and the
-    // reason is that this path is the ONLY headless way to reach `launch_pty`.
-    //
-    // `launch_pty` emits `terminal=<windows-terminal|conhost>` from the same
-    // branch that selects the spawn, and its comment states the purpose: the
-    // packet's closure asks for a lane "OBSERVED opening in Windows Terminal
-    // rather than conhost", three other observables were measured incapable of
-    // answering it, and "one line makes it checkable by any host forever,
-    // including headless ones and CI".
-    //
-    // It was not. `--forge` exits at the early-flag block in `main`, which runs
-    // BEFORE `notify_icon::init_tracing()`, so on the one path a harness or a
-    // headless host can use, that line was written to an uninitialised
-    // subscriber and went nowhere. MEASURED on yolanda: a successful
-    // `--forge tillandsias --shell` returned `ok:forge-launch:tillandsias`,
-    // exit 0, and tray.log did not grow by a single byte — 45534 before and
-    // after, with no `spawning in-VM PTY` record.
-    //
-    // So the observable installed to make the closure checkable was inert on
-    // exactly the path that would check it: a GUI click wrote the line, and
-    // every automated caller silently did not. `init_tracing` ends in
-    // `try_init()` with the result discarded, so calling it here is safe and
-    // cannot conflict with the tray's own later call — this path exits before
-    // that one is reached.
-    notify_icon::init_tracing();
-
-    let args: Vec<String> = std::env::args().collect();
-    let project = match args.iter().position(|a| a == "--forge") {
-        Some(i) => match args.get(i + 1) {
-            Some(p) if !p.starts_with("--") && !p.is_empty() => p.clone(),
-            _ => {
-                eprintln!("refused: --forge needs a project name, e.g. --forge myproject");
-                return 2;
-            }
-        },
-        None => return 2,
-    };
-
-    let mut intent: Option<PtyIntent> = None;
-    for (flag, agent) in [
-        ("--claude", Some(SelectedAgent::Claude)),
-        ("--codex", Some(SelectedAgent::Codex)),
-        ("--opencode", Some(SelectedAgent::OpenCode)),
-        ("--shell", None),
-    ] {
-        if args.iter().any(|a| a == flag) {
-            if intent.is_some() {
-                eprintln!("refused: pass at most one of --shell/--claude/--codex/--opencode");
-                return 2;
-            }
-            intent = Some(match agent {
-                Some(a) => PtyIntent::Agent(a),
-                None => PtyIntent::Shell,
-            });
-        }
-    }
-    let intent = intent.unwrap_or(PtyIntent::Shell);
-
-    match notify_icon::launch_pty(&intent, Some(project.as_str())) {
-        Ok(()) => {
-            println!("ok:forge-launch:{project}");
-            0
-        }
-        Err(err) => {
-            eprintln!("failed:forge-launch:{project}: {err}");
-            1
-        }
     }
 }

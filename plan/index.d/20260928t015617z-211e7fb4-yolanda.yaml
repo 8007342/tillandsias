@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-tray-does-not-subscribe-to-guest-progress-over-hvsocket-so-guest-install-progress-never-renders-on-windows
+    event:
+      type: completed
+      ts: "2026-09-28T01:56:17Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        Landed in relay commit 76c97c012 (land80) on origin/linux-next. Verified by content: trunk provision_console.rs carries push_subscribe_topics and GuestProgress. Live closure already measured 2026-09-27 on yolanda: tray.log "guest progress vault: in progress (overall 70%)" then "done (overall 100%)".

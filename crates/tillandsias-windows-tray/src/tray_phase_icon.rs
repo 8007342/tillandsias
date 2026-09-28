@@ -42,8 +42,133 @@ pub fn tray_state_for_phase(phase: VmPhase) -> TrayIconState {
     }
 }
 
+// ---------------------------------------------------------------------------
+// ORDER 1443-bgbs (Windows half of 1420-v3zt): first-provision progress on the
+// tray icon and in the menu, from typed ProgressEvents. Portable, like the
+// mapping above: the strip's palette, the row's text and the repaint gate are
+// what need pinning, and they are pinned on every host.
+// ---------------------------------------------------------------------------
+
+/// Cells in the menu row's bar. Ten, so the row fits the 45-character chip
+/// beside the longest label it carries ("Downloading Fedora rootfs").
+pub const PROGRESS_CELLS: usize = 10;
+
+fn clamp_fraction(fraction: f64) -> f64 {
+    if fraction.is_nan() {
+        0.0
+    } else {
+        fraction.clamp(0.0, 1.0)
+    }
+}
+
+/// Paint a progress strip across the bottom rows of an RGBA8 icon image, in
+/// place: the filled width on the tillandsia leaf ramp (deepest at the left),
+/// its leading column in the blush tip while unfinished, the rest in the track
+/// colour. Opaque, so it reads over any glyph. The strip is an eighth of the
+/// height and never less than two rows, so it survives a 16x16 icon.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub fn paint_progress_strip(rgba: &mut [u8], w: usize, h: usize, fraction: f64) {
+    use tillandsias_progress_tty::palette;
+    if w == 0 || h == 0 || rgba.len() < w * h * 4 {
+        return;
+    }
+    let fraction = clamp_fraction(fraction);
+    let rows = (h / 8).max(2).min(h);
+    let filled = ((fraction * w as f64).floor() as usize).min(w);
+    let ramp = &palette::LEAF_RAMP;
+    for y in (h - rows)..h {
+        for x in 0..w {
+            let rgb = if x < filled {
+                if x + 1 == filled && filled < w {
+                    palette::TIP_BLUSH.rgb
+                } else {
+                    ramp[(x * ramp.len() / w).min(ramp.len() - 1)].rgb
+                }
+            } else {
+                palette::TRACK.rgb
+            };
+            let i = (y * w + x) * 4;
+            rgba[i..i + 4].copy_from_slice(&[rgb.0, rgb.1, rgb.2, 0xFF]);
+        }
+    }
+}
+
+/// The menu progress row: the step's own label, a bar of `PROGRESS_CELLS`
+/// U+25B0/U+25B1 glyphs (macOS's, for one look across trays), the percent.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub fn menu_row_text(label: &str, fraction: f64) -> String {
+    let fraction = clamp_fraction(fraction);
+    let filled = ((fraction * PROGRESS_CELLS as f64).floor() as usize).min(PROGRESS_CELLS);
+    format!(
+        "{label} {}{} {}%",
+        "\u{25B0}".repeat(filled),
+        "\u{25B1}".repeat(PROGRESS_CELLS - filled),
+        tillandsias_progress_tty::percent(fraction)
+    )
+}
+
+/// The task id of the first-provision rootfs download, the one measurable
+/// step of a Windows provision.
+pub const ROOTFS_DOWNLOAD_TASK: &str = "provision/rootfs-download";
+
+/// The typed event for the rootfs download, `done` of `total` bytes. Its label
+/// is the phase's existing, approved wording (ProvisionPhase::DownloadingRootfs
+/// without the ellipsis), so no new user-visible words enter the tray.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+pub fn rootfs_download_event(done: u64, total: u64) -> tillandsias_control_wire::ProgressEvent {
+    use tillandsias_control_wire::{ProgressEvent, ProgressKind, ProgressUnit};
+    ProgressEvent {
+        task: ROOTFS_DOWNLOAD_TASK.to_string(),
+        parent: None,
+        label: tillandsias_host_shell::provisioning::ProvisionPhase::DownloadingRootfs
+            .status_text_ascii()
+            .trim_end_matches("...")
+            .to_string(),
+        kind: ProgressKind::Determinate {
+            done,
+            total: Some(total),
+            unit: ProgressUnit::Bytes,
+        },
+        ts_unix_ms: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0),
+    }
+}
+
+/// vm-layer reports per chunk; the tray repaints only when the shown percent
+/// changes (a new icon is a GDI handle and a Shell_NotifyIconW call). `true` =
+/// repaint. Same rule as macOS's PercentGate.
+#[derive(Debug, Default)]
+pub struct PercentGate {
+    last: Option<(String, u32)>,
+}
+
+impl PercentGate {
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    pub fn changed(&mut self, task: &str, fraction: f64) -> bool {
+        let key = (
+            task.to_string(),
+            tillandsias_progress_tty::percent(clamp_fraction(fraction)),
+        );
+        if self.last.as_ref() == Some(&key) {
+            return false;
+        }
+        self.last = Some(key);
+        true
+    }
+
+    /// Forget the last task, so the next event repaints (after a clear).
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    pub fn reset(&mut self) {
+        self.last = None;
+    }
+}
+
 #[cfg(target_os = "windows")]
 pub use windows_impl::apply_phase_icon;
+#[cfg(target_os = "windows")]
+pub use windows_impl::apply_progress_icon;
 
 #[cfg(target_os = "windows")]
 mod windows_impl {
@@ -80,6 +205,11 @@ mod windows_impl {
         /// only ever touched from the tray's own thread, but the Mutex needs
         /// the bound anyway. Round-tripped through `HICON(..)` at use.
         handles: HashMap<TrayIconState, isize>,
+        /// ORDER 1443-bgbs: the one progress icon currently installed, if
+        /// any. Unlike the per-state glyphs it is rebuilt per percent, so it
+        /// is the one handle this module destroys: when the next percent
+        /// replaces it, and when progress clears.
+        progress: Option<isize>,
     }
 
     // SAFETY-adjacent note: HICONs live until process exit by design (see
@@ -93,6 +223,13 @@ mod windows_impl {
     /// writes into the .ico, for the same reason: it is the one icon-image
     /// encoding every Windows loader accepts at every size.
     fn hicon_for_state(state: TrayIconState) -> Option<HICON> {
+        let (w, h, rgba) = rgba_for_state(state)?;
+        hicon_from_rgba(w, h, &rgba)
+    }
+
+    /// The state's embedded PNG as straight-alpha RGBA8, or None when it is
+    /// missing or not RGBA8 (the static icon then stays up).
+    fn rgba_for_state(state: TrayIconState) -> Option<(u32, u32, Vec<u8>)> {
         let png = tillandsias_core::icons::tray_icon_png(state);
         if png.is_empty() {
             return None;
@@ -110,8 +247,12 @@ mod windows_impl {
         if info.color_type != png::ColorType::Rgba || info.bit_depth != png::BitDepth::Eight {
             return None;
         }
-        let rgba = &buf[..(w as usize * h as usize * 4)];
+        buf.truncate(w as usize * h as usize * 4);
+        Some((w, h, buf))
+    }
 
+    /// Encode RGBA8 as an icon resource and load it.
+    fn hicon_from_rgba(w: u32, h: u32, rgba: &[u8]) -> Option<HICON> {
         let mask_stride = (w as usize).div_ceil(32) * 4;
         let mask_len = mask_stride * h as usize;
         let xor_len = (w as usize) * (h as usize) * 4;
@@ -131,7 +272,7 @@ mod windows_impl {
         // tiny-skia's premultiplied pixmap in build.rs), so no un-premultiply.
         for y in (0..h as usize).rev() {
             let row = &rgba[y * w as usize * 4..(y + 1) * w as usize * 4];
-            for px in row.chunks_exact(4) {
+            for px in row.as_chunks::<4>().0 {
                 res.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
             }
         }
@@ -177,6 +318,71 @@ mod windows_impl {
         let ok = unsafe { Shell_NotifyIconW(NIM_MODIFY, &nid) };
         if ok.as_bool() {
             cache.current = Some(state);
+            // 1443-bgbs: a phase glyph replaced any progress icon.
+            if let Some(old) = cache.progress.take() {
+                let _ = unsafe { DestroyIcon(HICON(old as *mut std::ffi::c_void)) };
+            }
+        }
+    }
+
+    /// ORDER 1443-bgbs: show `fraction` as a palette strip across the bottom
+    /// of the current state's glyph, or with `None` restore the plain glyph.
+    /// The progress icon is rebuilt per call (the caller gates it to once per
+    /// percent) and the previous one is destroyed only after its replacement
+    /// is installed, so the tray never shows a freed handle.
+    pub fn apply_progress_icon(fraction: Option<f64>, hwnd: HWND) {
+        let Ok(mut guard) = ICON_CACHE.lock() else {
+            return;
+        };
+        let cache = guard.get_or_insert_with(IconCache::default);
+        let state = cache.current.unwrap_or(TrayIconState::Pup);
+        let raw = match fraction {
+            Some(f) => {
+                let Some((w, h, mut rgba)) = rgba_for_state(state) else {
+                    return;
+                };
+                super::paint_progress_strip(&mut rgba, w as usize, h as usize, f);
+                let Some(icon) = hicon_from_rgba(w, h, &rgba) else {
+                    return;
+                };
+                icon.0 as isize
+            }
+            None => {
+                if cache.progress.is_none() {
+                    return;
+                }
+                match cache.handles.get(&state) {
+                    Some(h) => *h,
+                    None => {
+                        let Some(h) = hicon_for_state(state) else {
+                            return;
+                        };
+                        cache.handles.insert(state, h.0 as isize);
+                        h.0 as isize
+                    }
+                }
+            }
+        };
+        let mut nid: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
+        nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
+        nid.hWnd = hwnd;
+        nid.uID = TRAY_ICON_ID;
+        nid.uFlags = NIF_ICON;
+        nid.hIcon = HICON(raw as *mut std::ffi::c_void);
+        let ok = unsafe { Shell_NotifyIconW(NIM_MODIFY, &nid) };
+        if !ok.as_bool() {
+            // Not installed: a fresh progress icon is ours alone to free.
+            if fraction.is_some() {
+                let _ = unsafe { DestroyIcon(HICON(raw as *mut std::ffi::c_void)) };
+            }
+            return;
+        }
+        let old = cache.progress.take();
+        if fraction.is_some() {
+            cache.progress = Some(raw);
+        }
+        if let Some(old) = old {
+            let _ = unsafe { DestroyIcon(HICON(old as *mut std::ffi::c_void)) };
         }
     }
 
@@ -189,6 +395,9 @@ mod windows_impl {
         };
         if let Some(cache) = guard.as_mut() {
             for (_, raw) in cache.handles.drain() {
+                let _ = unsafe { DestroyIcon(HICON(raw as *mut std::ffi::c_void)) };
+            }
+            if let Some(raw) = cache.progress.take() {
                 let _ = unsafe { DestroyIcon(HICON(raw as *mut std::ffi::c_void)) };
             }
             cache.current = None;
@@ -234,5 +443,98 @@ mod tests {
         ] {
             assert_ne!(tray_state_for_phase(other), ready, "{other:?} vs Ready");
         }
+    }
+
+    /// 1443-bgbs: the strip is the tillandsia palette across the bottom rows
+    /// only: leaf ramp from the left, blush tip at the front, track after it,
+    /// opaque; the glyph above it is untouched.
+    #[test]
+    fn progress_strip_paints_the_palette_on_the_bottom_rows_only() {
+        use tillandsias_progress_tty::palette;
+        let (w, h) = (32usize, 32usize);
+        let mut img = vec![7u8; w * h * 4];
+        paint_progress_strip(&mut img, w, h, 0.5);
+        let px = |x: usize, y: usize| {
+            let i = (y * w + x) * 4;
+            (img[i], img[i + 1], img[i + 2], img[i + 3])
+        };
+        let rgb = |c: tillandsias_progress_tty::palette::Colour| (c.rgb.0, c.rgb.1, c.rgb.2, 0xFF);
+        // 32 / 8 = 4 rows of strip, rows 28..32.
+        assert_eq!(px(0, 27), (7, 7, 7, 7), "the glyph above the strip changed");
+        assert_eq!(px(0, 28), rgb(palette::LEAF_DEEPEST));
+        assert_eq!(
+            px(15, 31),
+            rgb(palette::TIP_BLUSH),
+            "the leading filled column"
+        );
+        assert_eq!(px(16, 31), rgb(palette::TRACK));
+        assert_eq!(px(31, 28), rgb(palette::TRACK));
+        // Complete: no blush tip, no track; a 16px icon still gets 2 rows.
+        let mut full = vec![0u8; 16 * 16 * 4];
+        paint_progress_strip(&mut full, 16, 16, 1.0);
+        for x in 0..16 {
+            let i = (15 * 16 + x) * 4;
+            let c = (full[i], full[i + 1], full[i + 2]);
+            assert_ne!(c, palette::TIP_BLUSH.rgb, "blush at x={x} when complete");
+            assert_ne!(c, palette::TRACK.rgb, "track at x={x} when complete");
+        }
+        assert_eq!(full[(14 * 16) * 4 + 3], 0xFF, "a 16px strip must be 2 rows");
+        assert_eq!(full[(13 * 16) * 4 + 3], 0, "and only 2");
+    }
+
+    /// 1443-bgbs: the menu row is label, ten-cell bar, percent, and fits the
+    /// 45-character status chip at 100% with the longest label it carries.
+    #[test]
+    fn menu_row_is_label_bar_percent_and_fits_the_chip() {
+        assert_eq!(
+            menu_row_text("Downloading Fedora rootfs", 0.42),
+            "Downloading Fedora rootfs \u{25B0}\u{25B0}\u{25B0}\u{25B0}\u{25B1}\u{25B1}\u{25B1}\u{25B1}\u{25B1}\u{25B1} 42%"
+        );
+        let full = menu_row_text("Downloading Fedora rootfs", 1.0);
+        assert!(
+            full.ends_with(" 100%") && !full.contains('\u{25B1}'),
+            "{full}"
+        );
+        assert!(
+            full.chars().count() <= 45,
+            "{} chars: {full}",
+            full.chars().count()
+        );
+        assert!(menu_row_text("x", f64::NAN).ends_with(" 0%"));
+    }
+
+    /// 1443-bgbs: the rootfs download is a typed Bytes event under the
+    /// approved phase wording, not prose.
+    #[test]
+    fn rootfs_download_is_a_typed_bytes_event_with_the_approved_label() {
+        use tillandsias_control_wire::{ProgressKind, ProgressUnit};
+        let ev = rootfs_download_event(132, 528);
+        assert_eq!(ev.task, ROOTFS_DOWNLOAD_TASK);
+        assert_eq!(ev.label, "Downloading Fedora rootfs");
+        assert_eq!(
+            ev.kind,
+            ProgressKind::Determinate {
+                done: 132,
+                total: Some(528),
+                unit: ProgressUnit::Bytes
+            }
+        );
+        assert_eq!(ev.kind.fraction(), Some(0.25));
+    }
+
+    /// 1443-bgbs closure shape: a byte-granular download repaints once per
+    /// percent, at least 10 and at most 101 times, never once per chunk.
+    #[test]
+    fn percent_gate_repaints_once_per_percent() {
+        let mut gate = PercentGate::default();
+        let total = 528_000_000u64;
+        let repaints = (0..=total)
+            .step_by(1_000_000)
+            .filter(|done| gate.changed("rootfs", *done as f64 / total as f64))
+            .count();
+        assert!((10..=101).contains(&repaints), "{repaints}");
+        assert!(!gate.changed("rootfs", 1.0), "same percent, no repaint");
+        gate.reset();
+        assert!(gate.changed("rootfs", 1.0), "a reset repaints");
     }
 }
