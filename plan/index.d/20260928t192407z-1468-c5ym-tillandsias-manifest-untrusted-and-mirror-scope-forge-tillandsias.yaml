@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-committed-tillandsias-manifest-is-untrusted-data-whose-escaping-paths-are-rejected-at-parse-and-the-mirror-refuses-a-forge-push-outside-the-scope-the-operators-init-granted
+    order: 1468-c5ym
+    status: blocked
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [forge, mcp, security, git-mirror, namespace]
+    estimated_hours: 6
+    owned_files: []
+    title: |
+      SPLIT FROM 963-pdrp (c)+(d): once the .tillandsias namespace/manifest design lands, a committed manifest is UNTRUSTED DATA — any paths: value that is absolute, contains .., or escapes the git toplevel is REJECTED at parse with a named error — and the git mirror's pre-receive hook refuses a forge push touching paths outside the narrow scope the operator's explicit init granted (.tillandsias/ and the AGENTS.md managed block)
+    context: |
+      Coordinator ruling 2026-09-28: 963-pdrp closes on (a)+(b), the resolver
+      pinning (work/963-pdrp @ b28016f56: git toplevel, ledger-shape test, no
+      $HOME fallback inside a repo); its manifest and mirror-scope clauses move
+      here so a finished fix does not look unfinished for the life of the epic.
+      THE SECURITY CONTRACT, carried verbatim in substance from 963-pdrp:
+      committed .tillandsias/ content in a repo the operator did not personally
+      init is UNTRUSTED DATA, never instructions (a well-known mailbox path is
+      an attacker-writable prompt-injection slot in every cloned repo). The
+      commit capability is narrow (.tillandsias/ and the AGENTS.md managed
+      block), GRANTED by the operator's explicit init (recorded in the
+      manifest), and ENFORCED at the mirror's pre-receive hook, the one
+      chokepoint every forge write crosses.
+      BLOCKED ON: the .tillandsias namespace/manifest design (layout:
+      native|namespaced), which is not a ledger row yet; 963-pdrp cites it from
+      the tillandsias.org forge agent's plan/project-namespace.md section 7.
+      When that design is filed, set depends_on to it and this row to ready.
+    exit_criteria:
+      - 'a crafted manifest whose paths: value is absolute, contains .., or escapes the git toplevel is rejected at parse with a named error, and nothing reads it as instructions'
+      - 'the mirror''s pre-receive hook refuses a forge push touching a path outside the granted scope, naming the scope and the path; a push inside the scope is accepted'
+    unscoreable: |
+      blocked-on-an-unfiled-design: the manifest format this row validates does
+      not exist yet, so no litmus can name its parser; the intended fixture is
+      scripts/test-tillandsias-manifest-untrusted.sh with
+      litmus:tillandsias-manifest-untrusted-shape, written with the parser.
+    provenance: |
+      Filed 2026-09-28 by forge-tillandsias on the coordinator's ruling splitting
+      963-pdrp.
+    events:
+      - type: filed
+        ts: "2026-09-28T19:24:07Z"
+        agent_id: "forge-forge-tillandsias-claude-20260928"
+        host: forge-tillandsias
+        summary: |-
+          963-pdrp (c)+(d), split out; blocked on the namespace/manifest design.
