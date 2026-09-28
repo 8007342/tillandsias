@@ -12,7 +12,7 @@ not count as guarding its class.
 | 1 | SIGPIPE / pipefail / `if !` verdicts | 9 | none | **guarded**: `check-sigpipe-verdict-pipelines-added.sh` (build.sh), `check-no-spawn-in-if-not.sh` |
 | 2 | Quoting / expansion / backticks | 7 (+3 in ledger args) | 1256-t3w8, 1215-8jui, 1117-66qv | **unguarded**; the structural fix is the argv door, 1443-8pur |
 | 3 | bash-3.2 dialect | 9 | 964-zgga | **guarded**: `check-bash-dialect.sh` (build.sh), with rules added one incident at a time |
-| 4 | BSD vs GNU tools | ~14 | 1353-ryhq, 1135-z8gn | **partial**: `check-portability-idioms.sh` warns by design (build.sh:3894); 1135-z8gn owns the 37 standing idioms |
+| 4 | BSD vs GNU tools | ~14 | 1353-ryhq, 1135-z8gn | **partial**: `check-portability-idioms.sh` warns by design (its build.sh call site only counts, never refuses); 1135-z8gn owns the 37 standing idioms |
 | 5 | grep/sed over YAML/JSON | 10 | 1283-tpd5, 1287-myx8, 1238-u84w | **guarded**: jq ratchet (step 432, live arm 1), ledger readers (`litmus:no-unprotected-plan-ledger-readers`), order citations; quoted scalars are fixed by 1283-tpd5 |
 | 6 | Exit status lost or misread | 11 | 1260-2qgi, 1256-cqsy, 923-ys2t | **partial**: only stderr of backgrounded jobs is guarded; the Lua port of these deciders is 1384-ddua |
 | 7 | pkill / pgrep self-match | 4 | 1266-75tr, 1365-tjav | **guarded as of 1459-mqvd** for litmus steps: gate step 590, `tillandsias-litmus-rust litmus-self-match`; shell scripts are still advisory (`bash-hazards`) |
