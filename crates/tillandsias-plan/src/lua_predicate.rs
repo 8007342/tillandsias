@@ -569,6 +569,35 @@ fn resolve_write_path(root: &Path, path_str: &str, verb: &str) -> Result<PathBuf
     Ok(normalized)
 }
 
+/// ORDER 1443-fpck. Under regime=fixture a write verb may not reach the real
+/// checkout's git dir or leave the declared scope; the refusal is audited and
+/// RAISED like every other fs refusal, carrying the verdict token, why and
+/// remedy on separate lines, and nothing is written.
+fn fixture_write_guard(root: &Path, target: &Path, verb: &str) -> Result<(), mlua::Error> {
+    use crate::command_policy as cp;
+    if std::env::var("TILLANDSIAS_POLICY_REGIME").as_deref() != Ok("fixture") {
+        return Ok(());
+    }
+    let Some(d) = cp::fixture_write_decision(target, &cp::FixtureScope::from_env(root)) else {
+        return Ok(());
+    };
+    let req = cp::Request {
+        argv: vec![verb.to_string(), target.display().to_string()],
+        cwd: root.to_path_buf(),
+        workspace: root.to_path_buf(),
+        host_kind: cp::read_host_kind(root).kind,
+        regime: "fixture".into(),
+        caller: verb.to_string(),
+    };
+    cp::audit_decision(&req, &d, None);
+    Err(mlua::Error::RuntimeError(format!(
+        "{verb}: {}\nwhy: {}\nremedy: {}",
+        d.token,
+        d.why.unwrap_or_default(),
+        d.remedy.unwrap_or_default()
+    )))
+}
+
 /// fs.mkdir / fs.write / fs.list / fs.exists: OBSERVING ONLY (order 1380-u7sq).
 /// Rooted exactly like fs.read, so a script can touch the checkout (or the
 /// root TILLANDSIAS_REPO_ROOT names, which is how the archiver's --check points
@@ -591,6 +620,7 @@ fn register_fs_write_verbs(lua: &Lua) -> Result<(), LuaError> {
             let root = root_mkdir()?;
             let p = resolve_write_path(&root, &path_str, "fs.mkdir")
                 .map_err(mlua::Error::RuntimeError)?;
+            fixture_write_guard(&root, &p, "fs.mkdir")?;
             std::fs::create_dir_all(&p).map_err(|e| {
                 mlua::Error::RuntimeError(format!("fs.mkdir: failed to create '{path_str}': {e}"))
             })?;
@@ -607,6 +637,7 @@ fn register_fs_write_verbs(lua: &Lua) -> Result<(), LuaError> {
             let root = root_write()?;
             let p = resolve_write_path(&root, &path_str, "fs.write")
                 .map_err(mlua::Error::RuntimeError)?;
+            fixture_write_guard(&root, &p, "fs.write")?;
             let parent = p.parent().ok_or_else(|| {
                 mlua::Error::RuntimeError(format!("fs.write: '{path_str}' has no parent"))
             })?;
