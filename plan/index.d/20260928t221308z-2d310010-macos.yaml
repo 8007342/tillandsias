@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-largest-single-gate-step-has-never-failed-on-two-hosts-and-nobody-knows-if-it-is-load-bearing-or-redundant
+    event:
+      type: progress
+      ts: "2026-09-28T22:13:08Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t221308z
+      host: macos
+      summary: |
+        VERDICT: LOAD-BEARING. Answered by seeded defects, not by fail_pct (criterion 4), on tlatoanis-macbook-air 2026-09-28 at origin/linux-next, with each cargo command the gate runs. Every seed was reverted, and the tree is clean.
+        - SEED A2, tillandsias-otp parse_cookie_value accepting a short cookie: clippy --all-targets -D warnings green; feature-gated pass (headless bin, tray+listen-vsock) green; `cargo test --workspace` + check-test-baseline RED (tillandsias_otp::tests::parse_cookie_value_rejects_invalid, router_e2e_test::otp_malformed_token_rejected). Only this step catches it (criterion 1).
+        - SEED B, headless INIT_IMAGES dropping "web": clippy green; feature-gated pass RED; workspace step RED (cleanup_init_logs_covers_every_init_image_and_nothing_else, idiomatic_podman_launch_paths_do_not_bypass_shared_layer).
+        - OVERLAP ENUMERATED (criterion 2): the only duplication is the headless bin default-feature suite (632 tests, ~5 s), a strict subset of the feature-gated pass (809), with no default-only tests. Every other crate is tested only here.
+        - WHERE THE TIME GOES: the step is ~196 s here. One test, tillandsias-plan compaction_on_the_real_ledger_preserves_every_comment_and_item, is 117 s (32 s in release), because it compacts the LIVE ledger (68,841 lines, 2,990 fragments). The other 391 tests in that suite take 12 s. Filed as 1476-5dfy.
+        - Criterion 3: work/1118-pifa @ f22159c1a adds that evidence as a note next to the step in build.sh, so the next reader with a stopwatch does not re-open it.
+        SIDE FINDINGS: (1) the step is RED on this Mac today with the tray running: exec_guest_stdin refuses a live tray and the ratchet reads it as new-red=2. Filed as 1475-3mpc (p1, macos). (2) Seed A, which accepts an OVER-LONG cookie by truncating it, was caught by NO test at all. otp's tests cover empty, short and invalid characters, but not long. That is a missing test around a security boundary, noted here and not yet filed.
+        No fixture is added: a seeded-defect fixture would compile the workspace (minutes), so the pin is this measurement plus the build.sh note.
