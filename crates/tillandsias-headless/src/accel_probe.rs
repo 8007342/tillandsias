@@ -973,6 +973,8 @@ fn macos_system_ram_gb() -> Option<f64> {
 
 // @trace spec:accel-capability-probe
 fn enumerate_cpu() -> DeviceRecord {
+    // 1444-bzpu: only the Linux arm pushes flags; elsewhere the mut is unused.
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
     let mut flags = Vec::new();
     let physical_cores;
     let logical_cores;
@@ -1081,29 +1083,29 @@ fn enumerate_cpu() -> DeviceRecord {
              $m = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory; \
              $c.Name + '|' + $c.NumberOfCores + '|' + $c.NumberOfLogicalProcessors + '|' + \
              $c.Manufacturer + '|' + $m",
-        ) {
-            if let Some(line) = lines.first() {
-                let f: Vec<&str> = line.split('|').collect();
-                if f.len() >= 5 {
-                    let name = f[0].trim().to_string();
-                    // Only accept a COMPLETE row. A partial parse that keeps
-                    // some real fields and silently defaults the rest is how a
-                    // document ends up half-trustworthy, which is worse than a
-                    // uniformly unknown one.
-                    if let (Ok(phys), Ok(log)) =
-                        (f[1].trim().parse::<u32>(), f[2].trim().parse::<u32>())
-                    {
-                        if !name.is_empty() && phys > 0 && log > 0 {
-                            name_source = "measured".to_string(); // 1137-rgfm
-                            got = Some((
-                                name,
-                                phys,
-                                log,
-                                f[3].trim().to_string(),
-                                f[4].trim().parse::<u64>().ok(),
-                            ));
-                        }
-                    }
+        ) && let Some(line) = lines.first()
+        {
+            let f: Vec<&str> = line.split('|').collect();
+            if f.len() >= 5 {
+                let name = f[0].trim().to_string();
+                // Only accept a COMPLETE row. A partial parse that keeps
+                // some real fields and silently defaults the rest is how a
+                // document ends up half-trustworthy, which is worse than a
+                // uniformly unknown one.
+                if let (Ok(phys), Ok(log)) =
+                    (f[1].trim().parse::<u32>(), f[2].trim().parse::<u32>())
+                    && !name.is_empty()
+                    && phys > 0
+                    && log > 0
+                {
+                    name_source = "measured".to_string(); // 1137-rgfm
+                    got = Some((
+                        name,
+                        phys,
+                        log,
+                        f[3].trim().to_string(),
+                        f[4].trim().parse::<u64>().ok(),
+                    ));
                 }
             }
         }
@@ -3300,7 +3302,10 @@ fn largest_prefetchable_bar(resource_file: &str) -> u64 {
         .unwrap_or(0)
 }
 
+// 1444-bzpu: no Windows caller (enumerate_gpus_checked has no Windows arm).
+#[cfg_attr(target_os = "windows", allow(dead_code))]
 fn enumerate_gpus() -> Vec<DeviceRecord> {
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
     let mut gpus = Vec::new();
 
     // The tier no longer reaches this function at all (order 935-jhh5). It used

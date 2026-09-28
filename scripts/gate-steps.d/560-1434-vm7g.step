@@ -15,9 +15,15 @@
 # module; hvsocket.rs:138; notify_icon.rs:422; tray_phase_icon.rs:134), and
 # clean after the fix.
 #
+# 1444-bzpu WIDENED the decider to every crate with cfg(windows) code that the
+# change touches (podman held 12 findings and headless 7, unseen). ARM 5 pins
+# it with a crates root of three scratch crates, including one that mentions
+# cfg(windows) only in a comment and must NOT be linted. Sabotage: reading
+# comments reds ARM 5.
+#
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the Windows tray clippy decider refuses a new warning (1434-vm7g)"
 STEP_SCRIPT="scripts/test-windows-tray-clippy.sh"
 STEP_ERROR="the Windows tray clippy decider no longer refuses a clippy warning, or runs off Windows (1434-vm7g); see which arm failed above"
 STEP_OK="Windows tray clippy decider refuses warnings and skips off Windows"
-STEP_SECOND_REGIME="yolanda 2026-09-27 msys ok:windows-tray-clippy-fixture:4"
+STEP_SECOND_REGIME="yolanda 2026-09-27 msys ok:windows-tray-clippy-fixture:5"

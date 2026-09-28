@@ -42,41 +42,92 @@ case "$uname_s" in
     *) echo "skip:windows-tray-clippy:not-windows:${uname_s:-unknown}"; exit 0 ;;
 esac
 
-manifest="${TILLANDSIAS_WINDOWS_CLIPPY_MANIFEST:-crates/tillandsias-windows-tray/Cargo.toml}"
-prefix="$(dirname "$manifest")/"
+# ORDER 1444-bzpu: WIDENED from the tray to every crate with cfg(windows)
+# code. Measured 2026-09-27: native clippy refused tillandsias-podman on 12
+# sites and, behind them, tillandsias-headless on 7 — the same class as the
+# tray, in crates no gate compiled for Windows. The candidates are the crates
+# under $crates_root whose src/ carries a cfg(windows)/cfg(target_os =
+# "windows") attribute; comment lines are stripped before matching, so a crate
+# that merely DISCUSSES the attribute is not pulled in (a false inclusion would
+# only cost a lint, but a scan that reads comments measures the comments).
+# TILLANDSIAS_WINDOWS_CLIPPY_MANIFEST keeps its meaning: exactly that one crate.
+crates_root="${TILLANDSIAS_WINDOWS_CLIPPY_CRATES_DIR:-crates}"
+_has_windows_cfg() { # <crate dir>
+    [ -d "$1/src" ] || return 1
+    local hits
+    hits="$(find "$1/src" -name '*.rs' -exec sed -e 's#//.*$##' {} + 2>/dev/null \
+            | grep -cE 'cfg\((target_os *= *"windows"|windows)')" || true
+    [ "${hits:-0}" -gt 0 ]
+}
+if [ -n "${TILLANDSIAS_WINDOWS_CLIPPY_MANIFEST:-}" ]; then
+    candidates="$(dirname "$TILLANDSIAS_WINDOWS_CLIPPY_MANIFEST")"
+else
+    candidates=""
+    for d in "$crates_root"/*/; do
+        d="${d%/}"
+        [ -f "$d/Cargo.toml" ] || continue
+        _has_windows_cfg "$d" && candidates="$candidates$d
+"
+    done
+fi
 
-if [ "${1:-}" != "--all" ]; then
+targets=""
+if [ "${1:-}" = "--all" ]; then
+    targets="$candidates"
+else
     base="${TILLANDSIAS_WINDOWS_CLIPPY_BASE:-origin/linux-next}"
     if ! git rev-parse --verify --quiet "$base" >/dev/null 2>&1; then
         echo "skip:windows-tray-clippy:base-ref-unavailable:$base"
         exit 0
     fi
-    changed="$({ git diff --name-only "$base" -- "$prefix" 2>/dev/null
-                 git ls-files --others --exclude-standard -- "$prefix" 2>/dev/null; } | LC_ALL=C sort -u)"
-    if [ -z "$changed" ]; then
-        echo "skip:windows-tray-clippy:crate-untouched"
-        exit 0
-    fi
+    while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        changed="$({ git diff --name-only "$base" -- "$d/" 2>/dev/null
+                     git ls-files --others --exclude-standard -- "$d/" 2>/dev/null; } | head -1)"
+        [ -n "$changed" ] && targets="$targets$d
+"
+    done <<EOF
+$candidates
+EOF
+fi
+if [ -z "$(printf '%s' "$targets" | tr -d '[:space:]')" ]; then
+    echo "skip:windows-tray-clippy:crate-untouched"
+    exit 0
 fi
 
 command -v cargo >/dev/null 2>&1 || { echo "could-not-run:windows-tray-clippy:no-cargo"; exit 3; }
 
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
-cargo clippy --manifest-path "$manifest" --all-targets -- -D warnings > "$log" 2>&1
-rc=$?
-if [ "$rc" -eq 0 ]; then
+: > "$log"
+failed=""
+linted=0
+while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    linted=$((linted + 1))
+    if ! cargo clippy --manifest-path "$d/Cargo.toml" --all-targets -- -D warnings >> "$log" 2>&1; then
+        failed="$failed ${d##*/}"
+    fi
+done <<EOF
+$targets
+EOF
+echo "  linted $linted crate(s) with cfg(windows) code natively" >&2
+if [ -z "$failed" ]; then
     echo "ok:windows-tray-clippy:clean"
     exit 0
 fi
 # Count DISTINCT findings: --all-targets lints the same line once per target
 # (bin, bin test), and cargo adds a "could not compile" line per target, so a
-# raw count of error lines says 3 for one warning.
+# raw count of error lines says 3 for one warning. A dependency's finding seen
+# through two touched crates is also one finding.
 findings="$(awk '/^error: could not compile/ {next}
                  /^error: / {msg=$0; next}
                  msg != "" && /^ *--> / {sub(/^ *--> /, ""); print msg " @ " $0; msg=""}' "$log" | LC_ALL=C sort -u)"
-n="$(printf '%s\n' "$findings" | grep -c .)" || true
-printf '%s\n' "$findings" | head -20 | sed 's/^/  /' >&2
-echo "  remedy: fix each site above; 'cargo clippy -p tillandsias-windows-tray --all-targets -- -D warnings' reproduces it natively" >&2
+n="$(printf '%s
+' "$findings" | grep -c .)" || true
+printf '%s
+' "$findings" | head -20 | sed 's/^/  /' >&2
+echo "  refused in:$failed" >&2
+echo "  remedy: fix each site above; 'cargo clippy -p <crate> --all-targets -- -D warnings' reproduces it natively" >&2
 echo "refused:windows-tray-clippy:${n}-errors"
 exit 1

@@ -94,6 +94,58 @@ else
     bad "ARM 4 scope: untouched='$(printf '%s' "$o4a" | tail -1)' changed='$(printf '%s' "$o4b" | tail -1)' (rc=$rc4b)"
 fi
 
+# ARM 5 (1444-bzpu): WIDENED to every crate with cfg(windows) code. Under a
+# crates root holding three crates, all carrying the same lint except `clean`:
+#   winlint   has a real #[cfg(windows)] item      -> a candidate
+#   comment   mentions cfg(windows) only in a comment -> NOT a candidate
+#   clean     has a real cfg(windows) item, no lint -> a candidate
+# Touching comment alone skips (a scan that read comments would lint and
+# refuse it); touching clean alone is ok; touching winlint too refuses.
+# PRE-FIX RESULT: FAILS, the decider ignores the crates root and lints only
+# the tray.
+R5="$W/repo5"; mkdir -p "$R5/scripts"; cp "$DEC" "$R5/scripts/"
+mk_crate() { # <name> <lib.rs body>
+    mkdir -p "$R5/crates/$1/src"
+    printf '[package]\nname = "%s"\nversion = "0.1.0"\nedition = "2021"\n[workspace]\n' "$1" > "$R5/crates/$1/Cargo.toml"
+    printf '%s' "$2" > "$R5/crates/$1/src/lib.rs"
+}
+mk_crate winlint '#[cfg(windows)]
+pub fn only_on_windows() {}
+pub fn one() -> i32 {
+    return 1;
+}
+'
+mk_crate comment '// this crate never uses cfg(windows) in code
+pub fn one() -> i32 {
+    return 1;
+}
+'
+mk_crate clean '#[cfg(windows)]
+pub fn only_on_windows() {}
+pub fn one() -> i32 {
+    1
+}
+'
+printf 'Cargo.lock\n' > "$R5/.gitignore"
+git -C "$R5" init -q 2>/dev/null
+git -C "$R5" config user.email f@x.invalid; git -C "$R5" config user.name f
+git -C "$R5" add -A >/dev/null 2>&1; git -C "$R5" commit -qm base
+git -C "$R5" update-ref refs/remotes/origin/linux-next HEAD
+run5() { (cd "$R5" && TILLANDSIAS_WINDOWS_CLIPPY_UNAME=MINGW64_NT bash scripts/check-windows-tray-clippy.sh 2>/dev/null); }
+echo '// touched' >> "$R5/crates/comment/src/lib.rs"
+o5a="$(run5)"
+echo '// touched' >> "$R5/crates/clean/src/lib.rs"
+o5b="$(run5)"
+echo '// touched' >> "$R5/crates/winlint/src/lib.rs"
+o5c="$(run5)"; rc5c=$?
+if [ "$(printf '%s' "$o5a" | tail -1)" = "skip:windows-tray-clippy:crate-untouched" ] \
+   && [ "$(printf '%s' "$o5b" | tail -1)" = "ok:windows-tray-clippy:clean" ] \
+   && [ "$rc5c" -eq 1 ] && [ "$(printf '%s' "$o5c" | tail -1)" = "refused:windows-tray-clippy:1-errors" ]; then
+    ok "ARM 5 every touched cfg(windows) crate is linted; a comment-only mention is not a candidate"
+else
+    bad "ARM 5 widening: comment-only='$(printf '%s' "$o5a" | tail -1)' clean='$(printf '%s' "$o5b" | tail -1)' winlint='$(printf '%s' "$o5c" | tail -1)' (rc=$rc5c)"
+fi
+
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then echo "ok:windows-tray-clippy-fixture:$pass"; exit 0; fi
 echo "violation:windows-tray-clippy-fixture:$pass/$total"; exit 1

@@ -313,6 +313,7 @@ fn env_path_if_not_litmus(name: &str) -> Option<PathBuf> {
     }
 }
 
+#[cfg(unix)] // 1444-bzpu: its only caller is cfg(unix)
 fn host_session_bus_path() -> Option<PathBuf> {
     if let Some(address) = env::var_os("DBUS_SESSION_BUS_ADDRESS") {
         let address = address.to_string_lossy();
@@ -1546,6 +1547,7 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
         super::podman_bin_env_lock()
     }
 
+    #[cfg(unix)] // 1444-bzpu: drives a #!/bin/sh stub through stub_podman, itself cfg(unix)
     #[test]
     fn remote_transport_uses_remote_flag_and_skips_local_storage_args() {
         // 880-tdwn: resolve through the stub seam, never bare — these tests
@@ -1610,6 +1612,7 @@ exit 0
         assert!(!args.iter().any(|arg| arg == "--tmpdir"));
     }
 
+    #[cfg(unix)] // 1444-bzpu: drives a #!/bin/sh stub through stub_podman, itself cfg(unix)
     #[test]
     fn local_transport_isolation_env_enables_storage_overrides() {
         // 880-tdwn: resolve through the stub seam, never bare — these tests
