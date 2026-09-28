@@ -1373,6 +1373,318 @@ pub fn refresh_github_token_in_vault(debug: bool) -> Result<RotationOutcome, Str
     Ok(outcome)
 }
 
+// ── Order 1461-8tyy: the token rotates itself before it expires ─────────────
+//
+// GitHub App user-to-server access tokens expire after 8 hours. The locked
+// exchange above existed, but its only caller was the explicit
+// `--refresh-github-token`, gated to a desktop session, so nothing ran it on a
+// schedule: every 8 hours every mirror push was refused upstream until the
+// operator re-seeded by hand (twice on 2026-09-28). The live spec
+// (gh-auth-script, "Token Rotation and Expiration Management") already requires
+// rotation within 30 minutes of expiry; this is the thing that runs it.
+
+/// Rotate when the access token has this long or less to live.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const GITHUB_ROTATION_WINDOW_SECS: u64 = 30 * 60;
+/// How often the resident scheduler asks.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const GITHUB_ROTATION_CHECK_EVERY: std::time::Duration =
+    std::time::Duration::from_secs(15 * 60);
+
+/// What one due-check did. Every variant is a verdict, never a silence.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DueCheck {
+    /// Rotated; the new access token expires at this time. The refresh token's
+    /// own expiry rides along for the 14-day warning.
+    Rotated {
+        expires_at: u64,
+        refresh_expires_at: Option<u64>,
+    },
+    /// The stored token has more than the window left.
+    NotDue {
+        expires_at: u64,
+        refresh_expires_at: Option<u64>,
+    },
+    /// A stored token with no expiry (a token-only login): nothing to schedule.
+    NoExpiry,
+    NoToken,
+    NoRefreshToken,
+    /// A forge never rotates: its policy cannot read the refresh token, and a
+    /// second rotating process would race the host's.
+    RefusedInForge,
+}
+
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+impl DueCheck {
+    pub fn verdict(&self) -> String {
+        match self {
+            DueCheck::Rotated { expires_at, .. } => {
+                format!("ok:github-token-rotation:rotated:expires_at={expires_at}")
+            }
+            DueCheck::NotDue { expires_at, .. } => {
+                format!("ok:github-token-rotation:not-due:expires_at={expires_at}")
+            }
+            DueCheck::NoExpiry => "ok:github-token-rotation:no-expiry".into(),
+            DueCheck::NoToken => "ok:github-token-rotation:no-token".into(),
+            DueCheck::NoRefreshToken => "ok:github-token-rotation:no-refresh-token".into(),
+            DueCheck::RefusedInForge => "skip:github-token-rotation:forge".into(),
+        }
+    }
+}
+
+/// Is a token that expires at `expires_at` due for rotation at `now`?
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_token_rotation_due(expires_at: u64, now: u64) -> bool {
+    expires_at.saturating_sub(now) <= GITHUB_ROTATION_WINDOW_SECS
+}
+
+/// The due-check: under the exclusive rotation lock, read the stored bundle,
+/// and exchange ONLY when it is inside the window.
+///
+/// THE DECISION IS MADE UNDER THE LOCK, which is what makes two concurrent
+/// checks spend the single-use refresh token once: the second waits, re-reads
+/// the winner's new `expires_at`, and finds nothing due. `lock_name` is a
+/// parameter so tests never contend with a live tray's scheduler.
+///
+/// There is NO desktop-session gate here, deliberately: this spends the refresh
+/// token only when the access token is due, and only under the host lock. The
+/// session gate stays on the explicit forced rotation.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn rotate_github_token_if_due(
+    store: &dyn GitHubTokenStore,
+    refresh: &dyn Fn(&str, &str) -> Result<GitHubRefreshResponse, String>,
+    now: u64,
+    host_is_forge: bool,
+    lock_name: &str,
+    lock_timeout: std::time::Duration,
+    debug: bool,
+) -> Result<DueCheck, String> {
+    if host_is_forge {
+        return Ok(DueCheck::RefusedInForge);
+    }
+    let _lock = crate::resource_lock::acquire(lock_name, lock_timeout, debug)
+        .map_err(|e| format!("github-token-rotation-failed:lock:{e}"))?;
+    let Some(bundle) = store
+        .read_bundle()
+        .map_err(|e| format!("github-token-rotation-failed:read:{e}"))?
+    else {
+        return Ok(DueCheck::NoToken);
+    };
+    if bundle.refresh_token.as_deref().is_none_or(str::is_empty) {
+        return Ok(DueCheck::NoRefreshToken);
+    }
+    let Some(expires_at) = bundle.expires_at else {
+        return Ok(DueCheck::NoExpiry);
+    };
+    if !github_token_rotation_due(expires_at, now) {
+        return Ok(DueCheck::NotDue {
+            expires_at,
+            refresh_expires_at: bundle.refresh_token_expires_at,
+        });
+    }
+    match rotate_github_token(store, refresh, now) {
+        Ok((RotationOutcome::Rotated, Some(b))) => Ok(DueCheck::Rotated {
+            expires_at: b.expires_at.unwrap_or(0),
+            refresh_expires_at: b.refresh_token_expires_at,
+        }),
+        Ok((RotationOutcome::NoToken, _)) => Ok(DueCheck::NoToken),
+        Ok((RotationOutcome::NoRefreshToken, _)) => Ok(DueCheck::NoRefreshToken),
+        Ok((RotationOutcome::Rotated, None)) => {
+            Err("github-token-rotation-failed:no-bundle-returned".into())
+        }
+        // The exchange's errors already name the cause without echoing any
+        // token (parse_github_refresh_response), and the old pair is intact
+        // because nothing is written before the exchange succeeds.
+        Err(e) => Err(format!("github-token-rotation-failed:{e}")),
+    }
+}
+
+/// The live due-check: Vault, GitHub's token endpoint, the real clock, and the
+/// host kind from the environment.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_token_due_check_live(debug: bool) -> Result<DueCheck, String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
+    let forge = std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge");
+    let store = VaultGitHubTokenStore { debug };
+    rotate_github_token_if_due(
+        &store,
+        &|client_id, refresh_token| perform_github_token_refresh(client_id, refresh_token, debug),
+        now,
+        forge,
+        GITHUB_ROTATION_LOCK,
+        std::time::Duration::from_secs(60),
+        debug,
+    )
+}
+
+/// The delay before the next check: the regular interval after a verdict, and
+/// a backoff after a failure (1 min doubling, capped at the interval), so a
+/// transient failure is retried well before the token dies.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_rotation_next_delay(
+    last: &Result<DueCheck, String>,
+    prev_backoff: std::time::Duration,
+) -> std::time::Duration {
+    match last {
+        Ok(_) => GITHUB_ROTATION_CHECK_EVERY,
+        Err(_) => {
+            let next = if prev_backoff.is_zero() {
+                std::time::Duration::from_secs(60)
+            } else {
+                prev_backoff * 2
+            };
+            next.min(GITHUB_ROTATION_CHECK_EVERY)
+        }
+    }
+}
+
+/// Warn this many days before the refresh token expires (gh-auth-script:
+/// "Fourteen days before refresh_token_expires_at the tray MUST tell the
+/// operator to run tillandsias --github-login").
+pub const GITHUB_REFRESH_WARN_DAYS: u64 = 14;
+
+/// Days left on the refresh token when it is inside the warning window, else
+/// None. An expired refresh token answers Some(0): only a new login fixes it.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_refresh_expiry_warning(refresh_expires_at: Option<u64>, now: u64) -> Option<u64> {
+    let exp = refresh_expires_at?;
+    let left = exp.saturating_sub(now);
+    (left <= GITHUB_REFRESH_WARN_DAYS * 86_400).then_some(left / 86_400)
+}
+
+/// The operator-facing line for the warning.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_refresh_expiry_message(days_left: u64) -> String {
+    if days_left == 0 {
+        "GitHub sign-in has EXPIRED: run `tillandsias --github-login` to keep pushes working".into()
+    } else {
+        format!(
+            "GitHub sign-in expires in {days_left} day(s): run `tillandsias --github-login` before then to keep pushes working"
+        )
+    }
+}
+
+/// True at most once per UTC day: the scheduler checks every 15 minutes and a
+/// warning every 15 minutes would be noise the operator learns to ignore.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn should_warn_today(last_warned_day: &mut Option<u64>, now: u64) -> bool {
+    let today = now / 86_400;
+    if *last_warned_day == Some(today) {
+        return false;
+    }
+    *last_warned_day = Some(today);
+    true
+}
+
+/// The accountability event the spec requires for every rotation
+/// (gh-auth-script "Token Rotation and Expiration Management" ->
+/// spec:secret-rotation). Its own operation name, so an audit can tell an
+/// automatic rotation from the explicit `github_token_refresh`.
+// @trace spec:secret-rotation
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn audit_github_token_auto_rotation(outcome: &str) {
+    tracing::info!(
+        accountability = true,
+        category = "secrets",
+        spec = "secret-rotation",
+        operation = "github_token_auto_rotation",
+        secret_name = "github-token",
+        outcome = outcome,
+        "GitHub token auto-rotation: {outcome}"
+    );
+}
+
+/// One scheduler per process (1461-8tyy): the tray starts it, and so does every
+/// lane launch through `ensure_enclave_for_project`; a long-lived tray that
+/// launches many lanes must not accumulate a thread per launch. Returns true
+/// exactly once per process.
+fn claim_github_rotation_scheduler_slot() -> bool {
+    static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    !STARTED.swap(true, std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Start the resident rotation scheduler on its own thread: a check at start,
+/// then per [`github_rotation_next_delay`]. Idempotent per process.
+///
+/// WHO STARTS IT, and why that covers every regime that pushes:
+/// - the Linux tray, at start;
+/// - the guest's resident service on macOS/Windows;
+/// - EVERY LANE LAUNCH (`ensure_enclave_for_project`), so a bare-metal Linux
+///   host with no tray — one that only runs `tillandsias --bash <project>` and
+///   the mirror — rotates too. The mirror lives only while a lane is open
+///   (1448-yt96), and the lane process lives exactly that long, so the thread
+///   is alive whenever something can push.
+///
+/// Concurrent schedulers (a tray plus lanes, several lanes) are safe: the
+/// due-check decides under the host-wide rotation lock, so one exchange
+/// happens per due window. Never effective in a forge (the check refuses and
+/// the thread ends).
+pub fn spawn_github_token_rotation_scheduler(
+    debug: bool,
+    on_refresh_expiring: Option<Box<dyn Fn(String) + Send + 'static>>,
+) {
+    if !claim_github_rotation_scheduler_slot() {
+        return;
+    }
+    let _ = std::thread::Builder::new()
+        .name("github-token-rotation".into())
+        .spawn(move || {
+            let mut backoff = std::time::Duration::ZERO;
+            let mut last_warned_day: Option<u64> = None;
+            loop {
+                let out = github_token_due_check_live(debug);
+                // The 14-day refresh-expiry warning, at most once a day.
+                if let Ok(
+                    DueCheck::Rotated {
+                        refresh_expires_at, ..
+                    }
+                    | DueCheck::NotDue {
+                        refresh_expires_at, ..
+                    },
+                ) = &out
+                {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    if let Some(days) = github_refresh_expiry_warning(*refresh_expires_at, now)
+                        && should_warn_today(&mut last_warned_day, now)
+                    {
+                        let msg = github_refresh_expiry_message(days);
+                        eprintln!("[tillandsias] warn:github-refresh-expiring:{days}d: {msg}");
+                        if let Some(cb) = &on_refresh_expiring {
+                            cb(msg);
+                        }
+                    }
+                }
+                match &out {
+                    Ok(DueCheck::RefusedInForge) => return,
+                    Ok(v @ DueCheck::Rotated { .. }) => {
+                        audit_github_token_auto_rotation("rotated");
+                        eprintln!("[tillandsias] {}", v.verdict());
+                    }
+                    Ok(v) if debug => eprintln!("[tillandsias] {}", v.verdict()),
+                    Ok(_) => {}
+                    Err(e) => {
+                        audit_github_token_auto_rotation("failed");
+                        eprintln!("[tillandsias] blocked:{e}");
+                    }
+                }
+                let delay = github_rotation_next_delay(&out, backoff);
+                backoff = if out.is_err() {
+                    delay
+                } else {
+                    std::time::Duration::ZERO
+                };
+                std::thread::sleep(delay);
+            }
+        });
+}
+
 /// In-container address of the Vault TLS listener. The Vault server listens on
 /// the container loopback at :8200; `podman exec` does NOT inherit the
 /// entrypoint's environment, so every exec'd `vault` CLI call must set this (and
@@ -5589,6 +5901,346 @@ mod tests {
         );
     }
 
+    // ── 1461-8tyy: the resident due-check (github_token_auto_rotation_*) ──
+
+    /// A Send + Sync store for the concurrency arm (FakeStore is RefCell).
+    struct SharedStore {
+        records: std::sync::Mutex<std::collections::BTreeMap<String, serde_json::Value>>,
+        writes: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl SharedStore {
+        fn with(b: &GitHubTokenBundle) -> Self {
+            let mut m = std::collections::BTreeMap::new();
+            m.insert(GITHUB_TOKEN_PATH.to_string(), github_token_record(b));
+            if let Some(r) = github_refresh_record(b) {
+                m.insert(GITHUB_REFRESH_PATH.to_string(), r);
+            }
+            Self {
+                records: std::sync::Mutex::new(m),
+                writes: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+        fn snapshot(&self) -> std::collections::BTreeMap<String, serde_json::Value> {
+            self.records.lock().unwrap().clone()
+        }
+    }
+
+    impl GitHubTokenStore for SharedStore {
+        fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String> {
+            let m = self.records.lock().unwrap();
+            let Some(t) = m.get(GITHUB_TOKEN_PATH) else {
+                return Ok(None);
+            };
+            let r = m.get(GITHUB_REFRESH_PATH);
+            Ok(Some(GitHubTokenBundle {
+                token: t["token"].as_str().unwrap_or_default().to_string(),
+                refresh_token: r
+                    .and_then(|r| r["refresh_token"].as_str())
+                    .map(String::from),
+                expires_at: t["expires_at"].as_u64(),
+                refresh_token_expires_at: r.and_then(|r| r["refresh_token_expires_at"].as_u64()),
+                client_id: t["client_id"].as_str().map(String::from),
+            }))
+        }
+        fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+            self.writes.lock().unwrap().push(path.to_string());
+            self.records.lock().unwrap().insert(path.to_string(), value);
+            Ok(())
+        }
+    }
+
+    const NOW: u64 = 1_000_000;
+
+    fn bundle_expiring_at(expires_at: u64) -> GitHubTokenBundle {
+        GitHubTokenBundle {
+            expires_at: Some(expires_at),
+            ..old_bundle()
+        }
+    }
+
+    /// A lock name no live process uses, unique per test.
+    fn test_lock(tag: &str) -> String {
+        format!("gh-rotation-test-{tag}-{}", std::process::id())
+    }
+
+    fn fresh_pair(_: &str, _: &str) -> Result<GitHubRefreshResponse, String> {
+        Ok(GitHubRefreshResponse {
+            access_token: "ghu_NEWACCESS".into(),
+            refresh_token: "ghr_NEWREFRESH".into(),
+            expires_in: 28_800,
+            refresh_token_expires_in: 15_811_200,
+        })
+    }
+
+    /// Arm 1: 20 minutes left -> ONE exchange, a later expiry, and the refresh
+    /// record written before the token record.
+    #[test]
+    fn github_token_auto_rotation_due_token_rotates_once_refresh_first() {
+        let store = SharedStore::with(&bundle_expiring_at(NOW + 20 * 60));
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let out = rotate_github_token_if_due(
+            &store,
+            &|c, r| {
+                calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                fresh_pair(c, r)
+            },
+            NOW,
+            false,
+            &test_lock("arm1"),
+            std::time::Duration::from_secs(5),
+            false,
+        )
+        .expect("a due token rotates");
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            out,
+            DueCheck::Rotated {
+                expires_at: NOW + 28_800,
+                refresh_expires_at: Some(NOW + 15_811_200),
+            }
+        );
+        assert_eq!(
+            *store.writes.lock().unwrap(),
+            vec![
+                GITHUB_REFRESH_PATH.to_string(),
+                GITHUB_TOKEN_PATH.to_string()
+            ],
+            "the scarce refresh token is persisted first"
+        );
+        assert_eq!(
+            store.snapshot()[GITHUB_TOKEN_PATH]["token"],
+            "ghu_NEWACCESS"
+        );
+    }
+
+    /// Arm 2: two concurrent due-checks spend the single-use refresh token
+    /// ONCE — the decision is made under the lock, so the loser sees the
+    /// winner's new expiry.
+    #[test]
+    fn github_token_auto_rotation_concurrent_checks_exchange_once() {
+        let store = std::sync::Arc::new(SharedStore::with(&bundle_expiring_at(NOW + 60)));
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let lock = test_lock("arm2");
+        let handles: Vec<_> = (0..2)
+            .map(|_| {
+                let store = std::sync::Arc::clone(&store);
+                let calls = std::sync::Arc::clone(&calls);
+                let lock = lock.clone();
+                std::thread::spawn(move || {
+                    rotate_github_token_if_due(
+                        &*store,
+                        &|c, r| {
+                            calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            // Widen the window a racing reader would slip into.
+                            std::thread::sleep(std::time::Duration::from_millis(200));
+                            fresh_pair(c, r)
+                        },
+                        NOW,
+                        false,
+                        &lock,
+                        std::time::Duration::from_secs(10),
+                        false,
+                    )
+                })
+            })
+            .collect();
+        let outs: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "exactly one exchange: {outs:?}"
+        );
+        let rotated = outs
+            .iter()
+            .filter(|o| matches!(o, Ok(DueCheck::Rotated { .. })))
+            .count();
+        let not_due = outs
+            .iter()
+            .filter(|o| matches!(o, Ok(DueCheck::NotDue { .. })))
+            .count();
+        assert_eq!((rotated, not_due), (1, 1), "{outs:?}");
+    }
+
+    /// Arm 3, NEGATIVE CONTROL: two hours left -> no exchange at all.
+    #[test]
+    fn github_token_auto_rotation_not_due_makes_no_exchange() {
+        let store = SharedStore::with(&bundle_expiring_at(NOW + 2 * 3600));
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let out = rotate_github_token_if_due(
+            &store,
+            &|c, r| {
+                calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                fresh_pair(c, r)
+            },
+            NOW,
+            false,
+            &test_lock("arm3"),
+            std::time::Duration::from_secs(5),
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            DueCheck::NotDue {
+                expires_at: NOW + 2 * 3600,
+                refresh_expires_at: Some(1_000_000),
+            }
+        );
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert!(store.writes.lock().unwrap().is_empty());
+        // The window boundary itself: exactly 30 min left is due, 30 min + 1 s is not.
+        assert!(github_token_rotation_due(NOW + 30 * 60, NOW));
+        assert!(!github_token_rotation_due(NOW + 30 * 60 + 1, NOW));
+    }
+
+    /// Arm 4: GitHub rejects the refresh token -> the old records are intact
+    /// and the error names github-token-rotation-failed.
+    #[test]
+    fn github_token_auto_rotation_rejected_refresh_keeps_the_old_pair() {
+        let store = SharedStore::with(&bundle_expiring_at(NOW + 60));
+        let before = store.snapshot();
+        let err = rotate_github_token_if_due(
+            &store,
+            &|_, _| Err("GitHub refused the token refresh (bad_refresh_token)".into()),
+            NOW,
+            false,
+            &test_lock("arm4"),
+            std::time::Duration::from_secs(5),
+            false,
+        )
+        .unwrap_err();
+        assert!(err.starts_with("github-token-rotation-failed:"), "{err}");
+        assert!(err.contains("bad_refresh_token"), "{err}");
+        assert_eq!(store.snapshot(), before, "a failed exchange writes nothing");
+        assert!(!err.contains("ghr_") && !err.contains("ghu_"), "{err}");
+    }
+
+    /// Arm 5: the due-check needs no desktop session (it takes no session
+    /// input and consults none — the gate stays on the explicit command), and
+    /// it refuses inside a forge without touching the store.
+    #[test]
+    fn github_token_auto_rotation_needs_no_session_and_refuses_in_a_forge() {
+        let store = SharedStore::with(&bundle_expiring_at(NOW + 60));
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let refuse = rotate_github_token_if_due(
+            &store,
+            &|c, r| {
+                calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                fresh_pair(c, r)
+            },
+            NOW,
+            true,
+            &test_lock("arm5f"),
+            std::time::Duration::from_secs(5),
+            false,
+        )
+        .unwrap();
+        assert_eq!(refuse, DueCheck::RefusedInForge);
+        assert_eq!(refuse.verdict(), "skip:github-token-rotation:forge");
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        // Same store, bare metal, no session anywhere in the call: it rotates.
+        let ok = rotate_github_token_if_due(
+            &store,
+            &|c, r| {
+                calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                fresh_pair(c, r)
+            },
+            NOW,
+            false,
+            &test_lock("arm5b"),
+            std::time::Duration::from_secs(5),
+            false,
+        )
+        .unwrap();
+        assert!(matches!(ok, DueCheck::Rotated { .. }));
+        // The scheduler's own path never consults the session gate.
+        let src = include_str!("vault_bootstrap.rs");
+        let start = src
+            .find(&["pub fn github_token_due_check_", "live("].concat())
+            .unwrap();
+        let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
+        assert!(!body.contains(&["github_refresh_", "gate"].concat()));
+        assert!(!body.contains(&["has_graphical_", "session"].concat()));
+    }
+
+    /// One scheduler per process: the tray and every lane launch call the
+    /// spawn, and only the first may start a thread.
+    #[test]
+    fn github_token_auto_rotation_scheduler_starts_once_per_process() {
+        let first = claim_github_rotation_scheduler_slot();
+        let second = claim_github_rotation_scheduler_slot();
+        assert!(
+            first,
+            "the first claim in this process starts the scheduler"
+        );
+        assert!(!second, "a later claim must not start a second thread");
+        // And every lane launch reaches it: the call sits in the enclave
+        // funnel both the tray and the CLI lanes go through.
+        let main_src = include_str!("main.rs");
+        let start = main_src
+            .find(&["pub(crate) fn ensure_enclave_", "for_project("].concat())
+            .unwrap();
+        let body = &main_src[start..start + main_src[start..].find("\n}\n").unwrap()];
+        assert!(body.contains(&["spawn_github_token_", "rotation_scheduler("].concat()));
+    }
+
+    /// The 14-day refresh-expiry warning: fires inside the window (not
+    /// outside), says "expired" at zero, names the remedy, and fires at most
+    /// once per day however often the scheduler asks.
+    #[test]
+    fn github_token_auto_rotation_refresh_expiry_warns_once_a_day() {
+        let day = 86_400;
+        assert_eq!(
+            github_refresh_expiry_warning(Some(NOW + 15 * day), NOW),
+            None
+        );
+        assert_eq!(
+            github_refresh_expiry_warning(Some(NOW + 14 * day), NOW),
+            Some(14)
+        );
+        assert_eq!(
+            github_refresh_expiry_warning(Some(NOW + 3 * day + 5), NOW),
+            Some(3)
+        );
+        assert_eq!(github_refresh_expiry_warning(Some(NOW - 1), NOW), Some(0));
+        assert_eq!(github_refresh_expiry_warning(None, NOW), None);
+        assert!(github_refresh_expiry_message(3).contains("tillandsias --github-login"));
+        assert!(github_refresh_expiry_message(0).contains("EXPIRED"));
+        let mut last = None;
+        assert!(should_warn_today(&mut last, NOW));
+        assert!(
+            !should_warn_today(&mut last, NOW + 15 * 60),
+            "same day: silent"
+        );
+        assert!(
+            should_warn_today(&mut last, NOW + day),
+            "next day: warns again"
+        );
+    }
+
+    /// The scheduler backs off after a failure (1 min doubling, capped) and
+    /// returns to the regular interval after a verdict.
+    #[test]
+    fn github_token_auto_rotation_backoff_is_bounded() {
+        use std::time::Duration;
+        let fail: Result<DueCheck, String> = Err("x".into());
+        let d1 = github_rotation_next_delay(&fail, Duration::ZERO);
+        let d2 = github_rotation_next_delay(&fail, d1);
+        assert_eq!(
+            (d1, d2),
+            (Duration::from_secs(60), Duration::from_secs(120))
+        );
+        assert_eq!(
+            github_rotation_next_delay(&fail, Duration::from_secs(3600)),
+            GITHUB_ROTATION_CHECK_EVERY
+        );
+        assert_eq!(
+            github_rotation_next_delay(&Ok(DueCheck::NoToken), d2),
+            GITHUB_ROTATION_CHECK_EVERY
+        );
+    }
+
     /// Criterion 7, the other half: the token record the git-mirror service can
     /// read never carries the refresh token.
     #[test]
@@ -7015,10 +7667,15 @@ mod tests {
             env!("CARGO_MANIFEST_DIR"),
             "/src/vault_bootstrap.rs"
         ));
-        let window = source
+        // BOUNDED TO THE FUNCTION BODY (1461-8tyy). This window used to run to
+        // the END OF THE FILE, so any `thread::sleep` anywhere below the
+        // function failed an assertion that is about this function only —
+        // the GitHub token rotation scheduler's between-checks sleep did.
+        let after = source
             .split("fn wait_for_vault_ready(")
             .nth(1)
             .expect("wait_for_vault_ready source");
+        let window = &after[..after.find("\n}\n").expect("end of wait_for_vault_ready")];
         assert!(
             window.contains("PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME)"),
             "Vault readiness must use the idiomatic podman health layer"

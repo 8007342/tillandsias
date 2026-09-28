@@ -16641,6 +16641,13 @@ pub(crate) fn ensure_enclave_for_project(
         Ok::<Option<String>, String>(mirror_identity)
     })?;
 
+    // Order 1461-8tyy: every lane keeps the GitHub token alive while it runs.
+    // A bare-metal host with NO tray (only `tillandsias --bash <project>` and
+    // the mirror) otherwise had nothing rotating it, and its pushes died at
+    // 8 h. Idempotent per process; the tray's own start is deduplicated.
+    #[cfg(feature = "vault")]
+    crate::vault_bootstrap::spawn_github_token_rotation_scheduler(debug, None);
+
     Ok((certs_dir, mirror_identity))
 }
 /// Ensure the project's git mirror and the shared inference container for a
@@ -18148,6 +18155,12 @@ fn maybe_spawn_vsock_listener(
     shutdown: Arc<AtomicBool>,
 ) -> Option<tokio::task::JoinHandle<()>> {
     let port = listen_vsock_port?;
+    // Order 1461-8tyy: this is the guest's RESIDENT service (macOS/Windows),
+    // the process that holds this installation's Vault, so it keeps the GitHub
+    // token alive: a due-check at start and every 15 min, rotating inside the
+    // 30-minute window. The Linux tray starts the same scheduler.
+    #[cfg(feature = "vault")]
+    crate::vault_bootstrap::spawn_github_token_rotation_scheduler(false, None);
     Some(tokio::spawn(async move {
         // One VmStateHandle drives three concurrent tasks below — the
         // accept loop (reads it on every VmStatusRequest), the phase
