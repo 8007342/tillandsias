@@ -20,6 +20,8 @@
 #      rc 1 there; --json tells them apart; a usage error is 2
 #   3  --argv-json -: argv as a JSON array on stdin, delivered byte for byte
 #      (C:\x\. unconverted), through the same policy; malformed input is 2
+#   9  --caller run|mcp names the door in the audit; any other name (pretooluse,
+#      the Bash bridge whose count retires it) is a usage error
 #
 # Pre-fix: FAILS at arm 2 (`run` is an unknown subcommand).
 set -uo pipefail
@@ -171,7 +173,9 @@ else
 fi
 
 # ── 6 (slice 2) ─────────────────────────────────────────────────────────────
-out="$("$PLAN" run --json --capture-bytes 1024 -- head -c 4096 /dev/zero 2>/dev/null)"; rc=$?
+# argv as JSON on stdin: on the plain command line MSYS rewrites /dev/zero to
+# /Device/Null before the native exe sees it (yolanda, Windows, 2026-09-28).
+out="$(printf '%s' '["head","-c","4096","/dev/zero"]' | "$PLAN" run --json --capture-bytes 1024 --argv-json - 2>/dev/null)"; rc=$?
 if [ "$rc" -eq 0 ] && [ "$(jget -r '.truncated' <<<"$out")" = true ] && [ "$(jget -r '.ok' <<<"$out")" = false ] &&
     [ "$(jget -r '.code' <<<"$out")" = 0 ]; then
     ok "arm 6: stdout past --capture-bytes is truncated:true and ok:false (code 0)"
@@ -219,6 +223,18 @@ for bad_in in '"git status"' '[]' '["git",1]' 'not json'; do
 done
 printf '%s' '["true"]' | "$PLAN" run --argv-json - -- echo also >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 2 ] && ok "arm 3: argv from both --argv-json and -- is a usage error" || bad "arm 3 both: rc=$rc"
+
+# ── 9: --caller names the door in the audit, from a closed set ──────────────
+"$PLAN" run --json --caller mcp -- true >/dev/null 2>&1
+last="$(tail -n 1 "$W/audit.jsonl")"
+"$PLAN" run --json --caller pretooluse -- true >/dev/null 2>&1; rc_bridge=$?
+"$PLAN" run --json --caller "" -- true >/dev/null 2>&1; rc_empty=$?
+if [ "$(jget -r '.caller' <<<"$last")" = mcp ] && [ "$rc_bridge" -eq 2 ] && [ "$rc_empty" -eq 2 ] &&
+    [ "$(tail -n 1 "$W/audit.jsonl")" = "$last" ]; then
+    ok "arm 9: --caller mcp is audited as caller=mcp; pretooluse and empty are usage errors that audit nothing"
+else
+    bad "arm 9: last=[$last] rc_bridge=$rc_bridge rc_empty=$rc_empty"
+fi
 
 total=$((pass + fail))
 if [ "$fail" -eq 0 ]; then
