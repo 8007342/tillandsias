@@ -24,6 +24,8 @@
 #      wsl.exe (yolanda runs it on Windows);
 #   3. `producer | tee log`: the status is the PRODUCER's, not tee's;
 #   4. a child killed mid-run, by signal, from outside: ABSENT, not 128+N.
+#      On Windows, arms 1/3/4 skip BY NAME (limit:windows-external-kill-reads-
+#      as-exited) when the verb declares that limit. See WIN_LIMIT below.
 #
 # Verdict: ok:status-channel:absent-distinct-from-zero:<passed>/<run>, plus
 # `skipped=<n>` when an arm could not run here. PRE-FIX RESULT: FAILS — the
@@ -32,6 +34,15 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pass=0; run=0; skipped=0
+# ONE NAMED LIMIT (1443-8pur, the forge, 2026-09-28): on Windows a child killed
+# from OUTSIDE (not by the verb) reaches the native exe as exited 2304 (9<<8).
+# The verb does not decode it, because a native exe may exit 2304 on purpose,
+# and it declares the limit by this token in its usage text. Arms that kill
+# from outside SKIP BY THAT NAME there. They never read it as absent, and they
+# never read it as a pass.
+WIN_LIMIT="limit:windows-external-kill-reads-as-exited"
+ON_WINDOWS=0
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) ON_WINDOWS=1 ;; esac
 ok()  { echo "ok:   $1"; pass=$((pass+1)); run=$((run+1)); }
 bad() { echo "FAIL: $1"; run=$((run+1)); }
 skip() { echo "skip: $1"; skipped=$((skipped+1)); }
@@ -57,6 +68,21 @@ DOOR=0
 if [ -n "$PLAN" ] && "$PLAN" run --json -- bash "$W/ok.sh" 2>/dev/null | grep -q '"status"'; then
     DOOR=1
 fi
+# The limit counts only when the binary under test DECLARES it.
+LIMIT_DECLARED=0
+if [ "$ON_WINDOWS" = 1 ] && [ -n "$PLAN" ] && grep -qF "$WIN_LIMIT" <<<"$("$PLAN" run --help 2>&1)"; then
+    LIMIT_DECLARED=1
+fi
+# killed_verdict <terminal line>: verdict, or the named limit on Windows
+killed_verdict() {
+    local v
+    v="$(verdict "$1")"
+    if [ "$v" = "red:2304" ] && [ "$ON_WINDOWS" = 1 ] && [ "$LIMIT_DECLARED" = 1 ]; then
+        echo "$WIN_LIMIT"
+    else
+        echo "$v"
+    fi
+}
 echo "channel: $([ "$DOOR" = 1 ] && echo "agent door (tillandsias-plan run --json)" || echo "improvised recipe (pre-fix: the door has no --json on this binary)")"
 
 # verdict <terminal line> -> green | red:<n> | absent:<why> | unparsed:<line>
@@ -110,7 +136,15 @@ detached() { # detached <name> <argv...> -> prints the terminal line
 
 expect_arm() { # expect_arm <arm label> <red line> <killed line> <ok line>
     local label="$1" v_red v_abs v_ok
-    v_red="$(verdict "$2")"; v_abs="$(verdict "$3")"; v_ok="$(verdict "$4")"
+    v_red="$(verdict "$2")"; v_abs="$(killed_verdict "$3")"; v_ok="$(verdict "$4")"
+    if [ "$v_abs" = "$WIN_LIMIT" ]; then
+        if [ "$v_red" = "red:1" ] && [ "$v_ok" = green ]; then
+            skip "$label: killed-from-outside leg is $WIN_LIMIT (declared by the verb); rc1 -> red:1, exit 0 -> green"
+        else
+            bad "$label: rc1 -> $v_red (want red:1), exit 0 -> $v_ok (want green); killed leg $WIN_LIMIT"
+        fi
+        return
+    fi
     if [ "$v_red" = "red:1" ] && [ "${v_abs%%:*}" = absent ] && [ "$v_ok" = green ]; then
         ok "$label: rc1 -> red:1, killed -> $v_abs, exit 0 -> green"
     else
@@ -158,8 +192,10 @@ expect_arm "arm 3 (producer | tee)" \
 
 # 4 — a child killed mid-run, from outside, by signal: absent, never 128+N.
 k4="$(detached killed bash "$W/killme.sh")"
-v4="$(verdict "$k4")"
-if [ "${v4%%:*}" = absent ]; then
+v4="$(killed_verdict "$k4")"
+if [ "$v4" = "$WIN_LIMIT" ]; then
+    skip "arm 4 (killed mid-run): $WIN_LIMIT — an external kill on Windows reads as exited 2304; declared by the verb, not decoded"
+elif [ "${v4%%:*}" = absent ]; then
     ok "arm 4 (killed mid-run): absent ($v4)"
 else
     bad "arm 4 (killed mid-run): read as $v4 from [$k4] — a substituted integer, not absent"
