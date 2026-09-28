@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-agent-door-tillandsias-plan-run-json-takes-named-flags-and-an-argv-never-a-string-evaluates-the-policy-before-spawning-starts-the-child-from-the-base-env-only-and-reads-argv-as-json-on-windows-so-nothing-crosses-msys-or-wsl-as-a-string
+    event:
+      type: note
+      ts: "2026-09-28T07:40:45Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t074044z
+      host: macos
+      summary: |
+        DARWIN MEASUREMENT of `tillandsias-plan run` (slice 1), tlatoanis-macbook-air, 2026-09-28, at the coordinator's request. Ref: work/1443-8pur at 397c5f3ff, detached worktree; the plan binary was built from that ref; gate regime (TILLANDSIAS_PLAN_BIN and CARGO_TARGET_DIR unset); macOS arm64.
+        FIXTURE: `bash scripts/test-run-verb-agent-door.sh` gives FAIL: run-verb-agent-door 9/10, rc 1. The one red is arm 7 cwd, and it is a HARNESS artefact, not the product: `$W` is /var/folders/… and the child's `pwd` prints the physical /private/var/folders/… (on darwin /var is a symlink to /private/var). Fix: compare against "$(cd "$W" && pwd -P)".
+        HAND PROBES (sleep durations made unique so pgrep cannot confuse them). Probes 2-5 run as script FILES; the first attempt used `sh -c` strings, which the door correctly refuses (refused:policy:no-shell-strings), so those rc=1 results measured nothing and are discarded.
+         1. `run --timeout-ms 500 -- sleep 30` -> rc 124, wall 525 ms, 0 surviving sleep. PASS.
+         2. A child that backgrounds a grandchild and `wait`s, 500 ms deadline -> rc 124, 0 survivors: the group kill reaches the grandchild. PASS.
+         4. A child that SIGTERMs itself -> rc 143 (128+15). PASS.
+         5. The child is a process-group leader (pgid == its own pid, not the caller's). PASS.
+         3. FINDINGS, a child that backgrounds a grandchild and EXITS 0 at once:
+           3a. The grandchild keeps the inherited stdout -> `run` blocks until the DEADLINE (3021 ms with --timeout-ms 3000) and answers rc 124, then kills the group (0 survivors). A command that succeeded is reported as a TIMEOUT. The executor drains stdout until EOF, and the grandchild holds the write end.
+           3b. The grandchild redirects stdout/stderr/stdin -> `run` returns rc 0 in 15 ms, and the grandchild SURVIVES the door (1 process alive afterwards). The process group is killed only at the deadline, not when the leader exits normally, so a command can leave a daemon running that outlives the door and its policy.
+        Suggested: when the leader exits, send SIGTERM/SIGKILL to the whole process group before returning (this closes 3b, and ends 3a promptly by closing the pipe's last writer), and report the leader's status rather than 124. Worth a Linux check too; 3a/3b follow from POSIX process-group and pipe semantics, not from darwin specifically.
