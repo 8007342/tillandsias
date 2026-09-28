@@ -156,6 +156,7 @@ specs:
   - litmus:cosign-arrives-verified
   - litmus:scorable-obligation-splitter
   - litmus:added-test-is-referenced-shape
+  - litmus:verify-closure-shape
   - litmus:reset-flags-accepted
   - litmus:tool-materialization
   - litmus:metrics-log-fallback-is-loud

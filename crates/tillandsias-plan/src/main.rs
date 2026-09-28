@@ -1526,6 +1526,13 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
         // would report "no rows are marked" — the answer that looks like
         // success.
         "must_ship",
+        // ORDER 1443-qwpj. scripts/verify-closure.sh runs a packet's OWN
+        // closure command and compares the printed output — the acceptance
+        // an orchestrator runs instead of reading a delegate's "met". It
+        // needs the FOLDED closure (a set-field correction wins), and this
+        // projection is the only surface that folds; without the key the
+        // tool would have to re-implement the fold in shell.
+        "verifiable_closure",
     ] {
         if let Some(value) = packet.get(key) {
             obj.insert(

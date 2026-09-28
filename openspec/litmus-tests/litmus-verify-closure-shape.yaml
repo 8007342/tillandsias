@@ -1,0 +1,32 @@
+# @trace order:1443-qwpj, spec:ci-release
+name: litmus:verify-closure-shape
+spec: ci-release
+description: >
+  ORDER 1443-qwpj. scripts/verify-closure.sh is the acceptance an orchestrator
+  runs instead of reading a delegate's "met": it runs the packet's own
+  verifiable_closure command and compares the PRINTED output with the token
+  the closure names. On 2026-09-27 a Haiku implementer reported 1437-gbwi met
+  while its measurement read 76 s then 70 s against "under 20 s", and nothing
+  between report and acceptance ran the closure.
+
+  The load-bearing arms are the ones that must NOT accept: a wrong count is
+  unmet and names what was measured; the right line with the wrong rc is
+  unmet; prose with no runnable command is unscoreable (exit 2, never ok); a
+  `--claim met` passed in is ignored; a command that exits 0 beside a prose
+  threshold (the 1437-gbwi shape) is uncovered-criterion; and an rc-only
+  closure whose fixture SKIPS is unmet. A comparator that matched too loosely
+  would pass all of these.
+severity: critical
+size: instant
+phase: pre-build
+preconditions:
+  - workspace contains scripts/verify-closure.sh
+  - workspace contains scripts/test-verify-closure.sh
+critical_path:
+  - step: "every arm of the verifier holds, refusals included (8/8)"
+    command: "bash scripts/test-verify-closure.sh 2>&1"
+    expected_behavior: "ok:verify-closure:8/8"
+    assert_exit: 0
+    assert_output_contains: "ok:verify-closure:8/8"
+    assert_output_nonempty: true
+    timeout_ms: 120000
