@@ -33,6 +33,7 @@ pub mod answer;
 /// the envelope's `caller_relation`. Derives `same | behind | ahead | diverged`
 /// honestly and refuses to synthesise a total order git cannot give.
 pub mod branch_discipline;
+pub mod discipline_hooks;
 /// ORDER 920-pxg6 — the OpenAI-compatible loopback front-end over
 /// `pipeline::run_grounded`. One grounded pipeline, two front-ends.
 pub mod expert_serve;

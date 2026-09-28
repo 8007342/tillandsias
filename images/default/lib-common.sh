@@ -376,6 +376,14 @@ configure_git_identity() {
 # checkout, a missing installer, or a failed install each log one line and
 # return 0. A forge without guards is worse than one with them, but it is not
 # a reason to refuse the launch.
+#
+# ANY OTHER PROJECT (order 1446-xqi6, operator ruling 7): a checkout that is not
+# Tillandsias gets its discipline hooks from the plan binary's embedded
+# templates, `tillandsias-plan discipline install-hooks`, at the level its own
+# seed names (level 0 when it has none: advisory only, pushes to main allowed).
+# Same repo-local core.hooksPath and trailer copy as below. The forge's global
+# post-commit expert refresh is shadowed there too; it exits at once in any
+# repository without plan/index.yaml, so a non-Tillandsias project loses nothing.
 install_project_guard_hooks() {
     local project_dir="${1:-}"
     [ -n "$project_dir" ] && [ -d "$project_dir/.git" ] || {
@@ -384,7 +392,7 @@ install_project_guard_hooks() {
     }
     local installer="$project_dir/scripts/install-hooks.sh"
     [ -r "$installer" ] || {
-        trace_lifecycle "git-hook" "guards skipped (no scripts/install-hooks.sh — not a Tillandsias checkout)"
+        install_project_discipline_hooks "$project_dir"
         return 0
     }
 
@@ -409,6 +417,34 @@ install_project_guard_hooks() {
         echo "[forge] WARNING: scripts/install-hooks.sh failed; this checkout has NO pre-push gate." >&2
         echo "[forge] Push CI is gone, so nothing but your own discipline is checking the trunk." >&2
     fi
+    return 0
+}
+
+# install_project_discipline_hooks <project_dir> — order 1446-xqi6. The
+# non-Tillandsias half of install_project_guard_hooks. Fail-soft: no plan binary
+# or a refused install logs one line and returns 0.
+install_project_discipline_hooks() {
+    local project_dir="$1" plan out
+    plan="${TILLANDSIAS_PLAN_BIN:-$(command -v tillandsias-plan 2>/dev/null)}"
+    if [ -z "$plan" ] || ! "$plan" capabilities >/dev/null 2>&1; then
+        trace_lifecycle "git-hook" "discipline hooks skipped (no runnable tillandsias-plan) — not a Tillandsias checkout"
+        return 0
+    fi
+    local local_hooks="$project_dir/.git/hooks"
+    mkdir -p "$local_hooks" 2>/dev/null || return 0
+    git -C "$project_dir" config core.hooksPath "$local_hooks" 2>/dev/null || return 0
+    local global_hooks="$HOME/.cache/tillandsias/git-hooks"
+    if [ -r "$global_hooks/prepare-commit-msg" ]; then
+        cp "$global_hooks/prepare-commit-msg" "$local_hooks/prepare-commit-msg" 2>/dev/null || true
+        chmod 0755 "$local_hooks/prepare-commit-msg" 2>/dev/null || true
+    fi
+    out="$("$plan" discipline install-hooks --root "$project_dir" 2>>/tmp/forge-lifecycle.log)"
+    case "$out" in
+        ok:discipline:hooks-installed:*)
+            trace_lifecycle "git-hook" "discipline hooks installed: ${out#ok:discipline:hooks-installed:} (core.hooksPath=${local_hooks})" ;;
+        *)
+            trace_lifecycle "git-hook" "discipline hook install refused: ${out:-no verdict}" ;;
+    esac
     return 0
 }
 
