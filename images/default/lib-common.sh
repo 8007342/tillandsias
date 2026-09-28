@@ -304,6 +304,26 @@ ensure_forge_git_index() {
     return 1
 }
 
+# forge_src_budget_report <dir> — order 1445-7u63 criterion 3. /home/forge/src is
+# a kernel-capped tmpfs sized per launch (997-e4v2). When it fills, git dies with
+# a bare write error and the clone path used to blame the mirror ("unreachable or
+# has not finished initialising"). This names the real cause. It prints one line
+# and returns 0 when the filesystem holding <dir> is at or above 95% used, and
+# prints nothing and returns 1 otherwise, so a caller can put it in front of a
+# generic failure message.
+forge_src_budget_report() {
+    local dir="${1:-/home/forge/src}" line pct size used
+    [ -d "$dir" ] || dir="$(dirname "$dir")"
+    line="$(df -P -h "$dir" 2>/dev/null | awk 'NR == 2 { print $2, $3, $5 }')" || return 1
+    [ -n "$line" ] || return 1
+    read -r size used pct <<<"$line"
+    pct="${pct%\%}"
+    case "$pct" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$pct" -ge 95 ] || return 1
+    echo "[forge] /home/forge/src is FULL: ${used} of ${size} (${pct}%). The forge's source budget is exhausted, so git fails with a bare write error; this is not a mirror or network fault. Relaunch the forge (the budget is sized from the mirror at launch, 1445-7u63), or grow it live from the host with a tmpfs remount."
+    return 0
+}
+
 configure_git_identity() {
     # @trace spec:secrets-management, spec:git-mirror-service
     # GitHub Login stores identity on the host; launchers pass it in as env.
@@ -930,6 +950,7 @@ _clone_project_from_mirror_impl() {
             echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
             return 0
         else
+            forge_src_budget_report "${PROJECT_DIR:-/home/forge/src}" >&2 || true
             echo "[forge] FATAL: filesystem clone failed from ${src}" >&2
             echo "[forge] Mirror path not visible inside distro? Check /mnt/c/... mount." >&2
             exit 1
@@ -1018,6 +1039,7 @@ _clone_project_from_mirror_impl() {
                 trace_lifecycle "git-mirror" "clone failed after $max_retries attempts"
             fi
         done
+        forge_src_budget_report "${PROJECT_DIR:-/home/forge/src}" >&2 || true
         echo "[forge] FATAL: git clone failed from git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" >&2
         echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
         exit 1
