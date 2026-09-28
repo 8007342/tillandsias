@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: land-queue-resolves-its-plan-binary-from-the-callers-cwd-so-its-fixture-fails-12-of-14-on-darwin
+    order: 1461-5rm6
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [instrument, fleet, testing]
+    estimated_hours: 1
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+    title: |
+      scripts/land-queue.sh resolves tillandsias-plan relative to the caller's cwd, so test-land-queue.sh (run from a scratch repo) fails 12/14 in the macOS gate regime and passes 16/16 only when a binary is exported
+    context: |
+      MEASURED 2026-09-28 on tlatoanis-macbook-air, bare origin/linux-next:
+      `env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR bash scripts/test-land-queue.sh`
+      -> blocked:land-queue:12-failed-of-14, every failing arm reading
+      `fail:land-queue:no-plan-binary`. With
+      TILLANDSIAS_PLAN_BIN=<checkout>/target/release/tillandsias-plan the
+      same fixture reads ok:land-queue:16/16.
+      CAUSE (source-read): land-queue.sh:155-156 sources plan-binary-probe.sh
+      and calls resolve_plan_binary from the CALLER'S cwd. The fixture runs it
+      inside a scratch repo with no target/, so nothing resolves. Linux passes
+      because CARGO_TARGET_DIR resolves a binary from anywhere. It is the same
+      shape as 1455-d7hc and the nmq3 fixture-default-target lesson, except
+      that here it is the PRODUCT script, not only its fixture.
+      Found while verifying 1235-rfub (it does not touch land-queue).
+    exit_criteria:
+      - 'test-land-queue.sh passes under `env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR` on darwin from the repo root (pre-fix: blocked:land-queue:12-failed-of-14)'
+      - 'land-queue.sh resolves the plan binary from its own checkout root (the script dir), not the caller cwd, and a caller-supplied TILLANDSIAS_PLAN_BIN still wins'
+    unscoreable: |
+      regime-specific-fixture-not-a-litmus: closure is scripts/test-land-queue.sh
+      run in the darwin gate regime (env -u TILLANDSIAS_PLAN_BIN -u
+      CARGO_TARGET_DIR, from the repo root). That fixture already exists and
+      its failure depends on the regime, which no litmus pin expresses today.

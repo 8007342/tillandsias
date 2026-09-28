@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-mcp-run-command-tool-on-the-project-info-server-takes-argv-and-named-parameters-and-returns-the-run-verbs-typed-result-so-a-forge-agent-executes-through-the-runtime-without-a-shell-string-anywhere-on-the-path
+    field: notes
+    value: |-
+      size: M
+      implementer_tier: sonnet
+      A thin bash arm; the enforcement lives in the verb it calls.
+
+
+      [2026-09-28T16:02:43Z forge-tillandsias] AMENDED EXIT CRITERION 3 (coordinator ruling, 2026-09-28): the no-eval / no-`bash -c` check is SCOPED TO THE run_command ARM of project-info.sh (the fixture extracts the arm from `"run_command")` to its `;;`). The file-wide `git grep -E "eval |bash -c"` hits line 717, a comment containing "Retrieval " — a mention, not a use. ADDED (same ruling): the MCP call is audited as caller=mcp via `run --caller mcp` (1443-8pur), so the audit can say which door retired Bash; fixture arm 2 asserts it.
+    ts: "2026-09-28T16:02:43Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: an-mcp-run-command-tool-on-the-project-info-server-takes-argv-and-named-parameters-and-returns-the-run-verbs-typed-result-so-a-forge-agent-executes-through-the-runtime-without-a-shell-string-anywhere-on-the-path
+    event:
+      type: note
+      ts: "2026-09-28T16:02:43Z"
+      host: forge-tillandsias
+      summary: |-
+        coordinator ruling: scope criterion 3 to the arm; caller=mcp
