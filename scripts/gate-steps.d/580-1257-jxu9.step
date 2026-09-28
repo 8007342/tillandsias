@@ -1,0 +1,13 @@
+# Gate step 1257-jxu9 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS: the expert-accuracy record keeps its provenance. The
+# ollama-native /api/show is asked of the NATIVE base even when
+# TILLANDSIAS_EMBED_ENDPOINT is the OpenAI-compatible /v1 base, an endpoint that
+# cannot answer leaves quantisation and engine `unknown` (never guessed), and
+# the series is a TRACKED per-host file a normal pull carries.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the expert-accuracy record keeps its provenance (1257-jxu9)"
+STEP_SCRIPT="scripts/test-expert-accuracy-provenance.sh"
+STEP_ERROR="the expert-accuracy record loses provenance: a /v1 base asks /v1/api/show, or the series is not a tracked per-host file (1257-jxu9)"
+STEP_OK="expert-accuracy provenance: native /api/show, no guessing, tracked per-host series"
