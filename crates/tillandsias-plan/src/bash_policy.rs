@@ -716,60 +716,43 @@ pub fn context_for(cwd: &Path) -> Context {
     }
 }
 
-/// The hook's decision log (JSONL). The fleet audit (1443-w9hf) replaces it;
-/// until then `--status` counts from here. Never the raw command: a command
-/// can carry a secret, so only its length and the decision are recorded.
-pub fn log_path() -> PathBuf {
-    if let Ok(p) = std::env::var("TILLANDSIAS_PRETOOLUSE_LOG") {
-        return PathBuf::from(p);
-    }
-    let base = std::env::var("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".into()))
-                .join(".local/state")
-        });
-    base.join("tillandsias").join("pretooluse-decisions.jsonl")
+/// Where the bridge's decisions go: the per-host policy AUDIT (1443-w9hf),
+/// shared with every other evaluator decision, as caller=pretooluse.
+pub fn log_path(workspace: &Path) -> PathBuf {
+    cp::audit_log_path(workspace)
 }
 
-pub fn log_decision(decision: &str, rule: &str, kill_switch: bool, cmd_len: usize) {
-    let path = log_path();
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let line = serde_json::json!({
-        "ts": ts,
-        "caller": "pretooluse",
-        "decision": decision,
-        "rule": rule,
-        "kill_switch": if kill_switch { 1 } else { 0 },
-        "command_len": cmd_len,
-    });
-    use std::io::Write;
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-    {
-        let _ = writeln!(f, "{line}");
-    }
+/// Record one bridge decision. Never the raw command (a command can carry a
+/// secret no shape catches): the audit keeps its sha256 only. `ask` is
+/// recorded as `consent`, the engine's word for the same thing.
+pub fn log_decision(ctx: &Context, command: &str, verdict: &str, rule: &str, kill_switch: bool) {
+    let decision = if verdict == "ask" { "consent" } else { verdict };
+    let workspace =
+        crate::branch_discipline::find_root(&ctx.cwd).unwrap_or_else(|| ctx.cwd.clone());
+    cp::audit_bridge(
+        &workspace,
+        ctx.host_kind,
+        command,
+        rule,
+        decision,
+        kill_switch,
+    );
 }
 
-/// (deny, ask, allow, kill_switch uses) from the decision log.
-pub fn status_counts() -> (usize, usize, usize, usize) {
-    let text = std::fs::read_to_string(log_path()).unwrap_or_default();
+/// (deny, ask, allow, kill_switch uses) for caller=pretooluse, from the audit.
+pub fn status_counts(workspace: &Path) -> (usize, usize, usize, usize) {
+    let text = std::fs::read_to_string(log_path(workspace)).unwrap_or_default();
     let (mut d, mut a, mut al, mut k) = (0, 0, 0, 0);
     for line in text.lines() {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
         };
+        if v.get("caller").and_then(|x| x.as_str()) != Some("pretooluse") {
+            continue;
+        }
         match v.get("decision").and_then(|x| x.as_str()) {
             Some("deny") => d += 1,
-            Some("ask") => a += 1,
+            Some("consent") | Some("ask") => a += 1,
             Some("allow") => al += 1,
             _ => {}
         }

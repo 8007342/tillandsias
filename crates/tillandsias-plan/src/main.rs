@@ -4449,9 +4449,11 @@ fn run_classify_bash(args: &[String]) -> ! {
     };
     match args.first().map(String::as_str) {
         Some("--status") => {
-            let (d, a, al, k) = bp::status_counts();
+            let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let root = tillandsias_plan::branch_discipline::find_root(&cwd).unwrap_or(cwd);
+            let (d, a, al, k) = bp::status_counts(&root);
             println!("decisions={d}/{a}/{al} (deny/ask/allow) kill_switch_uses={k}");
-            println!("log: {}", bp::log_path().display());
+            println!("log: {} (caller=pretooluse)", bp::log_path(&root).display());
             println!("retirement condition (all three):");
             for line in bp::RETIREMENT_CONDITION {
                 println!("  {line}");
@@ -4467,22 +4469,23 @@ fn run_classify_bash(args: &[String]) -> ! {
                 .pointer("/tool_input/command")
                 .and_then(|x| x.as_str())
                 .unwrap_or("");
-            if std::env::var("TILLANDSIAS_PRETOOLUSE_HOOK").as_deref() == Ok("off") {
-                bp::log_decision("allow", "kill-switch", true, cmd.len());
-                std::process::exit(0);
-            }
-            // Anything that is not a Bash command is not this bridge's business.
-            if tool != "Bash" || cmd.is_empty() {
-                std::process::exit(0);
-            }
             let cwd = v
                 .get("cwd")
                 .and_then(|x| x.as_str())
                 .map(PathBuf::from)
                 .or_else(|| std::env::current_dir().ok())
                 .unwrap_or_else(|| PathBuf::from("."));
-            let c = bp::classify(cmd, &bp::context_for(&cwd));
-            bp::log_decision(c.verdict.as_str(), &c.rule, false, cmd.len());
+            let ctx = bp::context_for(&cwd);
+            if std::env::var("TILLANDSIAS_PRETOOLUSE_HOOK").as_deref() == Ok("off") {
+                bp::log_decision(&ctx, cmd, "allow", "kill-switch", true);
+                std::process::exit(0);
+            }
+            // Anything that is not a Bash command is not this bridge's business.
+            if tool != "Bash" || cmd.is_empty() {
+                std::process::exit(0);
+            }
+            let c = bp::classify(cmd, &ctx);
+            bp::log_decision(&ctx, cmd, c.verdict.as_str(), &c.rule, false);
             match c.verdict {
                 bp::Verdict::Allow => std::process::exit(0),
                 bp::Verdict::Deny => {
@@ -4554,13 +4557,56 @@ fn run_policy(args: &[String]) -> ! {
     use tillandsias_plan::command_policy as cp;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan policy eval [--host-kind bare-metal|forge|ci] [--regime interactive|gate|fixture|hook|relay] [--caller c] [--cwd dir] [--root dir] [--seed path] -- <argv...>\n       tillandsias-plan policy show [--root dir] [--seed path]"
+            "usage: tillandsias-plan policy eval [--host-kind bare-metal|forge|ci] [--regime interactive|gate|fixture|hook|relay] [--caller c] [--cwd dir] [--root dir] [--seed path] -- <argv...>\n       tillandsias-plan policy show [--root dir] [--seed path]\n       tillandsias-plan policy audit [--since 24h|7d|30m] [--caller c] [--root dir]\n       tillandsias-plan policy classify-bash --hook | --status | --command <cmd>"
         );
         std::process::exit(2);
     };
     let Some(verb) = args.first() else { usage() };
     if verb == "classify-bash" {
         run_classify_bash(&args[1..]);
+    }
+    // ORDER 1443-w9hf — `policy audit [--since 24h|7d|…] [--caller c] [--root dir]`:
+    // one line per (rule_id, decision) with its count, then the total. With no
+    // log: ok:policy-audit:empty, exit 0.
+    if verb == "audit" {
+        let mut since: Option<chrono::Duration> = None;
+        let mut caller: Option<String> = None;
+        let mut root: Option<PathBuf> = None;
+        let mut i = 1;
+        while i < args.len() {
+            let Some(v) = args.get(i + 1) else { usage() };
+            match args[i].as_str() {
+                "--since" => since = Some(cp::parse_since(v).unwrap_or_else(|| usage())),
+                "--caller" => caller = Some(v.clone()),
+                "--root" => root = Some(PathBuf::from(v)),
+                _ => usage(),
+            }
+            i += 2;
+        }
+        let root = root
+            .or_else(|| {
+                std::env::current_dir()
+                    .ok()
+                    .and_then(|c| tillandsias_plan::branch_discipline::find_root(&c))
+            })
+            .unwrap_or_else(|| PathBuf::from("."));
+        let path = cp::audit_log_path(&root);
+        match cp::audit_summary(&path, since, caller.as_deref()) {
+            None => {
+                println!("ok:policy-audit:empty");
+                eprintln!("  no audit log at {}", path.display());
+            }
+            Some(rows) if rows.is_empty() => println!("ok:policy-audit:empty"),
+            Some(rows) => {
+                let mut total = 0;
+                for ((rule, decision), n) in &rows {
+                    println!("{n} {rule} {decision}");
+                    total += n;
+                }
+                println!("total={total}");
+            }
+        }
+        std::process::exit(0);
     }
     let mut host_kind: Option<cp::HostKind> = None;
     let mut regime = "interactive".to_string();

@@ -23,7 +23,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STUB="$ROOT/scripts/hooks/claude-pretooluse-command-policy.sh"
 W="$(mktemp -d "${TMPDIR:-/tmp}/pretooluse-policy.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
-export TILLANDSIAS_PRETOOLUSE_LOG="$W/decisions.jsonl"
+export TILLANDSIAS_POLICY_AUDIT_LOG="$W/decisions.jsonl"
 unset TILLANDSIAS_PRETOOLUSE_HOOK
 pass=0
 fail=0
@@ -162,12 +162,12 @@ else
     bad "arm 7: status rc=$rc [$status]"
 fi
 TILLANDSIAS_PRETOOLUSE_HOOK=off hook 'gh auth refresh'
-if [ "$RC" -eq 0 ] && [ -z "$OUT" ] && grep -q '"kill_switch":1' "$TILLANDSIAS_PRETOOLUSE_LOG"; then
+if [ "$RC" -eq 0 ] && [ -z "$OUT" ] && grep -q '"kill_switch":1' "$TILLANDSIAS_POLICY_AUDIT_LOG"; then
     ok "arm 7: the kill switch allows a deny-shaped command and logs kill_switch=1"
 else
-    bad "arm 7: kill switch rc=$RC out=[$OUT] log=[$(tail -n 1 "$TILLANDSIAS_PRETOOLUSE_LOG" 2>/dev/null)]"
+    bad "arm 7: kill switch rc=$RC out=[$OUT] log=[$(tail -n 1 "$TILLANDSIAS_POLICY_AUDIT_LOG" 2>/dev/null)]"
 fi
-if grep -qF 'openspec' "$TILLANDSIAS_PRETOOLUSE_LOG"; then
+if grep -qF 'openspec' "$TILLANDSIAS_POLICY_AUDIT_LOG"; then
     bad "arm 7: the decision log recorded a raw command"
 else
     ok "arm 7: the decision log never records the raw command"
