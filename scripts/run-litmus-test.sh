@@ -445,6 +445,55 @@ _lt_gate_files() {
         done
     done
 }
+# ORDER 1464-v3xq. Does any single-line `command:` of <test_file> INVOKE podman
+# — in command position, outside quoted prose? The trigger used to be the word
+# after a space anywhere on a command line, so litmus:expert-groundtruth-harness,
+# which grades the QUESTION 'how do I run podman rootless' inside a printf'd
+# single-quoted body, was ENV-FAILed whole before step 1 on every host whose
+# `podman ps` fails, without ever running podman (measured in a forge,
+# 2026-09-28). Prose lives in quotes, so single-quoted segments are dropped,
+# and double-quoted ones too unless they carry a command substitution
+# (`"$(podman ps)"` is a real call). Then podman must stand where a shell runs
+# a command: at the start, after ; & | ( { $( or a backtick, or after a wrapper
+# (then do else ! exec time env sudo nice nohup setsid xargs command, timeout
+# N), bare or by path. NOT SEEN, by name: podman inside a quoted `sh -c '...'`
+# string; such a test loses the early ENV-FAIL, not its verdict (its podman
+# step still fails, only slower). The corpus diff is in the 1464-v3xq commit.
+_lt_command_invokes_podman() {
+    local line cmd
+    while IFS= read -r line; do
+        cmd="${line#*command:}"
+        cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+        # The YAML scalar: drop its outer quotes, then its escapes.
+        if [[ "$cmd" == \"*\" ]]; then
+            cmd="${cmd#\"}"
+            cmd="${cmd%\"}"
+            cmd="${cmd//\\\"/\"}"
+        elif [[ "$cmd" == \'*\' ]]; then
+            cmd="${cmd#\'}"
+            cmd="${cmd%\'}"
+            cmd="${cmd//\'\'/\'}"
+        fi
+        # A script handed to a shell (`bash -lc '...'`, `sh -c "..."`) is
+        # COMMANDS, not prose: unquote it first, behind a `;` so its first
+        # word is in command position. Then drop the quoted prose.
+        cmd="$(LC_ALL=C sed -E \
+            -e "s/(-[a-zA-Z]*c[[:space:]]+)'([^']*)'/\\1;\\2;/g" \
+            -e 's/(-[a-zA-Z]*c[[:space:]]+)"([^"]*)"/\1;\2;/g' \
+            -e "s/'[^']*'/''/g" \
+            -e 's/"[^"$]*"/""/g' <<<"$cmd")"
+        # Command position; then any VAR=value words and wrappers (a wrapper
+        # may carry option, VAR=value and duration words: `systemd-run --user
+        # -p NoNewPrivileges=yes --setenv=X podman info`, `timeout 5 podman`);
+        # then podman, bare or by path, or scripts/common.sh's require_podman
+        # (which runs "$PODMAN" --version).
+        if LC_ALL=C grep -qE '(^|[;&|({`]|\$\(|(^|[[:space:]])(then|do|else|!))[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(exec|time|env|sudo|nice|nohup|setsid|xargs|timeout|systemd-run|stdbuf|ionice|chrt)([[:space:]]+(-[^[:space:]]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|[0-9]+[smhd]?))*)[[:space:]]+)*(([^[:space:];&|()]*/)?podman|require_podman)([[:space:];&|)]|$)' <<<"$cmd"; then
+            return 0
+        fi
+    done < <(LC_ALL=C grep -E '^[[:space:]]*command:' "$1" 2>/dev/null)
+    return 1
+}
+
 # _lt_gate_snapshot <dir>: copy every gate file into <dir> with an index.
 _lt_gate_snapshot() {
     local snap="$1" f i=0
@@ -1442,7 +1491,7 @@ run_litmus_test_file() {
     # report what it observed; it must not classify a failure it did not
     # diagnose. Pinned by litmus:litmus-podman-preflight-diagnosis-shape.
     if [ "$(uname -s)" = "Linux" ] \
-        && grep -qE '^[[:space:]]*command:.*(^|[ ;|&(])podman[[:space:]]' "$test_file" 2>/dev/null \
+        && _lt_command_invokes_podman "$test_file" \
         && ! grep -q '^backend: fake' "$test_file" 2>/dev/null \
         && command -v podman >/dev/null 2>&1; then
         local _preflight_err=""
