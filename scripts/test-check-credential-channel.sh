@@ -9,6 +9,9 @@
 # fixture seam (TILLANDSIAS_CRED_PROBE_CMD) so no network is touched; each
 # scenario runs in its own scratch repo.
 set -uo pipefail
+# Order 1456-ib6i: this fixture pins the KEYRING path; keep the host's real
+# host-push lane (if one is wired here) from answering instead.
+export TILLANDSIAS_CCC_NO_LANE=1
 
 REAL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$REAL_ROOT/scripts/check-credential-channel.sh"

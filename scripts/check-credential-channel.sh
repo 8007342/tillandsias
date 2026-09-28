@@ -1195,6 +1195,62 @@ credential_channel_verdict() {
 # `%s` for the token and single-quoted printf format: the token never appears
 # in the printed command, only `$(gh auth token)`, so the remedy text itself is
 # safe to paste into a bug report.
+# ORDER 1456-ib6i — THE HOST-PUSH LANE IS A PUSH PATH TOO. A Silverblue host that
+# has wired the §6 lane (skills/initialize-bare-metal-host) pushes through its
+# mirror with the operator's Vault-held token, not the gh keyring. Measured on
+# lenovinha 2026-09-28: the login keyring re-locked on its own while every push
+# landed through the lane ("Atomic push ... succeeded"), yet this guard answered
+# unknown:secret-service-unprobed and check-fleet-membership told the worker
+# loop to stop-and-report. So when the keyring path does not verify, the lane is
+# asked before the refusal stands.
+#
+# WIRED means, without minting anything or touching Vault: the lane's
+# known_hosts carries a @cert-authority line, this host's key and AppRole
+# document exist (so a cert is mintable), and the mirror's sshd answers with an
+# SSH banner on the published port. A lane that is not wired changes nothing:
+# the original refusal is returned unchanged. Never consulted in a forge, where
+# the lane does not exist.
+# The first 7 bytes the lane's sshd sends on 127.0.0.1:<port> ("SSH-2.0" when it
+# is up). Its own function so a fixture can stand in for a listener on a host
+# that has no socat or nc.
+_ccc_lane_banner() {
+  _ccc_timeout 3 bash -c "exec 3<>/dev/tcp/127.0.0.1/$1 && head -c 7 <&3" 2>/dev/null
+}
+
+_ccc_host_push_lane() {
+  [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] && return 1
+  # Fixtures that pin the KEYRING logic set this, so the real host's lane
+  # cannot turn the refusal they are testing into a pass.
+  [ "${TILLANDSIAS_CCC_NO_LANE:-0}" = "1" ] && return 1
+  local host dir kh alias port banner
+  host="${TILLANDSIAS_HOST_PUSH_HOST:-$(hostname -s 2>/dev/null)}"
+  [ -n "$host" ] || return 1
+  dir="${TILLANDSIAS_HOST_PUSH_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/tillandsias/host-push}"
+  kh="$dir/known_hosts"
+  [ -r "$kh" ] && [ -r "$dir/$host.ed25519" ] && [ -r "$dir/$host.approle.json" ] || return 1
+  alias="$(awk '/^@cert-authority/ { print $2; exit }' "$kh")"
+  [ -n "$alias" ] || return 1
+  port="${TILLANDSIAS_HOST_PUSH_PORT:-2223}"
+  banner="$(_ccc_lane_banner "$port")" || return 1
+  [ "$banner" = "SSH-2.0" ] || return 1
+  echo "ok:host-push-lane:$alias"
+  return 0
+}
+
+# The final verdict: the keyring path first, then the lane (1456-ib6i). On a
+# lane pass the keyring's own answer goes to stderr, so a reader sees both.
+_ccc_verdict_with_lane() {
+  local verdict rc lane
+  verdict="$(credential_channel_verdict)" && rc=0 || rc=$?
+  if [ "$rc" -ne 0 ] && lane="$(_ccc_host_push_lane)"; then
+    echo "[check-credential-channel] keyring path: $verdict — pushing through the host-push lane instead (1456-ib6i)" >&2
+    echo "$lane"
+    return 0
+  fi
+  echo "$verdict"
+  return "$rc"
+}
+
 _ccc_seed_remedy_line() {
     # QUOTED heredoc: every $( ) and every backslash-n must survive verbatim
     # into the operator's terminal. The `\n` are for THEIR printf, not ours —
@@ -1235,7 +1291,7 @@ case "${1:-}" in
     # for every git operation. A guard slow enough to notice is a guard that
     # gets bypassed, and a bypassed guard protects nothing — so this runs once,
     # at the one point where the remaining cost is still worth saving.
-    verdict="$(credential_channel_verdict)" && rc=0 || rc=$?
+    verdict="$(_ccc_verdict_with_lane)" && rc=0 || rc=$?
     if [ "$rc" -eq 0 ]; then
       _ccc_record_pass "$verdict"
       echo "$verdict"
@@ -1277,7 +1333,7 @@ case "${1:-}" in
 esac
 
 # Standalone mode: print the single verdict line and exit with its pass/fail code.
-verdict="$(credential_channel_verdict)" && rc=0 || rc=$?
+verdict="$(_ccc_verdict_with_lane)" && rc=0 || rc=$?
 [ "$rc" -eq 0 ] && _ccc_record_pass "$verdict"
 echo "$verdict"
 exit "$rc"
