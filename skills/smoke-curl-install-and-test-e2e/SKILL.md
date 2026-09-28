@@ -1135,11 +1135,22 @@ than 0 on a host with no provisioned enclave.
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
 _T0="$(timing_now_ms)"
 timing_begin smoke-forge-lane smoke
+# 1275-ngrc: the agent-death watch runs BESIDE the lane (see §4a, third state).
+rm -f target/smoke-e2e/04-agent-watch.txt
+scripts/smoke-agent-watch.sh watch --out target/smoke-e2e --grace 300 > target/smoke-e2e/04-agent-watch.log 2>&1 &
+_WATCH_PID=$!
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   env TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode --prompt "Use the /meta-orchestration skill" 2>&1 \
   | tee target/smoke-e2e/04-opencode.log
 LANE_RC=${PIPESTATUS[0]}; printf 'opencode_exit=%s\n' "$LANE_RC" | tee target/smoke-e2e/04-opencode-exit.txt
+kill "$_WATCH_PID" 2>/dev/null; wait "$_WATCH_PID" 2>/dev/null
+# The watch's verdict, when it issued one, IS the §4 verdict: the agent died and
+# the watch stopped the forge so the lane could return.
+if [ -f target/smoke-e2e/04-agent-watch.txt ]; then
+  printf 'lane_verdict=agent-dead-process-idling\n' | tee -a target/smoke-e2e/04-opencode-exit.txt
+  cat target/smoke-e2e/04-agent-watch.txt
+fi
 timing_commit smoke-forge-lane smoke "$_T0" "${LANE_RC:-1}"
 ```
 
@@ -1186,6 +1197,39 @@ journalctl --since '1 hour ago' | grep -iE 'oom-kill|Killed process'   # empty -
 Containers up **and** no kernel oom-kill means the supervisor was killed by the
 agent harness, not the product and not the OOM killer. The run is unfinished,
 not red.
+
+**THREE STATES, NOT TWO (1275-ngrc).** The checks above tell a killed
+supervisor from a live lane. They CANNOT tell a working agent from a dead one
+whose process idles: measured on pirria 2026-09-19, the agent died at
+17:19:38Z (`AI_RetryError: Failed after 3 attempts. Last error: Rate limit
+exceeded.`), opencode idled instead of exiting, and the lane ran 2h19m more
+with all six containers Up, no oom-kill, the supervisor alive, and even a
+60-second CPU-delta probe reading ALIVE (an idle loop plus an hourly
+`cleanup prune=7.days` timer burns about a second a minute).
+
+| state | containers | supervisor | agent log (`04-opencode-agent.log`) |
+|---|---|---|---|
+| supervisor killed | Up | gone | — (read the lane's own evidence) |
+| agent working | Up | alive | lines keep arriving |
+| **agent dead, process idling** | Up | alive | last non-housekeeping line is a terminal ERROR, nothing after it |
+
+The third state is what `scripts/smoke-agent-watch.sh` detects, from the
+AGENT's log and never from the clock: a terminal error (retries exhausted, a
+bad key, no such model) that stays the agent's last line for 300s. It then
+copies the log out of the forge to `target/smoke-e2e/04-opencode-agent.log`
+(the path inside the forge is `/home/forge/.local/share/opencode/log/`, which
+this runbook never named before), writes `04-agent-watch.txt` beginning
+`refused:smoke-forge-lane:agent-dead-process-idling` with the error line, and
+stops the forge container so the lane returns in minutes instead of never.
+**Do not replace this with a timeout.** A budget tuned to the ~70-minute
+working figure kills long healthy lanes and still waits 70 minutes to notice a
+death at minute 2; any agent activity after an error resets the watch, which
+is the negative control (`scripts/test-smoke-agent-watch.sh` arm 4).
+To classify a lane by hand: `scripts/smoke-agent-watch.sh classify
+target/smoke-e2e/04-opencode-agent.log`.
+LIMIT, by name: the watch finds the forge by `podman ps` on THIS host, so on
+macOS and Windows (forge inside the VM) it finds nothing and the lane behaves
+as before; the log path above is still where to look.
 
 **The memory floor this step needs.** The forge lane brings up six containers
 (vault, proxy, router, git, inference, forge). Measured on **pirria, 15 GiB
@@ -1448,6 +1492,11 @@ completed cycle** (order 1190-swen), which of these happened:
   finding, not a pass.
 - `supervisor lost` — see §4a; containers up and no kernel oom-kill means the
   run is unfinished, not red.
+- `agent dead, process idling` — `04-opencode-exit.txt` carries
+  `lane_verdict=agent-dead-process-idling`; report the error line from
+  `04-agent-watch.txt` and cite `04-opencode-agent.log`. The lane ended BECAUSE
+  the agent died, so it is a verdict on the agent run (red unless the error is
+  the release's declared known red), never "unfinished".
 
 **Never report the forge lane from `opencode_exit` alone.** Exit 0 and a
 guard-stop are the same number.
