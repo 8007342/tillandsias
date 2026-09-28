@@ -6,7 +6,7 @@
 #
 # Tools: project_structure, file_summary, search_code, project_list, project_info,
 #        project_type, project_metadata, find_files, grep_code, git_status,
-#        read_file, plan_query, project_answer
+#        read_file, plan_query, project_answer, run_command
 #
 # Run with the single argument `capabilities` to print this engine's embedded
 # capability manifest and exit (order 569 pattern; see the manifest block below
@@ -536,6 +536,7 @@ project-metadata
 project-structure
 project-type
 read-file
+run-command
 search-code
 sibling-projects
 synthesis-refusal-typed
@@ -778,7 +779,7 @@ while IFS= read -r line; do
             echo '{"jsonrpc":"2.0","id":'"$id_json"',"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"project-info","version":"1.0.0"}}}'
             ;;
         "tools/list")
-            echo '{"jsonrpc":"2.0","id":'"$id_json"',"result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files (glob supports path patterns)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}},{"name":"find_files","description":"Find files by glob pattern (recursive, path-aware)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern e.g. **/*.sh, plan/index.yaml"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"grep_code","description":"Search for an EXTENDED regex (grep -E: a|b alternation works) across every file under path (.git excluded) with path-aware glob. Results cap at 50 lines and say so; an invalid pattern or an include matching no file is reported as such, never as No matches found","inputSchema":{"type":"object","properties":{"pattern":{"type":"string","description":"Extended regex (grep -E)"},"include":{"type":"string","description":"File glob pattern (default: *)"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"git_status","description":"Show working tree status as structured JSON data","inputSchema":{"type":"object","properties":{}}},{"name":"read_file","description":"Read a file with offset and limit support","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"offset":{"type":"number","description":"Line number to start from (1-indexed, default: 0 for beginning)"},"limit":{"type":"number","description":"Number of lines to read (default: all)"}},"required":["path"]}},{"name":"plan_query","description":"Query plan/index.yaml for matching work packets by status, role, or capability tags","inputSchema":{"type":"object","properties":{"status":{"type":"string","description":"Filter by status (ready, pending, in_progress, blocked, completed, etc.)"},"pickup_role":{"type":"string","description":"Filter by pickup_role substring"},"capability_tags":{"type":"array","items":{"type":"string"},"description":"Filter by capability tags (all must match)"},"limit":{"type":"number","description":"Max results (default: 20)"}}}},{"name":"project_answer","description":"Query project knowledge, architecture, or status with cited response envelope","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"Question about project structure, build, status, or plan"}},"required":["question"]}},{"name":"project_list","description":"Discover available projects in ~/src/ (git repos)","inputSchema":{"type":"object","properties":{}}},{"name":"sibling_projects","description":"Discover sibling projects in parent directory","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_info","description":"Get detailed info about a project at a path","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_type","description":"Detect project type from marker files","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_metadata","description":"Get structured metadata about a project","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."},"name":{"type":"string"}},"required":[]}}]}}'
+            echo '{"jsonrpc":"2.0","id":'"$id_json"',"result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files (glob supports path patterns)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}},{"name":"find_files","description":"Find files by glob pattern (recursive, path-aware)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern e.g. **/*.sh, plan/index.yaml"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"grep_code","description":"Search for an EXTENDED regex (grep -E: a|b alternation works) across every file under path (.git excluded) with path-aware glob. Results cap at 50 lines and say so; an invalid pattern or an include matching no file is reported as such, never as No matches found","inputSchema":{"type":"object","properties":{"pattern":{"type":"string","description":"Extended regex (grep -E)"},"include":{"type":"string","description":"File glob pattern (default: *)"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"git_status","description":"Show working tree status as structured JSON data","inputSchema":{"type":"object","properties":{}}},{"name":"read_file","description":"Read a file with offset and limit support","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"offset":{"type":"number","description":"Line number to start from (1-indexed, default: 0 for beginning)"},"limit":{"type":"number","description":"Number of lines to read (default: all)"}},"required":["path"]}},{"name":"plan_query","description":"Query plan/index.yaml for matching work packets by status, role, or capability tags","inputSchema":{"type":"object","properties":{"status":{"type":"string","description":"Filter by status (ready, pending, in_progress, blocked, completed, etc.)"},"pickup_role":{"type":"string","description":"Filter by pickup_role substring"},"capability_tags":{"type":"array","items":{"type":"string"},"description":"Filter by capability tags (all must match)"},"limit":{"type":"number","description":"Max results (default: 20)"}}}},{"name":"project_answer","description":"Query project knowledge, architecture, or status with cited response envelope","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"Question about project structure, build, status, or plan"}},"required":["question"]}},{"name":"project_list","description":"Discover available projects in ~/src/ (git repos)","inputSchema":{"type":"object","properties":{}}},{"name":"sibling_projects","description":"Discover sibling projects in parent directory","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_info","description":"Get detailed info about a project at a path","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_type","description":"Detect project type from marker files","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_metadata","description":"Get structured metadata about a project","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."},"name":{"type":"string"}},"required":[]}},{"name":"run_command","description":"Run ONE program through the Tillandsias runtime (tillandsias-plan run --json): argv is an array, never a shell string, and the command policy decides before anything spawns. Returns the run verb JSON verbatim (run_id, status, code, signal, ok, stdout, stderr, truncated, wall_ms, argv, policy); a policy refusal is a result with status policy_denied or policy_consent plus why and remedy, not an error. The default deadline is 300000 ms: pass timeout_ms for a long run.","inputSchema":{"type":"object","properties":{"argv":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Program and arguments, e.g. [\"git\",\"status\",\"--porcelain\"]"},"cwd":{"type":"string","description":"Working directory (default: the project root)"},"env":{"type":"object","additionalProperties":{"type":"string"},"description":"Added on top of the runtime base environment"},"timeout_ms":{"type":"number","description":"Deadline in ms (default 300000; 0 = none)"},"stdin":{"type":"string","description":"Bytes fed to the child on stdin"},"capture_bytes":{"type":"number","description":"Per-stream capture cap in bytes"}},"required":["argv"]}}]}}'
             ;;
         "tools/call")
             tool=$(echo "$line" | jq -r '.params.name // empty')
@@ -1299,6 +1300,69 @@ ${preview}"
                                     confidence: (if ($readme == "" or $desc == "") then "unsupported" else "exact" end),
                                     citation_root: $root
                                 }')
+                        fi
+                    fi
+                    ;;
+
+                "run_command")
+                    # ORDER 1443-r4cj. The MCP door onto `tillandsias-plan run`
+                    # (1443-8pur). THE ARGUMENTS NEVER BECOME A STRING: argv
+                    # reaches the verb as JSON on stdin (--argv-json -), every
+                    # other parameter is one element of the verb's own argv,
+                    # and nothing on this path is evaluated or given to a
+                    # shell. The verb's JSON is the result verbatim, so a
+                    # policy refusal is status=policy_denied|policy_consent in
+                    # a RESULT; only a call the verb could not answer (bad
+                    # params, no binary, no result object) is a JSON-RPC error.
+                    # Told apart by the object's status token, never by the
+                    # verb's exit code (1 and 4 are refusals it DID answer).
+                    _rc_in=""
+                    if ! jq -e '(.argv | type == "array" and length > 0 and all(type == "string"))
+                        and ((.cwd // "") | type == "string")
+                        and ((.stdin // "") | type == "string")
+                        and ((.env // {}) | type == "object" and all(.[]; type == "string")
+                             and all(keys[]; test("^[A-Za-z_][A-Za-z0-9_]*$")))
+                        and ((.timeout_ms // 0) | type == "number" and . >= 0 and . == floor)
+                        and ((.capture_bytes // 1) | type == "number" and . >= 1 and . == floor)' \
+                        <<<"$args" >/dev/null 2>&1; then
+                        error_code=-32602
+                        error_msg="Invalid params for tool 'run_command': argv must be a non-empty array of strings; cwd and stdin strings; env an object of string values keyed [A-Za-z_][A-Za-z0-9_]*; timeout_ms an integer >= 0; capture_bytes an integer >= 1"
+                    else
+                        _pbin="$(resolve_plan_bin)"
+                        if [ -z "$_pbin" ]; then
+                            error_code=-32603
+                            error_msg="run_command: no runnable tillandsias-plan binary on this server"
+                        else
+                            _rargs=(run --json --caller mcp)
+                            _v=$(jq -r '.cwd // empty' <<<"$args")
+                            [ -n "$_v" ] && _rargs+=(--cwd "$_v")
+                            _v=$(jq -r '.timeout_ms // empty' <<<"$args")
+                            [ -n "$_v" ] && _rargs+=(--timeout-ms "$_v")
+                            _v=$(jq -r '.capture_bytes // empty' <<<"$args")
+                            [ -n "$_v" ] && _rargs+=(--capture-bytes "$_v")
+                            # NUL-separated so a value may hold a newline.
+                            while IFS= read -r -d '' _kv; do
+                                _rargs+=(--env "$_kv")
+                            done < <(jq -j '(.env // {}) | to_entries[] | "\(.key)=\(.value)\u0000"' <<<"$args")
+                            # The verb's stdin carries argv, so the child's
+                            # stdin travels as a file.
+                            if jq -e 'has("stdin")' <<<"$args" >/dev/null 2>&1; then
+                                _rc_in=$(mktemp "${TMPDIR:-/tmp}/run-command-stdin.XXXXXX")
+                                jq -j '.stdin' <<<"$args" >"$_rc_in"
+                                _rargs+=(--stdin-file "$_rc_in")
+                            fi
+                            _rargs+=(--argv-json -)
+                            _rc_err=$(mktemp "${TMPDIR:-/tmp}/run-command-err.XXXXXX")
+                            _rc_code=0
+                            result=$(jq -c '.argv' <<<"$args" | "$_pbin" "${_rargs[@]}" 2>"$_rc_err") || _rc_code=$?
+                            if [ -z "$result" ] ||
+                                ! jq -e 'type == "object" and (.status | type == "string")' <<<"$result" >/dev/null 2>&1; then
+                                error_code=-32603
+                                error_msg="run_command: the run verb returned no result object (exit $_rc_code): $(head -n 2 "$_rc_err" | head -c 1000)"
+                                result=""
+                            fi
+                            rm -f "$_rc_err"
+                            [ -z "$_rc_in" ] || rm -f "$_rc_in"
                         fi
                     fi
                     ;;
