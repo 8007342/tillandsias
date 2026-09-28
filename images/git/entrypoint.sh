@@ -367,6 +367,23 @@ run_sync_state() {
     return 0
 }
 
+# @trace spec:git-mirror-service, spec:branch-discipline
+# Order 1443-uit6: publish the branch discipline this mirror enforces as
+# refs/tillandsias/discipline/<level>/<enforcement>/<derived>/<digest>/<epoch>,
+# on the same lifecycle as the auth verdict and the sync state: once after the
+# startup sweep and on every reconcile tick, right after the fetch that may
+# have brought in a changed seed. A missing publisher is announced.
+PUBLISH_DISCIPLINE="${PUBLISH_DISCIPLINE:-/usr/local/share/git-service/publish-discipline}"
+run_publish_discipline() {
+    if [ ! -x "$PUBLISH_DISCIPLINE" ]; then
+        retry_msg "[git-mirror] discipline NOT published: $PUBLISH_DISCIPLINE missing"
+        return 0
+    fi
+    OUT="$("$PUBLISH_DISCIPLINE" "$1" 2>&1)" || true
+    [ -n "$OUT" ] && retry_msg "[git-mirror] discipline: $OUT"
+    return 0
+}
+
 start_mirror_reconciler() {
     if [ ! -x "$RECONCILE_HEADS" ]; then
         retry_msg "[git-mirror] periodic reconciler NOT started: $RECONCILE_HEADS missing"
@@ -385,6 +402,7 @@ start_mirror_reconciler() {
                 # And the sync state, immediately after the reconcile that
                 # refreshed the tracking refs it reads (order 1350-ku7v).
                 run_sync_state "$m"
+                run_publish_discipline "$m"
             done
         done
     ) &
@@ -702,6 +720,8 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
     # publish that runs on a LOCAL-ONLY mirror, where the honest answer is
     # heads-unknown/no-tracking-data rather than silence.
     run_sync_state "$mirror"
+    # Order 1443-uit6: and the first discipline ref, for the same reason.
+    run_publish_discipline "$mirror"
 done
 
 echo "$(date -Is) [git-service] startup sweep complete" >> "$SLOG"

@@ -1,0 +1,16 @@
+# Gate step 1443-uit6 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. The enclave git mirror enforces the project's seeded branch
+# discipline (.tillandsias/branch-discipline.yaml) at pre-receive, before the
+# relay, and publishes it as exactly one
+# refs/tillandsias/discipline/<level>/<enforcement>/<derived>/<digest>/<epoch>.
+# 1443-z3vb's land tool compares that full 64-hex digest with the checkout's
+# seed, so the ref shape is an interface. Hermetic: a scratch bare mirror with
+# a stub relay; nothing touches this checkout or GitHub. Needs ruby, which the
+# mirror image ships; it skips by name without it.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the git mirror enforces and publishes the seeded branch discipline (1443-uit6)"
+STEP_SCRIPT="scripts/test-mirror-discipline.sh"
+STEP_ERROR="the git mirror no longer enforces or publishes the seeded branch discipline as specified (1443-uit6); see which arm failed above"
+STEP_OK="mirror enforces the seeded discipline and publishes one discipline ref"

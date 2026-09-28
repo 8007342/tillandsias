@@ -22,6 +22,16 @@
 #   5 RELAY        (negative control) a fast-forward to the integration branch
 #                  still relays exactly as before
 #   6 UNREADABLE   a seed that is not YAML applies nothing and says so
+#   7 PUBLISH      publish-discipline.sh leaves exactly ONE
+#                  refs/tillandsias/discipline/2/enforced/unknown/<sha256>/<epoch>;
+#                  its 64-hex digest is the seed's sha256, and the blob it
+#                  points at IS the seed bytes
+#   8 REPUBLISH    after the seed changes on the integration branch, the next
+#                  tick replaces the ref: still exactly one, new digest
+#   9 NO SEED      (floor) a project with no seed publishes 0/advised/.../none,
+#                  with NO 64-hex segment anywhere (never sha256 of "")
+#  10 NEIGHBOURS   (negative control) the publisher leaves other
+#                  refs/tillandsias/* namespaces untouched
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/images/git/pre-receive-hook.sh"
@@ -138,6 +148,60 @@ commit "$d" c6; push "$d" main
 if [ "$rc" -eq 0 ] && grep -q 'present but unreadable' <<<"$out"; then
     ok "ARM6 an unparseable seed is reported and applies nothing"
 else bad "ARM6 rc=$rc out='$(tr '\n' '|' <<<"$out")'"; fi
+
+PUB="$ROOT/images/git/publish-discipline.sh"
+disc_refs() { git -C "$1/mirror.git" for-each-ref --format='%(refname)' refs/tillandsias/discipline; }
+sha_of() { ruby -rdigest -e 'print Digest::SHA256.hexdigest(File.binread(ARGV[0]))' "$1"; }
+
+# ── ARM 7 ────────────────────────────────────────────────────────────────
+d="$(new_mirror_seeded a7 "$(seed enforced warn)")"
+sh "$PUB" "$d/mirror.git" >/dev/null 2>&1
+refs="$(disc_refs "$d")"; n="$(grep -c . <<<"$refs")"
+want="$(sha_of "$d/work/.tillandsias/branch-discipline.yaml")"
+bytes_ok=no
+git -C "$d/mirror.git" cat-file -p "$refs" > "$tmp/a7.blob" 2>/dev/null \
+    && cmp -s "$tmp/a7.blob" "$d/work/.tillandsias/branch-discipline.yaml" && bytes_ok=yes
+case "$refs" in
+    "refs/tillandsias/discipline/2/enforced/unknown/$want/"[0-9]*)
+        [ "$n" -eq 1 ] && [ "$bytes_ok" = yes ] \
+            && ok "ARM7 exactly one ref, level 2, strictest enforcement, full sha256, blob = seed bytes" \
+            || bad "ARM7 n=$n bytes_ok=$bytes_ok" ;;
+    *) bad "ARM7 published '$(tr '\n' ' ' <<<"$refs")', want digest $want" ;;
+esac
+
+# ── ARM 8 ────────────────────────────────────────────────────────────────
+printf '%s\n' "$(seed enforced enforced)" > "$d/work/.tillandsias/branch-discipline.yaml"
+git -C "$d/work" commit -qam "raise grammar"
+git -C "$d/work" push -q --no-verify origin HEAD:refs/heads/linux-next 2>/dev/null
+sleep 1
+sh "$PUB" "$d/mirror.git" >/dev/null 2>&1
+refs2="$(disc_refs "$d")"; n2="$(grep -c . <<<"$refs2")"
+want2="$(sha_of "$d/work/.tillandsias/branch-discipline.yaml")"
+case "$refs2" in
+    "refs/tillandsias/discipline/2/enforced/unknown/$want2/"[0-9]*)
+        [ "$n2" -eq 1 ] && [ "$want2" != "$want" ] \
+            && ok "ARM8 a changed seed on the integration branch replaces the ref: one ref, new digest" \
+            || bad "ARM8 n=$n2 digest unchanged" ;;
+    *) bad "ARM8 published '$(tr '\n' ' ' <<<"$refs2")', want digest $want2" ;;
+esac
+
+# ── ARM 9 ────────────────────────────────────────────────────────────────
+d="$(new_mirror_seeded a9 "")"
+sh "$PUB" "$d/mirror.git" >/dev/null 2>&1
+refs="$(disc_refs "$d")"
+if [ "$(grep -c . <<<"$refs")" -eq 1 ] && grep -qE '^refs/tillandsias/discipline/0/advised/unknown/none/[0-9]+$' <<<"$refs" \
+   && ! grep -qE '/[0-9a-f]{64}(/|$)' <<<"$refs"; then
+    ok "ARM9 no seed publishes level 0 advised with digest none and no 64-hex segment"
+else bad "ARM9 published '$(tr '\n' ' ' <<<"$refs")'"; fi
+
+# ── ARM 10 ───────────────────────────────────────────────────────────────
+blob="$(git -C "$d/mirror.git" hash-object -w --stdin <<<"x")"
+git -C "$d/mirror.git" update-ref refs/tillandsias/upstream-auth/authorized/1 "$blob"
+sh "$PUB" "$d/mirror.git" >/dev/null 2>&1
+if git -C "$d/mirror.git" rev-parse --verify --quiet refs/tillandsias/upstream-auth/authorized/1 >/dev/null \
+   && [ "$(disc_refs "$d" | grep -c .)" -eq 1 ]; then
+    ok "ARM10 the publisher leaves refs/tillandsias/upstream-auth/* untouched"
+else bad "ARM10 a neighbour namespace was touched"; fi
 
 [ "$FAIL" -eq 0 ] && { echo "PASS: mirror-discipline (1443-uit6)"; exit 0; }
 echo "FAILED: mirror-discipline (1443-uit6)"; exit 1

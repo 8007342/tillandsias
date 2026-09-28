@@ -218,7 +218,7 @@ What exists (read before designing; none of it is re-filed):
 12. **The mirror answers with a published ref, because a dry-run cannot
     be answered.** `git push --dry-run` sends no ref commands, so the
     server's pre-receive never runs; the operator's "dry-run push" is
-    realised as `refs/tillandsias/discipline/<level>/<enforcement>/<derived>/<sha256[:12]>/<epoch>`
+    realised as `refs/tillandsias/discipline/<level>/<enforcement>/<derived>/<sha256>/<epoch>`
     pointing at the seed BLOB, kept single by `publish-discipline.sh` on
     the same tick as `run_auth_probe`, read by `ls-remote` (level,
     enforcement, derived level, digest — "the level of branch discipline

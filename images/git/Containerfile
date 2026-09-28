@@ -101,10 +101,13 @@ COPY probe-upstream-auth.sh /usr/local/share/git-service/probe-upstream-auth
 # probe-upstream-auth because it answers the second half of the same question
 # and shares that probe's ref grammar exactly.
 COPY publish-sync-state.sh /usr/local/share/git-service/publish-sync-state
+# Order 1443-uit6: publishes refs/tillandsias/discipline/* on the same tick.
+COPY publish-discipline.sh /usr/local/share/git-service/publish-discipline
 RUN chmod +x /usr/local/share/git-service/ensure-mirror-head \
     /usr/local/share/git-service/reconcile-exported-heads \
     /usr/local/share/git-service/probe-upstream-auth \
-    /usr/local/share/git-service/publish-sync-state
+    /usr/local/share/git-service/publish-sync-state \
+    /usr/local/share/git-service/publish-discipline
 
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli
