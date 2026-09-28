@@ -26,6 +26,8 @@
 #
 # Usage:
 #   scripts/land-on-platform-branch.sh [branch] [max-attempts]
+#   (no branch: the integration branch the seed names for this platform, or
+#   the default branch in a project with no seed — never the current work ref)
 #   scripts/land-on-platform-branch.sh linux-next 4
 #
 # Exit: 0 landed (verified against origin) | 1 dirty tree | 2 rebase conflict
@@ -35,9 +37,13 @@
 #         no free slot before the next occupied prefix — renumber by hand)
 #       7 push emitted nothing and hit its bound (1131-iax2: blocked credential
 #         helper — the push hangs forever and the log stays zero-byte)
+#       9 the discipline probe refused the target before any fetch or gate
+#         (1443-z3vb: refused:land:discipline:<reason>, the seed's remedy)
 set -uo pipefail
 
-BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD)}"
+# The target is decided by the discipline probe below (order 1443-z3vb): the
+# named branch, else the platform's integration branch from the seed.
+BRANCH="${1:-}"
 TRUNK="${TILLANDSIAS_TRUNK_BRANCH:-linux-next}"
 ATTEMPTS="${2:-4}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -54,6 +60,121 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
     _afford "the working tree or index has uncommitted changes, and landing gates and pushes a committed tree only" \
         "commit or stash them (git status lists them), or hand an ungated tree off with scripts/salvage-dirty-worktree.sh <slug>; then re-run"
     exit 1
+fi
+
+# ── ORDER 1443-z3vb: THE DISCIPLINE PROBE, before any fetch or gate ─────────
+# The tool asks the runtime WHERE to land instead of learning it from the
+# remote's GH006 after a fifteen-minute gate, and a host parked on a work ref
+# no longer lands that work ref as if it were trunk. Local verbs first
+# (seconds, no network):
+#   1. the target: the named branch, else `discipline target` for this
+#      platform — the seed's integration branch, or the default branch in a
+#      project with no seed (operator ruling 6: per project, from the seed
+#      only; level 0 lands on its default branch);
+#   2. `discipline check-ref` on it, which reads the EFFECTIVE level (ruling
+#      4: a seed ahead of reality WARNS, it does not refuse). A target outside
+#      the seed's grammar is refused here even where a plain push only warns:
+#      this tool lands on integration, default, work and salvage refs only.
+# Then ONE bounded ls-remote compares the mirror's published seed digest
+# (refs/tillandsias/discipline/…, 1443-uit6) to the checkout's. Refusals
+# exit 9 and name the skill (ruling 7). With no plan binary that has the
+# discipline verb the probe says so and the tool behaves as it did before:
+# the mirror and the remote still enforce.
+# New tokens only; every existing verdict line is unchanged.
+_disc_refuse() { # _disc_refuse <reason> <why> <remedy>
+    echo "refused:land:discipline:$1" >&2
+    _afford "$2" "$3; use /project-discipline for instructions"
+    exit 9
+}
+_disc_plan=""
+if [ -f "$ROOT/scripts/plan-binary-probe.sh" ]; then
+    _disc_plan="$(. "$ROOT/scripts/plan-binary-probe.sh" && resolve_plan_binary 2>/dev/null)" || _disc_plan=""
+    case "$_disc_plan" in "" | /*) ;; *) _disc_plan="$ROOT/${_disc_plan#./}" ;; esac
+fi
+[ -n "$_disc_plan" ] || _disc_plan="$(command -v tillandsias-plan 2>/dev/null || true)"
+_disc_caps=""
+[ -n "$_disc_plan" ] && _disc_caps="$("$_disc_plan" capabilities 2>/dev/null)"
+if ! grep -qx discipline <<<"$_disc_caps"; then
+    [ -n "$BRANCH" ] || BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+    echo "warn:land:discipline:probe-unavailable — no tillandsias-plan with the discipline verb; landing on $BRANCH unprobed (the mirror and the remote still enforce)" >&2
+else
+    case "${TILLANDSIAS_HOST_KIND:-}" in
+        forge) _disc_platform=forge ;;
+        *)
+            case "$(uname -s)" in
+                Darwin) _disc_platform=macos ;;
+                MINGW* | MSYS* | CYGWIN*) _disc_platform=windows ;;
+                *) _disc_platform=linux ;;
+            esac
+            ;;
+    esac
+    _disc_jget() { "$_disc_plan" json get -r "$1" 2>/dev/null; }
+    _disc_show="$("$_disc_plan" discipline show --json --root "$ROOT" 2>/dev/null)"
+    _disc_level="$(_disc_jget '.level' <<<"$_disc_show")"
+    _disc_digest="$(_disc_jget '.digest // empty' <<<"$_disc_show")"
+    case "$(_disc_jget '.source' <<<"$_disc_show")" in
+        seed) _disc_from=seed ;;
+        *) _disc_from=default ;;
+    esac
+    if [ -z "$BRANCH" ]; then
+        _disc_t="$("$_disc_plan" discipline target --platform "$_disc_platform" --root "$ROOT" 2>/dev/null)"
+        BRANCH="${_disc_t%% *}"
+        [ -n "$BRANCH" ] || _disc_refuse no-target \
+            "the discipline verb named no landing branch for platform $_disc_platform" \
+            "name the branch: scripts/land-on-platform-branch.sh <branch>"
+    fi
+    echo "land:target:$BRANCH:from=$_disc_from:level=${_disc_level:-0}"
+
+    _disc_out="$("$_disc_plan" discipline check-ref "$BRANCH" --root "$ROOT" 2>&1)"
+    _disc_verdict="$(head -n 1 <<<"$_disc_out")"
+    _disc_why="$(sed -n 's/^why: //p' <<<"$_disc_out")"
+    _disc_remedy="$(sed -n 's/^remedy: //p' <<<"$_disc_out")"
+    case "$_disc_verdict" in
+        ok:discipline:*) ;;
+        warn:discipline:ref-outside-grammar*)
+            _disc_refuse ref-outside-grammar "$_disc_why" \
+                "land onto your platform's integration branch (run with no branch to let the seed name it), or push a work ref with plain git push"
+            ;;
+        # check-ref reads the EFFECTIVE level itself (seed checked against
+        # `discipline derive`): a seed ahead of reality answers warn:…:
+        # seed-ahead-of-reality, and its remedy names the missing qualifier.
+        warn:discipline:*:seed-ahead-of-reality)
+            echo "land:discipline:seed-ahead-of-reality — $_disc_verdict; proceeding with a warning" >&2
+            echo "  missing: $_disc_remedy" >&2
+            ;;
+        warn:discipline:*) echo "$_disc_verdict" >&2 ;;
+        refused:discipline:*)
+            _disc_reason="${_disc_verdict#refused:discipline:}"
+            _disc_refuse "${_disc_reason%%:*}" "$_disc_why" "$_disc_remedy"
+            ;;
+        *)
+            echo "warn:land:discipline:probe-unreadable — check-ref answered [$_disc_verdict]; landing on $BRANCH unprobed" >&2
+            ;;
+    esac
+
+    # The mirror's published seed digest (1443-uit6). A digest the checkout
+    # does not carry is drift, unless THIS checkout is the one changing the
+    # seed (a commit ahead of origin/$BRANCH touches it).
+    _disc_bound=""
+    command -v timeout >/dev/null 2>&1 && _disc_bound="timeout 20"
+    _disc_ls_rc=0
+    _disc_ls="$(GIT_TERMINAL_PROMPT=0 $_disc_bound git ls-remote origin 'refs/tillandsias/discipline/*' 2>/dev/null)" || _disc_ls_rc=$?
+    if [ "$_disc_ls_rc" -ne 0 ]; then
+        echo "land:discipline:mirror-unreachable — ls-remote rc=$_disc_ls_rc; continuing from the seed" >&2
+    elif [ -z "$_disc_ls" ]; then
+        echo "land:discipline:mirror-silent — origin publishes no discipline ref; continuing from the seed" >&2
+    else
+        _disc_mdigest="$(cut -f2 <<<"$_disc_ls" | tr '/' '\n' | grep -E '^[0-9a-f]{64}$' | head -n 1)"
+        if [ "$_disc_mdigest" = "$_disc_digest" ]; then
+            echo "land:discipline:mirror-agrees:${_disc_digest:-no-seed}"
+        elif [ -n "$(git log --format=%h "origin/$BRANCH..HEAD" -- .tillandsias/branch-discipline.yaml 2>/dev/null)" ]; then
+            echo "land:discipline:seed-change-in-flight:mirror=${_disc_mdigest:-none}:checkout=${_disc_digest:-none}" >&2
+        else
+            _disc_refuse "seed-drift:mirror=${_disc_mdigest:-none}:checkout=${_disc_digest:-none}" \
+                "the mirror publishes a different branch-discipline seed than this checkout carries, so the probe above read a stale seed" \
+                "git fetch origin $BRANCH && git merge origin/$BRANCH (it brings the published seed), then re-run"
+        fi
+    fi
 fi
 
 for attempt in $(seq 1 "$ATTEMPTS"); do
