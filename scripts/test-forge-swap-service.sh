@@ -158,9 +158,16 @@ fi
 if [ ! -x "$BIN" ]; then
     skp "no tillandsias binary at $BIN: the --swap arms did not run (./build.sh builds it)"
 else
+    # The binary's VERDICTS are on stdout; its host warnings are on stderr. In a
+    # forge it warns on every call that /run/user/1000 cannot be set to 0700,
+    # which a `2>&1` capture folded into the verdict and 5 arms failed on it
+    # (macuahuitl-forge, 2026-09-28). Read stdout only, keep stderr for the
+    # failure message, and give the binary a runtime dir the test owns.
+    mkdir -p -m 700 "$W/xdg"
+    swapbin() { XDG_RUNTIME_DIR="$W/xdg" "$BIN" "$@" 2>>"$W/swap-stderr.log"; }
     B="$W/bin-root"; S="$W/script-root"
     bash scripts/install-forge-swap-service.sh --prefix "$S" --user tester >/dev/null
-    o8="$("$BIN" --swap on --prefix "$B" --user tester 2>&1)"; r8=$?
+    o8="$(swapbin --swap on --prefix "$B" --user tester)"; r8=$?
     # The units name the helper by its absolute path, which is inside each
     # scratch root: normalise the root before comparing, and compare modes too.
     tree() { (cd "$1" && find . -type f | sort | while read -r f; do
@@ -175,13 +182,13 @@ else
         ok "8 --swap on writes byte-identical files, with identical modes, to the installer's"
     else bad "8 the embedded assets differ from scripts/forge-swap/: $(diff <(echo "$ts") <(echo "$tb") | head -3)"; fi
 
-    o9="$("$BIN" --swap on --prefix "$B" --user tester 2>&1)"; t9="$(tree "$B")"
+    o9="$(swapbin --swap on --prefix "$B" --user tester)"; t9="$(tree "$B")"
     case "$o9" in ok:swap-on:*) v9=1 ;; *) v9=0 ;; esac
     [ "$v9" = 1 ] && [ "$o9" = "$o8" ] && [ "$t9" = "$tb" ] && ok "9 a second --swap on changes nothing" || bad "9 second on: out=[$o9]"
 
-    st_on="$("$BIN" --swap status --prefix "$B" 2>&1)"
+    st_on="$(swapbin --swap status --prefix "$B")"
     mkdir -p "$B/var/swap"; : > "$B/var/swap/tillandsias-launch-1"; : > "$B/var/swap/forge-live.swap"
-    o10="$("$BIN" --swap off --prefix "$B" 2>&1)"; r10=$?
+    o10="$(swapbin --swap off --prefix "$B")"; r10=$?
     left=""
     for p in usr/local/libexec/tillandsias-swap etc/systemd/system/tillandsias-swap@.service \
              etc/systemd/system/tillandsias-swap-gc.service etc/systemd/system/tillandsias-swap-gc.timer \
@@ -196,7 +203,7 @@ else
     # 11: the removal is COMPLETE (the list --uninstall reuses, 1437-evzi):
     # after on + off, the only file left in the root is the one we planted.
     rest="$(cd "$B" && find . -type f | sort)"
-    st_off="$("$BIN" --swap status --prefix "$B" 2>&1)"
+    st_off="$(swapbin --swap status --prefix "$B")"
     if [ "$rest" = "./var/swap/forge-live.swap" ] && [ "$st_on" = "ok:swap-status:installed=yes:active=0" ] \
        && [ "$st_off" = "ok:swap-status:installed=no:active=0" ]; then
         ok "11 the removal list covers every file --swap on installs (status yes -> no)"
@@ -206,7 +213,7 @@ else
     # removes nothing else.
     N="$W/empty-root"; mkdir -p "$N/etc/polkit-1/rules.d" "$N/var/swap"
     echo keep > "$N/etc/polkit-1/rules.d/10-other.rules"; echo keep > "$N/var/swap/other.swap"
-    o12="$("$BIN" --swap off --prefix "$N" 2>&1)"; r12=$?
+    o12="$(swapbin --swap off --prefix "$N")"; r12=$?
     if [ "$r12" = 0 ] && [ "$o12" = "ok:swap-off:prefix=$N:removed=0:swapfiles=0" ] \
        && [ -f "$N/etc/polkit-1/rules.d/10-other.rules" ] && [ -f "$N/var/swap/other.swap" ]; then
         ok "12 negative control: off with nothing installed exits 0 and removes nothing"
