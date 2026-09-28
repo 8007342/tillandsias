@@ -26,6 +26,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT"
+
+# 1238-b825: the label this build stamps on --version and the tarball name
+# (VERSION itself is never written; see scripts/lib-build-version.sh).
+# --print-version answers without building, on any host.
+. "$SCRIPT_DIR/lib-build-version.sh"
+if [[ "${1:-}" == "--print-version" ]]; then
+    build_version_label "$(tr -d '[:space:]' < VERSION)"
+    exit 0
+fi
 if command -v brew >/dev/null 2>&1 && brew --prefix rustup >/dev/null 2>&1; then
     PATH="$(brew --prefix rustup)/bin:$PATH"
 fi
@@ -53,8 +62,11 @@ command -v cargo-zigbuild >/dev/null || die "cargo-zigbuild not in PATH (install
 [[ -f VERSION ]] || die "VERSION file not found at $ROOT/VERSION"
 VERSION="$(cat VERSION | tr -d '[:space:]')"
 VERSION_SHORT="$(echo "$VERSION" | cut -d. -f1-2)"
+# The operator-facing label; Info.plist keeps VERSION (Apple's numeric form).
+BUILD_LABEL="$(build_version_label "$VERSION")"
+export TILLANDSIAS_BUILD_VERSION_LABEL="$BUILD_LABEL"
 MIN_MACOS="14.0"
-say "version: $VERSION  short: $VERSION_SHORT  min_macos: $MIN_MACOS"
+say "version: $VERSION  label: $BUILD_LABEL  short: $VERSION_SHORT  min_macos: $MIN_MACOS"
 
 # ── 3b. Stage the router sidecar ────────────────────────────────────────
 # MUST run before the first cargo invocation. tillandsias-headless/build.rs
@@ -279,7 +291,7 @@ elif [[ "$SIGN_IDENTITY" != "-" ]]; then
 fi
 
 # ── 7. Tarball + SHA256 ─────────────────────────────────────────────────
-TAR_NAME="tillandsias-tray-${VERSION}-macos-arm64.tar.gz"
+TAR_NAME="tillandsias-tray-${BUILD_LABEL}-macos-arm64.tar.gz"
 TAR_PATH="$DIST/$TAR_NAME"
 ( cd "$DIST" && tar -czf "$TAR_NAME" Tillandsias.app )
 
