@@ -2036,12 +2036,12 @@ fn should_poll_vm_status(push_stream_healthy: bool) -> bool {
 /// wearing the name of one. It was kept until this commit deliberately — the
 /// pin and the fallback die WITH the variant, not before it, or the wire
 /// loses its guard while a consumer still exists.
+///
+/// ORDER 1439-p853: this is the BASE list. The listener subscribes to it plus
+/// `Progress` only when the guest advertises progress.push@v1, via
+/// `provision_console::push_subscribe_topics`; the list itself lives there.
 fn vm_status_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
-    vec![
-        tillandsias_control_wire::SubscriptionTopic::VmStatus,
-        tillandsias_control_wire::SubscriptionTopic::LoginState,
-        tillandsias_control_wire::SubscriptionTopic::CloudProjects,
-    ]
+    crate::provision_console::base_push_topics()
 }
 
 /// SC-07 extension (order 154 slice 2): the slow-cadence
@@ -2242,7 +2242,7 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         // decode the topic list (postcard unknown-discriminant) may tear the
         // connection down rather than reply, so the fallback list must not
         // reuse the first stream.
-        let try_subscribe = |topics: Vec<tillandsias_control_wire::SubscriptionTopic>| async {
+        let try_subscribe = || async {
             let stream = crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT)
                 .await
                 .map_err(|e| format!("connect: {e}"))?;
@@ -2257,6 +2257,10 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
                 .handshake()
                 .await
                 .map_err(|e| format!("handshake: {e}"))?;
+            // ORDER 1439-p853: the topics come from the guest's HelloAck, so
+            // Progress is asked for only by a guest that advertised it; an
+            // older guest gets exactly the pre-change Subscribe.
+            let topics = crate::provision_console::push_subscribe_topics(client.server_caps());
             let seq = client.allocate_seq();
             let sub = ControlEnvelope {
                 wire_version: WIRE_VERSION,
@@ -2283,7 +2287,7 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         // identical list buys nothing and hides a real connect failure behind
         // a duplicate attempt. Reconnect is handled by the backoff loop below,
         // which is where it belonged all along.
-        let established = try_subscribe(vm_status_subscribe_topics()).await;
+        let established = try_subscribe().await;
 
         let mut client = match established {
             Ok(c) => c,
@@ -2315,6 +2319,11 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         refresh_github_login(hwnd).await;
         refresh_cloud_projects(hwnd).await;
 
+        // ORDER 1439-p853: guest progress through the 1420-9vpk renderer. The
+        // GUI tray has no console, so its sink is plain lines into tray.log;
+        // per connection, so a resubscribe starts a fresh task list.
+        let mut guest_progress = crate::provision_console::GuestProgress::to_tray_log();
+
         loop {
             match client.next_envelope().await {
                 Ok(env) => match env.body {
@@ -2340,6 +2349,9 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
                     ControlMessage::CloudProjectsPush { projects, .. } => {
                         let n = apply_cloud_projects(&projects, true);
                         tracing::debug!(count = n, "cloud projects pushed");
+                    }
+                    ControlMessage::ProgressPush { event, .. } => {
+                        guest_progress.observe(&event);
                     }
                     other => {
                         tracing::debug!("push stream: ignoring frame {}", other.kind());
