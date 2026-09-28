@@ -440,6 +440,85 @@ fn string_crosses_boundary(stage: &[String]) -> Option<String> {
     None
 }
 
+/// Expand a leading `~` and `$VAR` / `${VAR}` / `${VAR:-default}` from the
+/// environment. `None` when the word depends on something the hook cannot know
+/// before the shell runs: an unset variable, `$(…)`, a backtick, or `$` followed
+/// by anything else (`$1`, `$@`).
+fn expand_word(w: &str) -> Option<String> {
+    if w.contains('`') || w.contains("$(") {
+        return None;
+    }
+    let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+    let mut s = w.to_string();
+    if s == "~" || s.starts_with("~/") {
+        s = format!("{}{}", env("HOME")?, &s[1..]);
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s.as_str();
+    while let Some(i) = rest.find('$') {
+        out.push_str(&rest[..i]);
+        rest = &rest[i + 1..];
+        if let Some(body) = rest.strip_prefix('{') {
+            let end = body.find('}')?;
+            let inner = &body[..end];
+            let (name, default) = match inner.split_once(":-") {
+                Some((n, d)) => (n, Some(d)),
+                None => (inner, None),
+            };
+            if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                return None;
+            }
+            out.push_str(&match env(name) {
+                Some(v) => v,
+                None => default?.to_string(),
+            });
+            rest = &body[end + 1..];
+        } else {
+            let n = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .unwrap_or(rest.len());
+            if n == 0 || rest.as_bytes()[0].is_ascii_digit() {
+                return None;
+            }
+            out.push_str(&env(&rest[..n])?);
+            rest = &rest[n..];
+        }
+    }
+    out.push_str(rest);
+    Some(out)
+}
+
+/// Does an rm's target name a scratch root itself (lexically, trailing `/` and
+/// `.` segments ignored)?
+fn targets_a_scratch_root(argv: &[String], ctx: &Context) -> bool {
+    let norm = |p: &Path| -> PathBuf {
+        let mut out = PathBuf::new();
+        for c in p.components() {
+            match c {
+                std::path::Component::CurDir => {}
+                std::path::Component::ParentDir => {
+                    out.pop();
+                }
+                other => out.push(other.as_os_str()),
+            }
+        }
+        out
+    };
+    let roots: Vec<PathBuf> = ctx.scratch.iter().map(|r| norm(r)).collect();
+    argv.iter()
+        .skip(1)
+        .filter(|a| !a.starts_with('-'))
+        .map(|a| {
+            let p = Path::new(a);
+            norm(&if p.is_absolute() {
+                p.to_path_buf()
+            } else {
+                ctx.cwd.join(p)
+            })
+        })
+        .any(|t| roots.contains(&t))
+}
+
 fn floor_on(argv: &[String], ctx: &Context, workspace: &Path) -> Option<cp::Decision> {
     let req = cp::Request {
         argv: argv.to_vec(),
@@ -516,13 +595,43 @@ pub fn classify(cmd: &str, ctx: &Context) -> Classification {
                     "run the stages as separate commands, or put the pipeline in a script FILE and pass its path (`bash path/to/script.sh` is argv and allowed)",
                 );
             }
-            let argv = argv_of(stage);
+            let mut argv = argv_of(stage);
             if argv.is_empty() {
                 continue;
             }
             // A plain shell string is the bridge's business only in shape 6.
             if cp::is_shell_string_call(&argv) {
                 continue;
+            }
+            // The hook sees the command BEFORE the shell expands it, so an rm
+            // target like "$HOME" or ~/x would otherwise be judged as a literal
+            // path under the working directory. Expand ~, $VAR, ${VAR} and
+            // ${VAR:-default} from the environment; a target that cannot be
+            // resolved statically (an unset variable, $(…)) asks.
+            if cp::program_name(&argv[0]) == "rm" {
+                let mut unresolved = None;
+                for a in argv.iter_mut().skip(1) {
+                    match expand_word(a) {
+                        Some(e) => *a = e,
+                        None => {
+                            unresolved = Some(a.clone());
+                            break;
+                        }
+                    }
+                }
+                if let Some(t) = unresolved {
+                    if ask.is_none() {
+                        ask = Some(Classification::ask(
+                            "workspace-destroy",
+                            format!(
+                                "a recursive rm whose target `{}` cannot be resolved before the shell runs it [consent class: workspace-destroy]",
+                                cp::redact(&t)
+                            ),
+                            "name the target as a literal path under the working directory, $TMPDIR or /tmp".into(),
+                        ));
+                    }
+                    continue;
+                }
             }
             let Some(d) = floor_on(&argv, ctx, &ctx.cwd) else {
                 continue;
@@ -546,8 +655,11 @@ pub fn classify(cmd: &str, ctx: &Context) -> Classification {
                     );
                 }
                 cp::Strictness::Consent => {
-                    // A recursive rm under TMPDIR or a scratch root needs no consent.
+                    // A recursive rm BENEATH TMPDIR or a scratch root needs no
+                    // consent; a scratch root ITSELF always asks, even when it
+                    // sits beneath another root ($TMPDIR under /tmp).
                     if d.rule_id == "workspace-destroy"
+                        && !targets_a_scratch_root(&argv, ctx)
                         && ctx
                             .scratch
                             .iter()
@@ -577,9 +689,17 @@ pub fn classify(cmd: &str, ctx: &Context) -> Classification {
 /// policy engine's three sources, scratch roots from TMPDIR and the env.
 pub fn context_for(cwd: &Path) -> Context {
     let root = crate::branch_discipline::find_root(cwd).unwrap_or_else(|| cwd.to_path_buf());
-    let mut scratch = vec![PathBuf::from(
-        std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".into()),
-    )];
+    // Scratch roots: $TMPDIR, and /tmp and /private/tmp on every platform
+    // (coordinator ruling 2026-09-28, from macbookair's darwin run: TMPDIR is
+    // /var/folders/…/T/ there, and an agent on a Mac must get the same answer
+    // for /tmp as on Linux). Paths BENEATH a root are scratch; the roots
+    // themselves still ask (the floor treats target == root as a destroy).
+    let mut scratch = vec![PathBuf::from("/tmp"), PathBuf::from("/private/tmp")];
+    if let Ok(t) = std::env::var("TMPDIR")
+        && !t.is_empty()
+    {
+        scratch.push(PathBuf::from(t.trim_end_matches('/')));
+    }
     if let Ok(extra) = std::env::var("TILLANDSIAS_PRETOOLUSE_SCRATCH") {
         scratch.extend(
             extra

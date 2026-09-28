@@ -115,8 +115,28 @@ for cmd in 'podman system reset --force' 'tillandsias --reset-state'; do
     [ "$rc" -eq 4 ] && grep -qx 'consent:bash-policy:soft-reset' <<<"$out" &&
         ok "arm 4: '$cmd' asks on bare metal, never allows" || bad "arm 4 bare-metal '$cmd': rc=$rc [$out]"
 done
-out="$("$PLAN" policy classify-bash --command 'rm -rf /tmp/pretooluse-scratch-x' --cwd "$ROOT")"; rc=$?
-[ "$rc" -eq 0 ] && ok "arm 4: rm -rf under TMPDIR needs no consent" || bad "arm 4 tmp rm: rc=$rc [$out]"
+# Scratch: paths BENEATH /tmp and $TMPDIR need no consent on every platform
+# (darwin's TMPDIR is /var/folders/…/T/; coordinator ruling 2026-09-28); the
+# ROOTS themselves still ask.
+tmpdir="${TMPDIR:-/tmp}"
+tmpdir="${tmpdir%/}"
+for t in /tmp/pretooluse-scratch-x "$tmpdir/pretooluse-scratch-y"; do
+    out="$("$PLAN" policy classify-bash --command "rm -rf $t" --cwd "$ROOT")"; rc=$?
+    [ "$rc" -eq 0 ] && ok "arm 4: rm -rf $t (beneath a scratch root) needs no consent" || bad "arm 4 scratch rm $t: rc=$rc [$out]"
+done
+for t in /tmp /private/tmp "$tmpdir"; do
+    out="$("$PLAN" policy classify-bash --command "rm -rf $t" --cwd "$ROOT")"; rc=$?
+    [ "$rc" -eq 4 ] && grep -qx 'consent:bash-policy:workspace-destroy' <<<"$out" &&
+        ok "arm 4 NEGATIVE: rm -rf $t (a scratch ROOT itself) asks" || bad "arm 4 root rm $t: rc=$rc [$out]"
+done
+# The hook sees the command before the shell expands it: a variable target is
+# expanded from the environment, and one it cannot resolve asks.
+out="$(HOME=/home/nobody-fixture "$PLAN" policy classify-bash --command 'rm -rf "$HOME"' --cwd "$ROOT")"; rc=$?
+[ "$rc" -eq 4 ] && ok "arm 4: rm -rf \"\$HOME\" is judged as the expanded path, and asks" || bad "arm 4 \$HOME: rc=$rc [$out]"
+out="$(env -u PRETOOLUSE_UNSET_X "$PLAN" policy classify-bash --command 'rm -rf "$PRETOOLUSE_UNSET_X/y"' --cwd "$ROOT")"; rc=$?
+[ "$rc" -eq 4 ] && ok "arm 4: an rm target with an unset variable asks (not statically known)" || bad "arm 4 unset var: rc=$rc [$out]"
+out="$("$PLAN" policy classify-bash --command 'rm -rf "${TMPDIR:-/tmp}/pretooluse-z"' --cwd "$ROOT")"; rc=$?
+[ "$rc" -eq 0 ] && ok "arm 4: rm -rf \"\${TMPDIR:-/tmp}/…\" expands and needs no consent" || bad "arm 4 TMPDIR default: rc=$rc [$out]"
 
 # ── 5 ───────────────────────────────────────────────────────────────────────
 expect_deny "arm 5: wsl.exe … bash -lc with a pipe is refused" string-crosses-a-boundary \
