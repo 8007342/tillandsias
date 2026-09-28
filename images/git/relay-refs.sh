@@ -283,8 +283,22 @@ fi
 # GIT_ALTERNATE_OBJECT_DIRECTORIES. Keep Git's quarantine marker intact here:
 # an HTTPS/SSH upstream cannot inherit the local hook environment, and local
 # transport fixtures must sanitize the receiver side explicitly.
+# ORDER 1461-8tyy: the upstream outcome of a real push OVERWRITES the published
+# upstream-auth verdict, success included. It used to change only on the
+# probe's own schedule, so a `denied` from before an operator re-seed kept the
+# credential guard shut after a verified push. Quarantine is escaped for the
+# ref write, exactly as the sync-state publisher does.
+AUTH_PROBE="${AUTH_PROBE:-/usr/local/share/git-service/probe-upstream-auth}"
+record_upstream_auth() {
+    [ -x "$AUTH_PROBE" ] || return 0
+    env -u GIT_QUARANTINE_PATH -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+        "$AUTH_PROBE" "$@" >/dev/null 2>&1 || true
+}
+
 if OUTPUT="$(GIT_TERMINAL_PROMPT=0 git push --atomic "$PUSH_URL" "$@" 2>&1)"; then
     log_msg "Atomic push to $REMOTE_URL_REDACTED succeeded"
+    # The push itself proves the credential: record it without a network call.
+    record_upstream_auth --record "$(pwd)" authorized
     unset PUSH_URL BARE_URL
     exit 0
 fi
@@ -323,6 +337,10 @@ if [ -n "$PUSH_URL" ]; then
         FETCH_OUTPUT_REDACTED="$(redact_output "$FETCH_OUTPUT")"
         log_msg "Reconcile fetch non-fast-forward (expected if locally stranded): $FETCH_OUTPUT_REDACTED"
     fi
+    # 1461-8tyy: a refused push re-probes, so the published verdict names the
+    # CURRENT state (denied/<reason>, or authorized when the refusal was not
+    # about the credential, e.g. a protected branch).
+    record_upstream_auth "$(pwd)"
     # @trace spec:git-mirror-service
     # ORDER 1350-ku7v (T1). Republish after the post-failure reconcile too.
     # THIS IS THE ARM THAT MATTERS MOST: the push was just REFUSED, and the

@@ -1,0 +1,33 @@
+# @trace order:1461-8tyy, spec:git-mirror-service
+#
+# The mirror's published upstream-auth verdict is overwritten by the next real
+# upstream outcome, success included, so a `denied` from before an operator
+# re-seed does not keep the credential guard shut after a verified push.
+# Wraps scripts/test-mirror-upstream-auth-overwrite.sh (the real relay and
+# probe against a local bare upstream; no network, no Vault).
+name: litmus:mirror-upstream-auth-overwrite
+spec: ci-release
+phase: pre-build
+description: >
+  A recorded denied verdict is replaced by authorized after a successful relay
+  push, leaving exactly one verdict ref; the pre-fix relay left denied standing;
+  the probe's --record mode refuses an unknown state.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-mirror-upstream-auth-overwrite.sh
+  - workspace contains images/git/relay-refs.sh
+  - workspace contains images/git/probe-upstream-auth.sh
+  - shell utilities (git, sh, mktemp) are available in PATH
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-mirror-upstream-auth-overwrite.sh && test -x scripts/test-mirror-upstream-auth-overwrite.sh && echo 'ok: overwrite-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: overwrite-fixture-parses"
+
+  - step: "a successful push overwrites a stale denied verdict"
+    command: "out=$(bash scripts/test-mirror-upstream-auth-overwrite.sh 2>&1); rc=$?; case \"$out\" in (*'ok:mirror-upstream-auth-overwrite:'*) [ \"$rc\" = 0 ] && echo 'ok: verdict overwrite' ;; (*) printf '%s\\n' \"$out\" | tail -6; exit 1 ;; esac"
+    timeout_ms: 60000
+    expected_behavior: "ok: verdict overwrite"

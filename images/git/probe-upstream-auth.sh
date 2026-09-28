@@ -84,6 +84,21 @@ log_msg() {
 
 redact_output() { echo "$1" | sed -E 's#https://[^@/]+@#https://***@#g'; }
 
+# ORDER 1461-8tyy: `--record <mirror> <state> [reason]` publishes a verdict the
+# CALLER has already established, with no network call. relay-refs.sh uses it
+# after a SUCCESSFUL upstream push — the push itself proves the credential — so
+# a `denied` verdict from before an operator re-seed no longer outlives the
+# first push that works (macuahuitl-forge, 2026-09-28: the credential guard
+# kept reporting upstream-push-unauthorized after a verified push).
+RECORD_STATE=""; RECORD_REASON=""
+if [ "${1:-}" = "--record" ]; then
+    RECORD_STATE="${3:-}"; RECORD_REASON="${4:-}"
+    shift
+    case "$RECORD_STATE" in
+        authorized|denied|no-credential|agent-unauthenticated|local-only|error) ;;
+        *) echo "probe-upstream-auth: --record needs a known state, got '$RECORD_STATE'" >&2; exit 2 ;;
+    esac
+fi
 MIRROR="${1:-}"
 if [ -z "$MIRROR" ] || [ ! -d "$MIRROR" ]; then
     echo "probe-upstream-auth: usage: probe-upstream-auth <bare-mirror-dir>" >&2
@@ -133,6 +148,10 @@ finish() {
         *) exit 1 ;;
     esac
 }
+
+if [ -n "$RECORD_STATE" ]; then
+    finish "$RECORD_STATE" "$RECORD_REASON"
+fi
 
 REMOTE_URL="$(git -C "$MIRROR" remote get-url origin 2>/dev/null || true)"
 if [ -z "$REMOTE_URL" ]; then
