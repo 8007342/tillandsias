@@ -1,0 +1,43 @@
+# @trace spec:command-policies
+name: litmus:host-kind-evidence-not-from-workspace
+spec: command-policies
+phase: pre-build
+description: >
+  Order 1467-c8qg. Forge evidence is the container runtime's record of the
+  forge image (image= in /run/.containerenv), never a file in the workspace
+  and never the record's mere presence: a planted cwd marker is ignored; a
+  record naming the forge image reads forge (simulated under unshare -rm with
+  a /run tmpfs); a toolbox, forge-base or look-alike image does not; no record
+  reads bare metal; the real builder toolbox is not a forge. Unavailable
+  regimes are NAMED skips.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-host-kind-evidence-not-from-workspace.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-host-kind-evidence-not-from-workspace.sh && test -x scripts/test-host-kind-evidence-not-from-workspace.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "a planted workspace marker is not forge evidence; a real forge still is"
+    command: "bash scripts/test-host-kind-evidence-not-from-workspace.sh 2>&1 | tail -n 1"
+    timeout_ms: 60000
+    expected_behavior: "PASS: host-kind-evidence-not-from-workspace"
+
+observability:
+  traces:
+    - "@trace spec:command-policies"
+  expected_log: "PASS: host-kind-evidence-not-from-workspace"
+  log_fields:
+    spec: "command-policies"
+    test: "host-kind-evidence-not-from-workspace"
+    artifact: "crates/tillandsias-plan/src/command_policy.rs (read_host_kind)"
+
+rollback:
+  on_failure: >
+    A host kind readable from a file any directory writer can plant is the
+    defect: evidence must come from the container runtime, never the workspace.
+  command: "bash scripts/test-host-kind-evidence-not-from-workspace.sh"

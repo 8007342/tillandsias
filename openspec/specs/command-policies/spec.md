@@ -71,9 +71,13 @@ changing it is a seed edit reviewed like code.
 A request SHALL carry `argv`, `cwd`, the names (not values) of the
 environment it adds, `host_kind` (`bare-metal | forge | ci`), `platform`,
 `regime` (`interactive | gate | fixture | hook | relay`) and `caller`. Host
-kind SHALL be derived from `TILLANDSIAS_HOST_KIND`, `/run/.containerenv` and
-the `.forge-startup-context.md` marker together, and a disagreement SHALL be
-reported in the decision. A rule MAY give a different decision per host
+kind SHALL be derived from `TILLANDSIAS_HOST_KIND` and the container
+runtime's record of the forge image (`image=` in `/run/.containerenv`)
+together, and a disagreement SHALL be reported in the decision. The record's
+presence alone is not forge evidence (every container has one: a toolbox is
+not a forge), and forge evidence SHALL never come from a file in the
+workspace or the caller's cwd, which any writer of that directory could
+plant (1467-c8qg). A rule MAY give a different decision per host
 kind; the `hard-reset` class SHALL be `deny` in a forge and the
 `soft-reset` class SHALL be `allow` there.
 

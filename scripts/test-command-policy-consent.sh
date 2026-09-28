@@ -7,7 +7,7 @@
 # approval each time."). Runs under a redirected consent dir and audit log,
 # from a scratch directory that is not a checkout.
 #
-# BARE-METAL ARMS (need host-kind EVIDENCE of bare metal: no /run/.containerenv;
+# BARE-METAL ARMS (need host-kind EVIDENCE of bare metal: no forge image record;
 # in a forge they are a NAMED skip, and `cargo test -p tillandsias-plan --lib
 # command_policy` covers the same rules with an injected host kind):
 #   1  `policy consent grant soft-reset --ttl 30m -- podman system reset --force`
@@ -87,7 +87,13 @@ else
     bad "arm 7: [$out1] rc=$rc1 [$out2] rc=$rc2"
 fi
 
-if [ -e /run/.containerenv ]; then
+# A forge is the container record naming the forge image (1467-c8qg); a
+# toolbox or other container has the record too and is NOT a forge.
+in_forge=0
+[ -r /run/.containerenv ] &&
+    /usr/bin/grep -qE '^image="([^"]*/)?tillandsias-forge(:[^"@]*)?(@[^"]*)?"$' /run/.containerenv &&
+    in_forge=1
+if [ "$in_forge" = 1 ]; then
     # ── 8 (forge only) ──────────────────────────────────────────────────────
     plant "workspace-destroy-planted.json" workspace-destroy "$HOST" "2099-01-01T00:00:00Z"
     out="$("$PLAN" policy eval -- rm -rf /srv/elsewhere 2>/dev/null)"; rc=$?
@@ -98,9 +104,9 @@ if [ -e /run/.containerenv ]; then
         bad "arm 8: rc=$rc out=[$out]"
     fi
     rm -rf "$TILLANDSIAS_CONSENT_DIR"
-    skip "arms 1, 2, 3, 5: /run/.containerenv is present, so the evidence says forge and consent is (correctly) never granted here; run on bare metal, and see cargo test -p tillandsias-plan --lib command_policy"
+    skip "arms 1, 2, 3, 5: /run/.containerenv names the forge image, so the evidence says forge and consent is (correctly) never granted here; run on bare metal, and see cargo test -p tillandsias-plan --lib command_policy"
 else
-    skip "arm 8: not a forge (no /run/.containerenv)"
+    skip "arm 8: not a forge (no container record naming the forge image)"
 
     # ── 1 ───────────────────────────────────────────────────────────────────
     out="$("$PLAN" policy consent grant soft-reset --ttl 30m -- "${SOFT[@]}" 2>/dev/null)"; rc=$?
