@@ -919,6 +919,7 @@ try {
     #
     # NOT a version comparison: that would have to know which tag first
     # carried the flag and would be wrong for any build off that line.
+# BEGIN-RESET-PROBE
     $ProbeLog = Join-Path $env:TEMP "tillandsias-reset-probe.log"
     & cmd.exe /c "set TILLANDSIAS_DESTRUCTIVE_RESET_OK=0&& `"$InstalledExe`" --reset-state > `"$ProbeLog`" 2>&1"
     $ProbeExit = $LASTEXITCODE
@@ -928,11 +929,26 @@ try {
     # and names itself; anything else is treated as unsupported too, because a
     # probe that cannot get a clean acceptance must not authorise a
     # destructive call.
-    $HasResetState = ($ProbeExit -eq 0)
+    #
+    # ORDER 1449-4qqu: EXCEPT when the binary SAYS it accepted the flag. With
+    # the opt-out set, a supporting tray prints the skip line (the phrase
+    # tillandsias-core pins byte-exact in reset_state::RESET_SKIPPED_LINE) and
+    # then re-inits the EXISTING state. When that state is broken the re-init
+    # fails (exit 1), and reading the exit code alone called it "predates
+    # --reset-state" and skipped the one repair the guest needed (measured on
+    # yolanda 2026-09-27, v56.9.27.2). The skip line proves the parser took the
+    # flag, so the flag ran and failed: proceed to the full reset.
+    $ProbeAccepted = $ProbeOut -match [regex]::Escape('reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0')
+    $HasResetState = ($ProbeExit -eq 0) -or $ProbeAccepted
+    if ($HasResetState -and $ProbeExit -ne 0) {
+        SayWn "  probe: this tray knows --reset-state; its re-init of the existing state failed (exit $ProbeExit)."
+        SayWn "  proceeding to the full reset, which is the repair for exactly that."
+    }
     if (-not $HasResetState) {
         SayWn "  probe: --reset-state not usable on this tray (exit $ProbeExit)."
         if ($ProbeOut) { SayWn ("  probe said: " + (($ProbeOut -split "`n")[0]).Trim()) }
     }
+# END-RESET-PROBE
     if (-not $HasResetState) {
         SayWn "this tray predates --reset-state (order 1286-4437); skipping the state reset."
         SayWn "  the install is complete, but a broken local state was NOT repaired."

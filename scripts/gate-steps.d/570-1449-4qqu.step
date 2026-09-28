@@ -1,0 +1,20 @@
+# Gate step 1449-4qqu — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. install-windows.ps1's --reset-state probe. It runs the flag
+# with the opt-out set; a supporting tray announces the skip and re-inits the
+# EXISTING state. When that state is broken the re-init fails, and the probe
+# used to read that exit code as "this tray predates --reset-state", skipping
+# the one repair the guest needed (measured on yolanda 2026-09-27, v56.9.27.2).
+# The probe now also reads the skip line (tillandsias-core's pinned phrase).
+#
+# The fixture cuts the probe between exact-once markers and RUNS it in
+# PowerShell against four stub trays (.cmd): unknown flag, accepted-but-failed,
+# accepted-ok, unclaimed failure. Pre-fix: the accepted-but-failed arm FAILS.
+# Without PowerShell and cmd.exe (a Linux gate) it skips by name.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the installer's --reset-state probe tells a failed re-init from an old tray (1449-4qqu)"
+STEP_SCRIPT="scripts/test-installer-reset-probe.sh"
+STEP_ERROR="the installer's --reset-state probe again reads a failed re-init as an old tray and would skip the repair (1449-4qqu); see which arm failed above"
+STEP_OK="installer reset probe distinguishes unsupported from ran-and-failed"
+STEP_SECOND_REGIME="yolanda 2026-09-28 msys ok:reset-probe-fixture:4"
