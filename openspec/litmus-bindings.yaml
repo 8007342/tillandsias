@@ -962,6 +962,7 @@ specs:
 - spec_id: spec-traceability
   status: active
   litmus_tests:
+  - litmus:no-fixture-writes-live-ledger-shape
   - litmus:spec-traceability-shape
   - litmus:spec-traceability-usage-shape
   - litmus:litmus-runner-backslash-escaping-shape
