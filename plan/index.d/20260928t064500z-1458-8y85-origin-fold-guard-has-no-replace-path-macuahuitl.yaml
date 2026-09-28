@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hit twice on 2026-09-28: macbookair's plan-lane push and the land82 relay.
+packets:
+  - packet_id: the-origin-fold-drop-guard-has-no-path-for-a-deliberate-set-field-replace-so-a-reviewed-correction-of-a-long-form-field-can-never-land
+    order: 1458-8y85
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [plan-ledger, set-field, guard, lww]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-append-vs-origin-fold.sh
+      - scripts/test-append-vs-origin-fold.sh
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      check-append-vs-origin-fold (1261-bn7v) refuses every DELIBERATE `set-field --replace`, on the plan lane and in the gate alike, so a reviewed correction of a long-form field (1443-qwpj's closure 6/6 -> 8/8) can land through no lane at all
+    context: |
+      set-field's local guard (1151-td46) has three modes: default refuses a
+      value that drops lines, --append keeps them, --replace drops them
+      deliberately "having read what the refusal listed". The origin-fold
+      guard (1261-bn7v) was written for the accidental case — a host that had
+      not fetched a peer's newer append — and has no way to tell that case
+      from a deliberate --replace, so it refuses both. Measured 2026-09-28:
+      macbookair's --replace correcting 1443-qwpj's verifiable_closure was
+      refused on the plan lane (refused:append-drops-lines-vs-origin); the
+      coordinator's ruling routed it through the gated relay instead, and
+      land82's preflight refused it the same way. The fragment was held out
+      of land82 and sits on work/1443-qwpj (plan/index.d/20260928t024002z-
+      200e38f8-macos.yaml). Until this is fixed 1443-qwpj's row keeps a
+      closure its own tool scores unmet.
+      DESIGN POINT: the acknowledgement must be in the FRAGMENT BYTES and
+      name what it drops, so the guard can distinguish "I read these lines
+      and drop them" from "I never saw them". Candidate: --replace writes a
+      `replaces_lines_sha:` (hash of the exact origin value it replaced) on
+      the status entry; the guard admits the drop only when that hash equals
+      origin's current folded value — so a replace written against a stale
+      fold is still refused, which is the 1261-bn7v case.
+    verifiable_closure: |
+      bash scripts/test-append-vs-origin-fold.sh prints its ok summary with
+      two new arms: (1) a --replace fragment whose acknowledgement matches
+      origin's current value is admitted (ok:append-vs-origin); (2) NEGATIVE
+      CONTROL: the same --replace written against a stale fold (origin gained
+      a peer's append after the replace was written) is still refused with
+      refused:append-drops-lines-vs-origin. And the held qwpj fragment,
+      rewritten with the acknowledgement, passes the guard on the merged
+      tree. PRE-FIX RESULT: FAILS — every --replace is refused (arm 1).
+    unscoreable: "unpinnable-until-the-guard-exists: the closure is two new arms in the existing fixture plus the held fragment passing; no separate litmus pin"
+    next_action: >
+      Add the acknowledgement to set-field --replace (the plan binary) and
+      teach check-append-vs-origin-fold.sh to admit a drop only when the
+      acknowledgement matches origin's folded value; then re-write the held
+      1443-qwpj fragment with it and hand it to the coordinator.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Owner suggestion: macbookair (hit it first and owns 1443-qwpj).
