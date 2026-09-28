@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator 2026-09-28: "Fix the defects found, and start packets for the
+# recommended pilots, let's have Antigravity and Codex implement some of them."
+packets:
+  - packet_id: the-centicolon-graders-over-credit-a-pass-credits-sibling-scenarios-a-pass-without-provenance-a-pass-on-the-wrong-subject-and-a-later-pass-on-another-platform-masks-a-failure
+    order: 1469-vhuk
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [centicolon, lua, grader, evidence, plan-only-peer-ok]
+    estimated_hours: 6
+    owned_files:
+      - scripts/lua/centicolon-grade-static.lua
+      - scripts/lua/centicolon-grade-observed.lua
+      - scripts/test-centicolon-grader-attribution.sh
+    title: |
+      The CentiColon graders over-credit (4 executed counterexamples, Codex 2026-09-28): one pass credits every scenario under a req-id; a pass with no spec/implementation digest scores R=0; a pass naming the wrong spec and an unrelated implementation is credited; a Linux FAIL followed by a Windows PASS reads satisfied
+    context: |
+      Found by Codex (research 1453-p9gb, parent 1447-9sne), recorded with a
+      reproduction recipe in plan/issues/centicolon-transient-work-scope-
+      research-2026-09-27.md ("Measured baseline and evidence counterexamples"
+      and the recipe paragraph after the table). The operator ruled
+      2026-09-28: fix them. They are wrong under ANY evidence policy the
+      operator later picks, so this does not wait for the pilots.
+      Source causes (from the doc, verify before editing):
+      centicolon-grade-static.lua's ext.obligations loop assigns every
+      scenario refs[o.req_id], so a req-id match credits all its scenarios;
+      centicolon-grade-observed.lua's `observe` selects `latest` by test and
+      digest, not by regime, and its spec_moved/pass branch requires neither
+      a spec digest nor an implementation-input match.
+      REQUIRED INTERPRETATIONS (the doc's table): credit only scenarios a
+      bound assertion explicitly covers; a pass missing mandatory provenance
+      is unmeasured/invalid, never credit; a pass on the wrong subject is
+      rejected; each REQUIRED regime keeps its own outcome, so a later pass
+      on one platform never masks a fail on another.
+      ALSO SOURCE-REVIEWED, NOT EXECUTED (verify each; fix here if it is real
+      and small, else file it): run-litmus-test.sh serialises an ADVISORY
+      verdict (3) as status=pass and a file with skipped steps as pass, so a
+      file pass cannot witness an unexecuted assertion; _pt_files/_pt_digests
+      hash test/spec files, not implementation dependencies;
+      check-centicolon-ratchet.sh advances last.txt after lost credit.
+      Plan-only peers: follow methodology/multi-host-development.yaml ->
+      plan_only_peers (claim, work/<order>, READY:, ASK:).
+    verifiable_closure: |
+      bash scripts/test-centicolon-grader-attribution.sh prints its ok summary
+      with four arms, one per counterexample, each built exactly as the
+      research doc's recipe describes (extractor doc with
+      cc:aaaa0001:scenario-a / scenario-b under req aaaa0001, litmus:one
+      bound under spec alpha, the graders run through `tillandsias-plan lua`):
+      (1) a pass whose step names only scenario-a credits scenario-a and NOT
+      scenario-b; (2) a pass without spec/implementation digests credits
+      nothing and reports unmeasured; (3) a pass naming spec beta and an
+      unrelated implementation revision credits nothing and reports
+      wrong-subject; (4) Linux FAIL at 01:00Z then Windows PASS at 02:00Z
+      leaves the Linux regime failing and the obligation unsatisfied.
+      NEGATIVE CONTROL: a correctly attributed pass with full provenance on
+      every required regime still credits 1/1. PRE-FIX RESULT: FAILS all four
+      arms (the doc measured satisfied=2/2, R=0 in each).
+    unscoreable: "unpinnable-until-the-guard-exists: litmus-centicolon-grader-attribution.yaml wraps the new fixture and is written in the same commit as the fix (1136-n8sh)"
+    next_action: >
+      Write the four-arm fixture from the recipe FIRST and watch every arm
+      fail on trunk; then fix the two graders; then verify the three
+      source-reviewed findings and either fix or file each.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Open to plan-only peers (Antigravity, Codex). Pilot A (evidence
+      attribution) builds on this fix.

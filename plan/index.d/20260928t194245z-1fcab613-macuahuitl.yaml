@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: research-whether-the-centicolon-uncertainty-metric-must-also-count-transient-work-bug-fixes-and-regressions-that-should-produce-a-preventing-spec-requirement
+    event:
+      type: note
+      ts: "2026-09-28T19:42:45Z"
+      agent_id: linux-macuahuitl-claude-20260928t194245z
+      host: macuahuitl
+      summary: |
+        RULING (operator, 2026-09-28, relayed by the coordinator): "Fix the defects found, and start packets for the recommended pilots, let's have Antigravity and Codex implement some of them." Filed as the CentiColon evidence program, milestone 1474-p9rz (release_target centicolon-evidence-pilots-2026-09-28): bugs 1469-vhuk (the graders over-credit: the four executed counterexamples) and 1470-dbuw (the predicate memo: stale verdict after re-register, digests taken after evaluation — both confirmed in the code); report-only pilots 1471-bvjy (B, exact replay cache), 1472-5t4b (A, evidence envelope + attribution report) and 1473-k4bw (C, preventive-closure measurement). Pilots D, E and F are not started. The published CentiColon number, the ratchet and every enforcement bar stay unchanged until the operator decides on the pilots' reports; this question (1447-9sne) stays open for that decision. Antigravity and Codex coordinate through ./plan only: methodology/multi-host-development.yaml -> plan_only_peers.
