@@ -104,7 +104,11 @@ if [ "$in_forge" = 1 ] || ! command -v toolbox >/dev/null 2>&1 ||
     ! podman container exists tillandsias-builder 2>/dev/null; then
     skip "arm 6: no tillandsias-builder toolbox on this host"
 else
-    tout="$(toolbox run -c tillandsias-builder "$PLAN" policy eval -- tillandsias --reset-state 2>/dev/null)"
+    # Under the litmus runner, PATH starts with its podman shim, which routes
+    # through the Rust facade and swallows the exec'd command's stdout, so the
+    # arm read [] (land85 relay). toolbox must reach the real podman.
+    tb_path="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/litmus-runtime/bin$' | paste -sd: -)"
+    tout="$(PATH="$tb_path" toolbox run -c tillandsias-builder "$PLAN" policy eval -- tillandsias --reset-state 2>/dev/null)"
     [ "$tout" = "$BARE_ANS" ] && ok "arm 6: the real builder toolbox is not a forge" ||
         bad "arm 6: toolbox answered [$tout]"
 fi

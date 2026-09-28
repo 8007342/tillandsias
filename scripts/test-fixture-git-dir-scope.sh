@@ -58,6 +58,11 @@ trap 'rm -rf "$W"' EXIT
 
 unset TILLANDSIAS_POLICY_REGIME TILLANDSIAS_FIXTURE_SCOPE TILLANDSIAS_FIXTURE_GIT_DIRS TILLANDSIAS_REPO_ROOT
 export TILLANDSIAS_POLICY_AUDIT_LOG="$W/audit.jsonl"
+# The Lua sandbox finds its repo root via TILLANDSIAS_REPO_ROOT, then
+# PROJECT_ROOT, then cwd. The litmus runner exports PROJECT_ROOT (the real
+# checkout), which made every scratch-repo write read as "outside the
+# repository root" (8/12 under the runner, 12/12 standalone; land85 relay).
+unset PROJECT_ROOT TILLANDSIAS_REPO_ROOT
 export GIT_CONFIG_GLOBAL="$W/gitconfig" GIT_CONFIG_NOSYSTEM=1
 printf '[user]\n\tname = t\n\temail = t@example.invalid\n' >"$GIT_CONFIG_GLOBAL"
 
