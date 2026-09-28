@@ -143,7 +143,7 @@ warn_if_outside_branch_grammar() {
         [ "$DISC_ENF_GRAMMAR" = warn ] || return 0
         discipline_ref_in_grammar "$refname" && return 0
         log_msg "WARNING: new branch '$refname' is outside this project's branch grammar"
-        log_msg "WARNING: expected $DISC_INTEGRATION, work/<order> or salvage/<host>/<yyyymmdd>-<slug>; accepted (the grammar rule is warn)"
+        log_msg "WARNING: expected $DISC_INTEGRATION, work/<order>${TILLANDSIAS_RESCUE_REF_HINT:+ or $TILLANDSIAS_RESCUE_REF_HINT}; accepted (the grammar rule is warn)"
         return 0
     fi
     [ -n "${TILLANDSIAS_BRANCH_CREATION_REGEX:-}" ] || return 0
@@ -271,7 +271,7 @@ discipline_check_update() {   # <oldsha> <refname>
     case "$DISC_ENF_GRAMMAR" in
         enforced)
             log_msg "REJECT: new branch '$ref' is outside this project's branch grammar"
-            log_msg "REJECT: use $DISC_INTEGRATION, work/<order> ($DISC_WORK_RE) or salvage/<host>/<yyyymmdd>-<slug>"
+            log_msg "REJECT: use $DISC_INTEGRATION, work/<order> ($DISC_WORK_RE)${TILLANDSIAS_RESCUE_REF_HINT:+ or $TILLANDSIAS_RESCUE_REF_HINT}"
             log_msg "blocked:branch-discipline:ref-grammar:${ref#refs/heads/}"
             return 1 ;;
     esac
@@ -283,7 +283,8 @@ discipline_ref_in_grammar() {   # <refname>
     [ "$b" = "$DISC_DEFAULT" ] && return 0
     [ "$b" = "$DISC_INTEGRATION" ] && return 0
     if [ -n "$DISC_WORK_RE" ] && printf '%s\n' "$b" | grep -Eqx -e "$DISC_WORK_RE"; then return 0; fi
-    case "$b" in salvage/*/*) return 0 ;; esac
+    # shellcheck disable=SC2254  # the glob comes from config on purpose
+    if [ -n "${TILLANDSIAS_RESCUE_REF_GLOB:-}" ]; then case "$b" in $TILLANDSIAS_RESCUE_REF_GLOB) return 0 ;; esac; fi
     if [ -n "${TILLANDSIAS_BRANCH_CREATION_REGEX:-}" ] && printf '%s\n' "$1" | grep -Eq -e "$TILLANDSIAS_BRANCH_CREATION_REGEX"; then return 0; fi
     return 1
 }

@@ -144,6 +144,15 @@ fi
 if [ "${TILLANDSIAS_YAML_GATE_EXEMPT_REFS+set}" != "set" ]; then
     TILLANDSIAS_YAML_GATE_EXEMPT_REFS='refs/heads/salvage/*'
 fi
+# The rescue-ref namespace the discipline check (1443-uit6) always admits, and
+# how its messages name it. Config, not hook code, like every other branch
+# convention (order-462 leak class; litmus:git-mirror-yaml-gate-shape).
+if [ "${TILLANDSIAS_RESCUE_REF_GLOB+set}" != "set" ]; then
+    TILLANDSIAS_RESCUE_REF_GLOB='salvage/*/*'
+fi
+if [ "${TILLANDSIAS_RESCUE_REF_HINT+set}" != "set" ]; then
+    TILLANDSIAS_RESCUE_REF_HINT='salvage/<host>/<yyyymmdd>-<slug>'
+fi
 # CI workflow budget (order 598). UNSET-ONLY like the rest: an end-user project
 # that legitimately runs its own GitHub Actions exports this EMPTY and the gate
 # disappears. For Tillandsias, release.yml is the only workflow permitted to
@@ -152,7 +161,7 @@ fi
 if [ "${TILLANDSIAS_CI_WORKFLOW_ALLOWLIST+set}" != "set" ]; then
     TILLANDSIAS_CI_WORKFLOW_ALLOWLIST='release.yml'
 fi
-export TILLANDSIAS_BRANCH_CREATION_REGEX TILLANDSIAS_BRANCH_GRAMMAR_HINT TILLANDSIAS_YAML_GATE_EXEMPT_REFS
+export TILLANDSIAS_BRANCH_CREATION_REGEX TILLANDSIAS_BRANCH_GRAMMAR_HINT TILLANDSIAS_YAML_GATE_EXEMPT_REFS TILLANDSIAS_RESCUE_REF_GLOB TILLANDSIAS_RESCUE_REF_HINT
 export TILLANDSIAS_CI_WORKFLOW_ALLOWLIST
 if [ -n "$TILLANDSIAS_BRANCH_CREATION_REGEX" ]; then
     echo "[git-service] branch-name grammar active (warn-only, rung 2); yaml-gate exempt refs: ${TILLANDSIAS_YAML_GATE_EXEMPT_REFS:-none}"

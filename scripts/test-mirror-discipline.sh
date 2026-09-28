@@ -42,6 +42,14 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/images/git/pre-receive-hook.sh"
 [ -r "$HOOK" ] || { echo "blocked:mirror-discipline:no-hook"; exit 2; }
+# The hook reads the rescue-ref namespace from config, as the mirror's
+# entrypoint exports it. Take the SHIPPED values from that file, not a copy,
+# so this fixture and the image cannot drift apart.
+ENTRY="$ROOT/images/git/entrypoint.sh"
+TILLANDSIAS_RESCUE_REF_GLOB="$(sed -n "s/^ *TILLANDSIAS_RESCUE_REF_GLOB='\(.*\)'$/\1/p" "$ENTRY")"
+TILLANDSIAS_RESCUE_REF_HINT="$(sed -n "s/^ *TILLANDSIAS_RESCUE_REF_HINT='\(.*\)'$/\1/p" "$ENTRY")"
+[ -n "$TILLANDSIAS_RESCUE_REF_GLOB" ] || { echo "blocked:mirror-discipline:no-rescue-ref-config-in-entrypoint"; exit 2; }
+export TILLANDSIAS_RESCUE_REF_GLOB TILLANDSIAS_RESCUE_REF_HINT
 command -v ruby >/dev/null 2>&1 || { echo "skip:mirror-discipline:no-ruby (the mirror image ships ruby)"; exit 0; }
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/mirror-discipline.XXXXXX")"
