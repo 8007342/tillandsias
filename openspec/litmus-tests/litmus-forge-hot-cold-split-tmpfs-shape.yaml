@@ -54,6 +54,11 @@ preconditions:
   - shell utilities (grep) are available in PATH
 
 critical_path:
+  - step: "order 1445-7u63: a full /home/forge/src names the exhausted source budget instead of blaming the mirror (4 arms)"
+    command: "bash scripts/test-forge-src-budget-report.sh"
+    timeout_ms: 30000
+    success_pattern: "PASS: forge-src-budget-report"
+    failure_pattern: "FAIL:"
   - step: "Req 1 + 2: 4 forge profiles each declare /opt/cheatsheets:size=8m,mode=0755 tmpfs"
     # Spec § HOT tier mandates /opt/cheatsheets at 8 MB / mode 0755.
     # 4 profiles × 1 line each = 4 declarations. A regression to a
