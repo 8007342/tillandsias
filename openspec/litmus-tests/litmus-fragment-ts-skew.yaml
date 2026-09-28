@@ -33,7 +33,7 @@ critical_path:
     # every relay fold in the fleet.
 
   - step: "both the cheap lane and the gate run it, so a gated land cannot carry what the lane refuses"
-    command: "n=$(grep -lc 'check-fragment-ts-skew' scripts/hooks/pre-push-local-gate.sh build.sh 2>/dev/null | wc -l); if [ \"$n\" -eq 2 ]; then echo ok:both-consumers; else echo \"FAIL:consumers=$n\"; fi"
+    command: "n=$(grep -l 'check-fragment-ts-skew' scripts/hooks/pre-push-local-gate.sh build.sh 2>/dev/null | wc -l | tr -d ' '); if [ \"$n\" -eq 2 ]; then echo ok:both-consumers; else echo \"FAIL:consumers=$n\"; fi"
     timeout_ms: 5000
     expected_behavior: "ok:both-consumers"
 
