@@ -619,18 +619,19 @@ pub fn classify(cmd: &str, ctx: &Context) -> Classification {
                         }
                     }
                 }
+                // DENY, not ask (operator, 2026-09-28: an ask put a raw
+                // `rm -rf $d` in front of the operator, who cannot judge an
+                // agent's temp variable). The agent can always rewrite with a
+                // literal path; only the floor's consent classes reach a human.
                 if let Some(t) = unresolved {
-                    if ask.is_none() {
-                        ask = Some(Classification::ask(
-                            "workspace-destroy",
-                            format!(
-                                "a recursive rm whose target `{}` cannot be resolved before the shell runs it [consent class: workspace-destroy]",
-                                cp::redact(&t)
-                            ),
-                            "name the target as a literal path under the working directory, $TMPDIR or /tmp".into(),
-                        ));
-                    }
-                    continue;
+                    return Classification::deny(
+                        "unresolvable-rm-target",
+                        &format!(
+                            "an rm whose target `{}` cannot be resolved before the shell runs it, so what it deletes cannot be judged",
+                            cp::redact(&t)
+                        ),
+                        "name the target as a literal path (under the working directory, $TMPDIR, /tmp or the agent scratchpad), or delete a mktemp dir with its literal path",
+                    );
                 }
             }
             let Some(d) = floor_on(&argv, ctx, &ctx.cwd) else {

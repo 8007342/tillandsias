@@ -133,8 +133,14 @@ done
 # expanded from the environment, and one it cannot resolve asks.
 out="$(HOME=/home/nobody-fixture "$PLAN" policy classify-bash --command 'rm -rf "$HOME"' --cwd "$ROOT")"; rc=$?
 [ "$rc" -eq 4 ] && ok "arm 4: rm -rf \"\$HOME\" is judged as the expanded path, and asks" || bad "arm 4 \$HOME: rc=$rc [$out]"
-out="$(env -u PRETOOLUSE_UNSET_X "$PLAN" policy classify-bash --command 'rm -rf "$PRETOOLUSE_UNSET_X/y"' --cwd "$ROOT")"; rc=$?
-[ "$rc" -eq 4 ] && ok "arm 4: an rm target with an unset variable asks (not statically known)" || bad "arm 4 unset var: rc=$rc [$out]"
+# An unresolvable target is REFUSED with a remedy, never asked: an ask put a
+# raw `d=$(mktemp -d); …; rm -rf $d` in front of the operator (2026-09-28), who
+# cannot judge an agent's temp variable; the agent can always name the path.
+unset PRETOOLUSE_UNSET_X
+expect_deny "arm 4: an rm target with an unset variable is refused with a remedy, not asked" \
+    unresolvable-rm-target 'rm -rf "$PRETOOLUSE_UNSET_X/y"' "literal path"
+expect_deny "arm 4: the operator's shape (a mktemp dir deleted through its variable) is refused, not asked" \
+    unresolvable-rm-target 'd=$(mktemp -d); ls "$d"; rm -rf $d' "literal path"
 out="$("$PLAN" policy classify-bash --command 'rm -rf "${TMPDIR:-/tmp}/pretooluse-z"' --cwd "$ROOT")"; rc=$?
 [ "$rc" -eq 0 ] && ok "arm 4: rm -rf \"\${TMPDIR:-/tmp}/…\" expands and needs no consent" || bad "arm 4 TMPDIR default: rc=$rc [$out]"
 
