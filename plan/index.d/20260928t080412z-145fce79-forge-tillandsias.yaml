@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-agent-door-tillandsias-plan-run-json-takes-named-flags-and-an-argv-never-a-string-evaluates-the-policy-before-spawning-starts-the-child-from-the-base-env-only-and-reads-argv-as-json-on-windows-so-nothing-crosses-msys-or-wsl-as-a-string
+    field: notes
+    value: |-
+      size: M
+      implementer_tier: opus
+      The policy call sits in this verb's spawn path (enforcement path
+      rule); the argv-json form is the Windows quoting fix and must be
+      verified on the native binary, not only in WSL.
+
+
+      [2026-09-28T08:04:12Z forge-tillandsias] AMENDED EXIT CRITERION (coordinator ruling, 2026-09-28, from macbookair's 1260-2qgi vocabulary): `run --json` carries an 11th key, `signal` — the signal number as an integer when status is "signaled", and null for every other status. `code` stays an integer ONLY for status "exited". A signal status without its number is half a status ("absent:signal:<N>" needs N). A child that SIGTERMs itself reports {"status":"signaled","signal":15,"code":null}. deadline_ms stays out unless a consumer asks for it.
+    ts: "2026-09-28T08:04:12Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: the-agent-door-tillandsias-plan-run-json-takes-named-flags-and-an-argv-never-a-string-evaluates-the-policy-before-spawning-starts-the-child-from-the-base-env-only-and-reads-argv-as-json-on-windows-so-nothing-crosses-msys-or-wsl-as-a-string
+    event:
+      type: note
+      ts: "2026-09-28T08:04:12Z"
+      host: forge-tillandsias
+      summary: |-
+        coordinator ruling: carry the signal number as an 11th key

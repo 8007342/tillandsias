@@ -304,6 +304,26 @@ ensure_forge_git_index() {
     return 1
 }
 
+# forge_src_budget_report <dir> — order 1445-7u63 criterion 3. /home/forge/src is
+# a kernel-capped tmpfs sized per launch (997-e4v2). When it fills, git dies with
+# a bare write error and the clone path used to blame the mirror ("unreachable or
+# has not finished initialising"). This names the real cause. It prints one line
+# and returns 0 when the filesystem holding <dir> is at or above 95% used, and
+# prints nothing and returns 1 otherwise, so a caller can put it in front of a
+# generic failure message.
+forge_src_budget_report() {
+    local dir="${1:-/home/forge/src}" line pct size used
+    [ -d "$dir" ] || dir="$(dirname "$dir")"
+    line="$(df -P -h "$dir" 2>/dev/null | awk 'NR == 2 { print $2, $3, $5 }')" || return 1
+    [ -n "$line" ] || return 1
+    read -r size used pct <<<"$line"
+    pct="${pct%\%}"
+    case "$pct" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$pct" -ge 95 ] || return 1
+    echo "[forge] /home/forge/src is FULL: ${used} of ${size} (${pct}%). The forge's source budget is exhausted, so git fails with a bare write error; this is not a mirror or network fault. Relaunch the forge (the budget is sized from the mirror at launch, 1445-7u63), or grow it live from the host with a tmpfs remount."
+    return 0
+}
+
 configure_git_identity() {
     # @trace spec:secrets-management, spec:git-mirror-service
     # GitHub Login stores identity on the host; launchers pass it in as env.
@@ -314,24 +334,52 @@ configure_git_identity() {
     # function after find_project_dir, so hooking here covers them all without
     # touching five entrypoints.
     ensure_forge_git_index "${PROJECT_DIR:-$PWD}" || true
-    local name="${GIT_AUTHOR_NAME:-${GIT_COMMITTER_NAME:-}}"
-    local email="${GIT_AUTHOR_EMAIL:-${GIT_COMMITTER_EMAIL:-}}"
+
+    # Order 1453-7rzd (spec forge-git-identity-anonymization): the identity is
+    # the GitHub App user (or a project-scoped fallback) plus this host and a
+    # per-forge tillandsia name, written as git CONFIG. It is NEVER exported as
+    # GIT_AUTHOR_*/GIT_COMMITTER_*: exported, those override a scratch repo's
+    # own `-c user.name`, which is how test-discipline-derive went 4/5 red in
+    # every forge. Anything an older launcher still passes is dropped here.
+    unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+    local name="${TILLANDSIAS_GIT_NAME:-}"
+    local email="${TILLANDSIAS_GIT_EMAIL:-}"
+    local host="${TILLANDSIAS_GIT_HOST:-unknown-host}"
 
     if [[ -z "$name" || -z "$email" ]]; then
-        trace_lifecycle "git-identity" "not configured (missing name or email)"
+        trace_lifecycle "git-identity" "not configured (the launcher passed no TILLANDSIAS_GIT_NAME/EMAIL)"
+        _install_agent_trailer_hook
+        _install_expert_refresh_hook
         return 0
     fi
 
-    export GIT_AUTHOR_NAME="$name"
-    export GIT_AUTHOR_EMAIL="$email"
-    export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-$name}"
-    export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-$email}"
-
-    git config user.name "$name" 2>/dev/null || true
-    git config user.email "$email" 2>/dev/null || true
-    trace_lifecycle "git-identity" "configured"
+    local species
+    species="$(forge_tillandsia_species)"
+    git config --global user.name "$name ($host · tillandsia-$species)" 2>/dev/null || true
+    git config --global user.email "$email" 2>/dev/null || true
+    trace_lifecycle "git-identity" "configured from ${TILLANDSIAS_GIT_IDENTITY_SOURCE:-unknown} as tillandsia-$species on $host"
     _install_agent_trailer_hook
     _install_expert_refresh_hook
+}
+
+# The forge's tillandsia species (order 1453-7rzd): chosen ONCE per forge and
+# stable for its life, so every commit a forge makes carries the same name. The
+# choice is kept under $HOME, which dies with the container.
+TILLANDSIA_SPECIES=(
+    xerographica ionantha bulbosa caput-medusae usneoides aeranthos
+    brachycaulos capitata stricta tectorum juncea harrisii funckiana
+    streptophylla velutina fasciculata cyanea abdita
+)
+forge_tillandsia_species() {
+    local f="$HOME/.cache/tillandsias/tillandsia-species"
+    if [ -s "$f" ]; then
+        cat "$f"
+        return 0
+    fi
+    local s="${TILLANDSIA_SPECIES[RANDOM % ${#TILLANDSIA_SPECIES[@]}]}"
+    mkdir -p "$(dirname "$f")" 2>/dev/null || true
+    printf '%s\n' "$s" >"$f" 2>/dev/null || true
+    printf '%s\n' "$s"
 }
 
 # install_project_guard_hooks — ORDER 969-nhh7. Give the PROJECT CHECKOUT the
@@ -376,6 +424,14 @@ configure_git_identity() {
 # checkout, a missing installer, or a failed install each log one line and
 # return 0. A forge without guards is worse than one with them, but it is not
 # a reason to refuse the launch.
+#
+# ANY OTHER PROJECT (order 1446-xqi6, operator ruling 7): a checkout that is not
+# Tillandsias gets its discipline hooks from the plan binary's embedded
+# templates, `tillandsias-plan discipline install-hooks`, at the level its own
+# seed names (level 0 when it has none: advisory only, pushes to main allowed).
+# Same repo-local core.hooksPath and trailer copy as below. The forge's global
+# post-commit expert refresh is shadowed there too; it exits at once in any
+# repository without plan/index.yaml, so a non-Tillandsias project loses nothing.
 install_project_guard_hooks() {
     local project_dir="${1:-}"
     [ -n "$project_dir" ] && [ -d "$project_dir/.git" ] || {
@@ -384,7 +440,7 @@ install_project_guard_hooks() {
     }
     local installer="$project_dir/scripts/install-hooks.sh"
     [ -r "$installer" ] || {
-        trace_lifecycle "git-hook" "guards skipped (no scripts/install-hooks.sh — not a Tillandsias checkout)"
+        install_project_discipline_hooks "$project_dir"
         return 0
     }
 
@@ -409,6 +465,34 @@ install_project_guard_hooks() {
         echo "[forge] WARNING: scripts/install-hooks.sh failed; this checkout has NO pre-push gate." >&2
         echo "[forge] Push CI is gone, so nothing but your own discipline is checking the trunk." >&2
     fi
+    return 0
+}
+
+# install_project_discipline_hooks <project_dir> — order 1446-xqi6. The
+# non-Tillandsias half of install_project_guard_hooks. Fail-soft: no plan binary
+# or a refused install logs one line and returns 0.
+install_project_discipline_hooks() {
+    local project_dir="$1" plan out
+    plan="${TILLANDSIAS_PLAN_BIN:-$(command -v tillandsias-plan 2>/dev/null)}"
+    if [ -z "$plan" ] || ! "$plan" capabilities >/dev/null 2>&1; then
+        trace_lifecycle "git-hook" "discipline hooks skipped (no runnable tillandsias-plan) — not a Tillandsias checkout"
+        return 0
+    fi
+    local local_hooks="$project_dir/.git/hooks"
+    mkdir -p "$local_hooks" 2>/dev/null || return 0
+    git -C "$project_dir" config core.hooksPath "$local_hooks" 2>/dev/null || return 0
+    local global_hooks="$HOME/.cache/tillandsias/git-hooks"
+    if [ -r "$global_hooks/prepare-commit-msg" ]; then
+        cp "$global_hooks/prepare-commit-msg" "$local_hooks/prepare-commit-msg" 2>/dev/null || true
+        chmod 0755 "$local_hooks/prepare-commit-msg" 2>/dev/null || true
+    fi
+    out="$("$plan" discipline install-hooks --root "$project_dir" 2>>/tmp/forge-lifecycle.log)"
+    case "$out" in
+        ok:discipline:hooks-installed:*)
+            trace_lifecycle "git-hook" "discipline hooks installed: ${out#ok:discipline:hooks-installed:} (core.hooksPath=${local_hooks})" ;;
+        *)
+            trace_lifecycle "git-hook" "discipline hook install refused: ${out:-no verdict}" ;;
+    esac
     return 0
 }
 
@@ -443,8 +527,10 @@ _install_agent_trailer_hook() {
     local hook_file="$hooks_dir/prepare-commit-msg"
     mkdir -p "$hooks_dir" 2>/dev/null || return 0
 
-    # Idempotent: skip if hook already installed
-    if [ -f "$hook_file" ] && grep -q "TILLANDSIAS_AGENT" "$hook_file" 2>/dev/null; then
+    # Idempotent: skip if THIS version of the hook is installed. The marker is
+    # the host trailer (order 1453-7rzd), so a forge holding the older
+    # agent-only hook gets the new one.
+    if [ -f "$hook_file" ] && grep -q "Tillandsias-Host" "$hook_file" 2>/dev/null; then
         return 0
     fi
 
@@ -452,19 +538,28 @@ _install_agent_trailer_hook() {
 #!/usr/bin/env bash
 # prepare-commit-msg hook — Tillandsias forge attribution (auto-installed)
 # @trace spec:forge-git-identity-anonymization
-# Appends Co-Authored-By and Generated-By trailers for agentic commits.
+# Every commit gets a Tillandsias-Host trailer (order 1453-7rzd): the fleet's
+# host attribution reads it, because a noreply author email has no host domain.
+# Agentic commits (TILLANDSIAS_AGENT) also get Co-Authored-By and Generated-By.
 COMMIT_MSG_FILE="$1"
 COMMIT_SOURCE="${2:-}"
-
-[ -n "${TILLANDSIAS_AGENT_NAME:-}" ] || exit 0
 
 case "${COMMIT_SOURCE}" in
     merge|squash|commit) exit 0 ;;
 esac
 
+if [ -n "${TILLANDSIAS_GIT_HOST:-}" ] && ! grep -q "^Tillandsias-Host:" "$COMMIT_MSG_FILE" 2>/dev/null; then
+    git interpret-trailers --in-place --trailer "Tillandsias-Host: ${TILLANDSIAS_GIT_HOST}" "$COMMIT_MSG_FILE" 2>/dev/null \
+        || printf '\nTillandsias-Host: %s\n' "${TILLANDSIAS_GIT_HOST}" >> "$COMMIT_MSG_FILE"
+fi
+
+[ -n "${TILLANDSIAS_AGENT_NAME:-}" ] || exit 0
 grep -q "^Generated-By:" "$COMMIT_MSG_FILE" 2>/dev/null && exit 0
 
-{
+git interpret-trailers --in-place \
+    --trailer "Co-Authored-By: ${TILLANDSIAS_AGENT_NAME} <noreply@tillandsias>" \
+    --trailer "Generated-By: ${TILLANDSIAS_GENERATED_BY:-tool=${TILLANDSIAS_AGENT_NAME}}" \
+    "$COMMIT_MSG_FILE" 2>/dev/null || {
     echo ""
     echo "Co-Authored-By: ${TILLANDSIAS_AGENT_NAME} <noreply@tillandsias>"
     echo "Generated-By: ${TILLANDSIAS_GENERATED_BY:-tool=${TILLANDSIAS_AGENT_NAME}}"
@@ -930,6 +1025,7 @@ _clone_project_from_mirror_impl() {
             echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
             return 0
         else
+            forge_src_budget_report "${PROJECT_DIR:-/home/forge/src}" >&2 || true
             echo "[forge] FATAL: filesystem clone failed from ${src}" >&2
             echo "[forge] Mirror path not visible inside distro? Check /mnt/c/... mount." >&2
             exit 1
@@ -1018,6 +1114,7 @@ _clone_project_from_mirror_impl() {
                 trace_lifecycle "git-mirror" "clone failed after $max_retries attempts"
             fi
         done
+        forge_src_budget_report "${PROJECT_DIR:-/home/forge/src}" >&2 || true
         echo "[forge] FATAL: git clone failed from git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" >&2
         echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
         exit 1
@@ -3643,24 +3740,175 @@ seed_claude_bypass_consent() {
     trace_lifecycle "config" "claude bypass-permissions consent seeded (forge)"
 }
 
+# seed_claude_pretooluse_hook — order 1443-we89, THE TEMPORARY BRIDGE. Merge the
+# image's PreToolUse (matcher Bash) entry, which runs `tillandsias-plan policy
+# classify-bash --hook`, into ~/.claude/settings.json, so every Claude session
+# in a forge on ANY project has its Bash commands checked (operator ruling 1,
+# 2026-09-27: "Commit the hook to the project"; the forge overlay carries it
+# for projects that are not Tillandsias). Additive: every other setting and
+# hook is kept, and the entry is added once (idempotent). Forge-only.
+# TILLANDSIAS_PRETOOLUSE_HOOK=off disables the classifier without editing this.
+seed_claude_pretooluse_hook() {
+    [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] || return 0
+    local overlay_root="${TILLANDSIAS_CONFIG_OVERLAY_ROOT:-/home/forge/.config-overlay}"
+    local overlay_cfg="$overlay_root/claude/settings.json"
+    local settings_cfg="${CLAUDE_SETTINGS_FILE:-$HOME/.claude/settings.json}"
+    local tmp
+    [ -f "$overlay_cfg" ] || return 0
+    jq -e '.hooks.PreToolUse | type == "array"' "$overlay_cfg" >/dev/null 2>&1 || {
+        trace_lifecycle "config" "claude PreToolUse overlay invalid; hook NOT seeded"
+        return 1
+    }
+    mkdir -p "$(dirname "$settings_cfg")"
+    tmp="$(mktemp "${settings_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$settings_cfg" ]; then
+        if ! jq -e 'type == "object"' "$settings_cfg" >/dev/null 2>&1; then
+            rm -f "$tmp"
+            trace_lifecycle "config" "claude settings.json is not a JSON object; PreToolUse hook NOT seeded"
+            return 1
+        fi
+        # Already present (any hook running classify-bash): leave the file alone.
+        if jq -e '[.hooks.PreToolUse[]?.hooks[]?.command // empty] | any(test("classify-bash"))' \
+            "$settings_cfg" >/dev/null 2>&1; then
+            rm -f "$tmp"
+            return 0
+        fi
+        jq -s '.[0] * {hooks: ((.[0].hooks // {}) + {PreToolUse: ((.[0].hooks.PreToolUse // []) + .[1].hooks.PreToolUse)})}' \
+            "$settings_cfg" "$overlay_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        cp "$overlay_cfg" "$tmp" || { rm -f "$tmp"; return 1; }
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$settings_cfg"
+    trace_lifecycle "config" "claude PreToolUse Bash bridge seeded (forge)"
+}
+
 # Pre-trust the forge project folder (2026-08-31, minted-session blocker #2:
 # after the theme picker was seeded away, claude's workspace-trust dialog —
 # "Yes, I trust this folder / Enter to confirm" — blocked the prompt next).
 # Inside a forge the folder is a fresh clone from OUR OWN mirror into an
 # isolated container; the trust question is answered by the architecture,
 # not by a human at a dialog. Call AFTER find_project_dir with $PROJECT_DIR.
+#
+# ORDER 1447-nmq3: this function existed but NOTHING CALLED IT. b7cc60d8d added
+# the call; 892f2e46e replaced it the same day with the approvals-vault restore
+# ("first-ever launch prompts once"), and every new checkout path IS a first
+# launch, so the forge prompted on every project. The operator's direction
+# (2026-09-27): pre-seed /home/forge and allowlist the checked-out project, so
+# nothing prompts. entrypoint-forge-claude.sh now calls this right after
+# find_project_dir, after the vault restore, so a restored document cannot
+# undo it.
+#
+# THE KEY IS THE PATH CLAUDE USES: the absolute project directory with no
+# trailing slash (a live forge's ~/.claude.json holds "/home/forge/src/<p>").
+# find_project_dir returns "$HOME/src/<p>/", so the slash is stripped here; a
+# seeded "…/<p>/" key is one Claude never reads.
+#
+# hasTrustDialogAccepted is set to true UNCONDITIONALLY, unlike the bypass
+# seed's has()-guarded fields: Claude itself creates a project entry with
+# hasTrustDialogAccepted:false the first time it sees a path, so a false here
+# is Claude's "not yet asked", not an operator refusal. Every other key of the
+# entry, and every other project, is preserved. Forge-only: on bare metal this
+# writes nothing.
 seed_claude_project_trust() {
-    local project_dir="$1"
+    [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] || return 0
+    local project_dir="${1:-}"
     local user_cfg="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
     local tmp
+    while [ "${project_dir%/}" != "$project_dir" ] && [ "$project_dir" != "/" ]; do
+        project_dir="${project_dir%/}"
+    done
     [ -n "$project_dir" ] || return 0
-    [ -s "$user_cfg" ] || printf '{}
-' >"$user_cfg"
+    mkdir -p "$(dirname "$user_cfg")"
     tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
-    jq --arg dir "$project_dir"         '.projects = ((.projects // {}) | .[$dir] = ((.[$dir] // {}) + {hasTrustDialogAccepted: (.[$dir].hasTrustDialogAccepted // true)}))'         "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    if [ -s "$user_cfg" ] && jq -e 'type == "object"' "$user_cfg" >/dev/null 2>&1; then
+        jq --arg dir "$project_dir" \
+            '.projects = ((.projects // {}) | .[$dir] = ((.[$dir] // {}) + {hasTrustDialogAccepted: true}))' \
+            "$user_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        jq -n --arg dir "$project_dir" '{projects: {($dir): {hasTrustDialogAccepted: true}}}' >"$tmp" ||
+            { rm -f "$tmp"; return 1; }
+    fi
     chmod 600 "$tmp"
     mv -f "$tmp" "$user_cfg"
-    trace_lifecycle "config" "claude project trust seeded for $project_dir"
+    trace_lifecycle "config" "claude project trust seeded for $project_dir (forge)"
+}
+
+# seed_codex_project_trust <project_dir> — order 1447-nmq3. Codex keeps folder
+# trust in $CODEX_HOME/config.toml as a `projects` table of ProjectConfig
+# {trust_level} (measured in codex-cli 0.157.1's binary: "projects table missing
+# after initialization", `projects."<path>".trust_level`, values
+# trusted/untrusted). The forge's CODEX_HOME is ephemeral per worker
+# (codex-safe-state.sh never persists config.toml), so without a seed every
+# launch asks again.
+#
+# APPEND-ONLY TOML. The same file carries `[mcp_servers.*]` tables written by
+# `codex mcp add` (config-overlay/codex/register-experts.sh), so it is never
+# rewritten: a `[projects."<path>"]` table is appended when none exists for this
+# path, and an existing one, whatever it says, is left alone. Forge-only.
+seed_codex_project_trust() {
+    [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] || return 0
+    local project_dir="${1:-}" cfg key
+    while [ "${project_dir%/}" != "$project_dir" ] && [ "$project_dir" != "/" ]; do
+        project_dir="${project_dir%/}"
+    done
+    [ -n "$project_dir" ] || return 0
+    cfg="${CODEX_HOME:-$HOME/.codex}/config.toml"
+    # TOML basic string: escape backslash and double quote.
+    key="$(printf '%s' "$project_dir" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+    mkdir -p "$(dirname "$cfg")" || return 1
+    if [ -f "$cfg" ] && grep -qF "[projects.\"$key\"]" "$cfg"; then
+        trace_lifecycle "config" "codex project trust already present for $project_dir"
+        return 0
+    fi
+    {
+        # A file that does not end in a newline would glue the header onto its
+        # last line.
+        if [ -s "$cfg" ] && [ -n "$(tail -c 1 "$cfg")" ]; then printf '\n'; fi
+        printf '\n[projects."%s"]\ntrust_level = "trusted"\n' "$key"
+    } >>"$cfg" || return 1
+    chmod 600 "$cfg" 2>/dev/null || true
+    trace_lifecycle "config" "codex project trust seeded for $project_dir (forge)"
+}
+
+# seed_agy_workspace_trust <project_dir> — order 1447-nmq3. The Antigravity CLI
+# (agy 1.2.12) keeps workspace trust in ~/.gemini/antigravity-cli/settings.json
+# as `trustedWorkspaces`, a LIST of absolute paths. MEASURED in a scratch HOME:
+# ["<path>"] is accepted (agy re-serialises it), while a map
+# {"<path>": true} is rejected with "invalid settings: trustedWorkspaces:
+# invalid value" and ALL settings fall back to defaults. Its published
+# settings reference does not document the key, which is why it was measured.
+#
+# The path is appended when absent; every other setting is preserved. A
+# settings file that is not a JSON object is left untouched: rewriting it would
+# discard settings agy cannot read either, and that is the operator's to fix.
+# Forge-only.
+seed_agy_workspace_trust() {
+    [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] || return 0
+    local project_dir="${1:-}" cfg tmp
+    while [ "${project_dir%/}" != "$project_dir" ] && [ "$project_dir" != "/" ]; do
+        project_dir="${project_dir%/}"
+    done
+    [ -n "$project_dir" ] || return 0
+    cfg="${AGY_SETTINGS_FILE:-$HOME/.gemini/antigravity-cli/settings.json}"
+    mkdir -p "$(dirname "$cfg")" || return 1
+    tmp="$(mktemp "${cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$cfg" ]; then
+        if ! jq -e 'type == "object"' "$cfg" >/dev/null 2>&1; then
+            rm -f "$tmp"
+            trace_lifecycle "config" "agy settings.json is not a JSON object; workspace trust NOT seeded"
+            return 0
+        fi
+        jq --arg dir "$project_dir" \
+            '.trustedWorkspaces = (((.trustedWorkspaces // []) | if type == "array" then . else [] end) as $t
+                | if ($t | index([$dir])) then $t else $t + [$dir] end)' \
+            "$cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        jq -n --arg dir "$project_dir" '{trustedWorkspaces: [$dir]}' >"$tmp" || { rm -f "$tmp"; return 1; }
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$cfg"
+    trace_lifecycle "config" "agy workspace trust seeded for $project_dir (forge)"
 }
 
 # ── Hot-path population ─────────────────────────────────────

@@ -406,6 +406,10 @@ fn reconcile_notify_icon_settings() {
                 refreshed += 1;
             }
             EntryAction::Prune => {
+                // 1450-23if: an approval must outlive the entry it lived in.
+                if read_reg_dword(sub, "IsPromoted") == Some(1) {
+                    set_promotion_marker();
+                }
                 let _ = unsafe { RegCloseKey(sub) };
                 let name_w = to_utf16(name);
                 let _ = unsafe { RegDeleteTreeW(root, PCWSTR(name_w.as_ptr())) };
@@ -426,6 +430,242 @@ fn reconcile_notify_icon_settings() {
         tooltip = %tooltip,
         "notify-icon reconcile complete"
     );
+}
+
+/// ORDER 1450-23if: where a pruned approval is remembered until a tray carries
+/// it: `HKCU\Software\Tillandsias`, value `TrayIconPromoted` (DWORD 1). The
+/// installer writes the same value when its install-time prune removes a
+/// promoted entry, because it prunes before the new tray has ever run.
+const PROMOTION_MARKER_KEY: &str = r"Software\Tillandsias";
+const PROMOTION_MARKER_VALUE: &str = "TrayIconPromoted";
+/// Set inside an entry this tray has promoted, so it is carried at most once.
+const PROMOTION_CARRIED_VALUE: &str = "TillandsiasPromotionCarried";
+
+/// Read a `REG_DWORD` value; `None` when absent, of another type, or unreadable.
+#[cfg(target_os = "windows")]
+fn read_reg_dword(key: windows::Win32::System::Registry::HKEY, value: &str) -> Option<u32> {
+    use windows::Win32::System::Registry::{REG_DWORD, RegQueryValueExW};
+    use windows::core::PCWSTR;
+
+    let name_w = to_utf16(value);
+    let mut kind = windows::Win32::System::Registry::REG_VALUE_TYPE::default();
+    let mut data = [0u8; 4];
+    let mut size: u32 = 4;
+    let rc = unsafe {
+        RegQueryValueExW(
+            key,
+            PCWSTR(name_w.as_ptr()),
+            None,
+            Some(&mut kind),
+            Some(data.as_mut_ptr()),
+            Some(&mut size),
+        )
+    };
+    if rc.is_err() || kind != REG_DWORD || size != 4 {
+        return None;
+    }
+    Some(u32::from_le_bytes(data))
+}
+
+/// Write a `REG_DWORD` value. Best-effort, like every write in this hive.
+#[cfg(target_os = "windows")]
+fn write_reg_dword(key: windows::Win32::System::Registry::HKEY, value: &str, data: u32) -> bool {
+    use windows::Win32::System::Registry::{REG_DWORD, RegSetValueExW};
+    use windows::core::PCWSTR;
+
+    let name_w = to_utf16(value);
+    let bytes = data.to_le_bytes();
+    unsafe { RegSetValueExW(key, PCWSTR(name_w.as_ptr()), 0, REG_DWORD, Some(&bytes)) }.is_ok()
+}
+
+/// Remember that a promoted Tillandsias entry was pruned (1450-23if).
+#[cfg(target_os = "windows")]
+fn set_promotion_marker() {
+    use windows::Win32::System::Registry::{
+        HKEY, HKEY_CURRENT_USER, KEY_ALL_ACCESS, REG_OPTION_NON_VOLATILE, RegCloseKey,
+        RegCreateKeyExW,
+    };
+    use windows::core::PCWSTR;
+
+    let key_w = to_utf16(PROMOTION_MARKER_KEY);
+    let mut key = HKEY::default();
+    let created = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(key_w.as_ptr()),
+            0,
+            PCWSTR::null(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_ALL_ACCESS,
+            None,
+            &mut key,
+            None,
+        )
+    };
+    if created.is_ok() {
+        write_reg_dword(key, PROMOTION_MARKER_VALUE, 1);
+        let _ = unsafe { RegCloseKey(key) };
+    }
+}
+
+/// Read and clear the pruned-approval marker (1450-23if).
+#[cfg(target_os = "windows")]
+fn take_promotion_marker() -> bool {
+    use windows::Win32::System::Registry::{
+        HKEY, HKEY_CURRENT_USER, KEY_ALL_ACCESS, RegCloseKey, RegDeleteValueW, RegOpenKeyExW,
+    };
+    use windows::core::PCWSTR;
+
+    let key_w = to_utf16(PROMOTION_MARKER_KEY);
+    let mut key = HKEY::default();
+    if unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(key_w.as_ptr()),
+            0,
+            KEY_ALL_ACCESS,
+            &mut key,
+        )
+    }
+    .is_err()
+    {
+        return false;
+    }
+    let set = read_reg_dword(key, PROMOTION_MARKER_VALUE) == Some(1);
+    if set {
+        let name_w = to_utf16(PROMOTION_MARKER_VALUE);
+        let _ = unsafe { RegDeleteValueW(key, PCWSTR(name_w.as_ptr())) };
+    }
+    let _ = unsafe { RegCloseKey(key) };
+    set
+}
+
+/// ORDER 1450-23if: carry the operator's "show on the taskbar" approval into
+/// this tray's own `NotifyIconSettings` entry.
+///
+/// Windows creates the entry when the icon is first registered, keyed on the
+/// executable PATH, so a tray at a new path starts hidden in the overflow even
+/// though the operator approved Tillandsias before. Measured on yolanda: setting
+/// `IsPromoted = 1` on the live entry moves the icon onto the taskbar within
+/// seconds, so this runs AFTER `add_tray_icon`, on a background thread, and
+/// waits briefly for the entry to appear. The decision is
+/// `tray_registry::should_carry_promotion` (carry at most once per entry, never
+/// over an operator's later choice). Best-effort and silent on failure.
+#[cfg(target_os = "windows")]
+fn carry_notify_icon_promotion() {
+    use crate::tray_registry::{OwnPromotion, is_tillandsias_tray, should_carry_promotion};
+    use windows::Win32::System::Registry::{
+        HKEY, HKEY_CURRENT_USER, KEY_ALL_ACCESS, RegCloseKey, RegEnumKeyExW, RegOpenKeyExW,
+    };
+    use windows::core::PCWSTR;
+
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let current_exe = exe
+        .to_string_lossy()
+        .to_ascii_lowercase()
+        .replace('/', "\\");
+    let root_w = to_utf16(r"Control Panel\NotifyIconSettings");
+
+    for _attempt in 0..20 {
+        let mut root = HKEY::default();
+        if unsafe {
+            RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                PCWSTR(root_w.as_ptr()),
+                0,
+                KEY_ALL_ACCESS,
+                &mut root,
+            )
+        }
+        .is_err()
+        {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            continue;
+        }
+        let mut own: Option<(String, OwnPromotion)> = None;
+        let mut another_promoted = false;
+        let mut idx: u32 = 0;
+        loop {
+            let mut buf = [0u16; 256];
+            let mut len = buf.len() as u32;
+            if unsafe {
+                RegEnumKeyExW(
+                    root,
+                    idx,
+                    windows::core::PWSTR(buf.as_mut_ptr()),
+                    &mut len,
+                    None,
+                    windows::core::PWSTR::null(),
+                    None,
+                    None,
+                )
+            }
+            .is_err()
+            {
+                break;
+            }
+            idx += 1;
+            let name = String::from_utf16_lossy(&buf[..len as usize]);
+            let sub_w = to_utf16(&name);
+            let mut sub = HKEY::default();
+            if unsafe { RegOpenKeyExW(root, PCWSTR(sub_w.as_ptr()), 0, KEY_ALL_ACCESS, &mut sub) }
+                .is_err()
+            {
+                continue;
+            }
+            let path = read_reg_string(sub, "ExecutablePath").unwrap_or_default();
+            let promoted = read_reg_dword(sub, "IsPromoted") == Some(1);
+            if path.to_ascii_lowercase().replace('/', "\\") == current_exe {
+                let carried = read_reg_dword(sub, PROMOTION_CARRIED_VALUE) == Some(1);
+                own = Some((
+                    name,
+                    OwnPromotion {
+                        is_promoted: promoted,
+                        carried,
+                    },
+                ));
+            } else if promoted && is_tillandsias_tray(&path) {
+                another_promoted = true;
+            }
+            let _ = unsafe { RegCloseKey(sub) };
+        }
+        if let Some((name, state)) = own {
+            let marker = take_promotion_marker();
+            if should_carry_promotion(state, another_promoted, marker) {
+                let sub_w = to_utf16(&name);
+                let mut sub = HKEY::default();
+                if unsafe {
+                    RegOpenKeyExW(root, PCWSTR(sub_w.as_ptr()), 0, KEY_ALL_ACCESS, &mut sub)
+                }
+                .is_ok()
+                {
+                    let ok = write_reg_dword(sub, "IsPromoted", 1)
+                        && write_reg_dword(sub, PROMOTION_CARRIED_VALUE, 1);
+                    let _ = unsafe { RegCloseKey(sub) };
+                    tracing::info!(
+                        ok,
+                        from_sibling = another_promoted,
+                        from_marker = marker,
+                        "notify-icon: carried the taskbar approval into this tray's entry"
+                    );
+                }
+            } else {
+                tracing::debug!(
+                    ?state,
+                    another_promoted,
+                    marker,
+                    "notify-icon: no approval to carry"
+                );
+            }
+            let _ = unsafe { RegCloseKey(root) };
+            return;
+        }
+        let _ = unsafe { RegCloseKey(root) };
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    tracing::debug!("notify-icon: own entry never appeared; nothing carried");
 }
 
 /// Read a `REG_SZ` value as a Rust string. Returns `None` for any other type,
@@ -616,6 +856,9 @@ pub fn run() -> ! {
             eprintln!("failed to register notify icon: {err:?}");
             return 1;
         }
+        // 1450-23if: Windows has just created (or found) this tray's entry;
+        // carry an existing taskbar approval into it, off the UI thread.
+        std::thread::spawn(carry_notify_icon_promotion);
 
         // Initialise menu state; the WSL lifecycle task will mutate it.
         {

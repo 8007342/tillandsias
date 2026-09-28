@@ -1,0 +1,13 @@
+# Gate step 1458-8y85 — data, not code (order 1072-b7eq).
+#
+# The origin-fold drop guard (1261-bn7v) refuses a stale-base drop but admits a
+# DELIBERATE --replace whose replaces_sha256 matches origin's current fold, and
+# still refuses a replace written against a stale fold. This fixture was bound
+# to no gate before.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the origin-fold drop guard admits only acknowledged replaces (1458-8y85)"
+STEP_SCRIPT="scripts/test-append-vs-origin-fold.sh"
+STEP_ERROR="the origin-fold drop guard admits an unacknowledged or stale drop, or refuses an acknowledged deliberate replace (1458-8y85, 1261-bn7v) — see the FAIL lines above"
+STEP_OK="Origin-fold drop guard passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:append-vs-origin:refused-drop:1:admitted-current:1:scoped:3"

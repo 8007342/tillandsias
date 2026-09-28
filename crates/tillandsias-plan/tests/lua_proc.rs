@@ -122,13 +122,19 @@ fn arm3_a_deadline_kills_the_whole_group() {
     }
 }
 
-/// ARM 5: a shell handed a command STRING is refused, naming the declaration.
+/// ARM 5: a shell handed a command STRING is refused. Since 1443-isrk the
+/// refusal is the command policy's, returned as a VALUE naming its rule (it
+/// used to be a Lua error with no rule id), and nothing is spawned.
 #[test]
 fn arm5_a_shell_string_is_refused() {
-    let err = observing::<mlua::Value>(r#"return proc.run{argv = {"bash", "-c", "true | false"}}"#)
-        .unwrap_err()
-        .to_string();
-    assert!(err.contains("allow_shell_strings"), "{err}");
+    let (status, rule, remedy): (String, String, String) = observing(
+        r#"local r = proc.run{argv = {"bash", "-c", "true | false"}}
+           return r.status, r.rule_id, r.remedy"#,
+    )
+    .expect("a policy refusal is a value, not an error");
+    assert_eq!(status, "policy_denied");
+    assert_eq!(rule, "no-shell-strings");
+    assert!(remedy.contains("argv"), "{remedy}");
     // A script FILE given to bash is argv, not a string, and is allowed.
     if bash_available() {
         let ok: bool = observing(

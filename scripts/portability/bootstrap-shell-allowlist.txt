@@ -35,6 +35,10 @@ scripts/hooks/pre-push-local-gate.sh
 scripts/hooks/pre-push-main-branch-affordance.sh
 scripts/hooks/pre-push-no-stale-base-revert.sh
 scripts/hooks/pre-push-version-guard.sh
+# The Claude Code harness execs its PreToolUse hook through a shell, the same
+# shape as row 3; it retires with the bridge itself (1443-we89's retirement
+# condition), not by migrating to Lua.
+scripts/hooks/claude-pretooluse-command-policy.sh
 # Container entrypoints, until the image ships the plan binary (§6.5 row 4).
 images/default/entrypoint-forge-antigravity.sh
 images/default/entrypoint-forge-claude.sh

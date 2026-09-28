@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-agent-door-tillandsias-plan-run-json-takes-named-flags-and-an-argv-never-a-string-evaluates-the-policy-before-spawning-starts-the-child-from-the-base-env-only-and-reads-argv-as-json-on-windows-so-nothing-crosses-msys-or-wsl-as-a-string
+    event:
+      type: note
+      ts: "2026-09-28T08:37:22Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        WINDOWS MEASUREMENT (yolanda, 2026-09-28), tillandsias-plan.exe built natively from work/1260-2qgi 9aba0d618 (contains this row's c634aeb09).
+        (a) ARGV INTEGRITY, NATIVE CHILD: PASS. 15 hard arguments delivered via --argv-json - to a native Windows child (python.exe printing sys.argv as JSON; it parses the command line the standard MSVCRT way) came back BYTE-IDENTICAL: "a b", say "hi", $HOME, $(whoami), C:\x\., C:\x\ (trailing backslash), back\slash\, tail\"q, "", mid, "" (empty between args), "  lead and trail  ", *, %PATH%, a&b|c<d>e^f. So the exe's CreateProcess quoting is correct for every Windows-quoting hazard named in the ask.
+        (b) GIT BASH CONTRAST: PASS, and sharper than predicted. --argv-json - with ["printf","%s","C:\x\."] prints C:\x\. unconverted. The PLAIN form also leaves C:\x\. alone (MSYS does not rewrite drive paths) and /tmp/a:b alone, but it DOES rewrite a Unix device path: plain `-- printf %s /dev/zero` prints /Device/Null, while --argv-json keeps /dev/zero. That is the MSYS conversion --argv-json exists to defeat.
+        FIXTURE, NATIVE: scripts/test-run-verb-agent-door.sh 28/29. The one FAIL is arm 6, and it is the fixture, not the verb: it passes /dev/zero on the plain command line, MSYS turns it into /Device/Null before the exe sees it, and head fails. Re-run with MSYS_NO_PATHCONV=1 or through --argv-json the same arm reads truncated:true, ok:false, code 0 as intended. Fix: arm 6 passes its argv via --argv-json (or exports MSYS_NO_PATHCONV=1) so it holds on Windows.

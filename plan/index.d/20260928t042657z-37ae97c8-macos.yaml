@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: five-ci-release-litmus-tests-fail-on-unmodified-trunk-under-darwin-bsd-userland
+    event:
+      type: progress
+      ts: "2026-09-28T04:26:57Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t042657z
+      host: macos
+      summary: |
+        Implementation complete on work/1454-ssg3 at e3e974175 (merged over origin/linux-next). CLOSURE MEASURED on darwin in the GATE regime (TILLANDSIAS_PLAN_BIN and CARGO_TARGET_DIR unset, plan binary built from the tree): `run-litmus-test.sh ci-release --phase pre-build --size instant` gives Test Verdicts: passed=52 failed=0 at 27126ee63 (the tree before the final mf_plan_binary commit, which changes only how steps 3-4 of added-fragment-parse resolve the binary; both still [OK] after it). The cross-platform count arm is scripts/test-bsd-count-shapes.sh, 4/4, gate step 278. RE-MEASUREMENT CHANGED THE DIAGNOSIS, stated plainly: my earlier baseline was taken in the wrong regime (TILLANDSIAS_PLAN_BIN exported, in git worktrees, with a plan binary copied from an older tree). In the gate regime, #3 (closure-evidence) and #4 (status-loss) PASS unchanged: their "stale binary" stub is named tillandsias-plan.exe, and my exported binary answered in its place. They were never darwin reds. #5 (validator-surface-currency) was a worktree bug, not a darwin one: find_repo_root required `.git` to be a directory, and a linked worktree's `.git` is a file, so every binary built in a worktree answered unknown:validator-surface on any platform. Fixed with `.exists()`; the main checkout passes 8/8 before and after, and a worktree fails before and passes 8/8 after. #1 fixed (BSD grep -lc). #2 fixed: the parse gate refuses with blocked:…:no-validator instead of a green that never looked, falls back to `tillandsias-plan validate-yaml`, and its litmus steps copy the binary resolved by mf_plan_binary. Clean checkout: 12 deciders rc=0 (probe-usage included), ratchet 6/6, crate 475/0, musl zigbuild rc=0. ALSO FOUND, not fixed (out of scope; it pre-exists on trunk, with the identical 16 passed / 2 failed from trunk's own binary): scripts/test-metrics-log-path-agreement.sh fails 2 arms in ANY linked worktree ("Rust writer and shell rule DISAGREE", "no-checkout fallback broke"). It is the same worktree family: the Rust metrics path keeps an is_dir test by design, while the shell rule accepts the worktree. Please relay e3e974175; close after landing.

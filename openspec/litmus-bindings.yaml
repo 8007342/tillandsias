@@ -156,6 +156,7 @@ specs:
   - litmus:cosign-arrives-verified
   - litmus:scorable-obligation-splitter
   - litmus:added-test-is-referenced-shape
+  - litmus:verify-closure-shape
   - litmus:reset-flags-accepted
   - litmus:tool-materialization
   - litmus:metrics-log-fallback-is-loud
@@ -172,6 +173,7 @@ specs:
   # would be a file rather than a gate.
   - litmus:land-verdict-through-a-pipe
   - litmus:covering-relay-scope-shape
+  - litmus:command-policy-evaluator-shape
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
   - litmus:smoke-release-channel-shape
@@ -255,6 +257,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:opencode-render-probe-shape
+  - litmus:forge-project-trust-seeds-shape
   - litmus:forge-standalone-traceability
   - litmus:forge-tool-affordances
   - litmus:forge-diagnostics-e2e
@@ -1268,11 +1271,20 @@ specs:
   last_verified: '2026-09-27'
 - spec_id: command-policies
   status: draft
-  litmus_tests: []
+  litmus_tests:
+  - litmus:pretooluse-command-policy-shape
+  - litmus:command-policy-audit-shape
   coverage_ratio: 0
   last_verified: '2026-09-27'
 - spec_id: branch-discipline
   status: draft
-  litmus_tests: []
+  litmus_tests:
+  - litmus:discipline-install-hooks-shape
   coverage_ratio: 0
   last_verified: '2026-09-27'
+- spec_id: forge-git-identity-anonymization
+  status: active
+  litmus_tests:
+  - litmus:forge-git-identity-source
+  coverage_ratio: 1
+  last_verified: '2026-09-28'

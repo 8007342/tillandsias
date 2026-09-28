@@ -105,12 +105,27 @@ pairs="$(awk '
 
 [ -n "$pairs" ] || { echo "ok:append-vs-origin:checked:0"; exit 0; }
 
+# ORDER 1458-8y85. DELIBERATE-REPLACE ACKNOWLEDGEMENTS in this push's own
+# fragments: `set-field --replace` writes `replaces_sha256:` on its status row,
+# the sha256 of the exact folded value it read and replaced. A drop is admitted
+# only when that hash equals ORIGIN's current fold of the field, so a replace
+# written against a stale fold (origin gained a peer's append since) still
+# differs and is still refused, which is the 1261-bn7v case this guard exists for.
+acks="$(awk '
+    FNR == 1 { in_s = 0; pid = ""; fld = "" }
+    /^status:[[:space:]]*$/   { in_s = 1; pid = ""; fld = ""; next }
+    /^[a-z_]+:[[:space:]]*$/  { in_s = 0; pid = ""; fld = "" }
+    in_s && /^  - packet_id:/ { pid = $3; fld = ""; next }
+    in_s && /^    field:/     { fld = $2; next }
+    in_s && /^    replaces_sha256:/ { v = $2; gsub(/"/, "", v); if (pid != "" && fld != "") print pid "\t" fld "\t" v }
+' "${_pair_sources[@]}" 2>/dev/null | sort -u)"
+
 TMP="$(mktemp -d)" || { echo "skip:append-vs-origin:no-tmpdir"; exit 0; }
 trap 'rm -rf "$TMP"' EXIT
 git archive "$TRUNK_REF" plan/ 2>/dev/null | tar -x -C "$TMP" 2>/dev/null || {
     echo "skip:append-vs-origin:cannot-extract-origin"; exit 0; }
 
-checked=0; refused=0
+checked=0; refused=0; admitted=0
 _deadline="${TILLANDSIAS_APPEND_FOLD_DEADLINE:-300}"
 SECONDS=0
 while IFS=$'\t' read -r pid field; do
@@ -145,6 +160,23 @@ $origin_val
 EOF
 
     if [ -n "$dropped" ]; then
+        # 1458-8y85: a matching acknowledgement admits a deliberate replace.
+        ack="$(printf '%s\n' "$acks" | awk -F'\t' -v p="$pid" -v f="$field" '$1 == p && $2 == f { print $3; exit }')"
+        if [ -n "$ack" ]; then
+            origin_sha="$(printf '%s' "$origin_val" | "$PLAN_ABS" hash sha256 - 2>/dev/null)"
+            if [ -n "$origin_sha" ] && [ "$ack" = "$origin_sha" ]; then
+                admitted=$((admitted + 1))
+                echo "  admitted: ${pid}.${field} — a deliberate --replace of exactly origin's current value (replaces_sha256 matches; 1458-8y85)" >&2
+                continue
+            fi
+            refused=$((refused + 1))
+            echo "refused:append-drops-lines-vs-origin:${pid}:${field}:replace-against-stale-fold"
+            echo "  This push's --replace of ${pid}.${field} acknowledged a value origin no longer holds:" >&2
+            echo "    acknowledged: ${ack}" >&2
+            echo "    origin now:   ${origin_sha:-<could not hash>}" >&2
+            echo "  REMEDY: git fetch origin, re-read the field (someone appended to it), and redo the --replace on top of it." >&2
+            continue
+        fi
         refused=$((refused + 1))
         echo "refused:append-drops-lines-vs-origin:${pid}:${field}"
         echo "  This push's fold of ${pid}.${field} DROPS $(printf '%s' "$dropped" | grep -c .) line(s) that origin carries." >&2
@@ -164,4 +196,8 @@ EOF
 if [ "$refused" -gt 0 ]; then
     exit 1
 fi
-echo "ok:append-vs-origin:checked:${checked}"
+if [ "$admitted" -gt 0 ]; then
+    echo "ok:append-vs-origin:checked:${checked}:admitted-replace:${admitted}"
+else
+    echo "ok:append-vs-origin:checked:${checked}"
+fi

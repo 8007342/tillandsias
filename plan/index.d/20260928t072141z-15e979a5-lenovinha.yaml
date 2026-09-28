@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-credential-channel-reports-stop-and-report-on-a-host-whose-verified-host-push-lane-can-land-every-push
+    event:
+      type: note
+      ts: "2026-09-28T07:21:41Z"
+      agent_id: linux-lenovinha-claude-20260928t065321z
+      host: lenovinha
+      summary: |
+        REGIME NOTE (coordinator review): the lane upstream check reads the mirror verdict through a podman-exec source, which exists only where the mirror runs under THIS user's podman (the bare-metal Silverblue lane). Where the mirror is not reachable that way (no container of that name, another user's podman, a guest-resident mirror), the reader gets no verdict refs and answers blocked:upstream-auth-unpublished, rc 1: a named refusal, never a pass. Measured with the real reader against tillandsias-git-nosuchproject: verdict=blocked:upstream-auth-unpublished rc=1. So a lane counts only where its own upstream verdict is readable, fresh and authorized.

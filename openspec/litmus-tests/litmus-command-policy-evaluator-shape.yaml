@@ -1,0 +1,32 @@
+# @trace order:1443-isrk, spec:command-policies
+#
+# Pins the command policy evaluator (1443-isrk): `tillandsias-plan policy eval`
+# and the proc.run gate. Bound under ci-release so a gate actually executes it;
+# the command-policies spec entry is still draft.
+name: litmus:command-policy-evaluator-shape
+spec: ci-release
+phase: pre-build
+description: >
+  Credential mutations and shell strings are denied with why/remedy; soft reset
+  is consent on bare metal and pre-authorised in a forge; hard reset is consent
+  even with the smoke env and refused in a forge; a loosening seed is refused
+  whole; proc.run refuses without spawning; git status stays allowed.
+severity: critical
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-command-policy-evaluator.sh
+  - workspace contains crates/tillandsias-plan/src/command_policy.rs
+  - workspace contains .tillandsias/command-policies.yaml
+  - a built tillandsias-plan (resolved by scripts/plan-binary-probe.sh)
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-command-policy-evaluator.sh && test -x scripts/test-command-policy-evaluator.sh && echo 'ok: policy-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: policy-fixture-parses"
+
+  - step: "six arms: credential, shell string, soft/hard reset, seed cannot loosen, proc.run no-spawn, negative control"
+    command: "out=$(bash scripts/test-command-policy-evaluator.sh); rc=$?; case \"$out\" in (*'ok:command-policy-evaluator:6/6'*) [ \"$rc\" = 0 ] && echo 'ok: policy 6/6' ;; (*) printf '%s\\n' \"$out\"; exit 1 ;; esac"
+    timeout_ms: 60000
+    expected_behavior: "ok: policy 6/6"

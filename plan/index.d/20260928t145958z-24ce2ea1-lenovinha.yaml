@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-quoted-order-scalar-is-invisible-to-every-grep-based-ledger-reader-so-nine-filed-packets-could-not-be-cited-and-the-guards-own-fixture-could-never-have-caught-it
+    event:
+      type: progress
+      ts: "2026-09-28T14:59:58Z"
+      agent_id: linux-lenovinha-claude-20260928t145958z
+      host: lenovinha
+      summary: |
+        work/1283-tpd5 at 3c3a584a7 (preflight refused=0; full gate running). Per criterion:
+        C1 FIXTURE, both gates. test-plan-orders-fragment-fold.sh case 6: base declares order 700-aaaa unquoted, a fragment declares it quoted; plan-orders refuses duplicate-order:700-aaaa. PASS; it passed pre-fix too (the gate parses), so it is written as a regression guard. test-order-citations-resolve.sh arm 6: a hermetic tree declaring one order unquoted and one quoted, both cited, answers ok. Arm 7 is its negative control: remove the quoted declaration and the citation is refused by name. PRE-FIX measured by running the fixture against the guard with the pre-1274 quote-less pattern: arm 6 FAILS with violation:order-citations-unresolvable:1, naming only the quoted order.
+        C2 the guard's own fixture now builds a quoted declaration (arm 6); its archive sample (arm 4) also tolerates both spellings.
+        C3 ENUMERATION, by sweeping scripts, skills and .claude/skills for grep, sed, awk or rg over an order: line, literal or interpolated. Ledger order readers found: (1) check-order-citations-resolve.sh known-set read, already tolerant since 1274-cbk7; (2) check-cheatsheet-source-anchors.sh declaration check and fallback search, NOW tolerant; (3) test-append-event-archived-refusal.sh archive sample, live sample and index membership test, NOW tolerant; (4) test-order-citations-resolve.sh archive sample, NOW tolerant. Shown not to need it: the order:ID @trace citation reads (they read code comments, never the ledger); check-claim-confirmed.sh (reads the plan binary status line); test-plan-orders-fragment-fold.sh (greps verdict tokens, not the ledger); the plan binary and tillandsias-policy (parse YAML).
+        C4 WRITER, named: no tool. All nine quoted declarations were HAND-AUTHORED by one yoga session in six commits on 2026-09-18/19 (ad2140e3d, 79d796902, 22a4eef80, 784fd8f58, 96a20faee, 7b2a648c6). The same fragments also quote agent_id, which is a hand-written style, and no plan-binary writer emits a quoted order (the quoted strings in crates/tillandsias-plan/src/main.rs are test fixtures). The count is still nine at 2026-09-28: nothing has quoted the field since. Should it stop: yes, by filing through the plan CLI, which writes unquoted. The nine fragments are immutable and stay as they are; the readers now accept both spellings, so no rewrite is needed.

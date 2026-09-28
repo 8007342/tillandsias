@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-origin-fold-drop-guard-has-no-path-for-a-deliberate-set-field-replace-so-a-reviewed-correction-of-a-long-form-field-can-never-land
+    event:
+      type: progress
+      ts: "2026-09-28T07:28:35Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t072835z
+      host: macos
+      summary: |
+        Implementation complete on work/1458-8y85 at 7496563aa (merged over origin/linux-next). `set-field --replace` of long-form prose writes `replaces_sha256:` on its status row: the sha256 of the exact folded value it read, trailing newlines trimmed as the guard's $(…) does. The fold ignores the key, and check --strict-fragments accepts it. check-append-vs-origin-fold.sh, on a drop, looks for that acknowledgement in the push's own fragments and hashes origin's current fold. On a match the drop is admitted (ok:append-vs-origin:checked:N:admitted-replace:K). On a mismatch it is refused as …:replace-against-stale-fold, naming both hashes. With no acknowledgement it is refused exactly as before, so the 1261-bn7v stale-fold case is unchanged. CLOSURE, all three parts measured on darwin: (1) fixture arm 6, a current acknowledgement, is admitted; (2) arm 7, a replace written before a peer's append, is still refused. Arms 6-7 FAIL on trunk's guard, and all 7 arms pass on this ref. (3) The held qwpj fragment, regenerated with the acknowledgement, passes the real guard on the merged tree (admitted-replace:1, rc 0). It is now committed on work/1443-qwpj at db1ae275f, stacked on this ref, and with it in the fold `verify-closure.sh 1443-qwpj` gives ok:closure:1443-qwpj:ok:verify-closure:8/8. Unit test replace_acknowledgement_goes_on_the_status_row_only; crate 476/0; clean checkout: 12 deciders rc=0; musl zigbuild rc=0. The fixture was bound to no gate; it is now gate step 282 (hand-numbered: 280 is 900-z3kv, and 279 is 1455-d7hc, queued in land83). RELAY ORDER: 8y85 (7496563aa), then qwpj (db1ae275f), which carries 8y85.

@@ -93,6 +93,11 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         (IssueWebSession { .. } | EvictProject { .. }, UnixSocket) => Handle,
         (IssueWebSession { .. } | EvictProject { .. }, Vsock) => Unsupported,
 
+        // 679-rp9m: the login CLI tells the host tray its token is stored.
+        // Unix-only: it is a local notification to the tray on this host.
+        (GithubLoginStored { .. }, UnixSocket) => Handle,
+        (GithubLoginStored { .. }, Vsock) => Unsupported,
+
         // Q2: VM lifecycle queries on BOTH transports. Linux native has
         // a "phase" (Provisioning/Starting/Ready/...) too — useful for
         // UI state consistency even without a real VM.

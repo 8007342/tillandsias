@@ -236,6 +236,42 @@ the v0.0.1 series so support tooling (`scripts/tray-diagnose.ps1`,
   MAY silently drop large `println!` writes from GUI-subsystem binaries and
   thus is NOT a supported capture path (the cheatsheet documents this)
 
+### Requirement: The taskbar approval follows the tray across executable paths
+<!-- req-id: 3539113f -->
+- **ID**: windows-native-tray.notify-icon.approval-carries-across-paths@v1
+- **Modality**: MUST
+- **Measurable**: true
+
+@trace spec:windows-native-tray, order:1450-23if
+
+Windows remembers whether a notification-area icon is shown on the taskbar
+(`IsPromoted` under `HKCU\Control Panel\NotifyIconSettings`) per executable
+PATH, not per version: measured, a same-path upgrade keeps the approval and a
+new path starts hidden in the overflow. Once the operator has approved a
+Tillandsias tray, the tray MUST NOT ask again because its entry is new. After
+registering its icon, the tray MUST promote its own entry when another
+Tillandsias tray entry is promoted, or when a promoted Tillandsias entry was
+pruned (the installer's install-time prune and the tray's startup reconcile
+record that in `HKCU\Software\Tillandsias`, value `TrayIconPromoted`). It MUST
+carry the approval at most once per entry, so an operator who later hides the
+icon keeps that choice. Uninstall and purge record nothing.
+
+#### Scenario: A tray at a new path inherits the approval
+- **GIVEN** the installed tray's entry is promoted
+- **WHEN** a tray runs from a path Windows has not seen before
+- **THEN** its entry SHALL be set `IsPromoted = 1` and marked carried
+- **AND** its icon SHALL show on the taskbar without an operator click
+
+#### Scenario: A pruned approval survives the prune
+- **GIVEN** a promoted Tillandsias entry whose executable no longer exists
+- **WHEN** the installer or the tray's startup reconcile prunes it
+- **THEN** the approval SHALL be recorded and carried into the next tray's entry
+
+#### Scenario: An operator's later choice is kept
+- **GIVEN** an entry the tray has already carried an approval into
+- **WHEN** the operator hides the icon and the tray starts again
+- **THEN** the entry SHALL stay hidden
+
 ## Invariants
 
 ### Invariant: `--diagnose` exit codes are limited to {0, 2, 1}

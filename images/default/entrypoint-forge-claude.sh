@@ -94,6 +94,11 @@ seed_claude_first_run_defaults
 # already carries the consent and a stale/absent vault doc can never bring
 # the dialog back.
 seed_claude_bypass_consent
+# @trace order:1443-we89
+# The Bash-tool bridge: merge the image's PreToolUse hook into
+# ~/.claude/settings.json (additive, idempotent, forge-gated). The approvals
+# restore below only touches ~/.claude.json, so it cannot undo this.
+seed_claude_pretooluse_hook || true
 # Operator-approved interactive dialogs, restored from vault (2026-08-31):
 # first-ever launch prompts once — those are valid prompts — the watcher
 # below harvests the approval, and every later forge launch restores it.
@@ -110,6 +115,12 @@ find_project_dir
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
+# @trace order:1447-nmq3
+# Trust the checked-out project so Claude does not ask (forge-gated inside the
+# function). It needs PROJECT_DIR, so it runs here: after first-run defaults,
+# the bypass seed and the approvals restore above, which a restored document
+# therefore cannot undo.
+seed_claude_project_trust "$PROJECT_DIR" || true
 
 # ── Export project environment ───────────────────────────────
 # @trace spec:forge-environment-discoverability

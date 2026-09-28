@@ -1,0 +1,42 @@
+# @trace spec:command-policies
+name: litmus:command-policy-audit-shape
+spec: command-policies
+phase: pre-build
+description: >
+  Order 1443-w9hf. Every command-policy decision (policy eval, proc.run's
+  pre-spawn check, the Bash-tool bridge as caller=pretooluse) appends one JSONL
+  line to the per-host audit under .cache (never the shared timing path), with
+  the argv as a sha256 digest and token-shaped literals redacted;
+  `tillandsias-plan policy audit --since <d>` summarises it per (rule_id,
+  decision). The bridge's retirement condition reads this audit.
+severity: normal
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-command-policy-audit.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-command-policy-audit.sh && test -x scripts/test-command-policy-audit.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "decisions audited and redacted, summary verb, timing-log NEGATIVE CONTROL, bridge on the same audit"
+    command: "bash scripts/test-command-policy-audit.sh 2>&1 | tail -n 1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: command-policy-audit"
+
+observability:
+  traces:
+    - "@trace spec:command-policies"
+  expected_log: "PASS: command-policy-audit"
+  log_fields:
+    spec: "command-policies"
+    test: "command-policy-audit-shape"
+    artifact: "command_policy::audit_decision + tillandsias-plan policy audit"
+
+rollback:
+  on_failure: >
+    A line that carries a raw token is a leak: restore redaction before
+    anything else; TILLANDSIAS_POLICY_AUDIT=off stops writing.
+  command: "bash scripts/test-command-policy-audit.sh"

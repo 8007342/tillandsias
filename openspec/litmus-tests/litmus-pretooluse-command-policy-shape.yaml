@@ -1,0 +1,46 @@
+# @trace spec:command-policies
+name: litmus:pretooluse-command-policy-shape
+spec: command-policies
+phase: pre-build
+description: >
+  Order 1443-we89, THE TEMPORARY BRIDGE. scripts/hooks/claude-pretooluse-command-policy.sh
+  hands a Bash-tool command to `tillandsias-plan policy classify-bash --hook`,
+  which classifies it against the seven measured shapes (unquoted heredoc
+  executing prose, SIGPIPE verdict pipeline, verdict through tail -1,
+  credential mutation, destructive classes from the policy floor, a shell
+  string crossing a boundary, a token literal) and answers deny / ask / allow
+  in Claude Code's hook contract. Unknown shapes allow; the kill switch is
+  logged; --status prints the three-part retirement condition. Driven with hook
+  JSON directly, so the hook need not be installed.
+severity: normal
+size: instant
+
+preconditions:
+  - workspace contains scripts/hooks/claude-pretooluse-command-policy.sh
+  - workspace contains scripts/test-pretooluse-command-policy.sh
+
+critical_path:
+  - step: "stub and fixture parse"
+    command: "bash -n scripts/hooks/claude-pretooluse-command-policy.sh scripts/test-pretooluse-command-policy.sh && test -x scripts/test-pretooluse-command-policy.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "every shape decides as the row requires, with the ordinary-command NEGATIVE CONTROL allowing silently"
+    command: "bash scripts/test-pretooluse-command-policy.sh 2>&1 | tail -n 1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: pretooluse-command-policy"
+
+observability:
+  traces:
+    - "@trace spec:command-policies"
+  expected_log: "PASS: pretooluse-command-policy"
+  log_fields:
+    spec: "command-policies"
+    test: "pretooluse-command-policy-shape"
+    artifact: "tillandsias-plan policy classify-bash + scripts/hooks/claude-pretooluse-command-policy.sh"
+
+rollback:
+  on_failure: >
+    A bridge that refuses an ordinary command stops the fleet: restore
+    unknown-shapes-allow first; TILLANDSIAS_PRETOOLUSE_HOOK=off is the kill switch.
+  command: "bash scripts/test-pretooluse-command-policy.sh"

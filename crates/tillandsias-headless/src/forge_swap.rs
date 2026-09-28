@@ -26,7 +26,9 @@
 use std::path::{Path, PathBuf};
 
 pub(crate) const TEMPLATE: &str = "/etc/systemd/system/tillandsias-swap@.service";
-pub(crate) const INSTALL_CMD: &str = "sudo bash scripts/install-forge-swap-service.sh";
+/// 1448-kmyn: the binary installs the service itself (it embeds the assets),
+/// so the hint works on a host with no checkout.
+pub(crate) const INSTALL_CMD: &str = "tillandsias --swap on";
 
 /// Derive the instance id from the container name and this process: every
 /// char outside `[A-Za-z0-9-]` becomes `-`, and the result is capped at 64
