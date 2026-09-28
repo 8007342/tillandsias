@@ -33,12 +33,13 @@ bad() { printf 'FAIL: %s\n' "$1"; FAIL=1; }
 skip(){ printf 'skip: %s\n' "$1"; }
 
 extract() { awk -v n="$1" '$0 ~ "^"n"\\(\\) \\{" { p = 1 } p { print } p && /^}$/ { exit }' "$SRC"; }
-for f in _ccc_timeout _ccc_lane_banner _ccc_host_push_lane _ccc_verdict_with_lane; do
+for f in _ccc_timeout _ccc_lane_banner _ccc_host_push_lane _ccc_verdict_with_lane forge_upstream_auth_verdict; do
     body="$(extract "$f")"
     [ -n "$body" ] || { echo "FAIL: $f not found in $SRC"; exit 1; }
     eval "$body"
 done
 real_banner="$(declare -f _ccc_lane_banner)"
+real_upstream="$(declare -f forge_upstream_auth_verdict)"
 
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/ccc-lane.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
@@ -52,15 +53,18 @@ keyring_fails()  { credential_channel_verdict() { echo "unknown:secret-service-u
 keyring_passes() { credential_channel_verdict() { echo "ok:gh-keyring-push-verified"; return 0; }; }
 sshd_up()        { _ccc_lane_banner() { printf 'SSH-2.0'; }; }
 sshd_silent()    { _ccc_lane_banner() { return 1; }; }
+upstream_ok()     { forge_upstream_auth_verdict() { echo "ok:forge-git-mirror"; return 0; }; }
+upstream_denied() { forge_upstream_auth_verdict() { echo "blocked:upstream-push-unauthorized"; return 1; }; }
+upstream_stale()  { forge_upstream_auth_verdict() { echo "blocked:upstream-auth-stale"; return 1; }; }
 
-keyring_fails; sshd_up
+keyring_fails; sshd_up; upstream_ok
 out="$(_ccc_verdict_with_lane 2>"$scratch/err")"; rc=$?
 if [ "$rc" -eq 0 ] && [ "$out" = "ok:host-push-lane:git-v0test" ] \
    && grep -q 'keyring path: unknown:secret-service-unprobed' "$scratch/err"; then
     ok "ARM1 a wired lane is a push path: $out (keyring verdict kept on stderr)"
 else bad "ARM1 rc=$rc out='$out' err='$(cat "$scratch/err")'"; fi
 
-keyring_fails; sshd_up
+keyring_fails; sshd_up; upstream_ok
 out="$(TILLANDSIAS_HOST_PUSH_DIR="$scratch/nowhere" _ccc_verdict_with_lane 2>/dev/null)"; rc=$?
 [ "$rc" -eq 1 ] && [ "$out" = "unknown:secret-service-unprobed" ] \
     && ok "ARM2 negative control: no lane, the keyring refusal stands" \
@@ -78,7 +82,7 @@ out="$(_ccc_verdict_with_lane 2>/dev/null)"; rc=$?
     && ok "ARM4 a verified keyring answers for itself" \
     || bad "ARM4 rc=$rc out='$out'"
 
-keyring_fails; sshd_up
+keyring_fails; sshd_up; upstream_ok
 out="$(TILLANDSIAS_HOST_KIND=forge _ccc_verdict_with_lane 2>/dev/null)"; rc=$?
 [ "$rc" -eq 1 ] && ok "ARM5 a forge never consults the host lane" || bad "ARM5 rc=$rc out='$out'"
 
@@ -86,6 +90,34 @@ eval "$real_banner"
 if b="$(_ccc_lane_banner "${TILLANDSIAS_HOST_PUSH_PORT:-2223}")" && [ -n "$b" ]; then
     [ "$b" = "SSH-2.0" ] && ok "ARM6 the real banner read sees a live lane: $b" || bad "ARM6 live banner='$b'"
 else skip "ARM6 no lane listening on 127.0.0.1:${TILLANDSIAS_HOST_PUSH_PORT:-2223} (named skip, not a pass)"; fi
+
+# ARM 7 — NEGATIVE: wired, but upstream REFUSES the credential. This is
+# macuahuitl-forge's state on 2026-09-28 (lane fine, Vault token rejected
+# upstream, every push failed after a green gate): must refuse, by name.
+keyring_fails; sshd_up; upstream_denied
+out="$(_ccc_verdict_with_lane 2>/dev/null)"; rc=$?
+[ "$rc" -eq 1 ] && [ "$out" = "blocked:upstream-push-unauthorized" ] \
+    && ok "ARM7 a wired lane whose upstream refuses is NOT a push path: $out" \
+    || bad "ARM7 rc=$rc out='$out'"
+
+# ARM 8 — NEGATIVE: wired, but the upstream verdict is stale.
+keyring_fails; sshd_up; upstream_stale
+out="$(_ccc_verdict_with_lane 2>/dev/null)"; rc=$?
+[ "$rc" -eq 1 ] && [ "$out" = "blocked:upstream-auth-stale" ] \
+    && ok "ARM8 a stale upstream verdict refuses, by name: $out" \
+    || bad "ARM8 rc=$rc out='$out'"
+
+# ARM 9 — LIVE: the REAL verdict reader against this host's mirror, through
+# the podman-exec source. Skipped by name when no mirror container runs here.
+eval "$real_upstream"
+project="$(basename "$(dirname "$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")")"
+if command -v podman >/dev/null 2>&1 && podman container exists "tillandsias-git-$project" 2>/dev/null; then
+    out="$(forge_upstream_auth_verdict "podman-exec:tillandsias-git-$project:/srv/git/$project" 2>/dev/null)"
+    case "$out" in
+        ok:*|blocked:upstream-*) ok "ARM9 the real reader answers from the live mirror: $out" ;;
+        *) bad "ARM9 unexpected live verdict: '$out'" ;;
+    esac
+else skip "ARM9 no tillandsias-git-$project container on this host (named skip, not a pass)"; fi
 
 [ "$FAIL" -eq 0 ] && { echo "PASS: credential-channel-host-push-lane (1456-ib6i)"; exit 0; }
 echo "FAILED: credential-channel-host-push-lane (1456-ib6i)"; exit 1

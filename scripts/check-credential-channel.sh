@@ -160,7 +160,19 @@ fi
 forge_upstream_auth_verdict() {
   local auth_src="$1"
   local auth_lines _sha refname rest state epoch reason middle best_state best_reason best_epoch now age max_age
-  auth_lines="$(_ccc_timeout 10 git ls-remote "$auth_src" 'refs/tillandsias/upstream-auth/*' 2>/dev/null || true)"
+  case "$auth_src" in
+    podman-exec:*)
+      # ORDER 1456-ib6i. The HOST reads the same verdict refs from inside the
+      # mirror container: its git daemon port is not published to the host, and
+      # podman exec mints nothing. Same `<sha> <ref>` shape as ls-remote.
+      local _spec="${auth_src#podman-exec:}"
+      auth_lines="$(_ccc_timeout 10 podman exec "${_spec%%:*}" git -C "${_spec#*:}" \
+        for-each-ref --format='%(objectname) %(refname)' 'refs/tillandsias/upstream-auth/' 2>/dev/null || true)"
+      ;;
+    *)
+      auth_lines="$(_ccc_timeout 10 git ls-remote "$auth_src" 'refs/tillandsias/upstream-auth/*' 2>/dev/null || true)"
+      ;;
+  esac
   best_state=""
   best_reason=""
   best_epoch=-1
@@ -1233,20 +1245,40 @@ _ccc_host_push_lane() {
   port="${TILLANDSIAS_HOST_PUSH_PORT:-2223}"
   banner="$(_ccc_lane_banner "$port")" || return 1
   [ "$banner" = "SSH-2.0" ] || return 1
-  echo "ok:host-push-lane:$alias"
-  return 0
+  # WIRED only proves the lane can ACCEPT a push. Whether the push REACHES
+  # GitHub is the mirror's upstream-auth verdict (756-2jnj), which the forge
+  # already consults; read the same refs here, through the mirror container.
+  # macuahuitl-forge 2026-09-28: lane fine, Vault's GitHub token rejected
+  # upstream, every push failed after a green gate.
+  local project upstream
+  project="${TILLANDSIAS_HOST_PUSH_PROJECT:-$(basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")")}"
+  upstream="$(forge_upstream_auth_verdict "podman-exec:tillandsias-git-$project:/srv/git/$project")"
+  case "$upstream" in
+    ok:*) echo "ok:host-push-lane:$alias"; return 0 ;;
+    *) echo "$upstream"; return 2 ;;
+  esac
 }
 
 # The final verdict: the keyring path first, then the lane (1456-ib6i). On a
 # lane pass the keyring's own answer goes to stderr, so a reader sees both.
 _ccc_verdict_with_lane() {
-  local verdict rc lane
+  local verdict rc lane lrc
   verdict="$(credential_channel_verdict)" && rc=0 || rc=$?
-  if [ "$rc" -ne 0 ] && lane="$(_ccc_host_push_lane)"; then
-    echo "[check-credential-channel] keyring path: $verdict — pushing through the host-push lane instead (1456-ib6i)" >&2
-    echo "$lane"
-    return 0
-  fi
+  [ "$rc" -eq 0 ] && { echo "$verdict"; return 0; }
+  lane="$(_ccc_host_push_lane)" && lrc=0 || lrc=$?
+  case "$lrc" in
+    0)
+      echo "[check-credential-channel] keyring path: $verdict — pushing through the host-push lane instead (1456-ib6i)" >&2
+      echo "$lane"
+      return 0
+      ;;
+    2)
+      # Wired, but upstream will not take the push: that is the refusal to name.
+      echo "[check-credential-channel] keyring path: $verdict; the host-push lane is wired but its upstream refuses (1456-ib6i)" >&2
+      echo "$lane"
+      return 1
+      ;;
+  esac
   echo "$verdict"
   return "$rc"
 }
