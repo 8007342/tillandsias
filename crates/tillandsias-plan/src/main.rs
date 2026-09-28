@@ -4410,6 +4410,127 @@ fn run_predicate_cli(args: &[String]) {
 /// `  remedy:` on stderr. Exit 0 allow, 1 deny, 4 consent, 2 usage. A refused
 /// seed is named on stderr (`refused:policy-seed:<reason>`) and the answer
 /// comes from the floor alone.
+/// ORDER 1443-we89 — `policy classify-bash`: the Bash-tool bridge.
+///   --hook       read Claude Code's PreToolUse JSON on stdin and answer in its
+///                contract: deny = exit 2 with the refusal on stderr; ask =
+///                stdout {"hookSpecificOutput":{…"permissionDecision":"ask"…}};
+///                allow = exit 0, silent. TILLANDSIAS_PRETOOLUSE_HOOK=off allows
+///                everything and logs kill_switch=1.
+///   --status     decisions=<deny>/<ask>/<allow> and the retirement condition
+///   --command C  classify C directly: the verdict line (and why:/remedy:),
+///                exit 0 allow, 1 deny, 4 ask. [--cwd D] [--host-kind K]
+fn run_classify_bash(args: &[String]) -> ! {
+    use tillandsias_plan::bash_policy as bp;
+    use tillandsias_plan::command_policy as cp;
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan policy classify-bash --hook | --status | --command <cmd> [--cwd dir] [--host-kind bare-metal|forge|ci]"
+        );
+        std::process::exit(2);
+    };
+    match args.first().map(String::as_str) {
+        Some("--status") => {
+            let (d, a, al, k) = bp::status_counts();
+            println!("decisions={d}/{a}/{al} (deny/ask/allow) kill_switch_uses={k}");
+            println!("log: {}", bp::log_path().display());
+            println!("retirement condition (all three):");
+            for line in bp::RETIREMENT_CONDITION {
+                println!("  {line}");
+            }
+            std::process::exit(0);
+        }
+        Some("--hook") => {
+            let mut input = String::new();
+            let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input);
+            let v: serde_json::Value = serde_json::from_str(&input).unwrap_or_default();
+            let tool = v.get("tool_name").and_then(|x| x.as_str()).unwrap_or("");
+            let cmd = v
+                .pointer("/tool_input/command")
+                .and_then(|x| x.as_str())
+                .unwrap_or("");
+            if std::env::var("TILLANDSIAS_PRETOOLUSE_HOOK").as_deref() == Ok("off") {
+                bp::log_decision("allow", "kill-switch", true, cmd.len());
+                std::process::exit(0);
+            }
+            // Anything that is not a Bash command is not this bridge's business.
+            if tool != "Bash" || cmd.is_empty() {
+                std::process::exit(0);
+            }
+            let cwd = v
+                .get("cwd")
+                .and_then(|x| x.as_str())
+                .map(PathBuf::from)
+                .or_else(|| std::env::current_dir().ok())
+                .unwrap_or_else(|| PathBuf::from("."));
+            let c = bp::classify(cmd, &bp::context_for(&cwd));
+            bp::log_decision(c.verdict.as_str(), &c.rule, false, cmd.len());
+            match c.verdict {
+                bp::Verdict::Allow => std::process::exit(0),
+                bp::Verdict::Deny => {
+                    eprintln!("{}", c.token);
+                    if let Some(w) = &c.why {
+                        eprintln!("why: {w}");
+                    }
+                    if let Some(r) = &c.remedy {
+                        eprintln!("remedy: {r}");
+                    }
+                    std::process::exit(2);
+                }
+                bp::Verdict::Ask => {
+                    let reason = format!(
+                        "{} — {} — {}",
+                        c.token,
+                        c.why.unwrap_or_default(),
+                        c.remedy.unwrap_or_default()
+                    );
+                    println!(
+                        "{}",
+                        serde_json::json!({"hookSpecificOutput": {
+                            "hookEventName": "PreToolUse",
+                            "permissionDecision": "ask",
+                            "permissionDecisionReason": reason,
+                        }})
+                    );
+                    std::process::exit(0);
+                }
+            }
+        }
+        Some("--command") => {
+            let Some(cmd) = args.get(1) else { usage() };
+            let mut cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let mut host: Option<cp::HostKind> = None;
+            let mut i = 2;
+            while i < args.len() {
+                let Some(v) = args.get(i + 1) else { usage() };
+                match args[i].as_str() {
+                    "--cwd" => cwd = PathBuf::from(v),
+                    "--host-kind" => host = cp::HostKind::parse(v).or_else(|| usage()),
+                    _ => usage(),
+                }
+                i += 2;
+            }
+            let mut ctx = bp::context_for(&cwd);
+            if let Some(h) = host {
+                ctx.host_kind = h;
+            }
+            let c = bp::classify(cmd, &ctx);
+            println!("{}", c.token);
+            if let Some(w) = &c.why {
+                println!("why: {w}");
+            }
+            if let Some(r) = &c.remedy {
+                println!("remedy: {r}");
+            }
+            std::process::exit(match c.verdict {
+                bp::Verdict::Allow => 0,
+                bp::Verdict::Deny => 1,
+                bp::Verdict::Ask => 4,
+            });
+        }
+        _ => usage(),
+    }
+}
+
 fn run_policy(args: &[String]) -> ! {
     use tillandsias_plan::command_policy as cp;
     let usage = || -> ! {
@@ -4419,6 +4540,9 @@ fn run_policy(args: &[String]) -> ! {
         std::process::exit(2);
     };
     let Some(verb) = args.first() else { usage() };
+    if verb == "classify-bash" {
+        run_classify_bash(&args[1..]);
+    }
     let mut host_kind: Option<cp::HostKind> = None;
     let mut regime = "interactive".to_string();
     let mut caller = "cli".to_string();
