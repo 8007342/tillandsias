@@ -221,6 +221,25 @@ else
     echo "note:pretooluse-command-policy:no-jq — the forge seed arm needs jq (it ships in the forge image)"
 fi
 
+# ── 10: a binary that RUNS but predates `classify-bash` must ALLOW, not deny ──
+# Measured on the land83 relay: the stub exec'd a stale plan binary, whose usage
+# error exits 2 — the hook contract's deny — and every Bash call in the relaying
+# session was blocked. A deny counts only when it carries refused:bash-policy:.
+cat >"$W/stale-plan" <<'STALE'
+#!/usr/bin/env bash
+[ "${1:-}" = capabilities ] && { echo policy; exit 0; }
+echo "usage: tillandsias-plan policy eval [...] -- <argv...>" >&2
+exit 2
+STALE
+chmod +x "$W/stale-plan"
+out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git status"}}' |
+    TILLANDSIAS_PLAN_BIN="$W/stale-plan" bash "$STUB" 2>"$W/err10")"; rc=$?
+if [ "$rc" -eq 0 ] && [ -z "$out" ] && grep -q 'note:pretooluse:could-not-classify:rc=2' "$W/err10"; then
+    ok "arm 10: a plan binary that predates classify-bash is allowed with a note, not read as a deny"
+else
+    bad "arm 10: stale binary rc=$rc out=[$out] err=[$(cat "$W/err10")]"
+fi
+
 total=$((pass + fail))
 if [ "$fail" -eq 0 ]; then
     echo "PASS: pretooluse-command-policy $pass/$total (1443-we89)"

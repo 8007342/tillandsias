@@ -34,4 +34,26 @@ fi
 if [ "${1:-}" = "--status" ]; then
     exec "$PLAN" policy classify-bash --status
 fi
-exec "$PLAN" policy classify-bash --hook
+# A binary that RUNS but predates `classify-bash` answers with a usage error and
+# exit 2, and exit 2 is the hook contract's DENY: measured on the land83 relay,
+# where it blocked every Bash call in the relaying session. So a deny counts
+# only when it carries its verdict token; any other failure is "could not
+# classify", which the bridge allows with a note, like a missing binary.
+input="$(cat)"
+errf="$(mktemp "${TMPDIR:-/tmp}/pretooluse-err.XXXXXX")" || errf=/dev/null
+out="$("$PLAN" policy classify-bash --hook <<<"$input" 2>"$errf")"
+rc=$?
+err=""
+[ "$errf" = /dev/null ] || { err="$(cat "$errf")"; rm -f "$errf"; }
+if [ "$rc" -eq 0 ]; then
+    [ -z "$out" ] || printf '%s\n' "$out"
+    exit 0
+fi
+case "$err" in
+    *refused:bash-policy:*)
+        printf '%s\n' "$err" >&2
+        exit 2
+        ;;
+esac
+echo "note:pretooluse:could-not-classify:rc=$rc — allowed unchecked (rebuild the plan binary: it may predate policy classify-bash)" >&2
+exit 0
