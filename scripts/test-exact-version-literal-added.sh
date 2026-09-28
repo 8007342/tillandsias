@@ -95,7 +95,9 @@ run "$R"
 if [ -z "$_plan" ]; then
     bad "arm 6: no plan binary to evaluate the probe's validation filter"
 else
-    filter="$(sed -n "s/.*\"\$JQ\" -e '\(\.schema_version >= [0-9]*[^']*\)'.*/\1/p" "$ROOT/scripts/host-capability-probe.sh" | head -1)"
+    # The probe's own validation filter, cut from its source (first match).
+    probe_src="$(grep -oE "'[.]schema_version >= [0-9]+[^']*'" "$ROOT/scripts/host-capability-probe.sh")"
+    filter="${probe_src%%$'\n'*}"; filter="${filter#\'}"; filter="${filter%\'}"
     doc_v='{"schema_version":%s,"host":{"host_id":"h"}}'
     bumped="$(printf "$doc_v" 4 | "$_plan" json get -e "$filter" 2>/dev/null)"; rb=$?
     below="$(printf "$doc_v" 1 | "$_plan" json get -e "$filter" 2>/dev/null)"; rl=$?

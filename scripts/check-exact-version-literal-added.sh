@@ -78,10 +78,11 @@ while IFS= read -r f; do
         esac
         trimmed="${line#"${line%%[![:space:]]*}"}"
         case "$trimmed" in '#'*|'//'*) continue ;; esac
-        printf '%s\n' "$line" | grep -qE "$PAT" || continue
+        grep -qE "$PAT" <<<"$line" || continue
         # A stated reason on the line or in the four lines above admits it.
         from=$((ln > 4 ? ln - 4 : 1))
-        if sed -n "${from},${ln}p" "$f" | grep -q 'exact-version:'; then
+        window="$(sed -n "${from},${ln}p" "$f")"
+        if grep -q 'exact-version:' <<<"$window"; then
             continue
         fi
         violations=$((violations + 1))
