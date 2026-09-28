@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-idiomatic-command-executor-in-rust-argv-not-shell-strings-with-separately-captured-fds-concurrent-draining-and-a-run-identity-so-a-stale-marker-cannot-read-as-a-fresh-result
+    field: status
+    value: completed
+    ts: "2026-09-28T18:39:28Z"
+    host: lenovinha
+
+events:
+  - packet_id: an-idiomatic-command-executor-in-rust-argv-not-shell-strings-with-separately-captured-fds-concurrent-draining-and-a-run-identity-so-a-stale-marker-cannot-read-as-a-fresh-result
+    event:
+      type: completed
+      ts: "2026-09-28T18:39:28Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 25f800ec7 (land84 relay of work/1252-fg9e 98d8734dc, full gate 1328s) + crates/tillandsias-exec/tests/executor_contract.rs a_sigpipe_killed_producer_keeps_its_own_status PASS
+  - packet_id: an-idiomatic-command-executor-in-rust-argv-not-shell-strings-with-separately-captured-fds-concurrent-draining-and-a-run-identity-so-a-stale-marker-cannot-read-as-a-fresh-result
+    event:
+      type: note
+      ts: "2026-09-28T18:39:28Z"
+      host: lenovinha
+      summary: |-
+        landed on origin/linux-next in land84 25f800ec7
