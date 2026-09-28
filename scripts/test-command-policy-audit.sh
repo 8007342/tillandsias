@@ -71,7 +71,9 @@ fi
 "$PLAN" policy eval -- printf '%s' "-----BEGIN OPENSSH PRIVATE KEY-----
 b3BlbnNzaC1rZXktdjEAAAAA
 -----END OPENSSH PRIVATE KEY-----" >/dev/null 2>&1
-if ! grep -qE 'AKIAABCDEFGHIJKLMNOP|b3BlbnNzaC1rZXktdjEAAAAA' "$LOG" && grep -qF '<redacted:pem>' "$LOG"; then
+leaks="$(grep -cE 'AKIAABCDEFGHIJKLMNOP|b3BlbnNzaC1rZXktdjEAAAAA' "$LOG")"
+pems="$(grep -cF '<redacted:pem>' "$LOG")"
+if [ "$leaks" = 0 ] && [ "$pems" -ge 1 ]; then
     ok "arm 2: AWS-style key ids and PEM blocks are redacted too"
 else
     bad "arm 2: AWS/PEM leaked: [$(tail -n 2 "$LOG")]"
