@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-tray-login-vault-poll-to-event
+    field: notes
+    value: |-
+      yoga-silverblue 2026-09-28, NOT CLAIMED - criterion 2 names a mechanism that cannot exist. It requires login confirmation "fed by the Vault blocking-watch (packet vault-blocking-watch / SC-14)"; 158 (vault-blocking-watch) is itself recorded unimplementable - community Vault 1.18 KV v2 has no blocking GET ?wait= (that is Consul; Vault event subscribe is Enterprise), refuted 2026-07-28 and re-verified 2026-09-05. The poll is still there on trunk (tray/mod.rs GitHubLogin click task, `for i in 0..120` + sleep 1 s around vault_bootstrap::is_github_key_present).
+      ALSO RULED OUT - waiting on the login terminal's exit. launch_in_terminal starts a terminal emulator, and server-based emulators (gnome-terminal) return at once, so the child's exit says nothing about the login.
+      PROPOSED (a design decision for the owner of 158/679 and the wire - it touches all three trays): PRODUCER NOTIFICATION. `tillandsias --github-login` knows the instant it has stored the token; after the Vault write it sends one message to the tray's control socket (the tray already serves one, start_control_socket_server), and the tray's login task awaits that event with ONE 120 s deadline (not a tick) and a single presence check at the deadline as the fallback for a login run outside the tray. That satisfies criteria 1 and 3 and the INTENT of 2 without Vault features that do not exist. The wire already carries an unused LoginState FSM (control-wire auth_flow.rs, research 469), which is the natural payload. Asked the coordinator which mechanism to build before claiming.
+    ts: "2026-09-28T03:03:31Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: linux-tray-login-vault-poll-to-event
+    event:
+      type: progress
+      ts: "2026-09-28T03:03:31Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'yoga-silverblue 2026-09-28, NOT CLAIMED - criterion 2 names a mechanism that cannot exist. It requires login confirmation "fed by the Vault blocking-watch (packet vault-blocking-watch / SC-14)"; 158 (vault-blocking-watch) is itself recorded unimplementable - community Vault 1.18 KV v2 has no blocking GET ?wait= (that is Consul; Vault event subscribe is Enterprise), refuted 2026-07-28 and re-verified 2026-09-05. The poll is still there on trunk (tray/mod.rs GitHubLogin click task, `for i in 0..120` + sleep 1 s around vault_bootstrap::is_github_key_present).
+        ALSO RULED OUT - waiting on the login terminal's exit. launch_in_terminal starts a terminal emulator, and server-based emulators (gnome-terminal) return at once, so the child's exit says nothing about the login.
+        PROPOSED (a design decision for the owner of 158/679 and the wire - it touches all three trays): PRODUCER NOTIFICATION. `tillandsias --github-login` knows the instant it has stored the token; after the Vault write it sends one message to the tray's control socket (the tray already serves one, start_control_socket_server), and the tray's login task awaits that event with ONE 120 s deadline (not a tick) and a single presence check at the deadline as the fallback for a login run outside the tray. That satisfies criteria 1 and 3 and the INTENT of 2 without Vault features that do not exist. The wire already carries an unused LoginState FSM (control-wire auth_flow.rs, research 469), which is the natural payload. Asked the coordinator which mechanism to build before claiming.' (not terminal) with evidence_refs: 158
+  - packet_id: linux-tray-login-vault-poll-to-event
+    event:
+      type: note
+      ts: "2026-09-28T03:03:31Z"
+      host: yoga-silverblue
+      summary: |-
+        criterion 2 names an unimplementable mechanism; producer-notify proposed
