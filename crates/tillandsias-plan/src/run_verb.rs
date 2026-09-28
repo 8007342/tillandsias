@@ -71,6 +71,16 @@ pub enum RunOutcome {
     },
 }
 
+/// A status the verb produced by killing the child ITSELF (the deadline, the
+/// group reap) comes from the verb's own knowledge — tillandsias-exec builds
+/// `TimedOut` without reading the child's status — never from its exit code.
+/// A child killed from OUTSIDE on Windows is the named limit below: an MSYS
+/// `kill -KILL` reaches the native parent as an exit code (signal N as N<<8,
+/// 2304 for SIGKILL), and decoding it would misread a program that exits 2304
+/// on purpose, so it is reported as `exited` and the regime is declared
+/// (1260-2qgi; coordinator ruling 2026-09-28; spec command-runtime).
+pub const WINDOWS_EXTERNAL_KILL_LIMIT: &str = "limit:windows-external-kill-reads-as-exited";
+
 /// The child's environment: the proc.run base set plus the caller's additions.
 pub fn base_env(additions: &[(String, String)]) -> Vec<(String, String)> {
     let mut env = Vec::new();

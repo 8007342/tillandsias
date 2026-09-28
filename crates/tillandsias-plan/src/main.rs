@@ -4423,18 +4423,23 @@ fn run_run_verb(args: &[String]) -> ! {
     use tillandsias_plan::run_verb as rv;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan run [--json] [--cwd P] [--env K=V]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>\n\
+            "usage: tillandsias-plan run [--json] [--caller run|mcp] [--cwd P] [--env K=V]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>\n\
              \x20 argv is argv: there is no command-string form and no --shell.\n\
              \x20 --json prints one object (run_id,status,code,signal,ok,stdout,stderr,truncated,wall_ms,argv,policy) and\n\
              \x20 exits 0 whenever a child ran, 1 for a policy refusal, 4 for consent, 2 for usage.\n\
              \x20 WITHOUT --json the verb mirrors the child's exit code, so a refusal (1) and a child's own exit 1\n\
              \x20 cannot be told apart by the code: a caller that must tell them apart uses --json.\n\
-             \x20 --timeout-ms defaults to 300000 (300 s); a long run (a full gate) MUST pass its own, or 0 for none."
+             \x20 --timeout-ms defaults to 300000 (300 s); a long run (a full gate) MUST pass its own, or 0 for none.\n\
+             \x20 --caller names the door in the audit log: run (default) or mcp (project-info run_command).\n\
+             \x20 A child the verb kills (the deadline) is timed_out on every locus. {}: on Windows a child\n\
+             \x20 killed from OUTSIDE (MSYS kill) reads as exited with the MSYS code (2304 for SIGKILL), undecoded.",
+            rv::WINDOWS_EXTERNAL_KILL_LIMIT
         );
         std::process::exit(2);
     };
     let mut spec = rv::RunSpec::new(Vec::new());
     let mut json = false;
+    let mut caller = "run";
     let mut i = 0;
     let mut saw_dd = false;
     while i < args.len() {
@@ -4481,6 +4486,13 @@ fn run_run_verb(args: &[String]) -> ! {
         }
         let Some(v) = args.get(i + 1) else { usage() };
         match a {
+            // The door's name in the audit (1443-r4cj ruling): a CLOSED set, so no
+            // caller can pass as the Bash bridge (pretooluse) whose count retires it.
+            "--caller" => match v.as_str() {
+                "run" => caller = "run",
+                "mcp" => caller = "mcp",
+                _ => usage(),
+            },
             "--cwd" => spec.cwd = Some(PathBuf::from(v)),
             "--env" => {
                 let Some((k, val)) = v.split_once('=') else {
@@ -4513,7 +4525,7 @@ fn run_run_verb(args: &[String]) -> ! {
     if !saw_dd || spec.argv.is_empty() {
         usage();
     }
-    let outcome = rv::execute(&spec, "run");
+    let outcome = rv::execute(&spec, caller);
     if json {
         let (value, code) = rv::outcome_json(&spec, &outcome);
         println!("{value}");

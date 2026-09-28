@@ -63,11 +63,30 @@ DATA; the verb's own exit status reports only whether the verb ran (unless
 `--exit-with-child` is given). A `timed_out` run SHALL NOT invent an exit
 status.
 
+A status the runtime produced by killing the child ITSELF (the deadline, the
+group reap) SHALL come from the runtime's own knowledge (`timed_out`), never
+from the child's exit code, on every locus.
+
+WINDOWS-REGIME LIMIT, named `limit:windows-external-kill-reads-as-exited`: a
+child killed from OUTSIDE the runtime on Windows (an MSYS `kill -KILL <pid>`)
+has no signal channel to a native parent, which reads the MSYS encoding
+(signal N as exit code N<<8: 2304 for SIGKILL) as `exited`. The runtime SHALL
+NOT decode it, because a native program may exit 2304 on purpose; a consumer
+that must tell an external kill from an exit on Windows SHALL treat that
+regime as declared-limited (order 1260-2qgi, yolanda's measurement,
+2026-09-28).
+
 #### Scenario: Exit status is a value
 
 - **WHEN** an agent runs `tillandsias-plan run --json -- false`
 - **THEN** the JSON carries `status:"exited"`, `code:1`, `ok:false`
 - **AND** the verb exits 0
+
+#### Scenario: The runtime's own kill is typed on every locus
+
+- **WHEN** a child outlives `tillandsias-plan run --json --timeout-ms 300`
+- **THEN** the JSON carries `status:"timed_out"` and `code:null` on Linux,
+  macOS and Windows alike
 
 ### Requirement: Time and output are bounded and a clipped capture cannot look whole
 
