@@ -15437,6 +15437,26 @@ pub(crate) enum TrayNotify {
 
 /// The tray's control socket, as the tray computes it.
 #[cfg(unix)]
+/// Read one length-prefixed (u32 big-endian) control-wire frame body from a
+/// blocking stream, bounded by `MAX_MESSAGE_BYTES`. The single hand-rolled
+/// frame decode for the CLI-to-tray acks in this file (framing ratchet,
+/// 795-5itp): callers map the error into their own verdict.
+fn read_control_frame_blocking(stream: &mut impl Read) -> Result<Vec<u8>, String> {
+    let mut len_buf = [0_u8; 4];
+    stream
+        .read_exact(&mut len_buf)
+        .map_err(|e| format!("length prefix: {e}"))?;
+    let len = u32::from_be_bytes(len_buf) as usize;
+    if len == 0 || len > MAX_MESSAGE_BYTES {
+        return Err(format!("invalid length {len} (max {MAX_MESSAGE_BYTES})"));
+    }
+    let mut body = vec![0_u8; len];
+    stream
+        .read_exact(&mut body)
+        .map_err(|e| format!("body: {e}"))?;
+    Ok(body)
+}
+
 fn tray_control_socket_path() -> PathBuf {
     let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
         .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
@@ -15474,19 +15494,11 @@ pub(crate) fn notify_tray_github_login_stored(socket_path: &Path) -> TrayNotify 
     if let Err(e) = stream.write_all(&frame) {
         return no(format!("write: {e}"));
     }
-    let mut len_buf = [0_u8; 4];
-    if let Err(e) = stream.read_exact(&mut len_buf) {
-        // An older tray drops a frame it cannot decode: no ack.
-        return no(format!("no ack: {e}"));
-    }
-    let reply_len = u32::from_be_bytes(len_buf) as usize;
-    if reply_len == 0 || reply_len > MAX_MESSAGE_BYTES {
-        return no(format!("ack length {reply_len}"));
-    }
-    let mut reply = vec![0_u8; reply_len];
-    if let Err(e) = stream.read_exact(&mut reply) {
-        return no(format!("ack body: {e}"));
-    }
+    // An older tray drops a frame it cannot decode: no ack.
+    let reply = match read_control_frame_blocking(&mut stream) {
+        Ok(reply) => reply,
+        Err(e) => return no(format!("no ack: {e}")),
+    };
     match decode(&reply).map(|e| e.body) {
         Ok(ControlMessage::IssueAck { seq_acked: 1 }) => TrayNotify::Acked,
         Ok(other) => no(format!("tray answered {}", other.kind())),
@@ -15591,24 +15603,8 @@ fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Resul
     // Read one envelope back on the same connection. The tray writes
     // `IssueAck { seq_acked: 1 }` after broadcasting; anything else (or a
     // timeout) is treated as a failed handshake.
-    let mut len_buf = [0_u8; 4];
-    stream.read_exact(&mut len_buf).map_err(|e| {
-        format!(
-            "Failed to read ack length prefix from control socket: {}",
-            e
-        )
-    })?;
-    let reply_len = u32::from_be_bytes(len_buf) as usize;
-    if reply_len == 0 || reply_len > MAX_MESSAGE_BYTES {
-        return Err(format!(
-            "Control socket ack has invalid length {} (max {})",
-            reply_len, MAX_MESSAGE_BYTES
-        ));
-    }
-    let mut reply = vec![0_u8; reply_len];
-    stream
-        .read_exact(&mut reply)
-        .map_err(|e| format!("Failed to read ack body from control socket: {}", e))?;
+    let reply = read_control_frame_blocking(&mut stream)
+        .map_err(|e| format!("Failed to read ack from control socket: {e}"))?;
     let reply_envelope =
         decode(&reply).map_err(|e| format!("Failed to decode control socket ack: {}", e))?;
 
