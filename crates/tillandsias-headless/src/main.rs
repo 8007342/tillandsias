@@ -8272,8 +8272,10 @@ fn build_opencode_forge_args(
         // it is true rather than dressed up as a broken working copy.
         eprintln!(
             "[tillandsias] [forge-launch] CLOUD MODE: no host checkout to read a seed branch \
-             from, so no TILLANDSIAS_FORGE_SEED_BRANCH is injected and the mirror HEAD falls \
-             back to UPSTREAM'S DEFAULT BRANCH (typically `main`)."
+             from, so no TILLANDSIAS_FORGE_SEED_BRANCH is injected. The forge resolves its \
+             branch itself, never from the mirror's HEAD (1362-u8ww): the discipline \
+             seed's integration branch, else its default_branch, else main/master, and \
+             prints `[forge] Seed branch: <name> — <why>` at startup."
         );
     }
     // ORDER 505 (mirrored from build_forge_agent_run_args_with_vault for the
@@ -17363,8 +17365,10 @@ fn build_forge_agent_run_args_with_vault(
         // it is true rather than dressed up as a broken working copy.
         eprintln!(
             "[tillandsias] [forge-launch] CLOUD MODE: no host checkout to read a seed branch \
-             from, so no TILLANDSIAS_FORGE_SEED_BRANCH is injected and the mirror HEAD falls \
-             back to UPSTREAM'S DEFAULT BRANCH (typically `main`)."
+             from, so no TILLANDSIAS_FORGE_SEED_BRANCH is injected. The forge resolves its \
+             branch itself, never from the mirror's HEAD (1362-u8ww): the discipline \
+             seed's integration branch, else its default_branch, else main/master, and \
+             prints `[forge] Seed branch: <name> — <why>` at startup."
         );
     }
     // Every OAuth-credentialed agent lane mounts a scoped Vault token so its
