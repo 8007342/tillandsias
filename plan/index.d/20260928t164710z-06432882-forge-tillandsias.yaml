@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: per-run-consent-tokens-for-destructive-command-classes-minted-by-the-operator-on-the-host-consumed-once-never-grantable-in-a-forge-and-the-smoke-skills-env-authorisation-mapped-to-the-substrate-reset-class-with-its-source-recorded
+    field: notes
+    value: |-
+      size: M
+      implementer_tier: opus
+      Consent is the destructive-action gate; the env mapping is the one
+      place a wrong rule pre-authorises a workstation wipe.
+
+
+      [2026-09-28T16:47:10Z forge-tillandsias] AMENDED EXIT CRITERIA (coordinator direction 2026-09-28: "the token is single-use and bound to the exact argv, so a replay or a different argv is refused by name"; the substrate-reset class was split by 1446-xqi6): (1) the grant is `policy consent grant <class> [--ttl 30m] -- <argv…>`, and a grant with no argv is refused:consent:no-argv; the example class is soft-reset, not substrate-reset. (2) the replay answer stays the row's consent:policy:<class> exit 4, and its why names the spent token. (3) a different argv is refused:consent:invalid:argv-mismatch, and the token is kept for its own run. (4) the grant is refused on TILLANDSIAS_HOST_KIND=forge OR forge evidence, and also in CI. (5) the env maps to soft-reset only, for either registered smoke skill. ADDED: the floor rule no-self-consent refuses minting through any agent door. CLOSURE REGIME: the fixture's bare-metal arms (1, 2, 3, 5, 9) need bare-metal evidence; in a forge they are a named skip (4/4). The forge measured them at 9/9 with /run/.containerenv hidden by `unshare -rm` + a tmpfs over /run. A bare-metal gate runs them natively.
+    ts: "2026-09-28T16:47:10Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: per-run-consent-tokens-for-destructive-command-classes-minted-by-the-operator-on-the-host-consumed-once-never-grantable-in-a-forge-and-the-smoke-skills-env-authorisation-mapped-to-the-substrate-reset-class-with-its-source-recorded
+    event:
+      type: note
+      ts: "2026-09-28T16:47:10Z"
+      host: forge-tillandsias
+      summary: |-
+        amend criteria to the argv-bound design
