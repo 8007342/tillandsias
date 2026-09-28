@@ -46,8 +46,11 @@ SKILLS=(smoke-curl-install-and-test-e2e build-install-and-smoke-test-e2e)
 PAIR_RE='TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 TILLANDSIAS_SKILL=[A-Za-z0-9_-]*'
 
 # ── 1 ───────────────────────────────────────────────────────────────────────
-declare -A PREFIX
+# Indexed, not associative: bash 3.2 (the macOS /bin/bash) has no declare -A.
+PREFIXES=()
+idx=0
 for s in "${SKILLS[@]}"; do
+    PREFIXES[idx]=""
     f="$ROOT/skills/$s/SKILL.md"
     found="$(/usr/bin/grep -o -- "$PAIR_RE" "$f")"
     n="$(printf '%s\n' "$found" | /usr/bin/grep -c .)"
@@ -56,10 +59,11 @@ for s in "${SKILLS[@]}"; do
     if [ "$n" = 1 ] && [ "$found" = "TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 TILLANDSIAS_SKILL=$s" ] &&
         [ "$unset_n" = 0 ] && [ "$optout_n" -ge 1 ]; then
         ok "arm 1: $s prescribes [$found]; no 'unset or'; =0 opt-out documented"
-        PREFIX[$s]="$found"
+        PREFIXES[idx]="$found"
     else
         bad "arm 1: $s pair_lines=$n found=[$found] unset_or=$unset_n optout=$optout_n"
     fi
+    idx=$((idx + 1))
 done
 m_unset="$(/usr/bin/grep -c 'unset or 1' "$ROOT/methodology.yaml")"
 [ "$m_unset" = 0 ] && ok "arm 1: methodology.yaml no longer says 'unset or 1'" ||
@@ -69,8 +73,10 @@ cd "$W/cwd" || exit 1
 if [ -e /run/.containerenv ]; then
     skip "arms 2, 3, 4: /run/.containerenv is present, so the evidence says forge; run on bare metal, and see cargo test -p tillandsias-plan --lib bash_policy command_policy"
 else
+    idx=0
     for s in "${SKILLS[@]}"; do
-        pfx="${PREFIX[$s]:-}"
+        pfx="${PREFIXES[idx]:-}"
+        idx=$((idx + 1))
         [ -n "$pfx" ] || { bad "arms 2-4: $s has no extracted prefix (arm 1 failed)"; continue; }
         read -r -a ENVW <<<"$pfx"
         # ── 2 ───────────────────────────────────────────────────────────────

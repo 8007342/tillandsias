@@ -61,7 +61,7 @@ case_is yes '"true && /usr/bin/podman run --rm x"'
 case_is yes '"timeout 5 podman ps"'
 case_is yes '"DOCKER_HOST=unix:///x.sock podman info"'
 case_is yes '"out=$(systemd-run --user --wait --pipe -p NoNewPrivileges=yes --setenv=CONTAINER_HOST=unix://x podman info --format x)"'
-case_is yes "\"bash -lc 'FORGE_IMG=\$(podman images --format x | head -1) && podman run --rm \$FORGE_IMG true'\""
+case_is yes "\"bash -lc 'FORGE_IMG=\$(podman images --format x | head -1) && podman run --rm \$FORGE_IMG true'\""  # sigpipe-ok: quoted test DATA fed to the trigger classifier, never executed
 case_is yes "'b=\"\${XDG_RUNTIME_DIR}/x\"; podman rm -f \$(podman ps -a -q) 2>/dev/null || true'"
 case_is yes "\"bash -c 'source scripts/common.sh && require_podman && echo ok'\""
 case_is no "\"PB=x; printf '%s' 'query: how do I run podman rootless' > f; echo ok\""
