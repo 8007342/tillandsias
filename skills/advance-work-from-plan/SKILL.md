@@ -681,16 +681,36 @@ Hard rules:
   in the fleet):
 
   ```bash
+  # The gate script writes its OWN log (so the Monitor sees it grow), and the
+  # agent door writes ONE JSON verdict to a separate status file (1260-2qgi).
+  #   <script-file>:  exec ./build.sh --check > gate.log 2>&1
   # linux
-  setsid nohup <script-file> < /dev/null > log 2>&1 &
+  setsid nohup tillandsias-plan run --json --timeout-ms 5400000 -- bash <script-file> \
+      < /dev/null > gate.status 2>&1 &
   # macos — no setsid; disown detaches from the job table
-  nohup <script-file> < /dev/null > log 2>&1 & disown
+  nohup tillandsias-plan run --json --timeout-ms 5400000 -- bash <script-file> \
+      < /dev/null > gate.status 2>&1 & disown
   ```
+
+  THE VERDICT IS `status` IN gate.status, NEVER AN INTEGER YOU COMPOSED
+  (methodology/convergence.yaml -> status_channel_policy, 1260-2qgi). The old
+  recipe ended the script with `echo "rc=$?"`, and that line lied twice: a gate
+  KILLED mid-run printed `rc=137`, an integer indistinguishable from a red,
+  and `$?` after a pipe was the LAST stage's (a failed push read as 0). The
+  door's record is `"status":"exited"` with `code` for a real exit, and
+  `signaled` / `timed_out` / `spawn_failed` / `no_status` / `policy_denied`,
+  with `code` null, when no exit status exists. Those are ABSENT, not red:
+  re-run, never report green, never push on them. A gate.status with NO record
+  means the door itself died, which is also absent.
+
+  `--timeout-ms` IS NOT OPTIONAL: the door's default deadline is 300 s, which
+  would kill every full gate at five minutes. 0 means no deadline; the
+  explicit ceiling above is the safer choice, so a wedged gate still ends.
 
   Both load-bearing details are unchanged on either platform: a script FILE
   rather than an inline command (an inline one re-exposes the sibling-match
-  trap, where a pgrep/kill pattern carried in the same command matches itself),
-  and a terminal `rc=` line for the Monitor to watch. This recipe was written
+  trap, where a pgrep/kill pattern carried in the same command matches itself;
+  the door refuses command strings anyway), and a log the Monitor can watch. This recipe was written
   from Linux measurements and prescribed fleet-wide for weeks before a Mac ran
   it — a remedy measured on one regime is a property of that regime until a
   second one executes it. On Windows invoke from Git Bash so `with-wsl2-builder.sh`

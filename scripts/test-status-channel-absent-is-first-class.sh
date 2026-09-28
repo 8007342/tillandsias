@@ -69,7 +69,11 @@ verdict() {
                 exited)
                     code="$(printf '%s' "$line" | "$PLAN" json get -r '.code' 2>/dev/null)"
                     [ "$code" = 0 ] && echo green || echo "red:$code" ;;
-                signal|timeout|no_status|spawn_failed|policy_denied) echo "absent:$st" ;;
+                # The door's agreed vocabulary (1443-8pur, macuahuitl-forge,
+                # 2026-09-28): `code` is an integer ONLY for exited, JSON null
+                # for every other status. Every non-exited status is a status
+                # that did NOT come from the child exiting: absent.
+                signaled|timed_out|no_status|spawn_failed|policy_denied|policy_consent) echo "absent:$st" ;;
                 *) echo "unparsed:$line" ;;
             esac ;;
         rc=absent*) echo "absent:${line#rc=absent:}" ;;
