@@ -298,6 +298,13 @@ fn main() {
         return;
     }
 
+    // Order 828-h7kw: `--hold-window -- <command...>`. The terminal a lane
+    // opens runs THIS, so the window closes only after the operator has seen
+    // how the lane ended. Hidden helper mode, like --internal-ensure-image.
+    if user_args.first().map(String::as_str) == Some("--hold-window") {
+        std::process::exit(run_hold_window(&user_args[1..]));
+    }
+
     // Order 1448-kmyn: `--swap on|off|status`. Dispatched early and exits: it
     // installs or removes the per-launch swap service and never starts a lane.
     if user_args.first().map(String::as_str) == Some("--swap") {
@@ -704,6 +711,8 @@ fn main() {
         "--ensure-enclave",
         // Order 1448-kmyn: dispatched early, listed here too (see --sync below).
         "--swap",
+        // Order 828-h7kw: hidden lane-window helper, dispatched early.
+        "--hold-window",
         // Order 1350-ku7v (T1). Listed HERE as well as parsed above, because
         // this allow-list is what decides at runtime: the first draft of this
         // flag was dispatched, helped and documented, and still answered
@@ -16078,6 +16087,74 @@ impl ForgeAgentMode {
     }
 }
 
+/// ORDER 828-h7kw. The line the hold prints, and the pure half of the hold
+/// decision, so both are testable without a terminal.
+pub(crate) fn hold_window_line(status: &std::process::ExitStatus) -> String {
+    #[cfg(unix)]
+    let signal = {
+        use std::os::unix::process::ExitStatusExt;
+        status.signal()
+    };
+    #[cfg(not(unix))]
+    let signal: Option<i32> = None;
+    let how = match (status.code(), signal) {
+        (Some(0), _) => "finished (exit 0)".to_string(),
+        (Some(c), _) => format!("FAILED (exit {c})"),
+        (None, Some(s)) => format!("ended by signal {s}"),
+        (None, None) => "ended".to_string(),
+    };
+    format!("[tillandsias] this session {how}. Press Enter to close this window.")
+}
+
+/// ORDER 828-h7kw — hold a lane's window open on EVERY exit.
+///
+/// A terminal emulator closes its window when its child exits (ptyxis's
+/// profile `exit-action` is `close`). The lane used to BE that child, so a
+/// clean agent exit destroyed the window and its scrollback, and the last line
+/// visible — the ungated shared-stack teardown — read like a crash. The
+/// operator ruled against changing the terminal's settings (it mutates their
+/// desktop profile and outlives an uninstall): the fix goes through the command
+/// the terminal runs. So the terminal runs `tillandsias --hold-window --
+/// <lane argv>`, which runs the lane with the terminal's own stdio, and when it
+/// ends — cleanly, by failure or by signal — prints one line saying how and
+/// waits for Enter (or end of input). It writes nothing anywhere: when the
+/// window closes there is no residue.
+///
+/// Returns the lane's own exit code, so a caller that inspects it is unaffected.
+pub(crate) fn run_hold_window(args: &[String]) -> i32 {
+    let argv: Vec<&String> = match args.first().map(String::as_str) {
+        Some("--") => args[1..].iter().collect(),
+        _ => args.iter().collect(),
+    };
+    let Some((prog, rest)) = argv.split_first() else {
+        eprintln!("usage: tillandsias --hold-window -- <command> [args...]");
+        return 2;
+    };
+    let status = std::process::Command::new(prog.as_str())
+        .args(rest.iter().map(|a| a.as_str()))
+        .status();
+    let (line, code) = match status {
+        Ok(st) => (hold_window_line(&st), st.code().unwrap_or(1)),
+        Err(e) => (
+            format!("[tillandsias] could not start {prog}: {e}. Press Enter to close this window."),
+            127,
+        ),
+    };
+    println!();
+    println!("{line}");
+    let mut buf = String::new();
+    let _ = std::io::stdin().read_line(&mut buf);
+    code
+}
+
+/// The argv prefix that runs a lane under [`run_hold_window`] (828-h7kw).
+pub(crate) fn hold_window_prefix() -> Vec<String> {
+    let exe = std::env::current_exe()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "tillandsias".to_string());
+    vec![exe, "--hold-window".to_string(), "--".to_string()]
+}
+
 /// Resolve the host's default terminal emulator into an argv prefix that
 /// expects the command and its args appended verbatim.
 ///
@@ -17780,6 +17857,9 @@ pub(crate) fn launch_forge_agent(
     let executable = term.remove(0);
     let mut child = Command::new(&executable);
     child.args(&term);
+    // 828-h7kw: the terminal runs the hold wrapper, which runs the lane, so the
+    // window survives the lane's exit (clean or failed) until Enter.
+    child.args(hold_window_prefix());
     child.args(&argv);
     // Some terminal emulators (ptyxis on Fedora Silverblue 44 in particular)
     // refuse to launch when the parent process cwd is `/` — which is the
