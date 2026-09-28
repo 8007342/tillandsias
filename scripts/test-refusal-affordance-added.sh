@@ -17,7 +17,7 @@
 #   7. NEGATIVE CONTROL: a bare verdict already in the base is not re-litigated,
 #      and a fixture file (scripts/test-*.sh) is skipped;
 #   8. --audit counts PER SITE: one file with one covered and two bare verdicts
-#      reports covered=1 bare=2 sites=3, not "covered".
+#      lists covered=1 and bare=2 for that file, not "covered".
 #
 # PRE-FIX RESULT: FAILS — no guard existed, and 289 of 339 verdicts reached
 # trunk with no affordance (1247-amcu, measured per file, so a floor).
@@ -151,7 +151,9 @@ echo "unrelated line ten"
 echo "violation:c:bare"'
 git -C "$R" "${GC[@]}" commit -qam audit
 run "$R" --audit
-if grep -q '^audit:refusal-affordance:covered=1 bare=2 sites=3$' <<<"$OUT" \
+# Count only this file's sites: the scratch repo also holds the guard itself.
+xc="$(grep -c '^covered scripts/x.sh:' <<<"$OUT")"; xb="$(grep -c '^bare scripts/x.sh:' <<<"$OUT")"
+if [ "$xc" = 1 ] && [ "$xb" = 2 ] && grep -q '^audit:refusal-affordance:covered=[0-9]* bare=[0-9]* sites=[0-9]*$' <<<"$OUT" \
    && grep -q '^covered scripts/x.sh:3 refused:a:covered$' <<<"$OUT" && grep -q '^bare scripts/x.sh:11 refused:b:bare$' <<<"$OUT"; then
     ok "arm 8: --audit counts per site (covered=1 bare=2), naming file:line — one good message does not credit the file"
 else

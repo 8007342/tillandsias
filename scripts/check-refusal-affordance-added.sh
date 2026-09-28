@@ -32,7 +32,8 @@
 #
 # DIFF-SCOPED: only lines this change ADDS (tracked and untracked scripts/*.sh,
 # build.sh), so the standing corpus is not re-litigated. Fixtures
-# (scripts/test-*.sh) print verdicts as EXPECTATIONS and are skipped.
+# (scripts/test-*.sh) print verdicts as EXPECTATIONS and are skipped. This
+# file is NOT exempt: its own verdict carries its affordance.
 #
 #   ok:refusal-affordance-added:<n> checked
 #   violation:refusal-affordance-added:<n>        (rc 1; each site on stderr)
@@ -75,7 +76,7 @@ emits() {
 
 in_scope() {
     case "$1" in
-        scripts/test-*.sh|scripts/check-refusal-affordance-added.sh) return 1 ;;
+        scripts/test-*.sh) return 1 ;;
         scripts/*.sh|build.sh) return 0 ;;
     esac
     return 1
@@ -151,6 +152,8 @@ EOF
 
 if [ "$violations" -gt 0 ]; then
     echo "violation:refusal-affordance-added:$violations"
+    echo "  why: each site above emits a refusal verdict with no why/remedy near it (1247-amcu)" >&2
+    echo "  remedy: add the affordance each REFUSED block names, then re-run this check" >&2
     exit 1
 fi
 echo "ok:refusal-affordance-added:$checked checked"
