@@ -26,7 +26,7 @@ become `plan/issues/` work packets so they flow through the normal
 | immutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
 | mutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
 | macOS | `scripts/install-macos.sh` via release curl URL — **launches the tray and begins VM provisioning; not a download test (1281-pgit)** | remove Tillandsias app state/cache VM dirs | installed tray `--provision` + `--diagnose --json` |
-| Windows | `scripts/install-windows.ps1` release path when available | `wsl --unregister tillandsias`, cache purge, plus `vault-shamir-share-v1` + `vault-root-token-v1` cleared from Credential Manager (keeping `tillandsias-vm-uuid`) | installed tray provision/diagnose — implemented by the §3 "Windows" block (`--provision-once`, `--status-once --json` polled to Ready, `--diagnose --json` LAST) |
+| Windows | `scripts/install-windows.ps1` release path when available | `wsl --unregister tillandsias`, runtime-cache purge BY NAME (`%USERPROFILE%\.cache\tillandsias`, `%APPDATA%\tillandsias`; never `%LOCALAPPDATA%\tillandsias\wsl-build`, the builder distro — 1295-b4i8), plus `vault-shamir-share-v1` + `vault-root-token-v1` cleared from Credential Manager (keeping `tillandsias-vm-uuid`) | installed tray provision/diagnose — implemented by the §3 "Windows" block (`--provision-once`, `--status-once --json` polled to Ready, `--diagnose --json` LAST) |
 
 This is the only e2e install skill allowed on immutable Linux.
 
@@ -768,8 +768,41 @@ continue.
 > case-sensitivity hypothesis, read the stored name — a path you typed yourself
 > proves only that the filesystem folded it.
 
-On Windows, stop the tray, then run `wsl --terminate tillandsias` followed by
+On Windows, FIRST snapshot the builder distro's disk, so §3 can prove it
+survived (order 1295-b4i8):
+
+```powershell
+New-Item -ItemType Directory -Force target\smoke-e2e | Out-Null
+$b = Get-Item -LiteralPath "$env:LOCALAPPDATA\tillandsias\wsl-build\ext4.vhdx" -ErrorAction SilentlyContinue
+$(if ($b) { "$($b.Length) $($b.LastWriteTimeUtc.Ticks)" } else { 'absent' }) |
+  Set-Content target\smoke-e2e\02-builder-vhdx-before.txt
+```
+
+Then stop the tray, run `wsl --terminate tillandsias` followed by
 `wsl --unregister tillandsias`, tolerating an already-absent distro.
+
+**Then purge the runtime cache BY NAME (order 1295-b4i8).** This step used to
+say only "cache purge", and the obvious directory,
+`%LOCALAPPDATA%\tillandsias`, also holds `wsl-build\ext4.vhdx`: the BUILDER
+distro's disk (142.9 GB on yolanda), the host's gate toolchain. Measured on
+yolanda 2026-09-20: that purge was attempted and failed only because the
+builder was Running and held the file open. With the builder Stopped it is
+deleted, and §2 still reports a clean reset.
+
+- DELETE: `%USERPROFILE%\.cache\tillandsias` and `%APPDATA%\tillandsias`.
+- NEVER DELETE: `%LOCALAPPDATA%\tillandsias\wsl-build` (the builder distro),
+  nor `%LOCALAPPDATA%\tillandsias` as a whole. The runtime distro's own disk
+  is removed by `--unregister` above, not by a directory delete.
+- Do NOT work around this by stopping the builder first: that makes the
+  destructive case the default.
+
+```powershell
+foreach ($p in @("$env:USERPROFILE\.cache\tillandsias", "$env:APPDATA\tillandsias")) {
+  if ($p -match 'wsl-build') { throw "refusing to purge a path that names the builder: $p" }
+  if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Recurse -Force }
+  if (Test-Path -LiteralPath $p) { throw "runtime cache survived the purge: $p" }
+}
+```
 
 **Then clear the host credential store, or the run is not a clean room (order
 804-ckst).** Unregistering the distro and purging the cache leave Windows
@@ -992,11 +1025,41 @@ if ($provisionExit -ne 0) { throw "provision-once failed (exit $provisionExit)" 
 # the marker (WSL2 keeps each distro's ext4.vhdx under LOCALAPPDATA).
 $distros = (wsl.exe -l -q) -replace "`0", '' | ForEach-Object { $_.Trim() }
 if ($distros -notcontains 'tillandsias') { throw "distro 'tillandsias' not registered after provision" }
-$vhdx = Get-ChildItem -Path $env:LOCALAPPDATA -Recurse -Filter ext4.vhdx -ErrorAction SilentlyContinue |
-  Where-Object { $_.FullName -match 'tillandsias' } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-if (-not $vhdx) { throw "no ext4.vhdx for the tillandsias distro under $env:LOCALAPPDATA" }
+#
+# ORDER 1295-b4i8: select the disk by the distro's REGISTERED path, never by a
+# substring of a directory name. The old selector (every ext4.vhdx under
+# LOCALAPPDATA whose path contains 'tillandsias', newest first) also matches
+# the BUILDER distro at %LOCALAPPDATA%\tillandsias\wsl-build, and a running
+# builder writes its vhdx constantly, so the freshness check below could pass
+# on the wrong disk.
+$vhdx = $null
+$lxss = Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss' -ErrorAction SilentlyContinue |
+  ForEach-Object { Get-ItemProperty $_.PSPath } | Where-Object { $_.DistributionName -eq 'tillandsias' }
+if ($lxss) {
+  $vhdxPath = Join-Path ($lxss.BasePath -replace '^\\\\\?\\', '') 'ext4.vhdx'
+  if (Test-Path -LiteralPath $vhdxPath) { $vhdx = Get-Item -LiteralPath $vhdxPath }
+}
+if (-not $vhdx) { throw "no ext4.vhdx at the registered BasePath of distro 'tillandsias'" }
+if ($vhdx.FullName -match '\\wsl-build\\') { throw "the tillandsias distro resolves to the BUILDER's disk $($vhdx.FullName)" }
 if ($vhdx.LastWriteTime -lt (Get-Item target\smoke-e2e\03-destruction-marker).LastWriteTime) {
   throw "rootfs $($vhdx.FullName) predates the destruction marker — a survivor, not a fresh provision"
+}
+
+# ORDER 1295-b4i8: the builder distro SURVIVED §1+§2+§3 untouched. Compare
+# with the snapshot §2 took before it deleted anything. Size AND mtime: a
+# deleted-and-recreated disk has a new mtime even at the same size.
+if (Test-Path target\smoke-e2e\02-builder-vhdx-before.txt) {
+  $before = Get-Content target\smoke-e2e\02-builder-vhdx-before.txt -Raw
+  $b = Get-Item -LiteralPath "$env:LOCALAPPDATA\tillandsias\wsl-build\ext4.vhdx" -ErrorAction SilentlyContinue
+  $after = if ($b) { "$($b.Length) $($b.LastWriteTimeUtc.Ticks)" } else { 'absent' }
+  "$after" | Set-Content target\smoke-e2e\03-builder-vhdx-after.txt
+  if ($after -eq 'absent') { throw "the smoke DELETED the builder distro's disk (was: $($before.Trim()))" }
+  # A RUNNING builder writes its own disk, so byte-identity is only asserted
+  # when it is stopped. Stopped is the case the old purge destroyed.
+  $builderRunning = ((wsl.exe -l -q --running) -replace "`0", '' | ForEach-Object { $_.Trim() }) -contains 'tillandsias-build'
+  if (-not $builderRunning -and $after -ne $before.Trim()) {
+    throw "builder vhdx changed while the builder was STOPPED: before=$($before.Trim()) after=$after"
+  }
 }
 
 # Wire state at provision exit, POLLED to Ready: `--status-once --json` is
