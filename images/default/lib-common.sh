@@ -848,8 +848,77 @@ rewrite_origin_for_enclave_push() {
 #
 # Caveat: a REUSED (not recreated) container carries creation-time env, so a
 # stale seed is possible until the container is recreated.
+#
+# ORDER 1362-u8ww — A CLONE NEVER TAKES ITS BRANCH FROM THE MIRROR'S HEAD.
+# A cloud launch (`--cloud owner/repo`) has no host checkout, so the launcher
+# injects no seed, and the clone checked out whatever the mirror's HEAD named:
+# measured on pirria 2026-09-22, /srv/git/tillandsias HEAD -> work/1325-ygq5,
+# the branch that host happened to be working on, and the operator saw a
+# "remote" project open on a local work branch. The clone transports now pass
+# `resolve`, and an unset seed is RESOLVED instead of skipped, in this order:
+#   1. TILLANDSIAS_FORGE_SEED_BRANCH (the launch-gated branch; unchanged)
+#   2. the project's discipline seed (.tillandsias/branch-discipline.yaml):
+#      its forge integration branch (integration.forge, else .linux), else
+#      its default_branch
+#   3. main, else master, as the remote default by convention
+#   4. only then the clone's HEAD, with a LOUD line saying it is the mirror's
+# and the forge SAYS which it chose and why. Two hosts whose mirrors sit on
+# different HEADs therefore seed the same, named branch. A HOST-MOUNTED
+# checkout never resolves: it is the user's own tree and is never switched.
+resolve_forge_seed_branch() { # in the clone; prints "<branch>|<source>"
+    local ref text b
+    if [[ -n "${TILLANDSIAS_FORGE_SEED_BRANCH:-}" ]]; then
+        printf '%s|TILLANDSIAS_FORGE_SEED_BRANCH (the branch this launch was gated on)\n' "$TILLANDSIAS_FORGE_SEED_BRANCH"
+        return 0
+    fi
+    # The seed is a project constant, read from the conventional defaults
+    # first and from the clone's own tree last (it names BRANCHES; it does not
+    # make HEAD the answer).
+    for ref in origin/main origin/master HEAD; do
+        text="$(git show "${ref}:.tillandsias/branch-discipline.yaml" 2>/dev/null)" || continue
+        [[ -n "$text" ]] || continue
+        for key in forge linux; do
+            b="$(awk -v k="${key}:" '
+                /^integration:/ { inb = 1; next }
+                inb && /^[^[:space:]#]/ { inb = 0 }
+                inb && $1 == k { v = $2; gsub(/["\047]/, "", v); print v; exit }
+            ' <<<"$text")"
+            if [[ -n "$b" ]] && git show-ref --verify --quiet "refs/remotes/origin/${b}"; then
+                printf '%s|the discipline seed'"'"'s integration.%s (.tillandsias/branch-discipline.yaml at %s)\n' "$b" "$key" "$ref"
+                return 0
+            fi
+        done
+        b="$(awk '$1 == "default_branch:" { v = $2; gsub(/["\047]/, "", v); print v; exit }' <<<"$text")"
+        if [[ -n "$b" ]] && git show-ref --verify --quiet "refs/remotes/origin/${b}"; then
+            printf '%s|the discipline seed'"'"'s default_branch (.tillandsias/branch-discipline.yaml at %s)\n' "$b" "$ref"
+            return 0
+        fi
+        break
+    done
+    for b in main master; do
+        if git show-ref --verify --quiet "refs/remotes/origin/${b}"; then
+            printf '%s|the remote default by convention (origin/%s exists; the mirror'"'"'s HEAD is not consulted)\n' "$b" "$b"
+            return 0
+        fi
+    done
+    return 1
+}
+
 checkout_forge_seed_branch() {
     local seed="${TILLANDSIAS_FORGE_SEED_BRANCH:-}"
+    if [[ -z "$seed" && "${1:-}" == resolve ]]; then
+        local resolved
+        if resolved="$(resolve_forge_seed_branch)"; then
+            seed="${resolved%%|*}"
+            echo "[forge] Seed branch: '${seed}' — ${resolved#*|}."
+            trace_lifecycle "git-mirror" "seed branch ${seed} resolved from: ${resolved#*|}"
+        else
+            local head_now
+            head_now="$(git symbolic-ref --short -q HEAD 2>/dev/null || echo detached)"
+            echo "[forge] WARNING: no seed branch could be resolved (no TILLANDSIAS_FORGE_SEED_BRANCH, no discipline seed, no origin/main or origin/master); staying on '${head_now}', which is whatever the MIRROR'S HEAD names and may be another host's work branch." >&2
+            return 0
+        fi
+    fi
     [[ -n "$seed" ]] || return 0
 
     local current
@@ -1021,7 +1090,7 @@ _clone_project_from_mirror_impl() {
             configure_git_identity
             # COMMON TAIL (order 501, B6): every transport, incl. this
             # Windows/WSL + macOS staged path, must defeat sticky-HEAD.
-            checkout_forge_seed_branch
+            checkout_forge_seed_branch resolve
             echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
             return 0
         else
@@ -1103,7 +1172,7 @@ _clone_project_from_mirror_impl() {
                 rewrite_origin_for_enclave_push
                 # COMMON TAIL (order 501, B6): every transport, incl. this
                 # network path, must defeat sticky-HEAD.
-                checkout_forge_seed_branch
+                checkout_forge_seed_branch resolve
                 echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
                 return 0
             fi
