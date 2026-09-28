@@ -273,7 +273,21 @@ esac
 # Fedora CONTAINER IMAGE and ships no `hostname`. /etc/hostname had the answer
 # the whole time. Simulated by shadowing `hostname` with a failing stub.
 tdir="$(mktemp -d)"
-trap 'rm -rf "$tdir"' EXIT
+# Arms 9 and 9c must create the REAL /tmp/tillandsias-timing.jsonl (the split
+# guard names that path). A fixture killed between the create and its own rm
+# (preflight-fixtures-default-target bounds it; measured on the land83 relay)
+# left the file behind, and every cycle-metrics report on the host then refused
+# with violation:metrics-log-split. Clean it on ANY exit, but only while it still
+# holds nothing except this fixture's record, so a real log is never deleted.
+_rm_fixture_tmp_log() {
+    local f=/tmp/tillandsias-timing.jsonl
+    [ -f "$f" ] || return 0
+    grep -qv '"host":"fixture"' "$f" && return 0
+    rm -f "$f"
+}
+trap 'rm -rf "$tdir" "${_FIXTURE_METRICS:-}"; _rm_fixture_tmp_log' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 mkdir -p "$tdir/bin"
 printf '#!/bin/sh\nexit 127\n' > "$tdir/bin/hostname"
 chmod +x "$tdir/bin/hostname"
