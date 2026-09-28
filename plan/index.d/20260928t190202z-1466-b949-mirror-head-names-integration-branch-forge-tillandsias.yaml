@@ -30,6 +30,7 @@ packets:
       - 'a mirror whose HEAD names a work/<order> branch is repointed at the integration branch on the next ensure-mirror-head run: the discipline seed''s integration branch for this host kind, else upstream''s default (ls-remote --symref), else main (pre-fix: FAILS, a valid HEAD is never touched)'
       - 'a HEAD that already names the integration branch or the default branch is left alone (no churn), and a mirror with no seed and no upstream keeps today''s order'
       - 'the launcher no longer passes the host checkout''s current branch as the mirror''s preferred HEAD (the forge''s own seed resolution, 1362-u8ww, is what lands a forge on the working branch)'
+    unscoreable: unpinnable-until-the-guard-exists — the fixture IS the deliverable; the intended name is litmus:mirror-head-names-integration-branch-shape at openspec/litmus-tests/litmus-mirror-head-names-integration-branch-shape.yaml, written and bound in the same commit as the fix (1136-n8sh)
     verifiable_closure: |
       a scratch bare mirror with HEAD -> refs/heads/work/1325-ygq5 and a seed
       naming linux-next: after ensure-mirror-head, `git clone` of it checks out
