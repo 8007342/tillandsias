@@ -227,6 +227,7 @@ specs:
   - litmus:fake-cloudflare
   - litmus:cloudflare-oauth-core
   - litmus:cloudflare-token-rotation
+  - litmus:cloudflare-login
   coverage_ratio: 75
   last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher

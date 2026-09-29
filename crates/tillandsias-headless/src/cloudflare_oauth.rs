@@ -269,6 +269,18 @@ fn fetch_discovery(http: &dyn HttpClient, base_url: &str) -> Result<Discovery, S
         .map_err(|_| "refused:cloudflare-login:discovery-unusable".to_string())
 }
 
+/// The `revocation_endpoint` discovery names at `base_url` (`None` when the
+/// document lists none). Used by `--cloudflare-logout` (1505-kc5f), which
+/// revokes best-effort and holds no [`Pending`] to read it from.
+pub fn discover_revocation_endpoint(
+    http: &dyn HttpClient,
+    base_url: &str,
+) -> Result<Option<String>, String> {
+    Ok(fetch_discovery(http, base_url)?
+        .revocation_endpoint
+        .filter(|e| !e.is_empty()))
+}
+
 /// The device-grant adapter (design.md Decision 1: "The GitHub device-flow
 /// shape is kept as an adapter"). Cloudflare does not support
 /// [`DEVICE_CODE_GRANT_TYPE`] today; this reports whichever is true rather
@@ -392,27 +404,30 @@ impl std::fmt::Debug for Bundle {
     }
 }
 
-/// An OAuth `error` value kept only when it is a plain identifier
-/// (RFC 6749 §5.2's registered codes are lowercase words joined by `_`);
-/// anything else — a token echoed back, free text — becomes a fixed word.
-fn oauth_error_code(body: &str) -> &'static str {
+/// The registered OAuth error codes (RFC 6749 §4.1.2.1 and §5.2) as fixed
+/// `&'static str`s: a caller that must name a server-supplied `error` keeps
+/// it only when it is one of these, so the named word never carries
+/// response bytes. `None` for anything else (a token echoed back, free text).
+pub fn known_oauth_error(code: &str) -> Option<&'static str> {
     const KNOWN: &[&str] = &[
         "invalid_request",
         "invalid_client",
         "invalid_grant",
         "unauthorized_client",
         "unsupported_grant_type",
+        "unsupported_response_type",
         "invalid_scope",
         "access_denied",
         "server_error",
         "temporarily_unavailable",
     ];
+    KNOWN.iter().find(|k| **k == code).copied()
+}
+
+/// An OAuth `error` value from a JSON error body, reduced to a fixed word.
+fn oauth_error_code(body: &str) -> &'static str {
     match serde_json::from_str::<ErrorResponse>(body) {
-        Ok(e) => KNOWN
-            .iter()
-            .find(|k| **k == e.error)
-            .copied()
-            .unwrap_or("unrecognised-error-code"),
+        Ok(e) => known_oauth_error(&e.error).unwrap_or("unrecognised-error-code"),
         Err(_) => "no-error-code",
     }
 }

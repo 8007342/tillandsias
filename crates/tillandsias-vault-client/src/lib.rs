@@ -244,6 +244,31 @@ impl VaultClient {
         }
     }
 
+    /// Permanently delete a KV-v2 secret: EVERY version and its metadata
+    /// (`DELETE /v1/<mount>/metadata/<rest>`), not the soft delete of the
+    /// latest version that `DELETE .../data/...` performs — a soft-deleted
+    /// credential keeps its older versions readable and undeletable-by-accident.
+    /// Idempotent: a path that holds nothing is `Ok` (Vault answers 204 or 404).
+    ///
+    /// @trace order:1505-kc5f (`--cloudflare-logout`)
+    pub async fn delete_secret_all_versions(&self, path: &str) -> Result<(), VaultError> {
+        let kv_path = ensure_kv_metadata_prefix(path);
+        debug!(target: "tillandsias_vault_client", path = %kv_path, "DELETE secret metadata");
+        let resp = self
+            .client
+            .delete(self.url(&kv_path))
+            .header("X-Vault-Token", &self.token)
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.is_success() || status == StatusCode::NOT_FOUND {
+            Ok(())
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            Err(Self::map_status(status, body))
+        }
+    }
+
     /// Create-only KV-v2 write: `options.cas = 0` makes Vault reject the
     /// write when the path already holds any version.
     ///
@@ -941,9 +966,43 @@ fn ensure_kv_data_prefix(path: &str) -> String {
     }
 }
 
+/// `secret/foo` / `secret/data/foo` / `secret/metadata/foo` ->
+/// `secret/metadata/foo` (the KV-v2 path that addresses every version).
+fn ensure_kv_metadata_prefix(path: &str) -> String {
+    let p = path.trim_matches('/');
+    let mut segments = p.splitn(2, '/');
+    let mount = segments.next().unwrap_or("");
+    let rest = segments.next().unwrap_or("");
+    let rest = rest
+        .strip_prefix("data/")
+        .or_else(|| rest.strip_prefix("metadata/"))
+        .unwrap_or(rest);
+    if rest.is_empty() {
+        mount.to_string()
+    } else {
+        format!("{mount}/metadata/{rest}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ensure_kv_metadata_prefix_addresses_every_version() {
+        assert_eq!(
+            ensure_kv_metadata_prefix("secret/cloudflare/token"),
+            "secret/metadata/cloudflare/token"
+        );
+        assert_eq!(
+            ensure_kv_metadata_prefix("secret/data/cloudflare/token"),
+            "secret/metadata/cloudflare/token"
+        );
+        assert_eq!(
+            ensure_kv_metadata_prefix("/secret/metadata/cloudflare/refresh/"),
+            "secret/metadata/cloudflare/refresh"
+        );
+    }
 
     #[test]
     fn ensure_kv_data_prefix_inserts_data_infix() {

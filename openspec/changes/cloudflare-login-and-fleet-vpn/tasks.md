@@ -50,17 +50,22 @@ closure is the fixture named in its packet's `verifiable_closure`.
 
 - [ ] 5.1 `--cloudflare-login --via loopback`: listener on the registered
       ports, browser open, state check, exchange, Vault write, the stored
-      signal the tray waits on.
-- [ ] 5.2 `--via qr`: QR of the authorize URL with the relay redirect;
+      signal the tray waits on. (Done except the tray signal: there is no
+      tray-side Cloudflare waiter yet — that is 1505-hfim's row.)
+- [x] 5.2 `--via qr`: QR of the authorize URL with the relay redirect;
       paste prompt; optional relay poll behind
       `TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL`.
-- [ ] 5.3 `--via paste`; terminal requirement mirrored from
+- [x] 5.3 `--via paste`; terminal requirement mirrored from
       `select_github_login_input_mode`.
-- [ ] 5.4 `--cloudflare-logout`.
-- [ ] 5.5 `LITMUS_PODMAN_MODE` stop before any exchange, as for GitHub.
+- [x] 5.4 `--cloudflare-logout`.
+- [x] 5.5 `LITMUS_PODMAN_MODE` stop before any exchange, as for GitHub.
 - [ ] 5.6 `scripts/test-cloudflare-login.sh` driving the real binary
       against the fake for loopback (auto-approve), paste and deny.
-- [ ] 5.7 The static relay page (`assets/cloudflare-relay/index.html`) and
+      (Deny, state, qr, litmus and the refusals drive the real binary; the
+      STORING arms — loopback approve, paste — run the same `login()`
+      in-process with the in-memory Vault seam, because the binary's only
+      store is the live Vault and no env switch may select another.)
+- [x] 5.7 The static relay page (`assets/cloudflare-relay/index.html`) and
       its one test (renders `code` from the query string, never calls out).
 
 ## 6. Fleet VPN bootstrap [1505-6w7d, opus]

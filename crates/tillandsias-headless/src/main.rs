@@ -146,6 +146,11 @@ pub mod cloudflare_names;
 // `pub` so the redirect-receiver packet (1505-kc5f) and the rotation
 // scheduler (siblings under 1505-sm2j) can reach it.
 pub mod cloudflare_oauth;
+// @trace order:1505-kc5f — `--cloudflare-login [--via loopback|qr|paste]` and
+// `--cloudflare-logout`: the three redirect receivers over cloudflare_oauth,
+// storing through the 1505-iysn Vault functions. Needs Vault, so `vault`-gated.
+#[cfg(feature = "vault")]
+mod cloudflare_login;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
@@ -308,6 +313,31 @@ fn main() {
     if user_args.iter().any(|a| a == "--help" || a == "-h") {
         print_usage(version);
         return;
+    }
+
+    // Order 1505-kc5f: `--cloudflare-login` / `--cloudflare-logout`. Dispatched
+    // early and exits, like --swap: the module parses its own arguments
+    // (refusing anything it does not take, and never echoing a positional
+    // argument, which might be a pasted code), runs on the HOST binary (no
+    // container, no singleton) and stores only through the 1505-iysn Vault
+    // store. Also listed in known_flags below, per the five-sites rule.
+    if user_args
+        .iter()
+        .any(|a| a == "--cloudflare-login" || a == "--cloudflare-logout")
+    {
+        #[cfg(feature = "vault")]
+        std::process::exit(cloudflare_login::run_cli(&user_args));
+        #[cfg(not(feature = "vault"))]
+        {
+            eprintln!("refused:cloudflare-login:vault-not-compiled");
+            eprintln!(
+                "  why: the Cloudflare credential is stored only in Vault, and this binary was built without the `vault` feature"
+            );
+            eprintln!(
+                "  remedy: use a default build of tillandsias (the `vault` feature is on by default)"
+            );
+            std::process::exit(2);
+        }
     }
 
     // Order 828-h7kw: `--hold-window -- <command...>`. The terminal a lane
@@ -734,6 +764,11 @@ fn main() {
         "--sync",
         "--github-login",
         "--with-token",
+        // Order 1505-kc5f: dispatched early (cloudflare_login::run_cli), listed
+        // here too so no reorder can make them `Unsupported option`.
+        "--cloudflare-login",
+        "--cloudflare-logout",
+        "--via",
         "--refresh-github-token",
         "--github-refresh",
         "--claude-login",
@@ -1604,6 +1639,8 @@ fn print_usage(version: &str) {
     println!("       tillandsias --status-check [--debug]");
     println!("       tillandsias --swap on|off|status [--prefix DIR] [--user NAME]");
     println!("       tillandsias --github-login [--with-token] [--debug]");
+    println!("       tillandsias --cloudflare-login [--via loopback|qr|paste] [--debug]");
+    println!("       tillandsias --cloudflare-logout [--debug]");
     println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
     println!("       tillandsias --codex-login [--debug]");
@@ -1666,6 +1703,16 @@ fn print_usage(version: &str) {
     );
     println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
+    println!(
+        "  --cloudflare-login Sign in to Cloudflare (OAuth code + PKCE; Cloudflare has no device flow) and store the token pair in Vault. \
+         --via loopback: a browser on this desktop (127.0.0.1 ports 48631-48633); \
+         --via qr: a phone scans a QR whose redirect is the relay page ($TILLANDSIAS_CLOUDFLARE_RELAY_URL); \
+         --via paste: paste the authorization CODE the relay page (or the address bar) shows. A code, never a token: \
+         it is single-use and useless without the verifier that stays in this process"
+    );
+    println!(
+        "  --cloudflare-logout Revoke (best effort) and delete the stored Cloudflare sign-in; the fleet-vpn mesh credential is kept"
+    );
     println!(
         "  --refresh-github-token Refresh GitHub OAuth access token using refresh token in Vault"
     );

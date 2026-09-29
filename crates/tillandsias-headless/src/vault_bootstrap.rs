@@ -1808,6 +1808,29 @@ pub trait CloudflareTokenStore {
     /// Write one record and CONFIRM it (read back and compare); `Ok` means the
     /// record is durably in Vault.
     fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String>;
+    /// Destroy one record, EVERY version (1505-kc5f `--cloudflare-logout`), and
+    /// CONFIRM it is gone. Idempotent: an absent record is `Ok`. Unreachable,
+    /// sealed or refusing is `Err` — never read as "already deleted".
+    fn delete_record(&self, path: &str) -> Result<(), String>;
+}
+
+/// Delete the Cloudflare bundle (1505-kc5f `--cloudflare-logout`): the
+/// long-lived REFRESH record first, then the token record, and NOTHING else —
+/// `secret/cloudflare/mesh` (the host's fleet-vpn service token) is not this
+/// bundle and is never touched here.
+///
+/// Errors name which record is still present:
+/// `refresh-record-delete-failed:<reason>` (both records remain) or
+/// `token-record-delete-failed:<reason>` (the refresh record is gone, so the
+/// remaining access token can no longer be renewed and dies at its expiry).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn delete_cloudflare_token_bundle(store: &dyn CloudflareTokenStore) -> Result<(), String> {
+    store
+        .delete_record(CLOUDFLARE_REFRESH_PATH)
+        .map_err(|e| format!("refresh-record-delete-failed:{e}"))?;
+    store
+        .delete_record(CLOUDFLARE_TOKEN_PATH)
+        .map_err(|e| format!("token-record-delete-failed:{e}"))
 }
 
 /// How many times the refresh-record write is attempted before the rotation
@@ -1970,6 +1993,25 @@ impl CloudflareTokenStore for VaultCloudflareTokenStore {
         }
         Ok(())
     }
+
+    fn delete_record(&self, path: &str) -> Result<(), String> {
+        // No auto-start here: a Vault that is not running holds records this
+        // call cannot reach, so "deleted" would be a lie. Refuse instead.
+        if !container_running(VAULT_CONTAINER_NAME) {
+            return Err("vault-unavailable".into());
+        }
+        let (_stability, rt, client) = self.client()?;
+        rt.block_on(client.delete_secret_all_versions(path))
+            .map_err(|e| cloudflare_vault_reason(&e).to_string())?;
+        match rt.block_on(client.read_secret(path)) {
+            Err(VaultError::NotFound(_)) => Ok(()),
+            Ok(_) => Err("delete-not-confirmed:still-present".into()),
+            Err(e) => Err(format!(
+                "delete-not-confirmed:{}",
+                cloudflare_vault_reason(&e)
+            )),
+        }
+    }
 }
 
 /// A `cloudflare_oauth` refresh failure reduced to a reason token. The core's
@@ -2007,9 +2049,10 @@ fn cloudflare_refresh_failure_reason(err: &str) -> String {
 
 /// May a refresh token be POSTed to this endpoint? https anywhere; plain http
 /// only to a loopback host (the fixtures' fake). A userinfo component
-/// (`http://127.0.0.1@elsewhere/`) is refused.
+/// (`http://127.0.0.1@elsewhere/`) is refused. The login (1505-kc5f) applies
+/// the same rule to every endpoint it sends a code, verifier or token to.
 #[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
-fn cloudflare_token_endpoint_is_safe(endpoint: &str) -> bool {
+pub(crate) fn cloudflare_token_endpoint_is_safe(endpoint: &str) -> bool {
     if endpoint.starts_with("https://") {
         return true;
     }
@@ -9191,6 +9234,11 @@ mod cloudflare_token_rotation_tests {
                 return Err("simulated-vault-write-failure".into());
             }
             self.records.lock().unwrap().insert(path.into(), value);
+            Ok(())
+        }
+        fn delete_record(&self, path: &str) -> Result<(), String> {
+            self.touched.fetch_add(1, Ordering::SeqCst);
+            self.records.lock().unwrap().remove(path);
             Ok(())
         }
     }
