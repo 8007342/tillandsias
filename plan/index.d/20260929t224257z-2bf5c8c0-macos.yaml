@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    event:
+      type: note
+      ts: "2026-09-29T22:42:57Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t224257z
+      host: macos
+      summary: |
+        RUN FINISHED, RESTORED, SIGNED-IN CHECK (2026-09-29; /Users/tlatoani/.tillandsias/scratch/evidence-20260929t184231z/chrony-experiment-2.final.txt).
+        (a) The slew continued to A+720 s: 4099.18 s slow, still slewing at about 77 ms/s. When the Mac's maintenance sleeps paused the VM, chrony's log shows it could NOT keep synchronising at all: "Jitter of <src> exceeds maxjitter of 1.000 seconds", "Root distance of <src> exceeds maxdistance of 3.000 seconds", "Can't synchronise: no selectable sources", and sources being replaced. So a paused VM makes every NTP source unselectable for a while. That is more support for the host-driven set as the PRIMARY layer.
+        (b) RESTORE: `chronyc -a makestep` returned "200 OK"; tracking then read "0.000000000 seconds slow, Leap Normal" at guest 19:17:33; /etc/chrony.conf unchanged (makestep 1.0 3). CAVEAT: the output reached the host only at about 22:08Z (the Mac was sleeping), so when that line ran, and whether 19:17:33 was the real time then, cannot be established from this transcript. The VM then shut down, and the next boot takes its clock from the host.
+        (c) SIGNED-IN CHECK after the experiments: the tray relaunched 22:08:22Z (c2c0b7026), Ready 22:09:10, then "github-login: menu_state updated" and "cloud-projects: menu_state updated (14 entries)" at 22:25:50-52 (the gap was host sleep). The cloud list needs the stored GitHub credential, so the credential SURVIVED the clock experiments.
