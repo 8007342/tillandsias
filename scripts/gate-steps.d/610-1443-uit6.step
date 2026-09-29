@@ -14,4 +14,4 @@ STEP_DESC="Checking the git mirror enforces and publishes the seeded branch disc
 STEP_SCRIPT="scripts/test-mirror-discipline.sh"
 STEP_ERROR="the git mirror no longer enforces or publishes the seeded branch discipline as specified (1443-uit6); see which arm failed above"
 STEP_OK="mirror enforces the seeded discipline and publishes one discipline ref"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: mirror-discipline at 92ca6678b (13 arms, stock ruby 2.6); arm 14 added after, same git+sh primitives as arm 12"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: mirror-discipline at 106dca304 (14 arms, stock ruby 2.6, git status clean)"
