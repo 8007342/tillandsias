@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-new-literal-pin-guard-covers-litmus-steps-but-not-rust-include-str-contains-tests-which-produced-four-of-the-ten-costliest-pins
+    event:
+      type: progress
+      ts: "2026-09-29T00:24:02Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t002402z
+      host: macos
+      summary: |
+        work/1473-scdq @ 64a4f7244 ready for relay (tlatoanis-macbook-air, darwin).
+        - scripts/check-rust-source-pin-added.sh is diff-scoped (criterion 1). It refuses an ADDED non-negated VAR.contains( where VAR is source text: bound by include_str! of a source file in the same fn, or a window cut from such a variable (two hops, the vz.rs split() shape). Admitted: absence (!src.contains), a test naming a negative control (the same phrases the litmus guard accepts), or a reasoned source-pin-ok marker (an empty marker does not count).
+        - The refusal carries why plus the remedy, naming the behavioural alternative: assert on the value a function BUILDS (criterion 3). It is wired into build.sh --check next to the 634-39ik litmus check.
+        - REAL-CODE CHECK: run over trunk's vz.rs, it refuses the stale After=home-forge-src.mount pin that hid 1472-3d29 and the Type=oneshot window pin, and admits the RequiresMountsFor= absence check beside them.
+        - Fixture scripts/test-rust-source-pin-added.sh 7/7: direct pin, window pin, absence, negative control, marker with and without a reason, a built value, and the diff-scope negative control. Gate step 289 with a darwin STEP_SECOND_REGIME (criterion 2). Clean-checkout deciders all ok (bash-dialect caught a BSD-sed \s, fixed), and check-refusal-affordance-added (v67y) passes on it.
