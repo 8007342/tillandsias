@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: everything-tillandsias-owns-on-a-host-lives-under-tillandsias-home-and-a-first-launch-migrates-the-legacy-roots
+    event:
+      type: note
+      ts: "2026-09-29T16:58:36Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t165836z
+      host: macos
+      summary: |
+        RESET DESTROY LIST IS INCOMPLETE (tlatoanis-macbook-air, 2026-09-29; tray c2c0b7026). The operator authorized a from-scratch reprovision, and `tillandsias-tray --reset-state` (TILLANDSIAS_RESET_KEEP_MODELS=1, rc=0) announced its WILL-BE-DESTROYED list: rootfs.img, rootfs.qcow2, vmlinuz, initramfs.img, cidata.iso, console.log(.prev), heartbeat.state, crashloop.state, provision/, ~/Library/Caches/tillandsias (except models/), keychain vault-shamir-share-v1 and vault-root-token-v1, ~/.cache/tillandsias/fallback_* and vault-data. It does NOT list (and so does not sweep): (a) ~/Library/Application Support/tillandsias/vm-swap.img (the 1377-hcnv sparse swap image; it is normally removed at a clean stop, but after a force-stopped VM or a crash it can survive a reset); (b) ~/.local/state/tillandsias/guest-bin/ (the staged headless binary; the next launch re-stages it at "staged embedded guest binary at …/guest-bin/tillandsias-headless", so today it is overwritten rather than swept). Both are state roots this row's single-root layout must own. Added exit criterion for whoever takes this row (coordinator, 2026-09-29): after --reset-state NEITHER path exists, and a fixture enumerates the reset's destroy set so that the NEXT new state path fails it until it is added (a list derived from the resolver, not a hand-kept list, or it inherits the same omission).

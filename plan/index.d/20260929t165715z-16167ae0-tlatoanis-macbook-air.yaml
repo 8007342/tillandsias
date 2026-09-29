@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: wire-oscillation-root-cause
+    field: status
+    value: completed
+    ts: "2026-09-29T16:57:15Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: wire-oscillation-root-cause
+    event:
+      type: completed
+      ts: "2026-09-29T16:57:15Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: LANDED at c00a08ad7 on linux-next (land91): salvage/macbookair/20260929-148-keepalive @ 610d64ef8 is an ancestor of c00a08ad7, and c00a08ad7 of origin/linux-next (git merge-base, 2026-09-29). Closed per the coordinator's ruling; closure text as pre-written in event 20260929t094822z-1640b378: (1) Criterion 1 (root cause) is NOT MET as written: NOT REPRODUCING on current trunk. Conditions: macOS, the 1479-9hx6 build (0be6803ef), a freshly cold-provisioned guest, one boot, one sign-in. 4 h 48 min Ready after sign-in (04:50 -> 09:38Z), 0 "vm-status poll:" lines after 04:50:31, and 0 headless exit/restart lines in the guest console for the whole boot. Not "fixed": no change is identified as having removed it. (2) Criterion 2 (the wire stays Ready): MET on macOS only. Windows (HvSocket, a different transport) is unmeasured; the coordinator will ask yolanda for one idle-tray observation. (3) Criterion 3: litmus:headless-keepalive, red on a one-shot listener (above). (4) Caveat: a push drop that the fallback poll covers logs only at debug level, so it is invisible at the default log level, and also invisible to the operator.
+  - packet_id: wire-oscillation-root-cause
+    event:
+      type: note
+      ts: "2026-09-29T16:57:15Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        landed at c00a08ad7; closure per the coordinator's ruling

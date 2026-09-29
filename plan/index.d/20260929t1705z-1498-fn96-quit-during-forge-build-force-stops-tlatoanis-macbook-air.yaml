@@ -1,0 +1,32 @@
+packets:
+  - packet_id: quit-during-a-forge-build-gets-no-in-vm-shutdown-reply-and-the-drain-expires-to-a-force-stop-with-no-named-cause
+    order: 1498-fn96
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, tray, shutdown, forge, data-loss]
+    estimated_hours: 3
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: one observation, with the guest console for that boot destroyed; the reproduce needs a Quit during a live forge build with the guest console kept.
+    title: |
+      Quit during a forge build: the in-VM shutdown request gets no reply in 10 s, VZ requestStop's 60 s drain expires, and the tray force-stops the VM with no named cause, a data-loss risk for work in the forge
+    context: |
+      OBSERVED 2026-09-29 on tlatoanis-macbook-air, tray 56.9.27.2+built.56.9.29 (git c2c0b7026 = work/1429-u2wd, contains land90 ff5716971). Exact tray.log lines:
+        16:34:05.017Z click: id=project.cloud.8007342/tillandsias.antigravity action=Attach { scope: Cloud, name: "8007342/tillandsias", agent: Antigravity }
+        16:34:05.259Z Attach: PTY attached at /dev/ttys002
+        16:46:42.080Z Quit (menu Quit): draining (timeout=60s)
+        16:46:42.134Z vm-status: phase=Draining podman_ready=true event=Building Forge
+        16:46:52.082Z Quit: in-VM shutdown request got no reply within 10s (proceeding to VZ.requestStop)
+        16:47:57.272Z Quit: drain failed: VzRuntime::stop: drain_timeout (60s) expired; force-stop dispatched
+      CONDITIONS: the forge was the Antigravity attach for 8007342/tillandsias. Its agent had already failed (1496-x76p: agy 1.2.13 rejects `auth`, exit 2) and the operator had closed the forge window. The VM's last status event was still "Building Forge" 12 min 37 s after the attach. The operator quit from the menu. podman_ready=true at the drain.
+      UNKNOWN, AND WHY: whether the guest's headless process was alive at the Quit. The guest console.log for that boot was DESTROYED about a minute later by an operator-authorized --reset-state (for a fresh sign-in), before anyone read it. The tray log alone cannot say whether the shutdown request was received and ignored, never delivered, or received by a wedged headless; nor whether "Building Forge" was a live build or a stale event left behind by the failed attach.
+      RISK: a force-stop mid-build (or mid-session) kills the guest without a filesystem sync or container stop; any forge work not yet pushed is at risk.
+      NEXT: reproduce with a Quit during a live forge build; keep console.log; record the headless process state and whether the shutdown request reached it.
+    verifiable_closure: |
+      a Quit during a live forge build either gets the in-VM shutdown ack and stops without force, or logs WHY there was no ack (headless not reachable / request delivered but no reply / stale build state) before any force-stop, and never ends in a force-stop without a named cause; pre-fix result: FAILS (force-stop with no cause, 2026-09-29 16:47:57Z)
+    exit_criteria:
+      - 'Quit during a forge build ends in either a clean shutdown ack or a logged named cause; never a bare force-stop (pre-fix result: FAILS)'
+      - 'the reproduce records the headless process state and whether the shutdown request was delivered, with the guest console kept'
