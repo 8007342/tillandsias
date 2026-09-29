@@ -1,0 +1,38 @@
+packets:
+  - packet_id: the-guest-binary-litmus-refuses-a-verify-skip-verdict-its-own-script-added-so-every-host-that-cannot-restage-reads-a-regression
+    order: 1479-yz4c
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, release-gate, guest-binaries, interface]
+    estimated_hours: 1
+    owned_files:
+      - openspec/litmus-tests/litmus-guest-binary-embed-integrity.yaml
+    title: |
+      litmus:guest-binary-embed-integrity accepts only verify:(ok|skip-stale-staging), but 1308-9ej7 (2026-09-20) made build-guest-binaries.sh --verify print verify:skip-cannot-restage-here on a host with no nix and no aarch64 musl linker, so every such host reads the release-tier litmus RED while the script exits 0 with a correct skip
+    context: |
+      MEASURED on yoga 2026-09-29, clean trunk (ci-release pre-build instant:
+      52 passed / 1 failed with all local changes stashed): step 1 ran
+      `bash scripts/build-guest-binaries.sh --verify`, rc=0, last line
+      `verify:skip-cannot-restage-here`, preceded by "SKIP: staged guest
+      binaries are stale or absent (host staging predates VERSION 56.9.27.2)"
+      and "AND THIS HOST CANNOT RESTAGE: no nix, and no aarch64 musl linker".
+      target-guest/ does not exist on yoga. The step's success_pattern is
+      `verify:(ok|skip-stale-staging)`, so rc=0 plus a non-matching line is
+      marked FAIL. Not stale staging mis-read as a defect (the coordinator's
+      first suspect): the script's own skip verdict gained a second spelling in
+      1308-9ej7 (45b7b2ddd / 6080e8365) and its only consumer was never
+      updated. git grep for both tokens outside the script finds this litmus
+      and two comments; no other consumer.
+    exit_criteria:
+      - 'the step accepts verify:skip-cannot-restage-here as a skip, and still fails a current-stamped binary with a real defect (non-zero exit is unchanged)'
+      - 'on yoga (no nix, no aarch64 musl linker, no target-guest/) the ci-release pre-build instant tier no longer reports this litmus red (pre-fix: FAILS, measured above)'
+    verifiable_closure: |
+      litmus:guest-binary-embed-integrity passes in the ci-release pre-build
+      instant tier on yoga (no nix, no aarch64 musl linker, no target-guest/).
+    provenance: |
+      Filed 2026-09-29 by yoga on the coordinator's direction after the ci-release
+      tier went red on clean trunk while landing 767-qrbv.

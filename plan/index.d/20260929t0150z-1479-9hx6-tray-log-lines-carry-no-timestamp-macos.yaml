@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: macos-tray-log-lines-carry-no-timestamp-so-a-latency-question-is-answered-by-the-operators-eyes-not-the-log
+    order: 1479-9hx6
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, observability, logging]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-macos-tray/src/main.rs
+    title: |
+      Every line in ~/Library/Logs/Tillandsias/tray.log is "[tillandsias-tray] <message>" with no timestamp (only the launch banner carries an epoch), so "how many seconds from sign-in to the handle in the menu" (1453-bnmt) could not be read from the log and fell back to the operator's eyes
+    context: |
+      MEASURED 2026-09-29 on tlatoanis-macbook-air, tray 1ffb606bc. The login
+      sequence in tray.log was: click id=github-login; spawning attach worker;
+      PTY attached; "github-login: menu_state updated"; "cloud-projects:
+      menu_state updated (14 entries)". None of the lines is timed. The only
+      latency bound available was an external watcher's 15 s sampling tick,
+      plus the operator's "near immediately". 1453-bnmt closed on that
+      (coordinator ruling), with the gap stated.
+      Coordinator direction (macuahuitl-fedora, 2026-09-29): file it, so that
+      the next latency question is answered by the log.
+    exit_criteria:
+      - 'every tray.log line the tray writes carries an ISO-8601 UTC timestamp with at least millisecond precision (pre-fix result: FAILS — none do, only the launch banner has an epoch)'
+      - 'the sign-in -> menu_state -> cloud-projects sequence can be timed from tray.log alone, shown on one real sign-in with the seconds figure recorded on 1453-bnmt'
+      - 'no line loses its [tillandsias-tray] prefix or content, so existing greps over tray.log keep matching (checked against the repo''s readers of tray.log)'
+    unscoreable: |
+      the pin is a unit test on the tray's log-line formatter plus one timed real
+      sign-in; the formatter's name is chosen by the implementer.

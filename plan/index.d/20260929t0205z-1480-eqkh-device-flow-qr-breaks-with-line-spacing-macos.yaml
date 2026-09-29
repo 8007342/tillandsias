@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-github-device-flow-qr-is-drawn-with-half-block-glyphs-in-low-contrast-greens-so-line-spacing-or-a-large-font-stripes-it-and-phone-cameras-rarely-read-it
+    order: 1480-eqkh
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [ux, accessibility, github-login, terminal]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      The GitHub device-flow QR shows white horizontal lines between text rows on the operator's Mac terminal (a larger-than-default font, "which would also be our average user") and a phone camera "rarely" picks it up; the login still works through the clickable device URL fallback
+    context: |
+      OPERATOR REPORT 2026-09-29, tlatoanis-macbook-air, the login run from the
+      tray: "The QR code in this terminal doesn't read well on my cellphone ...
+      there're some white horizontal lines along the qr code, looks like white
+      lines between the text lines, which break the QR effect. I was still able
+      to load it once, but it's rarely picked up by the camera. I might have
+      changed the default font size from the terminal since I'm a little blind,
+      but that would also be our average user."
+      CAUSE, by source-read (not yet measured on that terminal):
+      render_terminal_qr_in (crates/tillandsias-headless/src/main.rs) renders
+      with qrcode::render::unicode::Dense1x2: half-block glyphs packing two
+      modules per text row. A glyph covers only the font's glyph box, so any
+      terminal line spacing (or a font whose line height exceeds its glyph)
+      leaves a gap between every pair of module rows: the white lines reported.
+      It is also coloured LEAF_DEEPEST on LEAF_LIGHT (1420-2pav) rather than
+      black on white, so a camera gets less contrast than the format assumes.
+      OPTIONS (for the implementer to measure, none chosen):
+        (a) draw each module as TWO background-coloured spaces on one row per
+            module; terminal backgrounds normally fill the whole cell including
+            line spacing (UNVERIFIED on Terminal.app with custom spacing), at
+            the cost of a code twice as tall;
+        (b) maximum-contrast colours (black modules on white) for the QR only,
+            keeping the palette everywhere else;
+        (c) on macOS, where the tray is local, also write the QR as a PNG and
+            offer to open it (Preview), a rendering no terminal font affects.
+      The device URL fallback already works (the operator logged in with it).
+    exit_criteria:
+      - 'on a macOS Terminal with enlarged font and line spacing, the device-flow QR shows no inter-row gaps and a phone camera decodes it on the first try, shown with a screenshot (pre-fix result: FAILS — the operator reports stripes and rare decoding)'
+      - 'the QR keeps a quiet zone and still renders with zero escape bytes in the Plain tier (NO_COLOR/CI), as today'
+      - 'the clickable device URL stays printed beside it as the fallback'
+    unscoreable: |
+      a visual, camera-dependent closure: the pin for the renderer is a unit
+      test on its output shape; the decode needs a real terminal and phone.
