@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-claim-confirmed-prints-confirmed-from-the-local-ledger-after-a-claim-push-that-failed-so-a-claim-that-never-reached-origin-reads-as-won
+    field: status
+    value: in_progress
+    ts: "2026-09-29T12:53:42Z"
+    host: lenovinha
+
+events:
+  - packet_id: check-claim-confirmed-prints-confirmed-from-the-local-ledger-after-a-claim-push-that-failed-so-a-claim-that-never-reached-origin-reads-as-won
+    event:
+      type: note
+      ts: "2026-09-29T12:53:42Z"
+      host: lenovinha
+      summary: |-
+        claimed by linux-lenovinha-claude-20260929t125341z
