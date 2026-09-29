@@ -31,7 +31,7 @@ printf '[user]\n\tname = t\n\temail = t@example.invalid\n' >"$GIT_CONFIG_GLOBAL"
 unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
 R="$W/repo"
 git init -q -b main "$R"
-mkdir -p "$R/src" "$R/plan/index.d"
+mkdir -p "$R/src" "$R/plan/index.d" "$R/openspec/specs/x" "$R/docs"
 commit() { # commit <path> <message>
     echo "$RANDOM" >>"$R/$1"
     git -C "$R" add -A && git -C "$R" commit -q -m "$2"
@@ -41,7 +41,11 @@ A_SHA="$(git -C "$R" rev-parse --short=12 HEAD)"
 commit src/b.rs "fix(2222-bbbb): landed and closed"
 commit plan/index.d/x.yaml "plan(3333-cccc): claim"
 commit src/c.rs "$(printf 'refactor: tidy\n\nContext: see 4444-dddd for why.')"
-printf '1111-aaaa ready\n2222-bbbb completed\n3333-cccc ready\n4444-dddd ready\n' >"$W/status"
+# 1483-8zct: a spec-only and a docs-only commit citing a READY order (the
+# 1438-pk9j shape): neither is a landing.
+commit openspec/specs/x/spec.md "spec(5555-eeee): the requirement lands before the code"
+commit docs/y.md "docs(5555-eeee): describe it"
+printf '1111-aaaa ready\n2222-bbbb completed\n3333-cccc ready\n4444-dddd ready\n5555-eeee ready\n' >"$W/status"
 
 run() { (cd "$R" && bash "$C" --ref HEAD --since "1 day ago" --status-file "$W/status" "$@"); }
 out="$(run)"; rc=$?
@@ -59,6 +63,11 @@ if ! grep -q '4444-dddd' <<<"$out" && grep -q '^suspect:4444-dddd:ready:' <<<"$w
     ok "arm 4: a body-only mention is not a citation by default, and is with --cite message"
 else
     bad "arm 4: default=[$out] wide=[$wide]"
+fi
+if ! grep -q '5555-eeee' <<<"$out" && grep -q ' landings=3 ' <<<"$out" && grep -q "^suspect:1111-aaaa:ready:" <<<"$out"; then
+    ok "arm 6: spec-only and docs-only commits citing a ready order are not landings (1483-8zct); the code landing (arm 1) is still a suspect"
+else
+    bad "arm 6: [$out]"
 fi
 n="$(grep -c '^suspect:' <<<"$out")"
 total="$(sed -n 's/^summary:landed-but-open:\([0-9]*\) .*/\1/p' <<<"$out")"
