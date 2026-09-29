@@ -449,7 +449,7 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
 # two passes ask it: the launcher (which must never start a guard the door does
 # not run: a gate-only fixture leaves a marker) and the reporter (which prints
 # the verdict). Prints what the door says about the guard; returns 0 = run it,
-# 10 = declared skip, 11 = could not run.
+# 10 = declared skip, 11 = could not run, 12 = run it ALONE (serial, below).
 _pf_predecide() {  # $1 = roster path, $2 = label
     local _p="$1" _l="$2" _b="${1##*/}" _pre _kind _why _bin _go _reason
     _pre="$(_preflight_preconditions | awk -F'|' -v s="$_b" '$1 == s { print $2 "|" $3; exit }')"
@@ -501,6 +501,22 @@ _pf_predecide() {  # $1 = roster path, $2 = label
                 ;;
         esac
     fi
+    # ORDER 1499-m9fj (coordinator ruling 2026-09-29): A GUARD THAT WRITES
+    # SHARED STATE RUNS ALONE. The door runs guards concurrently, and a guard
+    # that writes a fixed path another guard reads or writes (a fixed /tmp log,
+    # the checkout's own sources, a binary in target/) can make its neighbour
+    # PASS falsely, which no refusal count would show. Such a guard says so in
+    # its own header, `# preflight: serial — <reason>`, the same scan-not-curate
+    # shape as gate-only; the launcher then waits for every running guard,
+    # runs it with nothing beside it, and only then launches the next. The
+    # reason is required: a bare declaration runs concurrently, with a note.
+    if [ -n "$(sed -n '1,40{/^# preflight: serial/p}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        if [ -n "$_reason" ]; then
+            return 12
+        fi
+        echo "note:preflight:$_l:serial-without-a-reason — a declaration must name the shared state; running it concurrently (1499-m9fj)"
+    fi
     return 0
 }
 
@@ -511,28 +527,41 @@ _pf_predecide() {  # $1 = roster path, $2 = label
 # start), its own session and group kill, stdin from /dev/null, and its own
 # output file. It writes `<rc> <elapsed>` when the guard ends, via a rename so
 # the reporter never reads half a line. JOBS is a fraction of the cores
-# (max(2, cores/2)) so a 4-core floor host is not overcommitted into deadline
+# (max(2, cores/4); coordinator ruling 2026-09-29: past the budget the thing to
+# minimise is deadline SKIPS, not seconds; nproc/2 cost bash-dialect its
+# deadline on yoga) so a 4-core floor host is not overcommitted into deadline
 # skips; TILLANDSIAS_PREFLIGHT_JOBS overrides, and 1 is the old serial door.
 _pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs; roster on stdin
-    local _dir="$1" _dl="$2" _jobs="$3" _i=0 _line _p _args _pids="" _pid _live _n
+    local _dir="$1" _dl="$2" _jobs="$3" _i=0 _line _p _args _pids="" _pid _live _n _pd _cap _t _r
     while IFS= read -r _line; do
         [ -n "$_line" ] || continue
         _i=$((_i + 1))
         _p="${_line%%$'\t'*}"; _args=""
         [ "$_p" = "$_line" ] || _args="${_line#*$'\t'}"
-        if ! _pf_predecide "$_p" "x" >/dev/null 2>&1; then
-            echo "not-launched 0" > "$_dir/$_i.rc"
-            continue
-        fi
+        _pd=0
+        _pf_predecide "$_p" "x" >/dev/null 2>&1 || _pd=$?
+        case $_pd in
+            0) _cap="$_jobs" ;;
+            12) _cap=1 ;;   # serial: drain EVERY running guard first
+            *) echo "not-launched 0" > "$_dir/$_i.rc"; continue ;;
+        esac
         while :; do
             _live=""; _n=0
             for _pid in $_pids; do
                 if kill -0 "$_pid" 2>/dev/null; then _live="$_live $_pid"; _n=$((_n + 1)); fi
             done
             _pids="$_live"
-            [ "$_n" -ge "$_jobs" ] || break
+            [ "$_n" -ge "$_cap" ] || break
             sleep 0.1 2>/dev/null || sleep 1
         done
+        if [ "$_pd" -eq 12 ]; then
+            # ALONE: run in the foreground, so nothing launches until it ends.
+            _t=$SECONDS
+            _r=0
+            _pf_run_guard "$_p" "$_dl" "$_dir/$_i.out" "$_args" </dev/null || _r=$?
+            echo "$_r $(( SECONDS - _t ))" > "$_dir/$_i.rc.tmp" && mv "$_dir/$_i.rc.tmp" "$_dir/$_i.rc"
+            continue
+        fi
         (
             _t=$SECONDS
             # `|| _r=$?`, never a bare call then `$?`: this runs under set -e,
@@ -589,7 +618,7 @@ _preflight_roster() {
 # A guard is NEVER silently dropped: it is run, or it is named.
 _preflight_preconditions() {
     cat <<'PRECONDS'
-check-no-python-scripts.sh|policy-binary|compiles before it resolves (its line 7 is `cargo build -p tillandsias-policy`); runs only when that binary already exists
+check-no-python-scripts.sh|policy-binary|compiles before it resolves (its first command is `cargo build -p tillandsias-policy`); runs only when that binary already exists
 check-no-competing-gate.sh|gate-context|answers about a RUNNING gate's dispatch, not about the tree; it has no subject outside one
 check-tracked-files-unwritten.sh|gate-context|compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
 PRECONDS
@@ -891,7 +920,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     _pf_jobs="${TILLANDSIAS_PREFLIGHT_JOBS:-}"
     if [ -z "$_pf_jobs" ]; then
         _pf_cores="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
-        _pf_jobs=$(( _pf_cores / 2 ))
+        _pf_jobs=$(( _pf_cores / 4 ))
         [ "$_pf_jobs" -ge 2 ] || _pf_jobs=2
     fi
     _pf_roster="$(_preflight_roster | sort -u)"
@@ -939,6 +968,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         _pf_pd=0
         _pf_predecide "$_pf_path" "$_pf_label" || _pf_pd=$?
         case $_pf_pd in
+            12) echo "note:preflight:$_pf_label:serial — declares shared state; run with no other guard beside it" ;;
             10) _pf_declskip=$((_pf_declskip + 1)); continue ;;
             11) _pf_cantrun=$((_pf_cantrun + 1)); continue ;;
         esac

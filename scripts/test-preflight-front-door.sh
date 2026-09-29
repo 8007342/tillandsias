@@ -159,6 +159,52 @@ else
 fi
 go_cleanup; trap - EXIT INT TERM HUP PIPE
 
+# ── ARM 2d: A SERIAL GUARD RUNS WITH NOTHING BESIDE IT (1499-m9fj) ──────────
+# The door runs guards concurrently; a guard declaring `# preflight: serial —
+# <reason>` writes shared state and must run ALONE. Three plants log start and
+# end to one file: A declares serial, B and C do not. PREMISE FIRST: B and C
+# must overlap each other, or this run proves nothing about concurrency. Then
+# no line may fall between A's start and A's end.
+SER_LOG="$(mktemp "${TMPDIR:-/tmp}/serial-1499.XXXXXX")"
+plant_ser() { # plant_ser <path> <tag> <header line or empty>
+    printf '#!/usr/bin/env bash\n%s\necho "%s start" >> "%s"\nsleep 2\necho "%s end" >> "%s"\n' \
+        "$3" "$2" "$SER_LOG" "$2" "$SER_LOG" > "$1"
+    chmod +x "$1"
+}
+SER_A=scripts/test-zz-1499-serial-a.sh
+SER_B=scripts/test-zz-1499-serial-b.sh
+SER_C=scripts/test-zz-1499-serial-c.sh
+SER_STEP=scripts/gate-steps.d/999-zz-1499-serial.step
+plant_ser "$SER_A" A '# preflight: serial — planted: writes the shared log alone'
+plant_ser "$SER_B" B ''
+plant_ser "$SER_C" C ''
+{ for p in "$SER_A" "$SER_B" "$SER_C"; do
+    printf 'STEP_DESC="planted"\nSTEP_SCRIPT="%s"\nSTEP_ERROR="planted"\nSTEP_OK="planted"\n' "$p"; done; } > "$SER_STEP"
+ser_cleanup() { rm -f "$SER_A" "$SER_B" "$SER_C" "$SER_STEP" "$SER_LOG"; }
+trap ser_cleanup EXIT INT TERM HUP PIPE
+TILLANDSIAS_PREFLIGHT_JOBS=3 TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight >/dev/null 2>&1
+ser="$(tr '\n' ' ' < "$SER_LOG")"
+# overlaps <X> <Y>: 1 when X starts while Y is running or Y starts while X is.
+# An interval test, not a string pattern: B and C can overlap without their
+# start lines being adjacent (measured: `B start A end C start B end`).
+overlaps() {
+    awk -v x="$1" -v y="$2" '
+        $2 == "start" { if (($1 == x && open[y]) || ($1 == y && open[x])) o = 1; open[$1] = 1 }
+        $2 == "end"   { open[$1] = 0 }
+        END { print o + 0 }' "$SER_LOG"
+}
+if [ "$(overlaps B C)" = 1 ]; then
+    ok "PREMISE: undeclared plants B and C ran concurrently ($ser)"
+else
+    bad "PREMISE: B and C did not overlap, so this run cannot show exclusivity ($ser)"
+fi
+if [ "$(overlaps A B)" = 0 ] && [ "$(overlaps A C)" = 0 ] && grep -q '^A end$' "$SER_LOG"; then
+    ok "a guard declaring serial ran with nothing beside it"
+else
+    bad "a serial guard shared its run with another guard ($ser)"
+fi
+ser_cleanup; trap - EXIT INT TERM HUP PIPE
+
 # ── ARM 3: A NAMED SKIP IS NOT A REFUSAL (1273-4mak, 1309-fhxb) ─────────────
 # MEASURED: test-uninstall-matcher-spares-bystanders prints skip:not-darwin and
 # exits non-zero, and this door called it `refused` — 1309-fhxb's shape inside
