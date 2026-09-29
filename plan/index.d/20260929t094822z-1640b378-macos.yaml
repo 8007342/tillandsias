@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-oscillation-root-cause
+    event:
+      type: progress
+      ts: "2026-09-29T09:48:22Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t094821z
+      host: macos
+      summary: |
+        salvage/macbookair/20260929-148-keepalive @ ceb8e1ce4 ready for relay (the legacy order has no suffix, so it goes through a salvage ref, per the coordinator): litmus:headless-keepalive (criterion 3).
+        The test runs the REAL serve_listener on a Unix socket; three sequential connections must each be CLOSED BY THE HANDLER within 5 s. RED on both one-shot mutations: return-after-first-accept gives "connection 2: ... Connection refused (os error 61)"; park-after-first-accept gives "connection 2: not handled within 5 s". Through scripts/run-litmus-test.sh vsock-transport: [FAIL] mutated, [OK] real. Bound in openspec/litmus-bindings.yaml and the spec.
+        CLOSURE TEXT TO USE AT THE LANDED SHA (per the coordinator's ruling):
+        (1) Criterion 1 (root cause) is NOT MET as written: NOT REPRODUCING on current trunk. Conditions: macOS, the 1479-9hx6 build (0be6803ef), a freshly cold-provisioned guest, one boot, one sign-in. 4 h 48 min Ready after sign-in (04:50 -> 09:38Z), 0 "vm-status poll:" lines after 04:50:31, and 0 headless exit/restart lines in the guest console for the whole boot. Not "fixed": no change is identified as having removed it.
+        (2) Criterion 2 (the wire stays Ready): MET on macOS only. Windows (HvSocket, a different transport) is unmeasured; the coordinator will ask yolanda for one idle-tray observation.
+        (3) Criterion 3: litmus:headless-keepalive, red on a one-shot listener (above).
+        (4) Caveat: a push drop that the fallback poll covers logs only at debug level, so it is invisible at the default log level, and also invisible to the operator.

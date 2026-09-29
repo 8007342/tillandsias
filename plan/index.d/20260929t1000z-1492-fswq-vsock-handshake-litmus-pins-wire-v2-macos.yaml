@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: litmus-vsock-handshake-pins-wire-version-2-and-fails-on-every-host-since-the-wire-moved-to-4
+    order: 1492-fswq
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [litmus, tests, vsock]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-vsock-handshake-wire-v2.sh
+    title: |
+      scripts/test-vsock-handshake-wire-v2.sh (litmus:vsock-handshake) opens with `grep -Fq 'pub const WIRE_VERSION: u16 = 2;'`, but WIRE_VERSION is 4, so under `set -e` the litmus exits 1 with NO output on every host
+    context: |
+      MEASURED 2026-09-29 on tlatoanis-macbook-air: `scripts/run-litmus-test.sh
+      vsock-transport` fails litmus:vsock-handshake identically on bare
+      origin/linux-next and on a work ref (`output=` empty, rc=1). bash -x
+      shows the first line: the grep for `pub const WIRE_VERSION: u16 = 2;`
+      in crates/tillandsias-control-wire/src/lib.rs finds nothing (WIRE_VERSION
+      moved 2 -> 3 -> 4; see the 827-d3dc survey, entry 9) and `set -e` exits
+      silently. It is the exact-version-literal class 968-uhzg guards against
+      for NEW code; this is a standing instance. Found while landing
+      litmus:headless-keepalive (order 148), which it does not touch.
+    exit_criteria:
+      - 'litmus:vsock-handshake passes (or SKIPs by name) on darwin and Linux against the current WIRE_VERSION (pre-fix result: FAILS silently on every host)'
+      - 'the version check compares against the named constant or a floor, never a bare literal, and a failure prints which check failed instead of exiting silently under set -e'
+    unscoreable: |
+      the pin is litmus:vsock-handshake itself going green on both regimes.

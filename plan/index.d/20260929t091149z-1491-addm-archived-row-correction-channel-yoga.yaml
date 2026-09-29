@@ -1,0 +1,45 @@
+packets:
+  - packet_id: an-archived-row-has-no-correction-channel-so-a-later-discovered-defect-in-its-closure-can-only-be-recorded-on-some-other-row
+    order: 1491-addm
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.6
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan-tooling, ledger, archive]
+    estimated_hours: 3
+    owned_files: []
+    title: |
+      An archived row has no correction channel: set-field refuses it ("lands in a fragment no reader folds"), so when a later packet proves an archived closure false, the correction can only be written on some OTHER row, and a reader who starts at the archived row never sees it
+    context: |
+      MEASURED on yoga 2026-09-29 while closing 795-vq6b: its exit criterion 2
+      asked for "an event on 690-eug2 naming the driver its closure did not
+      cover, or a reopened status". 690-eug2 (exec-seam-observability-and-
+      bounds) is ARCHIVED, and `tillandsias-plan set-field 690-eug2 notes
+      --append …` answered: "resolves to exec-seam-observability-and-bounds,
+      which is ARCHIVED … REFUSED before any write. A field set here lands in a
+      fragment no reader folds." The refusal is correct for what it guards (a
+      silent write nobody reads), but it leaves no channel at all, so the
+      correction went onto 795-vq6b, where a reader of 690-eug2 will not look.
+      Same failure the "immutable title outlives its own disproof" lesson
+      names: the record a reader starts from keeps the false claim.
+      TWO OPTIONS, per the coordinator (2026-09-29); the implementer chooses
+      and records why:
+      (a) an append-only correction event that ARCHIVED rows accept (for
+          example `tillandsias-plan append-event <archived> --type correction`),
+          read by the archive fold so plan_status / plan_answer on the archived
+          row show it next to the closure;
+      (b) a documented rule, "a correction goes on the successor row, which
+          links back", PLUS a reverse lookup so asking about the archived row
+          surfaces the successor's correction (without the lookup, the rule
+          alone repeats today's invisibility).
+    exit_criteria:
+      - 'a reader who asks about an archived row (plan_status, or the answer surface) sees any later correction of its closure without knowing which other row carries it (pre-fix: FAILS, 690-eug2 shows nothing of 795-vq6b)'
+      - 'the refusal of ordinary set-field writes to archived rows is unchanged (NEGATIVE CONTROL: a non-correction write is still refused)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the channel is the deliverable; its
+      fixture and litmus are written in the same commit.
+    provenance: |
+      Filed 2026-09-29 by yoga on the coordinator's direction, from 795-vq6b's
+      criterion 2.
