@@ -4,7 +4,7 @@ packets:
     order: 1490-aqc7
     parent_order: 1490-gttj
     depends_on:
-      - 1490-52m5
+      - linux-upgrade-handoff-keeps-the-stack-and-the-forges-the-new-instance-adopts-instead-of-the-old-one-stopping
     status: ready
     kind: feature
     priority: p2

@@ -4,7 +4,7 @@ packets:
     order: 1490-j6du
     parent_order: 1490-gttj
     depends_on:
-      - 1490-acd5
+      - control-wire-hello-negotiates-a-version-inside-a-declared-window-instead-of-asserting-equality-so-a-hot-guest-or-host-upgrade-has-a-drain-path
     status: ready
     kind: feature
     priority: p1
