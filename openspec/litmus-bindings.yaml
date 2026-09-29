@@ -152,6 +152,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:land-refusals-carry-affordance
+  - litmus:plan-fragments-lane-refusals-carry-affordance
   - litmus:decider-retirement-shape
   - litmus:cosign-arrives-verified
   - litmus:scorable-obligation-splitter
@@ -174,6 +175,7 @@ specs:
   - litmus:land-verdict-through-a-pipe
   - litmus:github-token-auto-rotation
   - litmus:mirror-upstream-auth-overwrite
+  - litmus:exit-pause-host-hold
   - litmus:covering-relay-scope-shape
   - litmus:command-policy-evaluator-shape
   - litmus:guest-binary-embed-integrity

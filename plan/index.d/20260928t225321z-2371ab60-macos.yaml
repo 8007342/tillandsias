@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: one-live-ledger-compaction-test-is-sixty-percent-of-the-workspace-test-step-and-its-cost-grows-with-the-plan-not-the-code
+    event:
+      type: progress
+      ts: "2026-09-28T22:53:21Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t225321z
+      host: macos
+      summary: |
+        work/1476-5dfy @ 512c0a656 (supersedes 0212a395c): the ALGORITHMIC fix, per the coordinator's "profile compact_text" ruling.
+        PROFILE, by phase on the live ledger (temporary timers, not committed; opt 2): load_all 0.7 s, fold 0.1 s, deltas 0.0 s, lww+render 1.6 s, the push_event loop 9.7 s (748 events, each re-rendering the 5.9 MB candidate), lww_wins 0.9 s, serde reparse + fold_capabilities 0.6 s, then the COVERAGE CHECK ~45 s. That last loop called fragment_coverage_gaps once per fragment (~3,000), and the wrapper rebuilt FoldedIdentities over the whole candidate on every call. It is the same defect 964-tzmp fixed for `check` on 2026-09-17; this call site was left on the wrapper.
+        FIX: build the index once and call fragment_coverage_gaps_in. The wrapper is DELETED, so no caller can rebuild the index per fragment again. Fold-equivalence and comment and item preservation are still asserted by the live test (green).
+        RESULT (Mac): live test 134 s (trunk) -> 64 s (opt 2) -> 15.5 s (opt 2 + fix); 57.7 s at opt 0 with the fix, so both changes compound. Plan lib suite 139 s -> 27.6 s. Every real `tillandsias-plan compact` gets the same algorithmic speed-up.
+        NEXT QUADRATIC, not fixed: the push_event loop, O(events x text), now the largest remaining phase at ~10 s. A batched insert would remove it.

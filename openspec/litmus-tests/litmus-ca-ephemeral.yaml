@@ -34,7 +34,12 @@ critical_path:
     assert_output_matches: "^[[:space:]]*[1-9][0-9]*$"
 
   - step: "shutdown tillandsias tray"
-    command: "pkill -f tillandsias 2>/dev/null && sleep 3 && echo SHUTDOWN_COMPLETE"
+    # 1266-75tr: `pkill -f tillandsias` matched this step's OWN runner (its command
+    # line carries the checkout path), killing the shell executing it (rc=143,
+    # reproduced in a private PID namespace). `-x` matches the exact process
+    # NAME, which the runner (bash) never has. The step now ASSERTS the tray is
+    # gone (pgrep -x) and fails if there was nothing to shut down.
+    command: "pkill -x tillandsias 2>/dev/null || { echo NO_TRAY_RUNNING; exit 1; }; for _ in 1 2 3 4 5 6; do pgrep -x tillandsias >/dev/null || { echo SHUTDOWN_COMPLETE; exit 0; }; sleep 1; done; echo STILL_RUNNING; exit 1"
     timeout_ms: 8000
     expected_behavior: "shutdown command succeeds"
     assert_exit: 0

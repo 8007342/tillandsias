@@ -3510,6 +3510,11 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         generation_before.as_deref(),
         ca_generation(&certs_dir).as_deref(),
     ) {
+        // Order 472 criterion 1: only a declared transition may reach the wire.
+        debug_assert!(
+            flow_sink::ca_transition_declared(&from, &to, reason),
+            "undeclared CA transition {from} -> {to} ({reason})"
+        );
         flow_sink::emit(
             tillandsias_control_wire::FlowSource::DependencyNode {
                 node: flow_sink::CA_BUNDLE_NODE.to_string(),
@@ -16286,6 +16291,11 @@ pub(crate) fn hold_window_line(status: &std::process::ExitStatus) -> String {
 /// window closes there is no residue.
 ///
 /// Returns the lane's own exit code, so a caller that inspects it is unaffected.
+/// Set by `--hold-window` for the lane it runs, and passed into the forge by
+/// name (1457-r8yi): tells the entrypoint's exit_pause the host already holds
+/// the window.
+pub(crate) const HOLD_WINDOW_ENV: &str = "TILLANDSIAS_HOST_HOLDS_WINDOW";
+
 pub(crate) fn run_hold_window(args: &[String]) -> i32 {
     let argv: Vec<&String> = match args.first().map(String::as_str) {
         Some("--") => args[1..].iter().collect(),
@@ -16296,6 +16306,7 @@ pub(crate) fn run_hold_window(args: &[String]) -> i32 {
         return 2;
     };
     let status = std::process::Command::new(prog.as_str())
+        .env(HOLD_WINDOW_ENV, "1")
         .args(rest.iter().map(|a| a.as_str()))
         .status();
     let (line, code) = match status {
@@ -17295,6 +17306,11 @@ fn build_forge_agent_run_args_with_vault(
         // observe the lane that was actually launched, never an entrypoint
         // fallback. Every launch path injects this exact identity.
         .env("TILLANDSIAS_AGENT", mode.agent_identity())
+        // 1457-r8yi: `--hold-window` sets this on the host for the lane it
+        // runs; passed through BY NAME, so it reaches the forge only when the
+        // host really is holding the window, and the entrypoint's exit_pause
+        // then skips its own "Press any key" (one keypress, not two).
+        .env_passthrough(HOLD_WINDOW_ENV)
         // Order 392: agents (and the startup context) learn the host's
         // EFFECTIVE inference tier (hardware truth AND podman deliverability)
         // without probing hardware they cannot see.
@@ -28085,6 +28101,16 @@ esac
                 1,
                 "{mode:?} launch must inject exactly one harness identity"
             );
+            // 1457-r8yi: the host-hold signal is passed through BY NAME (no
+            // value decided at build time), so the forge sees it only when the
+            // host's --hold-window actually set it.
+            let i = args
+                .iter()
+                .position(|a| a == HOLD_WINDOW_ENV)
+                .unwrap_or_else(|| {
+                    panic!("{mode:?} launch must pass {HOLD_WINDOW_ENV}; args={args:?}")
+                });
+            assert_eq!(args[i - 1], "--env", "{mode:?}");
         }
 
         for (mode, expected) in [

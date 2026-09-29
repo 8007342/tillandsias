@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: affordance-slice-3-every-refusal-of-push-plan-fragments-to-trunk-says-why-and-what-clears-it-and-names-the-real-cause
+    field: status
+    value: completed
+    ts: "2026-09-29T00:20:05Z"
+    host: yolanda
+
+events:
+  - packet_id: affordance-slice-3-every-refusal-of-push-plan-fragments-to-trunk-says-why-and-what-clears-it-and-names-the-real-cause
+    event:
+      type: completed
+      ts: "2026-09-29T00:20:05Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: eced00b48
+  - packet_id: affordance-slice-3-every-refusal-of-push-plan-fragments-to-trunk-says-why-and-what-clears-it-and-names-the-real-cause
+    event:
+      type: note
+      ts: "2026-09-29T00:20:05Z"
+      host: yolanda
+      summary: |-
+        landed in land86 eced00b48 (real gate 1461s); content verified on origin/linux-next by content, not by SHA ancestry

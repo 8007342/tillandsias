@@ -133,23 +133,59 @@ case "$out" in
 esac
 [ "$rc" -eq 0 ] || bad "verified ok must exit 0"
 
-# ── 4. the repo-local store STILL short-circuits first (no regression) ──────
+# ── 4. ORDER 1004-8p76: the store arm PROBES its own channel ───────────────
+# The arm used to answer on the store file's PRESENCE (first ok:, then 1092-uv3k's
+# unverified:). MEASURED on esmeraldinha 2026-09-04: a present store file over a
+# dead gho_ token read green while the dry-run push said "Invalid username or
+# token". It is still checked FIRST (gh is stubbed healthy-or-not irrelevantly).
 D="$(scratch d)"
 printf 'x\n' > "$(git -C "$D" rev-parse --absolute-git-dir)/.gh-credentials"
-out="$(run_guard "$D" "false")"
+out="$(run_guard "$D" "false")"; rc=$?
 case "$out" in
-    # ORDER 1092-uv3k: `unverified:`, because this arm reports a file exists and
-    # probes nothing. The old `ok:` prefix is what let a dead credential read as
-    # green on a host whose store file was present.
-    unverified:gh-credentials-store) ok "repo-local store arm unchanged, checked first, and says it is UNVERIFIED" ;;
-    # `bad`, not `fail`: `fail` is the suite's FLAG VARIABLE, not its failure
-    # function. The first version of this line called it as a command, which was
-    # command-not-found and registered nothing — an assertion that looked like an
-    # assertion and was a no-op. Caught by sabotaging the rename and watching the
-    # suite pass anyway.
-    ok:gh-credentials-store) bad "arm 1 must not claim ok: it verifies nothing (1092-uv3k)" ;;
-    *) bad "store arm returned: $out" ;;
+    blocked:gh-credentials-store-push-refused) ok "4a: a present store file whose push is refused is NOT green ($out)" ;;
+    ok:*|unverified:*) bad "4a: a dead credential behind a present store file read as $out (1004-8p76)" ;;
+    *) bad "4a: store arm with a refused probe returned: $out" ;;
 esac
+[ "$rc" -ne 0 ] || bad "4a: a refused store probe must exit non-zero"
+out="$(run_guard "$D" "true")"; rc=$?
+[ "$out" = "ok:gh-credentials-store-push-verified" ] && [ "$rc" -eq 0 ] \
+    && ok "4b: a store file whose push authenticates -> $out" \
+    || bad "4b: store + passing probe returned: $out rc=$rc"
+# No override and no origin: the probe cannot run, and says so.
+out="$(run_guard "$D" "")"; rc=$?
+[ "$out" = "unverified:gh-credentials-store" ] && [ "$rc" -eq 0 ] \
+    && ok "4c: a store file with no origin to probe is unverified:, not ok: ($out)" \
+    || bad "4c: store + unrunnable probe returned: $out rc=$rc"
+# GH_TOKEN / GITHUB_TOKEN presence alone is not a green.
+for v in GH_TOKEN GITHUB_TOKEN; do
+    arm="gh-token-env"; [ "$v" = GITHUB_TOKEN ] && arm="github-token-env"
+    E="$(scratch "env-$v")"
+    o1="$( cd "$E" && env -u GH_TOKEN -u GITHUB_TOKEN "$v=fixture" PATH="$W/bin:$PATH" \
+          TILLANDSIAS_CRED_PROBE_CMD=false bash "$GUARD" 2>/dev/null )"; r1=$?
+    o2="$( cd "$E" && env -u GH_TOKEN -u GITHUB_TOKEN "$v=fixture" PATH="$W/bin:$PATH" \
+          TILLANDSIAS_CRED_PROBE_CMD=true bash "$GUARD" 2>/dev/null )"; r2=$?
+    if [ "$o1" = "blocked:$arm-push-refused" ] && [ "$r1" -ne 0 ] &&
+        [ "$o2" = "ok:$arm-push-verified" ] && [ "$r2" -eq 0 ]; then
+        ok "4d: $v set: refused probe -> $o1, passing probe -> $o2"
+    else
+        bad "4d: $v set: refused [$o1] rc=$r1; passing [$o2] rc=$r2"
+    fi
+done
+# reverify runs the same verdict function, so it inherits the fix: asserted,
+# not assumed from the docstring (exit criterion 4).
+out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN PATH="$W/bin:$PATH" \
+        TILLANDSIAS_CRED_PROBE_CMD=false bash "$GUARD" reverify 2>/dev/null )"; rc=$?
+case "$out" in
+    *ok:*|*unverified:*) bad "4e: reverify read a dead store credential as $out" ;;
+    *) [ "$rc" -ne 0 ] && ok "4e: reverify refuses the same dead store credential (rc=$rc)" \
+                        || bad "4e: reverify exited 0 on a refused store probe: $out" ;;
+esac
+
+# ── 4f. A REFUSED probe must not erase the credential (1004-8p76) ─────────
+# Needs a local server that answers 401, and scripts may not run a python
+# runtime (check-no-python-scripts), so this arm lives in Rust:
+# crates/tillandsias-core/tests/credential_probe_never_erases.rs (premise: a
+# plain refused push erases the store; property: the guard's does not).
 
 # ── 5. MUTATION CONTROL: the pre-fix guard must FAIL this suite ─────────────
 # Reconstruct the old arm (bare ok:gh-keyring on gh auth status alone) and
@@ -231,7 +267,7 @@ esac
 # Strip the retry block and assert the old script calls the hook refusal a
 # credential fault — proving arm 6 has teeth rather than passing by luck.
 PRE="$W/pre-876-guard.sh"
-awk '/# ORDER 876-exg2\./{skip=1} skip && /^    _helpers=/{skip=0} skip{next} {print}' \
+awk '/# ORDER 876-exg2\./{skip=1} skip && /# END-OF-PROBE-RETRIES/{skip=0} skip{next} {print}' \
     "$GUARD" > "$PRE"
 D="$(with_remote mutation 'echo refused >&2; exit 1')"
 out="$( cd "$D" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \
@@ -292,7 +328,7 @@ grep -q 'credential-store --file' "$D/.stderr" \
 
 # ── 8c. MUTATION CONTROL for 886-qmdz: the pre-fix guard must fail arm 8b. ────
 PRE2="$W/pre-886-guard.sh"
-awk '/# ORDER 886-qmdz\./{skip=1} skip && /^    _helpers=/{skip=0} skip{next} {print}' \
+awk '/# ORDER 886-qmdz\./{skip=1} skip && /# END-OF-PROBE-RETRIES/{skip=0} skip{next} {print}' \
     "$GUARD" > "$PRE2"
 D2="$(behind_repo two)"
 out="$( cd "$D2" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_CRED_PROBE_CMD \

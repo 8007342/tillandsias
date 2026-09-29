@@ -199,3 +199,30 @@ incident.
    restarted first.
 2. The CaBundle→Proxy generation-equality edge, with a unit test in
    `container_deps.rs` that fails on today's early return.
+
+## Slice 5 — exit criterion 1: the declared CA transition table (yoga, 2026-09-28)
+
+`flow_sink::CA_TRANSITIONS` declares the three transitions `ca_transition` can
+announce: `absent → current` (`minted`), `current → current` (`rotated`),
+`current → absent` (`lost`). Two tests in `flow_sink.rs` enforce it over the
+whole input space: every announcement is a declared row, and every declared row
+is announced for some input (no dead rows). The emit site in `main.rs`
+(`ensure_ca_bundle`) `debug_assert!`s the same predicate, so a debug build
+refuses an undeclared transition before it reaches the wire.
+
+Mutation controls, both run: renaming the rotation reason (`rotated` →
+`renewed`) fails with "undeclared CA transition current:aa -> current:bb
+(renewed)"; adding an unreachable row (`absent → absent`, `vanished`) fails
+with "declared CA transition never announced".
+
+The node catalog half of criterion 1 already exists: `unified_deps.rs`'s
+`unified_graph_is_complete_and_acyclic` covers the mixed node set including
+`CaBundle` and `CaBundleValid` (the module is still `#![allow(dead_code)]`,
+with no production caller).
+
+**Gap left on purpose, and the next slice:** `unreadable` is refused host-side
+(slice 4, `container_deps::ca_bundle_trustable`), but `ca_generation` cannot
+tell an unreadable certificate from an absent one, so the wire reports it as
+`absent`. It is not in the table because no code path can announce it. Adding
+it means making the generation read return a three-way answer first; the test
+above then fails until the row is declared, which is the order to do it in.
