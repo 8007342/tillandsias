@@ -12,3 +12,4 @@ STEP_DESC="Checking the bare-refusal ranker orders by recorded hits, not log noi
 STEP_SCRIPT="scripts/test-rank-refusal-hits.sh"
 STEP_ERROR="rank-refusal-hits.sh no longer ranks bare refusals by recorded hits, or lets log-only hits into the rank (1494-kkbi)"
 STEP_OK="bare refusals ranked by recorded hits"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: rank-refusal-hits (1494-kkbi) at 8339a3761, 6 arms, bash 3.2"
