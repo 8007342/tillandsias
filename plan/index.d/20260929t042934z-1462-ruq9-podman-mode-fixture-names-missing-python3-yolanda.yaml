@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-podman-mode-gate-fixture-fails-on-a-host-with-no-python3-instead-of-skipping-by-name
+    order: 1462-ruq9
+    status: in_progress
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    parent_order: 1462-trch
+    pickup_role: windows
+    capability_tags: [windows, msys, fixtures, fail-loud]
+    estimated_hours: 1
+    owned_files: [scripts/test-gate-podman-mode-configuration.sh]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixture's own new arm (python3 hidden from PATH gives a named skip, not FAIL) is written in the same commit.
+    title: |
+      scripts/test-gate-podman-mode-configuration.sh prints FAIL "could not create the AF_UNIX fixture socket (python3 required)" on a Windows Git Bash host that has no python3. That is a host that cannot run the fixture, not a broken tree, so it should skip by name (1462-trch baseline, fails on trunk too).
+    verifiable_closure: |
+      With no python3 on PATH, the fixture ends on a skip: line naming python3 and does not print FAIL. With python3 present, its behaviour is unchanged, including FAIL when the socket cannot be bound. Pre-fix on yolanda 2026-09-29: FAIL, rc 1.
+    events:
+      - type: filed
+        ts: "2026-09-29T04:29:35Z"
+        host: yolanda
+        summary: Filed and claimed by yolanda-windows as a slice of the 1462-trch Windows baseline.

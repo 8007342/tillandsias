@@ -85,6 +85,12 @@ during the v56.8.31.3 stable promotion):**
   existing release: `gh release edit vX.Y.Z.N --prerelease=false --latest`.
   Verify `/releases/latest` resolves to it. Stable then serves byte-for-byte
   what was blessed.
+  **Reading a channel tag in a clone? Sync it first** (1271-ff72):
+  `git fetch origin '+refs/tags/stable:refs/tags/stable' '+refs/tags/unstable:refs/tags/unstable'`.
+  A plain `git fetch --tags` REFUSES to move these two ("would clobber
+  existing tag"), so a clone's `stable`/`unstable` can sit days behind
+  origin's. The release tooling reads origin (`git ls-remote`) and is
+  unaffected; a human `git log stable` in a stale clone is not.
 - **CUT-NEW** (no existing blessed release, or the tree moved past it):
   compute the next version and run every step below.
 - **FIX-FORWARD with zero code delta** (a published cut lost one platform's

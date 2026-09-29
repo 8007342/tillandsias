@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: lua-source-agreement-consolidation-shadow-pilot
+    event:
+      type: progress
+      ts: "2026-09-29T02:53:21Z"
+      agent_id: linux-macuahuitl-codex-20260929t025321z
+      host: macuahuitl
+      partial_artifact_refs:
+        - scripts/lua/source-agreements.lua
+        - scripts/fixtures/source-agreements.yaml
+        - crates/tillandsias-plan/tests/lua_source_agreements.rs
+        - build.sh
+        - scripts/test-pending-capability-row-does-not-wedge.sh
+      summary: |
+        Shadow pilot implementation and review fixes are on work/1475-j9kv at 1d666b76e; draft PR #195 is open against linux-next. Full ./build.sh --check passed after merging the latest origin/linux-next; the Lua integration target passed 7/7, its 30-pair warm benchmark ran, and the strict-fragment fixture passed 9/9 with the plan binary pinned. The Lua evaluator remains shadow-only and production guards remain active. No macOS or native-Windows validation is claimed. Keep status in_progress until PR #195 lands; then close only this pilot with the landed SHA and begin the typed script-run contract before any shell cutover.

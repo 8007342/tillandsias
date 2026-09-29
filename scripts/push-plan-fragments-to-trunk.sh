@@ -92,19 +92,32 @@ usage: scripts/push-plan-fragments-to-trunk.sh [--dry-run] [<path> ...]
 USAGE
 }
 
+# ORDER 1247-3e64 (1247-amcu slice): every refused:fragments-to-trunk:* verdict
+# is followed by "  why: <the rule that refused>" and "  remedy: <what clears
+# it>" on stderr, the land-on-platform-branch.sh shape; the verdict line itself
+# is unchanged, because callers match on it. The remedy names the RULE and how
+# to find the local answer rather than a repo's branch, as 1247-amcu asks.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 DRY=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --dry-run) DRY=1; shift ;;
         -h|--help) _usage; exit 0 ;;
         --) shift; break ;;
-        -*) _usage; echo "refused:fragments-to-trunk:usage:$1"; exit 2 ;;
+        -*) _usage; echo "refused:fragments-to-trunk:usage:$1"
+            _afford "'$1' is not a flag this script takes; it accepts --dry-run and lane paths only" \
+                "drop it, or run with --dry-run first to see what would be pushed"
+            exit 2 ;;
         *) break ;;
     esac
 done
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
-    || { echo "refused:fragments-to-trunk:not-a-git-checkout"; exit 2; }
+    || { echo "refused:fragments-to-trunk:not-a-git-checkout"
+         _afford "the lane builds its commit from a repository's objects, and this cwd is in none" \
+             "cd into the project checkout (any branch) and re-run; paths are resolved from its root"
+         exit 2; }
 cd "$ROOT"
 REMOTE="${TILLANDSIAS_TRUNK_REMOTE:-origin}"
 TRUNK="${TILLANDSIAS_TRUNK_BRANCH:-linux-next}"
@@ -141,8 +154,9 @@ fi
 PLAN="$(resolve_plan_binary 2>/dev/null)" || PLAN=""
 if [ -z "$PLAN" ]; then
     echo "fragments-to-trunk: no runnable tillandsias-plan, so the trunk-fold check cannot run;" >&2
-    echo "  REMEDY: cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh" >&2
     echo "refused:fragments-to-trunk:no-validator"
+    _afford "the lane validates trunk's fold with these fragments before pushing, and fails closed without a validator" \
+        "cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh, then re-run"
     exit 1
 fi
 case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
@@ -189,6 +203,8 @@ HEAD_SHORT="$(git rev-parse --short HEAD 2>/dev/null || echo none)"
 _fetch_trunk() {
     if ! git fetch -q "$REMOTE" "+refs/heads/$TRUNK:$TRACK" 2>"$tmp/ferr"; then
         echo "refused:fragments-to-trunk:fetch:$(head -1 "$tmp/ferr" 2>/dev/null | tr -d '\n' | cut -c1-80)"
+        _afford "the lane must see the trunk's current tip to build on it, and '$REMOTE $TRUNK' could not be fetched" \
+            "check the network and credentials with: git fetch $REMOTE $TRUNK (its error is quoted above); the fragments are untouched, so re-run once it succeeds"
         exit 1
     fi
 }
@@ -237,13 +253,20 @@ _select_paths() {
         if ! _in_lane "$p"; then
             if [ "$EXPLICIT" -eq 1 ]; then
                 echo "fragments-to-trunk: '$p' is not a plan/index.d/*.yaml or plan/loop_status.d/*.md directly under its directory; this lane carries fragments only" >&2
-                echo "refused:fragments-to-trunk:scope:$p"; exit 1
+                echo "refused:fragments-to-trunk:scope:$p"
+                _afford "this lane carries only plan fragments, which is why a push through it may skip the full gate; anything else must pass that gate" \
+                    "commit '$p' on a work branch and push it the gated way, or name only plan/index.d/*.yaml and plan/loop_status.d/*.md here"
+                exit 1
             fi
             echo "fragments-to-trunk: note: '$p' is not a lane fragment (dotfile, nested, or wrong extension); skipped" >&2
             continue
         fi
         if [ ! -f "$p" ]; then
-            [ "$EXPLICIT" -eq 1 ] && { echo "refused:fragments-to-trunk:missing:$p"; exit 1; }
+            [ "$EXPLICIT" -eq 1 ] && {
+                echo "refused:fragments-to-trunk:missing:$p"
+                _afford "a path named explicitly must be a file in this worktree, and '$p' is not" \
+                    "check the path relative to the repository root, or omit paths to push every new lane file"
+                exit 1; }
             continue
         fi
         case "$p" in
@@ -251,7 +274,10 @@ _select_paths() {
                 if ! _loop_status_ok "$p"; then
                     if [ "$EXPLICIT" -eq 1 ]; then
                         echo "fragments-to-trunk: '$p' fails the lane's loop-status grammar (exactly one '## Cycle' heading, no other '## ' section)" >&2
-                        echo "refused:fragments-to-trunk:loop-status:$p"; exit 1
+                        echo "refused:fragments-to-trunk:loop-status:$p"
+                        _afford "a loop-status fragment must carry exactly one '## Cycle' heading and no other '## ' section, so it folds as one cycle" \
+                            "fix the headings in '$p' and re-run"
+                        exit 1
                     fi
                     echo "fragments-to-trunk: note: '$p' fails the lane's loop-status grammar (one '## Cycle' heading, no other '## '); skipped — fix it and re-run" >&2
                     continue
@@ -265,7 +291,10 @@ _select_paths() {
                 continue
             fi
             echo "fragments-to-trunk: '$p' exists on $REMOTE/$TRUNK with different bytes — fragments are immutable, a changed copy is not a new fragment (write a new fragment instead)" >&2
-            echo "refused:fragments-to-trunk:exists:$p"; exit 1
+            echo "refused:fragments-to-trunk:exists:$p"
+            _afford "fragments are immutable once on the trunk; a changed copy under the same name would silently rewrite history" \
+                "restore '$p' from the trunk (git show $REMOTE/$TRUNK:'$p' > '$p') and write the change as a NEW fragment (tillandsias-plan append-event or set-field)"
+            exit 1
         fi
         printf '%s\n' "$p" >> "$tmp/paths"
     done < "$tmp/cand"
@@ -282,7 +311,10 @@ _trunk_fold_check() {
     [ "${n:-0}" -gt 0 ] || return 0
     rm -rf "$tmp/fold"; mkdir -p "$tmp/fold/plan/index.d"
     if ! git cat-file -e "$base:plan/index.yaml" 2>/dev/null; then
-        echo "refused:fragments-to-trunk:trunk-fold:$REMOTE/$TRUNK has no plan/index.yaml"; exit 1
+        echo "refused:fragments-to-trunk:trunk-fold:$REMOTE/$TRUNK has no plan/index.yaml"
+        _afford "fragments fold onto the trunk's ledger, and this trunk has none, so the lane cannot validate against it" \
+            "confirm the trunk branch (TILLANDSIAS_TRUNK_BRANCH, default the project's integration branch) and that it carries plan/index.yaml"
+        exit 1
     fi
     git show "$base:plan/index.yaml" > "$tmp/fold/plan/index.yaml"
     # The fold is index.yaml + index.d + the ARCHIVE + the schema: archived
@@ -308,6 +340,8 @@ _trunk_fold_check() {
         grep -v 'OpenSpec' "$tmp/chk" | sed 's/^/  /' >&2
         echo "fragments-to-trunk: trunk's fold cannot use these fragments — if one is an event on a packet filed on this branch, push its filing fragment too (the default selection carries every new fragment)" >&2
         echo "refused:fragments-to-trunk:trunk-fold:$(grep -v OpenSpec "$tmp/chk" | tail -1 | tr -d '\n' | cut -c1-120)"
+        _afford "the trunk's ledger folded with these fragments fails tillandsias-plan check, so pushing them would break the ledger for every host" \
+            "read the check output above; the usual cause is an event on a packet filed on this branch, so push its filing fragment in the same run"
         exit 1
     fi
     # (b) terminal events fold to terminal statuses ON TRUNK.
@@ -321,7 +355,10 @@ _trunk_fold_check() {
                 completed|verified|done|obsoleted) ;;
                 *)
                     echo "fragments-to-trunk: '$p' carries a terminal event for $pid, but trunk's fold with the selected fragments reads '${got:-<absent>}' — push the status fragment (set-field … status completed) with it, or trunk offers a closed row as ready" >&2
-                    echo "refused:fragments-to-trunk:trunk-fold:status-loss:$pid"; exit 1 ;;
+                    echo "refused:fragments-to-trunk:trunk-fold:status-loss:$pid"
+                    _afford "a terminal event whose status fragment is not pushed with it leaves the trunk offering a closed row as ready" \
+                        "push the status fragment too (tillandsias-plan set-field $pid status <terminal> writes it), then re-run"
+                    exit 1 ;;
             esac
         done < "$tmp/tev"
     done < "$tmp/paths"
@@ -362,7 +399,10 @@ _fetch_trunk
 # lane is the tool; a side commit here would only make the branch non-ff.
 if [ "$BRANCH" = "$TRUNK" ] && [ "$(git rev-list --count "$TRACK..HEAD" 2>/dev/null || echo 0)" -gt 0 ]; then
     echo "fragments-to-trunk: this checkout is on $TRUNK with unpushed commits; push the branch itself (git push $REMOTE HEAD:$TRUNK takes the plan-only lane for fragment-only commits)" >&2
-    echo "refused:fragments-to-trunk:trunk-checkout-ahead"; exit 1
+    echo "refused:fragments-to-trunk:trunk-checkout-ahead"
+    _afford "this checkout IS the trunk branch with unpushed commits, and a side commit from here would make it non-fast-forward" \
+        "push the branch itself (git push $REMOTE HEAD:$TRUNK takes the plan-only lane when it carries only fragments)"
+    exit 1
 fi
 
 attempt=0
@@ -393,9 +433,32 @@ while :; do
             echo "fragments-to-trunk: $REMOTE/$TRUNK moved during attempt $attempt; rebuilding on the new tip" >&2
             continue
         fi
-        echo "refused:fragments-to-trunk:raced:$attempt"; exit 1
+        echo "refused:fragments-to-trunk:raced:$attempt"
+        _afford "$REMOTE/$TRUNK moved during each of $attempt attempts because other hosts were pushing; nothing landed and the fragments here are untouched" \
+            "re-run the same command: it refetches and rebuilds on the new tip. If it keeps racing the trunk is busy, so wait a minute and re-run"
+        exit 1
     fi
-    reason="$(grep -m1 -E 'refused|FAILED|not applicable|rejected|error:' "$tmp/push" | tr -d '\r\n' | cut -c1-120)"
+    # 1247-3e64: report the MOST SPECIFIC cause, not the first refusal-looking
+    # line. The plan-only lane's own refusal (a STALE plan binary, say) is
+    # printed in capitals ABOVE the hook's generic "pre-push refused: the tree
+    # changed since ./build.sh --check last passed", so a case-sensitive first
+    # match reported the stamp and sent the reader to a full gate when the fix
+    # was a cargo build. Prefer the lane's line and carry its REMEDY.
+    lane_line="$(grep -m1 -E '^plan-only lane: REFUSED' "$tmp/push" | tr -d '\r\n' | cut -c1-120 || true)"
+    lane_remedy="$(grep -m1 -E '^ *REMEDY:' "$tmp/push" | sed 's/^ *REMEDY: *//' | tr -d '\r\n' || true)"
+    if [ -n "$lane_line" ]; then
+        reason="${lane_line#plan-only lane: }"
+    else
+        reason="$(grep -m1 -E 'refused|FAILED|not applicable|rejected|error:' "$tmp/push" | tr -d '\r\n' | cut -c1-120 || true)"
+    fi
     echo "fragments-to-trunk: the push was refused by the hook or the remote (nothing landed); its output is above" >&2
-    echo "refused:fragments-to-trunk:push:${reason:-see the output above}"; exit 1
+    echo "refused:fragments-to-trunk:push:${reason:-see the output above}"
+    if [ -n "$lane_line" ]; then
+        _afford "the pre-push hook's plan-only lane refused these fragments: ${lane_line#plan-only lane: }" \
+            "${lane_remedy:-read the REMEDY line the lane printed above}, then re-run this command"
+    else
+        _afford "the pre-push hook or the remote refused the push; the first refusal line is quoted" \
+            "read the hook's own remedy lines above (each hook refusal carries one) and re-run once it is cleared"
+    fi
+    exit 1
 done

@@ -9,7 +9,23 @@
 set -uo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-cd "$ROOT" || exit 1
+# ORDER 1320-44rs: the probe is planted in a scratch WORKTREE of HEAD (the same
+# refs and the same diff base), never in the live plan/index.d, where a run
+# killed between _plant and cleanup left a fragment the fold reads as real.
+# Only the checker and plan/index.d are checked out (the checker diffs AM
+# against the base, so absent paths are deletions it ignores), and the checker
+# is the WORKING-TREE copy, so an uncommitted edit to it is what gets tested.
+WT="$(mktemp -d "${TMPDIR:-/tmp}/fragment-ts-skew.XXXXXX")" && rmdir "$WT" || exit 1
+teardown() { cd / && git -C "$ROOT" worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$WT"; git -C "$ROOT" worktree prune >/dev/null 2>&1; }
+trap teardown EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+trap 'exit 129' HUP
+git -C "$ROOT" worktree add --no-checkout --detach -q "$WT" HEAD &&
+    git -C "$WT" checkout -q HEAD -- plan/index.d scripts/check-fragment-ts-skew.sh &&
+    cp "$ROOT/scripts/check-fragment-ts-skew.sh" "$WT/scripts/check-fragment-ts-skew.sh" || {
+    echo "FAIL: could not build the scratch worktree"; exit 1; }
+cd "$WT" || exit 1
 CHECK=scripts/check-fragment-ts-skew.sh
 [ -x "$CHECK" ] || { echo "FAIL: $CHECK missing or not executable"; exit 1; }
 
@@ -19,7 +35,7 @@ bad() { fail=$((fail+1)); printf '  [FAIL] %s\n' "$1"; }
 
 PROBE=plan/index.d/zz-1313-probe.yaml
 cleanup() { rm -f "$PROBE"; }
-trap cleanup EXIT INT TERM HUP PIPE
+# (teardown above removes the whole worktree, the probe with it)
 
 # Portable offsets: GNU `date -d`, else BSD `date -v`. Neither is universal and
 # this fixture runs on macOS too (osx-next pushes through the same hook).

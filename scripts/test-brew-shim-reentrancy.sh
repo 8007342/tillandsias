@@ -52,10 +52,22 @@ fi
 # Resolve a tool through PATH — this is the re-entry. The nested output goes to
 # its own file: the shim gave brew's stdio to the caller, so mixing them would
 # make arm 2 unable to tell the outer refusal from the inner one.
+# REAL brew filters its environment (brew.sh keeps HOMEBREW_* and a handful of
+# basics, and drops the rest), so the nested resolve runs with ONLY those. The
+# first version of this fake passed the WHOLE environment through, so the guard's
+# TILLANDSIAS_-named marker always survived here and never survived real brew
+# (order 667-se87: 6144 processes on yoga, marker=0 in every nested shim).
+filtered=(PATH="\$PATH" HOME="\$HOME")
+while IFS='=' read -r k _; do
+    case "\$k" in HOMEBREW_*) filtered+=("\$k=\${!k}") ;; esac
+done < <(env)
+for k in TILLANDSIAS_BREW_AUTOINSTALL TILLANDSIAS_BREW_PREFIX TILLANDSIAS_BREW_ALLOWLIST TILLANDSIAS_PROJECT_CACHE TILLANDSIAS_BREW_INSTALL_TIMEOUT; do
+    [ -n "\${!k:-}" ] && filtered+=("\$k=\${!k}")   # fixture plumbing only, not the marker
+done
 if [ -f "$W/drop-marker" ]; then
-    env -u TILLANDSIAS_BREW_SHIM_INSTALLING faketool --version >> "$W/nested.txt" 2>&1
+    env -i "\${filtered[@]}" env -u HOMEBREW_TILLANDSIAS_SHIM_INSTALLING faketool --version >> "$W/nested.txt" 2>&1
 else
-    faketool --version >> "$W/nested.txt" 2>&1
+    env -i "\${filtered[@]}" faketool --version >> "$W/nested.txt" 2>&1
 fi
 exit 1
 FAKE
@@ -79,7 +91,7 @@ run_probe() {   # run_probe <"guarded"|"unset-marker">
     # cannot be steered by an argument — a file flag is the channel.
     if [ "$1" = "unset-marker" ]; then touch "$W/drop-marker"; else rm -f "$W/drop-marker"; fi
     write_fake_brew
-    env -u TILLANDSIAS_BREW_SHIM_INSTALLING \
+    env -u TILLANDSIAS_BREW_SHIM_INSTALLING -u HOMEBREW_TILLANDSIAS_SHIM_INSTALLING \
         TILLANDSIAS_BREW_AUTOINSTALL=1 \
         PATH="$W/shims:$PATH" \
         TILLANDSIAS_BREW_PREFIX="$W/prefix" \

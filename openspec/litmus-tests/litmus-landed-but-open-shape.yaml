@@ -1,0 +1,43 @@
+# @trace spec:meta-orchestration
+name: litmus:landed-but-open-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Order 1367-emjg. scripts/check-landed-but-open.sh lists every order a CODE
+  landing on trunk cites in its subject whose ledger row is still ready,
+  pending, in_progress or implemented, so "implemented but never closed" is a
+  count. Plan-only commits are not landings; a body-only mention is not a
+  citation unless --cite message; the summary total equals the suspect lines;
+  advisory (exit 0 always). The coordinator's stranded-claim sweep runs it.
+severity: normal
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-landed-but-open.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-landed-but-open.sh && test -x scripts/test-landed-but-open.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "ready landing listed, completed not, plan-only not a landing, body mention only with --cite message, total equals lines, exit 0"
+    command: "bash scripts/test-landed-but-open.sh 2>&1 | tail -n 1"
+    timeout_ms: 60000
+    expected_behavior: "PASS: landed-but-open"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "PASS: landed-but-open"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "landed-but-open-shape"
+    artifact: "scripts/check-landed-but-open.sh"
+
+rollback:
+  on_failure: >
+    A sweep that counts claims or notes as landings, or misses a landed order
+    whose row stayed open, is the defect: restore the path-based landing test
+    and the subject citation rule.
+  command: "bash scripts/test-landed-but-open.sh"

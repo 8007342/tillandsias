@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: no-test-catches-otp-parse-cookie-value-accepting-an-over-long-cookie-by-truncating-it
+    event:
+      type: progress
+      ts: "2026-09-28T23:39:55Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t233954z
+      host: macos
+      summary: |
+        work/1477-hff2 @ 7daba1180 ready for relay (tlatoanis-macbook-air). New test parse_cookie_value_rejects_an_over_long_cookie_instead_of_truncating in crates/tillandsias-otp: a well-formed base64url value decoding to COOKIE_LEN+1, +16 and +32 bytes must parse to None, and the exact-length token still parses (criterion 1).
+        MUTATION (criterion 2): with the seeded truncating guard (`bytes.len() < COOKIE_LEN`, copying `&bytes[..COOKIE_LEN]`), the new test FAILS: "a cookie decoding to 33 bytes (COOKIE_LEN + 1) must reject, not truncate". The otp suite shows 20 passed, 1 failed under the seed and 21 passed restored. The product code is unchanged: the guard was already exact, only untested. fmt, clippy --all-targets -D warnings and musl zigbuild --tests are clean.

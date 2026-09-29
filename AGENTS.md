@@ -98,6 +98,27 @@ Versions use CalVer `v<Major>.<Minor>.<YYMMDD>.<Build>`; canonical details
 belong in `methodology/versioning.yaml`. The active release is declared in
 `plan/loop_status.md` under `## ACTIVE RELEASE`.
 
+## Working Through ./plan Only
+
+If you cannot message the coordinator, the ledger is your channel: claim,
+push `work/<order>`, declare `READY:`, ask with `ASK:` and read `RULING:`
+events, all as plan fragments on `linux-next`. The complete protocol, with
+commands: `methodology/multi-host-development.yaml` → `plan_only_peers`.
+
+## Working Through ./plan Only
+
+If you cannot message the coordinator, the ledger is your channel: claim,
+push `work/<order>`, declare `READY:`, ask with `ASK:` and read `RULING:`
+events, all as plan fragments on `linux-next`. The complete protocol, with
+commands: `methodology/multi-host-development.yaml` → `plan_only_peers`.
+
+## Working Through ./plan Only
+
+If you cannot message the coordinator, the ledger is your channel: claim,
+push `work/<order>`, declare `READY:`, ask with `ASK:` and read `RULING:`
+events, all as plan fragments on `linux-next`. The complete protocol, with
+commands: `methodology/multi-host-development.yaml` → `plan_only_peers`.
+
 ## Platform Branch Coordination
 
 - Linux checkpoints to `linux-next`.

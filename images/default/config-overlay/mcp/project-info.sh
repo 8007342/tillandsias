@@ -413,9 +413,43 @@ discover_sibling_projects() {
 # while plan_query says it does not, an agent cannot tell which surface lies.
 # The compiled CLI loads the overlay; routing plan_query through it makes this
 # server's answer agree with forge-plan's by construction.
+# ORDER 963-pdrp — THE LEDGER IS PINNED TO THE REPOSITORY, AND ONLY A LEDGER
+# COUNTS. Two ways this used to answer from the wrong plan, both measured by the
+# tillandsias.org forge agent against the shipped image:
+#   1. a FOREIGN repo with any plan/index.yaml (a Terraform plan, a roadmap
+#      index) was promoted into the plan lane, because `-f plan/index.yaml` was
+#      the sole discriminator;
+#   2. a checkout that lost its marker (git sparse-checkout, --filter=tree:0, a
+#      docroot-restricted mount) fell through to the stale $HOME/src/tillandsias
+#      clone — 682-z5h8's exact defect, fail-OPEN.
+# So: the project root is `git rev-parse --show-toplevel`, never a cwd-relative
+# probe; INSIDE ANY git repo the answer is that repo's own ledger or NOTHING (no
+# $HOME fallback, whatever is or is not checked out); and a file counts only if
+# it is a Tillandsias ledger — a top-level `plan_index:` key, or `packets:` /
+# `capabilities:` beside a plan/index.d directory. TILLANDSIAS_PLAN_INDEX stays
+# an explicit override (operator pins, test stubs). Outside any repo the old
+# fallbacks remain, each held to the same ledger test.
+project_toplevel() {
+    git -C "$PWD" rev-parse --show-toplevel 2>/dev/null
+}
+is_tillandsias_ledger() { # <index path>
+    [ -f "$1" ] || return 1
+    grep -qE '^plan_index:' "$1" 2>/dev/null && return 0
+    [ -d "$(dirname "$1")/index.d" ] && grep -qE '^(packets|capabilities):' "$1" 2>/dev/null
+}
 resolve_plan_index() {
     if [ -n "${TILLANDSIAS_PLAN_INDEX:-}" ] && [ -f "${TILLANDSIAS_PLAN_INDEX}" ]; then
         printf '%s\n' "$TILLANDSIAS_PLAN_INDEX"
+        return 0
+    fi
+    local top candidate
+    top="$(project_toplevel)" || top=""
+    if [ -n "$top" ]; then
+        if is_tillandsias_ledger "$top/plan/index.yaml"; then
+            printf '%s\n' "$top/plan/index.yaml"
+        else
+            printf '\n'
+        fi
         return 0
     fi
     for candidate in \
@@ -423,7 +457,7 @@ resolve_plan_index() {
         "$HOME/src/tillandsias/plan/index.yaml" \
         "$HOME/tillandsias/plan/index.yaml" \
         "/opt/cheatsheets/plan-index.yaml"; do
-        if [ -f "$candidate" ]; then
+        if is_tillandsias_ledger "$candidate"; then
             printf '%s\n' "$candidate"
             return 0
         fi
@@ -1118,13 +1152,18 @@ ${preview}"
                         # operator pins and test stubs); everything else answers
                         # from the generic lane, whatever the tooling resolves.
                         _pa_plan_lane=0
-                        if [ -f "./plan/index.yaml" ]; then
+                        # ORDER 963-pdrp: the root is the git toplevel, and a
+                        # plan/index.yaml must BE a Tillandsias ledger to route
+                        # here (a Terraform plan or roadmap index is not one).
+                        _pa_root="$(project_toplevel)" || _pa_root=""
+                        [ -n "$_pa_root" ] || _pa_root="$PWD"
+                        if is_tillandsias_ledger "$_pa_root/plan/index.yaml"; then
                             _pa_plan_lane=1
                             _pbin="$(resolve_plan_bin)"
                             if [ -n "${TILLANDSIAS_PLAN_INDEX:-}" ] && [ -f "${TILLANDSIAS_PLAN_INDEX}" ]; then
                                 _pidx="${TILLANDSIAS_PLAN_INDEX}"
                             else
-                                _pidx="${PWD}/plan/index.yaml"
+                                _pidx="$_pa_root/plan/index.yaml"
                             fi
                             [ -n "$_pbin" ] || _pa_plan_lane=0
                         fi

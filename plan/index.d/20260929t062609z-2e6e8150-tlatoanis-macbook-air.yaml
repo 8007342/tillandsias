@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-tray-log-lines-carry-no-timestamp-so-a-latency-question-is-answered-by-the-operators-eyes-not-the-log
+    field: status
+    value: completed
+    ts: "2026-09-29T06:26:09Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: macos-tray-log-lines-carry-no-timestamp-so-a-latency-question-is-answered-by-the-operators-eyes-not-the-log
+    event:
+      type: completed
+      ts: "2026-09-29T06:26:09Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: f18c63c63 (land89)
+  - packet_id: macos-tray-log-lines-carry-no-timestamp-so-a-latency-question-is-answered-by-the-operators-eyes-not-the-log
+    event:
+      type: note
+      ts: "2026-09-29T06:26:09Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        LANDED in land89 at f18c63c63 (real gate 873 s). Re-measured there on tlatoanis-macbook-air (darwin): macos-tray tray_log tests 5 passed (iso8601 known instants, prefix kept, end-to-end relay: lines, the last line before exit, and a panic all stamped). Criterion 1 was measured live on the bundle; criterion 2 (a real sign-in timed from tray.log alone) was met 2026-09-29 04:48-04:50Z, with the figure on 1453-bnmt; criterion 3 (prefix and content unchanged; no line-start readers) is pinned by the test.

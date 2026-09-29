@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator 2026-09-28: start packets for the recommended pilots (A-C).
+packets:
+  - packet_id: pilot-a-every-litmus-result-carries-an-evidence-envelope-naming-its-subject-assertion-regime-and-provenance-and-a-report-only-attribution-pass-shows-which-credit-survives-it
+    order: 1472-5t4b
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    release_target: centicolon-evidence-pilots-2026-09-28
+    pickup_role: any
+    capability_tags: [centicolon, lua, litmus, evidence, provenance, pilot, plan-only-peer-ok]
+    estimated_hours: 10
+    depends_on: [the-centicolon-graders-over-credit-a-pass-credits-sibling-scenarios-a-pass-without-provenance-a-pass-on-the-wrong-subject-and-a-later-pass-on-another-platform-masks-a-failure]
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/lua/centicolon-grade-observed.lua
+      - scripts/centicolon-attribution-report.sh
+      - openspec/changes/centicolon-evidence-envelope/
+    title: |
+      PILOT A (CentiColon evidence program, operator 2026-09-28): the litmus runner emits a validated EVIDENCE ENVELOPE per result (spec/scenario/assertion IDs, subject = spec + implementation digests, required regime vs observed environment, runner/predicate digest, unique run id, outcome incl. skipped/advisory as their own values), and a REPORT-ONLY attribution pass shows, obligation by obligation, which of today's credit survives envelope rules
+    context: |
+      Design source: plan/issues/stockfish-centicolon-lessons-research-2026-09-28.md
+      "Concrete proposed architecture" (the envelope field list) and the
+      experiment table row A; parent review 1447-9sne. The research's
+      principle: evidence must name reproducible, APPLICABLE evidence;
+      hashing identifies artifacts, it does not authenticate a producer; a
+      malformed or incomplete envelope can never improve a score; skipped
+      and advisory are their own outcomes, never pass.
+      Deliverable in two parts: (1) the envelope — schema written as an
+      openspec change (openspec/changes/centicolon-evidence-envelope), the
+      runner emits it, a validator refuses malformed IDs, missing subject
+      identity, contradictory status and incomplete regime declarations;
+      (2) scripts/centicolon-attribution-report.sh — runs the CURRENT grader
+      and an envelope-rules grader side by side over the real corpus and
+      prints, per obligation, current-credit vs envelope-credit and the rule
+      that removed any credit.
+      SCOPE LIMIT: REPORT-ONLY. The published CentiColon number, the ratchet
+      and every enforcement bar are unchanged; switching the scorer is the
+      operator's later decision on this report's evidence (ask on 1447-9sne).
+      Plan-only peers: methodology/multi-host-development.yaml -> plan_only_peers.
+    verifiable_closure: |
+      A fixture (scripts/test-centicolon-evidence-envelope.sh) prints its ok
+      summary with the research table's falsifiers as arms, each through the
+      envelope-rules grader: sibling scenarios (only the covered one
+      credits); wrong subject and missing subject (no credit, named);
+      cross-platform pass masking a fail (the failing regime stays failing);
+      a file with mixed pass/skip (the skipped assertion is not credited);
+      an advisory verdict (not credited as pass); malformed and conflicting
+      envelopes (refused by the validator, never scored). NEGATIVE CONTROL:
+      a fully attributed pass on every required regime credits. And the
+      report runs over the real corpus and prints a per-obligation diff with
+      a total line. PRE-FIX RESULT: FAILS — no envelope or validator exists.
+    unscoreable: "unpinnable-until-the-guard-exists: litmus-centicolon-evidence-envelope.yaml wraps the fixture and is written with it (1136-n8sh)"
+    next_action: >
+      After 1469 lands: write the envelope schema as an openspec change and
+      post an ASK: on this row if any field in the research's list is
+      unclear; then the validator and fixture (watch it fail), the runner
+      emission, and the side-by-side report.
+    notes: |
+      size: L
+      implementer_tier: opus
+      Open to plan-only peers; a good split is envelope+validator in one
+      ref and the report in a second. Siblings: Pilot B (1471), Pilot C (1473).

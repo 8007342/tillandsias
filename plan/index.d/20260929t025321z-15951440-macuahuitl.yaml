@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lua-source-agreement-consolidation-shadow-pilot
+    field: next_action
+    value: 'Check whether draft PR #195 has landed in linux-next; if landed, record its landed SHA and close only this shadow pilot. Then start the typed script-run contract packet 1384-bqhy, keeping production guards enabled until runner and ratchet criteria are met.'
+    ts: "2026-09-29T02:53:21Z"
+    host: macuahuitl
+    replaces_sha256: "77343dc76e10e11045bdf1f979b4e70a45b0cbbbdf2e2746dcb74a1094a22086"
+
+events:
+  - packet_id: lua-source-agreement-consolidation-shadow-pilot
+    event:
+      type: note
+      ts: "2026-09-29T02:53:21Z"
+      host: macuahuitl
+      summary: |-
+        progress checkpoint: shadow pilot pushed and draft PR opened

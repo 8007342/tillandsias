@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lua-source-agreement-consolidation-shadow-pilot
+    field: status
+    value: in_progress
+    ts: "2026-09-29T00:55:20Z"
+    host: macuahuitl
+
+events:
+  - packet_id: lua-source-agreement-consolidation-shadow-pilot
+    event:
+      type: note
+      ts: "2026-09-29T00:55:20Z"
+      host: macuahuitl
+      summary: |-
+        claimed for 2026-09-29 UTC cycle by linux-macuahuitl-codex-20260929t005440z; Sol shadow pilot, legacy guards remain active

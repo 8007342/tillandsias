@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-tray-consumes-github-login-stored-instead-of-polling-for-the-login
+    event:
+      type: note
+      ts: "2026-09-29T04:51:25Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t045125z
+      host: macos
+      summary: |
+        TIMED SIGN-IN, 2026-09-29, tlatoanis-macbook-air, tray 0be6803ef (1479-9hx6, stamped tray.log), operator signing in from the tray via the device flow:
+          04:48:44.616Z  click id=github-login                       (tray.log)
+          04:48:44.862Z  PTY attached                                 (tray.log)
+          04:48:46 .. 04:50:10  github.com polled every ~5 s          (guest proxy log, epoch-stamped)
+          04:50:10.187Z  LAST github.com poll                         (guest proxy; INFERRED to be the token grant: the polling stops here)
+          04:50:10.3 .. 04:50:11.7  api.github.com calls              (guest proxy)
+          -- 13.4 s with no GitHub traffic --
+          04:50:25.1 .. 04:50:28.3  api.github.com calls              (guest proxy)
+          04:50:28.512Z  github-login: menu_state updated (handle)    (tray.log)
+          04:50:31.126Z  cloud-projects: menu_state updated (14 entries)  (tray.log, +2.61 s)
+        RESULT: from the inferred token grant to the handle in the menu is ~18.3 s; to the projects, ~20.9 s. The tray reacts within ~0.2 s of the last guest API burst; most of the gap is a ~13-14 s quiet stretch INSIDE THE GUEST after the token arrives (presumably Vault storage or gh setup-git; not identified). The ~104 s from click to menu is dominated by the human device-flow step. The operator's earlier "near immediately" matches the handle-to-projects gap (2.6 s), not token-to-handle.

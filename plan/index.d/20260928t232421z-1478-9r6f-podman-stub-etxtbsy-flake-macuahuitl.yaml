@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-test-that-writes-a-stub-podman-then-executes-it-fails-with-text-file-busy-when-a-parallel-test-forks-in-between
+    order: 1478-9r6f
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [flake, tests, podman, etxtbsy, gate]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-podman/src/backend.rs
+    title: |
+      tillandsias_podman backend::tests::a_stalled_podman_fails_within_its_budget_and_names_the_operation red the land86 gate with "Text file busy (os error 26)": the test writes a stub podman and executes it at once, and a sibling test's fork between the write and the exec holds the file open for writing (ETXTBSY) — passes 6/6 alone, fails under the workspace run
+    context: |
+      Measured on the land86 relay, 2026-09-28: the gate's workspace step
+      reported new-red=1 on this test; the transcript shows the stub's spawn
+      failing with ETXTBSY. The podman crate's suite passed 6/6 run alone on
+      the same tree. Classic Linux race: std opens files O_CLOEXEC, but a
+      sibling thread's fork() between the write and the child's exec keeps an
+      inherited write descriptor alive until that child execs, so executing
+      the just-written stub returns ETXTBSY. Any test that writes an
+      executable and runs it immediately can hit this under load.
+    verifiable_closure: |
+      cargo test -p tillandsias-podman passes 20/20 consecutive runs while a
+      parallel load of other crates' tests runs (or the workspace run passes
+      5/5), and a unit test pins the chosen mitigation (e.g. the stub is
+      written to a temp name, synced, closed and renamed into place BEFORE
+      any spawn in that test, or the spawn helper retries ETXTBSY with a
+      short bounded backoff and names it in the error if it persists).
+      PRE-FIX RESULT: intermittent — 1 red in the land86 workspace run.
+    unscoreable: "a flake closure measured by repetition under load; no litmus pin"
+    next_action: >
+      Find every test helper in the workspace that writes an executable stub
+      and runs it (grep for set_permissions 0o755 near a spawn); fix them all
+      with one shared helper, not just this test.
+    notes: |
+      size: S
+      implementer_tier: haiku

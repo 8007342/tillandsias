@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-trays-show-provisioning-progress-only-as-a-37-char-status-chip
+    event:
+      type: progress
+      ts: "2026-09-29T00:38:08Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t003807z
+      host: macos
+      summary: |
+        Cold provision RUN, operator-approved 2026-09-29, on tlatoanis-macbook-air with a tray built from trunk (which carries the landed macOS slice 19230b0a8) plus 1472-3d29 (1ffb606bc). Wiped with scripts/e2e-step2-macos.sh; launched 00:36:31Z; provision complete 00:37:27Z (about 56 s).
+        NOT YET OBSERVED: the menu-bar progress bar itself. This session cannot capture the screen (screencapture: "could not create image from rect", no Screen Recording grant, deliberately not requested). The operator has been asked to report what the menu bar showed. The row's live closure waits on that observation (Windows half still open).

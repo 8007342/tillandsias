@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-5-rank-the-bare-refusal-verdicts-by-how-often-agents-actually-hit-them-so-conversion-starts-with-the-ones-that-fire
+    order: 1494-kkbi
+    status: ready
+    kind: defect
+    priority: p1
+    size: S
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [fail-loud, affordance, guard, ranking]
+    estimated_hours: 3
+    depends_on:
+      - affordance-slice-4-a-guard-refuses-a-newly-added-refusal-verdict-with-no-affordance-and-the-audit-counts-per-verdict
+    owned_files:
+      - scripts/rank-refusal-hits.sh
+      - scripts/test-rank-refusal-hits.sh
+    title: |
+      1247-amcu criterion 3: rank the 526 bare refusal verdict sites by how often agents ACTUALLY hit them, from what agents record (plan ledger events and issues) plus any gate logs given, never alphabetically, so conversion starts with the refusals that fire
+    context: |
+      Slice of 1247-amcu (criterion 3), built on slice 4 (1470-v67y,
+      macbookair), whose check-refusal-affordance-added.sh --audit lists
+      every verdict site as covered|bare file:line token: 526 bare of 554
+      on origin/linux-next, 2026-09-28.
+
+      THE SOURCE OF "HOW OFTEN" IS A DECISION, stated so it can be argued
+      with. A green gate log is full of refusal tokens that FIXTURES provoke
+      on purpose (every negative-control arm), so counting gate logs alone
+      ranks the best-tested refusals highest, the opposite of what the
+      criterion wants. What agents actually hit, they RECORD: plan ledger
+      events and plan/issues notes quote the verdict they were stopped by.
+      The ranker counts each bare site's token prefix there, and accepts
+      extra log files as an optional second column, never merged into the
+      primary count.
+    exit_criteria:
+      - 'scripts/rank-refusal-hits.sh prints the bare verdict sites ranked by recorded hits (descending), one line per verdict token with its hit count, site count and first site; ties break by token, and a token with zero hits is listed after every token with hits (pre-fix: no ranking exists; the only ordering is the audit file order)'
+      - 'the fixture builds a scratch tree with known bare sites and a scratch ledger quoting them a known number of times, and asserts the exact order; NEGATIVE CONTROL: a token quoted only in a gate log given with --logs does not outrank a token agents recorded, since fixture-provoked refusals must not dominate'
+      - 'run against origin/linux-next, the top 10 are recorded on 1247-amcu as the conversion order for its next slices'
+    verifiable_closure: |
+      bash scripts/test-rank-refusal-hits.sh exits 0; its negative-control
+      arm fails if --logs hits are merged into the primary count.
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixture is this row's own
+      deliverable and lands with the ranker.
+    events:
+      - type: filed
+        ts: "2026-09-29T14:00:00Z"
+        agent_id: linux-lenovinha-claude-20260929t140000z
+        host: lenovinha
+        summary: |-
+          Filed from lenovinha as the next slice of 1247-amcu (criterion 3),
+          depending on macbookair's slice 4 (1470-v67y).

@@ -1,0 +1,113 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: atomically-cut-over-the-four-source-agreement-shell-files-to-the-typed-lua-runner
+    order: 1484-uf29
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [lua, bash, migration, rust, tests, gate]
+    estimated_hours: 6
+    depends_on: [tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d]
+    unscoreable: >
+      unpinnable-until-the-guard-exists: the source-agreement cutover litmus
+      is itself a deliverable; add and bind
+      openspec/litmus-tests/litmus-source-agreement-lua-cutover.yaml in the
+      same implementation commit that makes the Lua evaluator production
+      authoritative (977-448j, 1136-n8sh).
+    owned_files:
+      - scripts/check-tray-process-running-naming.sh
+      - scripts/check-dev-embed-model-agreement.sh
+      - scripts/check-inference-container-name-agreement.sh
+      - scripts/test-inference-container-name-agreement.sh
+      - scripts/lua/source-agreements.lua
+      - scripts/fixtures/source-agreements.yaml
+      - crates/tillandsias-plan/tests/lua_source_agreements.rs
+      - build.sh
+      - scripts/local-ci.sh
+    title: |
+      After the typed script-run contract lands, atomically replace the three
+      source-agreement deciders and their shell fixture runner with the
+      established pure Lua evaluator; preserve every caller, per-case
+      obligation, diagnostic contract, and reversible whole-change rollback.
+    context: |
+      The shadow evaluator and explicit case table are implemented and landed
+      by 1475-j9kv at 09555eec4. Its parity evidence covers the three existing
+      source-agreement guards, mutation controls, path/CRLF cases, a
+      capability-limited environment and zero evaluator child processes.
+      This packet is deliberately a separate atomic production cutover: the
+      typed `tillandsias-plan run` contract from 1384-bqhy does not yet exist,
+      and no production shell caller may be removed before that dependency is
+      complete. Research source: plan/issues/lua-shell-consolidation-research-2026-09-28.md,
+      Phase 2; design constraints also in
+      plan/issues/lua-bash-replacement-and-policies-design-2026-09-27.md.
+
+      Replace all four shell files in one reversible implementation commit:
+      the three guards and test-inference-container-name-agreement.sh. Update
+      every live caller in build.sh and scripts/local-ci.sh to invoke the
+      typed Lua runner with explicit named inputs. The Rust parity target stays
+      uncached and must become the production guard's actual decision path;
+      a shadow-only call, a wrapper that leaves Bash authoritative, or a
+      fallback to Bash does not satisfy this migration. Preserve the existing
+      three dev-model selftests, six inference-name fixture arms, diagnostic
+      payloads, missing-input failures, and all mutation controls from 1475.
+    exit_criteria:
+      - >
+        `tillandsias-plan status 1384-bqhy` reports completed with landed
+        evidence before implementation starts; otherwise this packet remains
+        blocked by its declared dependency and no shell caller is changed.
+      - >
+        build.sh and scripts/local-ci.sh route each former production decision
+        through the typed Lua runner; the three legacy deciders and the fourth
+        shell fixture file are deleted in the same implementation commit, with
+        no production shadow/Bash fallback left behind.
+      - >
+        The original three selftests and six inference fixture arms plus all
+        1475 adversarial controls pass through the production Lua path. Missing
+        files/declarations, duplicate IDs, prose-only matches, CRLF and
+        space-bearing paths retain their pinned behavior and diagnostics.
+      - >
+        The integration test has a nonzero selected count in ./build.sh
+        --check; uncached execution is proved, and the shell ratchet's counts
+        and floors are updated to reflect the four actual removals without
+        admitting a new unapproved shell decider.
+      - >
+        Add and bind openspec/litmus-tests/litmus-source-agreement-lua-cutover.yaml
+        in the implementation commit, pinning the four deletions, all live
+        callers, and the absence of a Bash fallback.
+      - >
+        Record paired 30-run warm measurements, cold startup separately,
+        checked cases, bytes read, child-process count, median and p95 against
+        the shell baseline. Do not claim speedup unless measured p95 is no
+        worse than 110% of baseline. Linux validation is required here;
+        record macOS/native-Windows status honestly and do not claim fleet-wide
+        cutover until both native lanes validate.
+      - >
+        Run ./build.sh --check on the complete cutover commit. Preserve a
+        whole-commit rollback path; on parity failure revert the entire
+        cutover and record the ratchet regression explicitly rather than
+        adding a silent runtime fallback or using --unsandboxed.
+    verifiable_closure: |
+      Verify 1384-bqhy's completed status and landed SHA; run the exact named
+      Lua integration target with a nonempty selected count, all retained
+      fixture/selftest arms, the shell-ratchet checks and ./build.sh --check.
+      Inspect git diff --stat and the callers to prove all four shell files
+      are absent and no fallback remains. Compare paired timing evidence to
+      the baseline. Pre-fix: build.sh and scripts/local-ci.sh still invoke the
+      production Bash guards and the fourth shell fixture runner exists.
+    next_action: >
+      Wait for 1384-bqhy's typed runner contract to land. Then verify its
+      folded status and sibling claims, claim this packet, run the current
+      shadow parity suite against all named callers, and perform the complete
+      caller+deletion cutover as one reversible commit.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      This is a bounded phase-2 source-agreement cutover, not a mandate to
+      translate unrelated shell scripts or expand the Lua runtime API.
+    provenance: |
+      Filed after the 1475-j9kv shadow pilot landed at 09555eec4. The scope,
+      four-file deletion boundary, parity requirements, and p95 criterion are
+      taken from the 1475 research packet and its Phase 2 research section.

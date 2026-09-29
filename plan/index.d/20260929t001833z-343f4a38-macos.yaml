@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: metrics-log-path-writer-and-reader-disagree-in-a-linked-worktree-because-the-rust-root-rule-requires-git-to-be-a-directory
+    event:
+      type: note
+      ts: "2026-09-29T00:18:33Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t001833z
+      host: macos
+      summary: |
+        yoga's linked-worktree arm landed in land86 (eced00b48). Re-measured there on tlatoanis-macbook-air (darwin, env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR, plan binary built from that tree): ok:metrics-log-path-agreement:19, rc=0, one arm more than the 18 measured at e2b8fd755. /tmp/tillandsias-timing.jsonl is absent afterwards, so no debris. The row stays completed; this note records the arm.

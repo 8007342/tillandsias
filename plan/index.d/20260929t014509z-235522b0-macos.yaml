@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: post-login-cloud-refresh
+    event:
+      type: progress
+      ts: "2026-09-29T01:45:09Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t014509z
+      host: macos
+      summary: |
+        PER-CRITERION, from the operator's tray sign-in (2026-09-29 ~01:43Z; evidence event 20260929t014405z-344341d8):
+          3 'Remote projects list populates within 60s of login': MET. 14 entries reached the menu in the same 15 s watcher tick as the login state; the operator said 'near immediately'.
+          1 'Vault kv get secret/github/token returns a valid token': NOT OBSERVED (no guest exec while the tray owns the VM).
+          2 'GithubLoginStatusReply logged_in:true seen in tray log within 60s': NOT MET AS WORDED. The tray log shows 'github-login: menu_state updated', not the reply or its logged_in field.
+          4 'Menu shows GitHub: @user handle': NOT RECORDED. The operator reported the projects, not the handle.
+        Row left open for 1, 2 and 4.

@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: macos-check-is-red-on-any-mac-running-the-tray-because-exec-guest-stdin-tests-refuse-a-live-tray-and-the-ratchet-reads-that-as-new-red
+    order: 1475-3mpc
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, gate, tests, instrument]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-macos-tray/tests/exec_guest_stdin.rs
+    title: |
+      On a Mac with the Tillandsias tray running, crates/tillandsias-macos-tray/tests/exec_guest_stdin.rs fails both tests, deliberately, because the order-277 live-tray refusal means it never reaches the stdin path; the workspace step's baseline ratchet reads that as new-red, so ./build.sh --check is red on every operator workstation whose tray is up
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-28 at origin/linux-next, with the
+      operator's tray running and not quit (it is theirs):
+        cargo test -p tillandsias-macos-tray --test exec_guest_stdin
+          stdin_that_closes_is_still_forwarded_without_the_bound_warning  FAILED
+          stdin_that_never_eofs_does_not_block_the_boot_forever           FAILED
+          panic: "one-shot exited on the order-277 live-tray refusal, so it never
+          reached the stdin path — this test proved nothing. Quit any running
+          tray and re-run."
+        scripts/check-test-baseline.sh over the workspace transcript:
+          fail:test-baseline:ran=2762 new-red=2 ... (both tests)
+      The tests are RIGHT to refuse a vacuous pass. But a refusal driven by host
+      state is not a regression, and the gate reports it as one. On a macOS
+      operator workstation the tray is normally running, so the workspace step,
+      and with it --check, the pre-push stamp and a Mac-side land, is red
+      without any code change. A reader then learns to quit the tray or ignore
+      the red, and both are worse than a named skip.
+      Found while measuring 1118-pifa.
+    exit_criteria:
+      - 'with a live tray, the two tests report a NAMED skip the ratchet does not count as new-red (for example, a skip line naming the order-277 refusal and the remedy, "quit the tray to exercise this"), never a pass (pre-fix: FAILS — new-red=2 on this host)'
+      - 'with no tray running they still exercise the stdin path and fail on a real regression (negative control: a seeded stdin block still reds)'
+      - 'the gate names how many of these tests were skipped for a live tray, so a Mac that always runs its tray is visibly not covering them'
+    unscoreable: |
+      host-state-dependent: exercising criterion 2 needs a Mac with the tray
+      quit, which is the operator's call on a workstation; the fixture for
+      criterion 1 runs with the tray up.

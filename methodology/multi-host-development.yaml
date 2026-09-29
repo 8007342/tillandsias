@@ -611,6 +611,88 @@ multi_host_development:
       from — the host checkout's checked-out branch at launch; the container
       OS never selects the branch. (Closes
       plan/issues/forge-agent-branch-selection-clarification-2026-07-28.md.)
+  plan_only_peers:
+    purpose: >
+      Operator direction 2026-09-28: some agents (Antigravity, Codex, and any
+      harness without the cross-session messaging channel) join the fleet and
+      coordinate ONLY through the shared ./plan ledger on origin/linux-next.
+      This is their complete protocol. It is also valid for every other agent;
+      messaging is a convenience, the ledger is the record.
+    identity: >
+      agent_id comes from `scripts/agent-identity.sh id <backend>` (e.g.
+      codex, antigravity), never hand-composed; export it as
+      TILLANDSIAS_AGENT_ID so append-event can attribute you. host is the
+      machine's short hostname.
+    steps:
+      1_find: >
+        `git fetch origin && git switch linux-next && git pull --ff-only`.
+        Read the packet with `tillandsias-plan status <order>` (the FOLDED
+        row, never a raw fragment). The operator names your packets; rows open
+        to plan-only peers carry capability tag `plan-only-peer-ok`.
+      2_claim: >
+        `tillandsias-plan set-field <order> status in_progress --host <host>
+        --reason "claimed by <agent_id>"`, commit ONLY that fragment, push it:
+        `git push origin HEAD:linux-next` (the plan-only lane admits a
+        fragment-only commit with no gate stamp). Then
+        `bash scripts/check-claim-confirmed.sh <order>` MUST print a win; a
+        `refused:claim-lost:` means another agent holds it — append a note
+        that you yielded and pick another packet.
+      3_work: >
+        `git switch -c work/<order> origin/linux-next` (the ref name is
+        exactly work/<order>). Commit and push to it as often as you like:
+        `git push origin work/<order>` — no gate stamp, no trunk merge.
+        Never push code to linux-next, main or a platform branch; never
+        force-push; never rebase a pushed ref (merge origin/linux-next INTO
+        your ref instead).
+      4_verify: >
+        Before declaring ready: `git merge origin/linux-next` into the ref;
+        run the packet's verifiable_closure command and show it FAIL on the
+        pre-fix code and PASS after (a fixture that could harm the real
+        checkout must run in a scratch dir first — see
+        cheatsheets/test/litmus-fixture-writing.md); run
+        `./build.sh --preflight` and, for Rust, `cargo clippy --all-targets --
+        -D warnings` plus `cargo fmt --check`. A full `./build.sh --check`
+        is welcome but not required — the coordinator's relay gates the union.
+      5_ready: >
+        Record READY in the ledger, with the evidence, as a note event, and
+        push it through the plan lane (step 2's push):
+        `printf '%s\n' "READY: work/<order> @ <full sha> — <closure verdict
+        line>; preflight <summary line>; <what is NOT done>" |
+        tillandsias-plan append-event <order> note --summary-file - --ts
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)"`. The READY event is what the
+        coordinator acts on. Optionally also open a PR
+        (`gh pr create --base linux-next --head work/<order> --draft`, then
+        `gh pr ready`); if the token lacks pull-request permission, skip it —
+        the READY event is sufficient.
+      6_questions: >
+        When a decision is not yours (scope, design choice, an ambiguous
+        criterion), do not guess and do not stop silently: append a note
+        event whose summary starts `ASK:` with the question and the options
+        you see, push it, and continue with anything else in the packet that
+        does not depend on the answer. Before each work session, re-read the
+        row (`tillandsias-plan status <order>`): the coordinator answers with
+        a note event starting `RULING:` and may amend next_action (--append).
+      7_close: >
+        The coordinator relays READY refs into linux-next and records a note
+        event `LANDED land<N> = <sha>` on your row. Then close it:
+        `tillandsias-plan set-field <order> status completed --host <host>
+        --evidence "<landed sha on origin/linux-next>: <closure verdict>"
+        --reason "..."`, pushed through the plan lane. The evidence SHA is the
+        LANDED commit, never your work ref's SHA.
+    never: >
+      gh auth login/refresh (the credential is the operator's); sudo; editing
+      .claude/ or other harness settings; deleting or rewriting another
+      agent's ref; a status write that drops another agent's lines (use
+      --append on long-form fields); declaring READY without the pre-fix
+      FAIL / post-fix PASS evidence.
+    coordinator_duty: >
+      Each coordination pass, after `git fetch origin`, the coordinator lists
+      new READY and ASK events on linux-next (`git log --since=<last pass>
+      -p origin/linux-next -- plan/index.d | grep -E 'READY: work/|ASK:'`),
+      relays READY refs whose SHA matches origin/work/<order>, answers every
+      ASK with a `RULING:` note event on the row, and records `LANDED` on each
+      landed row. A plan-only peer's question is answered in the ledger or it
+      is not answered.
   host_identity:
     required_fields:
       - host_id

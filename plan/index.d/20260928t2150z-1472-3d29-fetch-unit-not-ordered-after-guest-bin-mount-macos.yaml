@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-macos-guest-fetch-unit-is-ordered-after-the-retired-src-mount-not-the-guest-bin-mount-that-carries-the-binary-and-a-stale-pin-keeps-it-green
+    order: 1472-3d29
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, vm, provisioning, rust]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-vm-layer/src/vz.rs
+    title: |
+      tillandsias-headless-fetch.service is ordered After=home-forge-src.mount, but since 1019-ivia the staged binary arrives on the guest-bin virtiofs mount, which the unit is not ordered after; a source pin written for the old share keeps the stale ordering green
+    context: |
+      FOUND BY SOURCE-READ during the 827-d3dc pin survey (not yet measured on a
+      booting guest), 2026-09-28, at origin/linux-next 3c8f8ced2.
+      crates/tillandsias-vm-layer/src/vz.rs `provision_user_data` writes the
+      fetch unit with `After=home-forge-src.mount`. The same function writes the
+      fstab line `guest-bin /var/lib/tillandsias/guest-bin virtiofs ro,nofail`
+      (tillandsias_core::guest_bin_path::GUEST_BIN_MOUNT), and fetch-headless.sh
+      installs from GUEST_STAGED_BINARY under that mount. Nothing orders the unit
+      after the guest-bin mount.
+      MITIGATED, NOT SAFE: fetch-headless.sh checks `findmnt` on the guest-bin
+      path and warns "not mounted yet, so the host-staged binary is invisible to
+      this unit". It then falls back to the network, which is the outcome its own
+      comment calls "a working boot running the wrong headless".
+      WHY IT STAYED GREEN: the vz.rs test pinning the fetch unit asserts the
+      literal `After=home-forge-src.mount`. 454329a42 wrote that pin for the old
+      share; 14f1aaa5b (1019-ivia) moved staging to guest-bin and updated the
+      staged-path pin but not this one. A source pin kept a stale product
+      ordering green: the 827-d3dc pattern with a product consequence.
+    exit_criteria:
+      - 'the fetch unit is ordered After= the systemd mount unit for GUEST_BIN_MOUNT (derived from the const, not a copied literal), and still never uses RequiresMountsFor= (pre-fix: FAILS — it names home-forge-src.mount)'
+      - 'the test asserts the ordering against the unit text BUILT by provision_user_data_for_test() and the GUEST_BIN_MOUNT const, so moving the mount again reds the test rather than leaving a stale literal green'
+      - 'MEASURED on a macOS guest boot: fetch-headless.sh installs the host-staged binary (no "not mounted yet" warning, no network fallback) on a cold boot'
+    unscoreable: |
+      measured-on-a-booting-guest: criterion 3 needs a macOS VM boot and is
+      verified by its journal, not by a fixture; criteria 1-2 are a Rust test
+      in crates/tillandsias-vm-layer.

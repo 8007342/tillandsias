@@ -49,12 +49,17 @@ branch SHALL relay exactly as before.
 
 On every reconcile tick (the same tick as the upstream-auth probe) the git
 service SHALL keep exactly one ref
-`refs/tillandsias/discipline/<level>/<enforcement>/<derived>/<sha256-prefix>/<epoch>`
+`refs/tillandsias/discipline/<level>/<enforcement>/<derived>/<digest>/<epoch>`
 pointing at the seed blob (or at the built-in level-0 default rendered as
-YAML when the project has no seed), where `<derived>` is the level
-`tillandsias-plan discipline derive` observes over the mirror repository on
-that tick, replacing the previous ref when the seed or the derivation
-changes, so that a client's `git ls-remote origin
+YAML when the project has no seed), where `<enforcement>` is the strictest
+enforcement word across the seed's rules, `<digest>` is the FULL sha256 of
+the seed bytes (64 lowercase hex) or `none` when the project has no seed
+(never the hash of empty bytes, which a seedless client would read as
+drift), and `<derived>` is the level `tillandsias-plan discipline derive`
+observes over the mirror repository on that tick, or `unknown` while the git
+image carries no plan binary. The previous ref SHALL be replaced in the same
+atomic ref transaction that creates the new one, so a reader never sees two
+digests, so that a client's `git ls-remote origin
 'refs/tillandsias/discipline/*'` reads the level actively enforced, the
 derived level and the digest, and a fetch of the ref yields the seed bytes. The ref SHALL NOT be relayed
 upstream. A `git push --dry-run` SHALL NOT be documented as a discipline

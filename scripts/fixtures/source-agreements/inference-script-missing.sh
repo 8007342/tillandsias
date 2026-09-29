@@ -1,0 +1,1 @@
+echo no assignment here

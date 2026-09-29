@@ -515,6 +515,9 @@ jobs:
           echo "Resolved macOS release version: v${VERSION}"
 
       - name: Build Tillandsias.app + tarball
+        # 1238-b825: a release stamps VERSION verbatim, never VERSION+built.<date>.
+        env:
+          TILLANDSIAS_RELEASE_BUILD: "1"
         run: scripts/build-macos-tray.sh
 
       - name: Verify bundle (sanity checks before signing)

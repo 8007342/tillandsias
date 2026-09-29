@@ -123,8 +123,10 @@ methodology:
         destructive: true
         destructive_reset_policy: >
           Podman reset is an expected precondition on Tillandsias smoke hosts.
-          Do not stop for confirmation when TILLANDSIAS_DESTRUCTIVE_RESET_OK is
-          unset or 1; only skip/block if it is explicitly 0.
+          Do not stop for confirmation when the reset runs with
+          TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 AND TILLANDSIAS_SKILL=<this skill's
+          name> (the only pair the consent engine honours, 1443-9f5w and
+          1462-qvxj); only skip/block if it is explicitly 0.
         steerable: true
       build-install-and-smoke-test-e2e:
         path: skills/build-install-and-smoke-test-e2e/SKILL.md
@@ -139,7 +141,9 @@ methodology:
         destructive_reset_policy: >
           Explicit invocation authorizes the Podman/VM/WSL reset. Podman reset
           is an expected precondition on Tillandsias smoke hosts; do not
-          reconfirm unless TILLANDSIAS_DESTRUCTIVE_RESET_OK=0.
+          reconfirm when the reset runs with TILLANDSIAS_DESTRUCTIVE_RESET_OK=1
+          AND TILLANDSIAS_SKILL=<this skill's name> (the only pair the consent
+          engine honours, 1443-9f5w and 1462-qvxj); block if it is 0.
         steerable: true
       project-discipline:
         path: skills/project-discipline/SKILL.md

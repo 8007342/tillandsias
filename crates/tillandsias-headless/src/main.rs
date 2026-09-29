@@ -844,8 +844,10 @@ fn main() {
                 std::process::exit(2);
             }
         };
+        // Terminal mode runs the device flow and executes no script
+        // (777-kyjp); only the stdin seed has one.
         let token_script = match input_mode {
-            LoginInputMode::Terminal => GH_LOGIN_TOKEN_SCRIPT.to_string(),
+            LoginInputMode::Terminal => String::new(),
             LoginInputMode::StdinToken => GH_LOGIN_STDIN_TOKEN_SCRIPT.to_string(),
         };
         Some((
@@ -3510,6 +3512,11 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         generation_before.as_deref(),
         ca_generation(&certs_dir).as_deref(),
     ) {
+        // Order 472 criterion 1: only a declared transition may reach the wire.
+        debug_assert!(
+            flow_sink::ca_transition_declared(&from, &to, reason),
+            "undeclared CA transition {from} -> {to} ({reason})"
+        );
         flow_sink::emit(
             tillandsias_control_wire::FlowSource::DependencyNode {
                 node: flow_sink::CA_BUNDLE_NODE.to_string(),
@@ -5359,6 +5366,24 @@ const GIT_MIRROR_SEED_POLL_INTERVAL: Duration = Duration::from_secs(1);
 /// Probes via `podman exec` inside the mirror container so readiness is
 /// measured on the served repo itself, not on network reachability.
 /// @trace spec:git-mirror-service
+/// ORDER 778-hb3x criterion 3. The line the mirror prints when its seed fetch
+/// fails (images/git/entrypoint.sh, `retry_msg "[git-mirror] Seed fetch
+/// failed: …"`). A cross-component string: the litmus
+/// git-mirror-seed-failure-surfaced-shape pins that both files agree on it.
+const GIT_MIRROR_SEED_FAILURE_MARKER: &str = "[git-mirror] Seed fetch failed:";
+
+/// The mirror's most recent seed-fetch failure in a log tail, trimmed and
+/// bounded, or None when the tail holds none (a slow seed, not a failing one).
+fn last_seed_failure(lines: &[String]) -> Option<String> {
+    let line = lines
+        .iter()
+        .rev()
+        .find(|l| l.contains(GIT_MIRROR_SEED_FAILURE_MARKER))?;
+    let from = line.find(GIT_MIRROR_SEED_FAILURE_MARKER).unwrap_or(0);
+    let text: String = line[from..].trim().chars().take(400).collect();
+    Some(text)
+}
+
 async fn wait_for_git_mirror_ready(
     client: &PodmanClient,
     container_name: &str,
@@ -5378,6 +5403,7 @@ async fn wait_for_git_mirror_ready(
     // never assume the target project uses Tillandsias' `main` convention.
     let repo_path = format!("/srv/git/{project_name}");
     let mut last = String::from("no probe attempted");
+    let mut seen_failure: Option<String> = None;
     for attempt in 1..=GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS {
         match probe_git_mirror_seeded(client, container_name, &repo_path, expected_branch).await {
             Ok(seeded_ref) => {
@@ -5397,6 +5423,25 @@ async fn wait_for_git_mirror_ready(
                 "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s max)..."
             );
         }
+        // ORDER 778-hb3x criterion 3: a wait that can never succeed must not
+        // look like a slow first seed. Every 30 s, say what the probe saw and
+        // the mirror's own last seed-fetch failure, when it has one; print it
+        // again only when it changes. Measured on yoga 2026-09-29: a 1200 s
+        // wait that ended in "branch … is not concrete" said nothing until then.
+        if attempt == 5 || (attempt > 5 && attempt % 30 == 0) {
+            let tail = client
+                .log_tail(container_name, 200)
+                .await
+                .unwrap_or_default();
+            let failure = last_seed_failure(&tail.lines);
+            if failure != seen_failure || attempt == 5 {
+                eprintln!("[tillandsias] [forge-launch]   still waiting ({attempt}s): {last}");
+                if let Some(f) = &failure {
+                    eprintln!("[tillandsias] [forge-launch]   mirror reports: {f}");
+                }
+                seen_failure = failure;
+            }
+        }
         if debug {
             eprintln!(
                 "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}): {last}"
@@ -5404,8 +5449,15 @@ async fn wait_for_git_mirror_ready(
         }
         tokio::time::sleep(GIT_MIRROR_SEED_POLL_INTERVAL).await;
     }
+    let tail = client
+        .log_tail(container_name, 200)
+        .await
+        .unwrap_or_default();
+    let mirror_says = last_seed_failure(&tail.lines)
+        .map(|f| format!(" The mirror's last seed failure: {f}."))
+        .unwrap_or_default();
     Err(format!(
-        "git mirror {container_name} did not become cloneable within {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s: {last}. \
+        "git mirror {container_name} did not become cloneable within {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s: {last}.{mirror_says} \
          A forge launched now would land on an empty tree, so the launch is refused \
          (fresh-checkout invariant, \
          plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md). \
@@ -8272,8 +8324,10 @@ fn build_opencode_forge_args(
         // it is true rather than dressed up as a broken working copy.
         eprintln!(
             "[tillandsias] [forge-launch] CLOUD MODE: no host checkout to read a seed branch \
-             from, so no TILLANDSIAS_FORGE_SEED_BRANCH is injected and the mirror HEAD falls \
-             back to UPSTREAM'S DEFAULT BRANCH (typically `main`)."
+             from, so no TILLANDSIAS_FORGE_SEED_BRANCH is injected. The forge resolves its \
+             branch itself, never from the mirror's HEAD (1362-u8ww): the discipline \
+             seed's integration branch, else its default_branch, else main/master, and \
+             prints `[forge] Seed branch: <name> — <why>` at startup."
         );
     }
     // ORDER 505 (mirrored from build_forge_agent_run_args_with_vault for the
@@ -10962,6 +11016,53 @@ pub fn render_terminal_qr(url: &str) -> Result<String, String> {
     render_terminal_qr_in(url, qr_tier())
 }
 
+// Order 1475-uif4. OpenAI documents the device flow, but not a machine-readable
+// CLI output format or a permanent URL. Recognize only the currently observed
+// verification page as a complete whitespace-delimited token in Codex's own
+// stream. A changed or decorated URL leaves the CLI instructions untouched and
+// produces no QR; in particular, a query or path carrying a device code is
+// never encoded. This scanner retains at most one URL-sized window; it never
+// logs or persists the login output.
+const CODEX_DEVICE_VERIFICATION_URI: &str = "https://auth.openai.com/codex/device";
+
+struct CodexDeviceQrScanner {
+    tail: Vec<u8>,
+    displayed: bool,
+}
+
+impl CodexDeviceQrScanner {
+    fn new() -> Self {
+        Self {
+            tail: Vec::with_capacity(CODEX_DEVICE_VERIFICATION_URI.len() + 2),
+            displayed: false,
+        }
+    }
+
+    fn feed(&mut self, chunk: &[u8], tier: tillandsias_progress_tty::Tier) -> Option<String> {
+        if self.displayed {
+            return None;
+        }
+        let width = CODEX_DEVICE_VERIFICATION_URI.len() + 2;
+        for &byte in chunk {
+            self.tail.push(byte);
+            if self.tail.len() > width {
+                self.tail.remove(0);
+            }
+            if self.tail.len() == width
+                && self.tail[0].is_ascii_whitespace()
+                && self.tail[width - 1].is_ascii_whitespace()
+                && &self.tail[1..width - 1] == CODEX_DEVICE_VERIFICATION_URI.as_bytes()
+            {
+                self.displayed = true;
+                return render_terminal_qr_in(CODEX_DEVICE_VERIFICATION_URI, tier)
+                    .ok()
+                    .map(|qr| format!("\n{qr}\n"));
+            }
+        }
+        None
+    }
+}
+
 /// The one-time code, in blush on a colour tier and plain otherwise.
 fn styled_user_code(code: &str, tier: tillandsias_progress_tty::Tier) -> String {
     let open = qr_sgr(tier, tillandsias_progress_tty::palette::TIP_BLUSH, None);
@@ -11250,29 +11351,18 @@ fn run_github_device_login(container: &str, debug: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// In-container token entry for `--github-login`.
-///
-/// We deliberately avoid `gh auth login`'s interactive masked prompt: it puts
-/// the container pty into raw, char-at-a-time mode, and a long token pasted
-/// over `podman exec -it` can pick up bracketed-paste escape bytes
-/// (`ESC[200~ … ESC[201~`) or be truncated, so gh ends up validating garbage
-/// and GitHub returns `401 Bad credentials`.
-///
-/// Instead we read the token with a plain shell `read` (cooked line mode, which
-/// does not enable bracketed paste, so the terminal delivers the pasted text
-/// verbatim) and pipe it straight into `gh auth login --with-token`. The token
-/// is read, held, and consumed entirely inside the container — the host process
-/// still never sees it. `read -rs` keeps the input hidden, matching the old UX.
-const GH_LOGIN_TOKEN_SCRIPT: &str = r#"
-printf 'Paste your GitHub authentication token (input hidden), then press Enter: ' > /dev/tty
-IFS= read -rs TOKEN < /dev/tty
-printf '\n' > /dev/tty
-if [ -z "$TOKEN" ]; then
-  printf 'No token entered; aborting GitHub login.\n' >&2
-  exit 1
-fi
-printf '%s' "$TOKEN" | gh auth login --hostname github.com --git-protocol https --with-token
-"#;
+// ORDER 777-kyjp (operator directive 2026-08-16, reconciled with 1025-a896 by
+// the coordinator 2026-09-29): there is NO interactive token-paste prompt. A
+// person at a terminal running `--github-login` gets the device flow
+// (`run_github_device_login`, the only GitHub Terminal branch in
+// run_provider_login). The paste script that lived here was already dead code
+// for GitHub after 1381-za6b and is removed, not hidden. The non-interactive
+// operator seed below STAYS: `--with-token` reads stdin and runs no device
+// flow, which is why 1025-a896 sanctioned it (a device login evicts the token
+// on other hosts). A --with-token seed carries no refresh token, so
+// 1461-8tyy's rotation never runs for it, by design; the operator re-seeds.
+// Retiring --with-token too ("literally device-only") is a separate row that
+// must solve the eviction hazard first.
 
 /// Non-interactive token entry for `--github-login --with-token`.
 ///
@@ -11789,6 +11879,42 @@ fn provider_login_tool_cache_mount(provider: &ProviderId) -> Option<String> {
     None
 }
 
+/// Stream Codex's own device instructions byte-for-byte and add a QR only when
+/// the complete, code-free verification URI appears. The existing bounded
+/// Podman stream keeps the container PTY and its deadline; Codex needs no stdin
+/// for `login --device-auth`. No output chunk enters tracing or an argv/env.
+fn run_codex_device_login_with_qr(
+    mut login: tillandsias_podman::SyncPodmanCommand,
+    debug: bool,
+) -> Result<(), String> {
+    use std::io::Write;
+
+    if debug {
+        eprintln!("[tillandsias] running: {:?}", login.as_std());
+    }
+    let tier = qr_tier();
+    let mut scanner = CodexDeviceQrScanner::new();
+    let status = login
+        .status_bounded_with_stdin_streaming(
+            &[],
+            tillandsias_podman::OperationKind::Container.default_budget(),
+            move |chunk| {
+                let mut out = std::io::stdout().lock();
+                let _ = out.write_all(chunk);
+                if let Some(qr) = scanner.feed(chunk, tier) {
+                    let _ = out.write_all(qr.as_bytes());
+                }
+                let _ = out.flush();
+            },
+        )
+        .map_err(|e| format!("Failed to run Codex device login: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("Codex device login exited with status {status}"))
+    }
+}
+
 fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), String> {
     let provider_name = config.provider.name();
     let flag = format!("--{}-login", config.provider.id_str());
@@ -11994,7 +12120,13 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &config.token_script,
             config.input_mode,
         ));
-        run_podman_command(login, debug)?;
+        if matches!(config.provider, ProviderId::Codex)
+            && matches!(config.input_mode, LoginInputMode::Terminal)
+        {
+            run_codex_device_login_with_qr(login, debug)?;
+        } else {
+            run_podman_command(login, debug)?;
+        }
     }
 
     if matches!(config.provider, ProviderId::GitHub) {
@@ -12086,25 +12218,65 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         ));
     }
 
-    // ORDER 1364-27f8. Identity comes AFTER the Vault write is verified. The
-    // operator still sees token first, identity second (directive 2026-07-29),
-    // but a typo in these prompts can no longer throw away a token that gh
-    // accepted: the helper container holding it is removed on any early return.
-    if matches!(config.provider, ProviderId::GitHub) {
-        let identity = match github_stdin_identity {
-            Some((name, email)) => store_git_identity(&name, &email),
-            None => prompt_and_store_git_identity(),
-        };
-        identity.map_err(|e| {
-            format!("{provider_name} token is stored in Vault; git identity was not saved: {e}")
-        })?;
-    }
-
+    // ORDER 1486-y67a. The Vault write is verified (a failure returned above,
+    // so no sentinel is written for a login that did not land). Tell the
+    // resident control server NOW, before any prompt: the tray used to learn
+    // of the login only after the operator answered the identity prompts
+    // below, ~13 s after the token was safe (measured 2026-09-29).
     let mut username: Option<String> = None;
     if matches!(config.provider, ProviderId::GitHub) {
-        let mut username_cmd = podman_command();
-        username_cmd.args(["exec", &container, "gh", "api", "user", "--jq", ".login"]);
-        username = podman_command_output(username_cmd, debug).ok();
+        finish_github_login_steps(
+            Ok(()),
+            || {
+                #[cfg(feature = "listen-vsock")]
+                {
+                    let _ = std::fs::write(vsock_server::login_transition_sentinel_path(), b"1");
+                }
+            },
+            || {
+                // ONE `gh api user` (7rzd's derivation, replacing the old
+                // `--jq .login`): it gives the username, fills the App-user
+                // cache the forge identity reads, and supplies the prompt
+                // defaults below. A failed fetch clears the cache, so a
+                // previous account's name can never become the default.
+                let mut user_cmd = podman_command();
+                user_cmd.args([
+                    "exec",
+                    &container,
+                    "gh",
+                    "api",
+                    "user",
+                    "--jq",
+                    APP_USER_TSV_JQ,
+                ]);
+                match podman_command_output(user_cmd, debug)
+                    .ok()
+                    .and_then(|out| parse_app_user(out.trim()))
+                {
+                    Some(user) => {
+                        cache_app_user(&user, debug);
+                        username = Some(user.login);
+                    }
+                    None => {
+                        if let Some(path) = app_user_cache_path() {
+                            let _ = std::fs::remove_file(path);
+                        }
+                    }
+                }
+                // ORDER 1364-27f8. Identity comes AFTER the Vault write is
+                // verified: a typo in these prompts can no longer throw away a
+                // token that gh accepted.
+                match github_stdin_identity {
+                    Some((name, email)) => store_git_identity(&name, &email),
+                    None => prompt_and_store_git_identity(),
+                }
+                .map_err(|e| {
+                    format!(
+                        "{provider_name} token is stored in Vault; git identity was not saved: {e}"
+                    )
+                })
+            },
+        )?;
     }
 
     drop(cleanup);
@@ -12124,8 +12296,10 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     // succeeded because the tray stayed visually logged-out (F-D). The
     // resident server only exists in listen-vsock builds (the in-guest
     // binary); host builds without the feature have no probe to nudge.
+    // Other providers keep the end-of-flow nudge; GitHub already wrote it
+    // right after vault_verify (1486-y67a).
     #[cfg(feature = "listen-vsock")]
-    {
+    if !matches!(config.provider, ProviderId::GitHub) {
         let _ = std::fs::write(vsock_server::login_transition_sentinel_path(), b"1");
     }
     if let Some(username) = username.filter(|value| !value.is_empty()) {
@@ -12235,9 +12409,14 @@ fn prompt_and_store_git_identity() -> Result<(), String> {
     println!("access to anything.");
     println!();
 
+    // 1486-y67a: default to the SAME identity the forge uses (1453-7rzd): the
+    // App user's name and the GitHub noreply address, from the cache the login
+    // flow just filled; else the host gitconfig. The usual answer is Enter.
     let current = read_git_identity_defaults();
-    let name = prompt_with_default("Git author name", current.name.as_deref())?;
-    let email = prompt_with_default("Git author email", current.email.as_deref())?;
+    let (name_default, email_default) =
+        identity_prompt_defaults(read_cached_app_user().as_ref(), &current);
+    let name = prompt_with_default("Git author name", name_default.as_deref())?;
+    let email = prompt_with_default("Git author email", email_default.as_deref())?;
 
     store_git_identity(&name, &email)
 }
@@ -12411,6 +12590,59 @@ pub(crate) fn parse_app_user(tsv: &str) -> Option<AppUser> {
 /// Not a secret (a public id, login and display name), and not the token.
 pub(crate) fn app_user_cache_path() -> Option<PathBuf> {
     init_cache_dir().ok().map(|d| d.join("github-app-user.tsv"))
+}
+
+/// The jq projection 7rzd's probe uses for the App user: `id<TAB>login<TAB>name`.
+pub(crate) const APP_USER_TSV_JQ: &str = r#"[(.id|tostring), .login, (.name // "")] | @tsv"#;
+
+/// Write the App user to the host cache (the same line probe_github_username
+/// writes), so the forge identity and the prompt defaults agree.
+pub(crate) fn cache_app_user(user: &AppUser, debug: bool) {
+    if let Some(path) = app_user_cache_path() {
+        let line = format!(
+            "{}\t{}\t{}\n",
+            user.id,
+            user.login,
+            user.name.as_deref().unwrap_or("")
+        );
+        if let Err(e) = std::fs::write(&path, line)
+            && debug
+        {
+            eprintln!(
+                "[tillandsias] could not cache the App user at {}: {e}",
+                path.display()
+            );
+        }
+    }
+}
+
+/// Identity prompt defaults (1486-y67a): the App user's forge identity
+/// (1453-7rzd: name, else login; `<id>+<login>@users.noreply.github.com`)
+/// when known, else the host gitconfig's values.
+fn identity_prompt_defaults(
+    app: Option<&AppUser>,
+    current: &GitIdentity,
+) -> (Option<String>, Option<String>) {
+    match app {
+        Some(u) => {
+            let (name, email) = forge_git_identity(Some(u), "");
+            (Some(name), Some(email))
+        }
+        None => (current.name.clone(), current.email.clone()),
+    }
+}
+
+/// The order after a verified Vault write (1486-y67a): the login-transition
+/// signal FIRST, then everything that may wait on the operator. A failed
+/// verification signals nothing and runs nothing.
+pub(crate) fn finish_github_login_steps(
+    vault_verified: Result<(), String>,
+    signal_login: impl FnOnce(),
+    then: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    vault_verified?;
+    signal_login();
+    then()
 }
 
 fn read_cached_app_user() -> Option<AppUser> {
@@ -16284,6 +16516,11 @@ pub(crate) fn hold_window_line(status: &std::process::ExitStatus) -> String {
 /// window closes there is no residue.
 ///
 /// Returns the lane's own exit code, so a caller that inspects it is unaffected.
+/// Set by `--hold-window` for the lane it runs, and passed into the forge by
+/// name (1457-r8yi): tells the entrypoint's exit_pause the host already holds
+/// the window.
+pub(crate) const HOLD_WINDOW_ENV: &str = "TILLANDSIAS_HOST_HOLDS_WINDOW";
+
 pub(crate) fn run_hold_window(args: &[String]) -> i32 {
     let argv: Vec<&String> = match args.first().map(String::as_str) {
         Some("--") => args[1..].iter().collect(),
@@ -16294,6 +16531,7 @@ pub(crate) fn run_hold_window(args: &[String]) -> i32 {
         return 2;
     };
     let status = std::process::Command::new(prog.as_str())
+        .env(HOLD_WINDOW_ENV, "1")
         .args(rest.iter().map(|a| a.as_str()))
         .status();
     let (line, code) = match status {
@@ -17293,6 +17531,11 @@ fn build_forge_agent_run_args_with_vault(
         // observe the lane that was actually launched, never an entrypoint
         // fallback. Every launch path injects this exact identity.
         .env("TILLANDSIAS_AGENT", mode.agent_identity())
+        // 1457-r8yi: `--hold-window` sets this on the host for the lane it
+        // runs; passed through BY NAME, so it reaches the forge only when the
+        // host really is holding the window, and the entrypoint's exit_pause
+        // then skips its own "Press any key" (one keypress, not two).
+        .env_passthrough(HOLD_WINDOW_ENV)
         // Order 392: agents (and the startup context) learn the host's
         // EFFECTIVE inference tier (hardware truth AND podman deliverability)
         // without probing hardware they cannot see.
@@ -17363,8 +17606,10 @@ fn build_forge_agent_run_args_with_vault(
         // it is true rather than dressed up as a broken working copy.
         eprintln!(
             "[tillandsias] [forge-launch] CLOUD MODE: no host checkout to read a seed branch \
-             from, so no TILLANDSIAS_FORGE_SEED_BRANCH is injected and the mirror HEAD falls \
-             back to UPSTREAM'S DEFAULT BRANCH (typically `main`)."
+             from, so no TILLANDSIAS_FORGE_SEED_BRANCH is injected. The forge resolves its \
+             branch itself, never from the mirror's HEAD (1362-u8ww): the discipline \
+             seed's integration branch, else its default_branch, else main/master, and \
+             prints `[forge] Seed branch: <name> — <why>` at startup."
         );
     }
     // Every OAuth-credentialed agent lane mounts a scoped Vault token so its
@@ -24344,13 +24589,44 @@ mod tests {
 
     #[test]
     fn github_login_terminal_mode_keeps_tty_allocation() {
-        let args = provider_login_exec_args(
-            "login-helper",
-            GH_LOGIN_TOKEN_SCRIPT,
-            LoginInputMode::Terminal,
-        );
+        let args = provider_login_exec_args("login-helper", "true", LoginInputMode::Terminal);
         assert!(args.iter().any(|arg| arg == "--interactive"));
         assert!(args.iter().any(|arg| arg == "--tty"));
+    }
+
+    /// ORDER 777-kyjp. NEGATIVE CONTROL for both halves of the ruling: the
+    /// production source offers NO token-paste prompt, the GitHub Terminal
+    /// branch calls the device flow, and the stdin seed still stores a token
+    /// read from stdin (not /dev/tty).
+    #[test]
+    fn github_login_has_no_paste_prompt_and_keeps_the_stdin_seed() {
+        let src = include_str!("main.rs");
+        let prod = src.split("\n#[cfg(test)]\nmod tests").next().unwrap();
+        let paste = ["Paste your GitHub ", "authentication token"].concat();
+        assert!(
+            !prod.contains(&paste),
+            "an interactive token-paste prompt is back (777-kyjp)"
+        );
+        assert!(
+            !prod.contains("read -rs TOKEN"),
+            "a hidden tty token read is back (777-kyjp)"
+        );
+        let branch = prod
+            .split("if matches!(config.provider, ProviderId::GitHub)\n        && matches!(config.input_mode, LoginInputMode::Terminal)")
+            .nth(1)
+            .expect("the GitHub Terminal branch of run_provider_login moved; re-anchor this test");
+        let branch = &branch[..branch.find("} else {").expect("branch end")];
+        assert!(
+            branch.contains("run_github_device_login("),
+            "the GitHub Terminal branch must run the device flow"
+        );
+        assert!(GH_LOGIN_STDIN_TOKEN_SCRIPT.contains("IFS= read -r TOKEN"));
+        assert!(GH_LOGIN_STDIN_TOKEN_SCRIPT.contains("--with-token"));
+        assert_eq!(
+            select_github_login_input_mode(true, true),
+            Ok(LoginInputMode::StdinToken),
+            "--with-token must still select the stdin seed even at a terminal"
+        );
     }
 
     #[test]
@@ -24748,6 +25024,81 @@ mod tests {
     }
 
     #[test]
+    fn codex_device_qr_recognizes_every_stream_split_and_only_once() {
+        use tillandsias_progress_tty::{EnvView, Tier};
+
+        let non_tty = Tier::detect(&EnvView {
+            is_tty: false,
+            term: Some("xterm-256color".into()),
+            ..EnvView::default()
+        });
+        let no_color = Tier::detect(&EnvView {
+            is_tty: true,
+            term: Some("xterm-256color".into()),
+            no_color: Some(String::new()),
+            ..EnvView::default()
+        });
+        assert_eq!(non_tty, Tier::Plain);
+        assert_eq!(no_color, Tier::Plain);
+        let uri = CODEX_DEVICE_VERIFICATION_URI.as_bytes();
+        for tier in [non_tty, no_color] {
+            for split in 0..=uri.len() {
+                let mut scanner = CodexDeviceQrScanner::new();
+                let mut first = b"Open: \r\n  ".to_vec();
+                first.extend_from_slice(&uri[..split]);
+                assert!(scanner.feed(&first, tier).is_none(), "split={split}");
+                let mut second = uri[split..].to_vec();
+                second.extend_from_slice(b" \r\nEnter code: SECRET-1234\r\n");
+                let qr = scanner
+                    .feed(&second, tier)
+                    .expect("complete URI must render");
+                assert!(qr.lines().count() >= 10, "split={split}");
+                assert!(!qr.contains('\x1b'), "plain QR must have no escapes");
+                assert!(!qr.contains("SECRET-1234"), "code must not reach QR output");
+                assert!(scanner.tail.len() <= uri.len() + 2);
+                assert!(
+                    scanner
+                        .feed(b"\nhttps://auth.openai.com/codex/device \n", tier)
+                        .is_none(),
+                    "a login renders at most one QR"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn codex_device_qr_rejects_spoofed_or_code_bearing_urls() {
+        use tillandsias_progress_tty::Tier;
+
+        for output in [
+            "device code: SECRET-1234\n",
+            "\nhttp://auth.openai.com/codex/device \n",
+            "\nhttps://auth.openai.com.evil.invalid/codex/device \n",
+            "\nhttps://auth.openai.com/codex/device?user_code=SECRET-1234 \n",
+            "\nhttps://auth.openai.com/codex/device/SECRET-1234 \n",
+            "\nhttps://evil.invalid/?next=https://auth.openai.com/codex/device \n",
+        ] {
+            let mut scanner = CodexDeviceQrScanner::new();
+            assert!(
+                scanner.feed(output.as_bytes(), Tier::Plain).is_none(),
+                "{output:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn codex_device_qr_uses_the_existing_terminal_palette() {
+        use tillandsias_progress_tty::Tier;
+
+        let mut scanner = CodexDeviceQrScanner::new();
+        let output = format!("\r\n{CODEX_DEVICE_VERIFICATION_URI}\r\n");
+        let qr = scanner
+            .feed(output.as_bytes(), Tier::TrueColor)
+            .expect("verified URL must render");
+        assert!(qr.contains("\x1b[38;2;30;74;50;48;2;157;187;165m"));
+    }
+
+    #[test]
     fn codex_login_never_uses_generic_paste_token_script() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let start = source
@@ -25043,6 +25394,85 @@ mod tests {
     /// The git identity prompt must frame itself as commit metadata, NOT a
     /// credential — the confusion this reorder exists to remove.
     /// @trace spec:gh-auth-script
+    /// 1486-y67a: the tray learns of the login BEFORE the identity prompts.
+    /// A prompt step that takes its time (an operator typing) must find the
+    /// signal already given, and the signal must not wait for it.
+    #[test]
+    fn login_signal_precedes_a_slow_prompt() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let signalled = AtomicBool::new(false);
+        let started = std::time::Instant::now();
+        let mut signal_at = None;
+        finish_github_login_steps(
+            Ok(()),
+            || {
+                signal_at = Some(started.elapsed());
+                signalled.store(true, Ordering::SeqCst);
+            },
+            || {
+                assert!(
+                    signalled.load(Ordering::SeqCst),
+                    "signal must precede the prompts"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                Ok(())
+            },
+        )
+        .expect("finishes");
+        assert!(
+            signal_at.expect("signalled") < std::time::Duration::from_millis(50),
+            "the signal must not wait on the prompt step"
+        );
+    }
+
+    /// NEGATIVE CONTROL: a failed Vault verification writes no signal and
+    /// runs no prompt.
+    #[test]
+    fn failed_vault_verify_signals_nothing() {
+        let mut signalled = false;
+        let mut prompted = false;
+        let r = finish_github_login_steps(
+            Err("vault read failed".into()),
+            || signalled = true,
+            || {
+                prompted = true;
+                Ok(())
+            },
+        );
+        assert!(r.is_err());
+        assert!(
+            !signalled && !prompted,
+            "nothing may run after a failed verify"
+        );
+    }
+
+    /// The prompt defaults are the forge identity (1453-7rzd) when the App
+    /// user is known, else the host gitconfig.
+    #[test]
+    fn identity_prompt_defaults_follow_the_forge_identity() {
+        let app = parse_app_user("162944123\toctocat\tMona Lisa").expect("parse");
+        let host = GitIdentity {
+            name: Some("Host Name".into()),
+            email: Some("host@example.com".into()),
+        };
+        assert_eq!(
+            identity_prompt_defaults(Some(&app), &host),
+            (
+                Some("Mona Lisa".into()),
+                Some("162944123+octocat@users.noreply.github.com".into())
+            )
+        );
+        let nameless = parse_app_user("7\tappuser\t").expect("parse");
+        assert_eq!(
+            identity_prompt_defaults(Some(&nameless), &host).0,
+            Some("appuser".into())
+        );
+        assert_eq!(
+            identity_prompt_defaults(None, &host),
+            (Some("Host Name".into()), Some("host@example.com".into()))
+        );
+    }
+
     #[test]
     fn git_identity_prompt_disclaims_being_a_credential() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
@@ -28081,6 +28511,16 @@ esac
                 1,
                 "{mode:?} launch must inject exactly one harness identity"
             );
+            // 1457-r8yi: the host-hold signal is passed through BY NAME (no
+            // value decided at build time), so the forge sees it only when the
+            // host's --hold-window actually set it.
+            let i = args
+                .iter()
+                .position(|a| a == HOLD_WINDOW_ENV)
+                .unwrap_or_else(|| {
+                    panic!("{mode:?} launch must pass {HOLD_WINDOW_ENV}; args={args:?}")
+                });
+            assert_eq!(args[i - 1], "--env", "{mode:?}");
         }
 
         for (mode, expected) in [
@@ -32295,6 +32735,215 @@ mod flag_surface_tests {
             missing.is_empty(),
             "dispatched from user_args but NOT in known_flags, so the allow-list \
              refuses them with `Unsupported option` before the dispatch runs: {missing:?}"
+        );
+    }
+}
+
+/// ORDER 1469-q2r3 — the forge cgroup budget reaches the REAL launch argv.
+///
+/// 981-n5vx found the old memory ceiling computed by a helper nothing called,
+/// with every test on the pure helper. ForgeBudget (1375-xxzj) is wired, but
+/// its tests are all on `podman_args()`; these assert the argv each real
+/// builder returns, and a source scan enumerates the builders so a new forge
+/// launch site without the budget fails here rather than shipping green.
+#[cfg(test)]
+mod forge_budget_argv_tests {
+    use super::*;
+    use tillandsias_core::forge_budget::ForgeBudget;
+
+    /// Every budget flag, in the builder's argv. The exact strings come from
+    /// the budget itself, so a tier change cannot desynchronise the test; the
+    /// named-flag checks keep the list from being vacuously empty.
+    fn assert_budget(what: &str, args: &[String]) {
+        let budget = ForgeBudget::for_this_host().podman_args();
+        assert!(
+            budget.iter().any(|a| a.starts_with("--memory="))
+                && budget.iter().any(|a| a.contains("memory.high="))
+                && budget.iter().any(|a| a.contains("memory.swap.max=")),
+            "ForgeBudget::podman_args() no longer names --memory / memory.high / memory.swap.max: {budget:?}"
+        );
+        for flag in &budget {
+            assert!(
+                args.contains(flag),
+                "{what}: forge launch argv is missing budget flag {flag}; argv={args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn status_check_forge_argv_carries_the_budget() {
+        let args = build_status_check_forge_args(
+            &PathBuf::from("/tmp/workspace"),
+            "alpha",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+        );
+        assert_budget("build_status_check_forge_args", &args);
+    }
+
+    #[test]
+    fn opencode_forge_argv_carries_the_budget_in_both_modes() {
+        for mode in [ForgeMode::Cli, ForgeMode::Web] {
+            let args = build_opencode_forge_args(
+                std::path::Path::new("/tmp/probe-project"),
+                Some(std::path::Path::new("/tmp/probe-project")),
+                None,
+                "probe-project",
+                None,
+                None,
+                std::path::Path::new("/tmp/probe-certs"),
+                "0.0.0-test",
+                mode,
+                None,
+                false,
+                false,
+            );
+            assert_budget(&format!("build_opencode_forge_args({mode:?})"), &args);
+        }
+    }
+
+    #[test]
+    fn agent_forge_argv_carries_the_budget_for_every_agent() {
+        for mode in [
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Antigravity,
+            ForgeAgentMode::Maintenance,
+        ] {
+            for host_mount in [false, true] {
+                let args = build_forge_agent_run_args(
+                    &PathBuf::from("/tmp/project"),
+                    "alpha",
+                    None,
+                    &PathBuf::from("/tmp/ca"),
+                    "1.2.3",
+                    mode,
+                    false,
+                    host_mount,
+                    &test_cache_root(),
+                );
+                assert_budget(
+                    &format!("build_forge_agent_run_args({mode:?}, host_mount={host_mount})"),
+                    &args,
+                );
+            }
+        }
+    }
+
+    /// The enumeration, so the list above cannot silently fall behind: every
+    /// top-level function in the non-test part of main.rs that names the forge
+    /// image must carry the budget itself or through the shared common args.
+    #[test]
+    fn every_function_that_launches_the_forge_image_carries_the_budget() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs");
+        let src = std::fs::read_to_string(&path).expect("read main.rs");
+        let prod = src
+            .split("\n#[cfg(test)]\nmod tests")
+            .next()
+            .unwrap_or(&src);
+        let is_fn_start = |l: &str| {
+            [
+                "fn ",
+                "pub fn ",
+                "pub(crate) fn ",
+                "async fn ",
+                "pub(crate) async fn ",
+                "pub async fn ",
+            ]
+            .iter()
+            .any(|p| l.starts_with(p))
+        };
+        let lines: Vec<&str> = prod.lines().collect();
+        let starts: Vec<usize> = (0..lines.len())
+            .filter(|&i| is_fn_start(lines[i]))
+            .collect();
+        let mut launchers = Vec::new();
+        let mut missing = Vec::new();
+        for (k, &s) in starts.iter().enumerate() {
+            let e = starts.get(k + 1).copied().unwrap_or(lines.len());
+            let body = lines[s..e].join("\n");
+            let name = lines[s]
+                .split("fn ")
+                .nth(1)
+                .and_then(|r| r.split(['(', '<']).next())
+                .unwrap_or("?")
+                .to_string();
+            if name == "forge_image_tag" || !body.contains("forge_image_tag(") {
+                continue;
+            }
+            launchers.push(name.clone());
+            let budgeted = body.contains("ForgeBudget::for_this_host()")
+                || body.contains("build_forge_common_args(")
+                || body.contains("build_stack_common_args(");
+            if !budgeted {
+                missing.push(name);
+            }
+        }
+        // Vacuity floor: the builders this order was filed about must be found.
+        for known in [
+            "build_status_check_forge_args",
+            "build_opencode_forge_args",
+            "build_forge_agent_run_args_with_vault",
+        ] {
+            assert!(
+                launchers.iter().any(|n| n == known),
+                "the scan no longer finds {known}; it is asserting over the wrong set: {launchers:?}"
+            );
+        }
+        assert!(
+            missing.is_empty(),
+            "forge launch builder(s) naming the forge image without the ForgeBudget flags: {missing:?}"
+        );
+    }
+}
+
+/// ORDER 778-hb3x criterion 3 — the seed-failure line the launcher surfaces.
+#[cfg(test)]
+mod mirror_seed_failure_tests {
+    use super::*;
+
+    fn lines(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn the_latest_seed_failure_is_surfaced_and_a_slow_seed_is_not_a_failure() {
+        let log = lines(&[
+            "[git-mirror] Startup: /srv/git/p has no refs but has origin. Fetching upstream to seed mirror.",
+            "[git-mirror] Seed fetch failed: fatal: unable to access 'https://x/': proxy",
+            "noise",
+            "2026-09-29T00:00:00Z [git-mirror] Seed fetch failed: UPSTREAM AUTH REFUSED — the upstream demands credentials",
+            "[git-daemon] ready",
+        ]);
+        assert_eq!(
+            last_seed_failure(&log).as_deref(),
+            Some(
+                "[git-mirror] Seed fetch failed: UPSTREAM AUTH REFUSED — the upstream demands credentials"
+            )
+        );
+        let slow = lines(&[
+            "[git-mirror] Startup: /srv/git/p has no refs but has origin. Fetching upstream to seed mirror.",
+        ]);
+        assert_eq!(last_seed_failure(&slow), None);
+        assert_eq!(last_seed_failure(&[]), None);
+    }
+
+    #[test]
+    fn a_huge_failure_line_is_bounded() {
+        let long = format!("[git-mirror] Seed fetch failed: {}", "x".repeat(5000));
+        assert_eq!(last_seed_failure(&[long]).unwrap().chars().count(), 400);
+    }
+
+    /// The marker is a cross-component interface: it must be what the mirror prints.
+    #[test]
+    fn the_marker_is_what_the_mirror_prints() {
+        // source-pin-ok: the '[git-mirror] Seed fetch failed:' marker is the mirror->gate interface; the litmus pins both ends
+        let entry = include_str!("../../../images/git/entrypoint.sh");
+        assert!(
+            entry.contains(&format!("retry_msg \"{GIT_MIRROR_SEED_FAILURE_MARKER}")),
+            "images/git/entrypoint.sh no longer prints {GIT_MIRROR_SEED_FAILURE_MARKER:?}; the launcher would never surface a seed failure"
         );
     }
 }

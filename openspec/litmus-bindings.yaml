@@ -151,7 +151,9 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:pre-push-trailer-states-what-it-saw
   - litmus:land-refusals-carry-affordance
+  - litmus:plan-fragments-lane-refusals-carry-affordance
   - litmus:decider-retirement-shape
   - litmus:cosign-arrives-verified
   - litmus:scorable-obligation-splitter
@@ -172,8 +174,10 @@ specs:
   # only because a binding names it; without this line the land-verdict fixture
   # would be a file rather than a gate.
   - litmus:land-verdict-through-a-pipe
+  - litmus:smoke-consecutive-lanes-shape
   - litmus:github-token-auto-rotation
   - litmus:mirror-upstream-auth-overwrite
+  - litmus:exit-pause-host-hold
   - litmus:covering-relay-scope-shape
   - litmus:command-policy-evaluator-shape
   - litmus:guest-binary-embed-integrity
@@ -401,6 +405,7 @@ specs:
 - spec_id: forge-environment-discoverability
   status: active
   litmus_tests:
+  - litmus:mcp-plan-resolver-pinning-shape
   - litmus:forge-environment-discoverability-shape
   - litmus:lane-observed-startup-log
   - litmus:onboarding-cold-start-discovery
@@ -499,11 +504,13 @@ specs:
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
+  - litmus:forge-seed-branch-resolution-shape
   - litmus:initialize-bare-metal-host-idempotent
   - litmus:bare-metal-lane-command-is-runnable
   - litmus:mirror-sync-state-readable
   - litmus:git-mirror-fetch-reconcile
   - litmus:git-mirror-dns-identity
+  - litmus:git-mirror-seed-failure-surfaced-shape
   - litmus:forge-clone-reachability-probe-shape
   - litmus:forge-seeds-from-salvage-ref
   - litmus:running-image-freshness
@@ -730,6 +737,8 @@ specs:
   - litmus:forge-e2e-rate-limit-shape
   - litmus:codex-e2e-launch-parity
   - litmus:smoke-lock-fd-isolation-shape
+  - litmus:smoke-agent-watch-shape
+  - litmus:landed-but-open-shape
   - litmus:meta-orchestration-dirty-tree-safety
   - litmus:meta-orchestration-opsx-sync-merge
   - litmus:openspec-cli-pin-shape
@@ -961,6 +970,7 @@ specs:
 - spec_id: spec-traceability
   status: active
   litmus_tests:
+  - litmus:no-fixture-writes-live-ledger-shape
   - litmus:spec-traceability-shape
   - litmus:spec-traceability-usage-shape
   - litmus:litmus-runner-backslash-escaping-shape
@@ -1278,6 +1288,9 @@ specs:
   - litmus:pretooluse-command-policy-shape
   - litmus:command-policy-audit-shape
   - litmus:command-policy-consent-shape
+  - litmus:fixture-git-dir-scope-shape
+  - litmus:host-kind-evidence-not-from-workspace
+  - litmus:smoke-skill-reset-env-matches-policy
   coverage_ratio: 0
   last_verified: '2026-09-27'
 - spec_id: branch-discipline

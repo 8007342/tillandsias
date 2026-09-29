@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: codex-device-login-terminal-qr
+    field: status
+    value: ready
+    ts: "2026-09-28T23:48:06Z"
+    host: linux
+
+events:
+  - packet_id: codex-device-login-terminal-qr
+    event:
+      type: note
+      ts: "2026-09-28T23:48:06Z"
+      host: linux
+      summary: |-
+        Claim released after validated work-ref push; PR #194 awaits landing on linux-next, then close with landed SHA.

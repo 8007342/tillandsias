@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-enclave-git-mirror-enforces-the-seeded-branch-discipline-at-pre-receive-refuses-the-protected-default-branch-with-the-seeded-message-and-publishes-refs-tillandsias-discipline-digest-epoch-so-a-client-can-read-the-enforced-level-without-pushing
+    field: status
+    value: completed
+    ts: "2026-09-29T05:42:07Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-enclave-git-mirror-enforces-the-seeded-branch-discipline-at-pre-receive-refuses-the-protected-default-branch-with-the-seeded-message-and-publishes-refs-tillandsias-discipline-digest-epoch-so-a-client-can-read-the-enforced-level-without-pushing
+    event:
+      type: completed
+      ts: "2026-09-29T05:42:07Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: eced00b48 (land86 relay of work/1443-uit6 393301732 plus rescue-ref-from-config relay-fix) + scripts/test-mirror-discipline.sh PASS 11 arms (gate step 610, darwin regime)
+  - packet_id: the-enclave-git-mirror-enforces-the-seeded-branch-discipline-at-pre-receive-refuses-the-protected-default-branch-with-the-seeded-message-and-publishes-refs-tillandsias-discipline-digest-epoch-so-a-client-can-read-the-enforced-level-without-pushing
+    event:
+      type: note
+      ts: "2026-09-29T05:42:07Z"
+      host: lenovinha
+      summary: |-
+        landed in land86; probe namespace out by operator ruling

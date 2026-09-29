@@ -104,6 +104,10 @@ pub struct ContainerSpec {
     memory_budget: Option<tillandsias_core::forge_budget::ForgeBudget>,
     network: Option<String>,
     env: Vec<(String, String)>,
+    /// Names passed as `--env NAME`: podman copies the value from ITS OWN
+    /// environment at run time, and sets nothing when the name is unset there
+    /// (measured, 1457-r8yi). The builder never reads the process env.
+    env_passthrough: Vec<String>,
     secrets: Vec<String>,
     mounts: Vec<MountSpec>,
     tmpfs: Vec<String>,
@@ -135,6 +139,7 @@ impl ContainerSpec {
             memory_budget: None,
             network: None,
             env: Vec::new(),
+            env_passthrough: Vec::new(),
             secrets: Vec::new(),
             mounts: Vec::new(),
             tmpfs: Vec::new(),
@@ -205,6 +210,12 @@ impl ContainerSpec {
 
     pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.env.push((key.into(), value.into()));
+        self
+    }
+
+    /// Pass `key` through from the launcher's environment (`--env KEY`).
+    pub fn env_passthrough(mut self, key: impl Into<String>) -> Self {
+        self.env_passthrough.push(key.into());
         self
     }
 
@@ -344,6 +355,10 @@ impl ContainerSpec {
             args.push("--env".to_string());
             args.push(format!("{key}={value}"));
         }
+        for key in &self.env_passthrough {
+            args.push("--env".to_string());
+            args.push(key.clone());
+        }
 
         for secret in &self.secrets {
             args.push("--secret".to_string());
@@ -459,6 +474,30 @@ pub fn canonical_or_display(path: impl AsRef<Path>) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 1457-r8yi: a pass-through name is emitted as `--env NAME` (no value, so
+    /// podman reads it from its own environment), and the hardened argv
+    /// validator still accepts the launch.
+    #[test]
+    fn env_passthrough_is_emitted_by_name_and_validates() {
+        let spec = ContainerSpec::new("example:v1")
+            .env("A", "1")
+            .env_passthrough("TILLANDSIAS_HOST_HOLDS_WINDOW");
+        let args = spec.build_run_args();
+        let i = args
+            .iter()
+            .position(|a| a == "TILLANDSIAS_HOST_HOLDS_WINDOW")
+            .expect("the name is passed");
+        assert_eq!(args[i - 1], "--env");
+        assert!(
+            !args
+                .iter()
+                .any(|a| a.starts_with("TILLANDSIAS_HOST_HOLDS_WINDOW=")),
+            "a pass-through never carries a value decided at build time"
+        );
+        spec.build_run_argv()
+            .expect("the argv validator accepts it");
+    }
 
     #[test]
     fn default_spec_includes_immutable_hardening_flags() {

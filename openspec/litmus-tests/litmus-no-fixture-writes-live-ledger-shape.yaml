@@ -1,0 +1,51 @@
+# @trace spec:spec-traceability
+name: litmus:no-fixture-writes-live-ledger-shape
+spec: spec-traceability
+phase: pre-build
+description: >
+  Order 1320-44rs. No fixture writes a probe into the checkout's OWN
+  plan/index.d or plan/loop_status.d: a probe there survives the fixture's
+  death (the preflight door SIGKILLs its group at the deadline) and the fold
+  reads it as real, as the v56.9.20.1 release gate did twice
+  (blocked:plan-ledger-incomplete). scripts/check-no-fixture-writes-live-ledger.sh
+  scans every scripts/test-*.sh, cwd-aware; fixtures plant probes in scaffolds
+  (a scratch repo or a partial worktree) and assert the live plan/ unchanged.
+  The pending-capability fixture proves a TERM mid-run exits 143 with no debris
+  and a SIGKILL leaves the live plan/ unchanged.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-no-fixture-writes-live-ledger.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-no-fixture-writes-live-ledger.sh && test -x scripts/test-no-fixture-writes-live-ledger.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "live-write shapes flagged, scaffold idioms accepted, the whole corpus clean"
+    command: "bash scripts/test-no-fixture-writes-live-ledger.sh 2>&1 | tail -n 1"
+    timeout_ms: 60000
+    expected_behavior: "PASS: no-fixture-writes-live-ledger"
+
+  - step: "the pending-capability fixture runs in a scaffold: live plan/ untouched, TERM mid-run rc 143 with no debris, SIGKILL leaves the live plan/ unchanged"
+    command: "bash scripts/test-pending-capability-row-does-not-wedge.sh 2>&1 | tail -n 1"
+    timeout_ms: 120000
+    expected_behavior: "pending-capability-row-does-not-wedge: 9 passed, 0 failed"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: "PASS: no-fixture-writes-live-ledger"
+  log_fields:
+    spec: "spec-traceability"
+    test: "no-fixture-writes-live-ledger-shape"
+    artifact: "scripts/check-no-fixture-writes-live-ledger.sh"
+
+rollback:
+  on_failure: >
+    A fixture writing the live ledger is the defect: move its probe into a
+    scaffold (see scripts/test-pending-capability-row-does-not-wedge.sh) rather
+    than trusting an exit trap, which a SIGKILL never runs.
+  command: "bash scripts/check-no-fixture-writes-live-ledger.sh"

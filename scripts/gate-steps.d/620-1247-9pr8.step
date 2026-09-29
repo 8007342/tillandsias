@@ -1,0 +1,17 @@
+# Gate step 1247-9pr8 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. ./build.sh --preflight asks the plan binary for its currency
+# once, up front, and refuses ONCE by name (refused:preflight:stale-plan-binary,
+# with WHY and REMEDY) when it is stale, instead of letting every guard that
+# resolves it refuse under its own name. Measured on yolanda 2026-09-28
+# (1462-trch): four unrelated-looking refusals, no mention of the binary.
+# The fixture cuts the block between exact-once markers and runs it against
+# stub binaries (stale, current, mute, absent). A sabotage that drops the exit
+# reds arm 1.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking preflight refuses a stale plan binary once, by name (1247-9pr8)"
+STEP_SCRIPT="scripts/test-preflight-stale-plan-binary.sh"
+STEP_ERROR="preflight no longer names a stale plan binary up front, so its guards will refuse for it under unrelated names (1247-9pr8); see which arm failed above"
+STEP_OK="preflight names a stale plan binary once and runs nothing after it"
+STEP_SECOND_REGIME="yolanda 2026-09-28 msys ok:preflight-stale-plan-binary:5/5"

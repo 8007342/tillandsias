@@ -140,13 +140,20 @@ fn extraction_discriminates_the_live_path_from_the_retired_one() {
         host_expects().contains("DynamicExpect"),
         "host window is empty or wrong"
     );
+    // RETIRED CONTROL, kept with its disproof (order 777-kyjp, 2026-09-29).
+    // This used to assert the retired paste prompt still EXISTED in the guest
+    // source, so the extraction could prove it told the live path from the
+    // dead one. 777-kyjp removed GH_LOGIN_TOKEN_SCRIPT outright, so the prompt
+    // exists nowhere and "existence in the source" can no longer mislead a pin:
+    // the old failure mode this control guarded against is gone at its root.
+    // What stays asserted: the prompt is ABSENT everywhere, and in particular
+    // from the device-flow window this test extracts.
     assert!(
-        GUEST.contains("Paste your GitHub authentication token"),
-        "the retired paste prompt is gone from the guest source; the old failure mode this \
-         pin guards against no longer exists, so review whether this control still means anything"
+        !GUEST.contains("Paste your GitHub authentication token"),
+        "the retired paste prompt is back in the guest source (777-kyjp removed it)"
     );
     assert!(
         !guest_device_login().contains("Paste your GitHub authentication token"),
-        "the device-flow window swallowed the retired paste path; the window is wrong"
+        "the device-flow window contains a paste prompt; the window is wrong"
     );
 }

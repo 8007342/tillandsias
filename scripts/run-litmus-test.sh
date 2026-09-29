@@ -19,6 +19,7 @@
 # Usage:
 #   ./scripts/run-litmus-test.sh --spec SPEC   # Scope by spec ladder shorthand
 #   ./scripts/run-litmus-test.sh [spec-name]       # Run single spec's litmus tests
+#   ./scripts/run-litmus-test.sh --test litmus:NAME  # Run exactly ONE bound test (1465-ijv3)
 #   ./scripts/run-litmus-test.sh                     # Run all specs' tests
 #   ./scripts/run-litmus-test.sh --list              # List all test suites
 #   ./scripts/run-litmus-test.sh --timeout 60        # Custom timeout in seconds
@@ -268,6 +269,50 @@ if ! command -v yq &>/dev/null && command -v toolbox &>/dev/null; then
     fi
 fi
 
+# ── ORDER 1297-2htc: the Windows host class's toolbox is the WSL builder ─────
+# A Windows host has no `toolbox`; its builder is the tillandsias-build WSL2
+# distro (scripts/with-wsl2-builder.sh), which carries yq (measured on yolanda
+# 2026-09-28: /usr/sbin/yq, v4.53.3, and the checkout is visible under
+# /mnt/c). Its Linux binary cannot run natively here, so instead of copying it
+# the runner writes a SHIM that runs it through wsl.exe: relative paths work
+# because wsl.exe maps the cwd, absolute /c/... and C:\... paths are rewritten
+# to /mnt/c/..., stdin passes through. Measured cost: ~0.84 s per call against
+# ~0.29 s for `toolbox run` on Linux, the price of a toolbox-first answer on
+# this host class rather than a host install. The shim is written only after a
+# live probe through it returns the right answer, so a missing or broken
+# builder still ends in the degraded warning below.
+case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*)
+        # TILLANDSIAS_LITMUS_NO_WSL_YQ=1 skips the shim (a seam for measuring
+        # the degraded path on a host where the builder exists).
+        if [[ "${TILLANDSIAS_LITMUS_NO_WSL_YQ:-0}" != 1 ]] \
+           && ! command -v yq &>/dev/null && command -v wsl.exe &>/dev/null \
+           && [[ ! -x "$LITMUS_RUNTIME_DIR/bin/yq" ]]; then
+            _yq_shim="$LITMUS_RUNTIME_DIR/bin/yq"
+            cat >"$_yq_shim" <<'SHIM'
+#!/usr/bin/env bash
+# yq through the tillandsias-build WSL2 distro (order 1297-2htc), written by
+# scripts/run-litmus-test.sh. Absolute Windows-side paths become /mnt/<drive>/.
+args=()
+for a in "$@"; do
+    case "$a" in
+        /[A-Za-z]/*) args+=("/mnt/$(printf '%s' "${a:1:1}" | tr 'A-Z' 'a-z')${a:2}") ;;
+        [A-Za-z]:[\\/]*) args+=("/mnt/$(printf '%s' "${a:0:1}" | tr 'A-Z' 'a-z')/$(printf '%s' "${a:3}" | tr '\\' '/')") ;;
+        *) args+=("$a") ;;
+    esac
+done
+MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' exec wsl.exe -d "${TILLANDSIAS_WSL_BUILD_DISTRO:-tillandsias-build}" -- yq "${args[@]}"
+SHIM
+            chmod 755 "$_yq_shim"
+            _yq_probe="$(printf 'a: 1\n' | "$_yq_shim" '.a' 2>/dev/null | tr -d '\r')"
+            if [[ "$_yq_probe" != "1" ]]; then
+                rm -f "$_yq_shim"
+            fi
+            unset _yq_probe
+        fi
+        ;;
+esac
+
 # ── Say so when yq is still missing (order 799-tb7q) ────────────────────────
 # A run without yq is DEGRADED and used to be indistinguishable from a clean
 # one. Measured on this host: with yq absent,
@@ -280,7 +325,15 @@ fi
 # A warning, never a refusal: a host without yq must still be able to run its
 # suite, and the metadata fallbacks are real fallbacks. The point is only that
 # the reader can tell which kind of green they are holding.
+# ORDER 1297-2htc: the degradation is also COUNTED. A banner at the top of a
+# long run is not a control: the summary names how many executed steps called
+# yq, so a reader can tell a sound green from a partial one. One line per such
+# step goes to a file (steps may run in a subshell), truncated at each run.
+LITMUS_YQ_DEGRADED_LOG="$LITMUS_RUNTIME_DIR/yq-degraded-steps"
+LITMUS_YQ_DEGRADED=0
+: >"$LITMUS_YQ_DEGRADED_LOG" 2>/dev/null || true
 if ! command -v yq &>/dev/null && [[ ! -x "$LITMUS_RUNTIME_DIR/bin/yq" ]]; then
+    LITMUS_YQ_DEGRADED=1
     printf 'warn:litmus-degraded-no-yq — yq is not on PATH and could not be provisioned from the tillandsias-builder toolbox. Steps whose commands call yq will fail or return empty. (The runner'\''s OWN metadata reads use the compiled tillandsias-plan reader when one resolves — order 746-htj9 — and fall back to grep only without it.) Install yq on the host, or create the toolbox (see scripts/with-tillandsias-builder.sh), before trusting a verdict from this run.\n' >&2
 fi
 
@@ -408,6 +461,126 @@ _yaml_jq() {
 export TILLANDSIAS_NO_SINGLETON=1
 export LITMUS_PODMAN_CALLS_FILE="${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/target/litmus-podman/calls.log}"
 
+# ORDER 1443-fpck — EVERY STEP IS A FIXTURE, AND A FIXTURE MAY NOT MINT A STAMP.
+# Each step runs with TILLANDSIAS_POLICY_REGIME=fixture, TILLANDSIAS_FIXTURE_SCOPE
+# (the checkout and TMPDIR: the git dir is carved out below, not listed) and
+# TILLANDSIAS_FIXTURE_GIT_DIRS (this checkout's git dir and common dir), so the
+# policy engine refuses a Lua fs.write/fs.mkdir or a proc.run/`run` of
+# gate-stamp.sh write, git update-ref, git push or rm into the real git dir
+# BEFORE it happens. A bash step is not an argv the engine sees, so the runner
+# also compares this checkout's `tillandsias-gate-*` files around every step:
+# a step that changed them FAILS naming refused:policy:fixture-gate-stamp-write,
+# and the bytes are restored (1442-22d2: a fixture minted a full-scope stamp
+# and four relay lands adopted it). A fixture that snapshots and restores those
+# files itself (test-gate-stamp-memoization.sh) leaves them byte-identical and
+# passes. NOT COVERED, by name: a second gate writing this checkout's stamp
+# WHILE the suite runs reads as the step's write (never gate while a
+# measurement batch is live, cheatsheets/test/litmus-fixture-writing.md).
+LITMUS_REAL_GIT_DIRS=""
+_lt_gd="$(git -C "$PROJECT_ROOT" rev-parse --absolute-git-dir 2>/dev/null)" || _lt_gd=""
+_lt_cd="$(cd "$PROJECT_ROOT" 2>/dev/null && _c="$(git rev-parse --git-common-dir 2>/dev/null)" && cd "$_c" 2>/dev/null && pwd -P)" || _lt_cd=""
+[[ -n "$_lt_gd" ]] && _lt_gd="$(cd "$_lt_gd" 2>/dev/null && pwd -P)"
+for _lt_d in "$_lt_gd" "$_lt_cd"; do
+    [[ -n "$_lt_d" ]] || continue
+    case ":$LITMUS_REAL_GIT_DIRS:" in *":$_lt_d:"*) continue ;; esac
+    LITMUS_REAL_GIT_DIRS="${LITMUS_REAL_GIT_DIRS:+$LITMUS_REAL_GIT_DIRS:}$_lt_d"
+done
+unset _lt_gd _lt_cd _lt_d
+LITMUS_FIXTURE_SCOPE="$PROJECT_ROOT:${TMPDIR:-/tmp}"
+
+# The real git dirs' gate files, one per line.
+_lt_gate_files() {
+    local d f
+    local IFS=:
+    for d in $LITMUS_REAL_GIT_DIRS; do
+        for f in "$d"/tillandsias-gate-*; do
+            [[ -f "$f" ]] && printf '%s\n' "$f"
+        done
+    done
+}
+# ORDER 1464-v3xq. Does any single-line `command:` of <test_file> INVOKE podman
+# — in command position, outside quoted prose? The trigger used to be the word
+# after a space anywhere on a command line, so litmus:expert-groundtruth-harness,
+# which grades the QUESTION 'how do I run podman rootless' inside a printf'd
+# single-quoted body, was ENV-FAILed whole before step 1 on every host whose
+# `podman ps` fails, without ever running podman (measured in a forge,
+# 2026-09-28). Prose lives in quotes, so single-quoted segments are dropped,
+# and double-quoted ones too unless they carry a command substitution
+# (`"$(podman ps)"` is a real call). Then podman must stand where a shell runs
+# a command: at the start, after ; & | ( { $( or a backtick, or after a wrapper
+# (then do else ! exec time env sudo nice nohup setsid xargs command, timeout
+# N), bare or by path. NOT SEEN, by name: podman inside a quoted `sh -c '...'`
+# string; such a test loses the early ENV-FAIL, not its verdict (its podman
+# step still fails, only slower). The corpus diff is in the 1464-v3xq commit.
+_lt_command_invokes_podman() {
+    local line cmd
+    while IFS= read -r line; do
+        cmd="${line#*command:}"
+        cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+        # The YAML scalar: drop its outer quotes, then its escapes.
+        if [[ "$cmd" == \"*\" ]]; then
+            cmd="${cmd#\"}"
+            cmd="${cmd%\"}"
+            cmd="${cmd//\\\"/\"}"
+        elif [[ "$cmd" == \'*\' ]]; then
+            cmd="${cmd#\'}"
+            cmd="${cmd%\'}"
+            cmd="${cmd//\'\'/\'}"
+        fi
+        # A script handed to a shell (`bash -lc '...'`, `sh -c "..."`) is
+        # COMMANDS, not prose: unquote it first, behind a `;` so its first
+        # word is in command position. Then drop the quoted prose.
+        cmd="$(LC_ALL=C sed -E \
+            -e "s/(-[a-zA-Z]*c[[:space:]]+)'([^']*)'/\\1;\\2;/g" \
+            -e 's/(-[a-zA-Z]*c[[:space:]]+)"([^"]*)"/\1;\2;/g' \
+            -e "s/'[^']*'/''/g" \
+            -e 's/"[^"$]*"/""/g' <<<"$cmd")"
+        # Command position; then any VAR=value words and wrappers (a wrapper
+        # may carry option, VAR=value and duration words: `systemd-run --user
+        # -p NoNewPrivileges=yes --setenv=X podman info`, `timeout 5 podman`);
+        # then podman, bare or by path, or scripts/common.sh's require_podman
+        # (which runs "$PODMAN" --version).
+        if LC_ALL=C grep -qE '(^|[;&|({`]|\$\(|(^|[[:space:]])(then|do|else|!))[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(exec|time|env|sudo|nice|nohup|setsid|xargs|timeout|systemd-run|stdbuf|ionice|chrt)([[:space:]]+(-[^[:space:]]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|[0-9]+[smhd]?))*)[[:space:]]+)*(([^[:space:];&|()]*/)?podman|require_podman)([[:space:];&|)]|$)' <<<"$cmd"; then
+            return 0
+        fi
+    done < <(LC_ALL=C grep -E '^[[:space:]]*command:' "$1" 2>/dev/null)
+    return 1
+}
+
+# _lt_gate_snapshot <dir>: copy every gate file into <dir> with an index.
+_lt_gate_snapshot() {
+    local snap="$1" f i=0
+    : >"$snap/index"
+    while IFS= read -r f; do
+        i=$((i + 1))
+        cp -p "$f" "$snap/$i" 2>/dev/null && printf '%s\t%s\n' "$i" "$f" >>"$snap/index"
+    done < <(_lt_gate_files)
+}
+# _lt_gate_restore <dir>: print every gate file the step created, changed or
+# deleted, and put the snapshot's bytes back.
+_lt_gate_restore() {
+    local snap="$1" i f rc known=$'\n'
+    while IFS=$'\t' read -r i f; do
+        known+="$f"$'\n'
+        # 0 same, 1 differs, 2 gone: anything but 0 is a change.
+        cmp -s "$snap/$i" "$f" 2>/dev/null
+        rc=$?
+        if [[ $rc -ne 0 ]]; then
+            printf '%s\n' "$f"
+            cp -p "$snap/$i" "$f" 2>/dev/null
+        fi
+    done <"$snap/index"
+    while IFS= read -r f; do
+        case "$known" in
+            *$'\n'"$f"$'\n'*) ;;
+            *)
+                printf '%s\n' "$f"
+                rm -f "$f"
+                ;;
+        esac
+    done < <(_lt_gate_files)
+}
+
 # Default timeout in seconds (can be overridden via --timeout)
 # Increased from 30s to 600s (10 min) to handle slow tray feature compilation
 # @trace spec:spec-traceability
@@ -482,6 +655,8 @@ STRICT_MODE=0
 STRICT_SPEC_LIST=""
 IGNORE_SPEC_LIST=""
 SPEC_SHORTHAND=""
+# ORDER 1465-ijv3: --test litmus:<name> runs exactly that bound test.
+TEST_SELECTOR=""
 
 # Test result tracking
 TESTS_PASSED=0
@@ -708,6 +883,21 @@ get_litmus_tests_for_spec() {
             in_current && /^- spec_id/ { exit }
         ' "$LITMUS_BINDINGS"
     fi
+}
+
+# ORDER 1465-ijv3. Every spec whose litmus_tests binds <test>, one per line,
+# read from the bindings file with the same line grammar as the awk fallback
+# above (no yq, no plan binary: the selector must answer on any host).
+get_specs_binding_test() {
+    awk -v t="$1" '
+        /^- spec_id: / { s = $0; sub(/^- spec_id: /, "", s); in_tests = 0; next }
+        /^  litmus_tests:/ { in_tests = 1; next }
+        /^  [A-Za-z_]+:/ { in_tests = 0 }
+        in_tests && /^  - / {
+            x = $0; sub(/^  - /, "", x); gsub(/["\047[:space:]]/, "", x)
+            if (x == t) print s
+        }
+    ' "$LITMUS_BINDINGS"
 }
 
 # Get all active spec IDs from bindings
@@ -1371,7 +1561,7 @@ run_litmus_test_file() {
     # report what it observed; it must not classify a failure it did not
     # diagnose. Pinned by litmus:litmus-podman-preflight-diagnosis-shape.
     if [ "$(uname -s)" = "Linux" ] \
-        && grep -qE '^[[:space:]]*command:.*(^|[ ;|&(])podman[[:space:]]' "$test_file" 2>/dev/null \
+        && _lt_command_invokes_podman "$test_file" \
         && ! grep -q '^backend: fake' "$test_file" 2>/dev/null \
         && command -v podman >/dev/null 2>&1; then
         local _preflight_err=""
@@ -1784,11 +1974,34 @@ run_litmus_test_file() {
            && step_pipeline_swallows_status "${step_command}"; then
             step_shell_prelude="set -o pipefail; "
         fi
-        LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>&1 || exit_code=$?
+        # 1297-2htc: count every executed step whose command calls yq on a run
+        # that has none, so the summary can say how much of the green is partial.
+        if [[ "$LITMUS_YQ_DEGRADED" == 1 ]] && grep -qwE 'yq' <<<"$step_command"; then
+            printf '%s#%s\n' "$test_file" "$step_index" >>"$LITMUS_YQ_DEGRADED_LOG" 2>/dev/null || true
+        fi
+        # ORDER 1443-fpck: the fixture regime and scope for this step, and the
+        # real git dir's gate files snapshotted around it.
+        local _lt_gsnap=""
+        _lt_gsnap="$(mktemp -d "${TMPDIR:-/tmp}/litmus-gate-snap.XXXXXX")" && _lt_gate_snapshot "$_lt_gsnap"
+        TILLANDSIAS_POLICY_REGIME=fixture TILLANDSIAS_FIXTURE_SCOPE="$LITMUS_FIXTURE_SCOPE" \
+            TILLANDSIAS_FIXTURE_GIT_DIRS="$LITMUS_REAL_GIT_DIRS" \
+            LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>&1 || exit_code=$?
+        local _lt_tampered=""
+        if [[ -n "$_lt_gsnap" ]]; then
+            _lt_tampered="$(_lt_gate_restore "$_lt_gsnap")"
+            rm -rf "$_lt_gsnap"
+        fi
         step_output="$(cat "$step_capture")"
         rm -f "$step_capture"
         _lt_step_record "$test_file" "$step_index" "$step_timeout_ms" "$_lt_t0_ms" "$exit_code"
         combined_output+=$'\n'"[${step_index}:${step_name}]${step_output}"
+
+        if [[ -n "$_lt_tampered" ]]; then
+            printf ' %b[FAIL]%b rc=%s refused:policy:fixture-gate-stamp-write\n' "${RED}" "${NC}" "$exit_code" >&2
+            printf '         why: the step changed the real checkout'"'"'s gate files (%s), which the pre-push hook and the land tool trust; restored\n' "$(tr '\n' ' ' <<<"$_lt_tampered")" >&2
+            printf '         remedy: run the stamp writer in a scratch repository inside the fixture scope, or snapshot and restore the files yourself as test-gate-stamp-memoization.sh does\n' >&2
+            return 1
+        fi
 
         if [[ $exit_code -eq 124 ]]; then
             printf ' %b[TIMEOUT]%b\n' "${RED}" "${NC}" >&2
@@ -2050,6 +2263,11 @@ run_tests_for_spec() {
     local spec_skipped=0
     while IFS= read -r test_name; do
         [[ -z "$test_name" ]] && continue
+        # ORDER 1465-ijv3: under --test, the spec's other tests are not part
+        # of this run at all (not skips, not not-run).
+        if [[ -n "$TEST_SELECTOR" && "$test_name" != "$TEST_SELECTOR" ]]; then
+            continue
+        fi
 
         # Skip if already executed globally (same test bound to multiple specs)
         if litmus_global_seen "$test_name"; then
@@ -2260,6 +2478,17 @@ print_summary() {
             "${YELLOW}" "${NC}" "$TESTS_BUDGET_KILLED" >&2
     fi
     printf '  %bSKIP%b:  %d (excluded from coverage)\n' "${YELLOW}" "${NC}" "$TESTS_SKIPPED" >&2
+    # 1297-2htc: printed only on a degraded run, and as a count of EXECUTED steps
+    # whose command called yq with none available: their verdicts are not
+    # trustworthy, whatever PASS says.
+    local _yq_touched=0
+    if [[ -s "$LITMUS_YQ_DEGRADED_LOG" ]]; then
+        _yq_touched="$(grep -c . "$LITMUS_YQ_DEGRADED_LOG")" || true
+    fi
+    if [[ "$LITMUS_YQ_DEGRADED" == 1 ]]; then
+        printf '  %bDEGRADED%b: %d executed step(s) mention yq with no yq available; their verdicts are not trustworthy (1297-2htc)\n' \
+            "${YELLOW}" "${NC}" "$_yq_touched" >&2
+    fi
     printf '  %bTotal%b: %d (executed: %d, skipped: %d)\n' "${BOLD}" "${NC}" "$TESTS_RUN" "$total_executed" "$TESTS_SKIPPED" >&2
     echo "" >&2
 
@@ -2590,6 +2819,18 @@ parse_args() {
                 COMPACT=1
                 shift
                 ;;
+            --test|--test=*)
+                if [[ "$1" == *=* ]]; then
+                    TEST_SELECTOR="${1#*=}"
+                    shift
+                elif [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                    TEST_SELECTOR="$2"
+                    shift 2
+                else
+                    log_fail "--test needs a test name, e.g. --test litmus:expert-groundtruth-harness"
+                    exit 3
+                fi
+                ;;
             --phase)
                 FILTER_PHASE="${2:-all}"
                 shift 2
@@ -2638,6 +2879,15 @@ parse_args() {
                 exit 3
                 ;;
             *)
+                # ORDER 1460-3gja. An EXPLICIT empty spec is a caller whose
+                # lookup came back empty, not a request for everything: stored
+                # as FILTER_SPEC="" it meant "no filter" and ran every spec
+                # (1h47m on lenovinha 2026-09-28). Omit the argument to run all.
+                if [[ -z "$1" ]]; then
+                    log_fail "empty spec name: a lookup produced nothing; refusing to run every spec"
+                    echo "refused:empty-litmus-spec-argument" >&2
+                    exit 3
+                fi
                 if [[ -z "$FILTER_SPEC" ]]; then
                     FILTER_SPEC="$1"
                 else
@@ -2791,6 +3041,30 @@ main() {
         fi
     fi
 
+    # ORDER 1465-ijv3 — --test litmus:<name>: run EXACTLY that test, through
+    # the spec that binds it, so its preflights, the fixture regime and the
+    # verdict grammar are the ones a spec run applies. A floor-tier host was
+    # reaped for memory running a whole spec to measure one test (yolanda,
+    # 1293-krrp's closure). The POSITIONAL filter still refuses a test name
+    # (764-8m5j, litmus:litmus-name-filter-hint-shape): this is a separate,
+    # explicit flag, and the two never mix.
+    if [[ -n "$TEST_SELECTOR" ]]; then
+        [[ "$TEST_SELECTOR" == litmus:* ]] || TEST_SELECTOR="litmus:${TEST_SELECTOR#litmus-}"
+        local _sel_spec
+        _sel_spec="$(get_specs_binding_test "$TEST_SELECTOR" | head -n 1)"
+        if [[ -z "$_sel_spec" ]]; then
+            printf 'refused:litmus-runner:test-not-bound:%s\n' "$TEST_SELECTOR" >&2
+            printf '  why: --test runs a test through the spec that binds it, and no spec in %s binds this one\n' "$LITMUS_BINDINGS" >&2
+            printf '  remedy: bind it under its spec in openspec/litmus-bindings.yaml, or check the name (scripts/run-litmus-test.sh --list)\n' >&2
+            exit 3
+        fi
+        if [[ -n "$FILTER_SPEC" && "$FILTER_SPEC" != "$_sel_spec" ]]; then
+            log_fail "--test $TEST_SELECTOR is bound under spec $_sel_spec, not $FILTER_SPEC"
+            exit 3
+        fi
+        FILTER_SPEC="$_sel_spec"
+    fi
+
     log_info "Tillandsias Litmus Test Runner"
     log_info "Environment: ${PROJECT_ROOT}"
 
@@ -2871,6 +3145,7 @@ main() {
     local specs_to_test
     if [[ -n "$FILTER_SPEC" ]]; then
         log_info "Running tests for spec: $FILTER_SPEC"
+        [[ -n "$TEST_SELECTOR" ]] && log_info "Selected test (--test): $TEST_SELECTOR — the spec's other tests are not run"
         specs_to_test="$(normalize_spec_list "$FILTER_SPEC")"
         if [[ "$STRICT_MODE" == "1" && -z "$STRICT_SPEC_LIST" ]]; then
             STRICT_SPEC_LIST="$FILTER_SPEC"

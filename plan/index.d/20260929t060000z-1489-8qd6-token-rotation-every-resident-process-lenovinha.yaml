@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: every-resident-tillandsias-process-runs-the-github-token-due-check-tray-lane-and-guest-listener-pinned-by-spec-and-test-so-no-entry-point-can-silently-stop-rotating
+    order: 1489-8qd6
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [vault, github, credentials, spec, fail-loud]
+    estimated_hours: 3
+    owned_files:
+      - openspec/specs/gh-auth-script/spec.md
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - crates/tillandsias-headless/src/main.rs
+      - scripts/test-github-token-rotation-entry-points.sh
+    title: |
+      the GitHub token rotation (1461-8tyy) runs from three entry points (the Linux tray, every lane via ensure_enclave_for_project, and the guest vsock listener), but no spec names them and no test pins them, so deleting any one passes every gate; its audit event also cites a tombstoned spec
+    context: |
+      Operator direction (lenovinha session, 2026-09-29): "The token rotation
+      should be in both [tray and lane], and as a durable fix in the project,
+      with ./plan and specs backing it up."
+
+      MEASURED on trunk 3440dcca1. spawn_github_token_rotation_scheduler is
+      called from three places: tray/mod.rs (the Linux tray at start),
+      main.rs ensure_enclave_for_project (every lane, tray or CLI: yoga's
+      no-tray fix in 1461-8tyy), and main.rs maybe_spawn_vsock_listener (the
+      macOS and Windows guest). test-github-token-auto-rotation.sh pins the
+      due-check LOGIC in five arms, but nothing pins the CALLERS: removing
+      any call site leaves every test green, and a host whose only resident
+      process lost its call would go back to pushes dying at 8 h, which is
+      what lenovinha hit on 2026-09-28 (mirror verdict denied/unauthenticated).
+
+      The spec gap: gh-auth-script "Token Rotation and Expiration Management"
+      (req 9c34ea81) says the token MUST rotate but not WHICH processes run
+      the check, and says the audit event is recorded "under
+      spec:secret-rotation", a spec tombstoned as obsolete by 1397-eppt. The
+      two GitHub-token audit events (github_token_refresh and
+      github_token_auto_rotation) emit spec = "secret-rotation". No runtime
+      consumer reads that field (checked with git grep).
+    exit_criteria:
+      - 'gh-auth-script gains a scenario naming the three entry points (Linux tray at start, every lane launch, the guest vsock listener), that a forge never rotates, and that a token which expired while no process ran is rotated by the next one to start'
+      - 'scripts/test-github-token-rotation-entry-points.sh FAILS when any one of the three calls is removed (a mutation arm per call site) and passes on the fixed tree; it extracts function bodies from the Rust source rather than grepping the whole file, so a call in a comment or another function does not count'
+      - 'the two GitHub-token audit events cite spec gh-auth-script, and the spec text no longer points at the tombstoned secret-rotation spec'
+    verifiable_closure: |
+      bash scripts/test-github-token-rotation-entry-points.sh exits 0 on the
+      fixed tree and each of its three mutation arms reports the removed call
+      by name; the gh-auth-script spec names all three entry points.
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixture
+      scripts/test-github-token-rotation-entry-points.sh is this row's own
+      deliverable and lands in the same commit as the spec scenario it pins.
+    events:
+      - type: filed
+        ts: "2026-09-29T06:00:00Z"
+        agent_id: linux-lenovinha-claude-20260929t060000z
+        host: lenovinha
+        summary: |-
+          Filed from lenovinha at the operator's direction after the
+          2026-09-28 mirror token lapse; three call sites measured on trunk.

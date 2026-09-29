@@ -1,0 +1,17 @@
+# Gate step 968-uhzg — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. A validator that compares a version to a bare number EXACTLY
+# (`.schema_version == 2`) makes the first schema bump unpublishable, and stays
+# latent until someone bumps (host-capability-probe.sh, lenovinha 2026-09-02).
+# scripts/check-exact-version-literal-added.sh refuses such a line when a change
+# ADDS it, unless it compares against a named constant, is a floor, or states an
+# `exact-version: <reason>`. The fixture drives the guard over scratch repos
+# (jq/shell/Rust spellings, marker, constant, floor, diff-scope negative
+# control) and runs the capability probe's own filter on a bumped schema.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking an added exact-version literal is refused unless it says why (968-uhzg)"
+STEP_SCRIPT="scripts/test-exact-version-literal-added.sh"
+STEP_ERROR="the exact-version guard no longer refuses a bare-literal version pin, or the capability probe again rejects a bumped schema (968-uhzg); see which arm failed above"
+STEP_OK="exact-version literals refused unless reasoned; capability probe admits a bumped schema"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:exact-version-literal-added-fixture:6/6"

@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-running-tray-fails-two-integration-tests-instead-of-skipping-them-so-the-gate-cannot-pass-while-the-product-runs
+    field: verifiable_closure
+    value: |-
+      cargo test -p tillandsias-macos-tray --test exec_guest_stdin reports the
+      two stdin tests as SKIPPED BY NAME and exits 0 WHEN A TRAY IS RUNNING, so
+      ./build.sh --check can go green on that host.
+
+      WITH NO TRAY RUNNING, the two tests still RUN and still assert — proven by
+      a mutation that breaks the stdin path and must red them. A skip that
+      swallows the real assertion is worse than the failure it replaces, which
+      is what makes the no-tray arm the load-bearing half.
+
+
+      [2026-09-28T22:24:35Z macos] AMENDED 2026-09-28 (tlatoanis-macbook-air): the fix EXCEEDS the named-skip closure above rather than meeting it literally. The child runs under an isolated HOME (scratch singleton lock, placeholder rootfs.img), so with a tray running the two tests are not skipped; they RUN, reach the stdin path, and assert. Closure is therefore: with a tray running, `cargo test -p tillandsias-macos-tray --test exec_guest_stdin` gives 2 passed and exits 0; `cargo test --workspace` plus check-test-baseline gives ok:test-baseline:...:new-red=0; and a mutation that makes the stdin read unbounded still reds the never-EOF test (the load-bearing half, now shown WITH a tray up rather than only without one).
+    ts: "2026-09-28T22:24:35Z"
+    host: macos
+
+events:
+  - packet_id: a-running-tray-fails-two-integration-tests-instead-of-skipping-them-so-the-gate-cannot-pass-while-the-product-runs
+    event:
+      type: progress
+      ts: "2026-09-28T22:24:35Z"
+      host: macos
+      summary: |-
+        status 'cargo test -p tillandsias-macos-tray --test exec_guest_stdin reports the
+        two stdin tests as SKIPPED BY NAME and exits 0 WHEN A TRAY IS RUNNING, so
+        ./build.sh --check can go green on that host.
+        
+        WITH NO TRAY RUNNING, the two tests still RUN and still assert — proven by
+        a mutation that breaks the stdin path and must red them. A skip that
+        swallows the real assertion is worse than the failure it replaces, which
+        is what makes the no-tray arm the load-bearing half.
+        
+        
+        [2026-09-28T22:24:35Z macos] AMENDED 2026-09-28 (tlatoanis-macbook-air): the fix EXCEEDS the named-skip closure above rather than meeting it literally. The child runs under an isolated HOME (scratch singleton lock, placeholder rootfs.img), so with a tray running the two tests are not skipped; they RUN, reach the stdin path, and assert. Closure is therefore: with a tray running, `cargo test -p tillandsias-macos-tray --test exec_guest_stdin` gives 2 passed and exits 0; `cargo test --workspace` plus check-test-baseline gives ok:test-baseline:...:new-red=0; and a mutation that makes the stdin read unbounded still reds the never-EOF test (the load-bearing half, now shown WITH a tray up rather than only without one).' (not terminal) with evidence_refs: work/1224-zpek @ a4dea7c1e
+  - packet_id: a-running-tray-fails-two-integration-tests-instead-of-skipping-them-so-the-gate-cannot-pass-while-the-product-runs
+    event:
+      type: note
+      ts: "2026-09-28T22:24:35Z"
+      host: macos
+      summary: |-
+        the isolated-HOME fix exercises the tests with a tray up, which is stronger than a named skip; state the closure it meets
