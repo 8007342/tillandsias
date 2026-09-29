@@ -421,7 +421,16 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile
     done
     if kill -0 "$_pid" 2>/dev/null; then
         kill -TERM "-$_pid" 2>/dev/null || kill -TERM "$_pid" 2>/dev/null
-        sleep 1
+        # ORDER 1496-w25b: POLL THE GRACE, do not sleep it. An unconditional
+        # `sleep 1` charged every deadline-skipped guard a full second even
+        # when its group died on TERM at once, and with 11-14 guards reaching
+        # the deadline that was 11-14 s of the front door's 150 s budget spent
+        # waiting on processes that were already gone. Same 1 s ceiling.
+        _grace=0
+        while kill -0 "$_pid" 2>/dev/null && [ "$_grace" -lt "$_per_s" ]; do
+            sleep "$_tick"
+            _grace=$((_grace + 1))
+        done
         kill -KILL "-$_pid" 2>/dev/null || kill -KILL "$_pid" 2>/dev/null
         wait "$_pid" 2>/dev/null
         return 124
@@ -814,6 +823,35 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
             echo "could-not-run:preflight:${_pf_base%.sh}:absent — the file is not in this checkout, so nothing was learned about the tree"
             _pf_cantrun=$((_pf_cantrun + 1))
             continue
+        fi
+        # ORDER 1496-w25b (coordinator ruling 2026-09-29): A GUARD MAY DECLARE
+        # ITSELF GATE-ONLY in its own header, `# preflight: gate-only — <reason>`,
+        # when running it at all costs more than the door's deadline (it drives
+        # the litmus runner, folds the ledger, builds, spawns). Such a guard
+        # reached the deadline on every run, answered nothing here and cost ~5 s
+        # each time. The declaration keeps scan-not-curate (the author says it,
+        # in the guard, as STEP_SECOND_REGIME does) and feeds the SAME
+        # declared-skip category as the table above, with the same line shape.
+        # Three limits, each enforced here: the REASON is required (a bare
+        # declaration runs anyway); only fixtures (scripts/test-*) may declare,
+        # because a check-* is a push decider the door exists to run; and the
+        # full gate still runs every declared guard.
+        _pf_gate_only="$(sed -n '1,40{s/^# preflight: gate-only[[:space:]]*//p}' "$SCRIPT_DIR/$_pf_path" | head -n 1)"
+        if [ -n "$(sed -n '1,40{/^# preflight: gate-only/p}' "$SCRIPT_DIR/$_pf_path" | head -n 1)" ]; then
+            _pf_gate_reason="$(printf '%s' "$_pf_gate_only" | sed 's/^[—-][[:space:]]*//')"
+            case "$_pf_path" in
+                scripts/test-*)
+                    if [ -n "$_pf_gate_reason" ]; then
+                        echo "skip:preflight:${_pf_base%.sh}:gate-only — $_pf_gate_reason"
+                        _pf_declskip=$((_pf_declskip + 1))
+                        continue
+                    fi
+                    echo "note:preflight:${_pf_base%.sh}:gate-only-without-a-reason — a declaration must name its cost; running it (1496-w25b)"
+                    ;;
+                *)
+                    echo "note:preflight:${_pf_base%.sh}:gate-only-ignored — a push decider cannot be gate-only at the door; running it (1496-w25b)"
+                    ;;
+            esac
         fi
 
         # OUTPUT TO A FILE, NEVER A COMMAND SUBSTITUTION. `out="$(timeout N cmd)"`

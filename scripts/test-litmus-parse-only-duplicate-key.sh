@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# preflight: gate-only — runs scripts/run-litmus-test.sh end to end (the whole litmus runner); 30 s uncapped on yoga 2026-09-29
 # @trace order:1274-cbk7, spec:spec-traceability
 #
 # THE DEFECT. Two checks answer two different questions, and the one authors
