@@ -3332,6 +3332,28 @@ if [[ "$FLAG_CHECK" == true ]]; then
     #       not drift". Same cause as the tray-contract pin fixed at ae85ee471
     #       (1022-y7kc cause 1) — one change, two stale pins, and this one sat
     #       in a target no gate ran.
+    # ORDER 1118-pifa: THIS STEP IS LOAD-BEARING. Do not skip or memoise it on
+    # its run count. It tops `skippable:` on two hosts at ~95s with fail_pct=0,
+    # but a step that never fails is as consistent with "nothing regressed" as
+    # with "tests nothing", so the question was answered by SEEDING DEFECTS
+    # (tlatoanis-macbook-air, 2026-09-28, against each cargo command this gate
+    # runs):
+    #   tillandsias-otp parse_cookie_value accepting a short cookie
+    #     clippy -D warnings: green   feature-gated pass (below): green
+    #     THIS STEP: red (otp's own unit test + router-sidecar's e2e test)
+    #   headless INIT_IMAGES dropping "web"
+    #     clippy: green   feature-gated pass: red   THIS STEP: red
+    # So every crate except the headless bin is tested ONLY here. The one
+    # overlap is small: the headless bin's default-feature suite (632 tests,
+    # ~5s) is a strict subset of the feature-gated pass (809), with no
+    # default-only tests.
+    # WHERE THE TIME GOES (the same run): one test,
+    # tillandsias-plan fragments::compaction_on_the_real_ledger_preserves_every_comment_and_item,
+    # was 117s of this step's ~196s (debug; 32s in release). It compacts a copy
+    # of the LIVE ledger, so its cost grows with plan/ rather than with the
+    # code. It is also load-bearing, and deliberately live. Speed it up
+    # (optimise that crate's test profile, or move it to a tier that owns
+    # ledger-scale checks) rather than cutting this step.
     _step "Running workspace tests (cargo test --workspace, all targets)..."
     _WS_TEST_TRANSCRIPT="$SCRIPT_DIR/target/test-transcript-workspace-gate.log"
     mkdir -p "$(dirname "$_WS_TEST_TRANSCRIPT")"
