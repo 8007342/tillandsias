@@ -156,11 +156,22 @@ base URLs. The real App is never required by any gate.
 (lowercase ASCII, `[a-z0-9-]`, no leading/trailing/double hyphen, ≤ 63) and
 `normalize_display(&str) -> Result<Display>` (same alphabet, ≤ 255); typed so
 a `Display` cannot be passed where a `Label` is required. Canonical
-constructors: `network_name()` = `tillandsias-vpn`; `team_name(account_id)`
-= `tillandsias-vpn-<acct8>`; `participant_name(hostname)` =
-`tillandsias-<host>` truncated to fit 63; `service_route(service)` =
-`<service>.tillandsias-vpn.internal`. The table and the rule sources live in
-the design note; the module's doc comment cites them.
+constructors (OPERATOR RULING 2026-09-29, superseding the first table of
+`tillandsias-vpn` / `tillandsias-vpn-<acct8>`): `network_name()` =
+`tillandsias-enclave-vpn` (account-scoped); `team_name(github_login, n)` =
+`tillandsias-enclave-vpn-<normalized login>` plus `-<n>` for n ≥ 2 on a
+collision, reported as `note:fleet-vpn:team-name-suffixed:<name>` — the
+GitHub login is public, unique and ≤ 39 chars so it fits the 63-char label,
+and no Cloudflare account id or email ever appears in a name;
+`participant_name(hostname)` = `tillandsias-<host>` truncated to fit 63;
+`service_route(service)` = `<service>.tillandsias-enclave-vpn.internal`
+(the suffix follows the network name). The login comes from
+`--github-user` or the stored GitHub bundle's user. A Zero Trust
+organization is NEVER deleted or renamed by `init`, `leave`, a fixture or
+the fake's routes: a deleted organization's team name is permanently
+reserved (Cloudflare FAQ). The App is PRIVATE (operator-only) first;
+public later, with revisions expected. The table and the rule sources live
+in the design note; the module's doc comment cites them.
 
 ## Decision 5 — the network is Cloudflare Mesh; the client runs in a sidecar beside the router, never on a host OS
 
@@ -215,7 +226,7 @@ the diff is readable; nothing in them is to be implemented.
 
 `tillandsias --fleet-vpn init` (needs the OAuth token; idempotent; every
 call is a named step with `ok:` / `skip:` / `refused:` output): resolve the
-account; ensure virtual network `tillandsias-vpn`; ensure the default device
+account; ensure virtual network `tillandsias-enclave-vpn`; ensure the default device
 profile uses MASQUE and Split Tunnels include `100.96.0.0/12`; ensure Gateway
 proxy TCP+UDP on and one network policy allowing `100.96.0.0/12 → 100.96.0.0/12`
 for the org; mint service token `tillandsias-<host>` (duration `8760h`,
@@ -269,14 +280,14 @@ serve --mint` and stored at `secret/fleet/experts` (`bearer`,
 `hub_hostname`, `url`); spokes receive it through the same
 operator-mediated path as the GitHub token today (paste on the spoke or the
 host→guest hand-over) — distributing it automatically over Cloudflare is
-out of scope for v0.6. The hub advertises `fleet-experts.tillandsias-vpn.internal`
+out of scope for v0.6. The hub advertises `fleet-experts.tillandsias-enclave-vpn.internal`
 as a Mesh hostname route pointing at itself.
 
 Spoke: `--fleet-experts status` resolves the route, GETs `/v1/models` with
 the bearer, and prints `reachable:<url>:<index_digest>` or
 `unreachable:<why>`. The forge overlay gains provider
 `tillandsias-fleet-experts` (`baseURL`
-`http://fleet-experts.tillandsias-vpn.internal:11436/v1`, `apiKey` from the
+`http://fleet-experts.tillandsias-enclave-vpn.internal:11436/v1`, `apiKey` from the
 Vault path) beside `tillandsias-experts`; the local-experts agent prompt
 says which one answered. Authorization is the bearer, not the network:
 service-token devices share one Gateway identity, so Gateway cannot tell

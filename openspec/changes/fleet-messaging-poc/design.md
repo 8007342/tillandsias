@@ -49,22 +49,32 @@ entry in every entrypoint. The verbs:
 - `msg whoami` — prints `<host>/<lane>` from `TILLANDSIAS_MSG_LANE` and the
   node name; refuses `refused:msg:no-lane` when the launcher did not export
   one (a session outside any launcher passes `--lane host` explicitly).
-- `msg send --to <host>/<lane> --kind <KIND> [--row <order>]
+- `msg send --to <addr|@group> [--to …] --kind <KIND> [--row <order>]
   [--in-reply-to <id>] [--ttl <s>] [--id <id>] < body` — validates the
-  shape and the secret check, assigns `id` and `seq`, writes
-  `outbox/tmp/<id>` then renames into `outbox/new/`, prints
-  `ok:msg:queued:<id>`; a repeated `--id` prints `skip:msg:duplicate:<id>`.
-- `msg recv [--wait <s>] [--json]` — lists `inbox/new` and `inbox/cur`
-  ordered by `(from, seq)`, moves `new` → `cur`, prints each envelope
-  (`gap:` prefixed when `seq` skips), and blocks on the wake socket when
-  `--wait` is given.
-- `msg ack <id>... [--row <order>]` — moves `cur/<id>` → `acked/`, queues
-  the `acked` receipt, and with `--row` appends the `ack` event through the
-  existing `append-event` path.
-- `msg list [--box outbox|inbox|acked|dead]`, `msg status <id>`
-  (`queued|delivered:<ts>:via:<rung>|acked:<ts>|expired:<ts>`),
-  `msg lint < body` (the shape check alone, for 1437-arjg to wrap),
-  `msg gc`.
+  shape, the secret check, the TTL bounds and the reply target, resolves
+  groups, assigns `id` and `seq`, writes `outbox/tmp/<id>` then renames
+  into `outbox/new/`, and prints `ok:msg:queued:<id>` AT ONCE — the id is
+  the stable receipt every later `status`, log line and `--in-reply-to`
+  refers to; a repeated `--id` prints `skip:msg:duplicate:<id>`.
+- `msg recv [--wait <s>] [--keep] [--json]` — lists `inbox/new` and
+  `inbox/cur` ordered by `(from, seq)`, moves `new` → `cur` (local read
+  bookkeeping, never reported to the sender; `--keep` skips the move),
+  drops anything past its TTL, prints each envelope (`gap:` prefixed when
+  `seq` skips), and blocks on the wake socket when `--wait` is given.
+- `msg list [--box outbox|inbox|dead]`, `msg status <id>` (`pending` |
+  `acked:<host>/<lane>@<ts>` then `via:<rung>` | `undelivered:<reason>`;
+  for a broadcast `broadcast:<n>` then one line per recipient), `msg lint
+  < body` (the shape check alone, for 1437-arjg to wrap), `msg gc` (the
+  TTL sweep by hand).
+
+OPERATOR RULINGS 2026-09-29 on semantics: "ACK just means the message was
+accepted by the mailbox; agents will read at their own cadence … ACK
+doesn't mean read, it means delivered." And: "An agent does 'send this to
+agent X' and near immediately gets an ACK meaning the message was
+delivered, not read. And that's it." The ack is produced by the exchange
+layer only — the mover on one host, the receiving mailbox daemon across
+hosts — after fsync; no agent, harness, inference layer or verb ever
+writes one, so there is no `ack` verb and no `msg_ack` tool.
 
 The daemon is `tillandsias --msg-serve` in `tillandsias-headless`, started
 by the Linux tray beside the control socket and by the guest headless on
@@ -74,9 +84,9 @@ listener and the peer directory. The CLI never opens a network socket.
 ## Decision 2 — the store is Maildir-shaped on the host filesystem
 
 `$XDG_STATE_HOME/tillandsias/msg/lanes/<lane>/` with `outbox/{tmp,new}`,
-`inbox/{new,cur}`, `acked/`, `dead/`, `receipts/`, `seq` (the sender's
-counter) and `seen` (the receiver's `(from, id)` set and per-sender
-high-water). Every write is `tmp` then `rename`, so a crash leaves no
+`inbox/{new,cur}`, `dead/`, `receipts/`, `seq` (the sender's counter) and
+`seen` (the receiver's `(from, id)` set and per-sender high-water). Nothing
+in it outlives its TTL (Decision 5a). Every write is `tmp` then `rename`, so a crash leaves no
 half-file and two writers cannot collide; ids are unique so a move is
 idempotent. The mover (Decision 3) is the only process that writes into an
 `inbox/new` other than its own lane's. A forge's lane directory is
@@ -85,8 +95,9 @@ bind-mounted read-write at `/run/host/tillandsias-msg` with
 the directory survives the container.
 
 Envelope (postcard on the wire, YAML on disk so a human can read a mailbox):
-`id`, `from`, `to`, `from_agent`, `seq`, `ts`, `ttl_s`, `kind`, `row`,
-`in_reply_to`, `body`. `msg_shape` (pure module, no I/O) implements the
+`id`, `from`, `to` (one address per copy), `from_agent`, `seq`, `ts`,
+`ttl_s`, `broadcast` (true when the send resolved to more than one
+recipient), `kind`, `row`, `in_reply_to`, `body`. `msg_shape` (pure module, no I/O) implements the
 budget (≤ 600 bytes, ≤ 8 lines, line 1 `<KIND>:<subject>:<clause>`, every
 other line `- ` plus a ref: 7+ hex, an order token, `work/<order>` or a
 path) and `secret_shaped(&str) -> Option<&'static str>` (the pattern list in
@@ -101,12 +112,15 @@ verifies `from.lane` equals the lane whose directory the file sits in
 (overwriting is not done: a mismatch is `refused:msg:from-lane-mismatch` to
 `dead/` with a log line — a lane that lies is evidence, not a typo), runs
 `secret_shaped` again (a lane can write its outbox directory directly,
-bypassing the CLI), hard-links into the destination's `inbox/new`, writes
-`receipts/<id>` = `delivered:<ts>:via:local` in the sender's lane, and pokes
+bypassing the CLI), hard-links into the destination's `inbox/new`, fsyncs
+the file and the directory, writes `receipts/<id>` =
+`acked:<host>/<lane>@<ts>` plus `via:local` in the sender's lane, and pokes
 the wake socket `$XDG_RUNTIME_DIR/tillandsias/msg.sock` (one byte per
-delivery; `recv --wait` reads it). `<host>/*` fans out to every lane
-directory present. Bare-metal sessions share the lane `host` (one uid, one
-domain — open question 2 in the design note).
+delivery; `recv --wait` reads it). The group `@<host>/*` is resolved here,
+to every lane directory present, one receipt per lane; the mover also
+refuses an envelope whose `in_reply_to` names a broadcast copy it holds
+(Decision 5b) and sweeps every mailbox at TTL (Decision 5a). Bare-metal sessions share the
+lane `host` (one uid, one domain — open question 2 in the design note).
 
 ## Decision 4 — hosts authenticate with Noise XX pinned to a directory in the tree
 
@@ -126,21 +140,68 @@ refused naming it. mDNS (`_tillandsias-msg._tcp`, TXT `host=`, `fp=`) is a
 hint that fills the address; a hint whose `fp` is not in the directory is
 ignored and counted.
 
-## Decision 5 — the LAN rung is store-and-forward with two receipt levels
+## Decision 5 — the LAN rung is store-and-forward with one receipt: the mailbox's ack
 
 For a remote destination the daemon resolves the peer (directory
 `lan_hints`, then mDNS, then `mesh_ip`), opens a session, sends the
-envelope, and waits for `stored` (the receiving daemon has renamed it into
-the destination lane's `inbox/new` and recorded `(from, id)` in `seen`).
-Only then does the sender's outbox entry become `receipts/<id>` =
-`delivered:<ts>:via:lan|mesh`. Failure retries with backoff 1 s doubling to
-60 s until `ttl_s`, then `dead/` and `expired:`. The receiving daemon
-refuses `from.host` ≠ the authenticated peer (`refused:msg:from-host-mismatch`),
-drops a seen id silently while still answering `stored`, and drops a `seq`
-more than 1,000 behind the high-water. When the destination agent runs `msg
-ack`, the receiving daemon sends an `acked` receipt back over a session to
-the origin host; that flips `receipts/<id>` to `acked:<ts>`. `msg status`
-reads the receipt file, never guesses.
+envelope, and waits for `ack` — the receiving daemon has renamed it into
+the destination lane's `inbox/new`, fsync'd the file and the directory,
+and recorded `(from, id)` in `seen`. Only then does the sender's outbox
+entry become `receipts/<id>` = `acked:<host>/<lane>@<ts>` with
+`via:lan|mesh`. Failure retries with backoff 1 s doubling to 60 s until
+`ttl_s`, then `dead/` and `undelivered:expired` — the only failure there
+is, apart from a positive refusal by the destination mailbox
+(`undelivered:refused:<verdict>`). A broadcast runs this loop once per
+recipient.
+The receiving daemon refuses `from.host` ≠ the authenticated peer
+(`refused:msg:from-host-mismatch`), absorbs a seen id silently while still
+answering `ack`, and drops a `seq` more than 1,000 behind the high-water.
+Whether and when the destination agent runs `msg recv` is invisible to
+the sender by design. `msg status` reads the receipt file, never guesses.
+
+## Decision 5a — the queue is ephemeral: every message carries a bounded TTL
+
+Default `ttl_s` = 86,400 (24 h). Bounds: 60 ≤ `ttl_s` ≤ 604,800 (7 d);
+outside them `send` refuses `refused:msg:ttl-out-of-bounds:<v>:min=60:max=604800`.
+Why these numbers: the fleet's slowest scheduled reader is a host slot every
+two hours and a coordinator full cycle every four (`multi-host-development.yaml`
+slot table), Codex sessions are operator-launched roughly daily, and a
+laptop host is closed overnight — 24 h covers all of those and is the
+longest a heads-up is still about current work. The minimum equals the
+retry backoff cap (60 s), so any message survives at least one retry after
+a daemon restart; a shorter TTL would be a message that can expire between
+two retries and never be tried at all. The maximum is a week because a
+message older than that describes work the ledger has already recorded —
+the ledger is the durable record, the queue is not — and it bounds every
+mailbox and receipt store by construction. Expiry before any ack is
+`undelivered:expired` (the sender's `dead/`); a message a mailbox positively
+refuses is `undelivered:refused:<verdict>`. In the mailbox a message, read
+or unread, is dropped at its TTL by the daemon's sweep and by `recv`
+itself, and `recv` never prints an expired one. Receipts live 604,800 s
+after their terminal state, then `status` answers `unknown:receipt-expired`.
+This replaces the earlier 7-day/30-day retention rule entirely.
+
+## Decision 5b — broadcasts ack per recipient and are never replied to
+
+`--to` may repeat, and may name a group: `@all-hosts` (the `host` lane of
+every host in `plan/fleet/peers/`), `@<host>/*` (every lane directory
+present on that host at delivery time; the mover resolves it), or any name
+in `plan/fleet/groups.yaml` — a committed map from `@<name>` to a list of
+addresses or groups, defined in the tree exactly as peers are, so a group
+is a landing, not a runtime claim. More than one resolved recipient makes
+the send a broadcast: one receipt id, `broadcast: true` on every copy, and
+one independent ack per destination mailbox; `status` prints
+`broadcast:<n>` and a line per recipient (`acked:<mailbox>@<ts>`,
+`pending:<mailbox>`, `undelivered:<reason>:<mailbox>`). Replies: a send
+with `--in-reply-to <id>` is checked at the CLI against the local inbox
+copy (the recipient side) or the local receipt (the sender side); a
+broadcast id is refused `refused:msg:reply-to-broadcast:<id>:a broadcast
+has no single counterpart; send a new message to <from address> instead`,
+and an id unknown locally is `refused:msg:unknown-reply-target:<id>`. The
+exchange layer enforces the same rule a second time — the mover and the
+receiving daemon refuse an envelope whose `in_reply_to` names a broadcast
+they hold — so a lane writing its outbox directly gets
+`undelivered:refused:reply-to-broadcast`. Both sites are tested.
 
 ## Decision 6 — the Cloudflare rung is a sidecar in the router's network namespace, measured first
 
@@ -173,13 +234,18 @@ calls no billing route, and refuses `refused:fleet-vpn:paid-feature:<step>`.
 
 ## Decision 7 — the ledger stays the record; the inbox file retires
 
-`msg ack --row` writes the `ack` event the Codex inbox asked for by hand;
-an expiry writes `undelivered` on the row; `plan/inbox/codex.md` becomes a
-pointer to `msg recv`; `plan_only_peers` gains step 0 (`tillandsias-plan msg
-recv` at session start, `msg ack` after reading) with everything else
-unchanged; the Codex and OpenCode forge entrypoints print pending messages
-at start. The 600-byte budget is the same rule in both places, so 1437-arjg
-can close by wrapping `msg lint`.
+When a message that named a row reaches `undelivered:expired`, the SENDING
+DAEMON writes an `undelivered` event on that row (id, mailbox, TTL) — the
+only message outcome the ledger records, and written by the infrastructure,
+never by an agent; an ack writes nothing, because the mailbox's acceptance
+is not a fact about the work.
+The hand-appended `ACK:` note the Codex inbox asked for disappears with the
+inbox: `plan/inbox/codex.md` becomes a pointer to `msg recv`;
+`plan_only_peers` gains step 0 (`tillandsias-plan msg recv` at session
+start, at the peer's own cadence) with everything else unchanged; the Codex
+and OpenCode forge entrypoints print pending messages at start. The
+600-byte budget is the same rule in both places, so 1437-arjg can close by
+wrapping `msg lint`.
 
 ## Risks
 
@@ -187,8 +253,9 @@ can close by wrapping `msg lint`.
   firewall failure shape; the outcome is measured, and the PoC does not
   depend on it.
 - One shared bare-metal mailbox per host hides which session read a
-  message; `from_agent` on the `ack` event carries the session id, which is
-  the attribution the ledger already uses.
+  message; since reading is local bookkeeping that is never reported, the
+  only attribution that matters is `from_agent` on what a session SENDS,
+  which is the session id the ledger already uses.
 - mDNS on by default advertises host names and fingerprints on the LAN
   (public keys only); open question 3 offers directory-only discovery.
 - A peer key lives in the tree: rotating it is a landing plus a `--mint

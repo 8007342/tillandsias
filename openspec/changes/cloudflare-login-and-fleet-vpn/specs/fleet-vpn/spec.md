@@ -9,12 +9,23 @@ hostname-route labels and participant names are subject to) and
 `normalize_display` (same alphabet, at most 255 characters — the largest
 documented cap, 256 for a virtual network name, minus one for safety), with
 distinct result types so a `Display` cannot be passed where a `Label` is
-required. It SHALL provide the canonical constructors `network_name()` =
-`tillandsias-vpn`, `team_name(account_id)` = `tillandsias-vpn-<first 8 hex
-of the account id>`, `participant_name(hostname)` = `tillandsias-<normalized
-hostname>` truncated to 63, and `service_route(service)` =
-`<service>.tillandsias-vpn.internal`. Any input that normalizes to the empty
-string SHALL be refused, never defaulted.
+required. It SHALL provide the canonical constructors (operator ruling
+2026-09-29, superseding the earlier `tillandsias-vpn` / `tillandsias-vpn-<acct8>`
+table) `network_name()` = `tillandsias-enclave-vpn`,
+`team_name(github_login, suffix)` = `tillandsias-enclave-vpn-<normalized
+GitHub login>` with `-2`, `-3`… appended when `suffix` is greater than 1
+(the GitHub login is public, unique and at most 39 characters, so the label
+fits 63; no Cloudflare account id or email ever appears in a name),
+`participant_name(hostname)` = `tillandsias-<normalized hostname>` truncated
+to 63, and `service_route(service)` =
+`<service>.tillandsias-enclave-vpn.internal` (the route suffix follows the
+network name). Any input that normalizes to the empty string SHALL be
+refused, never defaulted.
+
+#### Scenario: the team name is the GitHub login, suffixed only on collision
+
+- **WHEN** `team_name("BullonCito", 1)` and `team_name("BullonCito", 2)` are called
+- **THEN** they return `tillandsias-enclave-vpn-bulloncito` and `tillandsias-enclave-vpn-bulloncito-2`
 
 #### Scenario: a hostname with spaces and case becomes a label
 
@@ -24,7 +35,7 @@ string SHALL be refused, never defaulted.
 #### Scenario: the network name is fixed
 
 - **WHEN** `network_name()` is called on any host
-- **THEN** it returns `tillandsias-vpn`
+- **THEN** it returns `tillandsias-enclave-vpn`
 
 #### Scenario: an over-long hostname is truncated to a valid label
 
@@ -35,9 +46,17 @@ string SHALL be refused, never defaulted.
 ### Requirement: fleet-vpn init is idempotent and names its steps
 
 `tillandsias --fleet-vpn init` SHALL, using the stored Cloudflare bundle:
-resolve the account; verify the Zero Trust organization `team_name(account)`
-exists and otherwise refuse with `refused:fleet-vpn:no-zero-trust-org:<team_name>`
-naming the dashboard step; ensure the virtual network `tillandsias-vpn`;
+resolve the account; obtain the GitHub login from `--github-user <login>` or,
+absent that, from the stored GitHub bundle's user; read the account's Zero
+Trust organization and accept it iff its team name is
+`team_name(login, n)` for some n, printing
+`note:fleet-vpn:team-name-suffixed:<name>` when n is greater than 1;
+otherwise refuse with `refused:fleet-vpn:no-zero-trust-org:<team_name>`
+naming the dashboard step (create the organization by hand with that exact
+team name; on a collision take the next suffix and report it). Neither
+`init`, `leave` nor any fixture SHALL delete or rename a Zero Trust
+organization: a deleted organization's team name is permanently reserved;
+the fake's ledger SHALL never record a DELETE on the organization route; ensure the virtual network `tillandsias-enclave-vpn`;
 ensure the default device profile uses MASQUE and its Split Tunnels route
 `100.96.0.0/12` through Cloudflare; ensure the Gateway proxy is on for TCP and
 UDP and one network policy allows `100.96.0.0/12` to `100.96.0.0/12`; mint a
@@ -58,8 +77,18 @@ Mesh node and service-token counts it read. The API base SHALL come from
 #### Scenario: a missing organization is a dashboard remedy, not a stack trace
 
 - **WHEN** the fake reports no Zero Trust organization
-- **THEN** stdout is `refused:fleet-vpn:no-zero-trust-org:tillandsias-vpn-<acct8>`
+- **THEN** stdout is `refused:fleet-vpn:no-zero-trust-org:tillandsias-enclave-vpn-<github_login>`
   followed by the dashboard step, and no service token is minted
+
+#### Scenario: a suffixed organization is accepted and reported
+
+- **WHEN** the fake's organization is named `tillandsias-enclave-vpn-<github_login>-2`
+- **THEN** init prints `note:fleet-vpn:team-name-suffixed:tillandsias-enclave-vpn-<github_login>-2` and continues
+
+#### Scenario: the organization is never deleted
+
+- **WHEN** `--fleet-vpn leave` and every fixture in this change run against the fake
+- **THEN** the fake's ledger holds no DELETE or rename on the organization route
 
 ### Requirement: the Cloudflare One Client runs in a sidecar beside the router, never on a host OS
 

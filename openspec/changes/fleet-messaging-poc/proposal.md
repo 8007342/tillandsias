@@ -38,10 +38,17 @@ Two facts fix the shape:
   host filesystem bind-mounted into forges, a resident `tillandsias
   --msg-serve` that moves messages between lanes on one host and carries
   them to peers over TCP with Noise XX pinned to `plan/fleet/peers/`,
-  at-least-once delivery with `delivered` and `acked` receipts, idempotent
-  ids, per-sender sequence, the 600-byte/8-line shape budget and a
+  at-least-once delivery with ONE receipt produced by the infrastructure
+  only — `ack` means the recipient's mailbox durably accepted the message,
+  never that an agent read it, and no agent can write one (operator
+  rulings 2026-09-29) — a stable receipt id returned by `send` at once,
+  idempotent ids deduplicated by the mailbox, per-sender sequence, an
+  ephemeral queue with a bounded TTL per message (default 24 h, 60 s to
+  7 d), broadcasts to lists and tree-defined groups with one ack per
+  recipient and a refused reply, the 600-byte/8-line shape budget and a
   secret-shaped body refusal enforced at two sites, and ledger integration
-  (`ack` and `undelivered` events on the named row).
+  (a daemon-written `undelivered` event on the named row on expiry;
+  nothing else).
 - **MODIFIED** (in `cloudflare-login-and-fleet-vpn`, Decision 5 and the
   `fleet-vpn` delta): no host OS runs `warp-svc`. The Cloudflare One Client
   runs in a dedicated `tillandsias-warp` sidecar container that shares the
