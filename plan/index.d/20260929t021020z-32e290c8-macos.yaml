@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-trays-show-provisioning-progress-only-as-a-37-char-status-chip
+    event:
+      type: progress
+      ts: "2026-09-29T02:10:20Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t021020z
+      host: macos
+      summary: |
+        OPERATOR OBSERVATION, macOS half: SEEN. Cold provision relaunched 2026-09-29T01:56:50Z on tlatoanis-macbook-air (operator-approved wipe; tray 1ffb606bc = trunk carrying the landed macOS slice 19230b0a8, plus 1472-3d29), operator watching the menu bar. Operator's words: "I saw those pretty graph bars!! They were very quick, I could barely see them for a second or two. I think there were two bars back to back, but they filled in too quick. This is fine, we don't want to be too invasive in the panel spamming info, those bars were fantastic". So the first-provision progress renders in the menu bar from typed events, and the operator accepts a brief display. Operator's forward note, not a criterion: later, container initialisation may push its own bars there.
+        The macOS half is observed and accepted. The Windows half is still open.

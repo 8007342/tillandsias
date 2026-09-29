@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-tray-consumes-github-login-stored-instead-of-polling-for-the-login
+    event:
+      type: progress
+      ts: "2026-09-29T01:44:05Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t014404z
+      host: macos
+      summary: |
+        OPERATOR MEASUREMENT, 2026-09-29 ~01:43Z, tlatoanis-macbook-air, tray and guest 1ffb606bc (trunk + 1472-3d29) on a freshly cold-provisioned VM with no prior login. Operator's words: "I've just ran the github authentication flow, and the remote projects were listed near immediately".
+        TRAY LOG (tray.log has no timestamps), in order: click id=github-login action=GithubLogin; attach worker spawned; PTY attached at /dev/ttys001; then "github-login: menu_state updated" IMMEDIATELY followed by "cloud-projects: menu_state updated (14 entries)". The login state and the 14 remote projects reached the menu together. A watcher sampling the log every 15 s saw both in the SAME tick and stamped 2026-09-29T01:43:23Z, so both landed within 15 s of each other and within 15 s before that stamp.
+        NOT MEASURED: an exact seconds-to-handle figure. The operator gave a qualitative "near immediately", not a stopwatch number, and the log carries no timestamps. It is far inside any 60 s bound.
