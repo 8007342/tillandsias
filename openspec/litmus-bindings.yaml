@@ -221,6 +221,15 @@ specs:
   - litmus:gate-stamp-portable-digest
   - litmus:macos-portability-residuals
   - litmus:sidecar-arch-derivation
+  # 1505-svve / 1505-kyx8. No cloudflare-auth spec_id exists yet (the
+  # openspec/changes/cloudflare-login-and-fleet-vpn/ change has not been
+  # archived into openspec/specs/), so these bind here per the fallback
+  # scripts/check-added-test-is-referenced.sh names: a script's basename
+  # must appear in a bound litmus yaml or it cannot fail a gate.
+  - litmus:fake-cloudflare
+  - litmus:cloudflare-oauth-core
+  - litmus:cloudflare-token-rotation
+  - litmus:cloudflare-login
   coverage_ratio: 75
   last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher

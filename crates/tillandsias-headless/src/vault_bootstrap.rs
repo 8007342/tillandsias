@@ -1686,6 +1686,753 @@ pub fn spawn_github_token_rotation_scheduler(
         });
 }
 
+// ── Order 1505-iysn: the Cloudflare OAuth bundle in Vault, and its rotation ──
+//
+// @trace order:1505-iysn, openspec/changes/cloudflare-login-and-fleet-vpn/design.md (Decision 2)
+// @trace openspec/changes/cloudflare-login-and-fleet-vpn/specs/cloudflare-auth/spec.md
+//
+// SIBLINGS of the GitHub items above, not a generalization of them (design
+// Decision 2): the GitHub code is under a live p0 and the two providers have
+// different lifetimes. What is REUSED is the machinery: the same Vault (root
+// token, stability lease, read-back verification), the same host-wide
+// advisory lock (`resource_lock`), the same "refresh record first" ordering
+// rule and the same three resident entry points (tray start, every lane
+// launch, the guest listener).
+//
+// What is STRICTER than the GitHub sibling, deliberately, because this is a
+// new credential with no legacy callers:
+// - The live store FAILS CLOSED: an unreachable, sealed or refusing Vault is a
+//   named error (`vault-unavailable`, `vault-sealed`, `vault-unauthorized`),
+//   never "no token", and a refresh-path read error is never read as "no
+//   refresh token". There is no file, keychain or plaintext fallback anywhere
+//   on this path.
+// - No error string, verdict or `Debug` output carries token bytes: Vault and
+//   OAuth failures are reduced to fixed reason tokens before they leave this
+//   block (`cloudflare_refresh_failure_reason`, `cloudflare_vault_reason`),
+//   and `CloudflareTokenBundle`'s `Debug` redacts both tokens.
+// - The token endpoint must be https (plain http only to loopback, which is
+//   where the fixtures' fake lives), so the refresh token is never sent in
+//   clear to a host a discovery document named.
+
+/// Where the Cloudflare OAuth credential lives in Vault. TWO PATHS for the
+/// GitHub reason: KV v2 policies are path-scoped, not field-scoped, so the
+/// long-lived refresh token gets a path no reader of the access token can be
+/// granted by accident. Only the host's resident process (root token; the
+/// `tray` policy's `secret/*`) reads the refresh path; no forge, mirror,
+/// inference or login-container policy names anything under
+/// `secret/data/cloudflare/` (asserted by
+/// `cloudflare_token_rotation_policies_keep_forges_out`).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const CLOUDFLARE_TOKEN_PATH: &str = "secret/cloudflare/token";
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const CLOUDFLARE_REFRESH_PATH: &str = "secret/cloudflare/refresh";
+
+/// The Cloudflare bundle as the two records hold it.
+///
+/// `expires_at` is `Some` only when Cloudflare reported `expires_in` (token
+/// lifetimes are undocumented, design Risks): a bundle without it is never
+/// rotated on a guess, and the surfaces say "expiry unknown".
+///
+/// NO `Display`, and a hand-written `Debug` that redacts both tokens: a bundle
+/// that reaches a log line, a panic message or an `{:?}` in an error must not
+/// carry a credential with it.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct CloudflareTokenBundle {
+    pub access_token: String,
+    pub expires_at: Option<u64>,
+    pub account_id: Option<String>,
+    pub client_id: String,
+    pub refresh_token: Option<String>,
+    pub refresh_token_expires_at: Option<u64>,
+}
+
+impl std::fmt::Debug for CloudflareTokenBundle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CloudflareTokenBundle")
+            .field("access_token", &"<redacted>")
+            .field("expires_at", &self.expires_at)
+            .field("account_id", &self.account_id)
+            .field("client_id", &self.client_id)
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| "<redacted>"),
+            )
+            .field("refresh_token_expires_at", &self.refresh_token_expires_at)
+            .finish()
+    }
+}
+
+/// The token-path record: `access_token`, `expires_at` (when known),
+/// `account_id` (when known), `client_id`. Never the refresh token.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_token_record(b: &CloudflareTokenBundle) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    map.insert("access_token".into(), b.access_token.clone().into());
+    if let Some(exp) = b.expires_at {
+        map.insert("expires_at".into(), exp.into());
+    }
+    if let Some(acct) = &b.account_id {
+        map.insert("account_id".into(), acct.clone().into());
+    }
+    map.insert("client_id".into(), b.client_id.clone().into());
+    serde_json::Value::Object(map)
+}
+
+/// The refresh-path record: `refresh_token`, `refresh_token_expires_at` (when
+/// reported), `client_id`. `None` for a bundle without a refresh token.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_refresh_record(b: &CloudflareTokenBundle) -> Option<serde_json::Value> {
+    let rt = b.refresh_token.as_ref().filter(|s| !s.is_empty())?;
+    let mut map = serde_json::Map::new();
+    map.insert("refresh_token".into(), rt.clone().into());
+    if let Some(rexp) = b.refresh_token_expires_at {
+        map.insert("refresh_token_expires_at".into(), rexp.into());
+    }
+    map.insert("client_id".into(), b.client_id.clone().into());
+    Some(serde_json::Value::Object(map))
+}
+
+/// Vault as the Cloudflare rotation sees it. A trait so the ordering, lock and
+/// failure rules are testable against an in-memory store; the only production
+/// implementation is [`VaultCloudflareTokenStore`], and nothing in production
+/// selects another one (no env switch, no fallback store).
+///
+/// Errors are REASON TOKENS (`vault-sealed`, `write-not-confirmed`, ...), never
+/// a Vault response body and never a record's contents.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub trait CloudflareTokenStore {
+    /// `Ok(None)` ONLY when Vault answered that the token record does not
+    /// exist. Unreachable, sealed or refusing is `Err`.
+    fn read_bundle(&self) -> Result<Option<CloudflareTokenBundle>, String>;
+    /// Write one record and CONFIRM it (read back and compare); `Ok` means the
+    /// record is durably in Vault.
+    fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String>;
+    /// Destroy one record, EVERY version (1505-kc5f `--cloudflare-logout`), and
+    /// CONFIRM it is gone. Idempotent: an absent record is `Ok`. Unreachable,
+    /// sealed or refusing is `Err` — never read as "already deleted".
+    fn delete_record(&self, path: &str) -> Result<(), String>;
+}
+
+/// Delete the Cloudflare bundle (1505-kc5f `--cloudflare-logout`): the
+/// long-lived REFRESH record first, then the token record, and NOTHING else —
+/// `secret/cloudflare/mesh` (the host's fleet-vpn service token) is not this
+/// bundle and is never touched here.
+///
+/// Errors name which record is still present:
+/// `refresh-record-delete-failed:<reason>` (both records remain) or
+/// `token-record-delete-failed:<reason>` (the refresh record is gone, so the
+/// remaining access token can no longer be renewed and dies at its expiry).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn delete_cloudflare_token_bundle(store: &dyn CloudflareTokenStore) -> Result<(), String> {
+    store
+        .delete_record(CLOUDFLARE_REFRESH_PATH)
+        .map_err(|e| format!("refresh-record-delete-failed:{e}"))?;
+    store
+        .delete_record(CLOUDFLARE_TOKEN_PATH)
+        .map_err(|e| format!("token-record-delete-failed:{e}"))
+}
+
+/// How many times the refresh-record write is attempted before the rotation
+/// gives up. Once Cloudflare has answered a refresh, the OLD refresh token is
+/// spent (refresh-token rotation) and the new one exists only in this
+/// process: a transient Vault hiccup at that moment must not cost the
+/// operator a login. The write is idempotent, so retrying it is safe.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+const CLOUDFLARE_REFRESH_WRITE_ATTEMPTS: u32 = 3;
+
+/// Write a bundle: the REFRESH record first, then the token record — the
+/// GitHub failure rule ([`store_github_token_bundle`]).
+///
+/// - Refresh write fails (after [`CLOUDFLARE_REFRESH_WRITE_ATTEMPTS`]):
+///   NOTHING in Vault changed; the old pair is intact. Error
+///   `refresh-record-write-failed:<reason>`.
+/// - Token write fails afterwards: Vault holds the NEW refresh token and the
+///   OLD access-token record, whose `expires_at` is still inside the window,
+///   so the next due-check rotates again with the new refresh token. At no
+///   point is neither credential stored. Error
+///   `token-record-write-failed:<reason>`.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn store_cloudflare_token_bundle(
+    store: &dyn CloudflareTokenStore,
+    bundle: &CloudflareTokenBundle,
+) -> Result<(), String> {
+    if bundle.access_token.is_empty() || bundle.client_id.is_empty() {
+        return Err("bundle-incomplete".into());
+    }
+    if let Some(refresh) = cloudflare_refresh_record(bundle) {
+        let mut last = String::new();
+        let mut stored = false;
+        for attempt in 1..=CLOUDFLARE_REFRESH_WRITE_ATTEMPTS {
+            match store.write_record(CLOUDFLARE_REFRESH_PATH, refresh.clone()) {
+                Ok(()) => {
+                    stored = true;
+                    break;
+                }
+                Err(e) => {
+                    last = e;
+                    if attempt < CLOUDFLARE_REFRESH_WRITE_ATTEMPTS {
+                        std::thread::sleep(std::time::Duration::from_millis(
+                            250 * u64::from(attempt),
+                        ));
+                    }
+                }
+            }
+        }
+        if !stored {
+            return Err(format!("refresh-record-write-failed:{last}"));
+        }
+    }
+    store
+        .write_record(CLOUDFLARE_TOKEN_PATH, cloudflare_token_record(bundle))
+        .map_err(|e| format!("token-record-write-failed:{e}"))
+}
+
+/// A Vault client error reduced to a fixed reason token. The variants' payloads
+/// (Vault response bodies, `missing data.data in response: {envelope}`) are
+/// DROPPED: an envelope can hold a record's contents.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_vault_reason(e: &VaultError) -> &'static str {
+    match e {
+        VaultError::Network(_) => "vault-unavailable",
+        VaultError::Unauthorized(_) => "vault-unauthorized",
+        VaultError::Sealed(_) => "vault-sealed",
+        VaultError::NotFound(_) => "vault-not-found",
+        VaultError::Other(_) => "vault-error",
+    }
+}
+
+/// The live store: the same Vault, root token, stability lease and client the
+/// GitHub store uses. Fails closed on every path (see [`CloudflareTokenStore`]).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub struct VaultCloudflareTokenStore {
+    pub debug: bool,
+}
+
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+impl VaultCloudflareTokenStore {
+    fn client(
+        &self,
+    ) -> Result<
+        (
+            crate::resource_lock::ResourceLockGuard,
+            crate::RuntimeOrHandle,
+            VaultClient,
+        ),
+        String,
+    > {
+        let debug = self.debug;
+        let stability = vault_stability_lease(debug).map_err(|_| "vault-lease".to_string())?;
+        let rt = tokio_runtime().map_err(|_| "vault-runtime".to_string())?;
+        let root_token = read_and_handover_root_token(debug)
+            .map_err(|_| "vault-root-token-unavailable".to_string())?;
+        let client = vault_client(&vault_api_base_url(), &root_token, debug)
+            .map_err(|_| "vault-unavailable".to_string())?;
+        Ok((stability, rt, client))
+    }
+}
+
+impl CloudflareTokenStore for VaultCloudflareTokenStore {
+    fn read_bundle(&self) -> Result<Option<CloudflareTokenBundle>, String> {
+        if !container_running(VAULT_CONTAINER_NAME) {
+            return Err("vault-unavailable".into());
+        }
+        let (_stability, rt, client) = self.client()?;
+        let token_rec = match rt.block_on(client.read_secret(CLOUDFLARE_TOKEN_PATH)) {
+            Ok(v) => v,
+            Err(VaultError::NotFound(_)) => return Ok(None),
+            Err(e) => return Err(cloudflare_vault_reason(&e).into()),
+        };
+        let access_token = token_rec["access_token"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .ok_or("token-record-malformed")?
+            .to_string();
+        // An absent refresh record is a legitimate state; any OTHER read
+        // failure is not "absent" and is reported.
+        let refresh_rec = match rt.block_on(client.read_secret(CLOUDFLARE_REFRESH_PATH)) {
+            Ok(v) => Some(v),
+            Err(VaultError::NotFound(_)) => None,
+            Err(e) => return Err(format!("refresh-{}", cloudflare_vault_reason(&e))),
+        };
+        let client_id = token_rec["client_id"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(crate::cloudflare_oauth::client_id);
+        Ok(Some(CloudflareTokenBundle {
+            access_token,
+            expires_at: token_rec["expires_at"].as_u64(),
+            account_id: token_rec["account_id"].as_str().map(str::to_string),
+            client_id,
+            refresh_token: refresh_rec
+                .as_ref()
+                .and_then(|r| r["refresh_token"].as_str())
+                .filter(|s| !s.is_empty())
+                .map(str::to_string),
+            refresh_token_expires_at: refresh_rec
+                .as_ref()
+                .and_then(|r| r["refresh_token_expires_at"].as_u64()),
+        }))
+    }
+
+    fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+        if !container_running(VAULT_CONTAINER_NAME) {
+            // Bring Vault itself up (the same idempotent path `--init` uses);
+            // if that fails the write is REFUSED. There is no other store.
+            ensure_vault_running(self.debug).map_err(|_| "vault-unavailable".to_string())?;
+        }
+        let (_stability, rt, client) = self.client()?;
+        rt.block_on(client.write_secret(path, value.clone()))
+            .map_err(|e| cloudflare_vault_reason(&e).to_string())?;
+        let read_back = rt
+            .block_on(client.read_secret(path))
+            .map_err(|e| format!("write-not-confirmed:{}", cloudflare_vault_reason(&e)))?;
+        if read_back != value {
+            return Err("write-not-confirmed:mismatch".into());
+        }
+        Ok(())
+    }
+
+    fn delete_record(&self, path: &str) -> Result<(), String> {
+        // No auto-start here: a Vault that is not running holds records this
+        // call cannot reach, so "deleted" would be a lie. Refuse instead.
+        if !container_running(VAULT_CONTAINER_NAME) {
+            return Err("vault-unavailable".into());
+        }
+        let (_stability, rt, client) = self.client()?;
+        rt.block_on(client.delete_secret_all_versions(path))
+            .map_err(|e| cloudflare_vault_reason(&e).to_string())?;
+        match rt.block_on(client.read_secret(path)) {
+            Err(VaultError::NotFound(_)) => Ok(()),
+            Ok(_) => Err("delete-not-confirmed:still-present".into()),
+            Err(e) => Err(format!(
+                "delete-not-confirmed:{}",
+                cloudflare_vault_reason(&e)
+            )),
+        }
+    }
+}
+
+/// A `cloudflare_oauth` refresh failure reduced to a reason token. The core's
+/// errors are shaped `refused:cloudflare-login:token-exchange-http-<status>:<code>`
+/// (code from the server's JSON), `...:token-response-parse:<serde error>` (a
+/// serde type error can QUOTE the offending value, e.g. a token sent as a
+/// number) or a transport error; only the status and a plain-identifier OAuth
+/// error code survive.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_refresh_failure_reason(err: &str) -> String {
+    const HTTP: &str = "refused:cloudflare-login:token-exchange-http-";
+    if let Some(rest) = err.strip_prefix(HTTP) {
+        let (status, code) = rest.split_once(':').unwrap_or((rest, ""));
+        let status =
+            if (1..=3).contains(&status.len()) && status.bytes().all(|b| b.is_ascii_digit()) {
+                status
+            } else {
+                "unknown"
+            };
+        let code = if !code.is_empty()
+            && code.len() <= 64
+            && code.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
+        {
+            code
+        } else {
+            "unrecognised-error-code"
+        };
+        return format!("refresh-refused:http-{status}:{code}");
+    }
+    if err.starts_with("refused:cloudflare-login:token-response-parse") {
+        return "refresh-response-unusable".into();
+    }
+    "refresh-transport".into()
+}
+
+/// May a refresh token be POSTed to this endpoint? https anywhere; plain http
+/// only to a loopback host (the fixtures' fake). A userinfo component
+/// (`http://127.0.0.1@elsewhere/`) is refused. The login (1505-kc5f) applies
+/// the same rule to every endpoint it sends a code, verifier or token to.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub(crate) fn cloudflare_token_endpoint_is_safe(endpoint: &str) -> bool {
+    if endpoint.starts_with("https://") {
+        return true;
+    }
+    let Some(rest) = endpoint.strip_prefix("http://") else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if authority.contains('@') {
+        return false;
+    }
+    let host = if let Some(v6) = authority.strip_prefix('[') {
+        v6.split(']').next().unwrap_or("")
+    } else {
+        authority.split(':').next().unwrap_or("")
+    };
+    matches!(host, "127.0.0.1" | "localhost" | "::1")
+}
+
+/// The token endpoint, read from the OpenID discovery document at `base_url`
+/// (design Decision 1: endpoints come from discovery, never a compiled path).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_token_endpoint(
+    http: &dyn crate::cloudflare_oauth::HttpClient,
+    base_url: &str,
+) -> Result<String, String> {
+    let url = format!(
+        "{}/.well-known/openid-configuration",
+        base_url.trim_end_matches('/')
+    );
+    let resp = http
+        .get(&url)
+        .map_err(|_| "discovery-unreachable".to_string())?;
+    if resp.status != 200 {
+        return Err(format!("discovery-http-{}", resp.status));
+    }
+    let doc: serde_json::Value =
+        serde_json::from_str(&resp.body).map_err(|_| "discovery-unusable".to_string())?;
+    let endpoint = doc["token_endpoint"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or("discovery-unusable:no-token-endpoint")?;
+    if !cloudflare_token_endpoint_is_safe(endpoint) {
+        return Err("token-endpoint-not-https".into());
+    }
+    Ok(endpoint.to_string())
+}
+
+/// One `grant_type=refresh_token` exchange through `cloudflare_oauth::refresh`
+/// against the endpoint discovery names. Errors are reason tokens only.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn perform_cloudflare_token_refresh(
+    http: &dyn crate::cloudflare_oauth::HttpClient,
+    base_url: &str,
+    client_id: &str,
+    refresh_token: &str,
+) -> Result<crate::cloudflare_oauth::Bundle, String> {
+    let endpoint = cloudflare_token_endpoint(http, base_url)?;
+    let mut bundle = crate::cloudflare_oauth::refresh(http, &endpoint, client_id, refresh_token)
+        .map_err(|e| cloudflare_refresh_failure_reason(&e))?;
+    if bundle.access_token.is_empty() {
+        return Err("refresh-response-unusable".into());
+    }
+    if bundle.refresh_token.as_deref() == Some("") {
+        bundle.refresh_token = None;
+    }
+    Ok(bundle)
+}
+
+/// The bundle a successful refresh produces. A response without a new refresh
+/// token (a server that does not rotate them) keeps the old one, per RFC 6749
+/// §6; a NEW refresh token's lifetime is not reported, so it is recorded as
+/// unknown rather than inherited from the old one.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_rotated_bundle(
+    old: &CloudflareTokenBundle,
+    resp: crate::cloudflare_oauth::Bundle,
+    now: u64,
+) -> CloudflareTokenBundle {
+    let (refresh_token, refresh_token_expires_at) = match resp.refresh_token {
+        Some(new) if !new.is_empty() => (Some(new), None),
+        _ => (old.refresh_token.clone(), old.refresh_token_expires_at),
+    };
+    CloudflareTokenBundle {
+        access_token: resp.access_token,
+        expires_at: resp.expires_in.map(|s| now.saturating_add(s)),
+        account_id: old.account_id.clone(),
+        client_id: old.client_id.clone(),
+        refresh_token,
+        refresh_token_expires_at,
+    }
+}
+
+/// Rotate when the access token has this long or less to live (design
+/// Decision 2: `expires_at - now <= 30 min`).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const CLOUDFLARE_ROTATION_WINDOW_SECS: u64 = 30 * 60;
+/// How often the resident scheduler asks.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const CLOUDFLARE_ROTATION_CHECK_EVERY: std::time::Duration =
+    std::time::Duration::from_secs(15 * 60);
+/// The host-wide advisory lock every Cloudflare rotation takes.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const CLOUDFLARE_ROTATION_LOCK: &str = "cloudflare-token-rotation";
+
+/// What one Cloudflare due-check did. Every variant is a verdict.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CloudflareDueCheck {
+    /// Rotated; the new access token's expiry when Cloudflare reported one.
+    Rotated {
+        expires_at: Option<u64>,
+    },
+    NotDue {
+        expires_at: u64,
+    },
+    /// A stored token whose lifetime was never reported: never rotated on a
+    /// guess.
+    ExpiryUnknown,
+    NoToken,
+    NoRefreshToken,
+    /// A forge never rotates: no forge policy can read either path, and a
+    /// second rotating process would race the host's.
+    RefusedInForge,
+}
+
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+impl CloudflareDueCheck {
+    pub fn verdict(&self) -> String {
+        match self {
+            CloudflareDueCheck::Rotated {
+                expires_at: Some(e),
+            } => format!("ok:cloudflare-token-rotation:rotated:expires_at={e}"),
+            CloudflareDueCheck::Rotated { expires_at: None } => {
+                "ok:cloudflare-token-rotation:rotated:expiry-unknown".into()
+            }
+            CloudflareDueCheck::NotDue { expires_at } => {
+                format!("ok:cloudflare-token-rotation:not-due:expires_at={expires_at}")
+            }
+            CloudflareDueCheck::ExpiryUnknown => {
+                "ok:cloudflare-token-rotation:expiry-unknown".into()
+            }
+            CloudflareDueCheck::NoToken => "ok:cloudflare-token-rotation:no-token".into(),
+            CloudflareDueCheck::NoRefreshToken => {
+                "ok:cloudflare-token-rotation:no-refresh-token".into()
+            }
+            CloudflareDueCheck::RefusedInForge => "skip:cloudflare-token-rotation:forge".into(),
+        }
+    }
+}
+
+/// Is a token that expires at `expires_at` due for rotation at `now`?
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn cloudflare_token_rotation_due(expires_at: u64, now: u64) -> bool {
+    expires_at.saturating_sub(now) <= CLOUDFLARE_ROTATION_WINDOW_SECS
+}
+
+/// What the operator does about a failed rotation, by reason.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_rotation_remedy(reason: &str) -> &'static str {
+    if reason.starts_with("refresh-record-write-failed") {
+        "the new sign-in could not be stored in Vault and the old refresh token is spent: bring Vault up with `tillandsias --init`, then run `tillandsias --cloudflare-login`"
+    } else if reason.starts_with("token-record-write-failed") {
+        "the new refresh token IS stored; the access-token write is retried automatically"
+    } else if reason.starts_with("refresh-refused:") && reason.ends_with(":invalid_grant") {
+        "Cloudflare no longer accepts the stored sign-in: run `tillandsias --cloudflare-login`; both stored records were left untouched"
+    } else if reason.starts_with("read:") {
+        "Vault is unreachable, sealed or refused the host's token: run `tillandsias --init`; retried automatically"
+    } else if reason == "lock" {
+        "another rotation holds the host lock; retried automatically"
+    } else {
+        "nothing was written; retried automatically with backoff"
+    }
+}
+
+/// The named failure verdict: `cloudflare-token-rotation-failed:<reason>` plus
+/// the remedy. Callers print it as `blocked:<this>`.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_rotation_failure(reason: &str) -> String {
+    format!(
+        "cloudflare-token-rotation-failed:{reason} (remedy: {})",
+        cloudflare_rotation_remedy(reason)
+    )
+}
+
+/// The Cloudflare sibling of [`rotate_github_token_locked`]: take the
+/// exclusive host-wide lock, THEN read the stored bundle, decide, and exchange
+/// only when it is inside the window.
+///
+/// THE DECISION IS MADE UNDER THE LOCK: a second concurrent check waits, reads
+/// the winner's new `expires_at`, and finds nothing due, so a refresh token is
+/// spent once per window. Nothing is written before the exchange succeeds, so
+/// a refused exchange leaves both records exactly as they were.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn rotate_cloudflare_token_locked(
+    store: &dyn CloudflareTokenStore,
+    refresh: &dyn Fn(&str, &str) -> Result<crate::cloudflare_oauth::Bundle, String>,
+    now: u64,
+    lock_name: &str,
+    lock_timeout: std::time::Duration,
+    debug: bool,
+) -> Result<CloudflareDueCheck, String> {
+    let _lock = crate::resource_lock::acquire(lock_name, lock_timeout, debug)
+        .map_err(|_| cloudflare_rotation_failure("lock"))?;
+    let Some(bundle) = store
+        .read_bundle()
+        .map_err(|e| cloudflare_rotation_failure(&format!("read:{e}")))?
+    else {
+        return Ok(CloudflareDueCheck::NoToken);
+    };
+    let Some(old_refresh) = bundle.refresh_token.as_deref().filter(|s| !s.is_empty()) else {
+        return Ok(CloudflareDueCheck::NoRefreshToken);
+    };
+    let Some(expires_at) = bundle.expires_at else {
+        return Ok(CloudflareDueCheck::ExpiryUnknown);
+    };
+    if !cloudflare_token_rotation_due(expires_at, now) {
+        return Ok(CloudflareDueCheck::NotDue { expires_at });
+    }
+    let resp =
+        refresh(&bundle.client_id, old_refresh).map_err(|e| cloudflare_rotation_failure(&e))?;
+    let rotated = cloudflare_rotated_bundle(&bundle, resp, now);
+    store_cloudflare_token_bundle(store, &rotated).map_err(|e| cloudflare_rotation_failure(&e))?;
+    Ok(CloudflareDueCheck::Rotated {
+        expires_at: rotated.expires_at,
+    })
+}
+
+/// The due-check: a forge refuses BEFORE touching the lock or the store;
+/// anywhere else, [`rotate_cloudflare_token_locked`]. `lock_name` is a
+/// parameter so tests never contend with a live tray's scheduler.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn rotate_cloudflare_token_if_due(
+    store: &dyn CloudflareTokenStore,
+    refresh: &dyn Fn(&str, &str) -> Result<crate::cloudflare_oauth::Bundle, String>,
+    now: u64,
+    host_is_forge: bool,
+    lock_name: &str,
+    lock_timeout: std::time::Duration,
+    debug: bool,
+) -> Result<CloudflareDueCheck, String> {
+    if host_is_forge {
+        return Ok(CloudflareDueCheck::RefusedInForge);
+    }
+    rotate_cloudflare_token_locked(store, refresh, now, lock_name, lock_timeout, debug)
+}
+
+/// `TILLANDSIAS_HOST_KIND=forge` means this process runs inside a forge.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn host_kind_is_forge(host_kind: Option<&str>) -> bool {
+    host_kind == Some("forge")
+}
+
+/// The live due-check: Vault, the token endpoint discovery names at
+/// `TILLANDSIAS_CLOUDFLARE_BASE_URL` (default dash.cloudflare.com), the real
+/// clock, and the host kind from the environment.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn cloudflare_token_due_check_live(debug: bool) -> Result<CloudflareDueCheck, String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| cloudflare_rotation_failure("clock"))?
+        .as_secs();
+    let forge = host_kind_is_forge(std::env::var("TILLANDSIAS_HOST_KIND").ok().as_deref());
+    let store = VaultCloudflareTokenStore { debug };
+    let http = crate::cloudflare_oauth::ReqwestHttpClient::default();
+    let base_url = crate::cloudflare_oauth::base_url();
+    rotate_cloudflare_token_if_due(
+        &store,
+        &|client_id, refresh_token| {
+            perform_cloudflare_token_refresh(&http, &base_url, client_id, refresh_token)
+        },
+        now,
+        forge,
+        CLOUDFLARE_ROTATION_LOCK,
+        std::time::Duration::from_secs(60),
+        debug,
+    )
+}
+
+/// The regular interval after a verdict; after a failure, 1 min doubling,
+/// capped at the interval.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn cloudflare_rotation_next_delay(
+    failed: bool,
+    prev_backoff: std::time::Duration,
+) -> std::time::Duration {
+    if !failed {
+        return CLOUDFLARE_ROTATION_CHECK_EVERY;
+    }
+    let next = if prev_backoff.is_zero() {
+        std::time::Duration::from_secs(60)
+    } else {
+        prev_backoff * 2
+    };
+    next.min(CLOUDFLARE_ROTATION_CHECK_EVERY)
+}
+
+/// The accountability event for every automatic rotation. `outcome` is
+/// `rotated` or `failed` — never a reason string that could carry data.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn audit_cloudflare_token_auto_rotation(outcome: &'static str) {
+    tracing::info!(
+        accountability = true,
+        category = "secrets",
+        spec = "cloudflare-auth",
+        operation = "cloudflare_token_auto_rotation",
+        secret_name = "cloudflare-token",
+        outcome = outcome,
+        "Cloudflare token auto-rotation: {outcome}"
+    );
+}
+
+/// One Cloudflare scheduler per process (the tray and every lane launch both
+/// call the spawn). Returns true exactly once per process.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn claim_cloudflare_rotation_scheduler_slot() -> bool {
+    static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    !STARTED.swap(true, std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Start the resident Cloudflare rotation scheduler on its own thread: a check
+/// at start, then per [`cloudflare_rotation_next_delay`]. Idempotent per
+/// process. Called from the SAME three entry points as
+/// [`spawn_github_token_rotation_scheduler`] — the Linux tray at start, every
+/// lane launch (`ensure_enclave_for_project`) and the guest listener
+/// (`maybe_spawn_vsock_listener`) — pinned by
+/// scripts/test-cloudflare-token-rotation.sh arm 6. Never effective in a
+/// forge (the check refuses and the thread ends).
+///
+/// A failure prints `blocked:cloudflare-token-rotation-failed:<reason> (remedy:
+/// ...)` when it first appears or changes (every time under `--debug`), is
+/// audited every time, and is retried with backoff.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn spawn_cloudflare_token_rotation_scheduler(debug: bool) {
+    if !claim_cloudflare_rotation_scheduler_slot() {
+        return;
+    }
+    let spawned = std::thread::Builder::new()
+        .name("cloudflare-token-rotation".into())
+        .spawn(move || {
+            let mut backoff = std::time::Duration::ZERO;
+            let mut last_failure: Option<String> = None;
+            loop {
+                let out = cloudflare_token_due_check_live(debug);
+                match &out {
+                    Ok(CloudflareDueCheck::RefusedInForge) => return,
+                    Ok(v @ CloudflareDueCheck::Rotated { .. }) => {
+                        audit_cloudflare_token_auto_rotation("rotated");
+                        eprintln!("[tillandsias] {}", v.verdict());
+                        last_failure = None;
+                    }
+                    Ok(v) => {
+                        if debug {
+                            eprintln!("[tillandsias] {}", v.verdict());
+                        }
+                        last_failure = None;
+                    }
+                    Err(e) => {
+                        audit_cloudflare_token_auto_rotation("failed");
+                        if debug || last_failure.as_deref() != Some(e.as_str()) {
+                            eprintln!("[tillandsias] blocked:{e}");
+                        }
+                        last_failure = Some(e.clone());
+                    }
+                }
+                let delay = cloudflare_rotation_next_delay(out.is_err(), backoff);
+                backoff = if out.is_err() {
+                    delay
+                } else {
+                    std::time::Duration::ZERO
+                };
+                std::thread::sleep(delay);
+            }
+        });
+    if spawned.is_err() {
+        eprintln!(
+            "[tillandsias] blocked:cloudflare-token-rotation-failed:thread-spawn (remedy: restart tillandsias; nothing rotates the Cloudflare token in this process)"
+        );
+    }
+}
+
 /// In-container address of the Vault TLS listener. The Vault server listens on
 /// the container loopback at :8200; `podman exec` does NOT inherit the
 /// entrypoint's environment, so every exec'd `vault` CLI call must set this (and
@@ -8381,5 +9128,1016 @@ mod tests {
                 "not in the spec verbatim: {line}"
             );
         }
+    }
+}
+
+// ── Order 1505-iysn: Cloudflare bundle + rotation (cloudflare_token_rotation_*) ──
+//
+// Every test here uses an in-memory store (no Vault) and either an injected
+// refresh closure or the real `tillandsias-fake-cloudflare` over loopback (no
+// real Cloudflare). The fake-driven tests are `#[ignore]`d so a plain
+// `cargo test` needs no fake binary; scripts/test-cloudflare-token-rotation.sh
+// builds the fake and runs them by name.
+#[cfg(test)]
+mod cloudflare_token_rotation_tests {
+    use super::*;
+    use std::collections::{BTreeMap, HashMap};
+    use std::io::{BufRead, BufReader, Write as _};
+    use std::path::{Path, PathBuf};
+    use std::process::{Child, Command, Stdio};
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+
+    const NOW: u64 = 1_000_000;
+    const ACCOUNT: &str = "0123456789abcdef0123456789abcdef";
+    const REDIRECT_URI: &str = "http://127.0.0.1:48631/tillandsias/cloudflare/callback";
+
+    // ── the in-memory Vault seam ──────────────────────────────────────────
+
+    /// Send + Sync fake Vault: records every write in order, can fail the
+    /// next N writes of a path, can widen the read window, and counts every
+    /// touch (the forge arm asserts zero).
+    #[derive(Default)]
+    struct MemStore {
+        records: Mutex<BTreeMap<String, serde_json::Value>>,
+        writes: Mutex<Vec<String>>,
+        fail_next: Mutex<HashMap<String, u32>>,
+        read_delay: Duration,
+        touched: AtomicUsize,
+    }
+
+    impl MemStore {
+        fn with(b: &CloudflareTokenBundle) -> Self {
+            let s = MemStore::default();
+            {
+                let mut m = s.records.lock().unwrap();
+                m.insert(CLOUDFLARE_TOKEN_PATH.into(), cloudflare_token_record(b));
+                if let Some(r) = cloudflare_refresh_record(b) {
+                    m.insert(CLOUDFLARE_REFRESH_PATH.into(), r);
+                }
+                m.insert(
+                    "secret/cloudflare/mesh".into(),
+                    serde_json::json!({ "client_id": "mesh-id", "team_name": "t" }),
+                );
+            }
+            s
+        }
+        fn failing(self, path: &str, times: u32) -> Self {
+            self.fail_next.lock().unwrap().insert(path.into(), times);
+            self
+        }
+        fn delayed(mut self, d: Duration) -> Self {
+            self.read_delay = d;
+            self
+        }
+        fn snapshot(&self) -> BTreeMap<String, serde_json::Value> {
+            self.records.lock().unwrap().clone()
+        }
+        fn writes(&self) -> Vec<String> {
+            self.writes.lock().unwrap().clone()
+        }
+    }
+
+    impl CloudflareTokenStore for MemStore {
+        fn read_bundle(&self) -> Result<Option<CloudflareTokenBundle>, String> {
+            self.touched.fetch_add(1, Ordering::SeqCst);
+            let out = {
+                let m = self.records.lock().unwrap();
+                let Some(t) = m.get(CLOUDFLARE_TOKEN_PATH) else {
+                    return Ok(None);
+                };
+                let r = m.get(CLOUDFLARE_REFRESH_PATH);
+                CloudflareTokenBundle {
+                    access_token: t["access_token"].as_str().unwrap_or_default().into(),
+                    expires_at: t["expires_at"].as_u64(),
+                    account_id: t["account_id"].as_str().map(String::from),
+                    client_id: t["client_id"].as_str().unwrap_or_default().into(),
+                    refresh_token: r
+                        .and_then(|r| r["refresh_token"].as_str())
+                        .map(String::from),
+                    refresh_token_expires_at: r
+                        .and_then(|r| r["refresh_token_expires_at"].as_u64()),
+                }
+            };
+            std::thread::sleep(self.read_delay);
+            Ok(Some(out))
+        }
+        fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+            self.touched.fetch_add(1, Ordering::SeqCst);
+            self.writes.lock().unwrap().push(path.into());
+            let mut f = self.fail_next.lock().unwrap();
+            if let Some(n) = f.get_mut(path)
+                && *n > 0
+            {
+                *n -= 1;
+                return Err("simulated-vault-write-failure".into());
+            }
+            self.records.lock().unwrap().insert(path.into(), value);
+            Ok(())
+        }
+        fn delete_record(&self, path: &str) -> Result<(), String> {
+            self.touched.fetch_add(1, Ordering::SeqCst);
+            self.records.lock().unwrap().remove(path);
+            Ok(())
+        }
+    }
+
+    fn bundle(access: &str, refresh: &str, expires_at: u64) -> CloudflareTokenBundle {
+        CloudflareTokenBundle {
+            access_token: access.into(),
+            expires_at: Some(expires_at),
+            account_id: Some(ACCOUNT.into()),
+            client_id: "fake-client".into(),
+            refresh_token: Some(refresh.into()),
+            refresh_token_expires_at: None,
+        }
+    }
+
+    fn test_lock(tag: &str) -> String {
+        format!("cf-rotation-test-{tag}-{}", std::process::id())
+    }
+
+    /// Every token string a test planted or the fake issued must be absent
+    /// from `text`.
+    fn assert_no_token_bytes(text: &str, tokens: &[&str]) {
+        for t in tokens {
+            assert!(t.len() >= 8, "probe token too short to mean anything: {t}");
+            assert!(!text.contains(t), "token bytes leaked into output: {text}");
+        }
+    }
+
+    // ── the real fake Cloudflare over loopback ────────────────────────────
+
+    struct FakeServer {
+        child: Child,
+        base_url: String,
+        ledger_path: PathBuf,
+    }
+
+    impl Drop for FakeServer {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
+    fn start_fake(name: &str) -> FakeServer {
+        let bin = std::env::var("TILLANDSIAS_FAKE_CLOUDFLARE_BIN")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../target/debug/tillandsias-fake-cloudflare")
+            });
+        assert!(
+            bin.exists(),
+            "fake-cloudflare binary not found at {bin:?}; run scripts/test-cloudflare-token-rotation.sh"
+        );
+        let dir =
+            std::env::temp_dir().join(format!("cf-token-rotation-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("work dir");
+        let ledger_path = dir.join("ledger.jsonl");
+        let mut child = Command::new(&bin)
+            .arg("--ledger")
+            .arg(&ledger_path)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn fake-cloudflare");
+        let mut line = String::new();
+        BufReader::new(child.stdout.take().expect("stdout"))
+            .read_line(&mut line)
+            .expect("port line");
+        let port: u16 = line.trim().parse().expect("fake printed a port");
+        FakeServer {
+            child,
+            base_url: format!("http://127.0.0.1:{port}"),
+            ledger_path,
+        }
+    }
+
+    /// `grant_type=refresh_token` requests the fake received.
+    fn refresh_exchanges(ledger: &Path) -> usize {
+        std::fs::read_to_string(ledger)
+            .unwrap_or_default()
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(|l| serde_json::from_str::<serde_json::Value>(l).expect("ledger JSON"))
+            .filter(|e| {
+                e["path"]
+                    .as_str()
+                    .unwrap_or("")
+                    .starts_with("/oauth2/token")
+                    && e["body"]
+                        .as_str()
+                        .unwrap_or("")
+                        .contains("grant_type=refresh_token")
+            })
+            .count()
+    }
+
+    /// The operator's click, test-only: GET the authorize URL with
+    /// `auto=approve` and read the redirect's `Location` without following it.
+    fn approve(authorize_url: &str) -> (String, String) {
+        let url = format!("{authorize_url}&auto=approve");
+        let rest = url.strip_prefix("http://").expect("http url");
+        let (authority, path) = rest.split_once('/').expect("path");
+        let mut s = std::net::TcpStream::connect(authority).expect("connect fake");
+        write!(
+            s,
+            "GET /{path} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\n\r\n"
+        )
+        .expect("write");
+        let mut buf = String::new();
+        s.read_to_string(&mut buf).expect("read");
+        let loc = buf
+            .lines()
+            .find_map(|l| {
+                l.strip_prefix("Location: ")
+                    .or_else(|| l.strip_prefix("location: "))
+            })
+            .expect("Location header")
+            .trim()
+            .to_string();
+        let q = loc
+            .split_once('?')
+            .map(|(_, q)| q)
+            .unwrap_or("")
+            .to_string();
+        let get = |k: &str| {
+            q.split('&')
+                .find_map(|p| {
+                    p.split_once('=')
+                        .filter(|(kk, _)| *kk == k)
+                        .map(|(_, v)| v.to_string())
+                })
+                .expect("query param")
+        };
+        (get("code"), get("state"))
+    }
+
+    /// A real pair issued by the fake, stored as a bundle expiring at `exp`.
+    fn logged_in_bundle(server: &FakeServer, exp: u64) -> CloudflareTokenBundle {
+        let http = crate::cloudflare_oauth::ReqwestHttpClient::default();
+        let pending = crate::cloudflare_oauth::begin(
+            &http,
+            &server.base_url,
+            "fake-client",
+            REDIRECT_URI,
+            &[],
+        )
+        .expect("begin");
+        let (code, state) = approve(&pending.authorize_url);
+        let b =
+            crate::cloudflare_oauth::exchange(&http, &pending, &state, &code).expect("exchange");
+        CloudflareTokenBundle {
+            access_token: b.access_token,
+            expires_at: Some(exp),
+            account_id: Some(ACCOUNT.into()),
+            client_id: "fake-client".into(),
+            refresh_token: b.refresh_token,
+            refresh_token_expires_at: None,
+        }
+    }
+
+    type RefreshFn<'a> = dyn Fn(&str, &str) -> Result<crate::cloudflare_oauth::Bundle, String> + 'a;
+
+    /// The PRODUCTION refresh path (`perform_cloudflare_token_refresh`) aimed
+    /// at the fake.
+    fn fake_refresh(
+        base: String,
+    ) -> impl Fn(&str, &str) -> Result<crate::cloudflare_oauth::Bundle, String> {
+        move |client_id, refresh_token| {
+            perform_cloudflare_token_refresh(
+                &crate::cloudflare_oauth::ReqwestHttpClient::default(),
+                &base,
+                client_id,
+                refresh_token,
+            )
+        }
+    }
+
+    fn due_check(
+        store: &dyn CloudflareTokenStore,
+        refresh: &RefreshFn<'_>,
+        forge: bool,
+        lock: &str,
+    ) -> Result<CloudflareDueCheck, String> {
+        rotate_cloudflare_token_if_due(
+            store,
+            refresh,
+            NOW,
+            forge,
+            lock,
+            Duration::from_secs(20),
+            false,
+        )
+    }
+
+    // ── ARM 1: 20 min left -> exactly one exchange, refresh record first ──
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    fn cloudflare_token_rotation_fake_due_token_rotates_once_refresh_first() {
+        let server = start_fake("arm1");
+        let old = logged_in_bundle(&server, NOW + 20 * 60);
+        let store = MemStore::with(&old);
+        let mesh_before = store.snapshot()["secret/cloudflare/mesh"].clone();
+        assert_eq!(refresh_exchanges(&server.ledger_path), 0);
+        let out = due_check(
+            &store,
+            &fake_refresh(server.base_url.clone()),
+            false,
+            &test_lock("arm1"),
+        )
+        .expect("a due token rotates");
+        assert_eq!(
+            refresh_exchanges(&server.ledger_path),
+            1,
+            "exactly one grant_type=refresh_token exchange at the fake"
+        );
+        assert_eq!(
+            out,
+            CloudflareDueCheck::Rotated {
+                expires_at: Some(NOW + 3600)
+            }
+        );
+        assert_eq!(
+            store.writes(),
+            vec![
+                CLOUDFLARE_REFRESH_PATH.to_string(),
+                CLOUDFLARE_TOKEN_PATH.to_string()
+            ],
+            "the refresh record is written first"
+        );
+        let new = store.read_bundle().unwrap().unwrap();
+        assert_ne!(new.access_token, old.access_token);
+        assert_ne!(new.refresh_token, old.refresh_token);
+        assert!(
+            new.expires_at.unwrap() > old.expires_at.unwrap(),
+            "later expiry"
+        );
+        assert_eq!(new.account_id, old.account_id, "account_id carried over");
+        assert_eq!(
+            store.snapshot()["secret/cloudflare/mesh"],
+            mesh_before,
+            "rotation never touches the mesh credential"
+        );
+        assert!(
+            store.snapshot()[CLOUDFLARE_TOKEN_PATH]
+                .get("refresh_token")
+                .is_none(),
+            "the token record never carries the refresh token"
+        );
+    }
+
+    // ── ARM 2: two concurrent due-checks -> ONE exchange at the fake ──────
+    fn concurrent_run(
+        tag: &str,
+        shared_lock: bool,
+    ) -> (usize, Vec<Result<CloudflareDueCheck, String>>) {
+        let server = start_fake(tag);
+        let store = std::sync::Arc::new(
+            MemStore::with(&logged_in_bundle(&server, NOW + 60))
+                .delayed(Duration::from_millis(300)),
+        );
+        let handles: Vec<_> = (0..2)
+            .map(|i| {
+                let store = std::sync::Arc::clone(&store);
+                let base = server.base_url.clone();
+                let lock = if shared_lock {
+                    test_lock(tag)
+                } else {
+                    test_lock(&format!("{tag}-{i}"))
+                };
+                std::thread::spawn(move || due_check(&*store, &fake_refresh(base), false, &lock))
+            })
+            .collect();
+        let outs = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        (refresh_exchanges(&server.ledger_path), outs)
+    }
+
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    fn cloudflare_token_rotation_fake_concurrent_checks_exchange_once() {
+        let (n, outs) = concurrent_run("arm2", true);
+        assert_eq!(n, 1, "one lock -> exactly one exchange: {outs:?}");
+        let rotated = outs
+            .iter()
+            .filter(|o| matches!(o, Ok(CloudflareDueCheck::Rotated { .. })))
+            .count();
+        let not_due = outs
+            .iter()
+            .filter(|o| matches!(o, Ok(CloudflareDueCheck::NotDue { .. })))
+            .count();
+        assert_eq!((rotated, not_due), (1, 1), "{outs:?}");
+        // NEGATIVE CONTROL: without mutual exclusion (distinct lock names) the
+        // same two checks both spend the refresh token, and the ledger count
+        // sees it — the count discriminates, and the LOCK is what makes it one.
+        let (n_ctl, outs_ctl) = concurrent_run("arm2ctl", false);
+        assert_eq!(
+            n_ctl, 2,
+            "control: unserialised checks exchange twice: {outs_ctl:?}"
+        );
+    }
+
+    // ── ARM 3: 2 h left -> no exchange, no write ─────────────────────────
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    fn cloudflare_token_rotation_fake_not_due_makes_no_exchange() {
+        let server = start_fake("arm3");
+        let store = MemStore::with(&logged_in_bundle(&server, NOW + 2 * 3600));
+        let before = store.snapshot();
+        let out = due_check(
+            &store,
+            &fake_refresh(server.base_url.clone()),
+            false,
+            &test_lock("arm3"),
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            CloudflareDueCheck::NotDue {
+                expires_at: NOW + 2 * 3600
+            }
+        );
+        assert_eq!(
+            out.verdict(),
+            format!(
+                "ok:cloudflare-token-rotation:not-due:expires_at={}",
+                NOW + 7200
+            )
+        );
+        assert_eq!(refresh_exchanges(&server.ledger_path), 0);
+        assert!(store.writes().is_empty());
+        assert_eq!(store.snapshot(), before);
+        // The window boundary: exactly 30 min left is due, 30 min + 1 s is not.
+        assert!(cloudflare_token_rotation_due(NOW + 30 * 60, NOW));
+        assert!(!cloudflare_token_rotation_due(NOW + 30 * 60 + 1, NOW));
+    }
+
+    // ── ARM 4: the fake refuses the refresh -> both old records intact ────
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    fn cloudflare_token_rotation_fake_refused_refresh_keeps_both_records() {
+        let server = start_fake("arm4");
+        // A refresh token the fake never issued: it answers 400 invalid_grant.
+        let old = bundle(
+            "cf-access-OLD-0123456789",
+            "cf-refresh-NEVER-ISSUED-0123456789",
+            NOW + 60,
+        );
+        let store = MemStore::with(&old);
+        let before = store.snapshot();
+        let err = due_check(
+            &store,
+            &fake_refresh(server.base_url.clone()),
+            false,
+            &test_lock("arm4"),
+        )
+        .unwrap_err();
+        assert_eq!(
+            refresh_exchanges(&server.ledger_path),
+            1,
+            "the arm must REACH the fake's refusal, not fail before it"
+        );
+        assert!(
+            err.starts_with(
+                "cloudflare-token-rotation-failed:refresh-refused:http-400:invalid_grant"
+            ),
+            "{err}"
+        );
+        assert!(
+            err.contains("remedy:") && err.contains("--cloudflare-login"),
+            "{err}"
+        );
+        assert_eq!(
+            store.snapshot(),
+            before,
+            "a refused exchange writes nothing"
+        );
+        assert!(store.writes().is_empty());
+        assert_no_token_bytes(
+            &format!("blocked:{err}"),
+            &[
+                "cf-access-OLD-0123456789",
+                "cf-refresh-NEVER-ISSUED-0123456789",
+            ],
+        );
+    }
+
+    // ── ARM 5: a forge never rotates (and never touches store or fake) ───
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    fn cloudflare_token_rotation_fake_forge_never_rotates() {
+        let server = start_fake("arm5");
+        let store = MemStore::with(&logged_in_bundle(&server, NOW + 60));
+        let touched_after_setup = store.touched.load(Ordering::SeqCst);
+        let out = due_check(
+            &store,
+            &fake_refresh(server.base_url.clone()),
+            true,
+            &test_lock("arm5f"),
+        )
+        .unwrap();
+        assert_eq!(out, CloudflareDueCheck::RefusedInForge);
+        assert_eq!(out.verdict(), "skip:cloudflare-token-rotation:forge");
+        assert_eq!(
+            store.touched.load(Ordering::SeqCst),
+            touched_after_setup,
+            "a forge never reads or writes Vault"
+        );
+        assert_eq!(refresh_exchanges(&server.ledger_path), 0);
+        // CONTROL: the same due store on bare metal DOES rotate.
+        let ok = due_check(
+            &store,
+            &fake_refresh(server.base_url.clone()),
+            false,
+            &test_lock("arm5b"),
+        )
+        .unwrap();
+        assert!(matches!(ok, CloudflareDueCheck::Rotated { .. }), "{ok:?}");
+        assert_eq!(refresh_exchanges(&server.ledger_path), 1);
+        // TILLANDSIAS_HOST_KIND=forge is exactly what sets the flag live.
+        assert!(host_kind_is_forge(Some("forge")));
+        for other in [None, Some(""), Some("host"), Some("Forge"), Some("forge ")] {
+            assert!(!host_kind_is_forge(other), "{other:?}");
+        }
+        let src = include_str!("vault_bootstrap.rs");
+        let start = src
+            .find(&["pub fn cloudflare_token_due_check_", "live("].concat())
+            .unwrap();
+        let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
+        assert!(
+            body.contains(
+                &[
+                    "host_kind_is_forge(std::env::var(\"TILLANDSIAS_",
+                    "HOST_KIND\")"
+                ]
+                .concat()
+            ),
+            "the live check derives the forge flag from TILLANDSIAS_HOST_KIND"
+        );
+        assert!(
+            body.contains("        forge,\n"),
+            "the live check passes the flag through"
+        );
+    }
+
+    // ── Crash between the two writes: nothing is lost ────────────────────
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    fn cloudflare_token_rotation_fake_crash_between_writes_loses_nothing() {
+        let server = start_fake("crash");
+        let old = logged_in_bundle(&server, NOW + 60);
+        let store = MemStore::with(&old).failing(CLOUDFLARE_TOKEN_PATH, 1);
+        let base = server.base_url.clone();
+        let err = due_check(
+            &store,
+            &fake_refresh(base.clone()),
+            false,
+            &test_lock("crash1"),
+        )
+        .unwrap_err();
+        assert!(
+            err.starts_with("cloudflare-token-rotation-failed:token-record-write-failed:"),
+            "{err}"
+        );
+        let mid = store
+            .read_bundle()
+            .unwrap()
+            .expect("a bundle is still stored");
+        assert_eq!(
+            mid.access_token, old.access_token,
+            "old access token still stored"
+        );
+        assert!(
+            mid.refresh_token.is_some() && mid.refresh_token != old.refresh_token,
+            "the NEW refresh token is persisted (the old one is spent at the fake)"
+        );
+        // The next check (Vault healthy again) recovers with the persisted
+        // refresh token: the fake accepts it, which it would refuse had the
+        // stored token been the spent one (arm 2's control shows that refusal).
+        let ok =
+            due_check(&store, &fake_refresh(base), false, &test_lock("crash2")).expect("recovers");
+        assert!(matches!(ok, CloudflareDueCheck::Rotated { .. }), "{ok:?}");
+        assert_eq!(refresh_exchanges(&server.ledger_path), 2);
+        assert_no_token_bytes(
+            &err,
+            &[
+                old.access_token.as_str(),
+                old.refresh_token.as_deref().unwrap(),
+                mid.refresh_token.as_deref().unwrap(),
+            ],
+        );
+    }
+
+    // ── non-ignored unit arms (no fake, no network) ───────────────────────
+
+    /// No token bytes in Debug, verdicts or reasons. CONTROL: the substring
+    /// check itself sees a leak when one is planted, so its silence below is
+    /// not the silence of a check that cannot fire. (This control used to be
+    /// the core `cloudflare_oauth::Bundle`'s DERIVED Debug, which printed the
+    /// token; 1505-kc5f's prerequisite replaced it with a redacting impl, and
+    /// the core Bundle is now asserted leak-free here too.)
+    #[test]
+    fn cloudflare_token_rotation_never_prints_a_token() {
+        const A: &str = "cf-access-SECRET-abcdef012345";
+        const R: &str = "cf-refresh-SECRET-abcdef012345";
+        let b = bundle(A, R, NOW);
+        let dbg = format!("{b:?} {b:#?}");
+        assert_no_token_bytes(&dbg, &[A, R]);
+        assert!(
+            dbg.contains("<redacted>") && dbg.contains("fake-client"),
+            "{dbg}"
+        );
+        let core = crate::cloudflare_oauth::Bundle {
+            access_token: A.into(),
+            refresh_token: Some(R.into()),
+            expires_in: None,
+            token_type: None,
+        };
+        assert_no_token_bytes(&format!("{core:?} {core:#?}"), &[A, R]);
+        let planted = format!("a line that does carry {A}");
+        assert!(
+            std::panic::catch_unwind(|| assert_no_token_bytes(&planted, &[A])).is_err(),
+            "control: the substring check must fire on a planted token"
+        );
+        // Hostile core errors: a serde type error quoting a token, a token in
+        // the OAuth error field, a transport error naming a URL.
+        let hostile = [
+            (
+                format!("refused:cloudflare-login:token-response-parse:invalid type: string `{R}`"),
+                "refresh-response-unusable",
+            ),
+            (
+                format!("refused:cloudflare-login:token-exchange-http-400:{R}"),
+                "refresh-refused:http-400:unrecognised-error-code",
+            ),
+            (
+                "refused:cloudflare-login:token-exchange-http-400:invalid_grant".to_string(),
+                "refresh-refused:http-400:invalid_grant",
+            ),
+            (
+                format!("cloudflare_oauth: POST https://x/?t={R}: timeout"),
+                "refresh-transport",
+            ),
+        ];
+        for (raw, want) in hostile {
+            let r = cloudflare_refresh_failure_reason(&raw);
+            assert_eq!(r, want);
+            assert_no_token_bytes(&cloudflare_rotation_failure(&r), &[R]);
+        }
+        for v in [
+            CloudflareDueCheck::Rotated {
+                expires_at: Some(1),
+            },
+            CloudflareDueCheck::Rotated { expires_at: None },
+            CloudflareDueCheck::NotDue { expires_at: 1 },
+            CloudflareDueCheck::ExpiryUnknown,
+            CloudflareDueCheck::NoToken,
+            CloudflareDueCheck::NoRefreshToken,
+            CloudflareDueCheck::RefusedInForge,
+        ] {
+            assert!(
+                v.verdict().contains(":cloudflare-token-rotation:"),
+                "{}",
+                v.verdict()
+            );
+        }
+    }
+
+    /// The two records hold exactly the spec's fields; the token record never
+    /// carries the refresh token; a bundle without `expires_at` is never
+    /// rotated on a guess.
+    #[test]
+    fn cloudflare_token_rotation_records_keep_refresh_off_the_token_path() {
+        assert_eq!(CLOUDFLARE_TOKEN_PATH, "secret/cloudflare/token");
+        assert_eq!(CLOUDFLARE_REFRESH_PATH, "secret/cloudflare/refresh");
+        let b = bundle("A-access-token-xyz", "R-refresh-token-xyz", 42);
+        let t = cloudflare_token_record(&b);
+        let keys: std::collections::BTreeSet<_> = t.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(
+            keys.iter().map(String::as_str).collect::<Vec<_>>(),
+            vec!["access_token", "account_id", "client_id", "expires_at"]
+        );
+        assert!(!t.to_string().contains("R-refresh-token-xyz"));
+        let r = cloudflare_refresh_record(&b).unwrap();
+        let keys: std::collections::BTreeSet<_> = r.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(
+            keys.iter().map(String::as_str).collect::<Vec<_>>(),
+            vec!["client_id", "refresh_token"]
+        );
+        let mut unknown = b.clone();
+        unknown.expires_at = None;
+        assert!(
+            cloudflare_token_record(&unknown)
+                .get("expires_at")
+                .is_none()
+        );
+        let store = MemStore::with(&unknown);
+        let out = due_check(
+            &store,
+            &|_, _| panic!("never refresh on a guessed expiry"),
+            false,
+            &test_lock("noexp"),
+        )
+        .unwrap();
+        assert_eq!(out, CloudflareDueCheck::ExpiryUnknown);
+        assert!(store.writes().is_empty());
+    }
+
+    /// The refresh-record write is retried, and when it keeps failing the old
+    /// pair is intact and the verdict tells the operator the sign-in is spent.
+    #[test]
+    fn cloudflare_token_rotation_refresh_write_failure_keeps_old_pair() {
+        let rotated = || crate::cloudflare_oauth::Bundle {
+            access_token: "NEW-access-0123456789".into(),
+            refresh_token: Some("NEW-refresh-0123456789".into()),
+            expires_in: Some(3600),
+            token_type: None,
+        };
+        // Transient: one failure, then success.
+        let store = MemStore::with(&bundle(
+            "OLD-access-0123456789",
+            "OLD-refresh-0123456789",
+            NOW + 60,
+        ))
+        .failing(CLOUDFLARE_REFRESH_PATH, 1);
+        let ok = due_check(&store, &|_, _| Ok(rotated()), false, &test_lock("rw1")).unwrap();
+        assert!(matches!(ok, CloudflareDueCheck::Rotated { .. }));
+        assert_eq!(
+            store.snapshot()[CLOUDFLARE_REFRESH_PATH]["refresh_token"],
+            "NEW-refresh-0123456789"
+        );
+        // Persistent: every attempt fails -> nothing changed, never the token write.
+        let store = MemStore::with(&bundle(
+            "OLD-access-0123456789",
+            "OLD-refresh-0123456789",
+            NOW + 60,
+        ))
+        .failing(CLOUDFLARE_REFRESH_PATH, CLOUDFLARE_REFRESH_WRITE_ATTEMPTS);
+        let before = store.snapshot();
+        let err = due_check(&store, &|_, _| Ok(rotated()), false, &test_lock("rw2")).unwrap_err();
+        assert!(
+            err.starts_with("cloudflare-token-rotation-failed:refresh-record-write-failed:"),
+            "{err}"
+        );
+        assert!(err.contains("--cloudflare-login"), "{err}");
+        assert_eq!(store.snapshot(), before);
+        assert!(!store.writes().contains(&CLOUDFLARE_TOKEN_PATH.to_string()));
+        assert_no_token_bytes(
+            &err,
+            &[
+                "NEW-refresh-0123456789",
+                "OLD-refresh-0123456789",
+                "NEW-access-0123456789",
+            ],
+        );
+    }
+
+    /// A discovery document naming a plain-http, non-loopback token endpoint
+    /// is refused BEFORE the refresh token is sent anywhere.
+    #[test]
+    fn cloudflare_token_rotation_token_endpoint_must_be_https() {
+        struct Http {
+            token_endpoint: &'static str,
+            posts: AtomicUsize,
+        }
+        impl crate::cloudflare_oauth::HttpClient for Http {
+            fn get(&self, _: &str) -> Result<crate::cloudflare_oauth::HttpResponse, String> {
+                Ok(crate::cloudflare_oauth::HttpResponse {
+                    status: 200,
+                    body: serde_json::json!({
+                        "authorization_endpoint": "https://a/auth",
+                        "token_endpoint": self.token_endpoint,
+                    })
+                    .to_string(),
+                })
+            }
+            fn post_form(
+                &self,
+                _: &str,
+                _: &[(&str, &str)],
+            ) -> Result<crate::cloudflare_oauth::HttpResponse, String> {
+                self.posts.fetch_add(1, Ordering::SeqCst);
+                Ok(crate::cloudflare_oauth::HttpResponse {
+                    status: 200,
+                    body: r#"{"access_token":"n","expires_in":10}"#.into(),
+                })
+            }
+        }
+        for bad in [
+            "http://evil.example/oauth2/token",
+            "http://127.0.0.1@evil.example/t",
+            "ftp://x/t",
+        ] {
+            let http = Http {
+                token_endpoint: bad,
+                posts: AtomicUsize::new(0),
+            };
+            let err = perform_cloudflare_token_refresh(&http, "https://dash", "c", "R-secret")
+                .unwrap_err();
+            assert_eq!(err, "token-endpoint-not-https", "{bad}");
+            assert_eq!(
+                http.posts.load(Ordering::SeqCst),
+                0,
+                "{bad}: the refresh token was sent"
+            );
+        }
+        // CONTROL: https and loopback http do reach the POST.
+        for good in [
+            "https://dash.cloudflare.com/oauth2/token",
+            "http://127.0.0.1:4000/oauth2/token",
+            "http://localhost/t",
+            "http://[::1]:9/t",
+        ] {
+            let http = Http {
+                token_endpoint: good,
+                posts: AtomicUsize::new(0),
+            };
+            perform_cloudflare_token_refresh(&http, "https://dash", "c", "R").expect(good);
+            assert_eq!(http.posts.load(Ordering::SeqCst), 1, "{good}");
+        }
+    }
+
+    /// One scheduler per process; the failure backoff is bounded.
+    #[test]
+    fn cloudflare_token_rotation_scheduler_once_and_backoff_bounded() {
+        assert!(claim_cloudflare_rotation_scheduler_slot());
+        assert!(!claim_cloudflare_rotation_scheduler_slot());
+        let d1 = cloudflare_rotation_next_delay(true, Duration::ZERO);
+        let d2 = cloudflare_rotation_next_delay(true, d1);
+        assert_eq!(
+            (d1, d2),
+            (Duration::from_secs(60), Duration::from_secs(120))
+        );
+        assert_eq!(
+            cloudflare_rotation_next_delay(true, Duration::from_secs(3600)),
+            CLOUDFLARE_ROTATION_CHECK_EVERY
+        );
+        assert_eq!(
+            cloudflare_rotation_next_delay(false, d2),
+            CLOUDFLARE_ROTATION_CHECK_EVERY
+        );
+    }
+
+    // ── Criterion 2: no forge policy grants anything under secret/data/cloudflare/ ──
+
+    /// `(path pattern, capabilities)` per stanza; `#` comments dropped.
+    fn stanzas(hcl: &str) -> Vec<(String, Vec<String>)> {
+        let text: String = hcl
+            .lines()
+            .map(|l| l.split('#').next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut out = Vec::new();
+        let mut rest = text.as_str();
+        while let Some(i) = rest.find("path \"") {
+            let after = &rest[i + 6..];
+            let end = after.find('"').expect("closing quote");
+            let pattern = after[..end].to_string();
+            let body_start = after.find('{').expect("stanza body");
+            let body_end = after[body_start..].find('}').expect("stanza end") + body_start;
+            let body = &after[body_start..body_end];
+            let caps = body
+                .split_once('[')
+                .and_then(|(_, r)| r.split_once(']'))
+                .map(|(c, _)| {
+                    c.split(',')
+                        .map(|s| s.trim().trim_matches('"').to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default();
+            out.push((pattern, caps));
+            rest = &after[body_end..];
+        }
+        out
+    }
+
+    /// Vault path-pattern match: `+` is one segment, a trailing `*` a prefix.
+    fn pattern_matches(pattern: &str, path: &str) -> bool {
+        let (pat, glob) = match pattern.strip_suffix('*') {
+            Some(p) => (p, true),
+            None => (pattern, false),
+        };
+        let ps: Vec<&str> = pat.split('/').collect();
+        let xs: Vec<&str> = path.split('/').collect();
+        if (!glob && ps.len() != xs.len()) || ps.len() > xs.len() {
+            return false;
+        }
+        ps.iter().enumerate().all(|(i, p)| {
+            if *p == "+" {
+                true
+            } else if glob && i == ps.len() - 1 {
+                xs[i].starts_with(p)
+            } else {
+                *p == xs[i]
+            }
+        })
+    }
+
+    fn audit_policy_dir(dir: &Path) -> Vec<String> {
+        const PROBES: &[&str] = &[
+            "secret/data/cloudflare/token",
+            "secret/data/cloudflare/refresh",
+            "secret/data/cloudflare/mesh",
+            "secret/data/cloudflare/anything",
+            "secret/metadata/cloudflare/token",
+            "secret/metadata/cloudflare/refresh",
+        ];
+        let mut violations = Vec::new();
+        let mut files: Vec<_> = std::fs::read_dir(dir)
+            .expect("policy dir")
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|e| e == "hcl"))
+            .collect();
+        files.sort();
+        assert!(
+            files.len() >= 12,
+            "population: expected every shipped policy, found {} in {dir:?}",
+            files.len()
+        );
+        let mut saw_tray = false;
+        let mut saw_mirror = false;
+        for f in &files {
+            let name = f.file_name().unwrap().to_string_lossy().to_string();
+            let st = stanzas(&std::fs::read_to_string(f).unwrap());
+            if name == "tray.hcl" {
+                saw_tray = true;
+                for need in [
+                    "secret/data/cloudflare/token",
+                    "secret/data/cloudflare/refresh",
+                ] {
+                    if !st
+                        .iter()
+                        .any(|(p, c)| pattern_matches(p, need) && c.iter().any(|c| c == "read"))
+                    {
+                        violations.push(format!("tray.hcl (host resident) cannot read {need}"));
+                    }
+                }
+                continue;
+            }
+            if name == "git-mirror.hcl" {
+                saw_mirror = true;
+                let want = vec![
+                    (
+                        "secret/data/github/token".to_string(),
+                        vec!["read".to_string()],
+                    ),
+                    (
+                        "secret/metadata/github/token".to_string(),
+                        vec!["read".to_string()],
+                    ),
+                ];
+                if st != want {
+                    violations.push(format!("git-mirror.hcl grants changed: {st:?}"));
+                }
+            }
+            for probe in PROBES {
+                for (p, caps) in &st {
+                    if pattern_matches(p, probe) && caps.iter().any(|c| c != "deny") {
+                        violations.push(format!(
+                            "{name} grants {caps:?} on {probe} via path \"{p}\""
+                        ));
+                    }
+                }
+            }
+        }
+        if !saw_tray || !saw_mirror {
+            violations.push("tray.hcl or git-mirror.hcl missing from the policy dir".into());
+        }
+        violations
+    }
+
+    #[test]
+    fn cloudflare_token_rotation_policies_keep_forges_out() {
+        // Test-only: the fixture's negative control points this at a mutated
+        // COPY of the policy dir. Production never reads this variable.
+        let dir = std::env::var("TILLANDSIAS_TEST_POLICY_AUDIT_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../images/vault/policies")
+            });
+        // The matcher itself, both ways.
+        assert!(pattern_matches("secret/*", "secret/data/cloudflare/token"));
+        assert!(pattern_matches(
+            "secret/+/cloudflare/*",
+            "secret/data/cloudflare/refresh"
+        ));
+        assert!(pattern_matches(
+            "secret/data/cloud*",
+            "secret/data/cloudflare/token"
+        ));
+        assert!(!pattern_matches(
+            "secret/data/github/token",
+            "secret/data/cloudflare/token"
+        ));
+        assert!(!pattern_matches(
+            "secret/data/ca/proxy-cert",
+            "secret/data/cloudflare/token"
+        ));
+        let v = audit_policy_dir(&dir);
+        assert!(v.is_empty(), "policy violations:\n{}", v.join("\n"));
     }
 }
