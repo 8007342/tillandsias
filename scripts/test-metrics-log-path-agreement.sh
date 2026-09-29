@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# preflight: serial — writes the fixed /tmp/tillandsias-timing.jsonl and counts lines of the fixed /tmp/forge-expert-usage.jsonl before and after a run
 # test-metrics-log-path-agreement.sh — the writer and the reader of a metrics
 # log must resolve the SAME path, and a record must name the host that made it.
 # @trace order:890-t9pu

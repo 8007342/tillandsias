@@ -73,6 +73,50 @@ else
 fi
 cleanup; trap - EXIT INT TERM HUP PIPE
 
+# ── ARM 2c: A GUARD THE GATE RUNS INLINE IS A ROSTER ENTRY (1499-m9fj) ──────
+# MEASURED: 48 deciders build.sh runs as `_run bash .../check-X.sh` were in none
+# of the three rosters, so the door passed trees the gate refused. Plant one in
+# a never-called function of build.sh: the door must run it and refuse.
+# AND IN THE GATE'S MODE: a second plant refuses ONLY when given the argument
+# the gate passes it, so a door that drops arguments (the first draft of this
+# row, which made check-mcp-live-build refuse a tree the gate passes) sees a
+# pass there and this arm fails.
+PLANT=scripts/check-zz-1499-planted.sh
+PLANT_ARGS=scripts/check-zz-1499-args.sh
+cat > "$PLANT_ARGS" <<'PL'
+#!/usr/bin/env bash
+if [ "${1:-}" = zzmode ] && [ "${2:-}" = second ]; then
+    echo "violation:planted-mode-guard: refuses only in the gate's mode"
+    exit 1
+fi
+echo "ok:planted-mode-guard: no mode given (argv: $*)"
+PL
+chmod +x "$PLANT_ARGS"
+cat > "$PLANT" <<'PL'
+#!/usr/bin/env bash
+echo "violation:planted-inline-guard: this guard exists and refuses"
+exit 1
+PL
+chmod +x "$PLANT"
+_bs_backup="$(mktemp "${TMPDIR:-/tmp}/build-sh-1499.XXXXXX")"
+cp -p build.sh "$_bs_backup"
+cleanup() { rm -f "$PLANT" "$PLANT_ARGS"; [ -s "$_bs_backup" ] && cp -p "$_bs_backup" build.sh; rm -f "$_bs_backup"; }
+trap cleanup EXIT INT TERM HUP PIPE
+printf '\n_zz_1499_never_called() {\n    _run bash "$SCRIPT_DIR/scripts/check-zz-1499-planted.sh"\n    _run bash "$SCRIPT_DIR/scripts/check-zz-1499-args.sh" zzmode second 2>&1\n}\n' >> build.sh
+out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"; rc=$?
+if [ "$rc" -ne 0 ] && grep -q 'zz-1499-planted' <<< "$out"; then
+    ok "a guard build.sh runs inline is picked up and refuses (1499-m9fj)"
+else
+    bad "a guard the gate runs inline was invisible to the front door (rc=$rc)"
+fi
+if grep -q '^refused:preflight:check-zz-1499-args\[zzmode second\]$' <<< "$out" \
+    && grep -q 'violation:planted-mode-guard' <<< "$out"; then
+    ok "the door runs an inline guard in the gate's mode, with the gate's arguments (1499-m9fj)"
+else
+    bad "the door ran an inline guard without the arguments the gate passes it"
+fi
+cleanup; trap - EXIT INT TERM HUP PIPE
+
 # ── ARM 2b: A SELF-DECLARED GATE-ONLY GUARD (1496-w25b) ─────────────────────
 # A fixture that declares `# preflight: gate-only — <reason>` is reported as a
 # DECLARED skip by name, counted, and NOT run (it would leave a marker). The
@@ -114,6 +158,52 @@ else
     bad "a check-* push decider was allowed to skip the door"
 fi
 go_cleanup; trap - EXIT INT TERM HUP PIPE
+
+# ── ARM 2d: A SERIAL GUARD RUNS WITH NOTHING BESIDE IT (1499-m9fj) ──────────
+# The door runs guards concurrently; a guard declaring `# preflight: serial —
+# <reason>` writes shared state and must run ALONE. Three plants log start and
+# end to one file: A declares serial, B and C do not. PREMISE FIRST: B and C
+# must overlap each other, or this run proves nothing about concurrency. Then
+# no line may fall between A's start and A's end.
+SER_LOG="$(mktemp "${TMPDIR:-/tmp}/serial-1499.XXXXXX")"
+plant_ser() { # plant_ser <path> <tag> <header line or empty>
+    printf '#!/usr/bin/env bash\n%s\necho "%s start" >> "%s"\nsleep 2\necho "%s end" >> "%s"\n' \
+        "$3" "$2" "$SER_LOG" "$2" "$SER_LOG" > "$1"
+    chmod +x "$1"
+}
+SER_A=scripts/test-zz-1499-serial-a.sh
+SER_B=scripts/test-zz-1499-serial-b.sh
+SER_C=scripts/test-zz-1499-serial-c.sh
+SER_STEP=scripts/gate-steps.d/999-zz-1499-serial.step
+plant_ser "$SER_A" A '# preflight: serial — planted: writes the shared log alone'
+plant_ser "$SER_B" B ''
+plant_ser "$SER_C" C ''
+{ for p in "$SER_A" "$SER_B" "$SER_C"; do
+    printf 'STEP_DESC="planted"\nSTEP_SCRIPT="%s"\nSTEP_ERROR="planted"\nSTEP_OK="planted"\n' "$p"; done; } > "$SER_STEP"
+ser_cleanup() { rm -f "$SER_A" "$SER_B" "$SER_C" "$SER_STEP" "$SER_LOG"; }
+trap ser_cleanup EXIT INT TERM HUP PIPE
+TILLANDSIAS_PREFLIGHT_JOBS=3 TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight >/dev/null 2>&1
+ser="$(tr '\n' ' ' < "$SER_LOG")"
+# overlaps <X> <Y>: 1 when X starts while Y is running or Y starts while X is.
+# An interval test, not a string pattern: B and C can overlap without their
+# start lines being adjacent (measured: `B start A end C start B end`).
+overlaps() {
+    awk -v x="$1" -v y="$2" '
+        $2 == "start" { if (($1 == x && open[y]) || ($1 == y && open[x])) o = 1; open[$1] = 1 }
+        $2 == "end"   { open[$1] = 0 }
+        END { print o + 0 }' "$SER_LOG"
+}
+if [ "$(overlaps B C)" = 1 ]; then
+    ok "PREMISE: undeclared plants B and C ran concurrently ($ser)"
+else
+    bad "PREMISE: B and C did not overlap, so this run cannot show exclusivity ($ser)"
+fi
+if [ "$(overlaps A B)" = 0 ] && [ "$(overlaps A C)" = 0 ] && grep -q '^A end$' "$SER_LOG"; then
+    ok "a guard declaring serial ran with nothing beside it"
+else
+    bad "a serial guard shared its run with another guard ($ser)"
+fi
+ser_cleanup; trap - EXIT INT TERM HUP PIPE
 
 # ── ARM 3: A NAMED SKIP IS NOT A REFUSAL (1273-4mak, 1309-fhxb) ─────────────
 # MEASURED: test-uninstall-matcher-spares-bystanders prints skip:not-darwin and

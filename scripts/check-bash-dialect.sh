@@ -370,7 +370,33 @@ if [ -z "$SCAN_FILES" ]; then
   exit 1
 fi
 
+# ORDER 1500-gu5r: ONE BULK PREFILTER, THEN THE PER-FILE WORK ONLY WHERE IT CAN
+# FIND SOMETHING. The loop below spawns a dozen or more processes per file
+# (code_of's sed, a grep per rule, awk twice) across ~880 files: 15 s on yoga,
+# three times the preflight door's deadline, so the door could only ever skip
+# this decider. Every rule's report requires its own trigger to match the RAW
+# file (a superset of the comment-stripped code_of text): the ten PAT_* rules,
+# awk -v NAME="$... for awkv_multiline_sites, and `$(` followed by `case ` or a
+# line ending in `$(` for case_in_cs_sites (the only two ways its state machine
+# is entered). Allowlisted files are always kept, for the "shrink the allowlist"
+# note. So one grep -lE over the population names every file any rule could
+# report, and skipping the rest changes no verdict (the fixture pins the
+# rules; the live-tree run is unchanged).
+_dialect_trigger="$PAT_EXPANSION|$PAT_BUILTIN|$PAT_ASSOC|$PAT_PRINTF_T|$PAT_GNUDATE|$PAT_GNUDU|$PAT_GNUSED|$PAT_BASH4|$PAT_PROCSUB_SOURCE|$PAT_EMPTYARR"
+_dialect_trigger="$_dialect_trigger"'|-v[[:space:]]*[A-Za-z_][A-Za-z0-9_]*="?\$|\$\(.*case[[:space:]]|\$\([[:space:]]*$'
+# shellcheck disable=SC2086
+_dialect_candidates="$(grep -lE -- "$_dialect_trigger" $SCAN_FILES 2>/dev/null || true)"
+_dialect_candidates="
+$_dialect_candidates
+"
+
 for f in $SCAN_FILES; do
+  case "$_dialect_candidates" in
+    *"
+$f
+"*) ;;
+    *) in_allowlist "${f##*/}" || continue ;;
+  esac
   # 1374-4u6i: count FILES, as the summary line says. Each rule below used to
   # increment the counter itself, so one mapfile line (PAT_BUILTIN and PAT_BASH4
   # both match it) was reported as two files and the fixture arm expecting :1
