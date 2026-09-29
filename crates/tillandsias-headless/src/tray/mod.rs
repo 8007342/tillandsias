@@ -4952,6 +4952,11 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         debug,
         Some(Box::new(notify_github_refresh_expiring)),
     );
+    // Order 1505-iysn: the same resident process keeps the Cloudflare OAuth
+    // bundle alive (secret/cloudflare/{token,refresh}); a no-op verdict when
+    // no Cloudflare login is stored.
+    #[cfg(feature = "vault")]
+    crate::vault_bootstrap::spawn_cloudflare_token_rotation_scheduler(debug);
     // Order 363: the NDJSON MCP tool socket for in-forge agents. A bind
     // failure degrades the tray to no-agent-publish rather than killing
     // it — the control socket above is load-bearing, this one is not

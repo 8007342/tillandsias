@@ -17014,6 +17014,9 @@ pub(crate) fn ensure_enclave_for_project(
     // 8 h. Idempotent per process; the tray's own start is deduplicated.
     #[cfg(feature = "vault")]
     crate::vault_bootstrap::spawn_github_token_rotation_scheduler(debug, None);
+    // Order 1505-iysn: and the Cloudflare OAuth bundle, from the same entry.
+    #[cfg(feature = "vault")]
+    crate::vault_bootstrap::spawn_cloudflare_token_rotation_scheduler(debug);
 
     Ok((certs_dir, mirror_identity))
 }
@@ -18535,6 +18538,10 @@ fn maybe_spawn_vsock_listener(
     // 30-minute window. The Linux tray starts the same scheduler.
     #[cfg(feature = "vault")]
     crate::vault_bootstrap::spawn_github_token_rotation_scheduler(false, None);
+    // Order 1505-iysn: the guest's resident service keeps the Cloudflare OAuth
+    // bundle alive too.
+    #[cfg(feature = "vault")]
+    crate::vault_bootstrap::spawn_cloudflare_token_rotation_scheduler(false);
     Some(tokio::spawn(async move {
         // One VmStateHandle drives three concurrent tasks below — the
         // accept loop (reads it on every VmStatusRequest), the phase

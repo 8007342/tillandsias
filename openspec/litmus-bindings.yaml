@@ -226,6 +226,7 @@ specs:
   # must appear in a bound litmus yaml or it cannot fail a gate.
   - litmus:fake-cloudflare
   - litmus:cloudflare-oauth-core
+  - litmus:cloudflare-token-rotation
   coverage_ratio: 75
   last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher

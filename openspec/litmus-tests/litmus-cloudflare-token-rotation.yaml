@@ -1,0 +1,58 @@
+# @trace order:1505-iysn, openspec/changes/cloudflare-login-and-fleet-vpn/design.md (Decision 2)
+# @trace openspec/changes/cloudflare-login-and-fleet-vpn/specs/cloudflare-auth/spec.md
+name: litmus:cloudflare-token-rotation
+spec: ci-release
+phase: pre-build
+description: >
+  The Cloudflare OAuth bundle is stored at secret/cloudflare/token and
+  secret/cloudflare/refresh (refresh record first), and a resident due-check
+  rotates it under a host-wide lock from the Linux tray, every lane launch and
+  the guest listener. Against the real tillandsias-fake-cloudflare with an
+  in-memory Vault seam: a token with 20 min left rotates exactly once; two
+  concurrent checks make one exchange (control: distinct locks make two); 2 h
+  left makes none; a refused refresh keeps both records and names
+  cloudflare-token-rotation-failed; a forge never rotates; a crash between the
+  two writes loses nothing; no token bytes reach Debug or any verdict; each of
+  the three scheduler call sites is pinned by a mutation arm; no policy but
+  the host-resident tray.hcl grants anything under secret/data/cloudflare/ and
+  git-mirror.hcl's grants are unchanged.
+severity: critical
+size: long
+
+# PRE-FIX RESULT: FAILS — before 1505-iysn there were no Cloudflare Vault
+# paths, store, scheduler, call sites or named tests, so every arm prints FAIL.
+
+preconditions:
+  - workspace contains scripts/test-cloudflare-token-rotation.sh
+  - workspace contains crates/tillandsias-headless/src/vault_bootstrap.rs
+  - workspace contains crates/tillandsias-headless/src/bin/tillandsias-fake-cloudflare.rs
+  - cargo is available in PATH
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-cloudflare-token-rotation.sh && test -x scripts/test-cloudflare-token-rotation.sh && echo 'ok: cloudflare-rotation-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: cloudflare-rotation-fixture-parses"
+
+  - step: "the six arms, the crash/no-leak/policy arms and every control pass by name"
+    command: "out=$(bash scripts/test-cloudflare-token-rotation.sh 2>&1); rc=$?; case \"$out\" in (*'ok:cloudflare-token-rotation:6/6+controls'*) [ \"$rc\" = 0 ] && echo 'ok: cloudflare rotation 6/6+controls' ;; (*) printf '%s\\n' \"$out\" | tail -12; exit 1 ;; esac"
+    timeout_ms: 900000
+    expected_behavior: "ok: cloudflare rotation 6/6+controls"
+
+observability:
+  traces:
+    - "@trace order:1505-iysn"
+    - "@trace openspec:changes/cloudflare-login-and-fleet-vpn/design.md#decision-2"
+  expected_log: "ok:cloudflare-token-rotation:6/6+controls"
+  log_fields:
+    spec: "ci-release"
+    test: "cloudflare-token-rotation"
+    artifact: "crates/tillandsias-headless/src/vault_bootstrap.rs"
+
+rollback:
+  on_failure: >
+    A named arm or control failed. Re-run `bash scripts/test-cloudflare-token-rotation.sh`
+    and read its FAIL lines. Do not weaken the lock, the refresh-first write
+    order, the forge refusal, the fail-closed Vault store or the policy audit
+    to make it pass.
+  command: "bash scripts/test-cloudflare-token-rotation.sh"
