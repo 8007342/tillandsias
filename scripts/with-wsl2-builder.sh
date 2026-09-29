@@ -275,6 +275,28 @@ done
 # loop stood here as a second copy of the toolbox's, which is the divergence
 # that packet's fourth criterion forbids -- a third boundary must not be able
 # to reimplement it a third time.
+# ORDER 1471-8ydv — HAND THE HOST'S MEMORY ACROSS, sampled once, here. Inside
+# the guest, /proc/meminfo is the utility VM's (1337-7jr5), so the gate's
+# memory floor there cannot judge the Windows host that actually reaps it. On
+# THIS side of the hop, Git Bash's /proc/meminfo is the Windows host's own
+# memory: MemFree matched Win32_OperatingSystem.FreePhysicalMemory within
+# 1.5% on yolanda 2026-09-29 (4,465,888 vs 4,407,732 kB). That CIM field is
+# Windows' "Available" figure, not Linux's MemFree, so it is fed to the floor as
+# MemAvailable without the under-report the floor warns about. It costs no process;
+# the CIM query costs ~1s. The figure is exported as a TILLANDSIAS_* variable,
+# so lib-env-forward.sh carries it through its one channel, never the wsl.exe
+# argument string. build.sh turns it into --meminfo-from. It is the START
+# state (1176-fn2p); the run state stays the OOM post-mortem's job.
+# BEGIN-HOST-MEMORY-SAMPLE
+_w2_host_meminfo="${TILLANDSIAS_WSL2_HOST_MEMINFO:-/proc/meminfo}"   # fixture seam
+if [ -z "${TILLANDSIAS_GATE_HOST_MEMAVAILABLE_KB:-}" ] && [ -r "$_w2_host_meminfo" ]; then
+    _w2_memfree="$(sed -n 's/^MemFree:[[:space:]]*\([0-9][0-9]*\)[[:space:]]*kB.*/\1/p' "$_w2_host_meminfo" | head -n 1)"
+    case "$_w2_memfree" in
+        ''|*[!0-9]*) ;;
+        *) export TILLANDSIAS_GATE_HOST_MEMAVAILABLE_KB="$_w2_memfree" ;;
+    esac
+fi
+# END-HOST-MEMORY-SAMPLE
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-env-forward.sh"
 _ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 
