@@ -13,6 +13,10 @@
 #   3 LOGS      (negative control) a token hit only in a --logs file does NOT
 #               outrank a recorded token; its hits appear in the logs= column
 #   4 EMPTY     an audit with no bare sites refuses, never prints an empty rank
+#   6 REPORTS   a ledger file that pastes a ranking (carries the summary line)
+#               is not an encounter and adds no hits
+#   5 LONGEST   a verdict prefixed by two bare tokens counts once, for the
+#               longer (more specific) one; the family prefix is not inflated
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 R="$ROOT/scripts/rank-refusal-hits.sh"
@@ -59,6 +63,28 @@ out4="$(bash "$R" --audit-file "$W/audit-empty" --ledger "$W/ledger")"; rc4=$?
 [ "$rc4" -ne 0 ] && grep -q '^blocked:rank-refusal-hits:no-bare-sites' <<<"$out4" \
     && ok "ARM4 an audit with no bare sites is refused, not an empty rank" \
     || bad "ARM4 rc=$rc4 out='$out4'"
+
+# ── ARM 5 ────────────────────────────────────────────────────────────────
+mkdir -p "$W/l5"
+cat > "$W/audit5" <<'EOF'
+bare build.sh:1 refused:family:
+bare build.sh:2 refused:family:specific:
+EOF
+printf 'hit refused:family:specific:x and refused:family:specific:y and refused:family:other\n' > "$W/l5/a.yaml"
+out5="$(bash "$R" --audit-file "$W/audit5" --ledger "$W/l5")"
+if grep -qE '^1 hits=2 logs=0 sites=1 refused:family:specific: ' <<<"$out5" \
+   && grep -qE '^2 hits=1 logs=0 sites=1 refused:family: ' <<<"$out5"; then
+    ok "ARM5 a verdict prefixed by two tokens counts once, for the longest (specific=2, family=1)"
+else bad "ARM5 double-counted or misattributed: '$(tr '\n' '|' <<<"$out5")'"; fi
+
+# ── ARM 6 ────────────────────────────────────────────────────────────────
+mkdir -p "$W/l6"
+printf 'saw refused:family:specific:x\n' > "$W/l6/real.yaml"
+printf '1 hits=9 refused:family:specific: x\nrefused:family:specific:y refused:family:specific:z\nrank-refusal-hits:tokens=2 with-hits=1 sites=2\n' > "$W/l6/report.yaml"
+out6="$(bash "$R" --audit-file "$W/audit5" --ledger "$W/l6")"
+grep -qE '^1 hits=1 logs=0 sites=1 refused:family:specific: ' <<<"$out6" \
+    && ok "ARM6 a pasted ranking adds no hits (only the real encounter counts)" \
+    || bad "ARM6 a report was counted: '$(tr '\n' '|' <<<"$out6")'"
 
 [ "$FAIL" -eq 0 ] && { echo "PASS: rank-refusal-hits (1494-kkbi)"; exit 0; }
 echo "FAILED: rank-refusal-hits (1494-kkbi)"; exit 1

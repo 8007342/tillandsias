@@ -20,7 +20,9 @@
 #   <rank> hits=<recorded> logs=<log-only> sites=<n> <token> <first-site>
 # then `rank-refusal-hits:tokens=<t> with-hits=<h> sites=<n>`.
 # A token counts every recorded verdict that BEGINS with it, since audit
-# tokens are often a static prefix of a verdict completed at run time.
+# tokens are often a static prefix of a verdict completed at run time; when
+# several bare tokens prefix the same verdict, the LONGEST one owns it, so a
+# verdict is never counted twice.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 top=0; audit_file=""; ledgers=(); logs=()
@@ -52,7 +54,16 @@ if [ ! -s "$work/bare" ]; then
 fi
 
 TOK='(refused|blocked|violation):[A-Za-z0-9._/:-]+'
-grep -rhoE "$TOK" "${ledgers[@]}" 2>/dev/null | sort | uniq -c > "$work/recorded" || true
+# A REPORT is not an encounter. A pasted ranking or audit quotes every token it
+# lists, so counting it would make each published ranking inflate itself (the
+# first run's own top-10 event on 1247-amcu added one hit to each of its
+# entries). Files carrying this tool's or the audit's summary line are skipped.
+grep -rlE 'rank-refusal-hits:tokens=|audit:refusal-affordance:covered=' "${ledgers[@]}" 2>/dev/null | sort > "$work/reports" || true
+grep -rlE "$TOK" "${ledgers[@]}" 2>/dev/null | sort | comm -23 - "$work/reports" > "$work/sources" || true
+: > "$work/recorded"
+if [ -s "$work/sources" ]; then
+    tr '\n' '\0' < "$work/sources" | xargs -0 grep -hoE "$TOK" 2>/dev/null | sort | uniq -c > "$work/recorded" || true
+fi
 : > "$work/logged"
 [ "${#logs[@]}" -gt 0 ] && { grep -hoE "$TOK" "${logs[@]}" 2>/dev/null | sort | uniq -c > "$work/logged" || true; }
 
@@ -60,13 +71,20 @@ awk -v top="$top" '
     FILENAME ~ /recorded$/ { rec[$2] += $1; next }
     FILENAME ~ /logged$/   { lg[$2]  += $1; next }
     {   tok = $3; sites[tok]++; if (!(tok in first)) first[tok] = $2 }
+    # Each recorded verdict is attributed ONCE, to the LONGEST bare token it
+    # begins with (macbookair, 2026-09-29): with both refused:preflight: and
+    # refused:preflight:accounting-mismatch: in the audit, a quote of the
+    # latter must not also count for the former.
+    function owner(c,    t, best) {
+        best = ""
+        for (t in sites) if (index(c, t) == 1 && length(t) > length(best)) best = t
+        return best
+    }
     END {
-        for (t in sites) {
-            h = 0; l = 0
-            for (c in rec) if (index(c, t) == 1) h += rec[c]
-            for (c in lg)  if (index(c, t) == 1) l += lg[c]
-            printf "%d\t%d\t%d\t%s\t%s\n", h, l, sites[t], t, first[t]
-        }
+        for (c in rec) { o = owner(c); if (o != "") H[o] += rec[c] }
+        for (c in lg)  { o = owner(c); if (o != "") L[o] += lg[c] }
+        for (t in sites)
+            printf "%d\t%d\t%d\t%s\t%s\n", H[t] + 0, L[t] + 0, sites[t], t, first[t]
     }' "$work/recorded" "$work/logged" "$work/bare" \
   | sort -t$'\t' -k1,1nr -k4,4 > "$work/ranked"
 
