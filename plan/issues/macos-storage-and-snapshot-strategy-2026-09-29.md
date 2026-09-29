@@ -155,6 +155,23 @@ floor path, so no user on 14 to 26 is left behind.
 | Initial disk | 20 GiB logical (it was 250 GiB); the guest grew `vda2` and btrfs to the full 20 GiB on first boot (5% used) |
 | Growth | File extended to 30 GiB with the VM stopped. On the next boot the guest showed `vda` and `vda2` at 30 GiB and btrfs at 30 GiB (3% used); the host file allocated 972 MB. So `next_guest_disk_size` plus cloud-init growpart and resizefs grows end to end |
 
-The qcow2 path writes the same way and very likely allocates the same ~4.7 GB
-at first provision. If the raw.xz path is not adopted, port the zero-run
-punching to `crate::qcow2::expand_to_raw` anyway.
+**CORRECTION, measured the same day.** The guess above that the current
+qcow2 path pays the same ~4.7 GB was WRONG. `crate::qcow2::expand_to_raw` on
+the real Fedora-Cloud-Base-Generic-44-1.7 qcow2 (SHA-256 verified), release
+build, 250 GiB target:
+
+| Path | Allocated | Apparent | Expand time |
+|---|---|---|---|
+| qcow2 (current trunk) | **731 MB** | 250 GiB | **1.3 s** |
+| raw.xz (this branch, with F_PUNCHHOLE) | 803 MB | 20 GiB | 20.4 to 22.4 s |
+| raw.xz (this branch, before F_PUNCHHOLE) | 4.7 GB | 20 GiB | 22.1 s |
+
+qcow2 stores only allocated clusters and the expander writes only those, so
+the unwritten space stays as real holes. The 4.7 GB was this branch's own
+defect, fixed by the punching. So there is **no current-path bug**, and
+**raw.xz is not a win**: the download is 14 MB smaller, but decoding is about
+15x slower and allocates a little more. Its one real advantage is dropping the
+qcow2 parser. Recommendation: KEEP qcow2. The disk-size policy (20 GiB start,
+10 GiB growth, 50 GiB cap) is independent of the image format and applies to
+the qcow2 path as-is: pass `GUEST_DISK_SIZE_BYTES` to `expand_to_raw` exactly
+as today.
