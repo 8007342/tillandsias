@@ -73,19 +73,16 @@ closure is the fixture named in its packet's `verifiable_closure`.
       zero writes.
 - [ ] 6.3 `scripts/test-fleet-vpn-init.sh`.
 
-## 7. Join / leave / status per platform
+## 7. Join / leave / status — AMENDED 2026-09-29 (no host daemon anywhere)
 
-- [ ] 7.1 Linux bare metal [1505-bhsb, opus]: client detection, printed
-      install step per substrate, `mdm.xml` write, `warp-cli` verification,
-      Mesh IP in Vault, `leave`, `status`; `scripts/test-fleet-vpn-join-linux.sh`
-      with a fake `warp-cli` on PATH; first live arm on a Silverblue host
-      recorded in the packet.
-- [ ] 7.2 macOS/Windows through the guest [1505-g6zc, opus]: client in the
-      guest provisioning recipes; service token hand-over; guest-side join;
-      `status` relayed to the host tray.
-- [ ] 7.3 Spoke research [1505-m63i, sonnet]: proxy-mode-in-rootless-container
-      measurement with four named outcomes; result recorded in the packet
-      and the design note.
+- [x] 7.1 ~~Linux bare metal [1505-bhsb]~~ OBSOLETED by 1506-t97c: the
+      client runs in the `tillandsias-warp` sidecar sharing the router's
+      network namespace (`openspec/changes/fleet-messaging-poc/tasks.md` §7).
+- [x] 7.2 ~~macOS/Windows through the guest [1505-g6zc]~~ OBSOLETED by
+      1506-t97c: the guest's router hosts the same sidecar.
+- [x] 7.3 ~~Spoke research [1505-m63i]~~ OBSOLETED by 1506-euvq: proxy
+      mode is excluded by the Mesh documentation; the measurement is WARP
+      mode in the rootless sidecar, five outcomes.
 
 ## 8. Fleet experts
 

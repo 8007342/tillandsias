@@ -61,69 +61,70 @@ Mesh node and service-token counts it read. The API base SHALL come from
 - **THEN** stdout is `refused:fleet-vpn:no-zero-trust-org:tillandsias-vpn-<acct8>`
   followed by the dashboard step, and no service token is minted
 
-### Requirement: joining on Linux bare metal writes the managed file and proves registration
+### Requirement: the Cloudflare One Client runs in a sidecar beside the router, never on a host OS
 
-`tillandsias --fleet-vpn join` on a Linux host SHALL detect the Cloudflare
-One Client service; when absent it SHALL print the install step for the
-substrate (`dnf install cloudflare-warp` on mutable Fedora, `rpm-ostree
-install cloudflare-warp` then reboot on an ostree host) and refuse with
-`refused:fleet-vpn:client-absent`, never installing with elevated
-privileges itself. When present it SHALL produce `/var/lib/cloudflare-warp/mdm.xml`
-with `organization` = the team name, `auth_client_id` / `auth_client_secret`
-from `secret/cloudflare/mesh`, `service_mode` `warp`, `auto_connect` `1`,
-`onboarding` `false`, verify `warp-cli --accept-tos registration show` and
-`status`, and record the Mesh IP at `secret/cloudflare/mesh.mesh_ip`.
-`--fleet-vpn leave` SHALL delete the registration, delete this host's
-service token through the API, remove the managed file and clear
+AMENDED 2026-09-29 (1506-3xu7): this requirement replaces the earlier
+"joining on Linux bare metal writes the managed file", "macOS and Windows
+join through the Linux guest" and "the daemon-free spoke is measured"
+requirements of this delta.
+
+`tillandsias --fleet-vpn join` SHALL NOT install, start or configure any
+process on the host operating system. It SHALL write `mdm.xml`
+(`organization` = the team name, `auth_client_id` / `auth_client_secret`
+from `secret/cloudflare/mesh`, `service_mode` `warp`,
+`warp_tunnel_protocol` `masque`, `auto_connect` `1`, `onboarding` `false`)
+into a named volume, launch the `tillandsias-warp` container from
+`images/warp/` sharing the router's network namespace
+(`--network container:tillandsias-router`) with exactly `--cap-drop=ALL`,
+`--cap-add=NET_ADMIN`, `--device /dev/net/tun`,
+`--sysctl net.ipv4.conf.all.src_valid_mark=1`, `--userns=keep-id`,
+`--user 0`, `--read-only`, and no other capability or device; verify
+`warp-cli --accept-tos registration show` and `status` through `podman
+exec`; and record the Mesh IP at `secret/cloudflare/mesh.mesh_ip` and in
+`plan/fleet/peers/<host>.yaml`. The sidecar's launch arguments SHALL come
+from a dedicated `warp` profile in `container_spec`, never from a generic
+capability pass-through. `--fleet-vpn leave` SHALL remove the container and
+the volume, delete this host's service token through the API and clear
 `secret/cloudflare/mesh`. `--fleet-vpn status` SHALL print one fact per line
-(`org`, `client`, `registration`, `mesh_ip`, `route:<service>`) and print
-`unknown:<why>` for any fact it cannot read.
+(`org`, `client`, `registration`, `mesh_ip`, `route:<service>`) read from
+the sidecar and print `unknown:<why>` for any fact it cannot read. On macOS
+and Windows the guest's router SHALL host the same sidecar and the guest
+headless SHALL perform the join; the host tray relays `status` with
+`client` reading `guest`. `init` SHALL print the account plan it read,
+SHALL call no billing or subscription route, and SHALL refuse
+`refused:fleet-vpn:paid-feature:<step>` for any step whose answer names a
+paid feature.
 
-#### Scenario: an absent client is a printed step
+#### Scenario: join launches exactly the sidecar profile
 
-- **WHEN** `--fleet-vpn join` runs with no `warp-svc` on PATH
-- **THEN** it exits non-zero with `refused:fleet-vpn:client-absent` and
-  the printed step names the package manager of the running substrate
+- **WHEN** `--fleet-vpn join` runs with a fake `podman` on PATH that records its arguments
+- **THEN** the recorded `run` carries `--network container:tillandsias-router`, `--cap-drop=ALL`, `--cap-add=NET_ADMIN`, `--device /dev/net/tun` and `--userns=keep-id`, and no `--privileged`, no other `--cap-add` and no other `--device`
+- **AND** no `sudo`, `systemctl` or `/var/lib/cloudflare-warp` path is touched on the host
 
-#### Scenario: join with a fake warp-cli lands the managed file
+#### Scenario: join with a fake warp-cli records the Mesh IP twice
 
-- **WHEN** `--fleet-vpn join` runs with a fake `warp-cli` that reports a
-  registration and a Mesh IP
-- **THEN** the managed file contains the team name and the token client id
-  and not the OAuth access token
-- **AND** `secret/cloudflare/mesh.mesh_ip` equals the fake's reported IP
-
-### Requirement: macOS and Windows join through the Linux guest
-
-On macOS and Windows the host operating system SHALL NOT be enrolled;
-`--fleet-vpn join` SHALL provision the Cloudflare One Client inside the
-Linux guest (Virtualization.framework VM, WSL2 distro), hand the service
-token to the guest over the existing host-to-guest credential channel, have
-the guest's `tillandsias-headless` write the managed file and register, and
-relay `status` to the host tray. The guest SHALL be the Mesh participant;
-the design accepts that host-native tools on these platforms are not on the
-mesh.
+- **WHEN** the fake sidecar's `warp-cli` reports a registration and a Mesh IP
+- **THEN** `secret/cloudflare/mesh.mesh_ip` and `plan/fleet/peers/<host>.yaml` `mesh_ip` both equal the reported IP and `mdm.xml` in the volume carries the token client id and not the OAuth access token
 
 #### Scenario: the guest holds the registration
 
 - **WHEN** `--fleet-vpn status` runs on a joined macOS or Windows host
-- **THEN** `registration` and `mesh_ip` are the guest's values and `client`
-  reads `guest`
+- **THEN** `registration` and `mesh_ip` are the guest's values and `client` reads `guest`
 
-### Requirement: the daemon-free spoke is measured, not assumed
+### Requirement: the rootless sidecar is measured before join depends on it
 
-Before any spoke is designed without the host daemon, a research packet
-SHALL run the Cloudflare One Client in `service_mode` `proxy` inside a
-rootless container on a Linux host and record exactly one of
-`reaches-mesh`, `registers-but-no-mesh`, `cannot-register-unprivileged`,
-`package-refuses-container` against a hub's Mesh IP and hostname route, with
-the regime (client version, podman version, kernel) attached.
+Before `--fleet-vpn join` is wired to the sidecar, a research packet SHALL
+run the Cloudflare One Client in WARP mode inside the `tillandsias-warp`
+container beside a running router on a Linux host and record exactly one of
+`mesh-ip-acquired`, `tun-denied-rootless`, `firewall-refused`,
+`package-refuses-container`, `registers-no-mesh-ip`, with the regime
+(client version, podman version, kernel, host) attached. Proxy mode SHALL
+NOT be measured: the Mesh documentation excludes it.
 
-#### Scenario: the outcome is one of four named tokens
+#### Scenario: the outcome is one of five named tokens
 
 - **WHEN** the measurement script finishes
-- **THEN** its last stdout line is `outcome:<one of the four tokens>` and
-  the preceding lines carry the regime
+- **THEN** its last stdout line is `outcome:<one of the five tokens>` and the preceding lines carry the regime
 
 ### Requirement: the tray shows the network and the login
 
