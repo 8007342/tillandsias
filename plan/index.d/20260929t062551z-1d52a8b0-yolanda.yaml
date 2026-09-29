@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-podman-mode-gate-fixture-fails-on-a-host-with-no-python3-instead-of-skipping-by-name
+    field: status
+    value: completed
+    ts: "2026-09-29T06:25:51Z"
+    host: yolanda
+
+events:
+  - packet_id: the-podman-mode-gate-fixture-fails-on-a-host-with-no-python3-instead-of-skipping-by-name
+    event:
+      type: completed
+      ts: "2026-09-29T06:25:51Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: f18c63c63
+  - packet_id: the-podman-mode-gate-fixture-fails-on-a-host-with-no-python3-instead-of-skipping-by-name
+    event:
+      type: note
+      ts: "2026-09-29T06:25:51Z"
+      host: yolanda
+      summary: |-
+        landed in land89 f18c63c63 with the coordinator heredoc relay-fix; re-run on yolanda Windows Git Bash at that file: skip:gate-podman-mode:runtime-has-no-af-unix rc 0, and with python3 hidden skip:gate-podman-mode:no-fixture-runtime rc 0; checkout clean

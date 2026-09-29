@@ -5366,6 +5366,24 @@ const GIT_MIRROR_SEED_POLL_INTERVAL: Duration = Duration::from_secs(1);
 /// Probes via `podman exec` inside the mirror container so readiness is
 /// measured on the served repo itself, not on network reachability.
 /// @trace spec:git-mirror-service
+/// ORDER 778-hb3x criterion 3. The line the mirror prints when its seed fetch
+/// fails (images/git/entrypoint.sh, `retry_msg "[git-mirror] Seed fetch
+/// failed: …"`). A cross-component string: the litmus
+/// git-mirror-seed-failure-surfaced-shape pins that both files agree on it.
+const GIT_MIRROR_SEED_FAILURE_MARKER: &str = "[git-mirror] Seed fetch failed:";
+
+/// The mirror's most recent seed-fetch failure in a log tail, trimmed and
+/// bounded, or None when the tail holds none (a slow seed, not a failing one).
+fn last_seed_failure(lines: &[String]) -> Option<String> {
+    let line = lines
+        .iter()
+        .rev()
+        .find(|l| l.contains(GIT_MIRROR_SEED_FAILURE_MARKER))?;
+    let from = line.find(GIT_MIRROR_SEED_FAILURE_MARKER).unwrap_or(0);
+    let text: String = line[from..].trim().chars().take(400).collect();
+    Some(text)
+}
+
 async fn wait_for_git_mirror_ready(
     client: &PodmanClient,
     container_name: &str,
@@ -5385,6 +5403,7 @@ async fn wait_for_git_mirror_ready(
     // never assume the target project uses Tillandsias' `main` convention.
     let repo_path = format!("/srv/git/{project_name}");
     let mut last = String::from("no probe attempted");
+    let mut seen_failure: Option<String> = None;
     for attempt in 1..=GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS {
         match probe_git_mirror_seeded(client, container_name, &repo_path, expected_branch).await {
             Ok(seeded_ref) => {
@@ -5404,6 +5423,25 @@ async fn wait_for_git_mirror_ready(
                 "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s max)..."
             );
         }
+        // ORDER 778-hb3x criterion 3: a wait that can never succeed must not
+        // look like a slow first seed. Every 30 s, say what the probe saw and
+        // the mirror's own last seed-fetch failure, when it has one; print it
+        // again only when it changes. Measured on yoga 2026-09-29: a 1200 s
+        // wait that ended in "branch … is not concrete" said nothing until then.
+        if attempt == 5 || (attempt > 5 && attempt % 30 == 0) {
+            let tail = client
+                .log_tail(container_name, 200)
+                .await
+                .unwrap_or_default();
+            let failure = last_seed_failure(&tail.lines);
+            if failure != seen_failure || attempt == 5 {
+                eprintln!("[tillandsias] [forge-launch]   still waiting ({attempt}s): {last}");
+                if let Some(f) = &failure {
+                    eprintln!("[tillandsias] [forge-launch]   mirror reports: {f}");
+                }
+                seen_failure = failure;
+            }
+        }
         if debug {
             eprintln!(
                 "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}): {last}"
@@ -5411,8 +5449,15 @@ async fn wait_for_git_mirror_ready(
         }
         tokio::time::sleep(GIT_MIRROR_SEED_POLL_INTERVAL).await;
     }
+    let tail = client
+        .log_tail(container_name, 200)
+        .await
+        .unwrap_or_default();
+    let mirror_says = last_seed_failure(&tail.lines)
+        .map(|f| format!(" The mirror's last seed failure: {f}."))
+        .unwrap_or_default();
     Err(format!(
-        "git mirror {container_name} did not become cloneable within {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s: {last}. \
+        "git mirror {container_name} did not become cloneable within {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s: {last}.{mirror_says} \
          A forge launched now would land on an empty tree, so the launch is refused \
          (fresh-checkout invariant, \
          plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md). \
@@ -12173,25 +12218,65 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         ));
     }
 
-    // ORDER 1364-27f8. Identity comes AFTER the Vault write is verified. The
-    // operator still sees token first, identity second (directive 2026-07-29),
-    // but a typo in these prompts can no longer throw away a token that gh
-    // accepted: the helper container holding it is removed on any early return.
-    if matches!(config.provider, ProviderId::GitHub) {
-        let identity = match github_stdin_identity {
-            Some((name, email)) => store_git_identity(&name, &email),
-            None => prompt_and_store_git_identity(),
-        };
-        identity.map_err(|e| {
-            format!("{provider_name} token is stored in Vault; git identity was not saved: {e}")
-        })?;
-    }
-
+    // ORDER 1486-y67a. The Vault write is verified (a failure returned above,
+    // so no sentinel is written for a login that did not land). Tell the
+    // resident control server NOW, before any prompt: the tray used to learn
+    // of the login only after the operator answered the identity prompts
+    // below, ~13 s after the token was safe (measured 2026-09-29).
     let mut username: Option<String> = None;
     if matches!(config.provider, ProviderId::GitHub) {
-        let mut username_cmd = podman_command();
-        username_cmd.args(["exec", &container, "gh", "api", "user", "--jq", ".login"]);
-        username = podman_command_output(username_cmd, debug).ok();
+        finish_github_login_steps(
+            Ok(()),
+            || {
+                #[cfg(feature = "listen-vsock")]
+                {
+                    let _ = std::fs::write(vsock_server::login_transition_sentinel_path(), b"1");
+                }
+            },
+            || {
+                // ONE `gh api user` (7rzd's derivation, replacing the old
+                // `--jq .login`): it gives the username, fills the App-user
+                // cache the forge identity reads, and supplies the prompt
+                // defaults below. A failed fetch clears the cache, so a
+                // previous account's name can never become the default.
+                let mut user_cmd = podman_command();
+                user_cmd.args([
+                    "exec",
+                    &container,
+                    "gh",
+                    "api",
+                    "user",
+                    "--jq",
+                    APP_USER_TSV_JQ,
+                ]);
+                match podman_command_output(user_cmd, debug)
+                    .ok()
+                    .and_then(|out| parse_app_user(out.trim()))
+                {
+                    Some(user) => {
+                        cache_app_user(&user, debug);
+                        username = Some(user.login);
+                    }
+                    None => {
+                        if let Some(path) = app_user_cache_path() {
+                            let _ = std::fs::remove_file(path);
+                        }
+                    }
+                }
+                // ORDER 1364-27f8. Identity comes AFTER the Vault write is
+                // verified: a typo in these prompts can no longer throw away a
+                // token that gh accepted.
+                match github_stdin_identity {
+                    Some((name, email)) => store_git_identity(&name, &email),
+                    None => prompt_and_store_git_identity(),
+                }
+                .map_err(|e| {
+                    format!(
+                        "{provider_name} token is stored in Vault; git identity was not saved: {e}"
+                    )
+                })
+            },
+        )?;
     }
 
     drop(cleanup);
@@ -12211,8 +12296,10 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     // succeeded because the tray stayed visually logged-out (F-D). The
     // resident server only exists in listen-vsock builds (the in-guest
     // binary); host builds without the feature have no probe to nudge.
+    // Other providers keep the end-of-flow nudge; GitHub already wrote it
+    // right after vault_verify (1486-y67a).
     #[cfg(feature = "listen-vsock")]
-    {
+    if !matches!(config.provider, ProviderId::GitHub) {
         let _ = std::fs::write(vsock_server::login_transition_sentinel_path(), b"1");
     }
     if let Some(username) = username.filter(|value| !value.is_empty()) {
@@ -12322,9 +12409,14 @@ fn prompt_and_store_git_identity() -> Result<(), String> {
     println!("access to anything.");
     println!();
 
+    // 1486-y67a: default to the SAME identity the forge uses (1453-7rzd): the
+    // App user's name and the GitHub noreply address, from the cache the login
+    // flow just filled; else the host gitconfig. The usual answer is Enter.
     let current = read_git_identity_defaults();
-    let name = prompt_with_default("Git author name", current.name.as_deref())?;
-    let email = prompt_with_default("Git author email", current.email.as_deref())?;
+    let (name_default, email_default) =
+        identity_prompt_defaults(read_cached_app_user().as_ref(), &current);
+    let name = prompt_with_default("Git author name", name_default.as_deref())?;
+    let email = prompt_with_default("Git author email", email_default.as_deref())?;
 
     store_git_identity(&name, &email)
 }
@@ -12498,6 +12590,59 @@ pub(crate) fn parse_app_user(tsv: &str) -> Option<AppUser> {
 /// Not a secret (a public id, login and display name), and not the token.
 pub(crate) fn app_user_cache_path() -> Option<PathBuf> {
     init_cache_dir().ok().map(|d| d.join("github-app-user.tsv"))
+}
+
+/// The jq projection 7rzd's probe uses for the App user: `id<TAB>login<TAB>name`.
+pub(crate) const APP_USER_TSV_JQ: &str = r#"[(.id|tostring), .login, (.name // "")] | @tsv"#;
+
+/// Write the App user to the host cache (the same line probe_github_username
+/// writes), so the forge identity and the prompt defaults agree.
+pub(crate) fn cache_app_user(user: &AppUser, debug: bool) {
+    if let Some(path) = app_user_cache_path() {
+        let line = format!(
+            "{}\t{}\t{}\n",
+            user.id,
+            user.login,
+            user.name.as_deref().unwrap_or("")
+        );
+        if let Err(e) = std::fs::write(&path, line)
+            && debug
+        {
+            eprintln!(
+                "[tillandsias] could not cache the App user at {}: {e}",
+                path.display()
+            );
+        }
+    }
+}
+
+/// Identity prompt defaults (1486-y67a): the App user's forge identity
+/// (1453-7rzd: name, else login; `<id>+<login>@users.noreply.github.com`)
+/// when known, else the host gitconfig's values.
+fn identity_prompt_defaults(
+    app: Option<&AppUser>,
+    current: &GitIdentity,
+) -> (Option<String>, Option<String>) {
+    match app {
+        Some(u) => {
+            let (name, email) = forge_git_identity(Some(u), "");
+            (Some(name), Some(email))
+        }
+        None => (current.name.clone(), current.email.clone()),
+    }
+}
+
+/// The order after a verified Vault write (1486-y67a): the login-transition
+/// signal FIRST, then everything that may wait on the operator. A failed
+/// verification signals nothing and runs nothing.
+pub(crate) fn finish_github_login_steps(
+    vault_verified: Result<(), String>,
+    signal_login: impl FnOnce(),
+    then: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    vault_verified?;
+    signal_login();
+    then()
 }
 
 fn read_cached_app_user() -> Option<AppUser> {
@@ -25249,6 +25394,85 @@ mod tests {
     /// The git identity prompt must frame itself as commit metadata, NOT a
     /// credential — the confusion this reorder exists to remove.
     /// @trace spec:gh-auth-script
+    /// 1486-y67a: the tray learns of the login BEFORE the identity prompts.
+    /// A prompt step that takes its time (an operator typing) must find the
+    /// signal already given, and the signal must not wait for it.
+    #[test]
+    fn login_signal_precedes_a_slow_prompt() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let signalled = AtomicBool::new(false);
+        let started = std::time::Instant::now();
+        let mut signal_at = None;
+        finish_github_login_steps(
+            Ok(()),
+            || {
+                signal_at = Some(started.elapsed());
+                signalled.store(true, Ordering::SeqCst);
+            },
+            || {
+                assert!(
+                    signalled.load(Ordering::SeqCst),
+                    "signal must precede the prompts"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                Ok(())
+            },
+        )
+        .expect("finishes");
+        assert!(
+            signal_at.expect("signalled") < std::time::Duration::from_millis(50),
+            "the signal must not wait on the prompt step"
+        );
+    }
+
+    /// NEGATIVE CONTROL: a failed Vault verification writes no signal and
+    /// runs no prompt.
+    #[test]
+    fn failed_vault_verify_signals_nothing() {
+        let mut signalled = false;
+        let mut prompted = false;
+        let r = finish_github_login_steps(
+            Err("vault read failed".into()),
+            || signalled = true,
+            || {
+                prompted = true;
+                Ok(())
+            },
+        );
+        assert!(r.is_err());
+        assert!(
+            !signalled && !prompted,
+            "nothing may run after a failed verify"
+        );
+    }
+
+    /// The prompt defaults are the forge identity (1453-7rzd) when the App
+    /// user is known, else the host gitconfig.
+    #[test]
+    fn identity_prompt_defaults_follow_the_forge_identity() {
+        let app = parse_app_user("162944123\toctocat\tMona Lisa").expect("parse");
+        let host = GitIdentity {
+            name: Some("Host Name".into()),
+            email: Some("host@example.com".into()),
+        };
+        assert_eq!(
+            identity_prompt_defaults(Some(&app), &host),
+            (
+                Some("Mona Lisa".into()),
+                Some("162944123+octocat@users.noreply.github.com".into())
+            )
+        );
+        let nameless = parse_app_user("7\tappuser\t").expect("parse");
+        assert_eq!(
+            identity_prompt_defaults(Some(&nameless), &host).0,
+            Some("appuser".into())
+        );
+        assert_eq!(
+            identity_prompt_defaults(None, &host),
+            (Some("Host Name".into()), Some("host@example.com".into()))
+        );
+    }
+
     #[test]
     fn git_identity_prompt_disclaims_being_a_credential() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
@@ -32671,6 +32895,55 @@ mod forge_budget_argv_tests {
         assert!(
             missing.is_empty(),
             "forge launch builder(s) naming the forge image without the ForgeBudget flags: {missing:?}"
+        );
+    }
+}
+
+/// ORDER 778-hb3x criterion 3 — the seed-failure line the launcher surfaces.
+#[cfg(test)]
+mod mirror_seed_failure_tests {
+    use super::*;
+
+    fn lines(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn the_latest_seed_failure_is_surfaced_and_a_slow_seed_is_not_a_failure() {
+        let log = lines(&[
+            "[git-mirror] Startup: /srv/git/p has no refs but has origin. Fetching upstream to seed mirror.",
+            "[git-mirror] Seed fetch failed: fatal: unable to access 'https://x/': proxy",
+            "noise",
+            "2026-09-29T00:00:00Z [git-mirror] Seed fetch failed: UPSTREAM AUTH REFUSED — the upstream demands credentials",
+            "[git-daemon] ready",
+        ]);
+        assert_eq!(
+            last_seed_failure(&log).as_deref(),
+            Some(
+                "[git-mirror] Seed fetch failed: UPSTREAM AUTH REFUSED — the upstream demands credentials"
+            )
+        );
+        let slow = lines(&[
+            "[git-mirror] Startup: /srv/git/p has no refs but has origin. Fetching upstream to seed mirror.",
+        ]);
+        assert_eq!(last_seed_failure(&slow), None);
+        assert_eq!(last_seed_failure(&[]), None);
+    }
+
+    #[test]
+    fn a_huge_failure_line_is_bounded() {
+        let long = format!("[git-mirror] Seed fetch failed: {}", "x".repeat(5000));
+        assert_eq!(last_seed_failure(&[long]).unwrap().chars().count(), 400);
+    }
+
+    /// The marker is a cross-component interface: it must be what the mirror prints.
+    #[test]
+    fn the_marker_is_what_the_mirror_prints() {
+        // source-pin-ok: the '[git-mirror] Seed fetch failed:' marker is the mirror->gate interface; the litmus pins both ends
+        let entry = include_str!("../../../images/git/entrypoint.sh");
+        assert!(
+            entry.contains(&format!("retry_msg \"{GIT_MIRROR_SEED_FAILURE_MARKER}")),
+            "images/git/entrypoint.sh no longer prints {GIT_MIRROR_SEED_FAILURE_MARKER:?}; the launcher would never surface a seed failure"
         );
     }
 }

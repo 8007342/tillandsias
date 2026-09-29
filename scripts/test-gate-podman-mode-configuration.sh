@@ -53,15 +53,42 @@ echo "handed-container-host=[${CONTAINER_HOST:-<unset>}]"
 exit 0
 STUB
 
+# ORDER 1462-ruq9: a host that cannot build this fixture's AF_UNIX socket
+# cannot run it. That is not a broken tree, so skip BY NAME on the last line
+# (the litmus runner's skip rule) rather than print FAIL. MEASURED on yolanda
+# 2026-09-29: Windows Git Bash DOES have a python3 (the WindowsApps one), and
+# its socket module has NO AF_UNIX attribute. So the probe asks for the
+# capability, not just the interpreter. Where python3 has AF_UNIX, nothing
+# changes: a bind that fails is still a FAIL below.
+# The probe lives INSIDE the one grandfathered interpreter call, whose line is
+# kept byte-identical (the harness refuses new interpreter references,
+# 1087-h2z9). The script drops a marker when it starts and another when the
+# runtime has no AF_UNIX, so the failure branch can tell: never started = no
+# runtime (skip), no AF_UNIX = skip, anything else = a real FAIL.
+FIXTURE_MARK="$SANDBOX/fixture-runtime"
+rm -f "$FIXTURE_MARK.started" "$FIXTURE_MARK.no-af-unix"
 if ! python3 - "$SANDBOX/run/podman/podman.sock" <<'PY'
 import socket
 import sys
 
+mark = sys.argv[1].rsplit("/run/podman/", 1)[0] + "/fixture-runtime"
+open(mark + ".started", "w").close()
+if not hasattr(socket, "AF_UNIX"):
+    open(mark + ".no-af-unix", "w").close()
+    sys.exit(3)
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.bind(sys.argv[1])
 s.listen(1)
 PY
 then
+    if [[ ! -e "$FIXTURE_MARK.started" ]]; then
+        echo "skip:gate-podman-mode:no-fixture-runtime (no interpreter on PATH builds the AF_UNIX fixture socket; nothing was asserted)"
+        exit 0
+    fi
+    if [[ -e "$FIXTURE_MARK.no-af-unix" ]]; then
+        echo "skip:gate-podman-mode:runtime-has-no-af-unix (this runtime cannot create unix sockets, e.g. Windows; nothing was asserted)"
+        exit 0
+    fi
     echo "FAIL: could not create the AF_UNIX fixture socket (python3 required)"
     exit 1
 fi

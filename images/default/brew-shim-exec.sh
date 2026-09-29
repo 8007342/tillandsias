@@ -123,10 +123,24 @@ fi
 # The answer to a fork bomb is not a higher ceiling. One inherited marker turns
 # N nested installs into one, and a nested probe degrades to the same hint an
 # absent tool already gives.
-if [ -n "${TILLANDSIAS_BREW_SHIM_INSTALLING:-}" ]; then
-    echo "tillandsias: refusing to install '$FORMULA' — already inside an install of '${TILLANDSIAS_BREW_SHIM_INSTALLING}' (re-entrancy guard, order 966-rq7f)." >&2
+#
+# THE MARKER MUST SURVIVE BREW (order 667-se87, measured on yoga 2026-09-29).
+# Homebrew's brew.sh re-execs itself with a FILTERED environment that keeps
+# HOMEBREW_* and drops almost everything else, so TILLANDSIAS_BREW_SHIM_INSTALLING
+# never reached the nested shim: a live in-forge `./build.sh --check` read
+# marker=0 in every nested shim's /proc/<pid>/environ (next to 61 HOMEBREW_*
+# variables), recursed brew.sh -> shim -> timeout -> brew.sh at ~40 processes a
+# second to pids.max=6144, and every fork in the forge then failed with EAGAIN
+# (rustc: "Unable to install ctrlc handler ... Resource temporarily
+# unavailable"). The guard was in the image and never fired. So the marker is
+# carried under a HOMEBREW_-prefixed name, which brew passes through; the old
+# name is still honoured for a caller that sets it directly.
+_brew_shim_marker="${HOMEBREW_TILLANDSIAS_SHIM_INSTALLING:-${TILLANDSIAS_BREW_SHIM_INSTALLING:-}}"
+if [ -n "$_brew_shim_marker" ]; then
+    echo "tillandsias: refusing to install '$FORMULA' — already inside an install of '${_brew_shim_marker}' (re-entrancy guard, order 966-rq7f)." >&2
     hint_and_exit
 fi
+export HOMEBREW_TILLANDSIAS_SHIM_INSTALLING="$FORMULA"
 export TILLANDSIAS_BREW_SHIM_INSTALLING="$FORMULA"
 
 # Lazy Homebrew bootstrap: pinned-tag clone into the standard prefix

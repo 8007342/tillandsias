@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: after-github-grants-the-device-flow-token-the-guest-is-silent-for-13-seconds-before-the-tray-shows-the-handle
+    field: status
+    value: implemented
+    ts: "2026-09-29T06:26:10Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: after-github-grants-the-device-flow-token-the-guest-is-silent-for-13-seconds-before-the-tray-shows-the-handle
+    event:
+      type: progress
+      ts: "2026-09-29T06:26:10Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: f18c63c63 (land89)
+  - packet_id: after-github-grants-the-device-flow-token-the-guest-is-silent-for-13-seconds-before-the-tray-shows-the-handle
+    event:
+      type: note
+      ts: "2026-09-29T06:26:10Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        LANDED in land89 at f18c63c63. Re-measured there on darwin: login_signal_precedes_a_slow_prompt, failed_vault_verify_signals_nothing and identity_prompt_defaults_follow_the_forge_identity, 3 passed. Criterion 1 (step named) is MET. Marked IMPLEMENTED, not completed: criterion 2 (a real sign-in, token -> handle < 5 s; it was 18.3 s) is not yet measured. It runs once land90 lands, on a tray built from that commit, in the same sign-in that verifies 1487-6dz2; criterion 3 (the Linux comparison) is still open.

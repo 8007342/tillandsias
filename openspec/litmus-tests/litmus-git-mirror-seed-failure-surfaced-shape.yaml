@@ -1,0 +1,43 @@
+# @trace spec:git-mirror-service
+name: litmus:git-mirror-seed-failure-surfaced-shape
+spec: git-mirror-service
+phase: pre-build
+description: >
+  Order 778-hb3x criterion 3. The launcher's seeded-gate
+  (wait_for_git_mirror_ready) surfaces the mirror's own seed-fetch failure line
+  while it waits and when it gives up, so a wait that can never succeed is
+  visibly different from a slow first seed. This pins the cross-component half:
+  the marker the launcher searches for is the one images/git/entrypoint.sh
+  prints in both failure arms, and the gate reads the mirror log in both
+  places. The extraction itself is unit-tested (mirror_seed_failure_tests).
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-git-mirror-seed-failure-surfaced.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-git-mirror-seed-failure-surfaced.sh && test -x scripts/test-git-mirror-seed-failure-surfaced.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "the launcher's marker is what the mirror prints, and the gate surfaces it"
+    command: "bash scripts/test-git-mirror-seed-failure-surfaced.sh 2>&1 | tail -n 1"
+    timeout_ms: 10000
+    expected_behavior: "PASS: git-mirror-seed-failure-surfaced"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "PASS: git-mirror-seed-failure-surfaced"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "git-mirror-seed-failure-surfaced-shape"
+    artifact: "crates/tillandsias-headless/src/main.rs (wait_for_git_mirror_ready) + images/git/entrypoint.sh"
+
+rollback:
+  on_failure: >
+    If the mirror rewords its seed-failure line, update GIT_MIRROR_SEED_FAILURE_MARKER
+    in the same change; a mismatch makes every failing seed look like a slow one.
+  command: "bash scripts/test-git-mirror-seed-failure-surfaced.sh"
