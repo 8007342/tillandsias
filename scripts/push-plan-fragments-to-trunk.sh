@@ -244,8 +244,15 @@ _select_paths() {
     else
         {
             git ls-files --others --exclude-standard -- plan/index.d plan/loop_status.d 2>/dev/null
-            git diff --name-only --cached --diff-filter=A -- plan/index.d plan/loop_status.d 2>/dev/null
-            git diff --name-only --diff-filter=A "$base" HEAD -- plan/index.d plan/loop_status.d 2>/dev/null
+            # ORDER 1266-dh2d: --no-renames is load-bearing. A set-field fragment is
+            # a near-identical template, so when trunk has gained ANOTHER host's
+            # set-field since this branch last merged, the base->HEAD diff sees
+            # that file as deleted, pairs this branch's new status fragment with it
+            # as a RENAME (R080 measured), and --diff-filter=A drops it while the
+            # dissimilar note fragments still ride. That is 793-zumy on
+            # esmeraldinha 2026-09-19, reproduced in the fixture.
+            git diff --no-renames --name-only --cached --diff-filter=A -- plan/index.d plan/loop_status.d 2>/dev/null
+            git diff --no-renames --name-only --diff-filter=A "$base" HEAD -- plan/index.d plan/loop_status.d 2>/dev/null
         } | sort -u > "$tmp/cand"
     fi
     while IFS= read -r p; do
@@ -362,6 +369,49 @@ _trunk_fold_check() {
             esac
         done < "$tmp/tev"
     done < "$tmp/paths"
+    # (c) ORDER 1266-dh2d — the same status-loss, one step EARLIER in the
+    # lifecycle. MEASURED on esmeraldinha 2026-09-19 (793-zumy): the default
+    # selection carried a claim's two notes and two next_action writes, dropped
+    # its set-field status fragment (committed earlier on the branch, so it was
+    # not an add against the post-merge base), and printed ok. Trunk kept
+    # offering the claimed row as ready. (b) misses this because it keys on
+    # TERMINAL events; a claim has the same shape and the same consequence.
+    # For every packet a carried fragment addresses, a LOCAL status fragment
+    # for it that is neither riding nor already on trunk is the one being
+    # dropped. Refuse, and name it. Comparing the local fold to trunk's instead
+    # would refuse whenever trunk is simply AHEAD (another host moved the row),
+    # so this looks only for the missing file.
+    : > "$tmp/addressed"
+    while IFS= read -r p; do
+        case "$p" in plan/index.d/*) ;; *) continue ;; esac
+        "$PLAN" fragment-event-packets "$p" 2>/dev/null | grep -v OpenSpec >> "$tmp/addressed" || true
+    done < "$tmp/paths"
+    sort -u -o "$tmp/addressed" "$tmp/addressed"
+    local f
+    while IFS= read -r pid; do
+        [ -n "$pid" ] || continue
+        for f in plan/index.d/*.yaml; do
+            [ -f "$f" ] || continue
+            grep -qxF "$f" "$tmp/paths" && continue
+            _status_write_for "$f" "$pid" || continue
+            git cat-file -e "$base:$f" 2>/dev/null && continue
+            echo "fragments-to-trunk: '$f' writes the status of $pid and is not being carried, but the selected fragments address $pid — trunk would keep offering it at its old status" >&2
+            echo "refused:fragments-to-trunk:trunk-fold:status-loss:$pid"
+            _afford "an event pushed without the status fragment it belongs with leaves the trunk offering the row at its old status (a claimed row stays ready)" \
+                "name '$f' with the others (scripts/push-plan-fragments-to-trunk.sh $f <the rest>), then re-run"
+            exit 1
+        done
+    done < "$tmp/addressed"
+}
+
+# 0 when fragment $1 carries a set-field write of `status` for packet $2 (the
+# LWW `status:` channel set-field writes; see its fragment header).
+_status_write_for() {
+    awk -v pid="$2" '
+        /^[a-z_]+:/            { sec = $1 }
+        sec == "status:" && $0 ~ /^  - packet_id: / { cur = $3; next }
+        sec == "status:" && $1 == "field:" && $2 == "status" && cur == pid { hit = 1 }
+        END { exit hit ? 0 : 1 }' "$1"
 }
 
 # One commit on $1 carrying exactly $tmp/paths, through a temporary index.
@@ -415,6 +465,17 @@ while :; do
         echo "skip:fragments-to-trunk:nothing-new"; exit 0
     fi
     _trunk_fold_check "$base"
+    # ORDER 1266-dh2d, the self-describing half. Say how many carried
+    # fragments write a status, so a run that flipped one locally and carries
+    # zero is visible. It is a stderr note rather than a new field on the ok:
+    # line, because consumers match that line's `:<n>` suffix
+    # (test-claims-fleet-visible.sh strips `${sha%:1}`), and an extra field
+    # would silently break them.
+    _sw=0
+    while IFS= read -r p; do
+        case "$p" in plan/index.d/*) grep -q '^status:' "$p" 2>/dev/null && _sw=$((_sw + 1)) ;; esac
+    done < "$tmp/paths"
+    echo "fragments-to-trunk: carrying $n fragment(s), $_sw writing a status field" >&2
     commit="$(_build_commit "$base")"
     if [ "$DRY" -eq 1 ]; then
         git show --stat --format='%H %s' "$commit" | sed 's/^/  /' >&2
