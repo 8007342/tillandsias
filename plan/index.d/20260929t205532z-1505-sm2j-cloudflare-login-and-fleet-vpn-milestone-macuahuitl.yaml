@@ -1,0 +1,741 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator direction 2026-09-29: --cloudflare-login, TILLANDSIAS-VPN, fleet
+# experts. Milestone 1505-sm2j and its twelve children, filed together.
+# Research and sources: plan/issues/cloudflare-login-fleet-vpn-design-2026-09-29.md
+packets:
+  - packet_id: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    order: 1505-sm2j
+    status: ready
+    kind: milestone
+    priority: p1
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [cloudflare, oauth, vault, fleet-vpn, mesh, fleet-experts, tray, cli, milestone]
+    estimated_hours: 6
+    owned_files:
+      - openspec/changes/cloudflare-login-and-fleet-vpn/
+      - plan/issues/cloudflare-login-fleet-vpn-design-2026-09-29.md
+    title: |
+      MILESTONE — tillandsias --cloudflare-login (PKCE, not a device grant: Cloudflare offers none), every instance of one account joins ONE Cloudflare Mesh network named tillandsias-vpn, and a hub serves its Local Experts to the fleet as FLEET EXPERTS; today no host holds a Cloudflare credential, no host can reach another, and floor hosts answer unsupported: where a fat host has the answer
+    context: |
+      OPERATOR (2026-09-29): "tillandsias --cloudflare-login, analogous to
+      --github-login (device flow + QR codes)"; "every Tillandsias instance
+      signed in with the SAME Cloudflare account joins ONE private network,
+      the TILLANDSIAS-VPN. Normalize all names per Cloudflare's own naming
+      rules"; "later share ONE off-forge orchestrator for the whole fleet
+      over that network — e.g. macuahuitl serving its Local Experts to the
+      fleet as FLEET EXPERTS."
+      RESEARCH (public docs, 2026-09-29; sources in the design note):
+      Cloudflare states verbatim that it does not support the Device
+      Authorization grant for third-party clients — only Authorization Code,
+      PKCE S256 required for CLI apps, token auth method none. So a QR that
+      ends at a loopback redirect cannot work (the phone is redirected to
+      its own 127.0.0.1); the design has three receivers: loopback, QR to an
+      operator-owned relay page (sees only code+state, never a token or the
+      verifier), and paste. The network product is Cloudflare Mesh (formerly
+      WARP-to-WARP / WARP Connector), available on the Zero Trust Free plan;
+      participants get a Mesh IP in 100.96.0.0/12; every participant runs
+      the Cloudflare One Client (warp-svc, root) enrolled headlessly by a
+      per-host service token in mdm.xml; Linux node OSes include Fedora
+      43/44 (Silverblue unverified); macOS and Windows join through the
+      Linux guest. Account limits: 50 Mesh nodes, 50 service tokens. Names:
+      the team name is a DNS label; the strictest rule is adopted for every
+      name (cloudflare_names: [a-z0-9-], <=63 label / <=255 display);
+      canonical network name tillandsias-vpn, team tillandsias-vpn-<acct8>,
+      participant tillandsias-<host>, route <svc>.tillandsias-vpn.internal.
+      WHAT EXISTS (models, not re-filed): run_github_device_login,
+      render_terminal_qr_in, GITHUB_APP_CLIENT_ID; GITHUB_TOKEN_PATH /
+      GITHUB_REFRESH_PATH, GitHubTokenStore, store_github_token_bundle,
+      spawn_github_token_rotation_scheduler (1461-8tyy, 1489-8qd6);
+      handle_github_login, MenuId::GITHUB_LOGIN; tillandsias-plan
+      expert-serve on 127.0.0.1:11436 with provider tillandsias-experts.
+      DESIGN PRINCIPLES (binding on every child): no fixture needs the real
+      OAuth client (a fake Cloudflare serves every gate); the verifier never
+      leaves the process; two Vault paths as for GitHub; forges never
+      rotate; the hub's endpoint never binds off-loopback without a bearer;
+      nothing installs a host daemon with elevated privileges — it prints the
+      step and refuses; every status line is a read fact or unknown:<why>.
+    children:
+      - 1505-svve
+      - 1505-kyx8
+      - 1505-iky3
+      - 1505-iysn
+      - 1505-kc5f
+      - 1505-6w7d
+      - 1505-bhsb
+      - 1505-g6zc
+      - 1505-m63i
+      - 1505-br88
+      - 1505-wteh
+      - 1505-hfim
+    exit_criteria:
+      - 'tillandsias --cloudflare-login --via loopback against tillandsias-fake-cloudflare ends with ok:cloudflare-login:stored and Vault holds secret/cloudflare/token and secret/cloudflare/refresh (pre-fix: unknown flag)'
+      - 'tillandsias --fleet-vpn init run twice against the fake prints only skip: lines on the second run (pre-fix: unknown flag)'
+      - 'on one Linux hub, tillandsias --fleet-vpn status prints mesh_ip 100.96.x.y read from warp-cli, and on one spoke tillandsias --fleet-experts status prints reachable:<url>:<digest> for that hub (pre-fix: no such surfaces; no host reaches another)'
+      - 'the tray offers Cloudflare Login while no bundle is stored and Fleet VPN: / Fleet Experts: rows afterwards, on Linux, macOS and Windows (pre-fix: no such rows)'
+      - 'every child order is completed or superseded and the three deltas in openspec/changes/cloudflare-login-and-fleet-vpn/ are synced into openspec/specs/'
+    unscoreable: milestone-scored-by-its-children — this row owns no fixture; each child names its scripts/test-*.sh; the nearest single mechanical proxy is scripts/test-cloudflare-login.sh (1505-kc5f), and the live arm (hub mesh_ip + spoke reachable) is a two-host measurement recorded in the design note.
+    next_action: >
+      Operator answers the five open questions in the design note (relay
+      domain, hub daemon acceptable, private vs public App, guest-only join
+      on macOS/Windows, team name); then children drain in dependency order
+      starting with the fake server (1505-svve) and the normalizer
+      (1505-iky3), which need nothing from the operator.
+    notes: |
+      size: L
+      implementer_tier: opus
+      Coordinator note: the operator asked for a device flow; the research
+      shows Cloudflare has none, so the QR path needs an operator domain.
+      Say that in plain words when relaying.
+    provenance: |
+      Filed by the design-lead Fable session on macuahuitl, 2026-09-29, in
+      worktree worktree-agent-ae9525e76ba6c53c8 on linux-next 552af2544.
+      Every Cloudflare claim was read from the cited public page; unverified
+      items are marked in the design note. No Cloudflare API was called with
+      credentials.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Milestone for Cloudflare login, TILLANDSIAS-VPN and fleet experts;
+          twelve children filed in the same fragment; research note and
+          OpenSpec change written alongside.
+
+  - packet_id: a-fake-cloudflare-server-serves-openid-discovery-oauth-and-the-zero-trust-api-routes-the-bootstrap-calls-so-every-login-and-fleet-vpn-fixture-runs-without-the-real-app
+    order: 1505-svve
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    pickup_role: any
+    capability_tags: [cloudflare, oauth, testing, fixture]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-headless/src/bin/tillandsias-fake-cloudflare.rs
+      - scripts/test-fake-cloudflare.sh
+    title: |
+      A fake Cloudflare (tillandsias-fake-cloudflare) serves OpenID discovery, /oauth2/auth with ?auto=approve|deny, /oauth2/token enforcing PKCE S256, single-use codes and refresh rotation, /oauth2/revoke, /oauth2/userinfo and the Zero Trust API routes fleet-vpn init calls, recording every call to a JSON ledger, so no fixture in this milestone needs the real App
+    context: |
+      Every other child tests against this. It listens on 127.0.0.1:0 and
+      prints its port; fixtures export TILLANDSIAS_CLOUDFLARE_BASE_URL and
+      TILLANDSIAS_CLOUDFLARE_API_BASE_URL. The token endpoint must be as
+      strict as Cloudflare's documented behaviour (S256 only; exact
+      redirect_uri match including port, path and trailing slash; single-use
+      code) so a login that passes here is not a false green. The discovery
+      document's grant_types_supported is configurable so the device-grant
+      adapter note (1505-kyx8) can be tested. The API routes: GET /accounts,
+      POST/DELETE /accounts/{id}/access/service_tokens, POST
+      /accounts/{id}/teamnet/virtual_networks, the device-profile,
+      split-tunnel and gateway-rule routes; each appends {method, path,
+      body} to the ledger file named by --ledger. Design: Decision 3 in
+      openspec/changes/cloudflare-login-and-fleet-vpn/design.md.
+    exit_criteria:
+      - 'scripts/test-fake-cloudflare.sh exits 0: a token request with a wrong code_verifier is answered 400 invalid_grant; the same code exchanged twice is refused the second time; a redirect_uri differing only by trailing slash is refused; grant_type=refresh_token returns a new pair and invalidates the old refresh token (pre-fix: no such binary or script)'
+      - 'the ledger after one login + one init run lists every call in order with method and path'
+    verifiable_closure: |
+      bash scripts/test-fake-cloudflare.sh exits 0 on the fixed tree and
+      names each of its four arms; on today's tree the script does not
+      exist. Negative control: a run with TILLANDSIAS_FAKE_CLOUDFLARE_LAX=1
+      (which disables the verifier check) makes the wrong-verifier arm FAIL,
+      proving the arm reaches the check.
+    depends_on: []
+    next_action: >
+      Write the binary under crates/tillandsias-headless/src/bin with std
+      TcpListener (no new HTTP crate) and the fixture; nothing else in the
+      milestone can be tested before it.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Clear contract, one file plus one script; no credentials involved.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Test substrate for the milestone; first in dependency order.
+
+  - packet_id: cloudflare-oauth-begin-exchange-refresh-and-revoke-are-pure-pkce-functions-over-an-injected-http-client-and-the-login-announces-a-device-grant-if-discovery-ever-lists-one
+    order: 1505-kyx8
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    pickup_role: any
+    capability_tags: [cloudflare, oauth, pkce]
+    estimated_hours: 5
+    owned_files:
+      - crates/tillandsias-headless/src/cloudflare_oauth.rs
+      - scripts/test-cloudflare-oauth-core.sh
+    title: |
+      cloudflare_oauth::{begin, exchange, refresh, revoke} implement Authorization Code + PKCE S256 as pure functions over an injected HTTP client (32-byte state, RFC 7636 verifier that never leaves the process, exact redirect_uri), read the OpenID discovery document, and print note:cloudflare-login:device-grant-available if grant_types_supported ever lists the device grant
+    context: |
+      Cloudflare has no device grant (design note research §1); this is the
+      code-grant core every receiver in 1505-kc5f calls. Endpoints come from
+      TILLANDSIAS_CLOUDFLARE_BASE_URL (default https://dash.cloudflare.com)
+      and are confirmed against /.well-known/openid-configuration at login
+      (the secondary-source endpoint list — /oauth2/auth, /oauth2/token,
+      /oauth2/revoke, /oauth2/userinfo — must be verified by the
+      implementer from the discovery document, not hard-coded from the
+      note). Client id: CLOUDFLARE_APP_CLIENT_ID constant, overridable by
+      TILLANDSIAS_CLOUDFLARE_CLIENT_ID. A state mismatch is refused before
+      any network call. No token is logged even under --debug (mirror the
+      GitHub rule: the poll script carries nothing secret on argv).
+    exit_criteria:
+      - 'scripts/test-cloudflare-oauth-core.sh exits 0 against the fake: begin yields an authorize URL with code_challenge_method=S256 and a 43..128-char verifier; exchange with the right verifier returns a bundle; exchange after a state mismatch makes zero token requests; refresh rotates; a discovery document listing the device grant makes the login print note:cloudflare-login:device-grant-available (pre-fix: module absent)'
+      - 'cargo test -p tillandsias-headless cloudflare_oauth passes and no test constructs a network client (the HTTP client is a trait object)'
+    verifiable_closure: |
+      bash scripts/test-cloudflare-oauth-core.sh exits 0 on the fixed tree
+      (fake from 1505-svve on a random port); on today's tree it does not
+      exist. The state-mismatch arm asserts the fake's ledger has NO
+      /oauth2/token entry, which fails if the check is moved after the
+      request.
+    depends_on:
+      - a-fake-cloudflare-server-serves-openid-discovery-oauth-and-the-zero-trust-api-routes-the-bootstrap-calls-so-every-login-and-fleet-vpn-fixture-runs-without-the-real-app
+    next_action: >
+      Implement the module with an HttpClient trait and reqwest behind it;
+      port the parse strictness of parse_device_code_response (refuse odd
+      characters in code and state).
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Pure functions with a fake; credential handling is limited to the
+      in-memory bundle, and storage is 1505-iysn.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          OAuth core, second in dependency order.
+
+  - packet_id: cloudflare-names-is-the-one-normalizer-every-cloudflare-object-name-passes-through-with-typed-label-and-display-classes-and-the-canonical-tillandsias-vpn-name-table
+    order: 1505-iky3
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    pickup_role: any
+    capability_tags: [cloudflare, naming, fleet-vpn]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/cloudflare_names.rs
+    title: |
+      cloudflare_names normalizes every name Tillandsias mints for Cloudflare to the strictest documented rule (DNS label: [a-z0-9-], no edge or double hyphen, <=63; display <=255) with typed Label/Display results, and provides network_name = tillandsias-vpn, team_name = tillandsias-vpn-<acct8>, participant_name = tillandsias-<host>, service_route = <svc>.tillandsias-vpn.internal
+    context: |
+      Rules found (design note §3): the Zero Trust team name is the label of
+      <team>.cloudflareaccess.com ("without spaces"); a virtual network name
+      has maxLength 256 (API); Mesh hostname routes are under 255 chars with
+      one full-label wildcard; tunnel, service-token, OAuth client and Mesh
+      node names have no documented constraint (unverified). One alphabet
+      keeps one string valid everywhere. Empty results are refused, never
+      defaulted. The module doc cites the table and the sources by URL.
+    exit_criteria:
+      - 'cargo test -p tillandsias-headless cloudflare_names passes: participant_name("Tlatoani''s MacBook Air") == "tillandsias-tlatoanis-macbook-air"; a 100-char hostname yields <=63 chars ending in [a-z0-9] that re-normalizes to itself; normalize_label("---") is Err; a Display cannot be passed to a function taking Label (compile-fail doctest) (pre-fix: module absent)'
+    verifiable_closure: |
+      cargo test -p tillandsias-headless cloudflare_names exits 0 on the
+      fixed tree and the property test (every output re-normalizes to
+      itself over 1000 random inputs) is present; on today's tree the module
+      does not exist.
+    depends_on: []
+    next_action: >
+      Write the module and its tests; no I/O, no dependencies beyond std.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Pure normalizer; can start immediately.
+
+  - packet_id: the-cloudflare-bundle-lives-at-secret-cloudflare-token-and-secret-cloudflare-refresh-with-the-github-ordering-rule-and-a-resident-due-check-rotates-it-from-the-same-three-entry-points
+    order: 1505-iysn
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    pickup_role: linux
+    capability_tags: [cloudflare, vault, token-rotation, credentials]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/tray/mod.rs
+      - images/vault/policies/
+      - scripts/test-cloudflare-token-rotation.sh
+    title: |
+      The Cloudflare bundle is stored at secret/cloudflare/token (access_token, expires_at, account_id, client_id) and secret/cloudflare/refresh (refresh first, then token — the GitHub failure rule), only the host resident policy reads the refresh path, forges read neither, and spawn_cloudflare_token_rotation_scheduler rotates under a lock from the Linux tray, every lane launch and the guest listener
+    context: |
+      Mirrors GITHUB_TOKEN_PATH / GITHUB_REFRESH_PATH, GitHubTokenStore,
+      store_github_token_bundle, rotate_github_token_locked and
+      spawn_github_token_rotation_scheduler (1461-8tyy; entry points pinned
+      by 1489-8qd6). Filed as SIBLINGS, not a generalization: the GitHub
+      code is under a live p0 and the two providers have different
+      lifetimes (Cloudflare's are undocumented — expires_at is recorded
+      only when expires_in was reported; the tray shows "expiry unknown"
+      otherwise, never a guess). Failure verdict:
+      blocked:cloudflare-token-rotation-failed:<reason>, retried with
+      backoff. --cloudflare-logout (1505-kc5f) deletes both records and
+      leaves secret/cloudflare/mesh alone.
+    exit_criteria:
+      - 'scripts/test-cloudflare-token-rotation.sh exits 0: (1) expires_at=now+20min rotates exactly once with the refresh record written first; (2) two concurrent due-checks make ONE exchange at the fake; (3) expires_at=now+2h makes none; (4) the fake refusing the refresh leaves both old records intact and the verdict names cloudflare-token-rotation-failed; (5) TILLANDSIAS_HOST_KIND=forge never rotates; (6) each of three mutation arms removing a scheduler call site fails naming it (pre-fix: no Cloudflare paths, scheduler or script exist)'
+      - 'the forge Vault policy grants nothing under secret/data/cloudflare/ and the git-mirror policy is unchanged'
+    verifiable_closure: |
+      bash scripts/test-cloudflare-token-rotation.sh exits 0 on the fixed
+      tree with six named arms; on today's tree it does not exist. Arm 6
+      extracts function bodies from the Rust source (1489-8qd6's method),
+      so a call in a comment does not count.
+    depends_on:
+      - cloudflare-oauth-begin-exchange-refresh-and-revoke-are-pure-pkce-functions-over-an-injected-http-client-and-the-login-announces-a-device-grant-if-discovery-ever-lists-one
+    next_action: >
+      Add the paths, bundle, store trait and scheduler beside the GitHub
+      ones; add the policy stanza; write the six-arm fixture.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Credential handling and Vault policy: needs the security reading of
+      the two-path rule and the lock.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Vault contract and rotation.
+
+  - packet_id: tillandsias-cloudflare-login-completes-the-pkce-flow-through-one-of-three-receivers-loopback-qr-to-an-operator-relay-page-or-paste-stores-the-bundle-and-cloudflare-logout-revokes-it
+    order: 1505-kc5f
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    pickup_role: linux
+    capability_tags: [cloudflare, oauth, cli, qr, credentials]
+    estimated_hours: 10
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/cloudflare_login.rs
+      - assets/cloudflare-relay/index.html
+      - scripts/test-cloudflare-login.sh
+    title: |
+      tillandsias --cloudflare-login [--via loopback|qr|paste] completes Authorization Code + PKCE through a loopback listener on a registered port, a terminal QR of the authorize URL whose redirect is the operator's static relay page (code shown for paste, optional poll), or a pasted code; stores the bundle; --cloudflare-logout revokes and deletes it; LITMUS_PODMAN_MODE stops before any exchange
+    context: |
+      The honest replacement for the requested device flow (none exists at
+      Cloudflare). Loopback: 127.0.0.1:{48631,48632,48633} at
+      /tillandsias/cloudflare/callback, one request, state checked, browser
+      opened; refused:cloudflare-login:no-registered-port-free when none is
+      free. QR: render_terminal_qr_in of the authorize URL (public data
+      only — the QR MUST NOT contain the verifier, a token or a secret; the
+      fixture decodes the QR and asserts it); redirect is
+      https://<relay-host>/tillandsias/cloudflare/callback from
+      TILLANDSIAS_CLOUDFLARE_RELAY_URL; without it
+      refused:cloudflare-login:no-relay-configured naming the other two.
+      The relay page is static HTML that shows code and state from its
+      query string and never calls out; optional poll behind
+      TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL (<=5 min). Paste requires a
+      terminal, worded like the GitHub --with-token refusal
+      (select_github_login_input_mode). Runs on the HOST binary, not in the
+      git container. Denied consent: refused:cloudflare-login:access-denied,
+      nothing written. The stored signal wakes the tray as
+      await_github_login_confirmation does for GitHub.
+    exit_criteria:
+      - 'scripts/test-cloudflare-login.sh exits 0 against the fake: loopback with ?auto=approve ends ok:cloudflare-login:stored; ?auto=deny ends refused:cloudflare-login:access-denied with an empty ledger past /oauth2/auth; --via qr decodes to the authorize URL and nothing else, containing code_challenge and state and no verifier; --via paste with a code from the fake stores; --via qr with no relay configured refuses naming loopback and paste; LITMUS_PODMAN_MODE stops with nothing written (pre-fix: unknown flag)'
+      - 'tillandsias --cloudflare-logout deletes secret/cloudflare/token and secret/cloudflare/refresh and leaves secret/cloudflare/mesh untouched'
+    verifiable_closure: |
+      bash scripts/test-cloudflare-login.sh exits 0 on the fixed tree with
+      six named arms driving the REAL binary against the fake (a fake
+      browser opener on PATH captures the URL for the loopback arm); on
+      today's tree --cloudflare-login is an unknown flag.
+    depends_on:
+      - cloudflare-oauth-begin-exchange-refresh-and-revoke-are-pure-pkce-functions-over-an-injected-http-client-and-the-login-announces-a-device-grant-if-discovery-ever-lists-one
+      - the-cloudflare-bundle-lives-at-secret-cloudflare-token-and-secret-cloudflare-refresh-with-the-github-ordering-rule-and-a-resident-due-check-rotates-it-from-the-same-three-entry-points
+      - cloudflare-names-is-the-one-normalizer-every-cloudflare-object-name-passes-through-with-typed-label-and-display-classes-and-the-canonical-tillandsias-vpn-name-table
+    next_action: >
+      Implement the three receivers over cloudflare_oauth; the relay page;
+      the fixture with a fake browser opener; usage text.
+    notes: |
+      size: L
+      implementer_tier: opus
+      Security-bearing: the QR content, the state check and the loopback
+      listener's one-request rule are the whole trust story.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          The login command.
+
+  - packet_id: tillandsias-fleet-vpn-init-idempotently-ensures-the-tillandsias-vpn-virtual-network-masque-profile-split-tunnel-gateway-policy-and-a-per-host-service-token-and-refuses-with-the-dashboard-step-when-the-zero-trust-org-is-absent
+    order: 1505-6w7d
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    pickup_role: linux
+    capability_tags: [cloudflare, fleet-vpn, mesh, zero-trust, vault]
+    estimated_hours: 10
+    owned_files:
+      - crates/tillandsias-headless/src/fleet_vpn.rs
+      - crates/tillandsias-headless/src/main.rs
+      - scripts/test-fleet-vpn-init.sh
+    title: |
+      tillandsias --fleet-vpn init uses the stored bundle to ensure, idempotently and with one ok:/skip:/refused: line per step, the virtual network tillandsias-vpn, a MASQUE device profile whose Split Tunnels include 100.96.0.0/12, Gateway proxy TCP+UDP with one network policy for 100.96.0.0/12, and a per-host service token tillandsias-<host> stored at secret/cloudflare/mesh; a missing Zero Trust org is refused with the dashboard step
+    context: |
+      Cloudflare Mesh needs MASQUE, the split-tunnel include and the
+      Gateway proxy (design note §2). The org (team name
+      tillandsias-vpn-<acct8>) is created by the operator in the dashboard —
+      creating it by API is unverified — so init prints the exact step and
+      refuses refused:fleet-vpn:no-zero-trust-org:<team_name>. Service
+      token duration 8760h, renewed by join --renew. Init prints the Mesh
+      node and service-token counts it read (limits 50/50). Every API call
+      goes to TILLANDSIAS_CLOUDFLARE_API_BASE_URL. The scope names the App
+      needs are listed in the design note as UNVERIFIED permission names;
+      the first live run records the exact scope ids the consent screen
+      showed, in this packet's events.
+    exit_criteria:
+      - 'scripts/test-fleet-vpn-init.sh exits 0 against the fake: a first run prints ok: for every step and the ledger shows the virtual network, profile, policy and token writes; a second run prints only skip: lines with zero writes between the markers; a fake with no org prints refused:fleet-vpn:no-zero-trust-org:tillandsias-vpn-<acct8> and mints no token (pre-fix: unknown flag)'
+      - 'secret/cloudflare/mesh holds client_id, client_secret, expires_at, team_name and never the OAuth access token'
+    verifiable_closure: |
+      bash scripts/test-fleet-vpn-init.sh exits 0 on the fixed tree with
+      three named arms; on today's tree the flag is unknown. The
+      idempotency arm diffs the fake's ledger between two run markers and
+      fails on any POST/PUT/PATCH.
+    depends_on:
+      - tillandsias-cloudflare-login-completes-the-pkce-flow-through-one-of-three-receivers-loopback-qr-to-an-operator-relay-page-or-paste-stores-the-bundle-and-cloudflare-logout-revokes-it
+      - cloudflare-names-is-the-one-normalizer-every-cloudflare-object-name-passes-through-with-typed-label-and-display-classes-and-the-canonical-tillandsias-vpn-name-table
+      - a-fake-cloudflare-server-serves-openid-discovery-oauth-and-the-zero-trust-api-routes-the-bootstrap-calls-so-every-login-and-fleet-vpn-fixture-runs-without-the-real-app
+    next_action: >
+      Implement the steps as a list of named ensure functions over the API
+      client; write the fixture; record the live scope ids on first real
+      run.
+    notes: |
+      size: L
+      implementer_tier: opus
+      Cross-cutting (API, Vault, naming) and it mints a credential.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Account bootstrap.
+
+  - packet_id: tillandsias-fleet-vpn-join-leave-status-on-linux-bare-metal-detects-the-cloudflare-one-client-prints-the-install-step-per-substrate-instead-of-installing-writes-mdm-xml-from-the-service-token-and-proves-registration-through-warp-cli
+    order: 1505-bhsb
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    pickup_role: linux
+    capability_tags: [cloudflare, fleet-vpn, mesh, linux, silverblue, warp]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-headless/src/fleet_vpn.rs
+      - crates/tillandsias-headless/src/main.rs
+      - scripts/test-fleet-vpn-join-linux.sh
+    title: |
+      tillandsias --fleet-vpn join|leave|status on Linux bare metal detects warp-svc, prints the install step for the substrate (dnf on mutable Fedora, rpm-ostree + reboot on ostree hosts) and refuses client-absent rather than installing with sudo, writes /var/lib/cloudflare-warp/mdm.xml from secret/cloudflare/mesh, proves registration with warp-cli and records the Mesh IP; status prints one read fact per line or unknown:<why>
+    context: |
+      This is the one host daemon the design asks for, on hubs (a host that
+      must be reachable, e.g. macuahuitl). The toolbox-first rule cannot
+      carry it: the client owns a TUN and runs as root. Silverblue and the
+      Cloudflare client are an UNVERIFIED pair (Fedora 43/44 are listed
+      node OSes; Silverblue is not mentioned); the first live arm on a
+      Silverblue host is this packet's measurement and its outcome is
+      recorded in an event, not assumed. mdm.xml keys: organization,
+      auth_client_id, auth_client_secret, service_mode warp, auto_connect
+      1, onboarding false. The write goes through a printed sudo tee the
+      operator runs unless the process is root. leave: warp-cli
+      registration delete, API delete of this host's token, remove the
+      file, clear secret/cloudflare/mesh.
+    exit_criteria:
+      - 'scripts/test-fleet-vpn-join-linux.sh exits 0 with a fake warp-cli on PATH: join lands an mdm.xml containing the team name and the token client id and not the OAuth access token; status prints mesh_ip equal to the fake''s value; join with no warp-svc exits non-zero with refused:fleet-vpn:client-absent naming the package manager of the substrate (rpm-ostree when /run/ostree-booted exists); leave clears secret/cloudflare/mesh (pre-fix: unknown flag)'
+      - 'one live run on a Silverblue host is recorded in this packet''s events as one of: joined:<mesh_ip> | package-unavailable-on-ostree | registered-no-mesh-ip, with client version and rpm-ostree status'
+    verifiable_closure: |
+      bash scripts/test-fleet-vpn-join-linux.sh exits 0 on the fixed tree
+      with four named arms (fake warp-cli, fake ostree marker); on today's
+      tree the flag is unknown. The live Silverblue arm is a recorded
+      measurement, not a gate.
+    depends_on:
+      - tillandsias-fleet-vpn-init-idempotently-ensures-the-tillandsias-vpn-virtual-network-masque-profile-split-tunnel-gateway-policy-and-a-per-host-service-token-and-refuses-with-the-dashboard-step-when-the-zero-trust-org-is-absent
+    next_action: >
+      Implement detection, the printed step, the managed file, the warp-cli
+      verification and status; run the fixture; then the live Silverblue
+      arm on a hub with the operator present.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Touches a root-owned file and a host daemon; the refuse-not-install
+      rule must survive review.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Linux bare-metal join.
+
+  - packet_id: macos-and-windows-join-tillandsias-vpn-through-their-linux-guest-which-installs-the-cloudflare-one-client-at-provisioning-receives-the-service-token-over-the-host-guest-credential-channel-and-registers-so-the-host-os-is-never-enrolled
+    order: 1505-g6zc
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    pickup_role: any
+    capability_tags: [cloudflare, fleet-vpn, mesh, macos, windows, vm, wsl, provisioning]
+    estimated_hours: 12
+    owned_files:
+      - crates/tillandsias-vm-layer/src/vz.rs
+      - crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+      - crates/tillandsias-headless/src/fleet_vpn.rs
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - scripts/test-fleet-vpn-join-guest.sh
+    title: |
+      On macOS and Windows --fleet-vpn join provisions the Cloudflare One Client inside the Linux guest (VM / WSL2 distro — supported node OSes), hands the service token over the existing host-to-guest credential channel, has the guest headless write mdm.xml and register, and relays status to the host tray; the host OS is never enrolled and status reads client: guest
+    context: |
+      Trade-off accepted in the design (Decision 5): the forges and the
+      experts live in the guest, so the guest is the participant;
+      host-native tools on these platforms are off-mesh in v0.6. The token
+      hand-over follows set_in_vm_credentials / get_pending_handover; the
+      guest install goes in the provisioning recipe (vz) and the WSL
+      provisioning unit, both of which already install the guest headless
+      binary. A guest reprovision must re-join without the operator
+      (secret/cloudflare/mesh survives on the host side).
+    exit_criteria:
+      - 'scripts/test-fleet-vpn-join-guest.sh exits 0: with a fake guest channel, join hands over client_id/client_secret/team_name and never the OAuth token; status on the host prints client: guest and the guest''s mesh_ip; a guest that reports no warp-svc yields registration unknown:client-absent-in-guest (pre-fix: unknown flag on these platforms)'
+      - 'one live run on a macOS host and one on a Windows host are recorded as joined:<mesh_ip> or a named refusal, with guest OS and client version'
+    verifiable_closure: |
+      bash scripts/test-fleet-vpn-join-guest.sh exits 0 on the fixed tree
+      with three named arms over a fake guest channel; on today's tree the
+      flag is unknown. The live arms are recorded measurements.
+    depends_on:
+      - tillandsias-fleet-vpn-join-leave-status-on-linux-bare-metal-detects-the-cloudflare-one-client-prints-the-install-step-per-substrate-instead-of-installing-writes-mdm-xml-from-the-service-token-and-proves-registration-through-warp-cli
+    next_action: >
+      Reuse the Linux join inside the guest; add the client to both
+      provisioning paths; add the hand-over fields; relay status.
+    notes: |
+      size: L
+      implementer_tier: opus
+      Cross-platform provisioning and a credential hand-over.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Guest-side join for macOS and Windows.
+
+  - packet_id: research-whether-the-cloudflare-one-client-in-proxy-mode-inside-a-rootless-container-can-reach-a-hub-mesh-ip-so-spokes-can-stay-daemon-free-recorded-as-one-of-four-named-outcomes
+    order: 1505-m63i
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    release_target: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    pickup_role: linux
+    capability_tags: [cloudflare, fleet-vpn, mesh, research, podman, toolbox]
+    estimated_hours: 6
+    owned_files:
+      - scripts/research-fleet-vpn-proxy-spoke.sh
+      - plan/issues/cloudflare-login-fleet-vpn-design-2026-09-29.md
+    title: |
+      RESEARCH — run the Cloudflare One Client in service_mode proxy (SOCKS on 127.0.0.1:40000, MASQUE, no TUN) inside a rootless podman container on a Linux host and record exactly one of outcome:reaches-mesh | registers-but-no-mesh | cannot-register-unprivileged | package-refuses-container against a hub's Mesh IP and hostname route, so spokes can be designed daemon-free or not
+    context: |
+      Whether proxy mode carries Mesh traffic and whether the client runs
+      unprivileged in a container are both unverified (design note §2).
+      Toolbox-first says a toolbox carries the tool, never a host daemon;
+      this measurement decides whether that rule can hold for spokes. A
+      multi-outcome test, not a counter-claim: the script prints the regime
+      (client version, podman version, kernel, host) then the outcome
+      token as its last line. Needs a service token the operator mints in
+      the dashboard (the script never logs in) and one joined hub to
+      target. Blocked-by is a capability ("a joined linux hub"), not a
+      host.
+    exit_criteria:
+      - 'scripts/research-fleet-vpn-proxy-spoke.sh ends with outcome:<one of the four tokens> and the design note''s §2 carries the result with its regime (pre-fix: no script; the question is open)'
+      - 'the milestone''s spoke design is updated by the coordinator to "spoke = proxy container" or "spoke = same as hub" citing this order'
+    unscoreable: "research-measurement: the deliverable is one recorded outcome token with its regime; a fixture cannot pin a fact about Cloudflare's client behaviour on real hardware"
+    depends_on: []
+    next_action: >
+      Write the script (podman run with the client package, mdm.xml from a
+      dashboard-minted service token, curl through the SOCKS port at a hub
+      Mesh IP); run it on one Linux host with one joined hub available;
+      record the token in the design note and in this packet's events.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Requires an operator-minted service token and a joined hub; blocked
+      by "a joined linux hub" until 1505-bhsb has one live run.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Daemon-free spoke measurement.
+
+  - packet_id: expert-serve-binds-the-mesh-only-behind-a-bearer-and-tillandsias-fleet-experts-serve-runs-it-on-the-hub-mesh-ip-advertising-fleet-experts-tillandsias-vpn-internal
+    order: 1505-br88
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    pickup_role: linux
+    capability_tags: [fleet-experts, expert-serve, mesh, vault, security]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+      - crates/tillandsias-plan/src/expert_serve.rs
+      - crates/tillandsias-headless/src/fleet_experts.rs
+      - crates/tillandsias-headless/src/main.rs
+      - scripts/test-fleet-experts-serve.sh
+    title: |
+      tillandsias-plan expert-serve gains --bind and --bearer-file, refuses any non-loopback bind without a bearer (refused:expert-serve:non-loopback-without-bearer) and answers 401 without the header, and tillandsias --fleet-experts serve [--mint] runs it on the hub's Mesh IP with the bearer at secret/fleet/experts and advertises the hostname route fleet-experts.tillandsias-vpn.internal; without a join it refuses not-joined
+    context: |
+      Service-token devices share one Gateway identity, so the bearer is
+      the authorization, not the network (design note §2). The answer path
+      is unchanged: run_grounded, spec expert-serve-grounded-pipeline R1.
+      Loopback binds without a bearer keep answering as today so no local
+      forge changes. The bearer is 32 random bytes minted by --mint and
+      stored at secret/fleet/experts (bearer, hub_hostname, url); spokes
+      receive it by the operator-mediated path (paste or host→guest
+      hand-over) in v0.6. The hostname route is advertised through the
+      client (warp-cli) or the API — the packet records which worked.
+    exit_criteria:
+      - 'scripts/test-fleet-experts-serve.sh exits 0: expert-serve --bind 100.96.0.7 without --bearer-file exits non-zero with refused:expert-serve:non-loopback-without-bearer; with a bearer, GET /v1/models without the header is 401 {"error":"unauthorized"} and with it is 200; expert-serve on 127.0.0.1 without a bearer still answers 200; tillandsias --fleet-experts serve on a host with no secret/cloudflare/mesh exits with refused:fleet-experts:not-joined (pre-fix: expert-serve has no --bind and no bearer; the flag is unknown)'
+    verifiable_closure: |
+      bash scripts/test-fleet-experts-serve.sh exits 0 on the fixed tree
+      with four named arms (the bind arm uses a dummy interface address or
+      127.0.0.2 to stand in for a Mesh IP); on today's tree expert-serve
+      accepts no --bind and the flag is unknown.
+    depends_on:
+      - tillandsias-fleet-vpn-join-leave-status-on-linux-bare-metal-detects-the-cloudflare-one-client-prints-the-install-step-per-substrate-instead-of-installing-writes-mdm-xml-from-the-service-token-and-proves-registration-through-warp-cli
+    next_action: >
+      Add --bind/--bearer-file to expert-serve with the refusal and the
+      401; add --fleet-experts serve; the hostname route; the fixture.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Exposes the expert endpoint off-loopback; the refusal and the 401 are
+      the safety property.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Hub-side fleet experts.
+
+  - packet_id: every-forge-gets-a-tillandsias-fleet-experts-provider-beside-the-local-one-and-tillandsias-fleet-experts-status-resolves-the-route-and-prints-reachable-or-unreachable-with-a-reason
+    order: 1505-wteh
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    pickup_role: any
+    capability_tags: [fleet-experts, opencode, forge, cli]
+    estimated_hours: 5
+    owned_files:
+      - images/default/config-overlay/opencode/config.json
+      - opencode.json
+      - crates/tillandsias-headless/src/fleet_experts.rs
+      - scripts/test-fleet-experts-client.sh
+    title: |
+      The forge overlay carries provider tillandsias-fleet-experts (baseURL http://fleet-experts.tillandsias-vpn.internal:11436/v1, apiKey from secret/fleet/experts.bearer at launch) beside tillandsias-experts, the local-experts prompt names which provider answered, and tillandsias --fleet-experts status prints reachable:<url>:<index_digest> or unreachable:<why>; the tray shows Fleet Experts: reachable|unreachable|not configured
+    context: |
+      Spoke side of 1505-br88. A floor host whose local expert answers
+      unsupported: can ask the fleet expert instead; the prompt must say
+      which one answered so a citation is attributable to an index digest.
+      status uses the same bearer and the route from cloudflare_names
+      service_route("fleet-experts"); resolution failure, connection
+      refusal and 401 are three different unreachable:<why> values.
+    exit_criteria:
+      - 'scripts/test-fleet-experts-client.sh exits 0: against a loopback bearer-protected test server resolved by a hosts override, status prints reachable:<url>:<digest>; with a wrong stored bearer it prints unreachable:unauthorized; with nothing listening it prints unreachable:connection-refused; the overlay JSON parses and contains both providers (pre-fix: no provider, unknown flag)'
+    verifiable_closure: |
+      bash scripts/test-fleet-experts-client.sh exits 0 on the fixed tree
+      with four named arms; on today's tree the provider is absent and the
+      flag is unknown.
+    depends_on:
+      - expert-serve-binds-the-mesh-only-behind-a-bearer-and-tillandsias-fleet-experts-serve-runs-it-on-the-hub-mesh-ip-advertising-fleet-experts-tillandsias-vpn-internal
+    next_action: >
+      Add the provider entries and the prompt sentence; implement status;
+      write the fixture.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Config plus one status command; the bearer is read, never minted here.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Spoke-side discovery and provider.
+
+  - packet_id: the-tray-offers-cloudflare-login-beside-github-login-while-no-bundle-is-stored-and-shows-fleet-vpn-and-fleet-experts-rows-afterwards-on-linux-macos-and-windows-from-one-menu-body
+    order: 1505-hfim
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    pickup_role: any
+    capability_tags: [tray, cli, cloudflare, fleet-vpn, fleet-experts, macos, windows, linux]
+    estimated_hours: 5
+    owned_files:
+      - crates/tillandsias-host-shell/src/menu_state.rs
+      - crates/tillandsias-headless/src/tray/mod.rs
+      - crates/tillandsias-macos-tray/src/menu_disabled_v2.rs
+      - crates/tillandsias-windows-tray/src/notify_icon.rs
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      MenuId::CLOUDFLARE_LOGIN and a Cloudflare Login row (visible iff no Cloudflare bundle, launched in a terminal like handle_github_login) plus Fleet VPN: joined <ip>|not joined|client absent and Fleet Experts: reachable|unreachable|not configured rows render from one menu_state body on Linux, macOS and Windows, and the usage text documents every new flag
+    context: |
+      Mirrors the GitHub row: MenuId::GITHUB_LOGIN, the auth-gated body,
+      handle_github_login, await_github_login_confirmation and the
+      expect-order tests on each platform. The rows are read facts from
+      Vault and the status commands; a value that cannot be read renders
+      as unknown, never as a guess. Usage text: --cloudflare-login
+      [--via], --cloudflare-logout, --fleet-vpn init|join|leave|status
+      [--renew], --fleet-experts serve|status [--mint].
+    exit_criteria:
+      - 'the existing menu label tests gain arms: with no Cloudflare bundle the label list contains Cloudflare Login; after the stored signal it does not and contains Fleet VPN: and Fleet Experts:; the macOS and Windows expect-order tests include the new rows (pre-fix: no such labels)'
+      - 'tillandsias --help lists the four new flags with their sub-verbs'
+    verifiable_closure: |
+      cargo test -p tillandsias-headless tray::tests::cloudflare and the
+      macOS/Windows expect-order tests pass on the fixed tree; on today's
+      tree the labels do not exist. A negative arm asserts Cloudflare Login
+      is absent once stored.
+    depends_on:
+      - tillandsias-cloudflare-login-completes-the-pkce-flow-through-one-of-three-receivers-loopback-qr-to-an-operator-relay-page-or-paste-stores-the-bundle-and-cloudflare-logout-revokes-it
+      - tillandsias-fleet-vpn-join-leave-status-on-linux-bare-metal-detects-the-cloudflare-one-client-prints-the-install-step-per-substrate-instead-of-installing-writes-mdm-xml-from-the-service-token-and-proves-registration-through-warp-cli
+    next_action: >
+      Add the MenuId, the rows, the Linux handler, the platform renderers
+      and the usage lines; extend the label tests.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Additive rows following an existing pattern on three platforms.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Tray and CLI surfaces.
