@@ -12,3 +12,4 @@ STEP_DESC="Checking every release-preflight refusal says why and what clears it 
 STEP_SCRIPT="scripts/test-release-preflight-affordances.sh"
 STEP_ERROR="a release-preflight refusal lost its why/remedy, changed its token or exit code, or its remedy no longer clears it (1505-hedu)"
 STEP_OK="release-preflight refusals carry working affordances"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: release-preflight-affordances (1505-hedu) at 0a1b111ab, 3 arms, bash 3.2, NO tillandsias-plan on PATH (Gate 3 skipped by name there; the Linux run exercises it with a plan binary)"
