@@ -1,0 +1,21 @@
+packets:
+  - packet_id: anonymous-one-shot-containers-of-the-git-image-inherit-its-healthcheck-and-each-logs-a-failure-unit
+    order: 1501-n4i2
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [podman, git-service, healthcheck]
+    estimated_hours: 1
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-the-call-site-is-found: the pin is a unit test on that call site's podman run argv, as 1487-6dz2's was.
+    title: |
+      Anonymous one-shot containers of localhost/tillandsias-git (podman's random names: vigorous_blackwell, priceless_raman, …) inherit the git image's HEALTHCHECK and each logs a status=1/FAILURE unit: the 1487-6dz2 class at a call site that fix did not cover
+    context: |
+      MEASURED 2026-09-29, tlatoanis-macbook-air, tray c2c0b7026 (contains land90 ff5716971 = 1487-6dz2's --no-healthcheck on the github-login container). In the boot of the operator's successful sign-in (guest journal, mapped unit id -> container), six anonymous git-image containers each logged exactly ONE "Main process exited, code=exited, status=1/FAILURE" unit: vigorous_blackwell, priceless_raman, interesting_driscoll, strange_spence, epic_jang, cranky_cohen (image localhost/tillandsias-git:v56.9.27.2). The github-login container logged none (1487-6dz2 met). Unnamed and short-lived suggests a `podman run --rm` of the git image for a one-shot job (candidate: the cloud-project listing or a gh/git helper), not identified. Same boot: tillandsias-vault and tillandsias-proxy logged one FAILURE each, probably startup-window checks (not investigated).
+    verifiable_closure: |
+      in a boot with a sign-in and a cloud-project listing, no container of the git image except the long-running git service logs a healthcheck FAILURE unit, and the git service keeps its HEALTHCHECK (negative control); pre-fix result: FAILS (six anonymous FAILURE units, 2026-09-29)
+    exit_criteria:
+      - 'the call site that runs anonymous git-image containers passes --no-healthcheck (or a check that can pass), pinned by a unit test on its argv (pre-fix result: FAILS)'

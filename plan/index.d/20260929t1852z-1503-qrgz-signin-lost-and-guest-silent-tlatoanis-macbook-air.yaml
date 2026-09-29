@@ -1,0 +1,27 @@
+packets:
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    order: 1503-qrgz
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, tray, guest, github-login, time]
+    estimated_hours: 4
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the cause is not identified; the next step is a reproduce with the guest console kept.
+    title: |
+      macOS, 2026-09-29, two failures on one freshly reprovisioned guest, possibly one cause: (1) a device-flow sign-in the operator completed on GitHub never returned in the terminal; (2) after a successful sign-in the tray dropped back to "GitHub Login" 5 min later while a forge build ran, and the guest journal stops 32 s before that while the tray still thought the VM was running
+    context: |
+      Tray c2c0b7026 on tlatoanis-macbook-air; VM reprovisioned by --reset-state at ~16:48Z.
+      (1) STUCK DEVICE FLOW. Click 18:21:30Z; PTY attached 0.3 s later; the operator approved on GitHub; the terminal never noticed. Guest journal (that boot): the login container started, its exec ran from creation until the guest powered off at the Quit; no completion. THE GUEST CLOCK WAS ~69 MIN BEHIND THE HOST in that boot (journal last entry 17:16:00 guest time vs Quit at 18:24:49Z host time); timedatectl in the guest: NTP=no; chronyc tracking: "Leap status: Not synchronised". pmset shows the Mac slept 11:02-11:13 local (18:02-18:13Z) during that boot. A clock that stops during host sleep and never resyncs is a CANDIDATE cause, not established.
+      (2) SIGNED-IN STATE LOST. Successful sign-in (18:27:49 -> 18:29:11Z). OpenCode forge launch 18:31:05Z (it failed; see the forge-base 127 row, filed the same day). The guest journal for that boot ENDS at 18:33:12, mid-activity: no shutdown, no OOM, no kernel error. tray.log: 18:33:44 github-login menu_state updated (back to "GitHub Login", unprompted); the operator's second sign-in at 18:37:59 failed ("crashed", but no tray crash report exists); Quit at 18:38:08 got no in-VM reply in 10 s and force-stopped at 18:39:23 (1498-fn96). Whether the guest FROZE at 18:33:12 or its last 5 min of journal were lost to the force-stop (journald's sync interval) is undetermined.
+      EVIDENCE LOST: the host-side console.log for these boots was overwritten by later --exec-guest boots before it was read. Next reproduce: copy console.log off first.
+      Also seen: SELinux AVC denials from vault_container_t (curl to 8200, busybox/curl exec; permissive=1 on those checked).
+    verifiable_closure: |
+      on a Mac that sleeps during a session, the guest clock resyncs after wake; a completed device flow returns in the terminal; the tray keeps the signed-in state through a forge build; any loss of the guest is logged with a cause; pre-fix result: FAILS (both 2026-09-29 incidents)
+    exit_criteria:
+      - 'guest NTP (or a host-driven clock set on wake) keeps the guest clock within a few seconds of the host across host sleep (pre-fix result: FAILS, NTP=no, 69 min behind)'
+      - 'a device flow approved on GitHub completes in the terminal (pre-fix result: FAILS once, succeeded once, 2026-09-29)'
+      - 'the signed-in state survives a forge build, or the tray logs why the guest was lost (pre-fix result: FAILS, dropped at 18:33:44 with no cause)'
