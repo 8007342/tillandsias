@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-resident-tillandsias-process-runs-the-github-token-due-check-tray-lane-and-guest-listener-pinned-by-spec-and-test-so-no-entry-point-can-silently-stop-rotating
+    field: status
+    value: in_progress
+    ts: "2026-09-29T05:59:45Z"
+    host: lenovinha
+
+events:
+  - packet_id: every-resident-tillandsias-process-runs-the-github-token-due-check-tray-lane-and-guest-listener-pinned-by-spec-and-test-so-no-entry-point-can-silently-stop-rotating
+    event:
+      type: note
+      ts: "2026-09-29T05:59:45Z"
+      host: lenovinha
+      summary: |-
+        claimed by linux-lenovinha-claude-20260929t055944z
