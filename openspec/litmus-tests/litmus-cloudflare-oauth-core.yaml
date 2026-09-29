@@ -1,0 +1,64 @@
+# @trace order:1505-kyx8, openspec/changes/cloudflare-login-and-fleet-vpn/design.md (Decision 1)
+# @trace openspec/changes/cloudflare-login-and-fleet-vpn/specs/cloudflare-auth/spec.md
+name: litmus:cloudflare-oauth-core
+spec: ci-release
+phase: pre-build
+description: >
+  cloudflare_oauth::{begin, exchange, refresh, revoke} (order 1505-kyx8)
+  implement Authorization Code + PKCE S256 as pure functions over an injected
+  HttpClient trait object, since Cloudflare offers no device grant. This
+  drives the REAL client against a REAL loopback tillandsias-fake-cloudflare
+  (1505-svve): begin() reads endpoints from OpenID discovery, mints a
+  43..128-char PKCE verifier and a 32-byte state, and prints
+  note:cloudflare-login:device-grant-available if discovery ever lists the
+  device grant; exchange() refuses a tampered state BEFORE any network call
+  (the fake's own ledger shows zero /oauth2/token requests — the negative
+  control); refresh() rotates the pair and the old refresh_token stops
+  working. `cargo test -p tillandsias-headless cloudflare_oauth` (no
+  --ignored) constructs no network client at all — only this script's
+  --ignored run does.
+severity: high
+size: quick
+
+# scripts/test-cloudflare-oauth-core.sh runs the five #[ignore]d tests in
+# crates/tillandsias-headless/src/cloudflare_oauth.rs's `loopback_tests`
+# module with --nocapture, so begin()'s eprintln! note reaches the script's
+# own captured log rather than libtest's normally-swallowed buffer. See the
+# script's own header for the full per-arm description.
+#
+# PRE-FIX RESULT: FAILS — before 1505-kyx8, cloudflare_oauth.rs does not
+# exist, so the targeted `cargo test ... cloudflare_oauth::loopback_tests`
+# fails to compile ("cannot find `cloudflare_oauth`").
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/cloudflare_oauth.rs
+  - workspace contains crates/tillandsias-headless/src/bin/tillandsias-fake-cloudflare.rs
+  - workspace contains scripts/test-cloudflare-oauth-core.sh
+  - cargo is available in PATH
+
+critical_path:
+  - step: "cloudflare_oauth's begin/exchange/refresh/revoke complete a real PKCE login over loopback against tillandsias-fake-cloudflare, a tampered state is refused before any token request, and the device-grant note prints when discovery lists it"
+    command: "bash scripts/test-cloudflare-oauth-core.sh 2>&1 | tail -8 | grep -E '^ok:cloudflare-oauth-core:5/5\\+note$'"
+    timeout_ms: 300000
+    expected_behavior: "ok:cloudflare-oauth-core:5/5+note"
+
+observability:
+  traces:
+    - "@trace order:1505-kyx8"
+    - "@trace openspec:changes/cloudflare-login-and-fleet-vpn/design.md#decision-1"
+    - "@trace openspec:changes/cloudflare-login-and-fleet-vpn/specs/cloudflare-auth/spec.md"
+  expected_log: "ok:cloudflare-oauth-core:5/5+note"
+  log_fields:
+    spec: "ci-release"
+    test: "cloudflare-oauth-core"
+    artifact: "crates/tillandsias-headless/src/cloudflare_oauth.rs"
+
+rollback:
+  on_failure: >
+    A named arm failed, the device-grant note was not printed, or the
+    state-mismatch arm's ledger showed a /oauth2/token request (meaning the
+    client-side state check moved after the network call, or was removed).
+    Re-run `bash scripts/test-cloudflare-oauth-core.sh` locally and read the
+    FAIL lines it prints per arm; do not weaken the state check or the PKCE
+    verifier construction to make a fixture pass.
+  command: "bash scripts/test-cloudflare-oauth-core.sh"

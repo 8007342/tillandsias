@@ -140,6 +140,12 @@ pub mod policy_router;
 // I/O; `pub` so the login and fleet-vpn packets built on this table (siblings
 // under 1505-sm2j) can reach it.
 pub mod cloudflare_names;
+// @trace order:1505-kyx8 — cloudflare_oauth::{begin, exchange, refresh,
+// revoke}: Authorization Code + PKCE (S256) as pure functions over an
+// injected HttpClient trait object, since Cloudflare has no device grant.
+// `pub` so the redirect-receiver packet (1505-kc5f) and the rotation
+// scheduler (siblings under 1505-sm2j) can reach it.
+pub mod cloudflare_oauth;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
