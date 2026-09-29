@@ -83,10 +83,28 @@ verdicts() { # verdicts <live|dead> <set>
 
 total=0
 diverged=""
+# ORDER 1500-gu5r: GRADE CONCURRENTLY, COMPARE IN ORDER. The eight grade calls
+# (every set, live and dead) are independent, and ran one after another: 6.4 s
+# on yoga, over the preflight door's 5 s deadline, with one set
+# (expert-groundtruth-rung1) at 4.2 s by itself. Each call now writes its
+# verdicts to its own file in the background, and the comparison below reads
+# them in the ORIGINAL set order, so the verdict and its wording are unchanged.
+_gt_tmp="$(mktemp -d "${TMPDIR:-/tmp}/groundtruth-regime.XXXXXX")" || { echo "unavailable:no-tmp"; exit 2; }
+trap 'rm -rf "$_gt_tmp"' EXIT
+_gt_i=0
 for set_file in "$G"/*.yaml; do
     [ -e "$set_file" ] || continue
-    live="$(verdicts live "$set_file")"
-    dead="$(verdicts dead "$set_file")"
+    _gt_i=$((_gt_i + 1))
+    verdicts live "$set_file" > "$_gt_tmp/$_gt_i.live" &
+    verdicts dead "$set_file" > "$_gt_tmp/$_gt_i.dead" &
+done
+wait
+_gt_i=0
+for set_file in "$G"/*.yaml; do
+    [ -e "$set_file" ] || continue
+    _gt_i=$((_gt_i + 1))
+    live="$(cat "$_gt_tmp/$_gt_i.live")"
+    dead="$(cat "$_gt_tmp/$_gt_i.dead")"
     n=$(printf '%s\n' "$live" | grep -c . || true)
     total=$((total + n))
     # A case whose VERDICT moves between regimes is the finding. Comparing
@@ -96,9 +114,7 @@ for set_file in "$G"/*.yaml; do
     while IFS= read -r case_id; do
         [ -n "$case_id" ] || continue
         diverged="${diverged}${diverged:+,}$case_id"
-    done <<EOF
-$d
-EOF
+    done <<< "$d"
 done
 
 if [ "$total" -eq 0 ]; then
