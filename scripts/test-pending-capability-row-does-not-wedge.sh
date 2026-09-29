@@ -46,6 +46,24 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 
+# The scaffold below intentionally has no target/ tree. Resolve the binary from
+# the real checkout before entering it, then pin that exact instrument into
+# every release-preflight arm. Otherwise the release ledger gate silently
+# skips when the scratch repo cannot find a plan binary, and all three malformed
+# fragment controls report a false `ok:release-preflight` (observed on a fresh
+# namespaced toolbox, 2026-09-28). Missing instrument is a fixture setup error,
+# never a passing verdict.
+PLAN_BIN="$(
+    cd "$ROOT" || exit 1
+    . scripts/plan-binary-probe.sh
+    _plan_bin="$(resolve_plan_binary)" || exit 1
+    cd "$(dirname "$_plan_bin")" || exit 1
+    printf '%s/%s\n' "$PWD" "$(basename "$_plan_bin")"
+)" || {
+    echo "FAIL: no runnable tillandsias-plan binary for strict-fragment controls" >&2
+    exit 2
+}
+
 pass=0; fail=0
 ok()  { echo "ok:   $*"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $*" >&2; fail=$((fail + 1)); }
@@ -98,7 +116,7 @@ capabilities:
       timestamp: "2099-01-01T00:00:00.000000000+00:00"
 Y
 }
-verdict() { ( cd "$S" && bash scripts/release-preflight.sh 2>&1 | tail -1 ); }
+verdict() { ( cd "$S" && TILLANDSIAS_PLAN_BIN="$PLAN_BIN" bash scripts/release-preflight.sh 2>&1 | tail -1 ); }
 
 # ── 0. PRECONDITION. If the tree does not start clean, every arm below is about
 #      somebody else's fragment and proves nothing.

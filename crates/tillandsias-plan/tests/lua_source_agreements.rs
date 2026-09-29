@@ -357,10 +357,10 @@ fn malformed_empty_and_duplicate_manifests_fail_closed() {
 fn pure_environment_has_no_process_or_mutating_capabilities() {
     let lua = build_environment(PredicateClass::Cacheable).expect("fresh cacheable environment");
     let shape: String = lua
-        .load("return table.concat({type(proc), type(sh), type(time), type(fs.write), type(fs.list), type(expert.shell)}, ',')")
+        .load("return table.concat({type(proc), type(sh), type(time), type(os), type(io), type(loadfile), type(dofile), type(require), type(fs.write), type(fs.list), type(expert.shell)}, ',')")
         .eval()
         .expect("probe purity boundary");
-    assert_eq!(shape, "nil,nil,nil,nil,nil,nil");
+    assert_eq!(shape, "nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil");
 }
 
 #[test]
@@ -399,10 +399,37 @@ fn percentile(mut values: Vec<Duration>, numerator: usize, denominator: usize) -
     values[(values.len() - 1) * numerator / denominator]
 }
 
+fn declared_input_bytes_per_run(cases: &[ManifestCase]) -> u64 {
+    let mut total = std::fs::metadata(manifest_path())
+        .expect("manifest metadata")
+        .len();
+    let root = repo_root();
+    for case in cases {
+        for path in [
+            case.source.as_deref(),
+            case.hook.as_deref(),
+            case.ensure.as_deref(),
+            case.script.as_deref(),
+            case.probe.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            // Missing explicit paths contribute zero bytes; the evaluator still
+            // attempts the read and returns its named blocked verdict.
+            if let Ok(metadata) = std::fs::metadata(root.join(path)) {
+                total += metadata.len();
+            }
+        }
+    }
+    total
+}
+
 #[cfg(unix)]
 #[test]
 fn thirty_warm_paired_runs_report_case_and_process_evidence() {
     let cases = manifest().cases;
+    let input_bytes = declared_input_bytes_per_run(&cases);
     let _ = outcomes(); // uncounted warmup of the real module and manifest.
     let mut old = Vec::new();
     let mut new = Vec::new();
@@ -448,8 +475,9 @@ fn thirty_warm_paired_runs_report_case_and_process_evidence() {
     assert!(cold.status.success(), "cold evaluator launch: {cold:?}");
 
     eprintln!(
-        "MEASURE:1475-j9kv linux warm_runs=30 cases_per_run={} old_ms_p50={} old_ms_p95={} lua_ms_p50={} lua_ms_p95={} evaluator_child_processes=0 comparison_harness_child_processes={} cold_plan_binary_ms={}",
+        "MEASURE:1475-j9kv linux warm_runs=30 cases_per_run={} declared_input_bytes_per_run={} old_ms_p50={} old_ms_p95={} lua_ms_p50={} lua_ms_p95={} evaluator_child_processes=0 comparison_guard_invocations={} cold_plan_binary_ms={}",
         cases.len(),
+        input_bytes,
         percentile(old.clone(), 50, 100).as_millis(),
         percentile(old, 95, 100).as_millis(),
         percentile(new.clone(), 50, 100).as_millis(),
