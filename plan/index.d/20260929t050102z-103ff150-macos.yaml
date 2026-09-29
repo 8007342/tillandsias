@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: after-github-grants-the-device-flow-token-the-guest-is-silent-for-13-seconds-before-the-tray-shows-the-handle
+    event:
+      type: progress
+      ts: "2026-09-29T05:01:02Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t050101z
+      host: macos
+      summary: |
+        work/1486-y67a @ 50c6f61f7 ready for relay (tlatoanis-macbook-air), per the coordinator's accepted fix.
+        - ORDER: after vault_verify succeeds, finish_github_login_steps writes the login-transition sentinel FIRST, then runs the operator-paced steps (the App-user fetch and the identity prompts). A failed vault_verify returns before it (the `?` on vault_verify), so no sentinel is written. Other providers keep their end-of-flow sentinel.
+        - DEFAULTS (aligned with 1453-7rzd): the old `gh api user --jq .login` becomes the single App-user fetch using 7rzd's projection (APP_USER_TSV_JQ: id, login, name). It fills the App-user cache (cache_app_user, the same line probe_github_username writes) and the username. prompt_and_store_git_identity (signature unchanged, so the existing "not a credential" pin still holds) defaults via identity_prompt_defaults: forge_git_identity (name, else login; <id>+<login>@users.noreply.github.com), else the host gitconfig. A failed fetch clears the cache, so a stale account is never the default. There is no second GitHub call.
+        - TESTS: login_signal_precedes_a_slow_prompt (the signal is given before and independently of a 300 ms prompt step; MUTATION: running the prompt step first reds it); failed_vault_verify_signals_nothing (negative control); identity_prompt_defaults_follow_the_forge_identity. headless bin 644 passed, and 819 with tray,listen-vsock; clippy -D warnings on default and listen-vsock; aarch64 musl zigbuild --tests; the scdq and v67y guards both ok.
+        PENDING (criterion 2, live): one real macOS sign-in on a build carrying this guest binary, timing token grant -> handle from tray.log plus the guest proxy (target <5 s; it was 18.3 s).
