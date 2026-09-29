@@ -44,6 +44,11 @@
 #                  seed's digest, and an enforced push to main is rejected.
 #                  Pre-fix: FAILS (0/advised/none, the push accepted).
 #  13 SAYS WHY     a publish with no seed anywhere names the refs it tried
+#  14 USER PROJECT (negative control for the Tillandsias default) a project
+#                  with NO linux-next and its seed on main: the default
+#                  TILLANDSIAS_DISCIPLINE_SEED_REFS names a ref this mirror
+#                  lacks, so the lookup falls through to HEAD and the seed is
+#                  still published and enforced
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/images/git/pre-receive-hook.sh"
@@ -280,6 +285,29 @@ pub_out="$(sh "$PUB" "$d/mirror.git" 2>&1)"
 if grep -q 'no seed on:' <<<"$pub_out" && grep -q 'HEAD' <<<"$pub_out"; then
     ok "ARM13 a level-0 publish says why: $(sed 's/.*(//; s/)$//' <<<"$pub_out")"
 else bad "ARM13 publisher output does not name the refs it tried: '$pub_out'"; fi
+
+# ── ARM 14 ───────────────────────────────────────────────────────────────
+d="$tmp/a14"
+git init -q --bare -b main "$d/mirror.git"; mkdir -p "$d/mirror.git/hooks" "$d/nohooks"
+cp "$HOOK" "$d/mirror.git/hooks/pre-receive"; chmod +x "$d/mirror.git/hooks/pre-receive"
+printf '#!/bin/sh\ncat >/dev/null\n: > "%s/relayed"\nexit 0\n' "$d" > "$d/mirror.git/hooks/tillandsias-relay-refs"
+chmod +x "$d/mirror.git/hooks/tillandsias-relay-refs"
+git -C "$d/mirror.git" config core.hooksPath "$d/nohooks"
+git init -q -b main "$d/work"; git -C "$d/work" config user.email f@f; git -C "$d/work" config user.name f
+git -C "$d/work" remote add origin "$d/mirror.git"
+mkdir -p "$d/work/.tillandsias"; seed enforced warn > "$d/work/.tillandsias/branch-discipline.yaml"
+git -C "$d/work" add -A; git -C "$d/work" commit -qm seed
+git -C "$d/work" push -q --no-verify origin main
+git -C "$d/mirror.git" config core.hooksPath "$d/mirror.git/hooks"
+pub_out="$(sh "$PUB" "$d/mirror.git" 2>&1)"
+refs="$(disc_refs "$d")"
+want="$(sha_of "$d/work/.tillandsias/branch-discipline.yaml")"
+commit "$d" c14; push "$d" main
+if ! git -C "$d/mirror.git" rev-parse --verify --quiet refs/heads/linux-next >/dev/null \
+   && grep -qE "^refs/tillandsias/discipline/2/enforced/unknown/$want/[0-9]+$" <<<"$refs" \
+   && grep -q 'seed from HEAD' <<<"$pub_out" && [ "$rc" -ne 0 ]; then
+    ok "ARM14 a project without linux-next falls through to HEAD: its seed is published and enforced"
+else bad "ARM14 refs='$(tr '\n' ' ' <<<"$refs")' pub='$pub_out' push-rc=$rc"; fi
 
 [ "$FAIL" -eq 0 ] && { echo "PASS: mirror-discipline (1443-uit6)"; exit 0; }
 echo "FAILED: mirror-discipline (1443-uit6)"; exit 1
