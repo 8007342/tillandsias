@@ -1266,6 +1266,7 @@ specs:
   - litmus:vsock-exec-heartbeat
   - litmus:vsock-unauthenticated-peer-rejected
   - litmus:one-length-delimited-framing-impl
+  - litmus:headless-keepalive
   coverage_ratio: 100
   last_verified: '2026-07-14'
 - spec_id: expert-serve-grounded-pipeline
