@@ -53,6 +53,22 @@ echo "handed-container-host=[${CONTAINER_HOST:-<unset>}]"
 exit 0
 STUB
 
+# ORDER 1462-ruq9: a host that cannot build this fixture's AF_UNIX socket
+# cannot run it. That is not a broken tree, so skip BY NAME on the last line
+# (the litmus runner's skip rule) rather than print FAIL. MEASURED on yolanda
+# 2026-09-29: Windows Git Bash DOES have a python3 (the WindowsApps one), and
+# its socket module has NO AF_UNIX attribute. So the probe asks for the
+# capability, not just the interpreter. Where python3 has AF_UNIX, nothing
+# changes: a bind that fails is still a FAIL below.
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "skip:gate-podman-mode:no-python3 (this host has no python3 on PATH, which builds the AF_UNIX fixture socket; nothing was asserted)"
+    exit 0
+fi
+if ! python3 -c 'import socket, sys; sys.exit(0 if hasattr(socket, "AF_UNIX") else 3)' 2>/dev/null; then
+    echo "skip:gate-podman-mode:python3-has-no-af-unix (this python3 cannot create unix sockets, e.g. Windows; nothing was asserted)"
+    exit 0
+fi
+
 if ! python3 - "$SANDBOX/run/podman/podman.sock" <<'PY'
 import socket
 import sys
