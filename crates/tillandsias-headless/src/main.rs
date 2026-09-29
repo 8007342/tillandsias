@@ -15740,6 +15740,11 @@ fn build_project_browser_spec(
 ///
 /// @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
 /// What the login CLI's tray notify achieved (order 679-rp9m).
+///
+/// `cfg(unix)` like its only producer and consumer (order 1491-dnp6): without
+/// it the Windows-target clippy refuses the tray build with "enum is never
+/// used", a red that Linux clippy cannot see.
+#[cfg(unix)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum TrayNotify {
     /// The tray acked `GithubLoginStored`.
