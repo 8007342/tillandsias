@@ -1,0 +1,23 @@
+packets:
+  - packet_id: the-tray-sends-set-vsock-forward-target-with-request-but-the-guest-is-silent-on-success-so-the-request-consumes-the-next-reply
+    order: 1509-kf4d
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [control-wire, tray, vsock]
+    estimated_hours: 2
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-the-fixture-exists: the pin is a fake guest that is silent on success, written with the fix.
+    title: |
+      The macOS tray sends SetVsockForwardTarget with client.request(), which returns the NEXT inbound frame, but the guest answers nothing on success; the request then consumes the following VmStatusReply and the status read that follows gets the wrong frame
+    context: |
+      Found by source-reading while writing 1503-qrgz (tlatoanis-macbook-air, 2026-09-29), not observed live. crates/tillandsias-host-shell/src/vsock_client.rs: `request` = send, then recv (the next inbound envelope, with no seq filter). crates/tillandsias-macos-tray/src/action_host.rs poll_vm_status_once: when TILLANDSIAS_HOST_VSOCK_PORT is set it calls client.request(SetVsockForwardTarget) and only then client.request(VmStatusRequest). crates/tillandsias-headless/src/vsock_server.rs: the SetVsockForwardTarget arm writes NOTHING on success (only an Error on failure). So request #1 waits for the next frame, which is the VmStatusReply only once request #2 is sent; the order of those awaits means request #1 blocks or takes #2's reply, depending on timing.
+      LATENT: only when TILLANDSIAS_HOST_VSOCK_PORT is set (opt-in, off by default). 1503-qrgz's HostClockSync avoids the same trap by always answering exactly one frame (IssueAck or Error).
+    verifiable_closure: |
+      with a fake guest that is silent on success for SetVsockForwardTarget, the tray's status poll with TILLANDSIAS_HOST_VSOCK_PORT set returns the VmStatusReply to the VmStatusRequest (not to the forward-target request) within its timeout; pre-fix result: FAILS (the forward-target request consumes or waits on the status frame)
+    exit_criteria:
+      - 'fake-guest fixture: silent-on-success SetVsockForwardTarget followed by VmStatusRequest yields the VmStatusReply for the status read (pre-fix result: FAILS)'
+      - 'the fix is either the guest acking SetVsockForwardTarget (one frame per request, as HostClockSync does) or the tray sending it with send_envelope, stated on the row'
