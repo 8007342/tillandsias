@@ -1,0 +1,40 @@
+packets:
+  - packet_id: litmus-preflight-front-door-is-red-on-trunk-over-its-150s-floor-budget-and-the-runner-hides-its-planted-guard-and-wall-line
+    order: 1496-w25b
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [preflight, litmus, gate, release-tier]
+    estimated_hours: 4
+    owned_files: []
+    title: |
+      litmus:preflight-front-door (ci-release) is red on trunk: ./build.sh --preflight takes 166 s against its 150 s never-raised budget, and through the litmus runner two more arms fail (the planted gate-steps.d guard is invisible, and the verdict does not report its wall clock); only the release tier runs it, so it will red the next daily cut
+    context: |
+      MEASURED on macuahuitl at trunk 5091f4669 (coordinator, 2026-09-29):
+      direct `bash scripts/test-preflight-front-door.sh` rc=1 with one failure,
+      "the run exceeded the budget (166s > 150s)"; a bare ./build.sh --preflight
+      printed partial:preflight:ran=145 declared-skip=3 skipped-by-deadline=14
+      wall=170s. Through `scripts/run-litmus-test.sh --test
+      litmus:preflight-front-door`, two more failures: "a newly wired guard was
+      invisible to the front door" and "the verdict does not report its wall
+      clock", so the runner's environment changes what --preflight sees or
+      prints (PROJECT_ROOT leaking into children is the known runner hazard).
+      REPRODUCED on yoga 2026-09-29 at 16fbd9387, load 0.01: direct run rc=1,
+      same single failure, "166s > 150s" (fixture wall 338 s: it runs
+      preflight twice).
+      TWO QUESTIONS: (1) which guard grew slow (the budget is a floor-host
+      measurement with the rule "never raised", so find the growth instead of
+      raising the number); (2) why the runner hides the planted guard and the
+      wall line.
+    exit_criteria:
+      - 'litmus:preflight-front-door passes through the runner on a Linux host'
+      - 'the fixture budget arm is unchanged, or re-set only from a new floor-host measurement recorded on this row'
+      - 'the slow guard is named with its measured time, and the runner-only failures have a named cause'
+    verifiable_closure: |
+      litmus:preflight-front-door passes through scripts/run-litmus-test.sh on
+      yoga.
+    provenance: |
+      Filed and claimed 2026-09-29 by yoga on the coordinator's direction.
