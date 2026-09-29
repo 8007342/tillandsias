@@ -458,6 +458,12 @@ _preflight_roster() {
         | sed 's/STEP_SCRIPT="//; s/"$//'
     # 3. the pre-push lane's own checks
     grep -ohE 'scripts/check-[a-z0-9-]+\.sh' "$SCRIPT_DIR"/scripts/hooks/*.sh 2>/dev/null
+    # 4. every decider the gate runs INLINE (1499-m9fj): the literal
+    #    `_run bash "$SCRIPT_DIR/scripts/check-X.sh"` lines anywhere in this
+    #    file. Sources 1-3 missed 48 of them, so a push the gate refuses could
+    #    pass the door.
+    grep -oE '_run bash "\$SCRIPT_DIR/scripts/check-[a-z0-9-]+\.sh"' "$SCRIPT_DIR/build.sh" \
+        | grep -oE 'scripts/check-[a-z0-9-]+\.sh'
 }
 
 # Guards that cannot simply be run here, each with the reason the verdict prints.

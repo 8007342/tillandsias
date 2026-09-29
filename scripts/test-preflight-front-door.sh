@@ -64,6 +64,30 @@ else
 fi
 cleanup; trap - EXIT INT TERM HUP PIPE
 
+# ── ARM 2b: A GUARD THE GATE RUNS INLINE IS A ROSTER ENTRY (1499-m9fj) ──────
+# MEASURED: 48 deciders build.sh runs as `_run bash .../check-X.sh` were in none
+# of the three rosters, so the door passed trees the gate refused. Plant one in
+# a never-called function of build.sh: the door must run it and refuse.
+PLANT=scripts/check-zz-1499-planted.sh
+cat > "$PLANT" <<'PL'
+#!/usr/bin/env bash
+echo "violation:planted-inline-guard: this guard exists and refuses"
+exit 1
+PL
+chmod +x "$PLANT"
+_bs_backup="$(mktemp "${TMPDIR:-/tmp}/build-sh-1499.XXXXXX")"
+cp -p build.sh "$_bs_backup"
+cleanup() { rm -f "$PLANT"; [ -s "$_bs_backup" ] && cp -p "$_bs_backup" build.sh; rm -f "$_bs_backup"; }
+trap cleanup EXIT INT TERM HUP PIPE
+printf '\n_zz_1499_never_called() {\n    _run bash "$SCRIPT_DIR/scripts/check-zz-1499-planted.sh"\n}\n' >> build.sh
+out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"; rc=$?
+if [ "$rc" -ne 0 ] && grep -q 'zz-1499-planted' <<< "$out"; then
+    ok "a guard build.sh runs inline is picked up and refuses (1499-m9fj)"
+else
+    bad "a guard the gate runs inline was invisible to the front door (rc=$rc)"
+fi
+cleanup; trap - EXIT INT TERM HUP PIPE
+
 # ── ARM 3: A NAMED SKIP IS NOT A REFUSAL (1273-4mak, 1309-fhxb) ─────────────
 # MEASURED: test-uninstall-matcher-spares-bystanders prints skip:not-darwin and
 # exits non-zero, and this door called it `refused` — 1309-fhxb's shape inside
