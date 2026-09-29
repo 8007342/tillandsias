@@ -4812,6 +4812,14 @@ fn mirror_upgrade_skew(aliases: &[String], expected: &str) -> bool {
 // struct would touch seventeen call sites for a shape change nothing else
 // wants. If a ninth parameter is ever needed, group them then — that is the
 // point at which the argument list is the problem rather than the lint.
+/// The leading `podman run` flags of the one-shot provider-login helper
+/// container (order 1487-6dz2). `--no-healthcheck`: the helper runs from the
+/// tillandsias-git image and inherited its HEALTHCHECK, which cannot pass
+/// there. A device-flow login on a macOS guest logged it `unhealthy` 24 times
+/// in ~100 s (a transient systemd unit failing every 3 s), noise in every
+/// journal read during a login. The long-running git service keeps its check.
+const LOGIN_CONTAINER_RUN_PREFIX: [&str; 4] = ["run", "--detach", "--rm", "--no-healthcheck"];
+
 #[allow(clippy::too_many_arguments)]
 fn build_git_run_args(
     project_name: &str,
@@ -12038,10 +12046,8 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             certs_dir.join("intermediate.crt").display()
         );
         let mut run = podman_command();
+        run.args(LOGIN_CONTAINER_RUN_PREFIX);
         run.args([
-            "run",
-            "--detach",
-            "--rm",
             "--name",
             &container,
             "--network",
@@ -12074,10 +12080,8 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     #[cfg(not(feature = "vault"))]
     {
         let mut run = podman_command();
+        run.args(LOGIN_CONTAINER_RUN_PREFIX);
         run.args([
-            "run",
-            "--detach",
-            "--rm",
             "--name",
             &container,
             "--network",
@@ -26322,6 +26326,34 @@ mod tests {
             has_arg(&args, "--replace"),
             "inference args must include --replace so an exited container does not \
              block the next launch with a Permanent exit-125 (order 314): {args:?}"
+        );
+    }
+
+    /// 1487-6dz2: the one-shot login helper disables the git image's
+    /// HEALTHCHECK; the long-running git service keeps it (negative control).
+    #[test]
+    fn login_helper_disables_the_inherited_healthcheck_and_the_git_service_keeps_it() {
+        assert!(
+            LOGIN_CONTAINER_RUN_PREFIX.contains(&"--no-healthcheck"),
+            "the login helper must not inherit the git image's HEALTHCHECK"
+        );
+        assert_eq!(
+            &LOGIN_CONTAINER_RUN_PREFIX[..3],
+            &["run", "--detach", "--rm"]
+        );
+        let args = build_git_run_args(
+            "alpha",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "tillandsias-git:v1",
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(
+            !args.iter().any(|a| a == "--no-healthcheck"),
+            "the git SERVICE must keep its HEALTHCHECK: {args:?}"
         );
     }
 
