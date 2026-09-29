@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: transport-negligible-overhead-audit
+    field: status
+    value: completed
+    ts: "2026-09-29T16:57:15Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: transport-negligible-overhead-audit
+    event:
+      type: completed
+      ts: "2026-09-29T16:57:15Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: CLOSED with 148 at c00a08ad7 (land91), per this row's own next_action ("whoever takes 148 closes 147's criterion 3 with it") and the coordinator's ruling. Criteria 1, 2 and 5 were delivered 2026-08-16; criterion 4 (litmus:no-polling-noops) by yoga at bde83aa26. CRITERION 3 IS CLOSED AS NOT-REPRODUCING, NOT AS "ROOT CAUSE IDENTIFIED AND FIXED": its wording is not met. What 148 established: on macOS (1479-9hx6 build, cold-provisioned guest) the wire stayed Ready for 4 h 48 min after sign-in, with 0 vm-status poll lines and 0 headless exit/restart lines; no change is identified as having removed the oscillation. It is now guarded by litmus:headless-keepalive (red on both one-shot listener mutations). Windows (HvSocket) is unmeasured; the coordinator is asking yolanda for one idle-tray observation. If oscillation recurs, reopen 148 with the conditions, not this audit.
+  - packet_id: transport-negligible-overhead-audit
+    event:
+      type: note
+      ts: "2026-09-29T16:57:15Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        criterion 3 was 148's; closed with it at c00a08ad7
