@@ -45,6 +45,15 @@ fi
 # Plant a roster entry that is neither run nor named and the door must not
 # silently ignore it. This is what keeps enumeration from decaying into
 # curation by another name.
+# ORDER 1496-w25b: RUN THE DOOR ON THE HOST'S OWN podman. Under the litmus
+# runner PATH starts with its podman shim (target/litmus-runtime/bin), and on a
+# toolbox host build.sh re-execs through `toolbox run`, whose `podman exec`
+# then went through that shim and was killed at the shim's 120 s diagnostics
+# budget: no planted guard, no wall= line, and an orphaned exec session left
+# running in the toolbox. This fixture tests the front door, not podman calls.
+PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/target/litmus-runtime/bin$' | paste -sd: -)"
+export PATH
+
 PLANT=scripts/check-zz-1305-planted.sh
 cat > "$PLANT" <<'PL'
 #!/usr/bin/env bash

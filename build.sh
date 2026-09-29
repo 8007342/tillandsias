@@ -421,7 +421,16 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile
     done
     if kill -0 "$_pid" 2>/dev/null; then
         kill -TERM "-$_pid" 2>/dev/null || kill -TERM "$_pid" 2>/dev/null
-        sleep 1
+        # ORDER 1496-w25b: POLL THE GRACE, do not sleep it. An unconditional
+        # `sleep 1` charged every deadline-skipped guard a full second even
+        # when its group died on TERM at once, and with 11-14 guards reaching
+        # the deadline that was 11-14 s of the front door's 150 s budget spent
+        # waiting on processes that were already gone. Same 1 s ceiling.
+        _grace=0
+        while kill -0 "$_pid" 2>/dev/null && [ "$_grace" -lt "$_per_s" ]; do
+            sleep "$_tick"
+            _grace=$((_grace + 1))
+        done
         kill -KILL "-$_pid" 2>/dev/null || kill -KILL "$_pid" 2>/dev/null
         wait "$_pid" 2>/dev/null
         return 124
