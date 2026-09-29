@@ -11128,13 +11128,14 @@ fn github_refresh_verdict(
     }
 }
 
-/// The accountability event the spec names for rotation (spec:secret-rotation).
-// @trace spec:secret-rotation
+/// The accountability event the spec names for rotation (spec:gh-auth-script;
+/// secret-rotation is tombstoned, 1397-eppt).
+// @trace spec:gh-auth-script, order:1489-8qd6
 fn audit_github_token_refresh(outcome: &str) {
     info!(
         accountability = true,
         category = "secrets",
-        spec = "secret-rotation",
+        spec = "gh-auth-script",
         operation = "github_token_refresh",
         secret_name = "github-token",
         outcome = outcome,
@@ -25004,7 +25005,7 @@ mod tests {
         });
         let out = String::from_utf8(buf.0.lock().unwrap().clone()).unwrap();
         for needle in [
-            "secret-rotation",
+            "gh-auth-script",
             "github_token_refresh",
             "refused-no-desktop-session",
             "accountability=true",
