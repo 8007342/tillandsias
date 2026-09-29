@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-github-device-flow-qr-is-drawn-with-half-block-glyphs-in-low-contrast-greens-so-line-spacing-or-a-large-font-stripes-it-and-phone-cameras-rarely-read-it
+    field: status
+    value: completed
+    ts: "2026-09-29T18:35:55Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-github-device-flow-qr-is-drawn-with-half-block-glyphs-in-low-contrast-greens-so-line-spacing-or-a-large-font-stripes-it-and-phone-cameras-rarely-read-it
+    event:
+      type: completed
+      ts: "2026-09-29T18:35:55Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: LIVE ARM MET, 2026-09-29, operator on tlatoanis-macbook-air; tray built from work/1429-u2wd @ c2c0b7026, which contains land90 ff5716971 (this row's fix); fresh VM after an operator-authorized --reset-state. Operator's words: "The QR code looked solid and was read immediately … the blocky chars were properly blocked and the qr code was clear and parsed quickly and correctly." The phone decoded it on the FIRST scan and completed the device flow (tray.log: click 18:27:49.818Z, github-login menu_state updated 18:29:11.150Z). Conditions: the operator's Terminal with a much-enlarged font, the criterion's regime. At that font the QR filled the screen and needed a small scroll to fit; noted, not a defect. No screenshot was taken (the criterion asked for one); the operator's first-hand report stands in for it.
+  - packet_id: the-github-device-flow-qr-is-drawn-with-half-block-glyphs-in-low-contrast-greens-so-line-spacing-or-a-large-font-stripes-it-and-phone-cameras-rarely-read-it
+    event:
+      type: note
+      ts: "2026-09-29T18:35:55Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        live arm met by the operator's sign-in, 2026-09-29
