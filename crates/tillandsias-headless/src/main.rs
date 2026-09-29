@@ -32760,6 +32760,7 @@ mod mirror_seed_failure_tests {
     /// The marker is a cross-component interface: it must be what the mirror prints.
     #[test]
     fn the_marker_is_what_the_mirror_prints() {
+        // source-pin-ok: the '[git-mirror] Seed fetch failed:' marker is the mirror->gate interface; the litmus pins both ends
         let entry = include_str!("../../../images/git/entrypoint.sh");
         assert!(
             entry.contains(&format!("retry_msg \"{GIT_MIRROR_SEED_FAILURE_MARKER}")),
