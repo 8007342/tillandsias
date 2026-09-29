@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: shared-stack-version-skew-after-a-hot-upgrade-is-explicit-with-a-compatibility-window-and-drain-then-swap-only-with-zero-dependent-forges
+    order: 1490-d45z
+    parent_order: 1490-gttj
+    depends_on:
+      - every-podman-object-tillandsias-creates-carries-an-owner-label-and-the-ownership-predicates-key-on-it-not-on-the-name-prefix
+      - linux-upgrade-handoff-keeps-the-stack-and-the-forges-the-new-instance-adopts-instead-of-the-old-one-stopping
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lifecycle, upgrade, versioning, podman, linux]
+    estimated_hours: 5
+    owned_files:
+      - crates/tillandsias-core/src/version_guard.rs
+      - crates/tillandsias-headless/src/main.rs
+      - scripts/test-shared-stack-skew.sh
+    title: |
+      Shared-stack version skew is explicit: version_guard gains compatible(binary, image) with a WINDOW_DAYS constant; after adoption an Incompatible shared container is drained-then-swapped only when no forge depends on it, otherwise reported as deferred:skew; forges are never swapped; --diagnose prints the skew table
+    context: |
+      Image tags are versioned (versioned_image_tag main.rs:2348 ->
+      localhost/tillandsias-<name>:v<VERSION>) but container reuse is by name:
+      vault (vault_bootstrap.rs:826), proxy (ensure_proxy_running main.rs:3836
+      returns early if running), nix-cache (:6419), catalog services
+      (container_deps.rs:511). Only ensure_router_running (main.rs:6241)
+      compares the running image to the version tag and recreates. After a
+      binary swap the shared stack silently keeps running the OLD image while
+      new forges get the NEW forge image; skew is neither detected nor
+      declared. version_guard (crates/tillandsias-core/src/version_guard.rs)
+      already parses the monotonic CalVer and refuses downgrades
+      (downgrade_refusal main.rs:2869); it has no notion of "close enough".
+      cleanup_shared_stack_if_no_running_forge (main.rs:7776) already knows
+      when a shared container has no dependents. Design D3; spec delta
+      app-lifecycle "Shared-stack version skew is explicit and bounded".
+    exit_criteria:
+      - 'version_guard::compatible(binary, image) returns Same / Compatible / Incompatible with WINDOW_DAYS as a named constant (pre-fix: no such function)'
+      - 'with one forge running and the proxy on an Incompatible image, the proxy container id is unchanged and --diagnose shows proxy deferred:skew (pre-fix: no report, proxy silently stays old)'
+      - 'with no forge running, the same proxy is recreated on the current tag and its readiness probe passes before the run reports upgraded'
+      - 'a forge on an old image is listed in the skew table and never swapped'
+    verifiable_closure: |
+      bash scripts/test-shared-stack-skew.sh exits 0. Pre-fix: the script does not exist.
+    notes: |
+      size: M  implementer_tier: any
+      The window number is policy; the open question in design.md (date-based vs Major.Minor) is for the implementer to decide and record in the closing event.
+    next_action: 'write compatible() with a unit test over three CalVer pairs, then the post-adopt sweep'
+    provenance: |
+      Filed by a Fable agent on lenovinha, 2026-09-29, from the hot-upgrade investigation (1490-gttj).
+    events:
+      - type: filed
+        ts: "2026-09-29T06:16:04Z"
+        agent_id: "claude-fable-lenovinha-20260929t061525z"
+        host: lenovinha
+        summary: |-
+          Skew policy for the shared stack after adoption.

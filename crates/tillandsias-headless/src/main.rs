@@ -4812,6 +4812,14 @@ fn mirror_upgrade_skew(aliases: &[String], expected: &str) -> bool {
 // struct would touch seventeen call sites for a shape change nothing else
 // wants. If a ninth parameter is ever needed, group them then — that is the
 // point at which the argument list is the problem rather than the lint.
+/// The leading `podman run` flags of the one-shot provider-login helper
+/// container (order 1487-6dz2). `--no-healthcheck`: the helper runs from the
+/// tillandsias-git image and inherited its HEALTHCHECK, which cannot pass
+/// there. A device-flow login on a macOS guest logged it `unhealthy` 24 times
+/// in ~100 s (a transient systemd unit failing every 3 s), noise in every
+/// journal read during a login. The long-running git service keeps its check.
+const LOGIN_CONTAINER_RUN_PREFIX: [&str; 4] = ["run", "--detach", "--rm", "--no-healthcheck"];
+
 #[allow(clippy::too_many_arguments)]
 fn build_git_run_args(
     project_name: &str,
@@ -10995,6 +11003,21 @@ pub fn render_terminal_qr_in(
     use tillandsias_progress_tty::palette::{LEAF_DEEPEST, LEAF_LIGHT};
 
     let code = QrCode::new(url.as_bytes()).map_err(|e| format!("QR encoding failed: {e}"))?;
+
+    // ORDER 1480-eqkh: on a COLOUR tier, draw each module as two spaces with
+    // a BACKGROUND colour, one text row per module row. The old renderer
+    // packed two module rows into each text row with half-block glyphs
+    // (Dense1x2). A glyph covers only the font's glyph box, so terminal line
+    // spacing, or an enlarged font, left a light stripe between every pair of
+    // rows. The operator's phone "rarely" decoded it (2026-09-29). A cell's
+    // background fills the whole cell, line spacing included, on common
+    // terminals (UNVERIFIED on every Terminal.app setting; checked by the
+    // operator). The palette pair of 1420-2pav is kept: leaf-deepest modules
+    // on leaf-light. The plain tier cannot colour a background, so it keeps
+    // the Dense1x2 glyphs and carries no escape byte.
+    if !matches!(tier, tillandsias_progress_tty::Tier::Plain) {
+        return Ok(render_qr_background_cells(&code, tier));
+    }
     let raw = code.render::<Dense1x2>().quiet_zone(true).build();
 
     let open = qr_sgr(tier, LEAF_DEEPEST, Some(LEAF_LIGHT));
@@ -11009,6 +11032,59 @@ pub fn render_terminal_qr_in(
         out.push('\n');
     }
     Ok(out)
+}
+
+/// Quiet zone, in modules, around a background-cell QR (the QR spec's 4).
+const QR_QUIET_MODULES: usize = 4;
+
+/// SGR for a background colour alone, in a colour tier.
+fn qr_bg(
+    tier: tillandsias_progress_tty::Tier,
+    c: tillandsias_progress_tty::palette::Colour,
+) -> String {
+    use tillandsias_progress_tty::Tier;
+    match tier {
+        Tier::TrueColor => format!("\x1b[48;2;{};{};{}m", c.rgb.0, c.rgb.1, c.rgb.2),
+        _ => format!("\x1b[48;5;{}m", c.xterm256),
+    }
+}
+
+/// 1480-eqkh: one text row per module row; each module is two spaces on a
+/// leaf-deepest (dark) or leaf-light (light) background, with a quiet zone of
+/// [`QR_QUIET_MODULES`]. The colour changes only between runs, and every line
+/// ends with a reset.
+fn render_qr_background_cells(
+    code: &qrcode::QrCode,
+    tier: tillandsias_progress_tty::Tier,
+) -> String {
+    use qrcode::Color;
+    use tillandsias_progress_tty::palette::{LEAF_DEEPEST, LEAF_LIGHT};
+    let w = code.width();
+    let modules = code.to_colors();
+    let full = w + 2 * QR_QUIET_MODULES;
+    let dark = qr_bg(tier, LEAF_DEEPEST);
+    let light = qr_bg(tier, LEAF_LIGHT);
+    let is_dark = |x: usize, y: usize| -> bool {
+        x >= QR_QUIET_MODULES
+            && y >= QR_QUIET_MODULES
+            && x < QR_QUIET_MODULES + w
+            && y < QR_QUIET_MODULES + w
+            && modules[(y - QR_QUIET_MODULES) * w + (x - QR_QUIET_MODULES)] == Color::Dark
+    };
+    let mut out = String::new();
+    for y in 0..full {
+        let mut current: Option<bool> = None;
+        for x in 0..full {
+            let d = is_dark(x, y);
+            if current != Some(d) {
+                out.push_str(if d { &dark } else { &light });
+                current = Some(d);
+            }
+            out.push_str("  ");
+        }
+        out.push_str("\x1b[0m\n");
+    }
+    out
 }
 
 /// [`render_terminal_qr_in`] at the tier this process's stdout supports.
@@ -11120,13 +11196,14 @@ fn github_refresh_verdict(
     }
 }
 
-/// The accountability event the spec names for rotation (spec:secret-rotation).
-// @trace spec:secret-rotation
+/// The accountability event the spec names for rotation (spec:gh-auth-script;
+/// secret-rotation is tombstoned, 1397-eppt).
+// @trace spec:gh-auth-script, order:1489-8qd6
 fn audit_github_token_refresh(outcome: &str) {
     info!(
         accountability = true,
         category = "secrets",
-        spec = "secret-rotation",
+        spec = "gh-auth-script",
         operation = "github_token_refresh",
         secret_name = "github-token",
         outcome = outcome,
@@ -12038,10 +12115,8 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             certs_dir.join("intermediate.crt").display()
         );
         let mut run = podman_command();
+        run.args(LOGIN_CONTAINER_RUN_PREFIX);
         run.args([
-            "run",
-            "--detach",
-            "--rm",
             "--name",
             &container,
             "--network",
@@ -12074,10 +12149,8 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     #[cfg(not(feature = "vault"))]
     {
         let mut run = podman_command();
+        run.args(LOGIN_CONTAINER_RUN_PREFIX);
         run.args([
-            "run",
-            "--detach",
-            "--rm",
             "--name",
             &container,
             "--network",
@@ -24644,22 +24717,82 @@ mod tests {
             .expect("QR code rendering must succeed");
         assert!(qr.lines().count() >= 10, "QR code must have multiple lines");
         for line in qr.lines() {
-            assert!(
-                line.starts_with("\x1b[38;2;30;74;50;48;2;157;187;165m"),
-                "{line:?}"
-            );
+            assert!(line.starts_with("\x1b[48;2;157;187;165m"), "{line:?}"); // quiet zone: leaf-light
             assert!(line.ends_with("\x1b[0m"), "{line:?}");
         }
+        assert!(
+            qr.contains("\x1b[48;2;30;74;50m"),
+            "dark modules are leaf-deepest"
+        );
         assert!(
             !qr.contains("\x1b[47m"),
             "the hardcoded white-on-black is gone"
         );
     }
 
+    /// 1480-eqkh: a colour-tier QR is background cells, one text row per
+    /// module row, so terminal line spacing cannot stripe it; and the cells
+    /// DECODE to exactly the QR the qrcode crate generated (quiet zone
+    /// included). Nothing is pinned to a spelling: the module grid is checked.
+    #[test]
+    fn colour_qr_is_background_cells_one_row_per_module_and_decodes_to_the_code() {
+        use tillandsias_progress_tty::Tier;
+        let code = qrcode::QrCode::new(QR_URL.as_bytes()).unwrap();
+        let w = code.width();
+        let truth = code.to_colors();
+        for tier in [Tier::TrueColor, Tier::Ansi256] {
+            let qr = render_terminal_qr_in(QR_URL, tier).unwrap();
+            assert!(
+                !qr.contains(['\u{2580}', '\u{2584}', '\u{2588}']),
+                "{tier:?}: no half- or full-block glyphs: those leave line-spacing stripes"
+            );
+            let dark_sgr = qr_bg(tier, tillandsias_progress_tty::palette::LEAF_DEEPEST);
+            let rows: Vec<&str> = qr.lines().collect();
+            assert_eq!(
+                rows.len(),
+                w + 2 * QR_QUIET_MODULES,
+                "{tier:?}: one text row per module row"
+            );
+            for (y, row) in rows.iter().enumerate() {
+                // Decode: track the current background, two spaces = one module.
+                let mut cells = Vec::new();
+                let mut dark = false;
+                let mut rest = *row;
+                while !rest.is_empty() {
+                    if let Some(after) = rest.strip_prefix("\x1b[") {
+                        let end = after.find('m').expect("SGR ends");
+                        let sgr = &rest[..end + 3];
+                        if sgr != "\x1b[0m" {
+                            dark = sgr == dark_sgr;
+                        }
+                        rest = &after[end + 1..];
+                    } else {
+                        assert!(rest.starts_with("  "), "{tier:?}: a module is two spaces");
+                        cells.push(dark);
+                        rest = &rest[2..];
+                    }
+                }
+                assert_eq!(cells.len(), w + 2 * QR_QUIET_MODULES, "{tier:?} row {y}");
+                for (x, &d) in cells.iter().enumerate() {
+                    let inside = (QR_QUIET_MODULES..QR_QUIET_MODULES + w).contains(&x)
+                        && (QR_QUIET_MODULES..QR_QUIET_MODULES + w).contains(&y);
+                    let want = inside
+                        && truth[(y - QR_QUIET_MODULES) * w + (x - QR_QUIET_MODULES)]
+                            == qrcode::Color::Dark;
+                    assert_eq!(d, want, "{tier:?}: module ({x},{y})");
+                }
+            }
+        }
+    }
+
     #[test]
     fn terminal_qr_uses_the_palette_pair_on_256_colours() {
         let qr = render_terminal_qr_in(QR_URL, tillandsias_progress_tty::Tier::Ansi256).unwrap();
-        assert!(qr.lines().all(|l| l.starts_with("\x1b[38;5;22;48;5;108m")));
+        assert!(
+            qr.lines().all(|l| l.starts_with("\x1b[48;5;108m")),
+            "quiet zone: leaf-light"
+        );
+        assert!(qr.contains("\x1b[48;5;22m"), "dark modules: leaf-deepest");
     }
 
     /// The closure's plain arm: NO_COLOR / non-TTY means zero ESC bytes in the
@@ -24671,17 +24804,16 @@ mod tests {
         assert!(!plain.contains('\x1b'), "plain QR must carry no ESC byte");
         let code = styled_user_code("ABCD-1234", Tier::Plain);
         assert_eq!(code, "ABCD-1234");
-        let coloured = render_terminal_qr_in(QR_URL, Tier::TrueColor).unwrap();
-        let stripped: String = coloured
-            .lines()
-            .map(|l| {
-                let body = l.split_once('m').map(|(_, b)| b).unwrap_or(l);
-                format!("{}\n", body.trim_end_matches("\x1b[0m"))
-            })
-            .collect();
+        // 1480-eqkh: the colour tiers are background cells, not glyphs, so
+        // the old "same glyphs, different styling" comparison no longer
+        // applies. Both still encode the SAME code: the plain tier's row count
+        // is the Dense1x2 packing (two module rows per text row) of the same
+        // module grid the colour test decodes cell by cell.
+        let w = qrcode::QrCode::new(QR_URL.as_bytes()).unwrap().width();
         assert_eq!(
-            stripped, plain,
-            "the tiers differ only in styling, never in modules"
+            plain.lines().count(),
+            (w + 2 * 4).div_ceil(2),
+            "plain packs 2 module rows per line"
         );
     }
 
@@ -25000,7 +25132,7 @@ mod tests {
         });
         let out = String::from_utf8(buf.0.lock().unwrap().clone()).unwrap();
         for needle in [
-            "secret-rotation",
+            "gh-auth-script",
             "github_token_refresh",
             "refused-no-desktop-session",
             "accountability=true",
@@ -25095,7 +25227,14 @@ mod tests {
         let qr = scanner
             .feed(output.as_bytes(), Tier::TrueColor)
             .expect("verified URL must render");
-        assert!(qr.contains("\x1b[38;2;30;74;50;48;2;157;187;165m"));
+        // 1480-eqkh: the shared renderer draws background cells in the
+        // palette pair, so the Codex QR gets the line-spacing fix too.
+        assert!(qr.contains("\x1b[48;2;30;74;50m"), "leaf-deepest modules");
+        assert!(qr.contains("\x1b[48;2;157;187;165m"), "leaf-light ground");
+        assert!(
+            !qr.contains('\u{2580}') && !qr.contains('\u{2584}'),
+            "no half-block glyphs"
+        );
     }
 
     #[test]
@@ -26322,6 +26461,34 @@ mod tests {
             has_arg(&args, "--replace"),
             "inference args must include --replace so an exited container does not \
              block the next launch with a Permanent exit-125 (order 314): {args:?}"
+        );
+    }
+
+    /// 1487-6dz2: the one-shot login helper disables the git image's
+    /// HEALTHCHECK; the long-running git service keeps it (negative control).
+    #[test]
+    fn login_helper_disables_the_inherited_healthcheck_and_the_git_service_keeps_it() {
+        assert!(
+            LOGIN_CONTAINER_RUN_PREFIX.contains(&"--no-healthcheck"),
+            "the login helper must not inherit the git image's HEALTHCHECK"
+        );
+        assert_eq!(
+            &LOGIN_CONTAINER_RUN_PREFIX[..3],
+            &["run", "--detach", "--rm"]
+        );
+        let args = build_git_run_args(
+            "alpha",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "tillandsias-git:v1",
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(
+            !args.iter().any(|a| a == "--no-healthcheck"),
+            "the git SERVICE must keep its HEALTHCHECK: {args:?}"
         );
     }
 

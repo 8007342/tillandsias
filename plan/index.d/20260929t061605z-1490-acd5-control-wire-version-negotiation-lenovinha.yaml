@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: control-wire-hello-negotiates-a-version-inside-a-declared-window-instead-of-asserting-equality-so-a-hot-guest-or-host-upgrade-has-a-drain-path
+    order: 1490-acd5
+    parent_order: 1490-gttj
+    depends_on: []
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [control-wire, vsock, upgrade, macos, windows]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-control-wire/src/lib.rs
+      - crates/tillandsias-headless/src/vsock_server.rs
+      - crates/tillandsias-headless/src/control_dispatch.rs
+      - crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs
+      - crates/tillandsias-host-shell/src/vsock_client.rs
+    title: |
+      Hello/HelloAck carry wire_version_min and negotiate the highest common version inside a declared window; a disjoint peer is refused as refused:wire:incompatible with the drain-then-swap remedy; the two fixtures hard-coding wire_version 2 use the constant
+    context: |
+      WIRE_VERSION = 4 (crates/tillandsias-control-wire/src/lib.rs:86). A
+      mismatch closes the stream on every side: the guest server
+      (crates/tillandsias-headless/src/vsock_server.rs:949, "rejecting vsock
+      client with mismatched wire version"), the macOS bridge
+      (crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs:229) and the
+      Windows client (crates/tillandsias-host-shell/src/vsock_client.rs:182).
+      build_version is carried (lib.rs:400,408) but never enforced.
+      control_dispatch.rs:268 and :618 send wire_version: 2 as literals, so a
+      fixture can disagree with the wire without any test noticing. With a hot
+      guest/host upgrade one side is always briefly newer; the wire needs a
+      window, not an equality. Design D4; spec delta vsock-transport MODIFIED
+      "Framing and handshake are identical to the Unix-socket transport".
+    exit_criteria:
+      - 'peers offering [3,5] and [4,4] connect at version 4 (pre-fix: any inequality is fatal)'
+      - 'peers offering [5,6] and [2,4] are refused with refused:wire:incompatible:[2,4]:[5,6] before HelloAck and no further envelope is sent'
+      - 'grep -n "wire_version: 2" crates/tillandsias-headless/src/control_dispatch.rs finds nothing (pre-fix: two hits at :268 and :618)'
+    verifiable_closure: |
+      cargo test -p tillandsias-control-wire wire_window exits 0 with the three scenarios above as named tests; the negative control is the disjoint-window test. Pre-fix: the tests do not exist.
+    notes: |
+      size: S  implementer_tier: any
+      Cross-platform crate; buildable and testable on Linux. Bump WIRE_VERSION to 5 when adding the field so an old peer without wire_version_min is treated as [ver, ver].
+    next_action: 'add wire_version_min to Hello/HelloAck with a serde default equal to wire_version, then the intersection test'
+    provenance: |
+      Filed by a Fable agent on lenovinha, 2026-09-29, from the hot-upgrade investigation (1490-gttj).
+    events:
+      - type: filed
+        ts: "2026-09-29T06:16:05Z"
+        agent_id: "claude-fable-lenovinha-20260929t061525z"
+        host: lenovinha
+        summary: |-
+          Wire compatibility window.
