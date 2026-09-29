@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    field: status
+    value: in_progress
+    ts: "2026-09-29T21:23:47Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    event:
+      type: progress
+      ts: "2026-09-29T21:23:47Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: coordinator assignment (macuahuitl-fedora, 2026-09-29): two-layer fix, host-driven clock set on wake plus makestep 1.0 -1 fallback
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    event:
+      type: note
+      ts: "2026-09-29T21:23:47Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        claim: tlatoanis-macbook-air takes the guest-clock-after-sleep fix; darwin-only live arm
