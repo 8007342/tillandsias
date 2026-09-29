@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-empty-spec-argument-runs-every-litmus-spec-and-a-metrics-record-cannot-ride-the-plan-only-lane
+    field: status
+    value: completed
+    ts: "2026-09-29T05:42:07Z"
+    host: lenovinha
+
+events:
+  - packet_id: an-empty-spec-argument-runs-every-litmus-spec-and-a-metrics-record-cannot-ride-the-plan-only-lane
+    event:
+      type: completed
+      ts: "2026-09-29T05:42:07Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 2b1446057 (land85 relay of work/1460-3gja 960b721ec, full gate) + scripts/test-litmus-empty-spec-refused.sh PASS (gate step 600, msys regime)
+  - packet_id: an-empty-spec-argument-runs-every-litmus-spec-and-a-metrics-record-cannot-ride-the-plan-only-lane
+    event:
+      type: note
+      ts: "2026-09-29T05:42:07Z"
+      host: lenovinha
+      summary: |-
+        half one landed in land85. Half two (metrics record push without a full gate) was not built here and is left to the coordinator as a lane-policy decision
