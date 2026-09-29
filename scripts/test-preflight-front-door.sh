@@ -77,7 +77,21 @@ cleanup; trap - EXIT INT TERM HUP PIPE
 # MEASURED: 48 deciders build.sh runs as `_run bash .../check-X.sh` were in none
 # of the three rosters, so the door passed trees the gate refused. Plant one in
 # a never-called function of build.sh: the door must run it and refuse.
+# AND IN THE GATE'S MODE: a second plant refuses ONLY when given the argument
+# the gate passes it, so a door that drops arguments (the first draft of this
+# row, which made check-mcp-live-build refuse a tree the gate passes) sees a
+# pass there and this arm fails.
 PLANT=scripts/check-zz-1499-planted.sh
+PLANT_ARGS=scripts/check-zz-1499-args.sh
+cat > "$PLANT_ARGS" <<'PL'
+#!/usr/bin/env bash
+if [ "${1:-}" = zzmode ] && [ "${2:-}" = second ]; then
+    echo "violation:planted-mode-guard: refuses only in the gate's mode"
+    exit 1
+fi
+echo "ok:planted-mode-guard: no mode given (argv: $*)"
+PL
+chmod +x "$PLANT_ARGS"
 cat > "$PLANT" <<'PL'
 #!/usr/bin/env bash
 echo "violation:planted-inline-guard: this guard exists and refuses"
@@ -86,14 +100,20 @@ PL
 chmod +x "$PLANT"
 _bs_backup="$(mktemp "${TMPDIR:-/tmp}/build-sh-1499.XXXXXX")"
 cp -p build.sh "$_bs_backup"
-cleanup() { rm -f "$PLANT"; [ -s "$_bs_backup" ] && cp -p "$_bs_backup" build.sh; rm -f "$_bs_backup"; }
+cleanup() { rm -f "$PLANT" "$PLANT_ARGS"; [ -s "$_bs_backup" ] && cp -p "$_bs_backup" build.sh; rm -f "$_bs_backup"; }
 trap cleanup EXIT INT TERM HUP PIPE
-printf '\n_zz_1499_never_called() {\n    _run bash "$SCRIPT_DIR/scripts/check-zz-1499-planted.sh"\n}\n' >> build.sh
+printf '\n_zz_1499_never_called() {\n    _run bash "$SCRIPT_DIR/scripts/check-zz-1499-planted.sh"\n    _run bash "$SCRIPT_DIR/scripts/check-zz-1499-args.sh" zzmode second 2>&1\n}\n' >> build.sh
 out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && grep -q 'zz-1499-planted' <<< "$out"; then
     ok "a guard build.sh runs inline is picked up and refuses (1499-m9fj)"
 else
     bad "a guard the gate runs inline was invisible to the front door (rc=$rc)"
+fi
+if grep -q '^refused:preflight:check-zz-1499-args\[zzmode second\]$' <<< "$out" \
+    && grep -q 'violation:planted-mode-guard' <<< "$out"; then
+    ok "the door runs an inline guard in the gate's mode, with the gate's arguments (1499-m9fj)"
+else
+    bad "the door ran an inline guard without the arguments the gate passes it"
 fi
 cleanup; trap - EXIT INT TERM HUP PIPE
 
