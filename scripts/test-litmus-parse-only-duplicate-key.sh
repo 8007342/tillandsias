@@ -72,7 +72,14 @@ write_probe "$TMP/dup-command.yaml" '    command: "echo again"'
 # YAML-invalid and the clean file really is valid. If a future YAML reader
 # started accepting duplicate keys, every arm below would still "pass" while
 # testing nothing, and this arm is what would notice.
-READER="$(command -v tillandsias-plan 2>/dev/null || true)"
+# Resolve from this checkout, not the caller's PATH or target override: the
+# default-target gate runs fixtures from a scratch cwd with both masked
+# (1401-x76w). Same fix as Codex's PR #197 for this line.
+. "$ROOT/scripts/plan-binary-probe.sh"
+READER="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null)" || READER=""
+case "$READER" in
+    ./*) READER="$ROOT/${READER#./}" ;;
+esac
 if [ -z "$READER" ]; then
     printf 'skip:%s-parse-only-duplicate-key:no-yaml-reader-on-PATH\n' "$LIT"
     exit 0
