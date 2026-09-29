@@ -238,7 +238,14 @@ DISC_EOF
 }
 
 discipline_load() {
-    discipline_load_from HEAD || return 0
+    # 1490-zw87: the configured seed refs first (the integration branch carries
+    # the seed before the default branch does), then HEAD. The FIRST ref that
+    # holds a seed wins; refs this mirror does not have are skipped.
+    local r
+    for r in ${TILLANDSIAS_DISCIPLINE_SEED_REFS:-} HEAD; do
+        git rev-parse --verify --quiet "$r" >/dev/null 2>&1 || continue
+        discipline_load_from "$r" && break
+    done
     [ "$DISC_PRESENT" -eq 1 ] || return 0
     if [ -n "$DISC_INTEGRATION" ] && git rev-parse --verify --quiet "refs/heads/$DISC_INTEGRATION" >/dev/null; then
         discipline_load_from "refs/heads/$DISC_INTEGRATION" || true

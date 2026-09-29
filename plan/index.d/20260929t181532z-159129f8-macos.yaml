@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-vault-store-and-download-cache-are-host-persistent-across-reset
+    event:
+      type: note
+      ts: "2026-09-29T18:15:32Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t181531z
+      host: macos
+      summary: |
+        PATH SUPERSEDED (coordinator ruling, 2026-09-29): this row's store location "~/Library/Application Support/tillandsias/vault-data (or ~/Library/Caches …)" is SUPERSEDED by the operator's adopted rule that ~/.tillandsias/ is the only store location, carried as 1438-pk9j. The vault-store share's host path goes under ~/.tillandsias/ (vault/ in 1438's layout), not Application Support. The measurement's scratch share will live under ~/.tillandsias/scratch/. Also: the live arm (test-macos-reset-keeps-vault-store.sh, which runs --reset-state) needs the operator's explicit OK on this Mac, their daily machine (the row's notes ask for a smoke Mac); the earlier wipe approval covered only that one reprovision. The measurement waits for the operator's y67a/6dz2/eqkh sign-in on the fresh VM before any guest reboot.

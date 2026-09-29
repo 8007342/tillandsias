@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: two-red-instant-litmus-with-no-packet
+    field: notes
+    value: 'RE-MEASURED on yoga 2026-09-29 at 7c997a36e (linux-immutable, the host of the original measurement): all three named litmus PASS in their own spec runs: litmus:added-fragment-parse-gate-shape (ci-release), litmus:forge-clone-reachability-probe-shape (git-mirror-service, 14.0s), litmus:skills-canonical-and-mcp-first-shape (project-bootstrap-readme). Both negative controls control again. PLAUSIBLE fixes, from git log on each test''s scripts since 2026-08-17, NOT individually proven: forge-clone-reachability-probe-shape -> 598d465a3 ''the mirror reachability probe classifies under any locale'' (773-f5ma), which fits yoga''s French-locale git; added-fragment-parse-gate-shape -> fe162d54f ''point-of-use instrument freshness: a stale tillandsias-plan answers wrong, it does not fail'' (851-cduu), consistent with the step''s EMPTY output. Neither is a live defect today, so no new packet is filed.'
+    ts: "2026-09-29T15:05:48Z"
+    host: yoga
+
+events:
+  - packet_id: two-red-instant-litmus-with-no-packet
+    event:
+      type: progress
+      ts: "2026-09-29T15:05:48Z"
+      host: yoga
+      summary: |-
+        status 'RE-MEASURED on yoga 2026-09-29 at 7c997a36e (linux-immutable, the host of the original measurement): all three named litmus PASS in their own spec runs: litmus:added-fragment-parse-gate-shape (ci-release), litmus:forge-clone-reachability-probe-shape (git-mirror-service, 14.0s), litmus:skills-canonical-and-mcp-first-shape (project-bootstrap-readme). Both negative controls control again. PLAUSIBLE fixes, from git log on each test's scripts since 2026-08-17, NOT individually proven: forge-clone-reachability-probe-shape -> 598d465a3 'the mirror reachability probe classifies under any locale' (773-f5ma), which fits yoga's French-locale git; added-fragment-parse-gate-shape -> fe162d54f 'point-of-use instrument freshness: a stale tillandsias-plan answers wrong, it does not fail' (851-cduu), consistent with the step's EMPTY output. Neither is a live defect today, so no new packet is filed.' (not terminal) with evidence_refs: 7c997a36e
+  - packet_id: two-red-instant-litmus-with-no-packet
+    event:
+      type: note
+      ts: "2026-09-29T15:05:48Z"
+      host: yoga
+      summary: |-
+        re-measured: all green

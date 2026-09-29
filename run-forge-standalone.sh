@@ -7,13 +7,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$SCRIPT_DIR"
 
-if [[ -z "${TILLANDSIAS_PODMAN_REMOTE_URL:-}" ]]; then
-    runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-    remote_socket="$runtime_dir/podman/podman.sock"
-    if [[ -S "$remote_socket" ]]; then
-        export TILLANDSIAS_PODMAN_REMOTE_URL="unix://$remote_socket"
-    fi
-fi
+# ORDER 798-rvqb: remote podman mode is CONFIGURATION, never inferred from a
+# socket file existing (the ordinary state of any host with podman.socket
+# enabled). This block, like build.sh's before 797-r6tc, arrived in the
+# 406-file checkpoint ba5de86f4 with no rationale, and setting the variable
+# makes common.sh pin TILLANDSIAS_PODMAN_BIN ahead of PATH. A caller that wants
+# remote mode exports TILLANDSIAS_PODMAN_REMOTE_URL itself, as the systemd
+# unit does. Pinned by scripts/test-gate-podman-mode-configuration.sh.
 
 source "$SCRIPT_DIR/scripts/common.sh"
 

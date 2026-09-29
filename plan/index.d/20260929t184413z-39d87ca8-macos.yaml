@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: quit-during-a-forge-build-gets-no-in-vm-shutdown-reply-and-the-drain-expires-to-a-force-stop-with-no-named-cause
+    event:
+      type: note
+      ts: "2026-09-29T18:44:13Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t184413z
+      host: macos
+      summary: |
+        EVIDENCE PRESERVED (2026-09-29, before any further reboot): /Users/tlatoani/.tillandsias/scratch/evidence-20260929t184231z on tlatoanis-macbook-air, with SHA256SUMS. Contents: tray.log; the host console.log (NOTE: already overwritten by later --exec-guest boots, so it covers only those, not the incident boots); the full guest journals, exported by boot id, for 3aad84e57d444615979bf0662fb9c408 (16:48-17:16 guest time: the stuck device flow and the Quit that force-stopped with the BTRFS line) and 6c39d057b746497caef2aa573f0fc84f (18:27-18:33:12: the successful sign-in and the lost state); list-boots.txt; and the earlier probe outputs.
+        FILESYSTEM, READ-ONLY CHECK (no scrub, no repair; fs-readonly-check-{1,2,3}.txt in that folder): /sys/fs/btrfs/<uuid>/devinfo/1/error_stats = write_errs 0, read_errs 0, flush_errs 0, corruption_errs 0, generation_errs 0; btrfs device stats -c / rc=0. Across ALL boots in the journal (_TRANSPORT=kernel), exactly ONE BTRFS message: 2026-09-29T17:16:00Z 'BTRFS critical (device vda2): inode mode mismatch with dir: inode mode=00 btrfs type=0 dir type=1', at the power-off of the force-stopped boot. None in any later boot. fs: 19.90 GiB, 4.80 GiB used, rw,compress=zstd:1,discard=async,space_cache=v2.
+        READING: the device error counters are clean and the message did not recur, so there is no evidence of lasting damage. But the error counters do not count this class: an inode-mode mismatch is a metadata inconsistency (a directory entry pointing at an inode with mode 0), the signature of an operation interrupted mid-write. It happened AT the force-stop, which is this row's data-loss risk made concrete. 'Undamaged' is NOT established: that needs a btrfs check or scrub, which was not run (read-only instruction).

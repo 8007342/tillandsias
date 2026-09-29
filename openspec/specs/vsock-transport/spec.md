@@ -319,9 +319,10 @@ lane that the `Virtualization.framework` connector is the only host-side path.
 - **Expression**: `encode AND decode ARE_SHARED_FNS BETWEEN unix AND vsock paths`
 - **Measurable**: true
 
-### Invariant: Wire version is 2
+### Invariant: Wire version is 2 or later
 - **ID**: vsock-transport.invariant.wire-version-2
-- **Expression**: `WIRE_VERSION == 2`
+- **Expression**: `WIRE_VERSION >= 2`
+- **Note**: a floor, not an exact pin (order 1492-fswq). The wire is additive past v2 (it is 4 as of 2026-09-29), and an exact `== 2` left the litmus failing silently on every host once it moved. The ID keeps its name, so references stay valid.
 - **Measurable**: true
 
 ### Invariant: New variants are postcard-stable
@@ -350,6 +351,7 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:vsock-handshake` — primary handshake verification.
 - `litmus:vm-shutdown-drains-forges` — exercises `VmShutdownRequest` semantics.
 - `litmus:vsock-exec-heartbeat` — pins capability-gated silent-work liveness, the unified timeout policy, and empty-frame suppression.
+- `litmus:headless-keepalive` — the control listener stays long-lived: it accepts and handles a second and third connection after earlier ones close (order 148; red on a one-shot listener).
 
 ## Litmus Chain
 

@@ -14,7 +14,7 @@
 #   H2  a `### Requirement:` heading with no req-id is REFUSED by name
 #   H3  two scenarios with one title under one requirement are REFUSED
 #   H4  zero population is `blocked:`, never ok:0
-#   R1  the real gh-auth-script spec: 7 requirements, 19 scenario obligations
+#   R1  the real gh-auth-script spec: 7 requirements, 20 scenario obligations (1489-8qd6 added one)
 #       (the design doc's probe, reproduced through the `predicate` verb)
 #   R2  the real corpus, three processes: byte-identical canonical JSON, and a
 #       non-zero obligation count
@@ -178,7 +178,7 @@ else bad "H4 rc=$RC: $(grep -E '^(ok|refused|blocked):' <<<"$ERR" | head -2)"; f
 # ── R1: the real gh-auth-script spec ─────────────────────────────────────────
 run "$ROOT" "gh-auth-script"
 r="$(jg '.requirements' "$JSON") $(jg '.obligation_count' "$JSON")"
-if [ "$RC" -eq 0 ] && [ "$r" = "7 19" ]; then ok "R1 gh-auth-script: 7 requirements, 19 scenario obligations"
+if [ "$RC" -eq 0 ] && [ "$r" = "7 20" ]; then ok "R1 gh-auth-script: 7 requirements, 20 scenario obligations"
 else bad "R1 gh-auth-script rc=$RC: requirements/obligations=$r (want 7 19)"; fi
 
 # ── R2: the real corpus, three processes, one canonical output ───────────────

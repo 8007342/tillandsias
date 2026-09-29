@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-preflight-door-prints-ok-while-48-push-deciders-the-gate-runs-inline-in-build-sh-never-ran-there
+    field: context
+    value: |-
+      MEASURED on yoga 2026-09-29 (1496-w25b): 65 check-*.sh are invoked
+      inline in build.sh via `_run bash "$SCRIPT_DIR/scripts/check-X.sh"`; 48 of
+      them appear in none of the door's three roster sources. Proven by
+      instrumenting the door in a worktree at 02421446f: check-bash-dialect is
+      never invoked, while the same checker run by hand there refuses the
+      800-ivkg fixture (host and toolbox). The door printed
+      ok:preflight:ran=159 refused=0 for that tree; land92's gate then refused it
+      by name. On 1496-w25b's own change check-sigpipe-verdict-pipelines-added
+      refused three pipelines while `--preflight --full` said ok refused=0.
+      The shape is "a guard must assert its population": the door's counts cover
+      what it enumerated, and nothing says what it did not. Split out of
+      1496-w25b on the coordinator's direction (2026-09-29).
+
+
+      [2026-09-29T20:11:10Z yoga] SHARED-STATE AUDIT (coordinator ruling 2026-09-29, yoga, work/1499-m9fj 340f97640). Population: the 213 distinct scripts the door's four rosters name. Method: two greps. (1) Direct writes (>, >>, tee, touch, mkdir -p, cp, mv) to a literal /tmp/<name>, $ROOT|$REPO|$SCRIPT_DIR/<path>, .git/, target/, or $HOME. (2) Variables assigned such a fixed path without mktemp. Plus every real (non-message) cargo build/run/test and plan-binary stamp write. This is a SHAPE census, so it is an UPPER BOUND on what it can see: a fixed path assembled any other way is invisible to it. Verdicts:
+      - SHARED-WRITE, now `# preflight: serial`: test-gate-step-metrics-isolation (rm/restores /tmp/tillandsias-timing.jsonl and asserts its ABSENCE); test-metrics-log-path-agreement (writes /tmp/tillandsias-timing.jsonl, counts /tmp/forge-expert-usage.jsonl before and after); check-cheatsheet-sources, check-cheatsheet-tiers and check-no-python-scripts (cargo build tillandsias-policy into the shared target/); test-set-field-refuses-unknown-flags (with TILLANDSIAS_SET_FIELD_MUTANT=1 inherited from the environment, rewrites crates/tillandsias-plan/src/main.rs and rebuilds the plan binary).
+      - PRIVATE: test-gate-step-prefix-allocation and test-pending-capability-row-does-not-wedge (mktemp under target/plan-scratch; the latter's stale-sweep and count touch only its own pending-cap.* prefix); test-pre-push-honours-a-live-freeze (.git/hooks of its own temp repo); cp destinations in test-gate-step-metrics-isolation:89, test-native-lint-attested:48, test-preflight-fixtures-default-target:40 and test-set-field-refuses-unknown-flags:72 (all mktemp dirs).
+      - SHARED-READ-ONLY: test-build-version-label and test-headless-sidecar-target-gate (.github/workflows/release.yml); test-ledger-write-reaches-its-reader (plan/index.yaml, --live only); test-memo-hit-observability and test-preflight-{scratch-is-off-checkout,setsid-probe,stale-plan-binary,verdict-categories} (build.sh, no writes found).
+      - NOT WRITES (text only): check-backgrounded-jobs-redirect-stderr:8,70 (comment/remedy); test-env-forward-shared:77,81 (a string value).
+      Mechanism: _pf_predecide returns 12 for a declared serial guard; the launcher waits for every running guard, runs it in the foreground, then resumes. Fixture arm 2d asserts the premise (undeclared plants overlap) and then exclusivity; a negative control with the launcher ignoring the declaration fails exclusivity. Door at cap max(2, nproc/4)=3: ./build.sh --preflight wall=80s ran=194 skipped-by-deadline=13 refused=0 (serial door: 13 skips); --full ran=207 refused=0.
+    ts: "2026-09-29T20:11:10Z"
+    host: yoga
+
+events:
+  - packet_id: the-preflight-door-prints-ok-while-48-push-deciders-the-gate-runs-inline-in-build-sh-never-ran-there
+    event:
+      type: progress
+      ts: "2026-09-29T20:11:10Z"
+      host: yoga
+      summary: |-
+        status 'MEASURED on yoga 2026-09-29 (1496-w25b): 65 check-*.sh are invoked
+        inline in build.sh via `_run bash "$SCRIPT_DIR/scripts/check-X.sh"`; 48 of
+        them appear in none of the door's three roster sources. Proven by
+        instrumenting the door in a worktree at 02421446f: check-bash-dialect is
+        never invoked, while the same checker run by hand there refuses the
+        800-ivkg fixture (host and toolbox). The door printed
+        ok:preflight:ran=159 refused=0 for that tree; land92's gate then refused it
+        by name. On 1496-w25b's own change check-sigpipe-verdict-pipelines-added
+        refused three pipelines while `--preflight --full` said ok refused=0.
+        The shape is "a guard must assert its population": the door's counts cover
+        what it enumerated, and nothing says what it did not. Split out of
+        1496-w25b on the coordinator's direction (2026-09-29).
+        
+        
+        [2026-09-29T20:11:10Z yoga] SHARED-STATE AUDIT (coordinator ruling 2026-09-29, yoga, work/1499-m9fj 340f97640). Population: the 213 distinct scripts the door's four rosters name. Method: two greps. (1) Direct writes (>, >>, tee, touch, mkdir -p, cp, mv) to a literal /tmp/<name>, $ROOT|$REPO|$SCRIPT_DIR/<path>, .git/, target/, or $HOME. (2) Variables assigned such a fixed path without mktemp. Plus every real (non-message) cargo build/run/test and plan-binary stamp write. This is a SHAPE census, so it is an UPPER BOUND on what it can see: a fixed path assembled any other way is invisible to it. Verdicts:
+        - SHARED-WRITE, now `# preflight: serial`: test-gate-step-metrics-isolation (rm/restores /tmp/tillandsias-timing.jsonl and asserts its ABSENCE); test-metrics-log-path-agreement (writes /tmp/tillandsias-timing.jsonl, counts /tmp/forge-expert-usage.jsonl before and after); check-cheatsheet-sources, check-cheatsheet-tiers and check-no-python-scripts (cargo build tillandsias-policy into the shared target/); test-set-field-refuses-unknown-flags (with TILLANDSIAS_SET_FIELD_MUTANT=1 inherited from the environment, rewrites crates/tillandsias-plan/src/main.rs and rebuilds the plan binary).
+        - PRIVATE: test-gate-step-prefix-allocation and test-pending-capability-row-does-not-wedge (mktemp under target/plan-scratch; the latter's stale-sweep and count touch only its own pending-cap.* prefix); test-pre-push-honours-a-live-freeze (.git/hooks of its own temp repo); cp destinations in test-gate-step-metrics-isolation:89, test-native-lint-attested:48, test-preflight-fixtures-default-target:40 and test-set-field-refuses-unknown-flags:72 (all mktemp dirs).
+        - SHARED-READ-ONLY: test-build-version-label and test-headless-sidecar-target-gate (.github/workflows/release.yml); test-ledger-write-reaches-its-reader (plan/index.yaml, --live only); test-memo-hit-observability and test-preflight-{scratch-is-off-checkout,setsid-probe,stale-plan-binary,verdict-categories} (build.sh, no writes found).
+        - NOT WRITES (text only): check-backgrounded-jobs-redirect-stderr:8,70 (comment/remedy); test-env-forward-shared:77,81 (a string value).
+        Mechanism: _pf_predecide returns 12 for a declared serial guard; the launcher waits for every running guard, runs it in the foreground, then resumes. Fixture arm 2d asserts the premise (undeclared plants overlap) and then exclusivity; a negative control with the launcher ignoring the declaration fails exclusivity. Door at cap max(2, nproc/4)=3: ./build.sh --preflight wall=80s ran=194 skipped-by-deadline=13 refused=0 (serial door: 13 skips); --full ran=207 refused=0.' (not terminal) with evidence_refs: 340f97640a967742c353c7c968235e2f9c585b63
+  - packet_id: the-preflight-door-prints-ok-while-48-push-deciders-the-gate-runs-inline-in-build-sh-never-ran-there
+    event:
+      type: note
+      ts: "2026-09-29T20:11:10Z"
+      host: yoga
+      summary: |-
+        shared-state audit per coordinator ruling

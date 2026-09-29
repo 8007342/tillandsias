@@ -69,7 +69,17 @@ describe() {
 }
 
 BLOB=""
-if desc="$(describe HEAD)"; then
+# 1490-zw87: try the configured seed refs (TILLANDSIAS_DISCIPLINE_SEED_REFS,
+# from the entrypoint) before HEAD. The integration branch carries a level-2
+# seed long before the default branch gets it, so HEAD alone published level 0
+# for a level-2 project on the first live mirror.
+FOUND=""; TRIED=""
+for r in ${TILLANDSIAS_DISCIPLINE_SEED_REFS:-} HEAD; do
+    git -C "$MIRROR" rev-parse --verify --quiet "$r" >/dev/null 2>&1 || { TRIED="$TRIED $r(absent)"; continue; }
+    if desc="$(describe "$r")"; then FOUND="$r"; break; fi
+    TRIED="$TRIED $r"
+done
+if [ -n "$FOUND" ]; then
     set -- $desc
     integ="$3"
     if [ "$integ" != "-" ] && git -C "$MIRROR" rev-parse --verify --quiet "refs/heads/$integ" >/dev/null \
@@ -77,7 +87,7 @@ if desc="$(describe HEAD)"; then
         desc="$d2"; set -- $desc
         BLOB="$(git -C "$MIRROR" rev-parse "refs/heads/$integ:$SEED_PATH")"
     else
-        BLOB="$(git -C "$MIRROR" rev-parse "HEAD:$SEED_PATH")"
+        BLOB="$(git -C "$MIRROR" rev-parse "$FOUND:$SEED_PATH")"
     fi
     LEVEL="$1"; ENF="$2"; DIGEST="$4"
 else
@@ -98,7 +108,13 @@ NEW="$NS/$LEVEL/$ENF/unknown/$DIGEST/$EPOCH"
     printf 'update %s %s\n' "$NEW" "$BLOB"
 } > "$TMP/tx"
 if git -C "$MIRROR" update-ref --stdin < "$TMP/tx" 2>"$TMP/err"; then
-    echo "published:$NEW"
+    # Say WHY a level-0 ref was published: "no seed on <refs>" is a finding a
+    # reader can act on; a quiet 0/advised is not (1490-zw87).
+    if [ -z "$FOUND" ]; then
+        echo "published:$NEW (no seed on:$TRIED)"
+    else
+        echo "published:$NEW (seed from $FOUND)"
+    fi
 else
     echo "publish-discipline: update-ref failed: $(cat "$TMP/err")" >&2
     exit 1

@@ -1,0 +1,45 @@
+# @trace spec:host-guest-transport
+name: litmus:exec-transcript-capped-in-every-driver
+spec: host-guest-transport
+phase: pre-build
+description: >
+  Order 795-vq6b. Every place an exec driver in
+  crates/tillandsias-vm-layer/src/vsock_exec.rs accumulates guest output into a
+  transcript passes it through the one cap policy (trim_transcript, directly or
+  via retain_tail) within a few lines. 690-eug2 capped the expect driver while
+  its closure claimed the transcript was capped everywhere; the collecting
+  driver kept an unbounded Vec<u8>. The drivers stay separate (collect,
+  stream-to-callback and expect script are different contracts), so this scan
+  is what makes the next divergence loud. The trunk file before the fix fails
+  arm 2 at the collecting driver.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-exec-transcript-capped-in-every-driver.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-exec-transcript-capped-in-every-driver.sh && test -x scripts/test-exec-transcript-capped-in-every-driver.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "every transcript accumulator passes through the cap policy"
+    command: "bash scripts/test-exec-transcript-capped-in-every-driver.sh 2>&1 | tail -n 1"
+    timeout_ms: 10000
+    expected_behavior: "PASS: exec-transcript-capped-in-every-driver"
+
+observability:
+  traces:
+    - "@trace spec:host-guest-transport"
+  expected_log: "PASS: exec-transcript-capped-in-every-driver"
+  log_fields:
+    spec: "host-guest-transport"
+    test: "exec-transcript-capped-in-every-driver"
+    artifact: "crates/tillandsias-vm-layer/src/vsock_exec.rs"
+
+rollback:
+  on_failure: >
+    An exec driver that accumulates guest output without the cap is the defect:
+    route it through retain_tail (collecting) or trim_transcript (expect).
+  command: "bash scripts/test-exec-transcript-capped-in-every-driver.sh"

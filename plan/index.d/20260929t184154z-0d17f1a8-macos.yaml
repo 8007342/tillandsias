@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: quit-during-a-forge-build-gets-no-in-vm-shutdown-reply-and-the-drain-expires-to-a-force-stop-with-no-named-cause
+    event:
+      type: note
+      ts: "2026-09-29T18:41:54Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t184154z
+      host: macos
+      summary: |
+        TWO MORE OCCURRENCES, same day, same tray (c2c0b7026), so this is not a one-off tied to a forge build:
+        (a) Quit (menu) 18:24:49Z during a STUCK DEVICE-FLOW sign-in (vm-status event=Setting up Git): "in-VM shutdown request got no reply within 10s" at 18:24:59, then "drain failed: … drain_timeout (60s) expired; force-stop dispatched" at 18:26:04. The guest journal for that boot ends with a clean-looking systemd power-off sequence and then "BTRFS critical (device vda2): inode mode mismatch with dir: inode mode=00 btrfs type=0 dir type=1". The FILESYSTEM ERROR at the force-stop is concrete support for this row's data-loss risk.
+        (b) Quit (menu) 18:38:08Z after the guest appears to have gone silent at 18:33:12 (its journal ends there; see 1503-qrgz): no reply in 10 s (18:38:18), force-stop at 18:39:23.
+        In (b) the missing ack may be because the guest was already gone, which is this row's "log WHY" case: the tray could tell a dead guest from a slow one if the push subscription or heartbeat had already lapsed. In the fresh-boot measurements in between (--exec-guest), the stop was clean.

@@ -1560,6 +1560,24 @@ run_litmus_test_file() {
     # genuine code-level configuration defect (797-r6tc). A preflight may
     # report what it observed; it must not classify a failure it did not
     # diagnose. Pinned by litmus:litmus-podman-preflight-diagnosis-shape.
+    # ORDER 798-9xpq: A FAKE BACKEND CANNOT BE HONOURED UNDER A REMOTE PODMAN,
+    # so such a test is REFUSED up front instead of silently exercising the
+    # real one. With TILLANDSIAS_PODMAN_REMOTE_URL (or CONTAINER_HOST) set,
+    # scripts/common.sh takes its remote branch and EXPORTS
+    # TILLANDSIAS_PODMAN_BIN, which resolve_podman_bin() reads BEFORE PATH,
+    # and its wrapper unsets the LITMUS_PODMAN_* channels; both of the
+    # harness's injection channels are overridden, and a `backend: fake`
+    # fixture cannot tell. Adapting quietly is how this packet family
+    # started, so the gate says it cannot validate this mode. Non-fake tests
+    # are unaffected; a host that sets the variable deliberately (the
+    # dedicated service account) runs fake tests with it unset.
+    if grep -q '^backend: fake' "$test_file" 2>/dev/null \
+        && [ -n "${TILLANDSIAS_PODMAN_REMOTE_URL:-${CONTAINER_HOST:-}}" ]; then
+        local _remote_var=CONTAINER_HOST
+        [ -n "${TILLANDSIAS_PODMAN_REMOTE_URL:-}" ] && _remote_var=TILLANDSIAS_PODMAN_REMOTE_URL
+        echo -e "  ${RED}[ENV-FAIL]${NC} refused:litmus-gate:fake-backend-under-remote-podman — this test declares 'backend: fake', but ${_remote_var} is set, and common.sh's remote mode pins TILLANDSIAS_PODMAN_BIN ahead of the harness's fake, so the fixture would drive the REAL podman. The gate cannot validate this mode: re-run with the variable unset (798-9xpq)."
+        return 1
+    fi
     if [ "$(uname -s)" = "Linux" ] \
         && _lt_command_invokes_podman "$test_file" \
         && ! grep -q '^backend: fake' "$test_file" 2>/dev/null \
