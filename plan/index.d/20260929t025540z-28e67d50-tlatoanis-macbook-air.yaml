@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: no-build-path-validates-that-the-calver-date-is-today-so-a-build-silently-ships-a-version-encoding-a-date-days-in-the-past
+    field: status
+    value: completed
+    ts: "2026-09-29T02:55:40Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: no-build-path-validates-that-the-calver-date-is-today-so-a-build-silently-ships-a-version-encoding-a-date-days-in-the-past
+    event:
+      type: completed
+      ts: "2026-09-29T02:55:40Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: ae9d5f7ee (land87)
+  - packet_id: no-build-path-validates-that-the-calver-date-is-today-so-a-build-silently-ships-a-version-encoding-a-date-days-in-the-past
+    event:
+      type: note
+      ts: "2026-09-29T02:55:40Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        LANDED in land87 at ae9d5f7ee (real gate 1033 s). Re-measured at ae9d5f7ee on tlatoanis-macbook-air (darwin, env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR, plan binary built from that tree): scripts/test-build-version-label.sh ok:build-version-label-fixture:7/7; gate step 287 present. Coordinator relay-fix in land87: the nix-lane fixture's scratch copy now includes lib-build-version.sh (litmus:guest-binary-embed-integrity 17/17).
