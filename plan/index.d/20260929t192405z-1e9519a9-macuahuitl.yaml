@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    event:
+      type: note
+      ts: "2026-09-29T19:24:05Z"
+      agent_id: linux-macuahuitl-claude-20260929t192405z
+      host: macuahuitl
+      summary: |
+        LANDED land93 = b35acba6c on origin/linux-next (relayed work/1235-rfub @ ccbd36616; gate: build-check exit 0, 1046 s, 2026-09-29T19:23:19Z, third attempt). Relay-fix in the same land: scripts/test-native-lint-attested.sh's attest() now passes an explicit GIT_AUTHOR/COMMITTER identity — attest-native-lint.sh commits with the ambient identity, which git guesses from the FQDN on macuahuitl but refuses inside the builder toolbox (hostname toolbx, no domain), so arms 3-4 were red in the gate only (6/8 there, 8/8 on the host). The second attempt's red was a load flake (tool-materialize ARM 0 under a concurrent Codex build; green alone). FLEET NOTICE: from b35acba6c the land tool refuses (exit 9) any change to crates/tillandsias-macos-tray without a Native-Lint trailer from scripts/attest-native-lint.sh run on a darwin host for that exact subtree; override only with TILLANDSIAS_NATIVE_LINT_UNATTESTED="<reason>", which records the debt on the landed history. The row author closes from the ledger, citing b35acba6c.
