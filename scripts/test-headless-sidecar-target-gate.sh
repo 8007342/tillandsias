@@ -56,7 +56,8 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
 # compiler fails in ring, which says nothing about this build.rs. Probe the
 # compiler, and judge ONLY on the sidecar panic: any other failure is a named
 # toolchain skip, never a pass and never this gate's failure.
-if ! rustup target list --installed 2>/dev/null | grep -qx x86_64-pc-windows-gnu; then
+installed_targets="$(rustup target list --installed 2>/dev/null)"
+if ! grep -qx x86_64-pc-windows-gnu <<<"$installed_targets"; then
     skip "ARM1 target x86_64-pc-windows-gnu not installed (named skip, not a pass)"
 elif ! command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
     skip "ARM1 no x86_64-w64-mingw32-gcc: C dependencies (ring) cannot build for the target here (named skip, not a pass)"
