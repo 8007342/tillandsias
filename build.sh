@@ -3385,6 +3385,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Lua source-agreement shadow parity passed"
 
+    # ORDER 1375-amye. This command-door contract is exercised by the shell
+    # fixture on every host running build.sh --check. Keep it in the native
+    # check path rather than a gate-steps.d entry: the fixture itself selects
+    # the platform-specific detach contract, and its actual run is the
+    # cross-platform evidence (a static second-regime label cannot substitute).
+    _step "Checking the plan run verb's timeout, detach, argv and lock contracts (1375-amye)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-run-verb.sh" 2>&1; then
+        _error "the plan run verb contract failed (1375-amye)"
+        exit 1
+    fi
+    _info "Plan run verb contract passed"
+
     # ORDER 1118-pifa: THIS STEP IS LOAD-BEARING. Do not skip or memoise it on
     # its run count. It tops `skippable:` on two hosts at ~95s with fail_pct=0,
     # but a step that never fails is as consistent with "nothing regressed" as

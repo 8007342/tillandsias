@@ -4430,7 +4430,8 @@ fn run_predicate_cli(args: &[String]) {
 /// seed is named on stderr (`refused:policy-seed:<reason>`) and the answer
 /// comes from the floor alone.
 /// ORDER 1443-8pur — `tillandsias-plan run [--cwd P] [--env K=V]…
-/// [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>`.
+/// [--timeout <n>s|<n>ms] [--detach [--log F]] [--lock P [--lock-wait <dur>]]
+/// [--capture-bytes N] [--stdin-file F] -- <argv…>`.
 ///
 /// The policy decides on argv before anything spawns. In this (plain) form the
 /// child's stdout and stderr pass through byte for byte and the verb exits with
@@ -4442,13 +4443,16 @@ fn run_run_verb(args: &[String]) -> ! {
     use tillandsias_plan::run_verb as rv;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan run [--json] [--caller run|mcp] [--cwd P] [--env K=V]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>\n\
+            "usage: tillandsias-plan run [--json] [--caller run|mcp] [--cwd P] [--env K=V]… [--timeout <n>s|<n>ms] [--detach [--log F]] [--lock P [--lock-wait <dur>]] [--capture-bytes N] [--stdin-file F] -- <argv…>\n\
              \x20 argv is argv: there is no command-string form and no --shell.\n\
              \x20 --json prints one object (run_id,status,code,signal,ok,stdout,stderr,truncated,wall_ms,argv,policy) and\n\
              \x20 exits 0 whenever a child ran, 1 for a policy refusal, 4 for consent, 2 for usage.\n\
              \x20 WITHOUT --json the verb mirrors the child's exit code, so a refusal (1) and a child's own exit 1\n\
              \x20 cannot be told apart by the code: a caller that must tell them apart uses --json.\n\
-             \x20 --timeout-ms defaults to 300000 (300 s); a long run (a full gate) MUST pass its own, or 0 for none.\n\
+             \x20 --timeout accepts integer seconds or milliseconds; default is 300s. --timeout-ms N remains an alias.\n\
+             \x20 --detach starts a new session/process group and returns; stdio is discarded unless --log appends stdout to F and stderr to F.stderr.\n\
+             \x20 --detach cannot be combined with an explicit timeout or a lock: its child has an independent lifetime.\n\
+             \x20 --lock holds an advisory whole-file lock for the child lifetime; --lock-wait bounds acquisition (exit 75).\n\
              \x20 --caller names the door in the audit log: run (default) or mcp (project-info run_command).\n\
              \x20 A child the verb kills (the deadline) is timed_out on every locus. {}: on Windows a child\n\
              \x20 killed from OUTSIDE (MSYS kill) reads as exited with the MSYS code (2304 for SIGKILL), undecoded.",
@@ -4459,6 +4463,8 @@ fn run_run_verb(args: &[String]) -> ! {
     let mut spec = rv::RunSpec::new(Vec::new());
     let mut json = false;
     let mut caller = "run";
+    let mut lock_wait_requested = false;
+    let mut timeout_requested = false;
     let mut i = 0;
     let mut saw_dd = false;
     while i < args.len() {
@@ -4476,6 +4482,11 @@ fn run_run_verb(args: &[String]) -> ! {
         }
         if a == "--json" {
             json = true;
+            i += 1;
+            continue;
+        }
+        if a == "--detach" {
+            spec.detach = true;
             i += 1;
             continue;
         }
@@ -4522,7 +4533,20 @@ fn run_run_verb(args: &[String]) -> ! {
                 }
                 spec.env.push((k.to_string(), val.to_string()));
             }
-            "--timeout-ms" => spec.timeout_ms = v.parse().unwrap_or_else(|_| usage()),
+            "--timeout-ms" => {
+                timeout_requested = true;
+                spec.timeout_ms = v.parse().unwrap_or_else(|_| usage());
+            }
+            "--timeout" => {
+                timeout_requested = true;
+                spec.timeout_ms = rv::parse_duration_ms(v).unwrap_or_else(|| usage());
+            }
+            "--log" => spec.log = Some(PathBuf::from(v)),
+            "--lock" => spec.lock = Some(PathBuf::from(v)),
+            "--lock-wait" => {
+                lock_wait_requested = true;
+                spec.lock_wait_ms = Some(rv::parse_duration_ms(v).unwrap_or_else(|| usage()));
+            }
             "--capture-bytes" => {
                 let n: usize = v.parse().unwrap_or_else(|_| usage());
                 if n == 0 {
@@ -4542,6 +4566,16 @@ fn run_run_verb(args: &[String]) -> ! {
         i += 2;
     }
     if !saw_dd || spec.argv.is_empty() {
+        usage();
+    }
+    if (spec.detach
+        && (spec.lock.is_some()
+            || timeout_requested
+            || spec.capture_bytes.is_some()
+            || spec.stdin.is_some()))
+        || (spec.log.is_some() && !spec.detach)
+        || (lock_wait_requested && spec.lock.is_none())
+    {
         usage();
     }
     let outcome = rv::execute(&spec, caller);
@@ -4570,7 +4604,21 @@ fn run_run_verb(args: &[String]) -> ! {
             eprintln!("no_status: {reason}");
             std::process::exit(125);
         }
-        rv::RunOutcome::Ran { output, .. } => {
+        rv::RunOutcome::Detached { run_id, .. } => {
+            eprintln!("status=detached run_id={run_id}");
+            std::process::exit(0);
+        }
+        rv::RunOutcome::LockTimedOut { path, .. } => {
+            eprintln!("status=lock_timed_out path={}", path.display());
+            std::process::exit(75);
+        }
+        rv::RunOutcome::LockFailed { error, .. } => {
+            eprintln!("status=lock_failed error={error}");
+            std::process::exit(125);
+        }
+        rv::RunOutcome::Ran {
+            output, wall_ms, ..
+        } => {
             use std::io::Write;
             let _ = std::io::stdout().write_all(&output.stdout);
             let _ = std::io::stderr().write_all(&output.stderr);
@@ -4583,7 +4631,10 @@ fn run_run_verb(args: &[String]) -> ! {
             std::process::exit(match output.completion {
                 tillandsias_exec::Completion::Exited(c) => c,
                 tillandsias_exec::Completion::Signaled(s) => 128 + s,
-                tillandsias_exec::Completion::TimedOut { .. } => 124,
+                tillandsias_exec::Completion::TimedOut { .. } => {
+                    eprintln!("status=timed_out after_ms={wall_ms}");
+                    124
+                }
             });
         }
     }
