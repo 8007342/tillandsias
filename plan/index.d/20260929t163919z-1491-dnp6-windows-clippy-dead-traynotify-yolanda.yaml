@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: windows-target-clippy-refuses-trunk-because-tillandsias-headless-enum-traynotify-is-dead-code-there
+    order: 1491-dnp6
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, clippy, dead-code, tray]
+    estimated_hours: 1
+    owned_files: [crates/tillandsias-headless/src/main.rs]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the guard is the existing windows-tray-clippy check itself going clean on the Windows target; no new litmus is needed.
+    title: |
+      REGIME: Windows target only (Linux clippy does not show it). The commit hook's windows-tray-clippy check prints refused:windows-tray-clippy:1-errors on trunk: "enum TrayNotify is never used" at crates\tillandsias-headless\src\main.rs:15671 (measured on yolanda 2026-09-29 while committing 1266-dh2d, which does not touch that file; TrayNotify is present on origin/linux-next).
+    next_action: |
+      Find where TrayNotify is used (likely only under a non-Windows cfg), then either cfg-gate the enum to the same cfg as its users or remove it if nothing uses it on any target. Re-run the hook's windows-tray-clippy invocation on a Windows host and on Linux clippy to confirm both stay clean.
+    verifiable_closure: |
+      On a Windows host, the windows-tray-clippy invocation the commit hook runs reports no errors, and the TrayNotify enum is either removed or cfg-gated to where it is used; Linux clippy for tillandsias-headless stays clean. Pre-fix: refused:windows-tray-clippy:1-errors, enum TrayNotify is never used at main.rs:15671.
+    events:
+      - type: filed
+        ts: "2026-09-29T16:39:19Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request; the Windows-regime clippy red on trunk.

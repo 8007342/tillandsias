@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-podman-mode-gate-fixture-is-red-only-inside-the-wsl-builder-guest-because-the-podman-pin-bare-metal-has-does-not-reach-it
+    field: status
+    value: completed
+    ts: "2026-09-29T16:11:57Z"
+    host: yolanda
+
+events:
+  - packet_id: the-podman-mode-gate-fixture-is-red-only-inside-the-wsl-builder-guest-because-the-podman-pin-bare-metal-has-does-not-reach-it
+    event:
+      type: completed
+      ts: "2026-09-29T16:11:57Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: ff5716971
+  - packet_id: the-podman-mode-gate-fixture-is-red-only-inside-the-wsl-builder-guest-because-the-podman-pin-bare-metal-has-does-not-reach-it
+    event:
+      type: note
+      ts: "2026-09-29T16:11:57Z"
+      host: yolanda
+      summary: |-
+        landed in land90 ff5716971; content verified on origin/linux-next by content
