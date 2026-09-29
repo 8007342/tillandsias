@@ -3332,6 +3332,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     #       not drift". Same cause as the tray-contract pin fixed at ae85ee471
     #       (1022-y7kc cause 1) — one change, two stale pins, and this one sat
     #       in a target no gate ran.
+    # ORDER 1475-j9kv. Shadow-only source-agreement parity must execute as its
+    # own target: the workspace suite would compile it, but a named target and
+    # its nonzero test count make an unwired migration visible. The legacy Bash
+    # guards remain the production decision; this is evidence for a later
+    # typed-runner cutover, not a replacement.
+    _step "Running Lua source-agreement shadow parity (1475-j9kv)..."
+    if ! _run cargo test -p tillandsias-plan --test lua_source_agreements \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1; then
+        _error "the Lua source-agreement shadow parity target failed (1475-j9kv)"
+        exit 1
+    fi
+    _info "Lua source-agreement shadow parity passed"
+
     _step "Running workspace tests (cargo test --workspace, all targets)..."
     _WS_TEST_TRANSCRIPT="$SCRIPT_DIR/target/test-transcript-workspace-gate.log"
     mkdir -p "$(dirname "$_WS_TEST_TRANSCRIPT")"

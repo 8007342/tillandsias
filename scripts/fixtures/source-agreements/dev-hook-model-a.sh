@@ -1,0 +1,1 @@
+export TILLANDSIAS_EMBED_MODEL="model-a"
