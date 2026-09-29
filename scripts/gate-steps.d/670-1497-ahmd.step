@@ -12,3 +12,4 @@ STEP_DESC="Checking every credential-channel refusal says why and what clears it
 STEP_SCRIPT="scripts/test-credential-channel-affordances.sh"
 STEP_ERROR="a credential-channel refusal lost its why/remedy, a remedy again instructs gh auth login/refresh, or the printed remedy no longer clears its refusal (1497-ahmd)"
 STEP_OK="credential-channel refusals carry working affordances"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: credential-channel-affordances (1497-ahmd) at 389c7866c, 3 arms, bash 3.2; HOME pinned to the scratch dir afterwards at their suggestion"

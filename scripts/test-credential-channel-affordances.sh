@@ -82,7 +82,13 @@ exit 0
 PROBE
 chmod +x "$W/probe.sh"
 probe="$W/probe.sh"
+# HOME and system config point into the scratch dir for the guard AND the
+# executed remedy: today's remedy is --local only, but a future line with
+# --global must not be able to write the operator's real ~/.gitconfig
+# (macbookair, 2026-09-29; the lenovinha fixture-identity leak of 1453-7rzd).
+mkdir -p "$W/home"
 guard() { ( cd "$repo" && env -u GH_TOKEN -u GITHUB_TOKEN -u TILLANDSIAS_HOST_PUSH_DIR \
+    HOME="$W/home" GIT_CONFIG_NOSYSTEM=1 \
     TILLANDSIAS_CCC_NO_LANE=1 PATH="$W/bin:$PATH" TILLANDSIAS_CRED_PROBE_CMD="$probe" \
     bash "$GUARD" 2>"$W/err" ); }
 
@@ -95,7 +101,7 @@ else
     # Execute EXACTLY the remedy lines the guard printed (indented commands
     # after "REMEDY:", before the verdict), in the scratch repo.
     awk '/REMEDY:/{on=1; next} on && (/^blocked:/ || /^ *why:/){exit} on' "$W/err" | sed 's/^ *//; /^#/d' > "$W/remedy.sh"
-    ( cd "$repo" && PATH="$W/bin:$PATH" bash "$W/remedy.sh" >/dev/null 2>&1 ); rrc=$?
+    ( cd "$repo" && HOME="$W/home" GIT_CONFIG_NOSYSTEM=1 PATH="$W/bin:$PATH" bash "$W/remedy.sh" >/dev/null 2>&1 ); rrc=$?
     out2="$(guard)"; rc2=$?
     if [ "$rc_nc" -ne 0 ] && [ "$rrc" -eq 0 ] && [ "$rc2" -eq 0 ] && ! grep -q 'blocked:' <<<"$out2"; then
         ok "ARM3 the printed remedy, executed verbatim, clears interactive-credential-helper (after: $out2); without it the refusal stands"
