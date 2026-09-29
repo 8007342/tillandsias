@@ -2949,7 +2949,7 @@ pub(crate) fn ensure_image_exists(
         ensure_image_exists(root, dependency, &dependency_tag, debug).map_err(|e| {
             format!(
                 "Required base image '{}' is absent or stale and failed to build on demand: {}.\n\
-                 Please ensure the base image is built by running: tillandsias --init",
+                 {IMAGE_BUILD_REMEDY}",
                 dependency_tag, e
             )
         })?;
@@ -3003,10 +3003,36 @@ pub(crate) fn ensure_image_exists(
     Ok(())
 }
 
+/// How many trailing lines of podman's stderr a failed build carries into its
+/// error (order 1502-utcy).
+const BUILD_STDERR_TAIL_LINES: usize = 20;
+
+/// The error for a failed `podman build` (order 1502-utcy): the status, then
+/// podman's last stderr lines, which is where a failing RUN step names the
+/// command (`sh: foo: not found` for exit 127). Without them the operator got
+/// the bare status and nothing to act on.
+fn build_failure_message<'a>(status: &str, stderr_tail: impl Iterator<Item = &'a str>) -> String {
+    let tail: Vec<&str> = stderr_tail.filter(|l| !l.trim().is_empty()).collect();
+    if tail.is_empty() {
+        return format!("Build exited with status {status} (podman printed nothing on stderr)");
+    }
+    format!(
+        "Build exited with status {status}; podman's last stderr lines:\n  {}",
+        tail.join("\n  ")
+    )
+}
+
+/// The remedy line for an image that failed to build (order 1502-utcy). The
+/// guest cannot tell which host it runs under, so it names the action for each:
+/// "tillandsias --init" alone is Linux-only and unrunnable for a tray user.
+const IMAGE_BUILD_REMEDY: &str = "To retry: on Linux run `tillandsias --init`; from the macOS or \
+     Windows tray, launch the forge again (the build is retried on each launch). The lines above \
+     name the step that failed.";
+
 fn format_on_demand_image_build_error(image_tag: &str, error: &str) -> String {
     format!(
         "Required image '{image_tag}' is absent and failed to build on demand: {error}.\n\
-         Build it explicitly with: tillandsias --init"
+         {IMAGE_BUILD_REMEDY}"
     )
 }
 
@@ -9745,8 +9771,13 @@ pub(crate) fn build_image_with_logging(
     // podman build can be very noisy on stderr (e.g. download bars).
     let image_name_str = image_name.to_string();
     let log_handle_stderr = log_handle.clone();
+    // Order 1502-utcy: keep the LAST lines of podman's stderr, whatever the
+    // log/debug settings. The on-demand path passes no log file and no debug,
+    // so a failing RUN step's "sh: foo: not found" (exit 127) used to vanish:
+    // the operator saw only "Build exited with status 127".
     let stderr_thread = std::thread::spawn(move || {
         use std::io::BufRead;
+        let mut tail = std::collections::VecDeque::with_capacity(BUILD_STDERR_TAIL_LINES);
         if let Some(stderr_reader) = stderr {
             let buf_reader = std::io::BufReader::new(stderr_reader);
             for line in buf_reader.lines().map_while(Result::ok) {
@@ -9758,8 +9789,13 @@ pub(crate) fn build_image_with_logging(
                 {
                     let _ = writeln!(f, "{}", line);
                 }
+                if tail.len() == BUILD_STDERR_TAIL_LINES {
+                    tail.pop_front();
+                }
+                tail.push_back(line);
             }
         }
+        tail
     });
 
     // @trace gap:ON-005 — read and parse output for progress tracking
@@ -9811,7 +9847,7 @@ pub(crate) fn build_image_with_logging(
         .map_err(|e| format!("Failed to wait for build process: {e}"))?;
 
     // Wait for the stderr thread to finish logging
-    let _ = stderr_thread.join();
+    let stderr_tail = stderr_thread.join().unwrap_or_default();
 
     let result = if status.success() {
         if last_reported != Some(100) {
@@ -9819,7 +9855,10 @@ pub(crate) fn build_image_with_logging(
         }
         Ok(())
     } else {
-        Err(format!("Build exited with status {}", status))
+        Err(build_failure_message(
+            &status.to_string(),
+            stderr_tail.iter().map(String::as_str),
+        ))
     };
     let finished = progress.finish(&result);
     if let Some(ref log) = log_handle
@@ -30997,6 +31036,42 @@ esac
         assert!(message.contains("localhost/tillandsias-router:v1.2.3"));
         assert!(message.contains("fixture build failure"));
         assert!(message.contains("tillandsias --init"));
+    }
+
+    /// 1502-utcy: a failed build carries podman's last stderr lines, so an exit
+    /// 127 names the command that was not found.
+    /// NEGATIVE CONTROL: with no stderr the message says so instead of implying
+    /// a cause, and blank lines never make a tail.
+    #[test]
+    fn build_failure_names_the_failing_step_from_podman_stderr() {
+        let lines = [
+            "STEP 3/5: RUN pip3 install pyright",
+            "/bin/sh: line 1: pip3: command not found",
+            "Error: building at STEP \"RUN pip3 install pyright\": exit status 127",
+        ];
+        let msg = build_failure_message("exit status: 127", lines.iter().copied());
+        assert!(
+            msg.starts_with("Build exited with status exit status: 127;"),
+            "{msg}"
+        );
+        assert!(msg.contains("pip3: command not found"), "{msg}");
+        assert!(msg.contains("exit status 127"), "{msg}");
+
+        let silent = build_failure_message("exit status: 127", ["", "  "].into_iter());
+        assert_eq!(
+            silent,
+            "Build exited with status exit status: 127 (podman printed nothing on stderr)"
+        );
+    }
+
+    /// 1502-utcy: the remedy names an action for a tray user, not only the
+    /// Linux CLI, on both on-demand error paths.
+    #[test]
+    fn on_demand_build_remedy_is_runnable_from_the_macos_and_windows_tray() {
+        let message = format_on_demand_image_build_error("localhost/tillandsias-forge:v1", "x");
+        assert!(message.contains("tillandsias --init"), "{message}");
+        assert!(message.contains("macOS or Windows tray"), "{message}");
+        assert!(message.contains("launch the forge again"), "{message}");
     }
 
     #[test]
