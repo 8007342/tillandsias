@@ -1,0 +1,14 @@
+# Gate step 1504-4tty — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. finalize-cycle.sh refuses at the first failed Finalization
+# step with refused:finalize:<step>; record-failed is the third most recorded
+# bare refusal (1494-kkbi). Every verdict now says why and what clears it, the
+# tokens and exit codes are pinned, and boundary-verify-failed's remedy is
+# carried out in a hermetic scratch repo (stub guard, land and record) and
+# shown to clear the refusal, with a no-remedy negative control.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking every finalize-cycle refusal says why and what clears it (1504-4tty)"
+STEP_SCRIPT="scripts/test-finalize-cycle-affordances.sh"
+STEP_ERROR="a finalize-cycle refusal lost its why/remedy, changed its token or exit code, or its remedy no longer clears it (1504-4tty)"
+STEP_OK="finalize-cycle refusals carry working affordances"
