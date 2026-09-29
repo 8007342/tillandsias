@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-landed-but-open-counts-a-spec-only-commit-as-a-landing-so-a-row-whose-spec-landed-but-whose-code-did-not-is-reported-as-landed-but-open
+    event:
+      type: progress
+      ts: "2026-09-29T03:21:30Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t032130z
+      host: macos
+      summary: |
+        work/1483-8zct @ d081169cf ready for relay (tlatoanis-macbook-air). check-landed-but-open.sh now counts a landing only when a commit touches a path outside plan/, openspec/, docs/ and cheatsheets/ (it was: outside plan/). New fixture arm 6: a spec-only and a docs-only commit citing a READY order give no suspect and landings= stays 3; the code landing (arm 1) is the control and is still listed (criteria 1-2). PRE-FIX (trunk checker, new fixture): 4/6, listing the docs commit as a suspect; POST-FIX 6/6. litmus-landed-but-open-shape matches the prefix 'PASS: landed-but-open' only, so the arm count change breaks no pin. Deciders: dialect, sigpipe, jq 344/344, litmus pins, exec bits all ok; v67y's affordance guard ok.
