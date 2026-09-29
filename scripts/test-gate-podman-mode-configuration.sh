@@ -189,6 +189,59 @@ else
     _fail "explicit remote mode no longer reaches the wrapper branch: $out4"
 fi
 
+# ---------------------------------------------------------------------------
+# Scenarios 5-7 — ORDER 798-rvqb: the three launchers OFF the gate path that
+# inferred remote mode the same way. Each runs from a sandbox copy whose next
+# hop is a stub that reports what it was handed.
+# ---------------------------------------------------------------------------
+L="$SANDBOX/launchers"
+mkdir -p "$L/scripts" "$L/bin"
+cat > "$L/scripts/common.sh" <<'STUB'
+echo "handed-remote-url=[${TILLANDSIAS_PODMAN_REMOTE_URL:-<unset>}]"
+exit 0
+STUB
+cp "$L/scripts/common.sh" "$L/scripts/build-image.sh"
+cp "$L/scripts/common.sh" "$L/scripts/launch-chromium.sh"
+chmod +x "$L/scripts/build-image.sh" "$L/scripts/launch-chromium.sh"
+# A podman that answers `--remote --url … info`: build-forge.sh's old inference
+# probed reachability first, so without this the scenario would pass pre-fix
+# for the wrong reason (the fake socket answers nothing).
+printf '#!/bin/sh\nexit 0\n' > "$L/bin/podman"
+chmod +x "$L/bin/podman"
+cp "$ROOT/build-forge.sh" "$ROOT/run-forge-standalone.sh" "$L/"
+cp "$ROOT/scripts/run-safe-browser.sh" "$L/scripts/"
+launch() { # launch <script> [args] — caller silent, real socket present
+    env -u TILLANDSIAS_PODMAN_REMOTE_URL -u CONTAINER_HOST PATH="$L/bin:$PATH" \
+        XDG_RUNTIME_DIR="$SANDBOX/run" bash "$@" 2>&1
+}
+out5="$(launch "$L/build-forge.sh")"
+out5b="$(env -u CONTAINER_HOST PATH="$L/bin:$PATH" XDG_RUNTIME_DIR="$SANDBOX/run" \
+    TILLANDSIAS_PODMAN_REMOTE_URL="unix:///caller/chosen/podman.sock" bash "$L/build-forge.sh" 2>&1)"
+if grep -Fq 'handed-remote-url=[<unset>]' <<<"$out5" \
+    && grep -Fq 'handed-remote-url=[unix:///caller/chosen/podman.sock]' <<<"$out5b"; then
+    _ok "build-forge.sh: socket present + reachable, caller silent => no inferred remote mode; a caller's URL survives"
+else
+    _fail "build-forge.sh inferred remote mode or dropped the caller's URL: [$out5] [$out5b]"
+fi
+out6="$(launch "$L/run-forge-standalone.sh")"
+if grep -Fq 'handed-remote-url=[<unset>]' <<<"$out6"; then
+    _ok "run-forge-standalone.sh: socket present, caller silent => no inferred remote mode"
+else
+    _fail "run-forge-standalone.sh inferred remote podman mode from a socket file: $out6"
+fi
+# run-safe-browser.sh looked at the HARDCODED /run/user/1000, so this arm only
+# discriminates on a host where that socket exists; it says which it was.
+out7="$(launch "$L/scripts/run-safe-browser.sh" --url example.invalid)"
+if grep -Fq 'handed-remote-url=[<unset>]' <<<"$out7"; then
+    if [[ -S /run/user/1000/podman/podman.sock ]]; then
+        _ok "run-safe-browser.sh: /run/user/1000 socket present, caller silent => no inferred remote mode"
+    else
+        _ok "run-safe-browser.sh: no inferred remote mode (NOT discriminating here: no /run/user/1000 socket on this host)"
+    fi
+else
+    _fail "run-safe-browser.sh inferred remote podman mode from a socket file: $out7"
+fi
+
 if [[ "$FAILED" -ne 0 ]]; then
     echo "FAIL: gate podman mode is not configuration-only"
     exit 1
