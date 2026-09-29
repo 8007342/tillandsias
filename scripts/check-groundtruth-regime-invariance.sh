@@ -73,12 +73,21 @@ dead_env=(
     TILLANDSIAS_SPEC_EXPERT_ENDPOINT=http://127.0.0.1:1/v1
 )
 
-verdicts() { # verdicts <live|dead> <set>
+# raw_grade <live|dead> <set>: grade's FULL stdout. Its last line,
+# `groundtruth-result: ...`, is printed only when a grade RAN TO COMPLETION,
+# and is how a killed, crashed or harness-failed run is told apart from one
+# whose cases merely failed (grade's exit status is its FAIL count, so it
+# cannot make that distinction; 2 is both "two cases failed" and a harness error).
+raw_grade() {
     if [ "$1" = "dead" ]; then
         env "${dead_env[@]}" "$PLAN" grade "$2" 2>/dev/null
     else
         "$PLAN" grade "$2" 2>/dev/null
-    fi | grep -E '^(PASS|FAIL)' | awk '{print $1" "$2}' | LC_ALL=C sort
+    fi
+}
+# verdicts <raw file>: the PASS/FAIL lines, reduced to "<VERDICT> <case>".
+verdicts() {
+    grep -E '^(PASS|FAIL)' "$1" | awk '{print $1" "$2}' | LC_ALL=C sort
 }
 
 total=0
@@ -95,16 +104,34 @@ _gt_i=0
 for set_file in "$G"/*.yaml; do
     [ -e "$set_file" ] || continue
     _gt_i=$((_gt_i + 1))
-    verdicts live "$set_file" > "$_gt_tmp/$_gt_i.live" &
-    verdicts dead "$set_file" > "$_gt_tmp/$_gt_i.dead" &
+    raw_grade live "$set_file" > "$_gt_tmp/$_gt_i.live" &
+    raw_grade dead "$set_file" > "$_gt_tmp/$_gt_i.dead" &
 done
 wait
+# FAIL CLOSED ON AN INCOMPLETE GRADE (coordinator, 2026-09-29). With eight
+# grades in flight, one can be killed or crash on a loaded host; comparing the
+# other seven and printing ok would certify a population this check did not
+# see. Every one of the eight must have printed its summary line. (The serial
+# version failed open in the same way: a dead grade became an empty verdict
+# list and the set simply counted zero cases.)
 _gt_i=0
 for set_file in "$G"/*.yaml; do
     [ -e "$set_file" ] || continue
     _gt_i=$((_gt_i + 1))
-    live="$(cat "$_gt_tmp/$_gt_i.live")"
-    dead="$(cat "$_gt_tmp/$_gt_i.dead")"
+    for _gt_regime in live dead; do
+        if ! grep -q '^groundtruth-result: ' "$_gt_tmp/$_gt_i.$_gt_regime"; then
+            echo "[check-groundtruth-regime-invariance] the ${_gt_regime} grade of $(basename "$set_file") did not run to completion (no groundtruth-result line): it was killed, crashed or refused its input, so this check cannot vouch for that set in that regime. Nothing was compared." >&2
+            echo "unavailable:grade-incomplete:$(basename "$set_file"):${_gt_regime}"
+            exit 2
+        fi
+    done
+done
+_gt_i=0
+for set_file in "$G"/*.yaml; do
+    [ -e "$set_file" ] || continue
+    _gt_i=$((_gt_i + 1))
+    live="$(verdicts "$_gt_tmp/$_gt_i.live")"
+    dead="$(verdicts "$_gt_tmp/$_gt_i.dead")"
     n=$(printf '%s\n' "$live" | grep -c . || true)
     total=$((total + n))
     # A case whose VERDICT moves between regimes is the finding. Comparing
