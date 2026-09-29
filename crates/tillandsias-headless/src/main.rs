@@ -12173,25 +12173,65 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         ));
     }
 
-    // ORDER 1364-27f8. Identity comes AFTER the Vault write is verified. The
-    // operator still sees token first, identity second (directive 2026-07-29),
-    // but a typo in these prompts can no longer throw away a token that gh
-    // accepted: the helper container holding it is removed on any early return.
-    if matches!(config.provider, ProviderId::GitHub) {
-        let identity = match github_stdin_identity {
-            Some((name, email)) => store_git_identity(&name, &email),
-            None => prompt_and_store_git_identity(),
-        };
-        identity.map_err(|e| {
-            format!("{provider_name} token is stored in Vault; git identity was not saved: {e}")
-        })?;
-    }
-
+    // ORDER 1486-y67a. The Vault write is verified (a failure returned above,
+    // so no sentinel is written for a login that did not land). Tell the
+    // resident control server NOW, before any prompt: the tray used to learn
+    // of the login only after the operator answered the identity prompts
+    // below, ~13 s after the token was safe (measured 2026-09-29).
     let mut username: Option<String> = None;
     if matches!(config.provider, ProviderId::GitHub) {
-        let mut username_cmd = podman_command();
-        username_cmd.args(["exec", &container, "gh", "api", "user", "--jq", ".login"]);
-        username = podman_command_output(username_cmd, debug).ok();
+        finish_github_login_steps(
+            Ok(()),
+            || {
+                #[cfg(feature = "listen-vsock")]
+                {
+                    let _ = std::fs::write(vsock_server::login_transition_sentinel_path(), b"1");
+                }
+            },
+            || {
+                // ONE `gh api user` (7rzd's derivation, replacing the old
+                // `--jq .login`): it gives the username, fills the App-user
+                // cache the forge identity reads, and supplies the prompt
+                // defaults below. A failed fetch clears the cache, so a
+                // previous account's name can never become the default.
+                let mut user_cmd = podman_command();
+                user_cmd.args([
+                    "exec",
+                    &container,
+                    "gh",
+                    "api",
+                    "user",
+                    "--jq",
+                    APP_USER_TSV_JQ,
+                ]);
+                match podman_command_output(user_cmd, debug)
+                    .ok()
+                    .and_then(|out| parse_app_user(out.trim()))
+                {
+                    Some(user) => {
+                        cache_app_user(&user, debug);
+                        username = Some(user.login);
+                    }
+                    None => {
+                        if let Some(path) = app_user_cache_path() {
+                            let _ = std::fs::remove_file(path);
+                        }
+                    }
+                }
+                // ORDER 1364-27f8. Identity comes AFTER the Vault write is
+                // verified: a typo in these prompts can no longer throw away a
+                // token that gh accepted.
+                match github_stdin_identity {
+                    Some((name, email)) => store_git_identity(&name, &email),
+                    None => prompt_and_store_git_identity(),
+                }
+                .map_err(|e| {
+                    format!(
+                        "{provider_name} token is stored in Vault; git identity was not saved: {e}"
+                    )
+                })
+            },
+        )?;
     }
 
     drop(cleanup);
@@ -12211,8 +12251,10 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     // succeeded because the tray stayed visually logged-out (F-D). The
     // resident server only exists in listen-vsock builds (the in-guest
     // binary); host builds without the feature have no probe to nudge.
+    // Other providers keep the end-of-flow nudge; GitHub already wrote it
+    // right after vault_verify (1486-y67a).
     #[cfg(feature = "listen-vsock")]
-    {
+    if !matches!(config.provider, ProviderId::GitHub) {
         let _ = std::fs::write(vsock_server::login_transition_sentinel_path(), b"1");
     }
     if let Some(username) = username.filter(|value| !value.is_empty()) {
@@ -12322,9 +12364,14 @@ fn prompt_and_store_git_identity() -> Result<(), String> {
     println!("access to anything.");
     println!();
 
+    // 1486-y67a: default to the SAME identity the forge uses (1453-7rzd): the
+    // App user's name and the GitHub noreply address, from the cache the login
+    // flow just filled; else the host gitconfig. The usual answer is Enter.
     let current = read_git_identity_defaults();
-    let name = prompt_with_default("Git author name", current.name.as_deref())?;
-    let email = prompt_with_default("Git author email", current.email.as_deref())?;
+    let (name_default, email_default) =
+        identity_prompt_defaults(read_cached_app_user().as_ref(), &current);
+    let name = prompt_with_default("Git author name", name_default.as_deref())?;
+    let email = prompt_with_default("Git author email", email_default.as_deref())?;
 
     store_git_identity(&name, &email)
 }
@@ -12498,6 +12545,59 @@ pub(crate) fn parse_app_user(tsv: &str) -> Option<AppUser> {
 /// Not a secret (a public id, login and display name), and not the token.
 pub(crate) fn app_user_cache_path() -> Option<PathBuf> {
     init_cache_dir().ok().map(|d| d.join("github-app-user.tsv"))
+}
+
+/// The jq projection 7rzd's probe uses for the App user: `id<TAB>login<TAB>name`.
+pub(crate) const APP_USER_TSV_JQ: &str = r#"[(.id|tostring), .login, (.name // "")] | @tsv"#;
+
+/// Write the App user to the host cache (the same line probe_github_username
+/// writes), so the forge identity and the prompt defaults agree.
+pub(crate) fn cache_app_user(user: &AppUser, debug: bool) {
+    if let Some(path) = app_user_cache_path() {
+        let line = format!(
+            "{}\t{}\t{}\n",
+            user.id,
+            user.login,
+            user.name.as_deref().unwrap_or("")
+        );
+        if let Err(e) = std::fs::write(&path, line)
+            && debug
+        {
+            eprintln!(
+                "[tillandsias] could not cache the App user at {}: {e}",
+                path.display()
+            );
+        }
+    }
+}
+
+/// Identity prompt defaults (1486-y67a): the App user's forge identity
+/// (1453-7rzd: name, else login; `<id>+<login>@users.noreply.github.com`)
+/// when known, else the host gitconfig's values.
+fn identity_prompt_defaults(
+    app: Option<&AppUser>,
+    current: &GitIdentity,
+) -> (Option<String>, Option<String>) {
+    match app {
+        Some(u) => {
+            let (name, email) = forge_git_identity(Some(u), "");
+            (Some(name), Some(email))
+        }
+        None => (current.name.clone(), current.email.clone()),
+    }
+}
+
+/// The order after a verified Vault write (1486-y67a): the login-transition
+/// signal FIRST, then everything that may wait on the operator. A failed
+/// verification signals nothing and runs nothing.
+pub(crate) fn finish_github_login_steps(
+    vault_verified: Result<(), String>,
+    signal_login: impl FnOnce(),
+    then: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    vault_verified?;
+    signal_login();
+    then()
 }
 
 fn read_cached_app_user() -> Option<AppUser> {
@@ -25249,6 +25349,85 @@ mod tests {
     /// The git identity prompt must frame itself as commit metadata, NOT a
     /// credential — the confusion this reorder exists to remove.
     /// @trace spec:gh-auth-script
+    /// 1486-y67a: the tray learns of the login BEFORE the identity prompts.
+    /// A prompt step that takes its time (an operator typing) must find the
+    /// signal already given, and the signal must not wait for it.
+    #[test]
+    fn login_signal_precedes_a_slow_prompt() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let signalled = AtomicBool::new(false);
+        let started = std::time::Instant::now();
+        let mut signal_at = None;
+        finish_github_login_steps(
+            Ok(()),
+            || {
+                signal_at = Some(started.elapsed());
+                signalled.store(true, Ordering::SeqCst);
+            },
+            || {
+                assert!(
+                    signalled.load(Ordering::SeqCst),
+                    "signal must precede the prompts"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                Ok(())
+            },
+        )
+        .expect("finishes");
+        assert!(
+            signal_at.expect("signalled") < std::time::Duration::from_millis(50),
+            "the signal must not wait on the prompt step"
+        );
+    }
+
+    /// NEGATIVE CONTROL: a failed Vault verification writes no signal and
+    /// runs no prompt.
+    #[test]
+    fn failed_vault_verify_signals_nothing() {
+        let mut signalled = false;
+        let mut prompted = false;
+        let r = finish_github_login_steps(
+            Err("vault read failed".into()),
+            || signalled = true,
+            || {
+                prompted = true;
+                Ok(())
+            },
+        );
+        assert!(r.is_err());
+        assert!(
+            !signalled && !prompted,
+            "nothing may run after a failed verify"
+        );
+    }
+
+    /// The prompt defaults are the forge identity (1453-7rzd) when the App
+    /// user is known, else the host gitconfig.
+    #[test]
+    fn identity_prompt_defaults_follow_the_forge_identity() {
+        let app = parse_app_user("162944123\toctocat\tMona Lisa").expect("parse");
+        let host = GitIdentity {
+            name: Some("Host Name".into()),
+            email: Some("host@example.com".into()),
+        };
+        assert_eq!(
+            identity_prompt_defaults(Some(&app), &host),
+            (
+                Some("Mona Lisa".into()),
+                Some("162944123+octocat@users.noreply.github.com".into())
+            )
+        );
+        let nameless = parse_app_user("7\tappuser\t").expect("parse");
+        assert_eq!(
+            identity_prompt_defaults(Some(&nameless), &host).0,
+            Some("appuser".into())
+        );
+        assert_eq!(
+            identity_prompt_defaults(None, &host),
+            (Some("Host Name".into()), Some("host@example.com".into()))
+        );
+    }
+
     #[test]
     fn git_identity_prompt_disclaims_being_a_credential() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
