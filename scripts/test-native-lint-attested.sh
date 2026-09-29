@@ -58,7 +58,14 @@ incident() { # the 690-w94k line, committed
     git -C "$1" "${GC[@]}" commit -qam "tray: map_err"
 }
 check()  { OUT="$(cd "$1" && bash scripts/check-native-lint-attested.sh 2>&1)"; RC=$?; }
-attest() { AOUT="$(cd "$1" && PATH="$W/bin:$PATH" STUB_RC="$2" bash scripts/attest-native-lint.sh 2>&1)"; ARC=$?; }
+# The attest script commits with the AMBIENT git identity, which is right on a
+# real darwin host and absent in the builder toolbox (hostname `toolbx` has no
+# domain, so git cannot guess an email and refuses). Hand the scratch repo the
+# same identity GC gives every other commit here, so the arm tests attestation,
+# not the gate host's identity config.
+attest() { AOUT="$(cd "$1" && PATH="$W/bin:$PATH" STUB_RC="$2" \
+    GIT_AUTHOR_NAME=f GIT_AUTHOR_EMAIL=f@x GIT_COMMITTER_NAME=f GIT_COMMITTER_EMAIL=f@x \
+    bash scripts/attest-native-lint.sh 2>&1)"; ARC=$?; }
 commits() { git -C "$1" rev-list --count HEAD; }
 
 # 1 — unattested.
