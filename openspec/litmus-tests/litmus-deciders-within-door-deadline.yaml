@@ -1,0 +1,43 @@
+# @trace spec:ci-release
+name: litmus:deciders-within-door-deadline
+spec: ci-release
+phase: pre-build
+description: >
+  Order 1500-gu5r. Six push deciders used to outlive the preflight door's 5 s
+  deadline on the full population, so the door could only skip them, never
+  refuse (check-bash-dialect was the one that refused 800-ivkg in land92 while
+  the door said ok). Each now finishes inside the deadline, run exactly as the
+  door runs a guard (setsid, stdin /dev/null, 5 s bound), with its verdict
+  byte-identical to the pre-change script on the live tree and seeded inputs.
+  A decider that grows past the bound fails BY NAME with its measured time.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-deciders-within-door-deadline.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-deciders-within-door-deadline.sh && test -x scripts/test-deciders-within-door-deadline.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "each of the six deciders finishes inside the door's deadline"
+    command: "bash scripts/test-deciders-within-door-deadline.sh 2>&1 | tail -n 1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: deciders-within-door-deadline"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "PASS: deciders-within-door-deadline"
+  log_fields:
+    spec: "ci-release"
+    test: "deciders-within-door-deadline"
+    artifact: "scripts/check-{bash-dialect,terminology,all-fragments-intact,carry-forward,groundtruth-regime-invariance,plan-binary-probe-usage}.sh"
+
+rollback:
+  on_failure: >
+    The named decider grew past the door's deadline: find the per-file spawn or
+    serial work that came back, rather than raising the deadline.
+  command: "bash scripts/test-deciders-within-door-deadline.sh"
