@@ -13,3 +13,4 @@ STEP_DESC="Checking the router sidecar is required only for Linux-target headles
 STEP_SCRIPT="scripts/test-headless-sidecar-target-gate.sh"
 STEP_ERROR="a non-Linux target build of tillandsias-headless again refuses without the Linux-only router sidecar, or a Linux build stopped refusing (1269-6fcn)"
 STEP_OK="router sidecar required only for Linux targets; release job selects it by runner.arch"
+STEP_SECOND_REGIME="yolanda 2026-09-29 msys PASS: headless-sidecar-target-gate (1269-6fcn) at 89e5f2999; ARM3 ok, ARM1 and ARM2 named skips (no mingw, msvc host)"
