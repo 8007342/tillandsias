@@ -5366,6 +5366,24 @@ const GIT_MIRROR_SEED_POLL_INTERVAL: Duration = Duration::from_secs(1);
 /// Probes via `podman exec` inside the mirror container so readiness is
 /// measured on the served repo itself, not on network reachability.
 /// @trace spec:git-mirror-service
+/// ORDER 778-hb3x criterion 3. The line the mirror prints when its seed fetch
+/// fails (images/git/entrypoint.sh, `retry_msg "[git-mirror] Seed fetch
+/// failed: …"`). A cross-component string: the litmus
+/// git-mirror-seed-failure-surfaced-shape pins that both files agree on it.
+const GIT_MIRROR_SEED_FAILURE_MARKER: &str = "[git-mirror] Seed fetch failed:";
+
+/// The mirror's most recent seed-fetch failure in a log tail, trimmed and
+/// bounded, or None when the tail holds none (a slow seed, not a failing one).
+fn last_seed_failure(lines: &[String]) -> Option<String> {
+    let line = lines
+        .iter()
+        .rev()
+        .find(|l| l.contains(GIT_MIRROR_SEED_FAILURE_MARKER))?;
+    let from = line.find(GIT_MIRROR_SEED_FAILURE_MARKER).unwrap_or(0);
+    let text: String = line[from..].trim().chars().take(400).collect();
+    Some(text)
+}
+
 async fn wait_for_git_mirror_ready(
     client: &PodmanClient,
     container_name: &str,
@@ -5385,6 +5403,7 @@ async fn wait_for_git_mirror_ready(
     // never assume the target project uses Tillandsias' `main` convention.
     let repo_path = format!("/srv/git/{project_name}");
     let mut last = String::from("no probe attempted");
+    let mut seen_failure: Option<String> = None;
     for attempt in 1..=GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS {
         match probe_git_mirror_seeded(client, container_name, &repo_path, expected_branch).await {
             Ok(seeded_ref) => {
@@ -5404,6 +5423,25 @@ async fn wait_for_git_mirror_ready(
                 "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s max)..."
             );
         }
+        // ORDER 778-hb3x criterion 3: a wait that can never succeed must not
+        // look like a slow first seed. Every 30 s, say what the probe saw and
+        // the mirror's own last seed-fetch failure, when it has one; print it
+        // again only when it changes. Measured on yoga 2026-09-29: a 1200 s
+        // wait that ended in "branch … is not concrete" said nothing until then.
+        if attempt == 5 || (attempt > 5 && attempt % 30 == 0) {
+            let tail = client
+                .log_tail(container_name, 200)
+                .await
+                .unwrap_or_default();
+            let failure = last_seed_failure(&tail.lines);
+            if failure != seen_failure || attempt == 5 {
+                eprintln!("[tillandsias] [forge-launch]   still waiting ({attempt}s): {last}");
+                if let Some(f) = &failure {
+                    eprintln!("[tillandsias] [forge-launch]   mirror reports: {f}");
+                }
+                seen_failure = failure;
+            }
+        }
         if debug {
             eprintln!(
                 "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}): {last}"
@@ -5411,8 +5449,15 @@ async fn wait_for_git_mirror_ready(
         }
         tokio::time::sleep(GIT_MIRROR_SEED_POLL_INTERVAL).await;
     }
+    let tail = client
+        .log_tail(container_name, 200)
+        .await
+        .unwrap_or_default();
+    let mirror_says = last_seed_failure(&tail.lines)
+        .map(|f| format!(" The mirror's last seed failure: {f}."))
+        .unwrap_or_default();
     Err(format!(
-        "git mirror {container_name} did not become cloneable within {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s: {last}. \
+        "git mirror {container_name} did not become cloneable within {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s: {last}.{mirror_says} \
          A forge launched now would land on an empty tree, so the launch is refused \
          (fresh-checkout invariant, \
          plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md). \
@@ -32671,6 +32716,54 @@ mod forge_budget_argv_tests {
         assert!(
             missing.is_empty(),
             "forge launch builder(s) naming the forge image without the ForgeBudget flags: {missing:?}"
+        );
+    }
+}
+
+/// ORDER 778-hb3x criterion 3 — the seed-failure line the launcher surfaces.
+#[cfg(test)]
+mod mirror_seed_failure_tests {
+    use super::*;
+
+    fn lines(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn the_latest_seed_failure_is_surfaced_and_a_slow_seed_is_not_a_failure() {
+        let log = lines(&[
+            "[git-mirror] Startup: /srv/git/p has no refs but has origin. Fetching upstream to seed mirror.",
+            "[git-mirror] Seed fetch failed: fatal: unable to access 'https://x/': proxy",
+            "noise",
+            "2026-09-29T00:00:00Z [git-mirror] Seed fetch failed: UPSTREAM AUTH REFUSED — the upstream demands credentials",
+            "[git-daemon] ready",
+        ]);
+        assert_eq!(
+            last_seed_failure(&log).as_deref(),
+            Some(
+                "[git-mirror] Seed fetch failed: UPSTREAM AUTH REFUSED — the upstream demands credentials"
+            )
+        );
+        let slow = lines(&[
+            "[git-mirror] Startup: /srv/git/p has no refs but has origin. Fetching upstream to seed mirror.",
+        ]);
+        assert_eq!(last_seed_failure(&slow), None);
+        assert_eq!(last_seed_failure(&[]), None);
+    }
+
+    #[test]
+    fn a_huge_failure_line_is_bounded() {
+        let long = format!("[git-mirror] Seed fetch failed: {}", "x".repeat(5000));
+        assert_eq!(last_seed_failure(&[long]).unwrap().chars().count(), 400);
+    }
+
+    /// The marker is a cross-component interface: it must be what the mirror prints.
+    #[test]
+    fn the_marker_is_what_the_mirror_prints() {
+        let entry = include_str!("../../../images/git/entrypoint.sh");
+        assert!(
+            entry.contains(&format!("retry_msg \"{GIT_MIRROR_SEED_FAILURE_MARKER}")),
+            "images/git/entrypoint.sh no longer prints {GIT_MIRROR_SEED_FAILURE_MARKER:?}; the launcher would never surface a seed failure"
         );
     }
 }
