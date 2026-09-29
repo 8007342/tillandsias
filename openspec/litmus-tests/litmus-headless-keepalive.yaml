@@ -1,0 +1,47 @@
+# @trace spec:vsock-transport
+name: litmus:headless-keepalive
+spec: vsock-transport
+phase: pre-build
+description: The in-guest control listener is long-lived. It keeps accepting AND handling connections after earlier ones close (order 148, criterion 3); a one-shot listener was the 2026-06-30 oscillation hypothesis.
+severity: high
+size: quick
+
+# Order 148. The test runs the REAL serve_listener loop on a Unix socket (the
+# same Listener type the vsock bind returns). Three sequential connections each
+# send a malformed frame and must be closed BY THE HANDLER within 5 s, which
+# needs an accept and a live handle_connection.
+#
+# NEGATIVE CONTROLS, measured 2026-09-29 on tlatoanis-macbook-air by mutating
+# serve_listener and running this step (both red, then restored):
+#   return after the first accept   -> "connection 2: the listener must still
+#                                       accept: Connection refused (os error 61)"
+#   park after the first accept     -> "connection 2: not handled within 5 s"
+#     (socket kept open: the kernel backlog would fool a connect-only check)
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+
+critical_path:
+  - step: "the control listener serves a second and third connection after the first closes"
+    command: "cargo test -p tillandsias-headless --bin tillandsias --features listen-vsock vsock_server::tests::serve_listener_keeps_serving_after_earlier_connections_close -- --exact 2>&1 | grep -E '^test result: ok\\. 1 passed'"
+    timeout_ms: 300000
+    expected_behavior: "test result: ok. 1 passed"
+
+observability:
+  traces:
+    - "@trace spec:vsock-transport"
+    - "@trace order:148"
+  expected_log: "test result: ok. 1 passed"
+  log_fields:
+    spec: "vsock-transport"
+    test: "headless-keepalive"
+    artifact: "crates/tillandsias-headless/src/vsock_server.rs"
+
+rollback:
+  on_failure: >
+    serve_listener stopped looping after a connection (it returned or parked),
+    so the tray's second and later connections are refused or never handled:
+    exactly the one-shot listener order 148 suspected. Restore the accept loop
+    in serve_listener.
+  command: "cargo test -p tillandsias-headless --bin tillandsias --features listen-vsock serve_listener_keeps_serving -- --nocapture"

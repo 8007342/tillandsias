@@ -134,6 +134,25 @@ else
     _fail "build.sh did not pass the caller's remote URL through: $out2"
 fi
 
+# ORDER 1485-m9m8. Scenarios 3 and 4 source the REAL common.sh, whose mode
+# branches are only reachable when it RESOLVES a podman binary: with none,
+# it sets PODMAN=podman and pins nothing, which is correct product behaviour.
+# The WSL tillandsias-build guest has no podman at all (measured on yolanda
+# 2026-09-29: command -v podman -> none), so scenario 4's positive control
+# read pinned-bin=[<unset>] there while bare-metal macuahuitl, which has
+# podman, passed. On a host with no podman, put a stub on PATH (the resolver
+# searches PATH first) so both scenarios test the MODE and not the host's
+# package list. A host that has podman is untouched.
+if ! command -v podman >/dev/null 2>&1 \
+   && [[ ! -x /usr/bin/podman && ! -x /bin/podman && ! -x /usr/local/bin/podman ]]; then
+    mkdir -p "$SANDBOX/fakebin"
+    printf '#!/usr/bin/env bash\n[ "${1:-}" = --version ] && { echo "podman version 5.0.0"; exit 0; }\nexit 0\n' \
+        > "$SANDBOX/fakebin/podman"
+    chmod +x "$SANDBOX/fakebin/podman"
+    export PATH="$SANDBOX/fakebin:$PATH"
+    echo "  note: no podman on this host; scenarios 3-4 resolve a stub at $SANDBOX/fakebin/podman (1485-m9m8)"
+fi
+
 # ---------------------------------------------------------------------------
 # Scenario 3 — THE CONSEQUENCE THAT ACTUALLY BROKE THE GATE. Against the REAL
 # scripts/common.sh: local mode must leave TILLANDSIAS_PODMAN_BIN unset, which

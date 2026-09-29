@@ -75,7 +75,43 @@ echo stub > "$FAKE_HOME/Library/LaunchAgents/com.tillandsias.tray.plist"
 printf '%s' "$BLOCK" | grep -qF 'TILLANDSIAS_UNINSTALL_APPS_DIR:-/Applications}' || fail "apps-seam-default-is-not-system-applications"
 printf '%s\n' "$BLOCK" > "$TMP/block.sh"
 export TILLANDSIAS_UNINSTALL_APPS_DIR="$FAKE_SYS" TILLANDSIAS_UNINSTALL_TRAY_PROC="nonce-tray-1401"
-HOME="$FAKE_HOME" bash "$TMP/block.sh" >/dev/null 2>&1 || fail "block-exited-nonzero"
+
+# ORDER 1365-tjav. THE BLOCK IS EXECUTED, and it stops the tray with
+# pgrep/pkill. The sandbox above scopes FILESYSTEM paths only: a fake HOME and
+# a rewritten /Applications do not scope the process table. Before this, every
+# run sent real signals (four per gate, pre-1401 at the operator's own tray;
+# since 1401-p3k7 at a nonce name, which is harmless only by luck of naming).
+# The process commands now resolve to shims that RECORD and never signal, and
+# PROC-SCOPE below proves they were intercepted.
+#
+# MEASURED 2026-09-29 (lenovinha): on the tree as filed, the stop sits behind
+# `if [[ "$IS_MACOS" == true ]]`, and IS_MACOS is set BEFORE the extracted
+# block, so inside this fixture it was unset and the stop never ran on any
+# host. The signals stopped by accident, and the stop had NO behavioural
+# coverage here. IS_MACOS=true now drives that path deliberately, under the
+# shims, so the stop is exercised and provably cannot reach the process table. The textual assertion above
+# (the tray is stopped before its bundle is deleted) stays: that property was
+# found live on 2026-08-30 and is not what was wrong.
+PROCSHIM="$TMP/procshim"; mkdir -p "$PROCSHIM"
+for c in pgrep pkill killall; do
+  printf '#!/bin/sh\necho "%s $*" >> "%s/proc-calls"\n[ "%s" = pgrep ] && exit 0\nexit 0\n' "$c" "$TMP" "$c" > "$PROCSHIM/$c"
+  chmod +x "$PROCSHIM/$c"
+done
+: > "$TMP/proc-calls"
+IS_MACOS=true HOME="$FAKE_HOME" PATH="$PROCSHIM:$PATH" bash "$TMP/block.sh" >/dev/null 2>&1 || fail "block-exited-nonzero"
+# PROC-SCOPE: the block's tray stop reached the shims (so nothing reached the
+# process table), and it targeted only the nonce.
+proc_scoped() {   # <calls file>
+  grep -qE '^pkill -TERM' "$1" && grep -qE '^pkill -KILL' "$1" \
+    && ! grep -vE 'nonce-tray-1401' "$1" | grep -q .
+}
+proc_scoped "$TMP/proc-calls" || fail "process-commands-escaped-the-sandbox($(tr '\n' ';' < "$TMP/proc-calls"))"
+# NEGATIVE CONTROL: without the shims, the same arm must RED, or it passes
+# vacuously. Safe to run only BECAUSE the tray seam names a nonce: the real
+# pkill it reaches matches no process.
+: > "$TMP/proc-calls-unshimmed"
+IS_MACOS=true HOME="$FAKE_HOME" bash "$TMP/block.sh" >/dev/null 2>&1 || true
+proc_scoped "$TMP/proc-calls-unshimmed" && fail "proc-scope-arm-passes-without-its-shims"
 
 [ -e "$FAKE_SYS/Tillandsias.app" ]              && fail "system-app-survived"
 [ -e "$FAKE_SYS/Tillandsias.app.bak" ]          && fail "system-bak-survived"
@@ -87,7 +123,7 @@ HOME="$FAKE_HOME" bash "$TMP/block.sh" >/dev/null 2>&1 || fail "block-exited-non
 # fallback dir (this host: $HOME/Applications does not exist) must still
 # uninstall cleanly.
 rm -rf "$FAKE_HOME/Applications"
-HOME="$FAKE_HOME" bash "$TMP/block.sh" >/dev/null 2>&1 || fail "absent-dir-made-the-sweep-fail"
+IS_MACOS=true HOME="$FAKE_HOME" PATH="$PROCSHIM:$PATH" bash "$TMP/block.sh" >/dev/null 2>&1 || fail "absent-dir-made-the-sweep-fail"
 
 if [ "$fails" -gt 0 ]; then
   echo "FAIL:uninstall-sweeps-both-app-dirs:$fails" >&2

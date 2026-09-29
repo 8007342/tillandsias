@@ -1,62 +1,20 @@
 #!/usr/bin/env bash
 # @trace spec:shell-prompt-localization-fr, spec:shell-prompt-localization-ja
 # Tillandsias Forge — English locale bundle
-# Sourced by entrypoint.sh and forge-welcome.sh after locale detection.
+# Sourced by lib-common.sh and forge-welcome.sh after locale detection (no
+# entrypoint*.sh references an L_ key; 792-7bt5 removed 34 keys nothing read).
 # Variables prefixed with L_ to avoid collisions with other env vars.
 
 # ── entrypoint.sh ────────────────────────────────────────────
-L_INSTALLING_OPENCODE="Installing OpenCode..."
-L_INSTALLED_OPENCODE="  OpenCode ready: %s"
-L_WARN_OPENCODE="  WARNING: OpenCode binary exists but --version returned nothing."
-L_INSTALLING_CLAUDE="Installing Claude Code..."
-L_INSTALLED_CLAUDE="  Claude Code ready: %s"
-L_WARN_CLAUDE="  WARNING: Claude Code binary exists but --version returned nothing."
-L_CLAUDE_NOT_FOUND="  Claude Code binary not found after install."
-L_INSTALL_FAILED_CLAUDE="  ERROR: npm install failed. See output above for details."
-L_INSTALLING_OPENSPEC="Installing OpenSpec..."
-L_INSTALLED_OPENSPEC="  ✓ OpenSpec installed"
-L_OPENSPEC_NOT_FOUND="  ✗ OpenSpec binary not found after install"
-L_OPENSPEC_FAILED="  [common] WARNING: DEGRADED — OpenSpec unavailable, /opsx commands will not work"
-L_RETRY_HINT="To retry: restart the container"
-L_CLEAR_CACHE_CLAUDE="To clear cache: rm -rf ~/.cache/tillandsias/claude/"
-L_CLEAR_CACHE_OPENCODE="To clear cache: rm -rf ~/.cache/tillandsias/opencode/"
-L_OPENCODE_INSTALL_FAILED="ERROR: OpenCode failed to install."
 L_BANNER_FORGE="tillandsias forge"
 L_BANNER_PROJECT="project:"
 L_BANNER_AGENT="agent:"
-L_BANNER_MODE_MAINTENANCE="mode:    maintenance"
-L_AGENT_NOT_AVAILABLE="Claude Code not available. Starting bash."
-L_OPENCODE_NOT_AVAILABLE="OpenCode not available. Starting bash."
-L_UNKNOWN_AGENT="Unknown agent '%s'. Starting bash."
-
-# ── CA / proxy warnings ─────────────────────────────────────────
-L_WARN_CA_INSTALL="WARNING: Failed to install CA certificate — proxy HTTPS caching may not work"
-L_WARN_CA_UPDATE="WARNING: Failed to update CA trust store"
-
-# ── Git mirror messages ─────────────────────────────────────────
-L_WARN_PUSH_URL="WARNING: Failed to set push URL — git push may not work"
-L_GIT_CLONE_FAILED="ERROR: Could not clone project from git service."
-L_GIT_CLONE_HINT="The git service may not be running. Dropping to shell."
-L_GIT_EPHEMERAL="All changes must be committed to persist. Uncommitted work is lost on stop."
-
-# ── Auth / init warnings ────────────────────────────────────────
-L_WARN_GH_AUTH="WARNING: gh auth setup-git failed — git push may not authenticate"
-L_WARN_OPENSPEC_INIT="WARNING: OpenSpec init failed — /opsx commands may not work"
-
-# ── Installer exit warnings ──────────────────────────────────────
-L_WARN_OPENCODE_EXIT="WARNING: OpenCode installer exited with code"
-L_WARN_OPENCODE_UPDATE_EXIT="WARNING: OpenCode update exited with code"
-
-# ── Updating messages ───────────────────────────────────────────
-L_UPDATING_CLAUDE="Updating Claude Code..."
-L_UPDATING_OPENCODE="Updating OpenCode..."
 
 # ── forge-welcome.sh ──────────────────────────────────────────
 L_WELCOME_TITLE="🌱 Tillandsias Forge"
 L_WELCOME_PROJECT="Project"
 L_WELCOME_FORGE="Forge"
 L_WELCOME_MOUNTS="Mounts"
-L_WELCOME_PROJECT_AT="→ Project at /home/forge/src/%s"
 L_WELCOME_SECURITY="Security"
 L_WELCOME_NETWORK="Network"
 L_WELCOME_NETWORK_DESC="enclave only (no internet, packages via proxy)"
@@ -66,7 +24,7 @@ L_WELCOME_CODE="Code"
 L_WELCOME_CODE_DESC="cloned from git mirror (uncommitted work is ephemeral)"
 L_WELCOME_SERVICES="Services"
 L_WELCOME_PROXY_DESC="caching HTTP/S proxy (allowlisted domains)"
-L_WELCOME_GIT_DESC="git mirror + auto-push to remote"
+L_WELCOME_GIT_DESC="git mirror (git push origin routes through tillandsias-git:9418)"
 L_WELCOME_INFERENCE_DESC="ollama (local LLM)"
 
 # ── Tips (rotating, shown at login) ──────────────────────────
@@ -95,7 +53,6 @@ L_TIP_20="GitHub CLI: gh repo view, gh pr list"
 # Note: The cheatsheet pointer is currently hardcoded in forge-welcome.sh
 # and does not use locale variables. This is kept for future localization
 # if we make the banner fully locale-aware.
-L_WELCOME_CHEATSHEETS="📚 Cheatsheets"
 L_AGENT_ONBOARDING="🤖 Agent onboarding"
 L_AGENT_ONBOARDING_HINT="cat \$TILLANDSIAS_CHEATSHEETS/welcome/readme-discipline.md for first-turn guide"
 
