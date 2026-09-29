@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: after-github-grants-the-device-flow-token-the-guest-is-silent-for-13-seconds-before-the-tray-shows-the-handle
+    field: status
+    value: implemented
+    ts: "2026-09-29T18:36:25Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: after-github-grants-the-device-flow-token-the-guest-is-silent-for-13-seconds-before-the-tray-shows-the-handle
+    event:
+      type: falsified
+      ts: "2026-09-29T18:36:25Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        falsified 'completed' claim; evidence: e1984e0c3 (the completion measured click-to-QR, not the post-grant silence this row names) — status set to 'implemented', new attempt epoch
+  - packet_id: after-github-grants-the-device-flow-token-the-guest-is-silent-for-13-seconds-before-the-tray-shows-the-handle
+    event:
+      type: note
+      ts: "2026-09-29T18:36:25Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        reopen: completed on a measurement of a different interval; the live arm is still pending
