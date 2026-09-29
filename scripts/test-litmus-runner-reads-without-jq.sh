@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# preflight: gate-only — runs scripts/run-litmus-test.sh end to end (the whole litmus runner); 78 s uncapped on yoga 2026-09-29
 # test-litmus-runner-reads-without-jq.sh — order 1375-6pnd.
 #
 # The litmus runner is the release tier's own instrument, so the set of tests

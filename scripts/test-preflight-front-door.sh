@@ -73,6 +73,48 @@ else
 fi
 cleanup; trap - EXIT INT TERM HUP PIPE
 
+# ── ARM 2b: A SELF-DECLARED GATE-ONLY GUARD (1496-w25b) ─────────────────────
+# A fixture that declares `# preflight: gate-only — <reason>` is reported as a
+# DECLARED skip by name, counted, and NOT run (it would leave a marker). The
+# NEGATIVE CONTROLS: the same plant with NO reason runs, and a check-* (a push
+# decider) that declares it runs, each with a note saying why.
+GO_MARK="$(mktemp -u "${TMPDIR:-/tmp}/gate-only-ran.XXXXXX")"
+plant_go() { # plant_go <script path> <declaration line>
+    printf '#!/usr/bin/env bash\n%s\ntouch "%s.$(basename "$0")"\nexit 0\n' "$2" "$GO_MARK" > "$1"
+    chmod +x "$1"
+}
+GO_A=scripts/test-zz-1496-gate-only.sh
+GO_B=scripts/test-zz-1496-gate-only-bare.sh
+GO_C=scripts/check-zz-1496-gate-only-decider.sh
+GO_STEP=scripts/gate-steps.d/999-zz-1496-gate-only.step
+plant_go "$GO_A" '# preflight: gate-only — runs the planted fixture harness end to end'
+plant_go "$GO_B" '# preflight: gate-only'
+plant_go "$GO_C" '# preflight: gate-only — a decider claiming it'
+{ for p in "$GO_A" "$GO_B" "$GO_C"; do
+    printf 'STEP_DESC="planted"\nSTEP_SCRIPT="%s"\nSTEP_ERROR="planted"\nSTEP_OK="planted"\n' "$p"; done; } > "$GO_STEP"
+go_cleanup() { rm -f "$GO_A" "$GO_B" "$GO_C" "$GO_STEP" "$GO_MARK".*; }
+trap go_cleanup EXIT INT TERM HUP PIPE
+out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"
+if printf '%s' "$out" | grep -q '^skip:preflight:test-zz-1496-gate-only:gate-only — runs the planted fixture harness end to end$' \
+    && [ ! -e "$GO_MARK.test-zz-1496-gate-only.sh" ]; then
+    ok "a declared gate-only fixture is a named declared skip and is not run"
+else
+    bad "a declared gate-only fixture was run, or not reported by name as a declared skip"
+fi
+if [ -e "$GO_MARK.test-zz-1496-gate-only-bare.sh" ] \
+    && printf '%s' "$out" | grep -q 'test-zz-1496-gate-only-bare:gate-only-without-a-reason'; then
+    ok "NEGATIVE CONTROL: a declaration with no reason is not honoured; the guard runs"
+else
+    bad "a reasonless gate-only declaration was honoured"
+fi
+if [ -e "$GO_MARK.check-zz-1496-gate-only-decider.sh" ] \
+    && printf '%s' "$out" | grep -q 'check-zz-1496-gate-only-decider:gate-only-ignored'; then
+    ok "NEGATIVE CONTROL: a push decider cannot declare itself gate-only; it runs"
+else
+    bad "a check-* push decider was allowed to skip the door"
+fi
+go_cleanup; trap - EXIT INT TERM HUP PIPE
+
 # ── ARM 3: A NAMED SKIP IS NOT A REFUSAL (1273-4mak, 1309-fhxb) ─────────────
 # MEASURED: test-uninstall-matcher-spares-bystanders prints skip:not-darwin and
 # exits non-zero, and this door called it `refused` — 1309-fhxb's shape inside

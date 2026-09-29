@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# preflight: gate-only — runs the ci-release instant litmus tier through scripts/run-litmus-test.sh; 29 s uncapped on yoga 2026-09-29
 # @trace order:1269-gfdi, spec:ci-release
 #
 # THE DEFECT. litmus:tool-materialization's arms step ended in `| tail -1`, so a

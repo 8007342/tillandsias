@@ -824,6 +824,35 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
             _pf_cantrun=$((_pf_cantrun + 1))
             continue
         fi
+        # ORDER 1496-w25b (coordinator ruling 2026-09-29): A GUARD MAY DECLARE
+        # ITSELF GATE-ONLY in its own header, `# preflight: gate-only — <reason>`,
+        # when running it at all costs more than the door's deadline (it drives
+        # the litmus runner, folds the ledger, builds, spawns). Such a guard
+        # reached the deadline on every run, answered nothing here and cost ~5 s
+        # each time. The declaration keeps scan-not-curate (the author says it,
+        # in the guard, as STEP_SECOND_REGIME does) and feeds the SAME
+        # declared-skip category as the table above, with the same line shape.
+        # Three limits, each enforced here: the REASON is required (a bare
+        # declaration runs anyway); only fixtures (scripts/test-*) may declare,
+        # because a check-* is a push decider the door exists to run; and the
+        # full gate still runs every declared guard.
+        _pf_gate_only="$(sed -n '1,40{s/^# preflight: gate-only[[:space:]]*//p}' "$SCRIPT_DIR/$_pf_path" | head -n 1)"
+        if [ -n "$(sed -n '1,40{/^# preflight: gate-only/p}' "$SCRIPT_DIR/$_pf_path" | head -n 1)" ]; then
+            _pf_gate_reason="$(printf '%s' "$_pf_gate_only" | sed 's/^[—-][[:space:]]*//')"
+            case "$_pf_path" in
+                scripts/test-*)
+                    if [ -n "$_pf_gate_reason" ]; then
+                        echo "skip:preflight:${_pf_base%.sh}:gate-only — $_pf_gate_reason"
+                        _pf_declskip=$((_pf_declskip + 1))
+                        continue
+                    fi
+                    echo "note:preflight:${_pf_base%.sh}:gate-only-without-a-reason — a declaration must name its cost; running it (1496-w25b)"
+                    ;;
+                *)
+                    echo "note:preflight:${_pf_base%.sh}:gate-only-ignored — a push decider cannot be gate-only at the door; running it (1496-w25b)"
+                    ;;
+            esac
+        fi
 
         # OUTPUT TO A FILE, NEVER A COMMAND SUBSTITUTION. `out="$(timeout N cmd)"`
         # reads the pipe until EOF, and EOF does not arrive while the guard's
