@@ -9,11 +9,18 @@ size: quick
 preconditions:
   - workspace contains images/default/codex-device-auth.sh
   - workspace contains scripts/test-codex-device-auth.sh
+  - workspace contains scripts/test-configure-codex.sh
   - workspace contains scripts/test-codex-oauth-restore.sh
   - workspace contains scripts/test-codex-oauth-harvest.sh
   - workspace contains crates/tillandsias-headless/src/main.rs
 
 critical_path:
+  - step: "reject the removed host-side GitHub token prompt before credential handling"
+    command: "scripts/test-configure-codex.sh"
+    timeout_ms: 30000
+    expected_behavior: "ok:configure-codex:no-token-prompt"
+    assert_output_contains: "ok:configure-codex:no-token-prompt"
+
   - step: "exercise supported and unsupported Codex device-command fixtures"
     command: "scripts/test-codex-device-auth.sh"
     timeout_ms: 30000
