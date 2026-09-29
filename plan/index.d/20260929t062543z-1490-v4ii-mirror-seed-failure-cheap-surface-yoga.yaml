@@ -1,0 +1,35 @@
+packets:
+  - packet_id: a-mirror-with-an-origin-zero-refs-and-a-failing-seed-is-distinguishable-from-a-healthy-or-seeding-one-on-a-cheap-surface-without-reading-the-journal
+    order: 1490-v4ii
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [git-mirror, fail-loud, observability, healthcheck]
+    estimated_hours: 3
+    owned_files: []
+    title: |
+      A mirror whose seed can never succeed still looks healthy on every cheap surface: the container HEALTHCHECK is port-only (nc 127.0.0.1 9418), so "daemon up, origin configured, zero refs, seed failing" reads the same as a healthy or still-seeding mirror unless someone reads the container log
+    context: |
+      Split out of 778-hb3x (its exit criterion 1) on the coordinator's
+      ruling 2026-09-29, for consistency with 963-pdrp: 778-hb3x closed on
+      criteria 2 and 3 (land89 f18c63c63). Criterion 3 made the LAUNCHER's
+      seeded-gate print the mirror's last "[git-mirror] Seed fetch failed:"
+      line while it waits, so a launching operator now sees the cause; this row
+      is the surface for everyone who is NOT launching (a health check, the
+      tray, a monitoring glance). Original evidence: 777-i7hf (windows java-lane
+      live repro 2026-08-16), ~80 minutes of a fetch-broken mirror reported
+      healthy throughout. The mirror already records the failure in its retry
+      log (images/git/entrypoint.sh retry_msg), so the data exists; what is
+      missing is a cheap surface that carries it.
+    exit_criteria:
+      - 'a mirror with a configured origin, zero refs and a failing seed fetch is distinguishable from a healthy or seeding mirror WITHOUT reading the container journal, on at least one cheap surface (healthcheck state, or a published ref/verdict)'
+      - 'a slow but succeeding first seed is NOT reported as failing on that surface'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the surface is the deliverable; its
+      litmus is written in the same commit as the surface.
+    provenance: |
+      Filed 2026-09-29 by yoga on the coordinator's split ruling; formerly
+      778-hb3x exit criterion 1.
