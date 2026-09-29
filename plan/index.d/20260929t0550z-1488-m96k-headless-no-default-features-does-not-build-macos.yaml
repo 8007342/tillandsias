@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: tillandsias-headless-does-not-compile-without-default-features-and-no-gate-builds-that-feature-set-so-the-error-count-grows-unseen
+    order: 1488-m96k
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [rust, build, gate]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/container_deps.rs
+    title: |
+       fails to compile (39 errors on trunk, first: container_deps.rs referencing crate::vault_bootstrap, which is cfg'd out without the vault feature); no gate builds that feature set, so it grew from 35 errors (noted 2026-09-15) unseen
+    context: |
+      MEASURED 2026-09-29 on tlatoanis-macbook-air, origin/linux-next: 39
+      error[E0433]-class errors, the first "cannot find `vault_bootstrap` in
+      `crate`" at crates/tillandsias-headless/src/container_deps.rs (the
+      container_running / container_exit_state calls), with rustc noting "found
+      an item that was configured out". An agent measured 35 on 2026-09-15
+      (plan/index.d/20260915t100008z-14ff710a-linux.yaml) and filed nothing.
+      Coordinator direction (macuahuitl-fedora, 2026-09-29): file the one-liner.
+    exit_criteria:
+      - 'either the crate compiles and tests with --no-default-features (cfg-gating the vault-only call sites), or the feature set is declared unsupported (Cargo.toml comment plus a compile_error! naming the required feature), so the state is a decision and not drift (pre-fix result: 39 errors)'
+      - 'whichever is chosen is checked by a gate step or a clippy arm, so the count cannot grow unseen again'
+    unscoreable: |
+      a build-configuration decision; the pin is whichever of the two a gate
+      step then checks.
