@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-localization-assets-are-staged-nowhere-and-partly-dead
+    event:
+      type: note
+      ts: "2026-09-29T07:18:29Z"
+      agent_id: linux-lenovinha-claude-20260929t071829z
+      host: lenovinha
+      summary: |
+        NIX EVAL on lenovinha, 2026-09-29, at the macuahuitl coordinator's request (yoga has no nix; macuahuitl's host nix has no daemon). Command, run through scripts/nix-toolbox.sh run in the recreated tillandsias-nix toolbox (the persistent store survived the 2026-09-29 SOFT reset):
+        nix eval --raw "git+file://<checkout>?rev=8a88f6d708228112af63d9dda048fa25db6a085e#packages.x86_64-linux.forge-image.drvPath"
+        Result: rc=0, drvPath /nix/store/y7572fgm5n78mhrp4sjzp58mx605d2lr-tillandsias-forge.tar.gz.drv. The flake at work/792-7bt5 8a88f6d70 evaluates, so the newly staged help-script and locale-bundle paths resolve. Evaluation only; no build was run.
