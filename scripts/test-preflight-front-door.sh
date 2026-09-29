@@ -95,20 +95,20 @@ plant_go "$GO_C" '# preflight: gate-only — a decider claiming it'
 go_cleanup() { rm -f "$GO_A" "$GO_B" "$GO_C" "$GO_STEP" "$GO_MARK".*; }
 trap go_cleanup EXIT INT TERM HUP PIPE
 out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"
-if printf '%s' "$out" | grep -q '^skip:preflight:test-zz-1496-gate-only:gate-only — runs the planted fixture harness end to end$' \
+if grep -q '^skip:preflight:test-zz-1496-gate-only:gate-only — runs the planted fixture harness end to end$' <<<"$out" \
     && [ ! -e "$GO_MARK.test-zz-1496-gate-only.sh" ]; then
     ok "a declared gate-only fixture is a named declared skip and is not run"
 else
     bad "a declared gate-only fixture was run, or not reported by name as a declared skip"
 fi
 if [ -e "$GO_MARK.test-zz-1496-gate-only-bare.sh" ] \
-    && printf '%s' "$out" | grep -q 'test-zz-1496-gate-only-bare:gate-only-without-a-reason'; then
+    && grep -q 'test-zz-1496-gate-only-bare:gate-only-without-a-reason' <<<"$out"; then
     ok "NEGATIVE CONTROL: a declaration with no reason is not honoured; the guard runs"
 else
     bad "a reasonless gate-only declaration was honoured"
 fi
 if [ -e "$GO_MARK.check-zz-1496-gate-only-decider.sh" ] \
-    && printf '%s' "$out" | grep -q 'check-zz-1496-gate-only-decider:gate-only-ignored'; then
+    && grep -q 'check-zz-1496-gate-only-decider:gate-only-ignored' <<<"$out"; then
     ok "NEGATIVE CONTROL: a push decider cannot declare itself gate-only; it runs"
 else
     bad "a check-* push decider was allowed to skip the door"
