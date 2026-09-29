@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-preflight-front-door-is-red-on-trunk-over-its-150s-floor-budget-and-the-runner-hides-its-planted-guard-and-wall-line
+    field: notes
+    value: |-
+      FINDINGS (yoga 2026-09-29; implemented on work/1496-w25b 739563a85).
+      ORPHAN SHAPE, named so the next person recognises it: an orphaned `bash …/build.sh --preflight` whose parent is a `conmon` (podman exec session) inside the tillandsias-builder toolbox comes from a litmus step that ran ./build.sh under the runner. PATH starts with the runner's podman shim (target/litmus-runtime/bin); build.sh's toolbox re-exec went through it; the shim killed its podman client at its 120 s diagnostics budget; the exec session in the toolbox kept running. Kill it by pid (it holds this checkout).
+      BUDGET: no guard grew; the door ROSTER grew 108 (2026-09-20, when 150 s was set) -> 118 (09-23) -> 133 (09-26) -> 150 (09-28) -> 162 (09-29). Fixed without moving the number: polled kill grace, plus four self-declared gate-only fixtures (coordinator ruling). Door wall 137 s <= 150 s on yoga.
+      THE "ok MEANS NOTHING THAT RAN REFUSED" TRAP, measured: 48 scripts/check-*.sh the gate runs INLINE in build.sh (`_run bash "$SCRIPT_DIR/scripts/check-X.sh"`, outside the FAST REFUSALS block) are in NONE of the door's three roster sources, including check-bash-dialect, check-sigpipe-verdict-pipelines-added, check-plan-binary-probe-usage, check-version-bump-isolation, check-litmus-bindings and check-litmus-yaml-parses. So `--preflight` printed ok for 800-ivkg's tree (ran=159 refused=0) while check-bash-dialect refuses it by name (reproduced in a worktree at 02421446f, on the host and in the toolbox), and on this very change check-sigpipe-verdict-pipelines-added refused a pipeline the door's ok did not see. An earlier "it is in the roster" read of mine was a false positive: `grep -c check-bash-dialect` also matched test-check-bash-dialect.sh. Adding a fourth roster source (build.sh's inline _run bash check-* calls) is NOT done here: it adds up to 48 guards' cost to a door at 137/150 s and needs the coordinator's ruling.
+    ts: "2026-09-29T18:32:50Z"
+    host: yoga
+
+events:
+  - packet_id: litmus-preflight-front-door-is-red-on-trunk-over-its-150s-floor-budget-and-the-runner-hides-its-planted-guard-and-wall-line
+    event:
+      type: progress
+      ts: "2026-09-29T18:32:50Z"
+      host: yoga
+      summary: |-
+        status 'FINDINGS (yoga 2026-09-29; implemented on work/1496-w25b 739563a85).
+        ORPHAN SHAPE, named so the next person recognises it: an orphaned `bash …/build.sh --preflight` whose parent is a `conmon` (podman exec session) inside the tillandsias-builder toolbox comes from a litmus step that ran ./build.sh under the runner. PATH starts with the runner's podman shim (target/litmus-runtime/bin); build.sh's toolbox re-exec went through it; the shim killed its podman client at its 120 s diagnostics budget; the exec session in the toolbox kept running. Kill it by pid (it holds this checkout).
+        BUDGET: no guard grew; the door ROSTER grew 108 (2026-09-20, when 150 s was set) -> 118 (09-23) -> 133 (09-26) -> 150 (09-28) -> 162 (09-29). Fixed without moving the number: polled kill grace, plus four self-declared gate-only fixtures (coordinator ruling). Door wall 137 s <= 150 s on yoga.
+        THE "ok MEANS NOTHING THAT RAN REFUSED" TRAP, measured: 48 scripts/check-*.sh the gate runs INLINE in build.sh (`_run bash "$SCRIPT_DIR/scripts/check-X.sh"`, outside the FAST REFUSALS block) are in NONE of the door's three roster sources, including check-bash-dialect, check-sigpipe-verdict-pipelines-added, check-plan-binary-probe-usage, check-version-bump-isolation, check-litmus-bindings and check-litmus-yaml-parses. So `--preflight` printed ok for 800-ivkg's tree (ran=159 refused=0) while check-bash-dialect refuses it by name (reproduced in a worktree at 02421446f, on the host and in the toolbox), and on this very change check-sigpipe-verdict-pipelines-added refused a pipeline the door's ok did not see. An earlier "it is in the roster" read of mine was a false positive: `grep -c check-bash-dialect` also matched test-check-bash-dialect.sh. Adding a fourth roster source (build.sh's inline _run bash check-* calls) is NOT done here: it adds up to 48 guards' cost to a door at 137/150 s and needs the coordinator's ruling.' (not terminal) with evidence_refs: 739563a85
+  - packet_id: litmus-preflight-front-door-is-red-on-trunk-over-its-150s-floor-budget-and-the-runner-hides-its-planted-guard-and-wall-line
+    event:
+      type: note
+      ts: "2026-09-29T18:32:50Z"
+      host: yoga
+      summary: |-
+        findings: orphan shape, roster growth, 48 inline deciders absent from the door

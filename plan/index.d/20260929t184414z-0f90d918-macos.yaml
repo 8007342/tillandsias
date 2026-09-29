@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    event:
+      type: note
+      ts: "2026-09-29T18:44:14Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t184413z
+      host: macos
+      summary: |
+        EVIDENCE PRESERVED for both incidents in this row: /Users/tlatoani/.tillandsias/scratch/evidence-20260929t184231z (tlatoanis-macbook-air), SHA256SUMS included. The journals of boot 3aad84e5… (the stuck device flow; the guest clock ran ~69 min behind) and boot 6c39d057… (the successful sign-in, then the journal ends at 18:33:12) are exported whole. The host console.log for those boots was already lost (overwritten by --exec-guest), as recorded in this row's context.
