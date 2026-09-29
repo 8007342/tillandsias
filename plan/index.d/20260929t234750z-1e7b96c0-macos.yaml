@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    event:
+      type: progress
+      ts: "2026-09-29T23:47:50Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t234749z
+      host: macos
+      summary: |
+        FIX ON work/1503-qrgz @ 6966cfd51 (833e3ba79 fix plus the native-lint attestation, tillandsias-macos-tray=28d66a37e). Two layers, per the coordinator.
+        (1) PRIMARY, host-driven: the new trailing wire variant HostClockSync { seq, host_unix_ms } (additive, pinned discriminant 36, DECLARED_VARIANTS 37). The tray registers ONE NSWorkspaceDidWakeNotification observer per process (a block that only forwards to a channel; a tokio task sends to the current VM, no polling). WHICH MECHANISM, as asked: the headless side SETS CLOCK_REALTIME FROM THE HOST TIMESTAMP (libc clock_settime) when the skew is >= 1 s. It already runs as root in the guest, so NO new privileged verb or helper; chronyc makestep would not help, because chrony has no usable sources right after a pause. The guest always answers exactly one frame (IssueAck or Error).
+        (2) FALLBACK: provisioning rewrites makestep to "makestep 1.0 -1" (non-fatal; sed -i.orig for GNU/BSD portability).
+        TESTS (darwin): wire and headless 893 passed; tray and vm-layer 328 passed; clippy -D warnings on all four rc=0; fmt clean. provision_user_data_lets_chrony_step_on_any_large_offset EXECUTES the built user-data's chrony block against a scratch Fedora chrony.conf; red on a mutation dropping the sed. clock_sync has a sub-second negative control.
+        FOUND WHILE HERE, NOT FIXED: the tray's existing SetVsockForwardTarget send uses client.request() while the guest is silent on success, so that request can consume the NEXT reply (the VmStatusReply). Latent while TILLANDSIAS_HOST_VSOCK_PORT is unset (the default).
+        LIVE ARM PENDING: signed bundle built at ~/claudia/wt-qrgz/dist/Tillandsias.app. It needs this tray running through a real Mac sleep of >= N min with the VM up, then: tray.log "wake: sent the host clock", the guest's "guest clock stepped +X ms" (X about the sleep length), and the guest within 1 s of the host within 10 s of wake. Swapping trays means a Quit, which today force-stops the VM (1498-fn96, once followed by a BTRFS error), so I am leaving the swap to the operator rather than doing it unattended.
