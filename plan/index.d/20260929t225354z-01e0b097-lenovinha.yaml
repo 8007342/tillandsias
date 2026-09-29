@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-salvage-or-work-ref-to-sync-to-seed-sequence-is-documented-where-a-worker-looks-and-a-litmus-seeds-a-forge-from-a-salvage-ref-so-the-uncommitted-edit-workflow-exists-before-the-host-mount-is-removed
+    field: status
+    value: in_progress
+    ts: "2026-09-29T22:53:54Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-salvage-or-work-ref-to-sync-to-seed-sequence-is-documented-where-a-worker-looks-and-a-litmus-seeds-a-forge-from-a-salvage-ref-so-the-uncommitted-edit-workflow-exists-before-the-host-mount-is-removed
+    event:
+      type: note
+      ts: "2026-09-29T22:53:54Z"
+      host: lenovinha
+      summary: |-
+        claimed by linux-lenovinha-claude-20260929t225353z
