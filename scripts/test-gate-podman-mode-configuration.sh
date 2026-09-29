@@ -60,24 +60,35 @@ STUB
 # its socket module has NO AF_UNIX attribute. So the probe asks for the
 # capability, not just the interpreter. Where python3 has AF_UNIX, nothing
 # changes: a bind that fails is still a FAIL below.
-if ! command -v python3 >/dev/null 2>&1; then
-    echo "skip:gate-podman-mode:no-python3 (this host has no python3 on PATH, which builds the AF_UNIX fixture socket; nothing was asserted)"
-    exit 0
-fi
-if ! python3 -c 'import socket, sys; sys.exit(0 if hasattr(socket, "AF_UNIX") else 3)' 2>/dev/null; then
-    echo "skip:gate-podman-mode:python3-has-no-af-unix (this python3 cannot create unix sockets, e.g. Windows; nothing was asserted)"
-    exit 0
-fi
-
+# The probe lives INSIDE the one grandfathered interpreter call, whose line is
+# kept byte-identical (the harness refuses new interpreter references,
+# 1087-h2z9). The script drops a marker when it starts and another when the
+# runtime has no AF_UNIX, so the failure branch can tell: never started = no
+# runtime (skip), no AF_UNIX = skip, anything else = a real FAIL.
+FIXTURE_MARK="$SANDBOX/fixture-runtime"
+rm -f "$FIXTURE_MARK.started" "$FIXTURE_MARK.no-af-unix"
 if ! python3 - "$SANDBOX/run/podman/podman.sock" <<'PY'
 import socket
 import sys
 
+mark = sys.argv[1].rsplit("/run/podman/", 1)[0] + "/fixture-runtime"
+open(mark + ".started", "w").close()
+if not hasattr(socket, "AF_UNIX"):
+    open(mark + ".no-af-unix", "w").close()
+    sys.exit(3)
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.bind(sys.argv[1])
 s.listen(1)
 PY
 then
+    if [[ ! -e "$FIXTURE_MARK.started" ]]; then
+        echo "skip:gate-podman-mode:no-fixture-runtime (no interpreter on PATH builds the AF_UNIX fixture socket; nothing was asserted)"
+        exit 0
+    fi
+    if [[ -e "$FIXTURE_MARK.no-af-unix" ]]; then
+        echo "skip:gate-podman-mode:runtime-has-no-af-unix (this runtime cannot create unix sockets, e.g. Windows; nothing was asserted)"
+        exit 0
+    fi
     echo "FAIL: could not create the AF_UNIX fixture socket (python3 required)"
     exit 1
 fi
