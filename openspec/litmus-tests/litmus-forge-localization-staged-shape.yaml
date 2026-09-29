@@ -1,0 +1,43 @@
+# @trace spec:default-image
+name: litmus:forge-localization-staged-shape
+spec: default-image
+phase: pre-build
+description: >
+  Order 792-7bt5. Every localized asset the forge dispatches to is staged by
+  BOTH image paths: each translated help file (images/default/help-<xx>.sh) is
+  COPYed by the Containerfile and staged by flake.nix, help.sh dispatches where
+  both stage, flake.nix stages every locale bundle rather than a hand list, and
+  no stray help dispatcher remains in scripts/. Before the fix, 440 lines of
+  translated help were staged by nothing and the nix path shipped 2 of 17
+  bundles and no help.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-forge-localization-staged.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-forge-localization-staged.sh && test -x scripts/test-forge-localization-staged.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "translated help and every locale bundle are staged by both image paths"
+    command: "bash scripts/test-forge-localization-staged.sh 2>&1 | tail -n 1"
+    timeout_ms: 10000
+    expected_behavior: "PASS: forge-localization-staged"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "PASS: forge-localization-staged"
+  log_fields:
+    spec: "default-image"
+    test: "forge-localization-staged-shape"
+    artifact: "images/default/Containerfile + flake.nix + images/default/help*.sh"
+
+rollback:
+  on_failure: >
+    A translation added under images/default must be COPYed by the Containerfile
+    and staged by flake.nix in the same change, or it ships nowhere.
+  command: "bash scripts/test-forge-localization-staged.sh"

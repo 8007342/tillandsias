@@ -38,6 +38,17 @@
 #                  ACCEPTED, never rejected by a crash. Enforcement FAILS OPEN
 #                  there, by design, until the plan binary ships in the git
 #                  image. The publisher still publishes one ref (digest none).
+#  12 SEED ON INTEGRATION ONLY (1490-zw87) the live state of a level-2 project
+#                  between releases: main (HEAD) has NO seed, the integration
+#                  branch has it. The publisher publishes level 2 with the
+#                  seed's digest, and an enforced push to main is rejected.
+#                  Pre-fix: FAILS (0/advised/none, the push accepted).
+#  13 SAYS WHY     a publish with no seed anywhere names the refs it tried
+#  14 USER PROJECT (negative control for the Tillandsias default) a project
+#                  with NO linux-next and its seed on main: the default
+#                  TILLANDSIAS_DISCIPLINE_SEED_REFS names a ref this mirror
+#                  lacks, so the lookup falls through to HEAD and the seed is
+#                  still published and enforced
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/images/git/pre-receive-hook.sh"
@@ -49,7 +60,9 @@ ENTRY="$ROOT/images/git/entrypoint.sh"
 TILLANDSIAS_RESCUE_REF_GLOB="$(sed -n "s/^ *TILLANDSIAS_RESCUE_REF_GLOB='\(.*\)'$/\1/p" "$ENTRY")"
 TILLANDSIAS_RESCUE_REF_HINT="$(sed -n "s/^ *TILLANDSIAS_RESCUE_REF_HINT='\(.*\)'$/\1/p" "$ENTRY")"
 [ -n "$TILLANDSIAS_RESCUE_REF_GLOB" ] || { echo "blocked:mirror-discipline:no-rescue-ref-config-in-entrypoint"; exit 2; }
-export TILLANDSIAS_RESCUE_REF_GLOB TILLANDSIAS_RESCUE_REF_HINT
+TILLANDSIAS_DISCIPLINE_SEED_REFS="$(sed -n "s/^ *TILLANDSIAS_DISCIPLINE_SEED_REFS='\(.*\)'$/\1/p" "$ENTRY")"
+[ -n "$TILLANDSIAS_DISCIPLINE_SEED_REFS" ] || { echo "blocked:mirror-discipline:no-seed-refs-config-in-entrypoint"; exit 2; }
+export TILLANDSIAS_RESCUE_REF_GLOB TILLANDSIAS_RESCUE_REF_HINT TILLANDSIAS_DISCIPLINE_SEED_REFS
 command -v ruby >/dev/null 2>&1 || { echo "skip:mirror-discipline:no-ruby (the mirror image ships ruby)"; exit 0; }
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/mirror-discipline.XXXXXX")"
@@ -238,6 +251,63 @@ if ! PATH="$noruby" command -v ruby >/dev/null 2>&1 && [ "$rc" -eq 0 ] && [ -e "
    && grep -q 'present but unreadable (no-ruby)' <<<"$out" && [ "$(grep -c . <<<"$refs")" -eq 1 ]; then
     ok "ARM11 no ruby: the enforced seed is reported unreadable, the push is accepted (fails open), one ref published"
 else bad "ARM11 rc=$rc refs='$(tr '\n' ' ' <<<"$refs")' out='$(tr '\n' '|' <<<"$out")'"; fi
+
+# ── ARM 12 ───────────────────────────────────────────────────────────────
+# Main WITHOUT the seed, the integration branch WITH it (a later commit).
+d="$tmp/a12"
+git init -q --bare -b main "$d/mirror.git"; mkdir -p "$d/mirror.git/hooks" "$d/nohooks"
+cp "$HOOK" "$d/mirror.git/hooks/pre-receive"; chmod +x "$d/mirror.git/hooks/pre-receive"
+printf '#!/bin/sh\ncat >/dev/null\n: > "%s/relayed"\nexit 0\n' "$d" > "$d/mirror.git/hooks/tillandsias-relay-refs"
+chmod +x "$d/mirror.git/hooks/tillandsias-relay-refs"
+git -C "$d/mirror.git" config core.hooksPath "$d/nohooks"
+git init -q -b main "$d/work"; git -C "$d/work" config user.email f@f; git -C "$d/work" config user.name f
+git -C "$d/work" remote add origin "$d/mirror.git"
+echo base > "$d/work/base"; git -C "$d/work" add -A; git -C "$d/work" commit -qm base
+git -C "$d/work" push -q --no-verify origin main
+mkdir -p "$d/work/.tillandsias"; seed enforced warn > "$d/work/.tillandsias/branch-discipline.yaml"
+git -C "$d/work" add -A; git -C "$d/work" commit -qm seed
+git -C "$d/work" push -q --no-verify origin HEAD:refs/heads/linux-next
+git -C "$d/mirror.git" config core.hooksPath "$d/mirror.git/hooks"
+pub_out="$(sh "$PUB" "$d/mirror.git" 2>&1)"
+refs="$(disc_refs "$d")"
+want="$(sha_of "$d/work/.tillandsias/branch-discipline.yaml")"
+git -C "$d/work" reset -q --hard HEAD~1; commit "$d" c12
+push "$d" main
+if grep -qE "^refs/tillandsias/discipline/2/enforced/unknown/$want/[0-9]+$" <<<"$refs" \
+   && grep -q 'seed from refs/heads/linux-next' <<<"$pub_out" \
+   && [ "$rc" -ne 0 ] && [ ! -e "$d/relayed" ] && grep -q 'blocked:branch-discipline:default-branch:main' <<<"$out"; then
+    ok "ARM12 seed only on the integration branch: level 2 published from it, and an enforced push to main is rejected"
+else bad "ARM12 refs='$(tr '\n' ' ' <<<"$refs")' pub='$pub_out' push-rc=$rc"; fi
+
+# ── ARM 13 ───────────────────────────────────────────────────────────────
+d="$(new_mirror_seeded a13 "")"
+pub_out="$(sh "$PUB" "$d/mirror.git" 2>&1)"
+if grep -q 'no seed on:' <<<"$pub_out" && grep -q 'HEAD' <<<"$pub_out"; then
+    ok "ARM13 a level-0 publish says why: $(sed 's/.*(//; s/)$//' <<<"$pub_out")"
+else bad "ARM13 publisher output does not name the refs it tried: '$pub_out'"; fi
+
+# ── ARM 14 ───────────────────────────────────────────────────────────────
+d="$tmp/a14"
+git init -q --bare -b main "$d/mirror.git"; mkdir -p "$d/mirror.git/hooks" "$d/nohooks"
+cp "$HOOK" "$d/mirror.git/hooks/pre-receive"; chmod +x "$d/mirror.git/hooks/pre-receive"
+printf '#!/bin/sh\ncat >/dev/null\n: > "%s/relayed"\nexit 0\n' "$d" > "$d/mirror.git/hooks/tillandsias-relay-refs"
+chmod +x "$d/mirror.git/hooks/tillandsias-relay-refs"
+git -C "$d/mirror.git" config core.hooksPath "$d/nohooks"
+git init -q -b main "$d/work"; git -C "$d/work" config user.email f@f; git -C "$d/work" config user.name f
+git -C "$d/work" remote add origin "$d/mirror.git"
+mkdir -p "$d/work/.tillandsias"; seed enforced warn > "$d/work/.tillandsias/branch-discipline.yaml"
+git -C "$d/work" add -A; git -C "$d/work" commit -qm seed
+git -C "$d/work" push -q --no-verify origin main
+git -C "$d/mirror.git" config core.hooksPath "$d/mirror.git/hooks"
+pub_out="$(sh "$PUB" "$d/mirror.git" 2>&1)"
+refs="$(disc_refs "$d")"
+want="$(sha_of "$d/work/.tillandsias/branch-discipline.yaml")"
+commit "$d" c14; push "$d" main
+if ! git -C "$d/mirror.git" rev-parse --verify --quiet refs/heads/linux-next >/dev/null \
+   && grep -qE "^refs/tillandsias/discipline/2/enforced/unknown/$want/[0-9]+$" <<<"$refs" \
+   && grep -q 'seed from HEAD' <<<"$pub_out" && [ "$rc" -ne 0 ]; then
+    ok "ARM14 a project without linux-next falls through to HEAD: its seed is published and enforced"
+else bad "ARM14 refs='$(tr '\n' ' ' <<<"$refs")' pub='$pub_out' push-rc=$rc"; fi
 
 [ "$FAIL" -eq 0 ] && { echo "PASS: mirror-discipline (1443-uit6)"; exit 0; }
 echo "FAILED: mirror-discipline (1443-uit6)"; exit 1

@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-claim-confirmed-prints-confirmed-from-the-local-ledger-after-a-claim-push-that-failed-so-a-claim-that-never-reached-origin-reads-as-won
+    order: 1493-d93i
+    status: ready
+    kind: defect
+    priority: p1
+    size: S
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [plan-lane, claims, fail-loud, multi-host]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-claim-confirmed.sh
+    title: |
+      check-claim-confirmed.sh printed ok:claim-confirmed for a claim whose push had failed silently: it reads the LOCAL fold, never the claim on origin, so a success verdict came from a command that can succeed wrongly
+    context: |
+      MEASURED on lenovinha 2026-09-29. The 1365-tjav claim commit was made
+      and its push loop failed silently (keyring locked, no fallback). Then
+      check-claim-confirmed 1365-tjav --host lenovinha printed
+      ok:claim-confirmed:1365-tjav:lenovinha@<ts>. The claim existed only in
+      the local ledger; the next cycle's git pull --ff-only refused on
+      divergence, and the commit reached trunk only afterwards (e4c11b1e5).
+
+      The checker's result was never compared with the thing it claims: the
+      claim on ORIGIN. The skill sequence (set-field, push, pull, check)
+      assumes the push succeeded; when it did not, the pull is a no-op and the
+      local fold still carries the claim, so the check confirms a claim nobody
+      else can see and the host works a packet it may have lost.
+
+      Owning rows 1370-tjme and 1140-d6ni are completed; filed as a new S row
+      at the macuahuitl coordinator's direction. Stopgap in use on lenovinha:
+      prove every plan push with git ls-remote origin before trusting it.
+    exit_criteria:
+      - 'with origin pointed at a URL that REFUSES the push (so the claim commit stays local), check-claim-confirmed refuses with a named verdict (for example refused:claim-not-on-origin) instead of ok:claim-confirmed. PRE-FIX RESULT: prints ok:claim-confirmed in that setup'
+      - 'NEGATIVE CONTROL: with the claim commit on origin (a scratch bare remote that accepted it), the check still answers ok:claim-confirmed, and the 1370-tjme earliest-ts race arms stay green'
+      - 'the fixture builds scratch repositories only; it never pushes to the real origin or writes the real checkout'
+    verifiable_closure: |
+      a fixture arm with a refusing origin shows the named refusal (pre-fix:
+      ok:claim-confirmed), and the accepted-push arm still confirms.
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixture that pins the refusing-
+      origin arm is this row's own deliverable and lands with the fix.
+    events:
+      - type: filed
+        ts: "2026-09-29T12:00:00Z"
+        agent_id: linux-lenovinha-claude-20260929t120000z
+        host: lenovinha
+        summary: |-
+          Filed from lenovinha at the coordinator's request after a claim that
+          never reached origin was reported confirmed.

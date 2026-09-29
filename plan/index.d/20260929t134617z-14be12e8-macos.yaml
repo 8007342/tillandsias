@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-vsock-handshake-pins-wire-version-2-and-fails-on-every-host-since-the-wire-moved-to-4
+    event:
+      type: note
+      ts: "2026-09-29T13:46:17Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t134617z
+      host: macos
+      summary: |
+        SKIP FIX COMPILED AND RUN at work/1492-fswq 5f09b6d8f, measured by the coordinator on macuahuitl (not on darwin: this file is Linux-only and does not cross-compile here). Command: cargo test -p tillandsias-headless --features listen-vsock --test vsock_listener_e2e -- --ignored --nocapture. Result: rc=0 in 13 s, printing "[skip] vsock_loopback is loaded; bind refused: Permission denied (os error 13)". CAVEAT: the test is #[ignore]. Run without --ignored it reports "0 passed, 1 ignored", which shows nothing; the fixture script passes --ignored. The runtime arm is still unobserved (the EACCES cause is undiagnosed). land92 is queued at 5f09b6d8f.

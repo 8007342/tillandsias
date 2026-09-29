@@ -213,6 +213,14 @@
         forgeShellConfigs = ./images/default/shell;
         forgeWelcome = ./images/default/forge-welcome.sh;
         forgeLocales = ./images/default/locales;
+        # 792-7bt5: the help dispatcher and its translations (the nix path
+        # staged no help at all). Per-file paths, so the store copy is five
+        # files rather than all of images/default.
+        forgeHelp = ./images/default/help.sh;
+        forgeHelpDe = ./images/default/help-de.sh;
+        forgeHelpEs = ./images/default/help-es.sh;
+        forgeHelpFr = ./images/default/help-fr.sh;
+        forgeHelpJa = ./images/default/help-ja.sh;
         forgeCliCommands = ./images/default/cli;
         forgeShellHelpers = ./images/default/config-overlay/shell-helpers.sh;
         webEntrypoint = ./images/web/entrypoint.sh;
@@ -386,10 +394,22 @@
               chmod +x ./etc/tillandsias/shell-helpers.sh
 
               # Locale files — sourced by lib-common.sh for i18n
+              # 792-7bt5: ALL bundles, as the Containerfile ships (this staged
+              # only en and es, so 15 languages fell back to English on the
+              # nix/VM path with nothing saying so).
               mkdir -p ./etc/tillandsias/locales
-              cp ${forgeLocales}/en.sh ./etc/tillandsias/locales/en.sh
-              cp ${forgeLocales}/es.sh ./etc/tillandsias/locales/es.sh
-              chmod +r ./etc/tillandsias/locales/en.sh ./etc/tillandsias/locales/es.sh
+              cp ${forgeLocales}/*.sh ./etc/tillandsias/locales/
+              chmod +r ./etc/tillandsias/locales/*.sh
+              # The help dispatcher, its four translations and the
+              # tillandsias-help link, as the Containerfile ships them.
+              cp ${forgeHelp} ./usr/local/share/tillandsias/help.sh
+              cp ${forgeHelpDe} ./usr/local/share/tillandsias/help-de.sh
+              cp ${forgeHelpEs} ./usr/local/share/tillandsias/help-es.sh
+              cp ${forgeHelpFr} ./usr/local/share/tillandsias/help-fr.sh
+              cp ${forgeHelpJa} ./usr/local/share/tillandsias/help-ja.sh
+              chmod +x ./usr/local/share/tillandsias/help*.sh
+              mkdir -p ./usr/local/bin
+              ln -sf /usr/local/share/tillandsias/help.sh ./usr/local/bin/tillandsias-help
 
               # Fish config in the user's config dir — fish reads from
               # $__fish_config_dir/conf.d/ which is ~/.config/fish/conf.d/

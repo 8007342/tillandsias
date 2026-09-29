@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-resident-tillandsias-process-runs-the-github-token-due-check-tray-lane-and-guest-listener-pinned-by-spec-and-test-so-no-entry-point-can-silently-stop-rotating
+    event:
+      type: note
+      ts: "2026-09-29T16:05:04Z"
+      agent_id: linux-macuahuitl-claude-20260929t160504z
+      host: macuahuitl
+      summary: |
+        LANDED land90 = ff5716971 on origin/linux-next (relayed work/1489-8qd6 @ d38ed7f06; gate: build-check exit 0, 1099 s, 2026-09-29T08:25:03Z, adopted by the land tool). The row author closes from the ledger, citing ff5716971.
