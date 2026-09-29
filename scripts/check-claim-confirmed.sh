@@ -92,6 +92,39 @@ if [ -z "$mine" ]; then
     exit 1
 fi
 mine_ts="$(printf '%s' "$mine" | cut -f1)"
+mine_file="$(printf '%s' "$mine" | cut -f4)"
+
+# ORDER 1493-d93i. THE CLAIM MUST BE ON ORIGIN, not only in this checkout.
+# Everything above reads the LOCAL fold, so a claim whose push failed silently
+# (a locked keyring, no fallback) still read as ok:claim-confirmed on
+# lenovinha 2026-09-29, and the host worked a packet nobody else could see it
+# holding. When plan_dir lives in a git checkout with an origin, fetch the
+# checkout's upstream branch FROM ORIGIN (never trust the local tracking ref,
+# which a lane push does not update) and require this claim's own fragment to
+# be in that tree. A plan_dir outside any repository (the hermetic race
+# fixtures) has no origin to ask and is judged on the fold alone, as before.
+repo="$(git -C "$plan_dir" rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -n "$repo" ] && git -C "$repo" remote get-url origin >/dev/null 2>&1; then
+    branch="$(git -C "$repo" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
+    branch="${branch#origin/}"
+    [ -n "$branch" ] && [ "$branch" != "@{u}" ] || branch="$(git -C "$repo" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+    # Pure shell, not realpath --relative-to (GNU-only; absent on stock macOS).
+    plan_abs="$(cd "$plan_dir" 2>/dev/null && pwd -P)"
+    repo_abs="$(cd "$repo" 2>/dev/null && pwd -P)"
+    rel=""
+    case "$plan_abs" in "$repo_abs"/*) rel="${plan_abs#"$repo_abs"/}/index.d/$mine_file" ;; esac
+    if ! remote_tip="$(git -C "$repo" fetch -q origin "refs/heads/$branch" 2>/dev/null && git -C "$repo" rev-parse FETCH_HEAD 2>/dev/null)"; then
+        echo "unknown:claim-origin-unreachable:$order:$host@$mine_ts:branch=$branch"
+        echo "  the claim is in the local ledger, but origin could not be asked whether it has it; do not start work on an unverified claim" >&2
+        exit 3
+    fi
+    if [ -z "$rel" ] || ! git -C "$repo" cat-file -e "$remote_tip:$rel" 2>/dev/null; then
+        echo "refused:claim-not-on-origin:$order:$host@$mine_ts:$mine_file:origin/$branch=${remote_tip:0:9}"
+        echo "  the claim fragment exists only in this checkout: its push did not land. Push it (verify with git ls-remote origin), then re-run this check" >&2
+        exit 1
+    fi
+fi
+
 if [ "$(printf '%s' "$first" | cut -f2)" = "$host" ]; then
     echo "ok:claim-confirmed:$order:$host@$mine_ts"
     exit 0
