@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    event:
+      type: note
+      ts: "2026-09-29T11:31:17Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t113117z
+      host: macos
+      summary: |
+        DARWIN RUN for the coordinator (tlatoanis-macbook-air, 2026-09-29), work/1375-amye @ 83f94f3f6, detached on-disk worktree, env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR, plan binary built from that ref: `bash scripts/test-plan-run-verb.sh` -> rc=1 in 1.4 s:
+          ok: timeout deadline returns 124 promptly with measured status
+          ok: argv remains tokenized; spaces and glob characters are not reinterpreted
+          FAIL: detached session equals caller session (0)
+        CAUSE: the FIXTURE's measurement, not the verb. It reads session ids with `ps -o sess= -p <pid>`, and on macOS `ps -o sess=` prints 0 for EVERY process (measured: `ps -o pid=,sess=,pgid= -p $$` gives "96202 0 96202", while os.getsid(0) = 96202). So caller and child both read 0 and the arm fails whether or not the verb detaches.
+        VERB VERIFIED: in a local, uncommitted copy of the fixture with the two session reads replaced by `python3 -c 'import os; print(os.getsid(0))'`, all 5 arms pass on darwin: "detach returns promptly, enters a distinct session, and survives its caller", "100 concurrent advisory-lock runs serialize complete critical sections", "bounded lock acquisition returns 75 without spawning on expiry" -> ok:plan-run-verb:5.
+        SUGGESTED FIX (Codex's call): compare process GROUPS (`ps -o pgid=`, which setsid also changes and which works on Linux and BSD ps alike), or read getsid through a small helper. Do not use `ps -o sess=` on a darwin gate. Once fixed: STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin ok:plan-run-verb:5". I can re-run the fixed ref to make that a measurement.
