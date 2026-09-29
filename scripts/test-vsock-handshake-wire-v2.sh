@@ -5,11 +5,25 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
-grep -Fq 'pub const WIRE_VERSION: u16 = 2;' \
-    crates/tillandsias-control-wire/src/lib.rs
-grep -Fq 'vsock-transport.invariant.wire-version-2' \
-    openspec/specs/vsock-transport/spec.md
-test -f crates/tillandsias-headless/tests/vsock_listener_e2e.rs
+# ORDER 1492-fswq. These preconditions used to be bare greps under `set -e`,
+# the first of them for the LITERAL `pub const WIRE_VERSION: u16 = 2;`. The wire
+# moved 2 -> 3 -> 4, that grep found nothing, and the litmus exited 1 with NO
+# output on every host: indistinguishable from a green run that printed nothing.
+# Now the version is READ from the named constant and checked as a FLOOR (v2 is
+# the framing generation this test exercises; later versions are additive), and
+# each precondition names itself when it fails.
+fail() { echo "FAIL: $*" >&2; exit 1; }
+wire_version="$(sed -n 's/^pub const WIRE_VERSION: u16 = \([0-9][0-9]*\);.*/\1/p' \
+    crates/tillandsias-control-wire/src/lib.rs)"
+[ -n "$wire_version" ] \
+    || fail "could not read WIRE_VERSION from crates/tillandsias-control-wire/src/lib.rs"
+[ "$wire_version" -ge 2 ] \
+    || fail "WIRE_VERSION is $wire_version; this handshake test needs wire v2 framing or later"
+grep -Fq 'vsock-transport.invariant.wire-version-2' openspec/specs/vsock-transport/spec.md \
+    || fail "spec invariant vsock-transport.invariant.wire-version-2 is missing"
+[ -f crates/tillandsias-headless/tests/vsock_listener_e2e.rs ] \
+    || fail "crates/tillandsias-headless/tests/vsock_listener_e2e.rs is missing"
+echo "ok: preconditions (WIRE_VERSION=$wire_version, >= 2)"
 if grep -Fq 'vsock-handshake-probe' \
     openspec/litmus-tests/litmus-vsock-handshake.yaml; then
     echo "FAIL: handshake descriptor invokes removed probe example" >&2
