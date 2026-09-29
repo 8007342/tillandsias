@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: github-login-device-flow-only
+    event:
+      type: note
+      ts: "2026-09-29T03:17:05Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t031704z
+      host: macos
+      summary: |
+        DARWIN CHECK (tlatoanis-macbook-air, 2026-09-29) of work/777-kyjp @ 8f1eb7922, at the coordinator's request, because the test is cfg(macos) and yoga cannot compile it: cargo test -p tillandsias-macos-tray --test github_login_expect_order gives 5 passed, 0 failed: host_shows_the_guest_output_raw, host_waits_for_no_prompt_the_device_flow_never_prints, guest_github_terminal_login_takes_the_device_flow, host_identity_expects_match_the_guest_prompt_order, and extraction_discriminates_the_live_path_from_the_retired_one (the retired control, now asserting ABSENCE). cargo clippy -p tillandsias-macos-tray --all-targets -- -D warnings: rc=0.
