@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: wsl2-guest-hot-install-replaces-the-stop-overwrite-restart-with-an-atomic-rename-under-killmode-process-and-a-handoff-exit-that-does-not-terminate-the-distro
+    order: 1490-j6du
+    parent_order: 1490-gttj
+    depends_on:
+      - control-wire-hello-negotiates-a-version-inside-a-declared-window-instead-of-asserting-equality-so-a-hot-guest-or-host-upgrade-has-a-drain-path
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, wsl, upgrade, lifecycle, systemd]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+      - crates/tillandsias-windows-tray/src/notify_icon.rs
+      - crates/tillandsias-vm-layer/src/wsl.rs
+      - scripts/test-wsl-guest-hot-install.ps1
+    title: |
+      WSL2 guest hot-install: the headless unit gets KillMode=process, the ELF is installed by atomic rename (no stop, no ETXTBSY), reconcile_adopted_guest re-execs the daemon with podman ps unchanged, and a tray exiting as the old side of --upgrade-handoff does not wsl --terminate
+    context: |
+      reconcile_adopted_guest (crates/tillandsias-windows-tray/src/wsl_lifecycle.rs:999)
+      compares the adopted guest's headless version with the workspace version
+      and on mismatch inject_stale_guest_wiring (:1083) runs systemctl stop
+      tillandsias-headless.service (:1124, comment: overwriting a running ELF
+      is ETXTBSY), overwrites via cat > path (:2115, :2154), then restarts
+      (:1133). Every vsock/PTY session drops. The unit file ([Service] at
+      :1813/:1875) has no KillMode=, so the default control-group kill may
+      take conmon and the containers with it — UNMEASURED; the first
+      deliverable is the measurement. Quit runs WslLifecycle::graceful_shutdown
+      (:665) -> WslRuntime::stop (crates/tillandsias-vm-layer/src/wsl.rs:1120)
+      -> wsl --terminate. Design D1, D5; spec deltas vm-provisioning-lifecycle
+      MODIFIED "Tray exit triggers graceful drain" and ADDED "Guest headless
+      binary can be hot-installed into a running guest".
+    exit_criteria:
+      - 'MEASUREMENT recorded in the closing event: podman ps -q inside the distro before and after systemctl restart tillandsias-headless.service with KillMode=process (pre-fix: unmeasured)'
+      - 'with three containers running, a guest binary upgrade leaves the running container id set unchanged and the host reconnects within 10 s (pre-fix: unit stopped before overwrite; sessions dropped)'
+      - 'a tray exiting as the old side of --upgrade-handoff leaves the distro in wsl --list --running and the headless unit active (pre-fix: wsl --terminate on every quit)'
+      - 'when the handoff cannot be honoured the tray reports deferred with a reason and offers the ordinary drain; it never terminates silently'
+    unscoreable: windows-only-powershell-fixture — the verdict script is scripts/test-wsl-guest-hot-install.ps1, which needs a Windows host with the distro provisioned and is outside the scorer's scripts/*.sh grammar; it is written in the same commit as the KillMode=process unit change it tests (1136-n8sh), and its exit status plus the recorded podman ps measurement are the pin.
+    notes: |
+      size: L  implementer_tier: opus
+      If the measurement shows containers die under KillMode=process anyway (conmon in the unit cgroup), record it and switch to a socket-activated conmon scope before proceeding; do not ship a re-exec that loses containers.
+    next_action: 'measure first: add KillMode=process to the unit, restart it on a provisioned distro with three containers, record podman ps -q before and after'
+    provenance: |
+      Filed by a Fable agent on lenovinha, 2026-09-29, from the hot-upgrade investigation (1490-gttj).
+    events:
+      - type: filed
+        ts: "2026-09-29T06:16:06Z"
+        agent_id: "claude-fable-lenovinha-20260929t061525z"
+        host: lenovinha
+        summary: |-
+          Windows/WSL2 half of the hot-upgrade SOFT reset.

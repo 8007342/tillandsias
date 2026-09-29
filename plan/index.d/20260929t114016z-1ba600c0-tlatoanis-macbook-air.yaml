@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-tray-stream-refactor
+    field: status
+    value: completed
+    ts: "2026-09-29T11:40:16Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: macos-tray-stream-refactor
+    event:
+      type: completed
+      ts: "2026-09-29T11:40:16Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: audit plan/index.d/20260929t113910z-2fea47f8-macos.yaml; origin/linux-next 2026-09-29
+  - packet_id: macos-tray-stream-refactor
+    event:
+      type: note
+      ts: "2026-09-29T11:40:16Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        DONE BY LATER WORK, closed on the coordinator's ruling (2026-09-29). The macOS tray receives state by PUSH: a dedicated subscription (SC-07, 'polls demoted to fallback'), and the polls run only when should_poll_fallback(push unhealthy). The remaining timers in action_host.rs are a single 250 ms PTY-close flush grace, the outbound heartbeat writer and the resubscribe backoff; none polls state. Live: 4 h 48 min after sign-in with no 'vm-status poll:' line, so the fallback never fired. SHARED READER: both trays read pushes through the ONE shared implementation, tillandsias-host-shell vsock_client Client::next_envelope (called from macos-tray action_host.rs and windows-tray notify_icon.rs; tested by next_envelope_reads_unsolicited_push_frames). STATED RESIDUAL: what is shared is the framing and reading; the TASK LOOP around it stays per tray (should_poll_fallback exists only in the macOS action_host). 'Shared' here does NOT mean the loop. No row is filed to unify the loops, since no concrete divergence is cited.

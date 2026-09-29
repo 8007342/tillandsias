@@ -1,0 +1,16 @@
+# Gate step 1235-rfub — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. The relay gate compiles the cfg-gated macOS tray as STUBS and
+# cannot lint it (measured on lenovinha 2026-09-28: a Linux clippy for
+# aarch64-apple-darwin dies in ring's build script), so a relayed
+# useless_format reddened trunk for every Mac (d44909353). A change to a gated
+# crate now needs a Native-Lint attestation from scripts/attest-native-lint.sh
+# bound to the crate's content; land-on-platform-branch.sh refuses without it.
+# The fixture drives both scripts over scratch repos with a stub cargo.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a cfg-gated platform crate cannot relay without a native-lint attestation (1235-rfub)"
+STEP_SCRIPT="scripts/test-native-lint-attested.sh"
+STEP_ERROR="a change to a cfg-gated platform crate can again reach trunk with no host having linted it natively (1235-rfub); see which arm failed above"
+STEP_OK="cfg-gated crates relay only with a content-bound native-lint attestation"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:native-lint-attested-fixture:8/8"

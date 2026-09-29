@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-oscillation-root-cause
+    event:
+      type: progress
+      ts: "2026-09-29T09:39:15Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t093915z
+      host: macos
+      summary: |
+        BOUND, POST-LOGIN (the row's named trigger), measured 2026-09-29 on tlatoanis-macbook-air. Tray pid 83066 was built from work/1479-9hx6 (0be6803ef: trunk plus stamped tray.log), running on a freshly cold-provisioned VM. The operator signed in to GitHub at 04:50:28Z. Checked at 09:38:49Z: 4 h 48 min.
+        - tray.log has NO line after 04:50:31.126Z. A wire failure on the tray's poll path ALWAYS logs "[tillandsias-tray] vm-status poll: <err>" and flips the chip to reconnecting (action_host.rs, the Err arm that mirrors windows mark_wire_unreachable). Zero such lines = zero Ready -> unreachable flips.
+        - The guest console has 0 "tillandsias-headless.service: Main process exited|Scheduled restart|Failed" lines across the whole boot (the row's hypothesised cause: the headless crashing and restarting).
+        - heartbeat.state reads "🟢 Ready · Routing Proxy"; the guest proxy was active up to 09:38:48Z.
+        Together with the pre-login windows earlier today (9.5 and 6.5 min stable, 0 restarts), this is 4.8 h post-login with NO oscillation and NO headless restart on current trunk plus a fresh guest. The 2026-06-30 report does not reproduce here.
+        CAVEAT: the push-subscription drop path logs only at debug level, so a push drop that the fallback poll then covered would not appear in tray.log; but it would not show the operator "Wire unreachable" either, which is the row's symptom.
+        NOT DONE: criterion 3's litmus:headless-keepalive.

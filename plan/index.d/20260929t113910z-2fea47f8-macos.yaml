@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-tray-stream-refactor
+    event:
+      type: note
+      ts: "2026-09-29T11:39:10Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t113910z
+      host: macos
+      summary: |
+        AUDIT against the outcome, 2026-09-29, tlatoanis-macbook-air, origin/linux-next (source-read plus one live measurement). The refactor this row asks for appears DONE by later work; proposed for closure by the coordinator.
+        - PUSH IS PRIMARY: crates/tillandsias-macos-tray/src/action_host.rs opens a dedicated push connection subscribed to push_subscribe_topics() and logs "push subscription established (vm-status/login/cloud/local polls demoted to fallback, SC-07)". The polls run only when should_poll_fallback(push_stream_healthy) is true, i.e. when push is unhealthy, mirroring windows-tray's VM_STATUS_PUSH_HEALTHY.
+        - NO REMAINING POLLING LOOPS: the remaining timers in action_host.rs are (1) a single 250 ms grace so a PTY close frame flushes before the connection drops, (2) the heartbeat writer (HEARTBEAT_PERIOD_SECS), an outbound liveness beacon read by --diagnose rather than a poll of state, and (3) the resubscribe backoff after a push drop. None polls the guest for state.
+        - LIVE: on the 1479-9hx6 build, 4 h 48 min after sign-in, tray.log has no "vm-status poll:" line (recorded on 148), so the fallback poll never fired: state arrived by push.
+        - SHARED CODE: both trays build on tillandsias-host-shell (79 references in macos action_host.rs). Whether the push READER itself is one shared implementation or two mirrored ones was not audited line by line; if the coordinator wants that criterion enforced, it is the one residual.

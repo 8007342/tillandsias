@@ -153,6 +153,14 @@ fi
 if [ "${TILLANDSIAS_RESCUE_REF_HINT+set}" != "set" ]; then
     TILLANDSIAS_RESCUE_REF_HINT='salvage/<host>/<yyyymmdd>-<slug>'
 fi
+# Where the discipline seed lives (1490-zw87). A level-2 project carries its
+# seed on the INTEGRATION branch long before the default branch (HEAD) gets it
+# through a release, so reading HEAD first published level 0 for a level-2
+# project on the first live mirror. Space-separated refs, tried in order,
+# before HEAD. Config, not hook code (order-462 class).
+if [ "${TILLANDSIAS_DISCIPLINE_SEED_REFS+set}" != "set" ]; then
+    TILLANDSIAS_DISCIPLINE_SEED_REFS='refs/heads/linux-next'
+fi
 # CI workflow budget (order 598). UNSET-ONLY like the rest: an end-user project
 # that legitimately runs its own GitHub Actions exports this EMPTY and the gate
 # disappears. For Tillandsias, release.yml is the only workflow permitted to
@@ -161,7 +169,7 @@ fi
 if [ "${TILLANDSIAS_CI_WORKFLOW_ALLOWLIST+set}" != "set" ]; then
     TILLANDSIAS_CI_WORKFLOW_ALLOWLIST='release.yml'
 fi
-export TILLANDSIAS_BRANCH_CREATION_REGEX TILLANDSIAS_BRANCH_GRAMMAR_HINT TILLANDSIAS_YAML_GATE_EXEMPT_REFS TILLANDSIAS_RESCUE_REF_GLOB TILLANDSIAS_RESCUE_REF_HINT
+export TILLANDSIAS_BRANCH_CREATION_REGEX TILLANDSIAS_BRANCH_GRAMMAR_HINT TILLANDSIAS_YAML_GATE_EXEMPT_REFS TILLANDSIAS_RESCUE_REF_GLOB TILLANDSIAS_RESCUE_REF_HINT TILLANDSIAS_DISCIPLINE_SEED_REFS
 export TILLANDSIAS_CI_WORKFLOW_ALLOWLIST
 if [ -n "$TILLANDSIAS_BRANCH_CREATION_REGEX" ]; then
     echo "[git-service] branch-name grammar active (warn-only, rung 2); yaml-gate exempt refs: ${TILLANDSIAS_YAML_GATE_EXEMPT_REFS:-none}"

@@ -2307,6 +2307,76 @@ mod tests {
         }
     }
 
+    /// litmus:headless-keepalive (order 148, criterion 3): the control listener
+    /// is LONG-LIVED. It keeps accepting and HANDLING connections after an
+    /// earlier one has closed; a one-shot listener (accept once and return,
+    /// or exit after the first request) was the hypothesis for the 2026-06-30
+    /// Ready <-> "Wire unreachable" oscillation.
+    ///
+    /// Runs the REAL `serve_listener` loop on a Unix socket (the same
+    /// `Listener` type the vsock bind returns). Each of three sequential
+    /// connections sends a malformed frame and must be CLOSED BY THE HANDLER
+    /// within 5 s. That needs an accept plus a live `handle_connection`, so a
+    /// listener that stopped accepting (the second connect refused, or left
+    /// parked in the kernel backlog) fails, not just one that exited.
+    ///
+    /// @trace order:148, spec:vsock-transport
+    #[tokio::test]
+    async fn serve_listener_keeps_serving_after_earlier_connections_close() {
+        let dir =
+            std::env::temp_dir().join(format!("tillandsias-keepalive-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let sock = dir.join("control.sock");
+        let transport = Transport::Unix(sock.clone());
+        let mut listener = bind(&transport).await.expect("bind a unix listener");
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let server_shutdown = Arc::clone(&shutdown);
+        let server = tokio::spawn(async move {
+            serve_listener(&mut listener, server_shutdown, VmStateHandle::new()).await;
+        });
+
+        for n in 1..=3 {
+            let mut client = tillandsias_control_wire::transport::connect(&transport)
+                .await
+                .unwrap_or_else(|e| panic!("connection {n}: the listener must still accept: {e}"));
+            // Not a valid frame for any wire mode: a live handler closes it.
+            client
+                .write_all(&[0xFF, 0xFF, 0xFF, 0xF0, 0, 1, 2, 3])
+                .await
+                .unwrap_or_else(|e| panic!("connection {n}: write: {e}"));
+            let _ = client.flush().await;
+            let mut buf = [0u8; 256];
+            let mut closed = false;
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            while tokio::time::Instant::now() < deadline {
+                match tokio::time::timeout_at(deadline, client.read(&mut buf)).await {
+                    Ok(Ok(0)) | Ok(Err(_)) => {
+                        closed = true;
+                        break;
+                    }
+                    Ok(Ok(_)) => continue, // e.g. a refusal notice before the close
+                    Err(_) => break,
+                }
+            }
+            assert!(
+                closed,
+                "connection {n}: not handled within 5 s. The listener accepted nothing after \
+                 an earlier connection closed (a one-shot listener)"
+            );
+            drop(client);
+        }
+        assert!(
+            !server.is_finished(),
+            "the serve loop must still be running after three connections"
+        );
+
+        shutdown.store(true, Ordering::SeqCst);
+        shutdown_notify().notify_waiters();
+        let _ = tokio::time::timeout(Duration::from_secs(5), server).await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Order 795-5itp: PIPELINED Hello+Subscribe must both survive the
     /// handshake-to-read-loop handoff.
     ///

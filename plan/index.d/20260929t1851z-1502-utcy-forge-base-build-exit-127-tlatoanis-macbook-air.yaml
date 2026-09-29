@@ -1,0 +1,31 @@
+packets:
+  - packet_id: the-on-demand-forge-base-build-exits-127-after-a-complete-pull-and-its-log-names-no-command
+    order: 1502-utcy
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, forge, image-build, podman]
+    estimated_hours: 3
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the failing command is unknown; the build log does not name it.
+    title: |
+      On a freshly reprovisioned macOS guest, launching a forge fails: the on-demand build of localhost/tillandsias-forge-base:v56.9.27.2 (digest_missing) reaches "Pulling image forge-base 100%" and then exits 127, and neither the build log nor the guest journal names the command that was not found
+    context: |
+      OPERATOR REPORT, 2026-09-29, tlatoanis-macbook-air, tray c2c0b7026, VM reprovisioned from scratch by --reset-state about 1.5 h earlier. OpenCode forge for 8007342/tillandsias.org (click 18:31:05Z). Operator's transcript tail:
+        Error: detached image ensure helper for forge exited 1; log tail (/root/.cache/tillandsias/image-build-forge.log):
+        [tillandsias] building image forge-base (localhost/tillandsias-forge-base:v56.9.27.2, digest_missing); this may take several minutes
+        Pulling image forge-base [██████████] 100%
+        [tillandsias] --internal-ensure-image forge failed: Required base image 'localhost/tillandsias-forge-base:v56.9.27.2' is absent or stale and failed to build on demand: ... Build exited with status exit status: 127.
+        Build it explicitly with: tillandsias --init.
+      The guest's image-build-forge.log holds only the pull-progress lines: NO line names the 127. The guest journal shows a buildah container (crun-buildah-buildah2633213255.scope) that ran 18:32:57-18:33:02, 3.1 s CPU, 399.1M peak, and no "not found" line.
+      Also wrong: the remedy "tillandsias --init" is the Linux CLI; on macOS the operator has only the tray. It names a command the operator cannot run.
+      Unrelated to the same launch? An Antigravity forge earlier the same day (before the reset) sat at "Building Forge" for 12+ min (1498-fn96 context).
+    verifiable_closure: |
+      on a freshly reprovisioned macOS guest, launching an OpenCode forge from the tray builds forge-base and attaches; any build failure prints the failing command and its stderr, and names a remedy runnable on that platform; pre-fix result: FAILS (exit 127, no command named, 2026-09-29)
+    exit_criteria:
+      - 'a forge launch on a fresh macOS guest succeeds (pre-fix result: FAILS, exit 127)'
+      - 'a build failure names the failing command and captures its stderr in image-build-forge.log (pre-fix result: FAILS, log has only pull lines)'
+      - 'the remedy line names something runnable on macOS (pre-fix: "tillandsias --init")'
