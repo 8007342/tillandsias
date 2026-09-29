@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    event:
+      type: note
+      ts: "2026-09-29T22:45:06Z"
+      agent_id: linux-macuahuitl-claude-20260929t224504z
+      host: macuahuitl
+      summary: |
+        RULING (operator, 2026-09-29, relayed by the coordinator): (1) the Cloudflare App is PRIVATE (operator-only) first; public later, with revisions expected. (2) Zero Trust TEAM name = `tillandsias-enclave-vpn-<github_username>` (the team domain <team>.cloudflareaccess.com is globally unique per the Cloudflare FAQ; the GitHub login is public, unique and at most 39 chars, so the label fits 63; no account id or email in the name; on a collision suffix -2, -3 and report it); the virtual NETWORK name = `tillandsias-enclave-vpn`. Never delete the Zero Trust org in tests or tooling (a deleted org's team name is reserved permanently). Supersedes the `tillandsias-vpn` / `tillandsias-vpn-<acct8>` canonical table in cloudflare_names (1505-iky3, landed in land94). (3) Cloudflare software runs INSIDE a Tillandsias container (likely beside the router), free tier only; LAN-first, own tunnels where possible; first deliverable is the fleet-messaging PoC (1506-3xu7, design in flight). (4) Cloudflare has no device-authorization grant; recommended QR path is a free static relay page (Cloudflare Pages or GitHub Pages), with copying the code from the phone's address bar as the no-host fallback — operator decision on which page host pending.
