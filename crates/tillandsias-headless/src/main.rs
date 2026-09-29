@@ -844,8 +844,10 @@ fn main() {
                 std::process::exit(2);
             }
         };
+        // Terminal mode runs the device flow and executes no script
+        // (777-kyjp); only the stdin seed has one.
         let token_script = match input_mode {
-            LoginInputMode::Terminal => GH_LOGIN_TOKEN_SCRIPT.to_string(),
+            LoginInputMode::Terminal => String::new(),
             LoginInputMode::StdinToken => GH_LOGIN_STDIN_TOKEN_SCRIPT.to_string(),
         };
         Some((
@@ -11304,29 +11306,18 @@ fn run_github_device_login(container: &str, debug: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// In-container token entry for `--github-login`.
-///
-/// We deliberately avoid `gh auth login`'s interactive masked prompt: it puts
-/// the container pty into raw, char-at-a-time mode, and a long token pasted
-/// over `podman exec -it` can pick up bracketed-paste escape bytes
-/// (`ESC[200~ … ESC[201~`) or be truncated, so gh ends up validating garbage
-/// and GitHub returns `401 Bad credentials`.
-///
-/// Instead we read the token with a plain shell `read` (cooked line mode, which
-/// does not enable bracketed paste, so the terminal delivers the pasted text
-/// verbatim) and pipe it straight into `gh auth login --with-token`. The token
-/// is read, held, and consumed entirely inside the container — the host process
-/// still never sees it. `read -rs` keeps the input hidden, matching the old UX.
-const GH_LOGIN_TOKEN_SCRIPT: &str = r#"
-printf 'Paste your GitHub authentication token (input hidden), then press Enter: ' > /dev/tty
-IFS= read -rs TOKEN < /dev/tty
-printf '\n' > /dev/tty
-if [ -z "$TOKEN" ]; then
-  printf 'No token entered; aborting GitHub login.\n' >&2
-  exit 1
-fi
-printf '%s' "$TOKEN" | gh auth login --hostname github.com --git-protocol https --with-token
-"#;
+// ORDER 777-kyjp (operator directive 2026-08-16, reconciled with 1025-a896 by
+// the coordinator 2026-09-29): there is NO interactive token-paste prompt. A
+// person at a terminal running `--github-login` gets the device flow
+// (`run_github_device_login`, the only GitHub Terminal branch in
+// run_provider_login). The paste script that lived here was already dead code
+// for GitHub after 1381-za6b and is removed, not hidden. The non-interactive
+// operator seed below STAYS: `--with-token` reads stdin and runs no device
+// flow, which is why 1025-a896 sanctioned it (a device login evicts the token
+// on other hosts). A --with-token seed carries no refresh token, so
+// 1461-8tyy's rotation never runs for it, by design; the operator re-seeds.
+// Retiring --with-token too ("literally device-only") is a separate row that
+// must solve the eviction hazard first.
 
 /// Non-interactive token entry for `--github-login --with-token`.
 ///
@@ -24453,13 +24444,44 @@ mod tests {
 
     #[test]
     fn github_login_terminal_mode_keeps_tty_allocation() {
-        let args = provider_login_exec_args(
-            "login-helper",
-            GH_LOGIN_TOKEN_SCRIPT,
-            LoginInputMode::Terminal,
-        );
+        let args = provider_login_exec_args("login-helper", "true", LoginInputMode::Terminal);
         assert!(args.iter().any(|arg| arg == "--interactive"));
         assert!(args.iter().any(|arg| arg == "--tty"));
+    }
+
+    /// ORDER 777-kyjp. NEGATIVE CONTROL for both halves of the ruling: the
+    /// production source offers NO token-paste prompt, the GitHub Terminal
+    /// branch calls the device flow, and the stdin seed still stores a token
+    /// read from stdin (not /dev/tty).
+    #[test]
+    fn github_login_has_no_paste_prompt_and_keeps_the_stdin_seed() {
+        let src = include_str!("main.rs");
+        let prod = src.split("\n#[cfg(test)]\nmod tests").next().unwrap();
+        let paste = ["Paste your GitHub ", "authentication token"].concat();
+        assert!(
+            !prod.contains(&paste),
+            "an interactive token-paste prompt is back (777-kyjp)"
+        );
+        assert!(
+            !prod.contains("read -rs TOKEN"),
+            "a hidden tty token read is back (777-kyjp)"
+        );
+        let branch = prod
+            .split("if matches!(config.provider, ProviderId::GitHub)\n        && matches!(config.input_mode, LoginInputMode::Terminal)")
+            .nth(1)
+            .expect("the GitHub Terminal branch of run_provider_login moved; re-anchor this test");
+        let branch = &branch[..branch.find("} else {").expect("branch end")];
+        assert!(
+            branch.contains("run_github_device_login("),
+            "the GitHub Terminal branch must run the device flow"
+        );
+        assert!(GH_LOGIN_STDIN_TOKEN_SCRIPT.contains("IFS= read -r TOKEN"));
+        assert!(GH_LOGIN_STDIN_TOKEN_SCRIPT.contains("--with-token"));
+        assert_eq!(
+            select_github_login_input_mode(true, true),
+            Ok(LoginInputMode::StdinToken),
+            "--with-token must still select the stdin seed even at a terminal"
+        );
     }
 
     #[test]
