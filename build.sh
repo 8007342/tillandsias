@@ -716,6 +716,31 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     # fetch it scans nothing and prints a green that means nothing.
     git -C "$SCRIPT_DIR" fetch -q origin 2>/dev/null || true
 
+    # ORDER 1247-9pr8 — A STALE PLAN BINARY IS ONE CAUSE, SO SAY IT ONCE. Measured
+    # on yolanda 2026-09-28 (1462-trch): with a plan binary older than the tree,
+    # this door refused bsd-count-shapes, json-query-jq-parity, lua-determinism
+    # and plan-hash-time-verbs. Four refusals, four unrelated-looking names, and
+    # no mention of the binary. All four went green once the binary was rebuilt.
+    # The binary answers its own currency in ~0.3s, so ask it once, up front,
+    # and refuse by name instead of running guards that would only echo it.
+    # Only a definite `stale:` answer refuses. With no binary, or one too old to
+    # answer, the door behaves as before: the guards skip or answer for
+    # themselves.
+    # BEGIN-STALE-PLAN-BINARY-CHECK
+    _pf_plan_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _pf_plan_bin=""
+    if [ -n "$_pf_plan_bin" ]; then
+        _pf_vs="$(cd "$SCRIPT_DIR" && "$_pf_plan_bin" validator-surface-hash --check 2>&1)" || true
+        case "$_pf_vs" in
+            *stale:validator-surface*)
+                echo "refused:preflight:stale-plan-binary — $_pf_plan_bin was built from a different validator surface than this checkout (${_pf_vs##*stale:validator-surface })" >&2
+                echo "  WHY: the guards below resolve this binary, so each would refuse for this one cause under its own name." >&2
+                echo "  REMEDY: cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh, then re-run ./build.sh --preflight." >&2
+                echo "  No guard was run. A stale binary says nothing about the tree." >&2
+                exit 1 ;;
+        esac
+    fi
+    # END-STALE-PLAN-BINARY-CHECK
+
     # 5s, SET FROM THE DISTRIBUTION AND NOT CHOSEN. Measured over all 105 roster
     # entries on pirria: 94 finish under 5s for 55.3s of work, and the next costs
     # are 6.6, 9.1, 14.6, 16.8, 22.1, three at a 25s cap, 89 and 316 seconds — a
