@@ -9685,9 +9685,12 @@ mod cloudflare_token_rotation_tests {
 
     // ── non-ignored unit arms (no fake, no network) ───────────────────────
 
-    /// No token bytes in Debug, verdicts or reasons. CONTROL: the core's
-    /// derived `Debug` on `cloudflare_oauth::Bundle` DOES print the token, so
-    /// the substring check sees a leak when there is one.
+    /// No token bytes in Debug, verdicts or reasons. CONTROL: the substring
+    /// check itself sees a leak when one is planted, so its silence below is
+    /// not the silence of a check that cannot fire. (This control used to be
+    /// the core `cloudflare_oauth::Bundle`'s DERIVED Debug, which printed the
+    /// token; 1505-kc5f's prerequisite replaced it with a redacting impl, and
+    /// the core Bundle is now asserted leak-free here too.)
     #[test]
     fn cloudflare_token_rotation_never_prints_a_token() {
         const A: &str = "cf-access-SECRET-abcdef012345";
@@ -9701,13 +9704,15 @@ mod cloudflare_token_rotation_tests {
         );
         let core = crate::cloudflare_oauth::Bundle {
             access_token: A.into(),
-            refresh_token: None,
+            refresh_token: Some(R.into()),
             expires_in: None,
             token_type: None,
         };
+        assert_no_token_bytes(&format!("{core:?} {core:#?}"), &[A, R]);
+        let planted = format!("a line that does carry {A}");
         assert!(
-            format!("{core:?}").contains(A),
-            "control: a derived Debug leaks, and the check sees it"
+            std::panic::catch_unwind(|| assert_no_token_bytes(&planted, &[A])).is_err(),
+            "control: the substring check must fire on a planted token"
         );
         // Hostile core errors: a serde type error quoting a token, a token in
         // the OAuth error field, a transport error naming a URL.

@@ -23,7 +23,7 @@
 #        the NAMED function's body (not a comment), and a scratch copy with
 #        that one call commented out FAILS, naming the entry point
 #   +    crash between the two writes loses nothing; no token in Debug or in
-#        any verdict (CONTROL: the core's derived Debug does leak); a failed
+#        any verdict (CONTROL: a planted token trips the check); a failed
 #        refresh-record write keeps the old pair; a non-https token endpoint
 #        is refused before the refresh token is sent; bounded backoff
 #   POL  no policy but tray.hcl grants anything under secret/data/cloudflare/

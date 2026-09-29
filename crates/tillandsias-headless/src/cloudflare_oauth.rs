@@ -111,10 +111,41 @@ pub fn client_id() -> String {
 /// one (the redirect receivers that DO need `Location` are a sibling
 /// packet, and this module's own tests read it by a test-only raw socket
 /// helper, never through this type).
-#[derive(Debug, Clone)]
+///
+/// NO derived `Debug`: the body of a token-endpoint response IS the token
+/// pair, so the hand-written `Debug` below prints the status and the body's
+/// LENGTH only.
+#[derive(Clone)]
 pub struct HttpResponse {
     pub status: u16,
     pub body: String,
+}
+
+impl std::fmt::Debug for HttpResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HttpResponse")
+            .field("status", &self.status)
+            .field("body_len", &self.body.len())
+            .finish()
+    }
+}
+
+/// A transport failure reduced to a fixed reason word. `reqwest`'s own
+/// `Display` names the request URL (which, for a discovery-named endpoint,
+/// is response-derived text) and its source chain; none of it is kept.
+fn transport_error(method: &str, e: &reqwest::Error) -> String {
+    let kind = if e.is_timeout() {
+        "timeout"
+    } else if e.is_connect() {
+        "connect"
+    } else if e.is_body() || e.is_decode() {
+        "body"
+    } else if e.is_builder() {
+        "request-build"
+    } else {
+        "request"
+    };
+    format!("refused:cloudflare-login:transport-{method}-{kind}")
 }
 
 /// The network seam. Every PKCE decision — endpoint selection, the state
@@ -159,7 +190,7 @@ fn run_blocking<T>(fut: impl std::future::Future<Output = Result<T, String>>) ->
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .map_err(|e| format!("cloudflare_oauth: runtime: {e}"))?;
+        .map_err(|_| "refused:cloudflare-login:transport-runtime".to_string())?;
     rt.block_on(fut)
 }
 
@@ -171,17 +202,14 @@ impl HttpClient for ReqwestHttpClient {
             let client = reqwest::Client::builder()
                 .timeout(timeout)
                 .build()
-                .map_err(|e| format!("cloudflare_oauth: client: {e}"))?;
+                .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
             let resp = client
                 .get(&url)
                 .send()
                 .await
-                .map_err(|e| format!("cloudflare_oauth: GET {url}: {e}"))?;
+                .map_err(|e| transport_error("get", &e))?;
             let status = resp.status().as_u16();
-            let body = resp
-                .text()
-                .await
-                .map_err(|e| format!("cloudflare_oauth: GET {url} body: {e}"))?;
+            let body = resp.text().await.map_err(|e| transport_error("get", &e))?;
             Ok(HttpResponse { status, body })
         })
     }
@@ -197,18 +225,15 @@ impl HttpClient for ReqwestHttpClient {
             let client = reqwest::Client::builder()
                 .timeout(timeout)
                 .build()
-                .map_err(|e| format!("cloudflare_oauth: client: {e}"))?;
+                .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
             let resp = client
                 .post(&url)
                 .form(&owned_form)
                 .send()
                 .await
-                .map_err(|e| format!("cloudflare_oauth: POST {url}: {e}"))?;
+                .map_err(|e| transport_error("post", &e))?;
             let status = resp.status().as_u16();
-            let body = resp
-                .text()
-                .await
-                .map_err(|e| format!("cloudflare_oauth: POST {url} body: {e}"))?;
+            let body = resp.text().await.map_err(|e| transport_error("post", &e))?;
             Ok(HttpResponse { status, body })
         })
     }
@@ -239,8 +264,9 @@ fn fetch_discovery(http: &dyn HttpClient, base_url: &str) -> Result<Discovery, S
             resp.status
         ));
     }
+    // The serde message is DROPPED: a type error quotes the offending value.
     serde_json::from_str(&resp.body)
-        .map_err(|e| format!("refused:cloudflare-login:discovery-parse:{e}"))
+        .map_err(|_| "refused:cloudflare-login:discovery-unusable".to_string())
 }
 
 /// The device-grant adapter (design.md Decision 1: "The GitHub device-flow
@@ -336,7 +362,12 @@ impl std::fmt::Debug for Pending {
 
 /// The token bundle `exchange`/`refresh` hand back. In-memory only —
 /// writing it to Vault is 1505-iysn.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// NO derived `Debug` and no `Display`: the hand-written `Debug` below
+/// redacts both tokens, so a bundle that reaches a log line, a panic message
+/// or an `{:?}` in an error carries no credential (1505-kc5f prerequisite;
+/// `tests::bundle_debug_never_prints_a_token`).
+#[derive(Clone, PartialEq, Eq)]
 pub struct Bundle {
     pub access_token: String,
     pub refresh_token: Option<String>,
@@ -345,6 +376,45 @@ pub struct Bundle {
     /// a guessed default).
     pub expires_in: Option<u64>,
     pub token_type: Option<String>,
+}
+
+impl std::fmt::Debug for Bundle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Bundle")
+            .field("access_token", &"<redacted>")
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| "<redacted>"),
+            )
+            .field("expires_in", &self.expires_in)
+            .field("token_type", &self.token_type)
+            .finish()
+    }
+}
+
+/// An OAuth `error` value kept only when it is a plain identifier
+/// (RFC 6749 §5.2's registered codes are lowercase words joined by `_`);
+/// anything else — a token echoed back, free text — becomes a fixed word.
+fn oauth_error_code(body: &str) -> &'static str {
+    const KNOWN: &[&str] = &[
+        "invalid_request",
+        "invalid_client",
+        "invalid_grant",
+        "unauthorized_client",
+        "unsupported_grant_type",
+        "invalid_scope",
+        "access_denied",
+        "server_error",
+        "temporarily_unavailable",
+    ];
+    match serde_json::from_str::<ErrorResponse>(body) {
+        Ok(e) => KNOWN
+            .iter()
+            .find(|k| **k == e.error)
+            .copied()
+            .unwrap_or("unrecognised-error-code"),
+        Err(_) => "no-error-code",
+    }
 }
 
 #[derive(Deserialize)]
@@ -364,17 +434,18 @@ struct ErrorResponse {
 }
 
 fn parse_token_response(resp: &HttpResponse) -> Result<Bundle, String> {
+    // Errors are FIXED reason words: the status (a number) and an allow-listed
+    // OAuth error code. Never the body, never a serde message (a serde type
+    // error quotes the offending value, which may be a token).
     if resp.status != 200 {
-        let err_code = serde_json::from_str::<ErrorResponse>(&resp.body)
-            .map(|e| e.error)
-            .unwrap_or_else(|_| "unknown".to_string());
         return Err(format!(
-            "refused:cloudflare-login:token-exchange-http-{}:{err_code}",
-            resp.status
+            "refused:cloudflare-login:token-exchange-http-{}:{}",
+            resp.status,
+            oauth_error_code(&resp.body)
         ));
     }
     let parsed: TokenResponse = serde_json::from_str(&resp.body)
-        .map_err(|e| format!("refused:cloudflare-login:token-response-parse:{e}"))?;
+        .map_err(|_| "refused:cloudflare-login:token-response-parse".to_string())?;
     Ok(Bundle {
         access_token: parsed.access_token,
         refresh_token: parsed.refresh_token,
@@ -841,6 +912,102 @@ mod tests {
                 std::env::set_var("TILLANDSIAS_CLOUDFLARE_CLIENT_ID", v);
             }
         }
+    }
+
+    // ── No secret in Debug or in an error (the kc5f prerequisite) ─────────
+
+    const LEAK_ACCESS: &str = "cf-at-LEAKPROBE-7f3a9c1e5b2d";
+    const LEAK_REFRESH: &str = "cf-rt-LEAKPROBE-0e4b8d2a6c9f";
+
+    fn assert_no_leak(text: &str, what: &str) {
+        for probe in [LEAK_ACCESS, LEAK_REFRESH] {
+            assert!(
+                !text.contains(probe),
+                "{what} carries token bytes ({probe}): {text}"
+            );
+        }
+    }
+
+    /// `{:?}` and `{:#?}` of a Bundle holding known token bytes contain
+    /// neither token. NEGATIVE CONTROL (run by hand when this landed): with
+    /// `#[derive(Debug)]` restored on `Bundle` this test FAILS on the first
+    /// assertion, because a derived Debug prints both fields verbatim.
+    #[test]
+    fn bundle_debug_never_prints_a_token() {
+        let b = Bundle {
+            access_token: LEAK_ACCESS.into(),
+            refresh_token: Some(LEAK_REFRESH.into()),
+            expires_in: Some(3600),
+            token_type: Some("bearer".into()),
+        };
+        for text in [format!("{b:?}"), format!("{b:#?}")] {
+            assert_no_leak(&text, "Bundle Debug");
+            // Not an empty impl: the non-secret fields are still visible.
+            assert!(
+                text.contains("3600") && text.contains("<redacted>"),
+                "{text}"
+            );
+        }
+        let no_refresh = Bundle {
+            refresh_token: None,
+            ..b.clone()
+        };
+        assert!(format!("{no_refresh:?}").contains("None"));
+    }
+
+    /// An HttpResponse's body can BE a token response: its Debug must not
+    /// print the body.
+    #[test]
+    fn http_response_debug_never_prints_the_body() {
+        let r = HttpResponse {
+            status: 200,
+            body: format!(r#"{{"access_token":"{LEAK_ACCESS}","refresh_token":"{LEAK_REFRESH}"}}"#),
+        };
+        assert_no_leak(&format!("{r:?} {r:#?}"), "HttpResponse Debug");
+    }
+
+    /// Errors built from a HOSTILE response body carry fixed reason words,
+    /// never response bytes: a token in the OAuth `error` field, a token
+    /// quoted back by a serde type error (a token sent where a number was
+    /// expected), a token in the discovery document.
+    #[test]
+    fn errors_from_a_hostile_body_never_carry_a_token() {
+        let cases: Vec<(u16, String)> = vec![
+            (400, format!(r#"{{"error":"{LEAK_REFRESH}"}}"#)),
+            (401, format!(r#"{{"error":"invalid_grant {LEAK_ACCESS}"}}"#)),
+            (500, format!("upstream said {LEAK_ACCESS}")),
+            (
+                200,
+                format!(r#"{{"access_token":"x","expires_in":"{LEAK_REFRESH}"}}"#),
+            ),
+            (200, format!(r#"{{"access_token":{{"{LEAK_ACCESS}":1}}}}"#)),
+            (200, format!("not json {LEAK_ACCESS}")),
+        ];
+        for (status, body) in cases {
+            let err = parse_token_response(&HttpResponse { status, body }).unwrap_err();
+            assert_no_leak(&err, "token-response error");
+            assert!(err.starts_with("refused:cloudflare-login:"), "{err}");
+        }
+        // A plain OAuth error code still survives (the 1505-iysn reduction
+        // and the operator both need `invalid_grant`).
+        let err = parse_token_response(&HttpResponse {
+            status: 400,
+            body: r#"{"error":"invalid_grant"}"#.into(),
+        })
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "refused:cloudflare-login:token-exchange-http-400:invalid_grant"
+        );
+
+        let mock = MockHttpClient::default().with_get(
+            DISCOVERY_URL,
+            200,
+            &format!(r#"{{"authorization_endpoint":1,"token_endpoint":"{LEAK_ACCESS}"}}"#),
+        );
+        let err = begin(&mock, "https://fake.invalid", "c", REDIRECT_URI, &[]).unwrap_err();
+        assert_no_leak(&err, "discovery error");
+        assert!(err.starts_with("refused:cloudflare-login:"), "{err}");
     }
 }
 
