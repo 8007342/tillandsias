@@ -1,6 +1,6 @@
 # @trace spec:meta-orchestration
 name: litmus:smoke-consecutive-lanes-shape
-spec: meta-orchestration
+spec: ci-release
 phase: pre-build
 description: >
   Order 767-qrbv. scripts/smoke-consecutive-lanes.sh is the OPT-IN smoke
@@ -33,7 +33,7 @@ observability:
     - "@trace spec:meta-orchestration"
   expected_log: "PASS: smoke-consecutive-lanes"
   log_fields:
-    spec: "meta-orchestration"
+    spec: "ci-release"
     test: "smoke-consecutive-lanes-shape"
     artifact: "scripts/smoke-consecutive-lanes.sh"
 
