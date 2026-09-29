@@ -1240,6 +1240,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:secure-control-wire-guest-responder-shape
+  - litmus:exec-transcript-capped-in-every-driver
   - litmus:psk-input-parity-shape
   - litmus:host-guest-no-cfg-transport-selection
   - litmus:macos-vsock-inference-closure

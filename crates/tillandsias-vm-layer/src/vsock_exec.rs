@@ -244,6 +244,23 @@ fn trim_transcript(
     drop_to
 }
 
+/// Keep the most recent `cap` bytes of a transcript that nothing matches
+/// against, returning how many were dropped (order 795-vq6b).
+///
+/// ONE POLICY, NOT A SECOND IMPLEMENTATION: this is `trim_transcript` with the
+/// cursor at `len - cap` and a one-byte window, which marks exactly the bytes
+/// older than the last `cap` as dead. The expect driver passes `None` once
+/// matching is over (everything dead); a collecting driver cannot, because its
+/// transcript IS the result the caller parses, so it keeps the tail.
+fn retain_tail(stdout: &mut Vec<u8>, cap: usize) -> usize {
+    if cap == 0 || stdout.len() <= cap {
+        return 0;
+    }
+    let mut cursor = stdout.len() - cap;
+    let mut scan = cursor;
+    trim_transcript(stdout, &mut cursor, &mut scan, Some(1), cap)
+}
+
 /// Escape hatch for the deadlock report, mirroring the ceiling's own env.
 ///
 /// Set to `0` to disable. Present because a new terminal condition on a path
@@ -691,6 +708,12 @@ where
     // liveness heartbeats and reset the per-frame idle deadline without
     // changing collected output.
     let idle_timeout = exec_idle_timeout()?;
+    // ORDER 795-vq6b: this driver accumulated into an unbounded Vec while
+    // 690-eug2's closure said the transcript was capped (true only for the
+    // expect driver). Same cap, same trim function, keeping the newest bytes;
+    // the elision is reported on stderr, never injected into `stdout`.
+    let transcript_cap = exec_transcript_cap();
+    let mut elided_bytes: usize = 0;
     let mut stdout = Vec::new();
     loop {
         let env = read_exec_envelope(&mut stream, idle_timeout).await?;
@@ -699,11 +722,30 @@ where
                 session_id: sid,
                 direction: PtyDirection::ToHost,
                 bytes,
-            } if sid == session_id => stdout.extend_from_slice(&bytes),
+            } if sid == session_id => {
+                stdout.extend_from_slice(&bytes);
+                let dropped = retain_tail(&mut stdout, transcript_cap);
+                if dropped > 0 && elided_bytes == 0 {
+                    eprintln!(
+                        "[vsock_exec] transcript cap reached ({transcript_cap} bytes): keeping the most \
+                         recent output and eliding earlier bytes (order 795-vq6b)."
+                    );
+                }
+                elided_bytes += dropped;
+            }
             ControlMessage::PtyClose {
                 session_id: sid,
                 exit,
-            } if sid == session_id => return Ok(ExecOutput { exit, stdout }),
+            } if sid == session_id => {
+                if elided_bytes > 0 {
+                    eprintln!(
+                        "[vsock_exec] {elided_bytes} bytes of earlier guest output were elided by the \
+                         transcript cap; the returned output is the most recent {} bytes.",
+                        stdout.len()
+                    );
+                }
+                return Ok(ExecOutput { exit, stdout });
+            }
             // A guest-reported error (e.g. PtyOpen rejected by the exec
             // allowlist) is terminal for the session. Without this arm the
             // drain loop ignored it and hung until the idle timeout —
@@ -2237,6 +2279,37 @@ mod tests {
             100,
             "match context is never sacrificed to the cap"
         );
+    }
+
+    /// ORDER 795-vq6b: the collecting driver's policy, over explicit caps (no
+    /// env mutation; see the note below). Keeps the NEWEST bytes, drops the
+    /// oldest, and — the negative control — leaves a short transcript whole.
+    #[test]
+    fn retain_tail_keeps_the_newest_bytes_and_leaves_short_output_whole() {
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        assert_eq!(retain_tail(&mut buf, 10), 90);
+        assert_eq!(buf, (90..100u8).collect::<Vec<u8>>());
+
+        let short: Vec<u8> = b"hello guest".to_vec();
+        let mut kept = short.clone();
+        assert_eq!(
+            retain_tail(&mut kept, 1024),
+            0,
+            "a short transcript must not be trimmed"
+        );
+        assert_eq!(kept, short, "a short transcript must come back unmodified");
+
+        let mut exact: Vec<u8> = (0..10u8).collect();
+        assert_eq!(retain_tail(&mut exact, 10), 0);
+        assert_eq!(exact.len(), 10);
+
+        let mut uncapped: Vec<u8> = (0..100u8).collect();
+        assert_eq!(
+            retain_tail(&mut uncapped, 0),
+            0,
+            "cap 0 disables trimming, as for the expect driver"
+        );
+        assert_eq!(uncapped.len(), 100);
     }
 
     /// NO END-TO-END TRIM TEST, deliberately, and this is the second time the
