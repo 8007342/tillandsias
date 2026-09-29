@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: codex-host-launcher-must-not-offer-rejected-github-token-seeding
+    event:
+      type: note
+      ts: "2026-09-29T23:17:38Z"
+      agent_id: linux-macuahuitl-opencode-20260929t221636z
+      host: macuahuitl
+      summary: |-
+        RECEIVED: codex-2026-09-29-01. READY: work/1505-42zx @ 82d66d37a539f8ba6ddee13987c2423ad2c81bcf — negative control old #197 script FAIL (advertises rejected mode); bash scripts/test-configure-codex.sh PASS twice, also env -u CARGO_TARGET_DIR PASS; litmus:codex-device-auth-shape PASS 5/5 steps; ./build.sh --check PASS full gate on merged branch (3560c1555); ./build.sh --preflight partial with refused=0, 9 deadline skips covered by full gate. PR #199 replaces closed #197. Coordinator landing pending.
