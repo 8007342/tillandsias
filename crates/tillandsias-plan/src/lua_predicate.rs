@@ -63,6 +63,7 @@
 
 use crate::lua_runtime::LuaError;
 use mlua::prelude::*;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -905,9 +906,16 @@ fn values_equal(a: &LuaValue, b: &LuaValue) -> bool {
     }
 }
 
-/// Every file a predicate read through `fs.read`, in read order (repo-rooted,
-/// normalised). The memo keys a Cacheable verdict on these files' CONTENT.
-pub type ReadLog = std::sync::Arc<std::sync::Mutex<Vec<PathBuf>>>;
+/// The digest belongs to the bytes returned by this particular read, not to a
+/// later reread of the path. Duplicate paths are retained when their contents
+/// differ during one evaluation, making that evaluation uncacheable.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ReadObservation {
+    path: PathBuf,
+    digest: Option<[u8; 32]>,
+}
+
+pub type ReadLog = std::sync::Arc<std::sync::Mutex<Vec<ReadObservation>>>;
 
 /// Build a Lua runtime whose `expert` table contains EXACTLY the verbs its class
 /// is entitled to.
@@ -1016,13 +1024,18 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                         "fs.read: refused — symlink '{path_str}' resolves outside repository root"
                     )));
                 }
-                // Logged BEFORE the read, so a file that is absent now and
-                // appears later still invalidates the memo (its digest moves
-                // from "absent" to its bytes).
+                // Record the bytes THIS call observed. A post-evaluation
+                // reread can see different bytes and falsely authenticate the
+                // verdict against a state it never evaluated (1470-dbuw).
+                let bytes = std::fs::read(&normalized);
+                let digest = bytes.as_ref().ok().map(|b| Sha256::digest(b).into());
                 if let Ok(mut log) = reads.lock() {
-                    log.push(normalized.clone());
+                    log.push(ReadObservation {
+                        path: normalized,
+                        digest,
+                    });
                 }
-                let bytes = std::fs::read(&normalized).map_err(|e| {
+                let bytes = bytes.map_err(|e| {
                     mlua::Error::RuntimeError(format!("fs.read: failed to read '{path_str}': {e}"))
                 })?;
                 lua.create_string(&bytes)
@@ -1273,7 +1286,7 @@ pub struct Predicate {
 /// cacheable class.
 ///
 /// THE CACHE IS CONTENT-ADDRESSED, and it is populated ONLY for `Cacheable`.
-/// An entry is found by (name, argument) and SERVED only while every file the
+/// An entry is found by (name, source, argument) and SERVED only while every file the
 /// predicate read through `fs.read` still has the digest it had when the
 /// verdict was computed (review of 1367-q9yc: keying on (name, arg) alone
 /// replayed a stale verdict after a file edit). A Cacheable predicate is thus a
@@ -1282,7 +1295,7 @@ pub struct Predicate {
 #[derive(Default)]
 pub struct PredicateRegistry {
     predicates: BTreeMap<String, Predicate>,
-    cache: BTreeMap<(String, String), CacheEntry>,
+    cache: BTreeMap<(String, String, String), CacheEntry>,
     /// How many times a cached value was served, for tests that need to prove a
     /// second call did NOT re-execute.
     pub cache_hits: usize,
@@ -1290,18 +1303,18 @@ pub struct PredicateRegistry {
 
 struct CacheEntry {
     verdict: bool,
-    /// (path, digest-or-None-if-unreadable) for every `fs.read` of the run.
-    inputs: Vec<(PathBuf, Option<[u8; 32]>)>,
+    inputs: Vec<ReadObservation>,
 }
 
 fn file_digest(path: &Path) -> Option<[u8; 32]> {
-    use sha2::{Digest, Sha256};
     std::fs::read(path).ok().map(|b| Sha256::digest(&b).into())
 }
 
 impl CacheEntry {
     fn still_valid(&self) -> bool {
-        self.inputs.iter().all(|(p, d)| file_digest(p) == *d)
+        self.inputs
+            .iter()
+            .all(|read| file_digest(&read.path) == read.digest)
     }
 }
 
@@ -1328,6 +1341,10 @@ impl PredicateRegistry {
             .globals()
             .get(name)
             .map_err(|e| LuaError::LoadError(format!("predicate {name} not defined: {e}")))?;
+        // A successfully compiled replacement invalidates every old argument;
+        // a failed replacement leaves the registered source and memo intact.
+        self.cache
+            .retain(|(registered, _, _), _| registered != name);
         self.predicates.insert(
             name.to_string(),
             Predicate {
@@ -1374,7 +1391,7 @@ impl PredicateRegistry {
             .ok_or_else(|| LuaError::LoadError(format!("no such predicate: {name}")))?;
         let class = p.class;
         let source = p.source.clone();
-        let key = (name.to_string(), arg.to_string());
+        let key = (name.to_string(), source.clone(), arg.to_string());
 
         if class.is_cacheable()
             && let Some(hit) = self.cache.get(&key)
@@ -1398,16 +1415,12 @@ impl PredicateRegistry {
             .map_err(|e| LuaError::VmError(format!("predicate {name}: {e}")))?;
 
         if class.is_cacheable() {
-            let mut paths = reads.lock().map(|l| l.clone()).unwrap_or_default();
-            paths.sort();
-            paths.dedup();
-            let inputs = paths
-                .into_iter()
-                .map(|p| {
-                    let d = file_digest(&p);
-                    (p, d)
-                })
-                .collect();
+            let mut inputs = reads
+                .lock()
+                .map_err(|_| LuaError::VmError("predicate read log poisoned".into()))?
+                .clone();
+            inputs.sort();
+            inputs.dedup();
             self.cache.insert(key, CacheEntry { verdict, inputs });
         }
         Ok(verdict)
@@ -1417,6 +1430,72 @@ impl PredicateRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 1470-dbuw: replacing source must never replay the old verdict.
+    #[test]
+    fn re_registering_a_predicate_invalidates_its_memo() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let rel = format!("target/lua-source-replace-{}.txt", std::process::id());
+        let file = root.join(&rel);
+        std::fs::create_dir_all(file.parent().expect("parent")).expect("mkdir target");
+        std::fs::write(&file, "same").expect("write unchanged input");
+
+        let mut reg = PredicateRegistry::new();
+        reg.register(
+            "changed",
+            PredicateClass::Cacheable,
+            "function changed(p) return fs.read(p) == 'same' end",
+        )
+        .expect("register first source");
+        assert!(reg.eval("changed", &rel).expect("first evaluation"));
+        assert!(reg.eval("changed", &rel).expect("cached evaluation"));
+        assert_eq!(reg.cache_hits, 1);
+
+        reg.register(
+            "changed",
+            PredicateClass::Cacheable,
+            "function changed(p) return fs.read(p) == 'different' end",
+        )
+        .expect("register replacement source");
+        assert!(!reg.eval("changed", &rel).expect("replacement evaluation"));
+        assert_eq!(reg.cache_hits, 1, "replacement may not be a cache hit");
+        std::fs::remove_file(file).expect("remove probe");
+    }
+
+    /// The read log captures observed bytes before a later file replacement.
+    /// This is the deterministic read-then-write schedule behind 1470-dbuw.
+    #[test]
+    fn read_log_authenticates_bytes_returned_to_lua() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let rel = format!("target/lua-read-log-{}.txt", std::process::id());
+        let file = root.join(&rel);
+        std::fs::create_dir_all(file.parent().expect("parent")).expect("mkdir target");
+        std::fs::write(&file, "before").expect("write first version");
+
+        let reads = ReadLog::default();
+        let lua = build_environment_logged(PredicateClass::Cacheable, reads.clone())
+            .expect("pure environment");
+        let observed: String = lua
+            .load(format!("return fs.read('{rel}')"))
+            .eval()
+            .expect("read from Lua");
+        assert_eq!(observed, "before");
+        std::fs::write(&file, "after").expect("replace after read");
+
+        let inputs = reads.lock().expect("read log").clone();
+        assert_eq!(inputs.len(), 1, "one read must be recorded");
+        let expected: [u8; 32] = Sha256::digest(b"before").into();
+        assert_eq!(inputs[0].digest, Some(expected));
+        assert!(
+            !CacheEntry {
+                verdict: true,
+                inputs,
+            }
+            .still_valid(),
+            "a verdict over old bytes cannot validate against new bytes"
+        );
+        std::fs::remove_file(file).expect("remove probe");
+    }
 
     /// Review of 1367-q9yc (b): the filesystem root is never a repository root,
     /// so a cwd of `/` cannot turn every absolute path into an "inside" one.
