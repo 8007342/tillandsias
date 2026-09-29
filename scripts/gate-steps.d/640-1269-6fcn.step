@@ -1,0 +1,16 @@
+# Gate step 1269-6fcn — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. tillandsias-headless's build.rs requires the router sidecar,
+# a LINUX musl container artifact, only for a Linux TARGET. v56.9.19.1's
+# Windows release job died in build.rs because the Windows host build refused
+# without it. The fixture checks a Windows-target build in a scratch worktree
+# where the (untracked) sidecar is absent, keeps the Linux refusal as its
+# negative control, and pins the release job's runner.arch sidecar selection.
+# Pre-fix: arm 1 fails with rc=101 "required runtime asset missing".
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the router sidecar is required only for Linux-target headless builds (1269-6fcn)"
+STEP_SCRIPT="scripts/test-headless-sidecar-target-gate.sh"
+STEP_ERROR="a non-Linux target build of tillandsias-headless again refuses without the Linux-only router sidecar, or a Linux build stopped refusing (1269-6fcn)"
+STEP_OK="router sidecar required only for Linux targets; release job selects it by runner.arch"
+STEP_SECOND_REGIME="yolanda 2026-09-29 msys PASS: headless-sidecar-target-gate (1269-6fcn) at 89e5f2999; ARM3 ok, ARM1 and ARM2 named skips (no mingw, msvc host)"

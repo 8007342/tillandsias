@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-macos-tray-path-that-calls-vzruntime-stop-from-a-tokio-worker-traps-in-dispatch-assert-queue
+    event:
+      type: note
+      ts: "2026-09-29T16:37:04Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t163703z
+      host: macos
+      summary: |
+        PREMISE CORRECTED, 2026-09-29 (tlatoanis-macbook-air). The operator, running a tray built from work/1429-u2wd @ c2c0b7026, reports the menu has NO "Stop VM" item: only the cloud menu and Exit. Source read at c2c0b7026 agrees: the selector stopVm: (action_host.rs, #[method(stopVm:)]) and reset_guest_async have NO callers and NO menu item (grep for stopVm / reset_guest_async() callers: none; main.rs even pins reset_guest_menu_wiring_absent_cli_and_worker_present). The only other worker-side stop in action_host.rs is inside a #[tokio::test] (~line 4893). So NO operator-reachable tray path calls VzRuntime::stop off the main thread today. The trap this row names is LATENT: it fires only if Stop VM or Reset guest gets wired to the menu (or a test drives it with a live VM).
+        CONSEQUENCE FOR CLOSURE. The live "Stop VM on a signed bundle" arm in verifiable_closure cannot be run: the item it clicks does not exist. The fix on work/1429-u2wd (VzRuntime::stop marshals every VZ call through on_vm_queue; inline on main) is therefore DEFENSIVE. It makes the latent paths safe before anyone wires them. Its evidence is the tripwire test stop_makes_no_vz_call_outside_the_vm_queue (absence scan plus negative control; red on a mutation), with no behavioural measurement. Also, the pre-fix trap was not reproduced on Stop VM (unreachable); the only measured instance of the mechanism is still Quit (tillandsias-tray-2026-09-26-211531.ips), which 1426-cb6g fixed. Proposed: re-scope the closure to "stop() is safe off the main thread" and demote to p3, or keep it and re-state the live arm as a harness driving stop() from a spawned thread while the main thread runs its loop. Coordinator's call.

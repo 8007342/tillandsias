@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-macos-tray-path-that-calls-vzruntime-stop-from-a-tokio-worker-traps-in-dispatch-assert-queue
+    field: verifiable_closure
+    value: 'NO operator-reachable tray path traps today: stopVm: and reset_guest_async have no callers and no menu item (pinned by main.rs reset_guest_menu_wiring_absent_cli_and_worker_present). VzRuntime::stop is now safe off the main thread (every VZ call goes through on_vm_queue: inline on main, dispatched to the main queue with a bounded wait elsewhere). This is a DEFENSIVE fix, and its ONLY evidence is the tripwire test stop_makes_no_vz_call_outside_the_vm_queue (absence scan plus negative control; red on a mutation restoring a direct vm.state()). The live Stop VM arm is WITHDRAWN, NOT PASSED: the item it would click does not exist. Whoever wires a Stop VM or Reset guest menu item owns the live arm then (drive it from the menu on a signed bundle: the tray stays alive, the VM stops, vm-swap.img is removed), since that is when the trap becomes reachable.'
+    ts: "2026-09-29T16:39:20Z"
+    host: tlatoanis-macbook-air
+    replaces_sha256: "54041b949e9febed2b31f57eeecda238c8923bcd8500f2dab2f67a64f0b27ae0"
+
+events:
+  - packet_id: every-macos-tray-path-that-calls-vzruntime-stop-from-a-tokio-worker-traps-in-dispatch-assert-queue
+    event:
+      type: progress
+      ts: "2026-09-29T16:39:20Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'NO operator-reachable tray path traps today: stopVm: and reset_guest_async have no callers and no menu item (pinned by main.rs reset_guest_menu_wiring_absent_cli_and_worker_present). VzRuntime::stop is now safe off the main thread (every VZ call goes through on_vm_queue: inline on main, dispatched to the main queue with a bounded wait elsewhere). This is a DEFENSIVE fix, and its ONLY evidence is the tripwire test stop_makes_no_vz_call_outside_the_vm_queue (absence scan plus negative control; red on a mutation restoring a direct vm.state()). The live Stop VM arm is WITHDRAWN, NOT PASSED: the item it would click does not exist. Whoever wires a Stop VM or Reset guest menu item owns the live arm then (drive it from the menu on a signed bundle: the tray stays alive, the VM stops, vm-swap.img is removed), since that is when the trap becomes reachable.' (not terminal) with evidence_refs: coordinator ruling (a), 2026-09-29; premise note 16fbd9387
+  - packet_id: every-macos-tray-path-that-calls-vzruntime-stop-from-a-tokio-worker-traps-in-dispatch-assert-queue
+    event:
+      type: note
+      ts: "2026-09-29T16:39:20Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        re-scope: live arm withdrawn (unreachable), defensive fix evidenced by the tripwire only

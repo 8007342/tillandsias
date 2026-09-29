@@ -105,10 +105,17 @@ async fn test_vsock_end_to_end_localhost() {
         use tokio_vsock::{VsockAddr, VsockListener};
         let addr = VsockAddr::new(VMADDR_CID_LOCAL, 0);
         if let Err(err) = VsockListener::bind(addr) {
-            eprintln!(
-                "[skip] vsock loopback not available on this kernel: {err} \
-                 (modprobe vsock_loopback to enable)"
-            );
+            // Suggest modprobe only when the module is absent: with it loaded
+            // the refusal has another cause (measured on macuahuitl: EACCES
+            // with vsock_loopback loaded), and a wrong remedy is worse than none.
+            if std::path::Path::new("/sys/module/vsock_loopback").exists() {
+                eprintln!("[skip] vsock_loopback is loaded; bind refused: {err}");
+            } else {
+                eprintln!(
+                    "[skip] vsock loopback not available on this kernel: {err} \
+                     (modprobe vsock_loopback to enable)"
+                );
+            }
             return;
         }
     }

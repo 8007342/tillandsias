@@ -1,0 +1,38 @@
+packets:
+  - packet_id: the-preflight-door-prints-ok-while-48-push-deciders-the-gate-runs-inline-in-build-sh-never-ran-there
+    order: 1499-m9fj
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [preflight, gate, deciders, fail-loud]
+    estimated_hours: 4
+    owned_files: []
+    title: |
+      ./build.sh --preflight prints ok while 48 scripts/check-*.sh the gate runs INLINE in build.sh never ran at the door: its roster scans FAST REFUSALS, gate-steps.d and scripts/hooks, but not build.sh's own `_run bash "$SCRIPT_DIR/scripts/check-X.sh"` calls, so check-bash-dialect, check-sigpipe-verdict-pipelines-added, check-version-bump-isolation, check-litmus-bindings and 44 more are absent and the counts say nothing about them
+    context: |
+      MEASURED on yoga 2026-09-29 (1496-w25b): 65 check-*.sh are invoked
+      inline in build.sh via `_run bash "$SCRIPT_DIR/scripts/check-X.sh"`; 48 of
+      them appear in none of the door's three roster sources. Proven by
+      instrumenting the door in a worktree at 02421446f: check-bash-dialect is
+      never invoked, while the same checker run by hand there refuses the
+      800-ivkg fixture (host and toolbox). The door printed
+      ok:preflight:ran=159 refused=0 for that tree; land92's gate then refused it
+      by name. On 1496-w25b's own change check-sigpipe-verdict-pipelines-added
+      refused three pipelines while `--preflight --full` said ok refused=0.
+      The shape is "a guard must assert its population": the door's counts cover
+      what it enumerated, and nothing says what it did not. Split out of
+      1496-w25b on the coordinator's direction (2026-09-29).
+    exit_criteria:
+      - 'build.sh''s literal inline `_run bash "$SCRIPT_DIR/scripts/check-*.sh"` calls are a FOURTH roster source, scanned and not listed (the scan-not-curate arm still holds)'
+      - 'the 48 are MEASURED capped at 5 s before wiring, and any decider that is not sub-second is recorded as a finding'
+      - 'if the door then exceeds its 150 s budget, no decider is declared gate-only (the door forbids it for check-*); the budget is re-measured on the floor host and the number recorded on this row'
+      - 'a planted scripts/check-*.sh called inline by build.sh that refuses makes --preflight refuse (pre-fix: FAILS, the same plant prints ok)'
+    verifiable_closure: |
+      litmus:preflight-front-door passes through scripts/run-litmus-test.sh
+      with the inline-decider plant arm added.
+    provenance: |
+      Filed and claimed 2026-09-29 by yoga on the coordinator's direction, from
+      1496-w25b's finding.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-vsock-handshake-pins-wire-version-2-and-fails-on-every-host-since-the-wire-moved-to-4
+    field: status
+    value: completed
+    ts: "2026-09-29T18:02:43Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: litmus-vsock-handshake-pins-wire-version-2-and-fails-on-every-host-since-the-wire-moved-to-4
+    event:
+      type: completed
+      ts: "2026-09-29T18:02:43Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: LANDED at bbbdb21f3 on linux-next (land92): work/1492-fswq @ 5f09b6d8f is an ancestor of bbbdb21f3, and bbbdb21f3 of origin/linux-next (git merge-base, 2026-09-29). Delivered: scripts/test-vsock-handshake-wire-v2.sh no longer exits silently on the WIRE_VERSION literal; it prints named verdicts and accepts WIRE_VERSION >= 2 (spec expression updated); the vsock_listener_e2e skip reports the errno and suggests modprobe only when /sys/module/vsock_loopback is absent (the coordinator ran it on macuahuitl: "[skip] vsock_loopback is loaded; bind refused: Permission denied (os error 13)", rc=0, 13 s, with --ignored). THE RUNTIME ARM IS UNOBSERVED: no v4 vsock loopback handshake has been seen on any host (darwin skips by design; macuahuitl gets EACCES with the module loaded, cause undiagnosed). This closure does not claim the wire-v4 loopback handshake works.
+  - packet_id: litmus-vsock-handshake-pins-wire-version-2-and-fails-on-every-host-since-the-wire-moved-to-4
+    event:
+      type: note
+      ts: "2026-09-29T18:02:43Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        landed at bbbdb21f3; runtime arm recorded as unobserved

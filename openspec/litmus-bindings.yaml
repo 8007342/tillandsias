@@ -262,6 +262,7 @@ specs:
 - spec_id: default-image
   status: active
   litmus_tests:
+  - litmus:forge-localization-staged-shape
   - litmus:opencode-render-probe-shape
   - litmus:forge-project-trust-seeds-shape
   - litmus:forge-standalone-traceability
@@ -665,6 +666,7 @@ specs:
   - litmus:fake-podman-direct-invocation-safety
   - litmus:litmus-parse-instruments-agree
   - litmus:litmus-podman-preflight-diagnosis-shape
+  - litmus:fake-backend-under-remote-podman-shape
   - litmus:podman-mock-refuses-unknown-invocations
   coverage_ratio: 100
   last_verified: '2026-08-18'
@@ -1240,6 +1242,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:secure-control-wire-guest-responder-shape
+  - litmus:exec-transcript-capped-in-every-driver
   - litmus:psk-input-parity-shape
   - litmus:host-guest-no-cfg-transport-selection
   - litmus:macos-vsock-inference-closure
@@ -1266,6 +1269,7 @@ specs:
   - litmus:vsock-exec-heartbeat
   - litmus:vsock-unauthenticated-peer-rejected
   - litmus:one-length-delimited-framing-impl
+  - litmus:headless-keepalive
   coverage_ratio: 100
   last_verified: '2026-07-14'
 - spec_id: expert-serve-grounded-pipeline

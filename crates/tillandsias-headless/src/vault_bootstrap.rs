@@ -1582,15 +1582,16 @@ fn should_warn_today(last_warned_day: &mut Option<u64>, now: u64) -> bool {
 
 /// The accountability event the spec requires for every rotation
 /// (gh-auth-script "Token Rotation and Expiration Management" ->
-/// spec:secret-rotation). Its own operation name, so an audit can tell an
-/// automatic rotation from the explicit `github_token_refresh`.
-// @trace spec:secret-rotation
+/// spec:gh-auth-script; secret-rotation is tombstoned, 1397-eppt). Its own
+/// operation name, so an audit can tell an automatic rotation from the
+/// explicit `github_token_refresh`.
+// @trace spec:gh-auth-script, order:1489-8qd6
 #[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
 fn audit_github_token_auto_rotation(outcome: &str) {
     tracing::info!(
         accountability = true,
         category = "secrets",
-        spec = "secret-rotation",
+        spec = "gh-auth-script",
         operation = "github_token_auto_rotation",
         secret_name = "github-token",
         outcome = outcome,

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-vsock-handshake-pins-wire-version-2-and-fails-on-every-host-since-the-wire-moved-to-4
+    event:
+      type: note
+      ts: "2026-09-29T17:41:13Z"
+      agent_id: linux-macuahuitl-claude-20260929t174112z
+      host: macuahuitl
+      summary: |
+        LANDED land92 = bbbdb21f3 on origin/linux-next (relayed work/1492-fswq @ 5f09b6d8f; gate: build-check exit 0, 1022 s, 2026-09-29T17:40:39Z). The row author closes from the ledger, citing bbbdb21f3.

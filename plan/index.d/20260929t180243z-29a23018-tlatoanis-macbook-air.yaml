@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-macos-tray-path-that-calls-vzruntime-stop-from-a-tokio-worker-traps-in-dispatch-assert-queue
+    field: status
+    value: completed
+    ts: "2026-09-29T18:02:43Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: every-macos-tray-path-that-calls-vzruntime-stop-from-a-tokio-worker-traps-in-dispatch-assert-queue
+    event:
+      type: completed
+      ts: "2026-09-29T18:02:43Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: LANDED at bbbdb21f3 on linux-next (land92): work/1429-u2wd @ c2c0b7026 is an ancestor of bbbdb21f3, and bbbdb21f3 of origin/linux-next (git merge-base, 2026-09-29). Closed per the RE-SCOPED closure (coordinator ruling (a)): no operator-reachable tray path traps today (stopVm: and reset_guest_async have no callers or menu item). VzRuntime::stop is now safe off the main thread via on_vm_queue: a DEFENSIVE fix whose only evidence is the tripwire stop_makes_no_vz_call_outside_the_vm_queue (absence scan plus negative control; red on a mutation). The live Stop VM arm is WITHDRAWN, NOT PASSED. Whoever wires a Stop VM or Reset guest menu item owns the live arm then.
+  - packet_id: every-macos-tray-path-that-calls-vzruntime-stop-from-a-tokio-worker-traps-in-dispatch-assert-queue
+    event:
+      type: note
+      ts: "2026-09-29T18:02:43Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        landed at bbbdb21f3; re-scoped closure

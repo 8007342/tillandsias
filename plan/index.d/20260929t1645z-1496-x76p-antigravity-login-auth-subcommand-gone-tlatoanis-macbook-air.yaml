@@ -1,0 +1,33 @@
+packets:
+  - packet_id: the-antigravity-login-lane-runs-agy-auth-login-which-agy-1-2-13-refuses-as-an-unexpected-argument-so-antigravity-sign-in-exits-2
+    order: 1496-x76p
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, providers, antigravity, login]
+    estimated_hours: 2
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the fix needs agy 1.2.x's real login surface first; the closure names a fixture (a fake agy that rejects "auth") to be written with the fix.
+    title: |
+      The Antigravity login lane is broken: the agy CLI installs fine (1.2.13, linux_arm64, checksum verified), then the login step fails with 'Error: unexpected argument "auth". Prompts are read only from -p/--print, -i/--prompt-interactive, or stdin' and exits with status 2
+    context: |
+      OPERATOR REPORT, 2026-09-29, macOS tray built from work/1429-u2wd @ c2c0b7026 (contains land90 ff5716971). The operator's transcript:
+        [tillandsias] Antigravity login — preparing … [tillandsias] ready
+        [trust] WARNING: runtime proxy CA is not mounted; using vendor roots only
+        ✓ Platform detected: linux_arm64 / ✓ Latest available version: 1.2.13 / ✓ Download complete and checksum verified.
+        ✅ Antigravity CLI installed successfully at /home/forge/.local/bin/agy
+        Error: unexpected argument "auth".
+        Prompts are read only from -p/--print, -i/--prompt-interactive, or stdin, so this argument would have been ignored.
+        Error: Command exited with status exit status: 2
+      The failing code is the antigravity branch of images/default/provider-device-auth.sh: it probes `agy auth login --help`, and if that succeeds it runs `agy auth login`, else tries `agy login`.
+      HYPOTHESIS (UNVERIFIED; nobody has run agy 1.2.13 by hand): agy 1.2.13 accepts --help anywhere and exits 0, so the probe passes; the real `agy auth login` then rejects "auth" as a prompt argument. Either the login subcommand was renamed or removed in 1.2.x, or login is now interactive-only. Check `agy --help` on 1.2.13 before choosing a fix.
+      Secondary: the "[trust] WARNING: runtime proxy CA is not mounted" line on the login container may be expected (vendor roots) or a separate defect; not investigated.
+      OPERATOR DIRECTION: do not fix yet; likely picked up during the Lua migration.
+    verifiable_closure: |
+      an Antigravity sign-in from the tray on a current agy completes and stores the credential in Vault ("antigravity device credentials stored in Vault."); the lane detects the login subcommand by what agy actually accepts, not by a --help probe that can pass on any argv; pre-fix result: FAILS (exit 2, 'unexpected argument "auth"', operator report 2026-09-29)
+    exit_criteria:
+      - 'Antigravity sign-in succeeds end to end on the current agy release; pre-fix result: FAILS (exit 2)'
+      - 'the subcommand probe cannot pass on an argv agy rejects (negative control: a fake agy whose --help exits 0 for any argv and which rejects "auth")'
