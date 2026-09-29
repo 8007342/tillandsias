@@ -2343,7 +2343,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # fixture drives this block under set -e with a stub exiting 3 and
     # asserts the gate PROCEEDS.
     _mem_rc=0
-    _mem_out="$(bash "$SCRIPT_DIR/scripts/check-gate-memory-floor.sh" 2>&1)" || _mem_rc=$?
+    # ORDER 1471-8ydv — inside a WSL2 guest the floor refuses to judge its own
+    # meminfo (1337-7jr5), because the Windows host is what reaps the gate.
+    # with-wsl2-builder.sh samples the HOST's free memory on the Windows side
+    # and forwards it here. Hand it to the floor as a one-line meminfo through
+    # the floor's existing judged path, so a WSL gate is guarded again. Unset
+    # (every non-WSL host) leaves the call exactly as it was.
+    # (No case/esac here: the consumer fixture cuts this block at its first
+    # four-space `esac`.)
+    _mem_src=""
+    if [[ "${TILLANDSIAS_GATE_HOST_MEMAVAILABLE_KB:-}" =~ ^[0-9]+$ ]]; then
+        _mem_src="$(mktemp "${TMPDIR:-/tmp}/gate-host-meminfo.XXXXXX")" \
+            && printf 'MemAvailable:   %s kB\n' "$TILLANDSIAS_GATE_HOST_MEMAVAILABLE_KB" > "$_mem_src" \
+            || _mem_src=""
+    fi
+    _mem_out="$(bash "$SCRIPT_DIR/scripts/check-gate-memory-floor.sh" ${_mem_src:+--meminfo-from "$_mem_src"} 2>&1)" || _mem_rc=$?
+    [ -n "$_mem_src" ] && rm -f "$_mem_src"
     case "$_mem_rc" in
         0) _info "${_mem_out%%$'\n'*}" ;;
         1) _error "${_mem_out%%$'\n'*}"
