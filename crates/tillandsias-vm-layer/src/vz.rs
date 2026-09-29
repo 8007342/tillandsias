@@ -956,6 +956,21 @@ systemctl mask sshd-vsock.socket sshd-unix-local.socket 2>/dev/null || true
 mkdir -p /etc/systemd/system-generators
 ln -sf /dev/null /etc/systemd/system-generators/systemd-ssh-generator
 
+# Order 1503-qrgz: let chrony STEP on any large offset, not only in its first
+# three updates. The VM does not run while the Mac sleeps, so the clock falls
+# behind by the sleep; under Fedora's "makestep 1.0 3" chrony then only slews
+# (about 77 ms/s measured, so about 15 h for a 69-min lag). This is the
+# FALLBACK: the tray's HostClockSync on wake is primary, because chrony also
+# spends about 3.5 min unsynchronised after a pause. Non-fatal by design: a
+# guest without chrony still provisions.
+if [ -f /etc/chrony.conf ]; then
+  # -i.orig, not bare -i: the same line then runs under GNU sed (the guest)
+  # and BSD sed (the macOS test that executes this block).
+  sed -i.orig 's/^makestep .*/makestep 1.0 -1/' /etc/chrony.conf && rm -f /etc/chrony.conf.orig || true
+  grep -q '^makestep ' /etc/chrony.conf || echo 'makestep 1.0 -1' >> /etc/chrony.conf || true
+  systemctl try-restart chronyd.service 2>/dev/null || true
+fi
+
 # Install podman + dependencies for the enclave
 echo "Waiting for network..."
 until curl -sI https://mirrors.fedoraproject.org >/dev/null 2>&1; do
@@ -4278,6 +4293,49 @@ mod tests {
         assert_eq!(parse_df_available_kib(out), Some(709846428));
         assert_eq!(parse_df_available_kib(""), None);
         assert_eq!(parse_df_available_kib("Filesystem x\n"), None);
+    }
+
+    /// 1503-qrgz: the provisioning script's chrony block, RUN against a scratch
+    /// copy of Fedora's chrony.conf, turns "makestep 1.0 3" into "makestep 1.0
+    /// -1" and leaves the rest of the file alone. The block is cut from the
+    /// BUILT user-data (provision_user_data_for_test), then executed with
+    /// /etc/chrony.conf pointed at the scratch file.
+    /// NEGATIVE CONTROL: a config with no makestep line gains exactly one.
+    #[cfg(unix)]
+    #[test]
+    fn provision_user_data_lets_chrony_step_on_any_large_offset() {
+        let ud = provision_user_data_for_test();
+        let start = ud
+            .find("if [ -f /etc/chrony.conf ]; then")
+            .expect("the chrony block is in the built user-data");
+        let end = start + ud[start..].find("\nfi\n").expect("block closes") + 4;
+        let dir = std::env::temp_dir().join(format!("tillandsias-chrony-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let conf = dir.join("chrony.conf");
+        let block = ud[start..end]
+            .replace("/etc/chrony.conf", conf.to_str().unwrap())
+            .replace("systemctl try-restart chronyd.service", "true");
+        let run = |initial: &str| -> String {
+            std::fs::write(&conf, initial).unwrap();
+            let st = std::process::Command::new("/bin/bash")
+                .arg("-c")
+                .arg(&block)
+                .status()
+                .expect("bash");
+            assert!(st.success(), "the block must never fail provisioning");
+            std::fs::read_to_string(&conf).unwrap()
+        };
+        let fedora = "pool 2.fedora.pool.ntp.org iburst\nmakestep 1.0 3\nrtcsync\n";
+        assert_eq!(
+            run(fedora),
+            "pool 2.fedora.pool.ntp.org iburst\nmakestep 1.0 -1\nrtcsync\n"
+        );
+        let none = "pool 2.fedora.pool.ntp.org iburst\nrtcsync\n";
+        let got = run(none);
+        assert_eq!(got.matches("makestep").count(), 1, "{got}");
+        assert!(got.ends_with("makestep 1.0 -1\n"), "{got}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The provisioning script sets up both swap tiers, and does so without
