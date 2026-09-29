@@ -668,6 +668,7 @@ specs:
   - litmus:litmus-podman-preflight-diagnosis-shape
   - litmus:fake-backend-under-remote-podman-shape
   - litmus:podman-mock-refuses-unknown-invocations
+  - litmus:podman-mock-secret-lifecycle
   coverage_ratio: 100
   last_verified: '2026-08-18'
 - spec_id: macos-native-tray

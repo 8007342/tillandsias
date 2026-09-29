@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# preflight: gate-only — runs scripts/cycle-metrics.sh three times, each a full ledger fold; 25 s uncapped on yoga 2026-09-29
 # ORDER 1119-6wn6. The loop can say what a cycle spent in tokens, and which
 # repeated work keeps costing them.
 #
