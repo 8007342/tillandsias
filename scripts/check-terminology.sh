@@ -78,22 +78,31 @@ for f in "$LOCALE_DIR"/*.toml; do
     files=$((files + 1))
     # VALUES ONLY: the right-hand side of `key = "value"`. Keys are identifiers
     # and are explicitly out of tier 1.
-    while IFS= read -r value; do
-        [ -n "$value" ] || continue
-        while IFS="$(printf '\t')" read -r canon wrong _lower; do
-            [ -n "$wrong" ] || continue
-            case "$value" in
-                *"$wrong"*)
-                    echo "  $(basename "$f"): '$wrong' should be '$canon' — $value" >&2
-                    violations=$((violations + 1))
-                    ;;
-            esac
-        done <<EOF
-$DICT_ROWS
-EOF
-    done <<EOF
-$(grep '^[A-Za-z0-9_.]* *= *"' "$f" 2>/dev/null | sed 's/^[^=]*= *//')
-EOF
+    #
+    # ORDER 1500-gu5r: ONE awk PER FILE, not a bash loop over values x rows.
+    # The nested loop spawned a `$(printf '\t')` subshell and a here-document
+    # per VALUE and walked every dictionary row in bash: 14 s on yoga, three
+    # times the preflight door's deadline. The judgement is unchanged: a
+    # literal substring test (index(), as the quoted *"$wrong"* glob was) of
+    # every non-empty value against every row with a non-empty wrong term, the
+    # same message on stderr in the same value-then-row order, and the same
+    # count. The rows reach awk through ENVIRON, never a multi-line awk -v.
+    _hits="$(grep '^[A-Za-z0-9_.]* *= *"' "$f" 2>/dev/null | sed 's/^[^=]*= *//' |
+        TERM_ROWS="$DICT_ROWS" TERM_FILE="$(basename "$f")" awk '
+            BEGIN {
+                n = split(ENVIRON["TERM_ROWS"], rows, "\n")
+                for (i = 1; i <= n; i++) { split(rows[i], p, "\t"); canon[i] = p[1]; wrong[i] = p[2] }
+                file = ENVIRON["TERM_FILE"]; c = 0
+            }
+            $0 != "" {
+                for (i = 1; i <= n; i++)
+                    if (wrong[i] != "" && index($0, wrong[i]) > 0) {
+                        printf "  %s: \047%s\047 should be \047%s\047 — %s\n", file, wrong[i], canon[i], $0 > "/dev/stderr"
+                        c++
+                    }
+            }
+            END { print c }')"
+    violations=$((violations + ${_hits:-0}))
 done
 
 if [ "$violations" -gt 0 ]; then
