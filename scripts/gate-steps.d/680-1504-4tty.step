@@ -12,3 +12,4 @@ STEP_DESC="Checking every finalize-cycle refusal says why and what clears it (15
 STEP_SCRIPT="scripts/test-finalize-cycle-affordances.sh"
 STEP_ERROR="a finalize-cycle refusal lost its why/remedy, changed its token or exit code, or its remedy no longer clears it (1504-4tty)"
 STEP_OK="finalize-cycle refusals carry working affordances"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: finalize-cycle-affordances (1504-4tty) at dc2466f74, 3 arms, bash 3.2, ~/.gitconfig unchanged"
