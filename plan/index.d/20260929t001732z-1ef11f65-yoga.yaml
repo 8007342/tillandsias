@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: research-cert-lifecycle-state-graph
+    field: notes
+    value: 'Slice 5 (exit criterion 1, the declared CA transition table) LANDED in land86 eced00b48. Row stays open: criterion 3 (restart-on-rotation fan-out), criterion 5 (drift guardrail), the live arms of criterion 2, and the ''unreadable'' row (ca_generation must tell it from absent first). yoga releases its claim.'
+    ts: "2026-09-29T00:17:32Z"
+    host: yoga
+
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: progress
+      ts: "2026-09-29T00:17:32Z"
+      host: yoga
+      summary: |-
+        status 'Slice 5 (exit criterion 1, the declared CA transition table) LANDED in land86 eced00b48. Row stays open: criterion 3 (restart-on-rotation fan-out), criterion 5 (drift guardrail), the live arms of criterion 2, and the 'unreadable' row (ca_generation must tell it from absent first). yoga releases its claim.' (not terminal) with evidence_refs: eced00b48
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: note
+      ts: "2026-09-29T00:17:32Z"
+      host: yoga
+      summary: |-
+        slice 5 landed
