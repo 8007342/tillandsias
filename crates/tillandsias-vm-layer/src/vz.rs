@@ -1205,7 +1205,7 @@ cat > /etc/systemd/system/tillandsias-headless-fetch.service << 'EOF'
 Description=Ensure tillandsias-headless is present
 After=network-online.target
 Wants=network-online.target
-After=home-forge-src.mount
+After=var-lib-tillandsias-guest\x2dbin.mount
 Before=tillandsias-headless.service
 [Service]
 Type=oneshot
@@ -4467,9 +4467,23 @@ mod tests {
         // started at 4.461s — but the margin was only 1.456s, small enough that
         // a slower virtiofs mount closes it, and the failure is SILENT: the
         // script kept the old binary and exited 0.
+        //
+        // 1472-3d29: this pinned `After=home-forge-src.mount`, the share the
+        // binary came from when 701-iu9b wrote it. 1019-ivia moved staging to
+        // the guest-bin share and the literal stayed, so the unit raced the
+        // mount that actually carries the binary while this test stayed green.
+        // The expected unit is now DERIVED from GUEST_BIN_MOUNT, so moving the
+        // mount again reds this test instead of leaving a stale literal green.
+        let guest_bin_unit = systemd_mount_unit(tillandsias_core::guest_bin_path::GUEST_BIN_MOUNT);
         assert!(
-            fetch_unit.contains("After=home-forge-src.mount"),
-            "the fetch unit must be ordered after the share that carries the staged binary"
+            fetch_unit.contains(&format!("After={guest_bin_unit}")),
+            "the fetch unit must be ordered after {guest_bin_unit}, the guest-bin share that \
+             carries the staged binary (GUEST_BIN_MOUNT)"
+        );
+        assert!(
+            !fetch_unit.contains("After=home-forge-src.mount"),
+            "the ~/src share no longer carries the staged binary (1019-ivia); ordering on it \
+             leaves the unit racing the guest-bin mount"
         );
         // ...but NOT via RequiresMountsFor, which implies Requires=. The fstab
         // entry is deliberately `nofail` because a VZ config may legitimately
@@ -4487,6 +4501,52 @@ mod tests {
             !fetch_unit.contains("ConditionPathExists=!/usr/local/bin/tillandsias-headless"),
             "systemd must run the idempotent oneshot instead of skipping it"
         );
+    }
+
+    /// systemd's mount-unit name for an absolute path (systemd-escape --path
+    /// --suffix=mount): drop the leading `/`, escape `-` as `\x2d`, and join the
+    /// components with `-`. Enough for the plain ASCII paths used here.
+    fn systemd_mount_unit(path: &str) -> String {
+        let escaped: Vec<String> = path
+            .trim_start_matches('/')
+            .split('/')
+            .map(|c| c.replace('-', "\\x2d"))
+            .collect();
+        format!("{}.mount", escaped.join("-"))
+    }
+
+    #[test]
+    fn systemd_mount_unit_escapes_like_systemd() {
+        assert_eq!(
+            systemd_mount_unit("/var/lib/tillandsias/guest-bin"),
+            "var-lib-tillandsias-guest\\x2dbin.mount"
+        );
+        assert_eq!(
+            systemd_mount_unit("/home/forge/src"),
+            "home-forge-src.mount"
+        );
+    }
+
+    /// 1472-3d29, behavioural: the user-data this host actually BUILDS orders
+    /// the fetch unit after the guest-bin mount.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn built_user_data_orders_fetch_after_guest_bin_mount() {
+        let ud = super::provision_user_data_for_test();
+        let unit = ud
+            .split("tillandsias-headless-fetch.service << 'EOF'")
+            .nth(1)
+            .and_then(|t| t.split("\nEOF").next())
+            .expect("built user-data writes the fetch unit");
+        let want = format!(
+            "After={}",
+            systemd_mount_unit(tillandsias_core::guest_bin_path::GUEST_BIN_MOUNT)
+        );
+        assert!(
+            unit.contains(&want),
+            "built fetch unit lacks {want}:\n{unit}"
+        );
+        assert!(!unit.contains("RequiresMountsFor="));
     }
 
     /// 701-iu9b TRAP 1, the diagnostic half. Ordering makes the race unlikely;
