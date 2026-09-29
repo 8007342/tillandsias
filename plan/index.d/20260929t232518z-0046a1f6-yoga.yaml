@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-preflight-door-prints-ok-while-48-push-deciders-the-gate-runs-inline-in-build-sh-never-ran-there
+    field: status
+    value: completed
+    ts: "2026-09-29T23:25:18Z"
+    host: yoga
+
+events:
+  - packet_id: the-preflight-door-prints-ok-while-48-push-deciders-the-gate-runs-inline-in-build-sh-never-ran-there
+    event:
+      type: completed
+      ts: "2026-09-29T23:25:18Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: cfbbfbfa6 (relay: land work/1499-m9fj, on origin/linux-next) + bash scripts/test-preflight-front-door.sh on trunk -> ok:preflight-front-door:19/19, door 80s <= 150s (yoga 2026-09-29)
+  - packet_id: the-preflight-door-prints-ok-while-48-push-deciders-the-gate-runs-inline-in-build-sh-never-ran-there
+    event:
+      type: note
+      ts: "2026-09-29T23:25:18Z"
+      host: yoga
+      summary: |-
+        landed: fourth roster source with argument vector, bounded concurrency max(2,nproc/4), preflight: serial for six shared-write guards
