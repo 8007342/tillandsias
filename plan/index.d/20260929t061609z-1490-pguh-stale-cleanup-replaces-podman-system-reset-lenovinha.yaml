@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: label-keyed-stale-tillandsias-cleanup-replaces-podman-system-reset-in-the-soft-reset-body-the-skills-and-the-build-scripts
+    order: 1490-pguh
+    parent_order: 1490-gttj
+    depends_on:
+      - 1490-nczm
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [podman, smoke, skills, build, reset, linux, fleet-time]
+    estimated_hours: 6
+    owned_files:
+      - scripts/cleanup-stale-tillandsias.sh
+      - scripts/test-cleanup-stale-tillandsias.sh
+      - scripts/e2e-step2-linux.sh
+      - run_smoke.sh
+      - crates/tillandsias-headless/src/main.rs
+      - skills/build-install-and-smoke-test-e2e/SKILL.md
+      - skills/initialize-bare-metal-host/SKILL.md
+      - skills/meta-orchestration/SKILL.md
+      - skills/smoke-curl-install-and-test-e2e/SKILL.md
+    title: |
+      scripts/cleanup-stale-tillandsias.sh removes only EXITED owner-labelled containers, unreferenced owned volumes/networks and localhost/tillandsias-*:v<X> images neither current nor in use, names and skips anything toolbox-labelled, never touches a running owned container; run_reset_state, the skills and the build scripts use it, and podman system reset --force becomes the Linux HARD tier kept only by the clean-room release smoke
+    context: |
+      OPERATOR REQUEST (2026-09-29): replace podman system reset in ./skills and
+      build scripts with merely cleaning up the stale Tillandsias containers,
+      to save the fleet time. MEASURED COST the same day on lenovinha: the
+      Linux SOFT reset's podman system reset --force (run_reset_state
+      main.rs:10128, the call at :10172-10175) destroyed the non-Tillandsias
+      fedora-toolbox containers tillandsias-builder and tillandsias-nix (same
+      name prefix) and every running forge; the Vault store survived
+      (Verified:KEEP, 134 files before and after).
+
+      EXECUTABLE CALL SITES of podman system reset --force today:
+      scripts/e2e-step2-linux.sh:7 (gate 2 of the build-install smoke),
+      run_smoke.sh:16, main.rs:10172-10175 (the SOFT body — moves to HARD),
+      main.rs:3023-3067 (one-shot overlay-corruption self-heal — stays). PROSE
+      that instructs it: skills/build-install-and-smoke-test-e2e/SKILL.md:16,49,274,337;
+      skills/initialize-bare-metal-host/SKILL.md:90;
+      skills/meta-orchestration/SKILL.md:1973;
+      skills/smoke-curl-install-and-test-e2e/SKILL.md:3. Comment-only mentions
+      (several scripts/test-*.sh, the command-policy fixtures, cheatsheets)
+      are not call sites.
+
+      PRIOR ART: scripts/selective-tillandsias-reset.sh (order 222, opt-in via
+      TILLANDSIAS_SMOKE_RESET_MODE=selective) removes ALL containers and
+      volumes (podman ps -aq, not ours only) and keeps an allowlist of upstream
+      base images; it is still destructive to running forges and to toolboxes.
+      936-kdev narrowed is_stack_managed_name after the same builder toolbox
+      was stopped by a prefix sweep — hence the label key (1490-nczm). A
+      toolbox carries com.github.containers.toolbox labels; the cleanup
+      refuses anything with a toolbox label and prints its name.
+      smoke-curl-install-and-test-e2e keeps the full wipe as its default
+      because its contract IS the pristine host; it names it as the Linux
+      HARD tier with the 1443-bs9z per-run approval. Spec delta:
+      host-state-lifecycle MODIFIED SOFT requirement (Linux HARD; "Linux SOFT
+      reset keeps running forges and foreign containers" scenario). Design D7.
+    exit_criteria:
+      - 'grep -rn "podman system reset" scripts/e2e-step2-linux.sh run_smoke.sh skills/build-install-and-smoke-test-e2e skills/initialize-bare-metal-host skills/meta-orchestration finds only the HARD arm (pre-fix: the default arm in each)'
+      - 'with one toolbox-labelled container, one exited owned container and one running owned container present, the cleanup removes only the exited one and names the toolbox as skipped (pre-fix: podman system reset removes all three)'
+      - 'the cleanup exits 0 on an empty store and is idempotent'
+      - 'tillandsias --reset-state on Linux with tillandsias-builder and tillandsias-nix toolboxes running leaves both running (pre-fix: measured 2026-09-29, both destroyed)'
+      - 'a build-install smoke run on a host with a running forge of another project leaves that forge running (pre-fix: gate 2 destroys it)'
+    verifiable_closure: |
+      bash scripts/test-cleanup-stale-tillandsias.sh exits 0. Pre-fix: the script does not exist.
+    notes: |
+      size: M  implementer_tier: any
+      Independent of the handoff; can land right after 1490-nczm. The Linux HARD tier's consent shape is inherited from 1443-bs9z; if the operator rules that podman system reset should leave the binary entirely, keep it in the clean-room skill only and say so in the closing event.
+    next_action: 'write scripts/cleanup-stale-tillandsias.sh with --dry-run and its fixture, then switch scripts/e2e-step2-linux.sh:7 and run_smoke.sh:16'
+    provenance: |
+      Filed by a Fable agent on lenovinha at the operator's request, 2026-09-29.
+    events:
+      - type: filed
+        ts: "2026-09-29T06:16:09Z"
+        agent_id: "claude-fable-lenovinha-20260929t061525z"
+        host: lenovinha
+        summary: |-
+          Label-keyed stale cleanup replaces podman system reset in the SOFT body, skills and build scripts.

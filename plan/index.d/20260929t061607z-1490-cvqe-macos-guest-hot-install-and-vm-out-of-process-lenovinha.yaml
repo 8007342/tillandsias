@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: macos-guest-hot-install-via-a-path-unit-and-atomic-rename-plus-research-on-hosting-the-vm-out-of-process-so-a-host-tray-upgrade-keeps-it
+    order: 1490-cvqe
+    parent_order: 1490-gttj
+    depends_on:
+      - 1490-acd5
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, vz, upgrade, lifecycle, systemd, research]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-vm-layer/src/vz.rs
+      - crates/tillandsias-macos-tray/src/guest_binary.rs
+      - crates/tillandsias-macos-tray/src/action_host.rs
+      - scripts/test-macos-guest-hot-install.sh
+      - plan/issues/macos-vm-out-of-process-research-2026-09-29.md
+    title: |
+      macOS: (a) the guest fetch oneshot becomes a path unit that atomically installs a newly staged binary into the RUNNING guest and re-execs under KillMode=process, with the releases/latest fallback pinned to the host version; (b) RESEARCH whether VZVirtualMachine can be hosted out-of-process so a HOST tray upgrade keeps the VM, with a decision memo; until then a host handoff reports deferred:vm-in-process
+    context: |
+      GUEST: stage_guest_binary (crates/tillandsias-macos-tray/src/guest_binary.rs:232)
+      places the binary in a virtio-fs share; tillandsias-headless-fetch.service
+      (unit written at crates/tillandsias-vm-layer/src/vz.rs:1203, [Service]
+      :1210) installs it ONLY at boot and falls back to releases/latest
+      (vz.rs:1122) — an unpinned moving target that
+      openspec/specs/vm-provisioning-lifecycle/spec.md:37 says must be the
+      host's version. The headless unit ([Service] vz.rs:1240) has no
+      KillMode=. HOST: the VM is created in-process
+      (VZVirtualMachine::initWithConfiguration, vz.rs:2884-2885);
+      quit_with_drain (crates/tillandsias-macos-tray/src/action_host.rs:1211)
+      sends VmShutdownRequest (vz.rs:722; the headless stops every container)
+      then stops the VM. openspec/specs/vm-provisioning-lifecycle/spec.md:168
+      says there SHALL be no opt-out in v1 — the delta in
+      openspec/changes/hot-upgrade-live-stack adds exactly one (the handoff,
+      an argument of a relaunch, not a setting) and requires the in-process
+      case to say so loudly. Design D5 and the open question in design.md.
+    exit_criteria:
+      - 'staging a newer binary into the share of a RUNNING guest installs it and re-execs the daemon without a VM reboot; the provision-state share reports the new sha256 (pre-fix: installed only at next boot)'
+      - 'podman ps -q inside the guest is unchanged across the re-exec (pre-fix: unmeasured)'
+      - 'the releases/latest fallback is gone from the fetch script; the fallback is pinned to v<host-version> (pre-fix: vz.rs:1122 uses releases/latest)'
+      - 'RESEARCH MEMO plan/issues/macos-vm-out-of-process-research-2026-09-29.md answers whether the VM can outlive the tray process, with what was tried and measured, and names the follow-up order or the decision to keep host upgrades as a loud drain on macOS'
+      - 'a macOS host handoff today reports deferred:vm-in-process and offers the drain; it never drains silently'
+    verifiable_closure: |
+      bash scripts/test-macos-guest-hot-install.sh exits 0 on a macOS host with the VM provisioned (stages a binary with a distinct sha256, waits for the path unit, asserts the guest reports it and podman ps -q is unchanged); the research memo exists and names a decision. Pre-fix: the script and the memo do not exist.
+    notes: |
+      size: L  implementer_tier: opus
+      The host half is a design decision, not a fixture: the memo is the deliverable and the fixture covers the guest half only. Fixture written in the same commit as the path unit (1136-n8sh).
+    next_action: 'convert the fetch oneshot into a .path unit watching the share and install by rename; then start the memo with the entitlement question'
+    provenance: |
+      Filed by a Fable agent on lenovinha, 2026-09-29, from the hot-upgrade investigation (1490-gttj).
+    events:
+      - type: filed
+        ts: "2026-09-29T06:16:07Z"
+        agent_id: "claude-fable-lenovinha-20260929t061525z"
+        host: lenovinha
+        summary: |-
+          macOS half of the hot-upgrade SOFT reset: guest path plus VM-out-of-process research.
