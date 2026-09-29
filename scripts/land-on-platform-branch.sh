@@ -33,6 +33,7 @@
 #       6 push failed for a reason retrying cannot fix
 #       8 gate-step prefix could not be allocated after the integrate (1162-qbrx:
 #         no free slot before the next occupied prefix — renumber by hand)
+#       9 a cfg-gated platform crate changed with no native-lint attestation (1235-rfub)
 #       7 push emitted nothing and hit its bound (1131-iax2: blocked credential
 #         helper — the push hangs forever and the log stays zero-byte)
 set -uo pipefail
@@ -176,6 +177,41 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             _afford "scripts/allocate-gate-step-prefix.sh could not keep this push's new gate step at a free prefix" \
                 "renumber the step by hand into a free prefix (scripts/gate-steps.d/README.md), commit, then re-run"
             exit 8
+        fi
+    fi
+
+    # ORDER 1235-rfub: A CFG-GATED PLATFORM CRATE NEEDS A NATIVE LINT. This
+    # gate compiles the macOS tray as STUBS and cannot lint it (measured: a
+    # Linux clippy for aarch64-apple-darwin dies in ring's build script), so a
+    # relayed useless_format reddened trunk for every Mac. The check requires
+    # an attestation from scripts/attest-native-lint.sh for the exact content
+    # being landed, and its verdict says it was attested, not re-run here.
+    if [ -f scripts/check-native-lint-attested.sh ]; then
+        _nl_rc=0
+        _nl_out="$(bash scripts/check-native-lint-attested.sh --base "origin/$BRANCH" 2>&1)" || _nl_rc=$?
+        printf '%s\n' "$_nl_out" | sed "s/^/land: attempt $attempt — /"
+        if [ "$_nl_rc" -ne 0 ]; then
+            _nl_verdict="$(grep -m1 '^refused:' <<<"$_nl_out")" || _nl_verdict="$_nl_out"
+            echo "refused:land:native-lint — ${_nl_verdict%%$'\n'*}" >&2
+            _afford "this change touches a cfg-gated platform crate that this gate cannot lint, and no host attested a native lint of this content (1235-rfub)" \
+                "on the crate's platform, run scripts/attest-native-lint.sh on this ref, push it, then re-run; with no such host awake the land waits, or re-run with TILLANDSIAS_NATIVE_LINT_UNATTESTED=\"<reason>\" to land it as debt recorded on the landed history"
+            exit 9
+        fi
+        # The named override: land, but write the debt into the landed history.
+        if grep -q '^override:native-lint:' <<<"$_nl_out"; then
+            _nl_trailers=()
+            while IFS= read -r _l; do
+                case "$_l" in override:native-lint:unattested:*)
+                    _nl_trailers+=(--trailer "Native-Lint-Unattested: ${_l#override:native-lint:unattested:}") ;;
+                esac
+            done <<<"$_nl_out"
+            if ! git commit -q --allow-empty -m "native-lint: landed UNATTESTED on a named override (1235-rfub)" "${_nl_trailers[@]}"; then
+                echo "refused:land:native-lint-debt-unrecorded — the override's debt commit failed" >&2
+                _afford "an override may land an unlinted gated crate only with its debt written into the landed history, and that commit failed" \
+                    "fix what git commit reported (identity, hooks), then re-run with the same TILLANDSIAS_NATIVE_LINT_UNATTESTED"
+                exit 9
+            fi
+            echo "land: attempt $attempt — native-lint DEBT recorded on the landed history: TILLANDSIAS_NATIVE_LINT_UNATTESTED=$TILLANDSIAS_NATIVE_LINT_UNATTESTED"
         fi
     fi
 
