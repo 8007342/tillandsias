@@ -665,6 +665,7 @@ specs:
   - litmus:fake-podman-direct-invocation-safety
   - litmus:litmus-parse-instruments-agree
   - litmus:litmus-podman-preflight-diagnosis-shape
+  - litmus:fake-backend-under-remote-podman-shape
   - litmus:podman-mock-refuses-unknown-invocations
   coverage_ratio: 100
   last_verified: '2026-08-18'
