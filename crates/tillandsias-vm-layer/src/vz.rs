@@ -1764,8 +1764,62 @@ fn decode_raw_xz_to_raw(
     Ok(())
 }
 
-const GUEST_DISK_SIZE_GIB: u64 = 250;
+// exploration/raw-xz-rootfs, operator 2026-09-29: "Why is the VM trying to take
+// 250gb? ... limit that to MAX 50GB, but start much lower ... and let it grow".
+// The 250 GiB disk was sparse (it cost only written bytes: 11.33 GiB measured
+// after forge builds, per scripts/uninstall.sh), but it showed as 250 GB, and
+// it let the guest fill the host. It now STARTS at GUEST_DISK_SIZE_GIB, which
+// fits the measured ~11 GiB with headroom, and GROWS at VM start in
+// GUEST_DISK_GROW_STEP_GIB steps (next_guest_disk_size) up to
+// GUEST_DISK_MAX_GIB. The guest extends its partition and filesystem on the
+// next boot (cloud-init growpart/resizefs; to be verified on a real boot).
+const GUEST_DISK_SIZE_GIB: u64 = 20;
 const GUEST_DISK_SIZE_BYTES: u64 = GUEST_DISK_SIZE_GIB * 1024 * 1024 * 1024;
+const GUEST_DISK_MAX_GIB: u64 = 50;
+const GUEST_DISK_GROW_STEP_GIB: u64 = 10;
+/// Grow when the disk's ALLOCATED bytes exceed this share of its size. The
+/// host can measure this with no guest query: a sparse file's allocated bytes
+/// track what the guest has written.
+const GUEST_DISK_GROW_AT_PERCENT: u64 = 75;
+
+/// The size the guest disk should have before the next boot, or `None` to
+/// leave it. Pure, so the policy is unit-tested. Never shrinks, never exceeds
+/// GUEST_DISK_MAX_GIB, and grows one step at a time.
+pub fn next_guest_disk_size(allocated: u64, logical: u64) -> Option<u64> {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let max = GUEST_DISK_MAX_GIB * GIB;
+    if logical >= max || logical == 0 {
+        return None;
+    }
+    if allocated.saturating_mul(100) < logical.saturating_mul(GUEST_DISK_GROW_AT_PERCENT) {
+        return None;
+    }
+    Some((logical + GUEST_DISK_GROW_STEP_GIB * GIB).min(max))
+}
+
+/// Apply [`next_guest_disk_size`] to `rootfs` (VM stopped). Growing a sparse
+/// file with `set_len` only adds a hole, so this is O(1) and costs no space.
+#[cfg(unix)]
+fn grow_guest_disk_if_needed(rootfs: &std::path::Path) -> Result<(), String> {
+    use std::os::unix::fs::MetadataExt;
+    let md = std::fs::metadata(rootfs).map_err(|e| format!("stat {}: {e}", rootfs.display()))?;
+    let allocated = md.blocks().saturating_mul(512);
+    if let Some(new_len) = next_guest_disk_size(allocated, md.len()) {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(rootfs)
+            .and_then(|f| f.set_len(new_len))
+            .map_err(|e| format!("grow {} to {new_len}: {e}", rootfs.display()))?;
+        eprintln!(
+            "[tillandsias-vz] guest disk grown {} -> {} GiB ({} GiB allocated; cap {} GiB)",
+            md.len() >> 30,
+            new_len >> 30,
+            allocated >> 30,
+            GUEST_DISK_MAX_GIB
+        );
+    }
+    Ok(())
+}
 
 /// Fetch the xz-compressed asset at `xz_url` to `xz_temp_dest`,
 /// decompress to `final_dest` via `xz -d`, then SHA-256-verify the
@@ -2651,6 +2705,13 @@ impl VmRuntime for VzRuntime {
             if slot.is_some() {
                 return Err("VzRuntime::start: VM already running".into());
             }
+        }
+
+        // exploration/raw-xz-rootfs: grow the disk before it is attached.
+        // A failure here is reported, never fatal: the VM boots at its
+        // current size.
+        if let Err(e) = grow_guest_disk_if_needed(&rootfs) {
+            eprintln!("[tillandsias-vz] guest disk growth skipped: {e}");
         }
 
         let cidata_iso_path = self.image_root.join("cidata.iso");
@@ -3857,6 +3918,22 @@ mod tests {
     /// self-matching needle here would have made the assertion permanently and
     /// invisibly true.
     #[test]
+    fn guest_disk_grows_in_steps_to_the_cap_and_never_shrinks() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        // Plenty of room: leave it.
+        assert_eq!(next_guest_disk_size(5 * GIB, 20 * GIB), None);
+        // 75% used: one step.
+        assert_eq!(next_guest_disk_size(15 * GIB, 20 * GIB), Some(30 * GIB));
+        // A step past the cap is clamped to the cap.
+        assert_eq!(next_guest_disk_size(40 * GIB, 45 * GIB), Some(50 * GIB));
+        // At the cap: never grows further.
+        assert_eq!(next_guest_disk_size(50 * GIB, 50 * GIB), None);
+        // An existing oversized disk (the old 250 GiB default) is never shrunk.
+        assert_eq!(next_guest_disk_size(12 * GIB, 250 * GIB), None);
+        assert_eq!(next_guest_disk_size(0, 0), None);
+    }
+
+    #[test]
     fn convert_grows_raw_disk_before_first_boot() {
         let source = include_str!("vz.rs");
         assert!(
@@ -3880,9 +3957,17 @@ mod tests {
             .and_then(|t| t.split(';').next())
             .and_then(|t| t.trim().parse().ok())
             .expect("GUEST_DISK_SIZE_GIB must be a plain integer literal");
+        // exploration/raw-xz-rootfs: the >= 32 GiB floor (forge toolchain +
+        // overlay store) is now met by GROWTH up to GUEST_DISK_MAX_GIB rather
+        // than by a large initial size. The initial size must still hold the
+        // measured ~11 GiB post-forge footprint.
         assert!(
-            gib >= 32,
-            "guest disk must be >= 32 GiB for the forge toolchain + overlay store, got {gib}"
+            gib >= 16,
+            "initial guest disk must hold the measured ~11 GiB footprint, got {gib}"
+        );
+        const _: () = assert!(
+            GUEST_DISK_MAX_GIB >= 32 && GUEST_DISK_MAX_GIB <= 50,
+            "the growth cap must reach the 32 GiB forge floor and stay <= 50 GiB"
         );
     }
 
