@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-one-shot-github-login-container-inherits-the-git-service-healthcheck-and-fails-it-every-three-seconds-for-its-whole-life
+    event:
+      type: progress
+      ts: "2026-09-29T05:43:36Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t054335z
+      host: macos
+      summary: |
+        work/1487-6dz2 @ 062988f2a ready for relay (tlatoanis-macbook-air). Both build variants of the provider-login helper (vault and not) take their leading flags from LOGIN_CONTAINER_RUN_PREFIX = run --detach --rm --no-healthcheck (criterion 1, code half). Test login_helper_disables_the_inherited_healthcheck_and_the_git_service_keeps_it: the prefix carries --no-healthcheck, and build_git_run_args (the long-running git service) does NOT (criterion 2, negative control). headless 642 and 817 (tray,listen-vsock) passed; clippy listen-vsock, fmt and aarch64 musl clean; the scdq and v67y guards ok. (cargo test --no-default-features fails the same way on trunk: pre-existing, and not a gate configuration.) PENDING, criterion 1 live half: after it lands, a device-flow login leaves no failing healthcheck units for the login container in the guest journal. That is folded into the post-land89 sign-in the operator does for 1486-y67a, as one sign-in for both.
