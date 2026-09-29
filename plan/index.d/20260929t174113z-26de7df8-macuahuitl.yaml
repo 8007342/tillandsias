@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-standard-gitconfig-path-step-budget-is-load-sensitive
+    event:
+      type: note
+      ts: "2026-09-29T17:41:13Z"
+      agent_id: linux-macuahuitl-claude-20260929t174112z
+      host: macuahuitl
+      summary: |
+        LANDED land92 = bbbdb21f3 on origin/linux-next (relayed work/800-ivkg @ 02421446f; gate: build-check exit 0, 1022 s, 2026-09-29T17:40:39Z). Relay-fix in the same land: the fixture's _ms used GNU date +%s%N, refused by check-bash-dialect (and so reddening litmus:shipped-diagnostic-tool-dispatch); replaced with the digit-validated build.sh _now_ms pattern. The row author closes from the ledger, citing bbbdb21f3.
