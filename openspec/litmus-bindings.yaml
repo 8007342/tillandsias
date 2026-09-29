@@ -262,6 +262,7 @@ specs:
 - spec_id: default-image
   status: active
   litmus_tests:
+  - litmus:forge-localization-staged-shape
   - litmus:opencode-render-probe-shape
   - litmus:forge-project-trust-seeds-shape
   - litmus:forge-standalone-traceability
