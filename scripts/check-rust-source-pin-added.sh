@@ -53,7 +53,9 @@ judge() {
     # the receiver of the first non-negated .contains( on the line
     var="$(sed -nE 's/.*[^!A-Za-z0-9_]([A-Za-z_][A-Za-z0-9_]*)\.contains\(.*/\1/p' <<<" $line")"
     [ -n "$var" ] || return 0
-    grep -qE "!\s*${var}\.contains\(" <<<"$line" && ! grep -qE "[^!]\b${var}\.contains\(" <<<"$(sed -E "s/!\s*${var}\.contains\(//g" <<<"$line")" && return 0
+    # (A negated `!var.contains(` never matches above: the character before the
+    # receiver must not be `!`. So an absence assertion is admitted by
+    # construction, with no second pass.)
     # the enclosing fn: nearest `fn ` line above
     fnstart="$(awk -v n="$ln" 'NR<=n && /^[[:space:]]*(pub(\([a-z]+\))?[[:space:]]+)?fn[[:space:]]/ {s=NR} END{print s+0}' "$f")"
     [ "$fnstart" -gt 0 ] || return 0
