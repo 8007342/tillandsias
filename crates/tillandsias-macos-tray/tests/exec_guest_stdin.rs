@@ -25,6 +25,50 @@ fn exec_guest_lock() -> MutexGuard<'static, ()> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// 1475-3mpc: an ISOLATED HOME for the child, so these tests exercise the stdin
+/// path whatever this host is doing.
+///
+/// They used to run the child with the caller's HOME. On a Mac whose tray was
+/// running (every operator workstation), order 277's live-tray probe found the
+/// REAL singleton lock (`dirs::cache_dir()`, i.e. `$HOME/Library/Caches`) held,
+/// so the child exited on the refusal before reaching stdin, and both tests
+/// failed "proved nothing". The workspace gate's baseline ratchet read that as
+/// new-red=2, so `./build.sh --check` was red on any Mac with its tray up.
+/// Without a tray, the child instead reached the REAL image root, so the test's
+/// behaviour depended on the operator's VM state either way.
+///
+/// With HOME pointed at a scratch dir, the child takes its own singleton lock,
+/// and a placeholder `rootfs.img` satisfies `is_provisioned()` (a stat of that
+/// file) under the scratch image root, so the child reaches the stdin read. The
+/// VM start that follows fails fast and harmlessly (an unsigned test binary
+/// lacks the virtualization entitlement; measured at ~6s and 136 KB). Both
+/// tests assert only on what happens before the boot. The real VM and the
+/// operator's tray are never touched.
+struct IsolatedHome(std::path::PathBuf);
+
+impl IsolatedHome {
+    fn new(tag: &str) -> Self {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let home = std::env::temp_dir().join(format!(
+            "tillandsias-exec-guest-stdin-{tag}-{}-{nanos}",
+            std::process::id()
+        ));
+        let image_root = home.join("Library/Application Support/tillandsias");
+        std::fs::create_dir_all(&image_root).expect("scratch image root");
+        std::fs::write(image_root.join("rootfs.img"), b"").expect("placeholder rootfs");
+        IsolatedHome(home)
+    }
+}
+
+impl Drop for IsolatedHome {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 /// Guard against a vacuously-passing assertion: if the one-shot bailed on the
 /// live-tray refusal it never exercised the stdin path at all, and any
 /// conclusion drawn from its stderr is meaningless.
@@ -49,7 +93,9 @@ fn assert_reached_stdin_path(stderr_text: &str) {
 #[test]
 fn stdin_that_never_eofs_does_not_block_the_boot_forever() {
     let _serialized = exec_guest_lock();
+    let home = IsolatedHome::new("never-eof");
     let mut child = Command::new(env!("CARGO_BIN_EXE_tillandsias-tray"))
+        .env("HOME", &home.0)
         // A held-open pipe we deliberately never write to or close.
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -104,7 +150,9 @@ fn stdin_that_never_eofs_does_not_block_the_boot_forever() {
 #[test]
 fn stdin_that_closes_is_still_forwarded_without_the_bound_warning() {
     let _serialized = exec_guest_lock();
+    let home = IsolatedHome::new("closes");
     let mut child = Command::new(env!("CARGO_BIN_EXE_tillandsias-tray"))
+        .env("HOME", &home.0)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
