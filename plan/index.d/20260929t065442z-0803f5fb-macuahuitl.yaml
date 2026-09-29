@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    field: next_action
+    value: |-
+      Run ./build.sh --check; then trace Lua sh.run and build.sh preflight callers to determine the next shared-run-door integration slice.
+
+      [2026-09-29T06:54:42Z macuahuitl] Obtain integration landing of PR #196; once commit 6a4f1e8b0 is on linux-next, record its landed SHA and close packet 1375-amye with the two integrated full-gate results. Then advance the planned build.sh preflight caller work (1353-ryhq) and audit sh.run adoption under the shared runtime.
+    ts: "2026-09-29T06:54:42Z"
+    host: macuahuitl
+
+events:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    event:
+      type: note
+      ts: "2026-09-29T06:54:42Z"
+      host: macuahuitl
+      summary: |-
+        Integrated full gate passed and draft PR #196 is open; awaiting landing before closure.
