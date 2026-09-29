@@ -491,7 +491,17 @@ impl VzRuntime {
         } else {
             "x86_64"
         };
-        let format = "qcow2";
+        // exploration/raw-xz-rootfs: prefer Fedora's xz-compressed RAW image
+        // when the manifest lists one. No image-format parser at all; the qcow2
+        // path stays as the fallback, and TILLANDSIAS_ROOTFS_FORMAT=qcow2
+        // forces it.
+        let raw_xz_key = format!("{arch}.raw.xz");
+        let force_qcow2 = std::env::var("TILLANDSIAS_ROOTFS_FORMAT").as_deref() == Ok("qcow2");
+        let format = if !force_qcow2 && manifest.expected_sha(&raw_xz_key).is_some() {
+            "raw.xz"
+        } else {
+            "qcow2"
+        };
         let key = format!("{arch}.{format}");
         let url = manifest
             .artifact_url(arch, format, "fedora-44")
@@ -513,7 +523,11 @@ impl VzRuntime {
                 .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
         }
 
-        let qcow2_dest = self.rootfs_image_path().with_extension("qcow2");
+        let qcow2_dest = if format == "raw.xz" {
+            self.rootfs_image_path().with_extension("raw.xz")
+        } else {
+            self.rootfs_image_path().with_extension("qcow2")
+        };
         let artifact = RemoteArtifact {
             url,
             sha256,
@@ -558,8 +572,13 @@ impl VzRuntime {
             tillandsias_control_wire::ProgressKind::Done,
         ));
 
-        convert_qcow2_to_raw(&qcow2_dest, &self.rootfs_image_path(), on_phase, on_event)
-            .map_err(|e| format!("{FETCH_STAGE_EXPAND}{e}"))
+        if format == "raw.xz" {
+            decode_raw_xz_to_raw(&qcow2_dest, &self.rootfs_image_path(), on_phase, on_event)
+                .map_err(|e| format!("{FETCH_STAGE_EXPAND}{e}"))
+        } else {
+            convert_qcow2_to_raw(&qcow2_dest, &self.rootfs_image_path(), on_phase, on_event)
+                .map_err(|e| format!("{FETCH_STAGE_EXPAND}{e}"))
+        }
     }
 
     /// Fetch the recipe-published rootfs artifact (per l9 URL contract)
@@ -1685,6 +1704,66 @@ fn convert_qcow2_to_raw(
 /// BYTES, not a `"250G"` string, since 980-xcaf replaced `qemu-img resize`
 /// with `File::set_len` and there is no longer a command line to format for.
 /// See `convert_qcow2_to_raw`.
+/// exploration/raw-xz-rootfs: decode Fedora's `.raw.xz` into the sparse raw
+/// disk (see `crate::rawxz`), with the same progress task, `.partial`
+/// discipline and final size as the qcow2 path.
+#[cfg(all(feature = "recipe", feature = "download"))]
+fn decode_raw_xz_to_raw(
+    xz_path: &std::path::Path,
+    raw_dest: &std::path::Path,
+    on_phase: &(dyn Fn(&str) + Send + Sync),
+    on_event: ProgressSink<'_>,
+) -> Result<(), String> {
+    on_phase("Decompressing Fedora Cloud image");
+    let raw_part = raw_dest.with_extension("img.partial");
+    let started = std::time::Instant::now();
+    let decoded = crate::rawxz::expand_xz_to_raw(
+        xz_path,
+        &raw_part,
+        GUEST_DISK_SIZE_BYTES,
+        &|done, total| {
+            if let Some(pct) = (done * 100).checked_div(total) {
+                on_event(progress_event(
+                    PROGRESS_TASK_EXPAND,
+                    "Prepare VM disk",
+                    tillandsias_control_wire::ProgressKind::Determinate {
+                        done: pct,
+                        total: Some(100),
+                        unit: tillandsias_control_wire::ProgressUnit::Steps,
+                    },
+                ));
+            }
+        },
+    );
+    let decoded = match decoded {
+        Ok(n) => n,
+        Err(e) => {
+            let _ = std::fs::remove_file(&raw_part);
+            return Err(format!("decode raw.xz -> raw: {e}"));
+        }
+    };
+    eprintln!(
+        "[tillandsias-vz] raw.xz decoded {} bytes in {:.1}s (exploration/raw-xz-rootfs)",
+        decoded,
+        started.elapsed().as_secs_f64()
+    );
+    std::fs::rename(&raw_part, raw_dest).map_err(|e| {
+        let _ = std::fs::remove_file(&raw_part);
+        format!(
+            "rename {} -> {}: {e}",
+            raw_part.display(),
+            raw_dest.display()
+        )
+    })?;
+    on_event(progress_event(
+        PROGRESS_TASK_EXPAND,
+        "Prepare VM disk",
+        tillandsias_control_wire::ProgressKind::Done,
+    ));
+    on_phase("Fedora Cloud image ready");
+    Ok(())
+}
+
 const GUEST_DISK_SIZE_GIB: u64 = 250;
 const GUEST_DISK_SIZE_BYTES: u64 = GUEST_DISK_SIZE_GIB * 1024 * 1024 * 1024;
 

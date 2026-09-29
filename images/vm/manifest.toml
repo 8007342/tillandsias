@@ -37,11 +37,13 @@ digest = "sha256:6859a7bc64539828e18f26a1005a76579c536444855486c75c87f988225e003
 "x86_64.oci.tar.xz" = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Container/x86_64/images/Fedora-Container-Base-Generic-44-1.7.x86_64.oci.tar.xz"
 "aarch64.oci.tar.xz" = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Container/aarch64/images/Fedora-Container-Base-Generic-44-1.7.aarch64.oci.tar.xz"
 "aarch64.qcow2" = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/aarch64/images/Fedora-Cloud-Base-Generic-44-1.7.aarch64.qcow2"
+"aarch64.raw.xz" = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/aarch64/images/Fedora-Cloud-Base-AmazonEC2-44-1.7.aarch64.raw.xz"
 
 [output.expected_rootfs_sha]
 "x86_64.oci.tar.xz" = "75200f5752a74a21a616ca9a75e25beb594e2e117a0195c54f87c0b3e3974d1b"
 "aarch64.oci.tar.xz" = "eca19542a48a8e39b84e869713a1fa2408cbcc578de26c25ae72e3334ef968c1"
 "aarch64.qcow2" = "55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e4002a41a72fa0d5b"
+"aarch64.raw.xz" = "090d3cb07b266535ff81603d12cd143626caedc51be46977fef5f9161d5117b3"
 
 # Kernel command-line passed to the VM bootloader. Quiet boot + serial
 # console on hvc0 so the host can capture early-boot diagnostics.

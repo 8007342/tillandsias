@@ -96,6 +96,12 @@ pub mod fetch;
 #[cfg(feature = "download")]
 pub mod qcow2;
 
+/// Stream a Fedora `.raw.xz` cloud image into a sparse raw disk: no image
+/// format parser at all (exploration/raw-xz-rootfs). Behind `download`, which
+/// carries `xz2`.
+#[cfg(feature = "download")]
+pub mod rawxz;
+
 /// Shared (co-owned) Recipefile + manifest.toml parser for the recipe
 /// materializer (vm-recipe-provisioning §2). Behind the `recipe` feature.
 #[cfg(feature = "recipe")]
