@@ -120,6 +120,8 @@ objc2-foundation = { version = "0.2", features = [
   "NSData",
 ] }
 block2 = "0.5"
+# exploration/raw-xz-rootfs: F_PUNCHHOLE, to deallocate zero runs APFS fills in.
+libc = "0.2"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process", "io-util", "rt", "fs"] }

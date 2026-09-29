@@ -3651,6 +3651,7 @@ dependencies = [
  "flate2",
  "fs2",
  "futures-util",
+ "libc",
  "objc2",
  "objc2-foundation",
  "objc2-virtualization",

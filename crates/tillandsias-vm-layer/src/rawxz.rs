@@ -14,6 +14,15 @@
 //! `xz -dc -T1` 16.2 s, `xz -dc -T0` 2.5 s. This decoder is single-threaded
 //! (liblzma through xz2).
 //!
+//! APFS DOES NOT KEEP SMALL GAPS AS HOLES (measured on this host 2026-09-29):
+//! seeking past a gap and writing leaves a hole only when the gap is roughly
+//! 32 MiB or more. 1-16 MiB gaps were zero-filled and fully allocated, whether
+//! written sequentially or into a file pre-sized with set_len. The Fedora image
+//! has 0.78 GiB of non-zero data in 5 GiB, but its zero runs are mostly shorter
+//! than that, so seeking alone allocated 4.7 GB. So the decoder records every
+//! zero run and, on macOS, deallocates them with fcntl(F_PUNCHHOLE) after the
+//! last write. A test punching 1 MiB holes freed exactly what it punched.
+//!
 //! The caller verifies the download's SHA-256 before calling this; xz's own
 //! CRC64 per block additionally catches corruption during decoding.
 
@@ -65,6 +74,8 @@ pub fn expand_xz_to_raw(
     let mut buf = vec![0u8; CHUNK];
     let mut pos: u64 = 0;
     let mut last_pct = u64::MAX;
+    // Zero runs to deallocate after the last write (coalesced).
+    let mut zero_runs: Vec<(u64, u64)> = Vec::new();
     loop {
         // Fill the whole chunk (a decoder read may return less than asked).
         let mut filled = 0;
@@ -84,6 +95,10 @@ pub fn expand_xz_to_raw(
         if chunk.iter().all(|b| *b == 0) {
             out.seek(SeekFrom::Current(filled as i64))
                 .map_err(|e| format!("seek {}: {e}", dest.display()))?;
+            match zero_runs.last_mut() {
+                Some((start, len)) if *start + *len == pos => *len += filled as u64,
+                _ => zero_runs.push((pos, filled as u64)),
+            }
         } else {
             out.write_all(chunk)
                 .map_err(|e| format!("write {}: {e}", dest.display()))?;
@@ -101,9 +116,42 @@ pub fn expand_xz_to_raw(
     // the logical size (as a hole) whether or not the target is larger.
     out.set_len(pos.max(final_size))
         .map_err(|e| format!("size {} to {}: {e}", dest.display(), pos.max(final_size)))?;
+    punch_zero_runs(&out, &zero_runs)
+        .map_err(|e| format!("deallocate zero runs in {}: {e}", dest.display()))?;
     out.sync_all()
         .map_err(|e| format!("sync {}: {e}", dest.display()))?;
     Ok(pos)
+}
+
+/// Deallocate each zero run (macOS: fcntl F_PUNCHHOLE). The ranges read back
+/// as zeros either way, so this only changes allocation, never content.
+#[cfg(target_os = "macos")]
+fn punch_zero_runs(out: &File, runs: &[(u64, u64)]) -> Result<(), String> {
+    use std::os::fd::AsRawFd;
+    for &(offset, length) in runs {
+        let arg = libc::fpunchhole_t {
+            fp_flags: 0,
+            reserved: 0,
+            fp_offset: offset as libc::off_t,
+            fp_length: length as libc::off_t,
+        };
+        // SAFETY: a valid open fd and a fully initialised fpunchhole_t.
+        let rc = unsafe { libc::fcntl(out.as_raw_fd(), libc::F_PUNCHHOLE, &arg) };
+        if rc != 0 {
+            return Err(format!(
+                "F_PUNCHHOLE at {offset}+{length}: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Elsewhere the seeked gaps are left to the filesystem (ext4 and NTFS keep
+/// seeked gaps as holes); nothing to punch.
+#[cfg(not(target_os = "macos"))]
+fn punch_zero_runs(_out: &File, _runs: &[(u64, u64)]) -> Result<(), String> {
+    Ok(())
 }
 
 #[cfg(test)]
@@ -149,6 +197,36 @@ mod tests {
             "growth reads as zeros"
         );
         assert!(!seen.lock().unwrap().is_empty(), "progress was reported");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// macOS: zero runs APFS would zero-fill are DEALLOCATED. 16 chunks, one
+    /// in four data: allocation must stay near the data, not the logical size.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn zero_runs_are_deallocated_on_apfs() {
+        use std::os::unix::fs::MetadataExt;
+        let d = scratch("punch");
+        let mut raw = vec![0u8; CHUNK * 16];
+        for k in (0..16).step_by(4) {
+            raw[k * CHUNK..k * CHUNK + CHUNK].fill(0x5A);
+        }
+        let src = d.join("img.raw.xz");
+        let mut enc = xz2::write::XzEncoder::new(File::create(&src).expect("create"), 1);
+        enc.write_all(&raw).expect("encode");
+        enc.finish().expect("finish");
+        let dest = d.join("img.raw");
+        expand_xz_to_raw(&src, &dest, 0, &|_, _| {}).expect("expand");
+        assert_eq!(
+            std::fs::read(&dest).expect("read"),
+            raw,
+            "content unchanged"
+        );
+        let allocated = std::fs::metadata(&dest).expect("stat").blocks() * 512;
+        assert!(
+            allocated <= (CHUNK * 6) as u64,
+            "4 MiB of data must not allocate the 16 MiB logical size: {allocated}"
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 
