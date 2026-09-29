@@ -14,8 +14,12 @@
 # WHAT COUNTS
 #   a landing  a NON-MERGE commit reachable from --ref (default origin/linux-next)
 #              within --since (default "10 days ago") that touches at least one
-#              path OUTSIDE plan/ — a plan-only commit citing an order (a claim,
-#              a note, a filing) is not a landing;
+#              path OUTSIDE plan/, openspec/, docs/ and cheatsheets/. A commit
+#              that only edits the plan, the SPEC or documentation citing an
+#              order (a claim, a note, a filing, a spec amendment) is not a
+#              landing. 1483-8zct: spec-only commits (openspec/) used to count,
+#              so 1438-pk9j, whose spec landed but whose code did not, was
+#              listed as landed-but-open;
 #   an order   every NNN-xxxx / NNNN-xxxx token in that commit's SUBJECT (the
 #              orders it lands: `feat(1443-8pur): …`, `relay: land work/1446-xqi6`).
 #              A body cites orders as CONTEXT ("slice 3 of…", "related:"), and
@@ -71,13 +75,14 @@ else
         sed -n 's/^\["\{0,1\}\([^",]*\)"\{0,1\},"\([^"]*\)"\]$/\1 \2/p' >"$W/status"
 fi
 
-# landings: non-merge commits in the window touching something outside plan/
+# landings: non-merge commits in the window touching something outside the
+# plan, the spec and the docs (1483-8zct)
 git log --no-merges --since="$SINCE" --format='%H' "$REF" >"$W/shas" 2>/dev/null
 landings=0
 : >"$W/cites"
 while IFS= read -r sha; do
     [ -n "$sha" ] || continue
-    nonplan="$(git diff-tree --root --no-commit-id --name-only -r "$sha" 2>/dev/null | grep -vc '^plan/')"
+    nonplan="$(git diff-tree --root --no-commit-id --name-only -r "$sha" 2>/dev/null | grep -vcE '^(plan|openspec|docs|cheatsheets)/')"
     [ "${nonplan:-0}" -gt 0 ] || continue
     landings=$((landings + 1))
     fmt='%s'; [ "$CITE" = message ] && fmt='%B'
