@@ -143,3 +143,18 @@ floor path, so no user on 14 to 26 is left behind.
    pristine" action (seconds, no download).
 4. A measurement spike: `validateSaveRestoreSupport()` on the real config, then
    save and restore a launched forge and time the resume.
+
+## Measured on this branch, 2026-09-29 (tlatoanis-macbook-air, M5)
+
+| What | Result |
+|---|---|
+| Download | Fedora-Cloud-Base-AmazonEC2-44-1.7.aarch64.raw.xz, 513,786,992 B, SHA-256 matches Fedora's CHECKSUM (qcow2 was 528,154,624 B) |
+| Decode, `crate::rawxz` (single-threaded xz2) | 5 GiB in 20.4 to 22.4 s. For comparison, the `xz -dc` CLI is 16.2 s single-threaded and 2.5 s multithreaded (the stream has 214 blocks, so a parallel decoder is possible) |
+| cloud-init on the EC2 image | Used OUR seed: `Datasource DataSourceNoCloud [seed=/dev/vdc]`; provision `phase complete` (tray first boot 80 s) |
+| Disk allocation | The first build allocated 4.7 GB. APFS zero-fills seeked gaps under about 32 MiB (measured: 1-16 MiB gaps fully allocated, 32 MiB gaps stay holes). With the zero runs punched (`F_PUNCHHOLE`): **803 MB**, content identical to `xz -dc` |
+| Initial disk | 20 GiB logical (it was 250 GiB); the guest grew `vda2` and btrfs to the full 20 GiB on first boot (5% used) |
+| Growth | File extended to 30 GiB with the VM stopped. On the next boot the guest showed `vda` and `vda2` at 30 GiB and btrfs at 30 GiB (3% used); the host file allocated 972 MB. So `next_guest_disk_size` plus cloud-init growpart and resizefs grows end to end |
+
+The qcow2 path writes the same way and very likely allocates the same ~4.7 GB
+at first provision. If the raw.xz path is not adopted, port the zero-run
+punching to `crate::qcow2::expand_to_raw` anyway.
