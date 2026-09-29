@@ -2573,6 +2573,70 @@ pub mod boot {
     }
 }
 
+/// Is the calling thread the process's main thread? (1429-u2wd)
+#[cfg(target_os = "macos")]
+fn on_main_thread() -> bool {
+    unsafe extern "C" {
+        fn pthread_main_np() -> std::ffi::c_int;
+    }
+    // SAFETY: no arguments, no state; documented to return 1 on the main thread.
+    unsafe { pthread_main_np() == 1 }
+}
+
+/// How long an off-main caller waits for the main queue to run one VZ call.
+/// The tray's main thread services the queue continuously; a caller whose
+/// main thread is blocked (never servicing the queue) gets an error naming
+/// that, not a hang.
+#[cfg(target_os = "macos")]
+const VM_QUEUE_WAIT: Duration = Duration::from_secs(10);
+
+/// Run `f` against the VM on the queue VZ requires (1429-u2wd).
+///
+/// The VM is created and started on the MAIN dispatch queue, and every VZ
+/// call asserts that queue. On the main thread `f` runs inline (pumping the
+/// run loop, as `stop()` always did). Off it, `f` is dispatched to the main
+/// queue and this thread blocks until it has run.
+#[cfg(target_os = "macos")]
+fn on_vm_queue<R, F>(
+    vm: &objc2::rc::Retained<objc2_virtualization::VZVirtualMachine>,
+    f: F,
+) -> Result<R, VmError>
+where
+    F: FnOnce(&objc2_virtualization::VZVirtualMachine) -> R + Send + 'static,
+    R: Send + 'static,
+{
+    if on_main_thread() {
+        return Ok(f(vm));
+    }
+    let handle = vm_handle::VmHandle(vm.clone());
+    let (tx, rx) = std::sync::mpsc::channel::<R>();
+    boot::dispatch_to_main_queue(move || {
+        // `let` moves the WHOLE handle into the closure: naming only
+        // `handle.0` would capture the non-Send field (see vm_handle).
+        let handle = handle;
+        let _ = tx.send(f(&handle.0));
+    });
+    rx.recv_timeout(VM_QUEUE_WAIT).map_err(|_| {
+        format!(
+            "VzRuntime: the main dispatch queue did not run a VM call within {}s \
+             (called off the main thread while the main thread is not servicing its queue)",
+            VM_QUEUE_WAIT.as_secs()
+        )
+    })
+}
+
+/// Wait between VZ state reads: pump the run loop on the main thread (VZ
+/// delivers there), plain sleep elsewhere (a worker's run loop delivers
+/// nothing; the main thread's own loop runs the dispatched calls).
+#[cfg(target_os = "macos")]
+fn wait_for_vz(d: Duration) {
+    if on_main_thread() {
+        boot::pump_cf_loop_for(d);
+    } else {
+        std::thread::sleep(d);
+    }
+}
+
 #[cfg(target_os = "macos")]
 #[async_trait::async_trait]
 impl VmRuntime for VzRuntime {
@@ -3046,12 +3110,20 @@ impl VmRuntime for VzRuntime {
         // 690-xeda windows near-miss (a guest that killed itself every 30s,
         // caught only by a measurement guard) says not to rewire casually.
         // If the delegate lands, remove this justification with it.
-        let request_result = unsafe { vm.requestStopWithError() };
-        if let Err(e) = request_result {
-            // The VM may already be stopped or in an invalid state for stop;
-            // log + fall through to force-stop to honor the drain_timeout
-            // contract.
-            let msg = e.localizedDescription().to_string();
+        //
+        // 1429-u2wd: EVERY VZ call below goes through `on_vm_queue`. The VM
+        // was created on the main dispatch queue (start() dispatches there),
+        // and VZ asserts that queue on each call. Called from a tokio worker
+        // (the tray's Stop VM and Reset guest), a direct call trapped in
+        // dispatch_assert_queue (EXC_BREAKPOINT, tillandsias-tray-2026-09-26-
+        // 211531.ips). On the main thread the call runs inline, exactly as
+        // before; off it, the call hops to the main queue and this thread
+        // waits for the answer.
+        let request_result = on_vm_queue(vm, |vm| {
+            unsafe { vm.requestStopWithError() }.map_err(|e| e.localizedDescription().to_string())
+        })?;
+        if let Err(msg) = request_result {
+            // The VM may already be stopped or in an invalid state for stop.
             // Returning here would leak the VM in a weird state; better to
             // surface and let the caller decide.
             return Err(format!("VzRuntime::stop: requestStop failed: {msg}"));
@@ -3061,7 +3133,7 @@ impl VmRuntime for VzRuntime {
         let stop_res = loop {
             // VZ state enum: 0=Stopped, 1=Running, 2=Paused, 3=Error, 4=Starting,
             // 5=Pausing, 6=Resuming, 7=Stopping, 8=Saving, 9=Restoring.
-            let state = unsafe { vm.state() }.0;
+            let state = on_vm_queue(vm, |vm| unsafe { vm.state() }.0)?;
             if state == 0 {
                 // Stopped cleanly.
                 break Ok(());
@@ -3071,23 +3143,26 @@ impl VmRuntime for VzRuntime {
                 // is the force-stop variant; we wait briefly for it then
                 // return regardless.
                 let (tx, rx) = std::sync::mpsc::channel::<()>();
-                let handler = block2::RcBlock::new(move |_err: *mut objc2_foundation::NSError| {
-                    let _ = tx.send(());
-                });
-                unsafe { vm.stopWithCompletionHandler(&handler) };
+                on_vm_queue(vm, move |vm| {
+                    let handler =
+                        block2::RcBlock::new(move |_err: *mut objc2_foundation::NSError| {
+                            let _ = tx.send(());
+                        });
+                    unsafe { vm.stopWithCompletionHandler(&handler) };
+                })?;
                 let force_deadline = Instant::now() + Duration::from_secs(5);
                 while Instant::now() < force_deadline {
                     if rx.try_recv().is_ok() {
                         break;
                     }
-                    boot::pump_cf_loop_for(Duration::from_millis(100));
+                    wait_for_vz(Duration::from_millis(100));
                 }
                 break Err(format!(
                     "VzRuntime::stop: drain_timeout ({}s) expired; force-stop dispatched",
                     drain_timeout.as_secs()
                 ));
             }
-            boot::pump_cf_loop_for(Duration::from_millis(250));
+            wait_for_vz(Duration::from_millis(250));
         };
 
         // Explicitly drop handle to release VZ and unlock any files.
@@ -3506,6 +3581,86 @@ impl VmRuntime for VzRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// VZ calls in `text` that are NOT inside an `on_vm_queue(...)` call
+    /// (1429-u2wd): each returned string is the offending line, trimmed.
+    fn unmarshalled_vz_calls(text: &str) -> Vec<String> {
+        const CALLS: [&str; 3] = [
+            "requestStopWithError()",
+            "vm.state()",
+            "stopWithCompletionHandler(",
+        ];
+        // Byte spans covered by each `on_vm_queue(` ... matching `)`.
+        let mut spans = Vec::new();
+        let mut from = 0;
+        while let Some(i) = text[from..].find("on_vm_queue(") {
+            let open = from + i + "on_vm_queue".len();
+            let mut depth = 0i32;
+            let mut end = text.len();
+            for (j, c) in text[open..].char_indices() {
+                match c {
+                    '(' => depth += 1,
+                    ')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = open + j;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            spans.push((open, end));
+            from = open;
+        }
+        let mut bad = Vec::new();
+        for call in CALLS {
+            for (at, _) in text.match_indices(call) {
+                if !spans.iter().any(|&(s, e)| s < at && at < e) {
+                    let line_start = text[..at].rfind('\n').map_or(0, |n| n + 1);
+                    let line_end = text[at..].find('\n').map_or(text.len(), |n| at + n);
+                    bad.push(text[line_start..line_end].trim().to_string());
+                }
+            }
+        }
+        bad
+    }
+
+    /// 1429-u2wd: `VzRuntime::stop` makes NO VZ call outside `on_vm_queue`,
+    /// so a stop from a tokio worker (the tray's Stop VM and Reset guest)
+    /// hops to the VM's queue instead of trapping in dispatch_assert_queue.
+    /// An ABSENCE scan: it cannot be satisfied by a literal being present.
+    ///
+    /// NEGATIVE CONTROL: the pre-fix body (direct `vm.state()` and
+    /// `requestStopWithError()`) must be flagged, and a marshalled call must not.
+    #[test]
+    fn stop_makes_no_vz_call_outside_the_vm_queue() {
+        let neg = "let r = unsafe { vm.requestStopWithError() };\n\
+                   let state = unsafe { vm.state() }.0;\n\
+                   let ok = on_vm_queue(vm, |vm| unsafe { vm.state() }.0)?;\n";
+        assert_eq!(
+            unmarshalled_vz_calls(neg).len(),
+            2,
+            "negative control: the two direct calls are flagged, the marshalled one is not"
+        );
+
+        let source = include_str!("vz.rs");
+        let window = source
+            .split("async fn stop(&self, drain_timeout: Duration)")
+            .nth(1)
+            .and_then(|t| t.split("async fn exec(").next())
+            .expect("VzRuntime::stop must exist, followed by exec()");
+        assert!(
+            window.contains("requestStopWithError"),
+            "the stop window holds no requestStop at all — this scan is checking nothing"
+        );
+        let bad = unmarshalled_vz_calls(window);
+        assert!(
+            bad.is_empty(),
+            "VZ calls in VzRuntime::stop outside on_vm_queue trap when stop runs on a \
+             tokio worker (1429-u2wd): {bad:?}"
+        );
+    }
 
     /// ORDER 690-w94k item 1 — the pump must PARK, not SPIN, when the run
     /// loop mode has no sources.
