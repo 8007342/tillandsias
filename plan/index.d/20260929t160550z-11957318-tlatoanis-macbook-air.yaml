@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-github-device-flow-qr-is-drawn-with-half-block-glyphs-in-low-contrast-greens-so-line-spacing-or-a-large-font-stripes-it-and-phone-cameras-rarely-read-it
+    field: status
+    value: implemented
+    ts: "2026-09-29T16:05:50Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-github-device-flow-qr-is-drawn-with-half-block-glyphs-in-low-contrast-greens-so-line-spacing-or-a-large-font-stripes-it-and-phone-cameras-rarely-read-it
+    event:
+      type: progress
+      ts: "2026-09-29T16:05:50Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: LANDED on linux-next at ff5716971 (land90); work/1480-eqkh is an ancestor of ff5716971, and ff5716971 of origin/linux-next, checked by git merge-base 2026-09-29
+  - packet_id: the-github-device-flow-qr-is-drawn-with-half-block-glyphs-in-low-contrast-greens-so-line-spacing-or-a-large-font-stripes-it-and-phone-cameras-rarely-read-it
+    event:
+      type: note
+      ts: "2026-09-29T16:05:50Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        code landed; live arm pending: the operator's phone must decode the QR on the first try on an enlarged-font Terminal, with a screenshot, on a tray built from >= ff5716971 (exit criterion 1). Not completed until measured.
