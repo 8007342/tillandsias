@@ -10,7 +10,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # so. The fixture now times its own phases, bounds the container run BELOW the
 # step budget, and on that bound fails by name with the host's load and a timed
 # `podman info`, so a slow host reads as SLOW and never as a config regression.
-_ms() { date +%s%N | cut -c1-13; }
+# Milliseconds, digit-validated like build.sh _now_ms: BSD date passes %N
+# through literally, so a non-digit reading degrades to whole seconds.
+_ms() {
+    local t
+    t="$(date +%s%3N 2>/dev/null || true)" # gnu-date: ok (digit-validated below; degrades to seconds)
+    case "$t" in
+        ''|*[!0-9]*)
+            t="$(date +%s 2>/dev/null || true)"
+            case "$t" in
+                ''|*[!0-9]*) t=0 ;;
+                *) t=$((t * 1000)) ;;
+            esac
+            ;;
+    esac
+    printf '%s\n' "$t"
+}
 _T0="$(_ms)"
 CONTAINER_BOUND_SECS="${TILLANDSIAS_GITCONFIG_FIXTURE_BOUND_SECS:-25}"
 _DEFAULT_VERSION="$(tr -d '[:space:]' < "$SCRIPT_DIR/../VERSION")"
