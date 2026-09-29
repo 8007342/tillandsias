@@ -300,16 +300,18 @@ POST /accounts/0123456789abcdef0123456789abcdef/gateway/rules"
     if [ ! -f "$LEDGER_LEDGER" ]; then
         arm_fail "ledger_records_calls_in_order" "no ledger file at $LEDGER_LEDGER"
     else
-        ACTUAL_ORDER="$(python3 -c '
-import json, sys
-for line in open(sys.argv[1]):
-    line = line.strip()
-    if not line:
-        continue
-    entry = json.loads(line)
-    path = entry["path"].split("?", 1)[0]
-    print(entry["method"], path)
-' "$LEDGER_LEDGER")"
+        # One "METHOD path" line per ledger entry, query string dropped.
+        # Plain awk (bash 3.2 / BSD userland; no python, 1087-h2z9). Each
+        # ledger line is one serde_json object; inside a JSON string every
+        # quote is escaped, so the unescaped `"method":"` / `"path":"` key
+        # sequences can only be the keys themselves, never body text.
+        ACTUAL_ORDER="$(awk '
+            NF == 0 { next }
+            {
+                m = $0; sub(/.*"method":"/, "", m); sub(/".*/, "", m)
+                p = $0; sub(/.*"path":"/, "", p); sub(/".*/, "", p); sub(/[?].*/, "", p)
+                print m " " p
+            }' "$LEDGER_LEDGER")"
         LINE_COUNT="$(wc -l <"$LEDGER_LEDGER" | tr -d '[:space:]')"
         if [ "$ACTUAL_ORDER" = "$EXPECTED_ORDER" ] && [ "$LINE_COUNT" = "10" ]; then
             arm_ok "ledger_records_calls_in_order"
