@@ -173,6 +173,7 @@ specs:
   # only because a binding names it; without this line the land-verdict fixture
   # would be a file rather than a gate.
   - litmus:land-verdict-through-a-pipe
+  - litmus:smoke-consecutive-lanes-shape
   - litmus:github-token-auto-rotation
   - litmus:mirror-upstream-auth-overwrite
   - litmus:exit-pause-host-hold
