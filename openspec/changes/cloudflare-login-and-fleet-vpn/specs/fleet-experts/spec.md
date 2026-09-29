@@ -29,7 +29,7 @@ same `run_grounded` call path as before (spec
 host's Mesh IP from `secret/cloudflare/mesh.mesh_ip` on port 11436 with the
 bearer at `secret/fleet/experts` (`bearer`, `hub_hostname`, `url`), minting
 a 32-byte bearer on `--mint` and refusing to serve without one; it SHALL
-advertise the Mesh hostname route `fleet-experts.tillandsias-vpn.internal`
+advertise the Mesh hostname route `fleet-experts.tillandsias-enclave-vpn.internal`
 for this node and refuse with `refused:fleet-experts:not-joined` when the
 host has no Mesh IP.
 
@@ -41,7 +41,7 @@ host has no Mesh IP.
 ### Requirement: every forge can ask the fleet experts and knows which expert answered
 
 The forge overlay SHALL carry a provider `tillandsias-fleet-experts` with
-`baseURL` `http://fleet-experts.tillandsias-vpn.internal:11436/v1` and an
+`baseURL` `http://fleet-experts.tillandsias-enclave-vpn.internal:11436/v1` and an
 API key read from `secret/fleet/experts.bearer` at launch, beside the
 existing `tillandsias-experts` provider, and the local-experts agent prompt
 SHALL name which provider produced each relayed answer.

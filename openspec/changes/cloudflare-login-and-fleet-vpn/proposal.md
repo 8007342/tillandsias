@@ -52,7 +52,7 @@ implementation:
   1506-t97c and 1506-euvq.
 - **ADDED** capability `fleet-experts`: `expert-serve` bound to the Mesh IP
   behind a per-fleet bearer from Vault, the
-  `fleet-experts.tillandsias-vpn.internal` hostname route, the
+  `fleet-experts.tillandsias-enclave-vpn.internal` hostname route, the
   `tillandsias-fleet-experts` provider in every forge, and the tray rows.
 - Tray and CLI surfaces: `Cloudflare Login` beside `GitHub Login`
   (`MenuId::GITHUB_LOGIN` is the model), `Fleet VPN:` and `Fleet Experts:`

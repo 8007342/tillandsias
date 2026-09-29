@@ -176,17 +176,20 @@ feature (`refused:fleet-vpn:paid-feature:<step>`).
 Proves, on Linux hosts (macuahuitl, lenovinha, yoga):
 
 1. SAME HOST: a message queued by the bare-metal lane on one host is
-   delivered into a Codex forge lane's mailbox, `msg recv` prints it,
-   `msg ack` flips the sender's `msg status <id>` to `acked:` — no network,
-   filesystem plus one Unix socket.
+   delivered into a Codex forge lane's mailbox, which fsyncs it and acks;
+   the sender's `msg status <id>` reads `acked:<host>/<lane>@<ts>` before
+   any agent has run `msg recv` — no network, filesystem plus one Unix
+   socket. Later, at its own cadence, the Codex session runs `msg recv`
+   and sees it.
 2. SAME LAN: the same round trip between two hosts over TCP with
    Noise XX mutual authentication pinned to `plan/fleet/peers/`, discovery
-   from the directory plus mDNS hints, a `delivered` receipt from the
-   receiving daemon and an end-to-end `acked` receipt from the agent.
-   Acceptance demo: "the Codex forge on macuahuitl receives and ACKs a
-   HEADS-UP sent by the Claude bare-metal session on yoga; yoga's
-   `msg status` reads `acked`, and the ACK event lands on the row the
-   message named."
+   from the directory plus mDNS hints, and the mailbox's ack carried back
+   to the sender. Acceptance demo (operator ruling 2026-09-29): "yoga
+   sends a HEADS-UP to macuahuitl/<codex lane>; macuahuitl's mailbox acks
+   within 5 s and yoga's `msg status` reads
+   `acked:macuahuitl/<codex lane>@<ts>`; separately, and without
+   blocking anything, Codex's session later `recv`s it at its own
+   cadence."
 3. The Cloudflare rung is RESEARCHED, not gated: 1506-euvq records whether
    WARP mode runs as a rootless sidecar sharing the router's network
    namespace and acquires a Mesh IP; 1506-t97c wires `join` to it. The
@@ -198,9 +201,9 @@ Proves, on Linux hosts (macuahuitl, lenovinha, yoga):
 
 ### Surfaces
 
-`tillandsias-plan msg send|recv|ack|list|status|whoami|lint|gc` (CLI, any
-harness), `forge-plan` MCP tools `msg_send`, `msg_recv`, `msg_ack`,
-`msg_list`, `msg_status` (agents with MCP), `tillandsias --msg-serve` (the
+`tillandsias-plan msg send|recv|list|status|whoami|lint|gc` (CLI, any
+harness), `forge-plan` MCP tools `msg_send`, `msg_recv`, `msg_list`,
+`msg_status` (agents with MCP), `tillandsias --msg-serve` (the
 resident daemon in `tillandsias-headless`: the mover on one host, the TCP
 face on the LAN, the Mesh face through the router sidecar). Why the plan
 binary and not a new one: it is already installed on every host and in every
@@ -231,26 +234,63 @@ both refused at `send`, never truncated. Body comes from stdin or
 
 ### Delivery semantics (what can actually be kept)
 
-- At-least-once: a message stays in the sender's outbox until the receiving
-  daemon writes it durably and answers `stored`; retries with backoff (1 s
-  doubling to 60 s) until `ttl_s`; then it moves to `dead/` and `msg status`
-  prints `expired:`.
-- Idempotent: the receiver keeps a seen-set of `(from, id)`; a duplicate is
-  dropped silently and re-acknowledged as `stored`.
-- Explicit ACK: `msg recv` moves `new/` → `cur/` (seen, not acked) and prints
-  the same messages on every call until `msg ack <id>`, which moves them to
-  `acked/` and sends an `acked` receipt back to the sender. Two receipt
-  levels, named apart on purpose: `delivered` (the daemon stored it) and
-  `acked` (an agent read it and said so).
+OPERATOR RULING 2026-09-29: "ACK just means the message was accepted by the
+mailbox; agents will read at their own cadence and whenever they feel
+appropriate. ACK doesn't mean read, it means delivered."
+
+Refined the same day: "An agent does 'send this to agent X' and near
+immediately gets an ACK meaning the message was delivered, not read. And
+that's it." Plus: ephemeral queue with TTL, stable receipt ids, broadcasts
+with per-recipient acks that are never replied to, at-least-once with
+dedupe at the mailbox.
+
+- ONE receipt level, produced by the INFRASTRUCTURE only. `ack` = the
+  recipient's mailbox durably accepted the message (written into
+  `inbox/new`, file and directory fsync'd, `(from, id)` recorded) — written
+  by the mover on one host or the receiving mailbox daemon across hosts,
+  never by an agent, a harness, an inference layer or a verb. At that
+  moment the sender's `receipts/<id>` reads `acked:<host>/<lane>@<ts>` and
+  `msg status <id>` prints it, with `via:<rung>` on a second line.
+- Receipt id at once: `send` prints `ok:msg:queued:<id>` before any
+  delivery; `<id>` is stable and is what `status`, logs and
+  `--in-reply-to` name.
+- At-least-once: a message stays in the sender's outbox until the ack;
+  retries with backoff (1 s doubling to 60 s) until its TTL; then it moves
+  to `dead/` and `msg status` prints `undelivered:expired` — the only
+  failure, apart from a positive refusal by the destination mailbox
+  (`undelivered:refused:<verdict>`).
+- TTL: default 86,400 s (24 h); per send `--ttl` within 60 s … 604,800 s
+  (7 d), otherwise refused. 24 h covers the fleet's slowest scheduled
+  reader (host slots every 2 h, coordinator full cycles every 4 h, Codex
+  sessions launched roughly daily) and a laptop closed overnight; 60 s is
+  the retry backoff cap, so a message always survives at least one retry
+  after a daemon restart; 7 d is the point past which the ledger already
+  holds the fact, and it bounds every mailbox and receipt store. A message
+  in a mailbox, read or unread, is dropped at its TTL (daemon sweep and
+  `recv`); receipts live 7 d past their terminal state. This replaces the
+  earlier 7/30-day retention rule.
+- Idempotent: the mailbox keeps a seen-set of `(from, id)`; a duplicate is
+  absorbed silently and acked again.
+- Reading is local bookkeeping: `msg recv` moves `new/` → `cur/` (`--keep`
+  peeks); none of it is reported to the sender and none of it gates
+  delivery. There is no agent-read receipt and no `ack` verb.
+- Broadcast: `--to` repeats; groups `@all-hosts` (every host in
+  `plan/fleet/peers/`, lane `host`), `@<host>/*` (every lane on a host),
+  and names from the committed `plan/fleet/groups.yaml`. One receipt id,
+  one independent ack per recipient mailbox, `status` per recipient. A
+  reply to a broadcast is refused at the CLI
+  (`refused:msg:reply-to-broadcast:<id>:…send a new message to <from>
+  instead`) AND by the exchange layer if the CLI is bypassed
+  (`undelivered:refused:reply-to-broadcast`).
 - Ordering: per `(from lane, to lane)`, `recv` presents by `seq`; a gap is
   delivered and flagged `gap:` rather than held (at-least-once beats
   in-order for a coordination channel). No cross-sender order is promised.
 - Persistence: `$XDG_STATE_HOME/tillandsias/msg/lanes/<lane>/{outbox,inbox,
-  acked,dead,receipts}` on the HOST filesystem; a forge lane's directory is
-  bind-mounted into its container, so a forge rebuild keeps its mailbox.
-- Retention: `acked/` 7 days, `dead/` and `receipts/` 30 days; `msg gc`.
-- Broadcast is `<host>/*` (every lane on one host) in the PoC; fleet-wide
-  fan-out is a loop over the directory on the sender's side, not a feature.
+  dead,receipts}` on the HOST filesystem; a forge lane's directory is
+  bind-mounted into its container, so a forge rebuild keeps its mailbox
+  until the TTLs run out.
+- Broadcast is a feature (ruling 4 above): lists, `@all-hosts`,
+  `@<host>/*` and committed groups, one ack per recipient.
 
 ### Transport ladder
 
@@ -261,7 +301,7 @@ both refused at `send`, never truncated. Body comes from stdin or
 | Cloudflare Mesh | `plan/fleet/peers/<host>.yaml` `mesh_ip:` written by `join` | the router sidecar binds `<mesh_ip>:48640` inside the router netns and pipes bytes to `host.containers.internal:48640`; the same Noise session end to end | 1506-euvq then 1506-t97c (after the PoC) |
 
 The daemon tries rungs in that order per peer and records which one carried
-the last `stored` receipt (`msg status` prints `via:lan` or `via:mesh`).
+the ack (`msg status` prints `via:lan` or `via:mesh`).
 "Handle our own tunnels" is the Noise session: it is the tunnel on every
 rung; Cloudflare only supplies reachability.
 
@@ -308,7 +348,7 @@ Threat table:
 | Attacker | Can | Cannot | Because |
 |---|---|---|---|
 | a device on the same switch (passive) | see that hosts talk, TCP 4-tuples, message sizes | read bodies, learn lanes | AEAD on every frame |
-| a device on the same switch (active, spoofs mDNS) | make a daemon try an address | become a peer, receive a message, cause a false `delivered` | mDNS is a hint; XX pins the static key to the directory |
+| a device on the same switch (active, spoofs mDNS) | make a daemon try an address | become a peer, receive a message, cause a false `ack` | mDNS is a hint; XX pins the static key to the directory |
 | a device on the LAN replaying captured frames | nothing | re-deliver a message | per-session keys; seen-set |
 | a compromised forge (lane) | send as its own lane; read its own inbox; fill its own outbox | send as another lane, read another lane's inbox, reach the network | it holds one directory; the mover stamps `from.lane` from the mount; the daemon runs on the host |
 | a peer host that is compromised | send any message as itself, to anyone | impersonate a third host | `from.host` must equal the authenticated static |
@@ -319,12 +359,14 @@ Threat table:
 ### The ledger keeps the record
 
 The bus is fast and acknowledged; the ledger is durable. `msg send --row
-<order>` names the row; `msg ack --row` appends the `ack` event on that row
-(the same `ACK: <msg-id>` the Codex inbox asked for, written by the tool
-rather than by hand); an expiry writes an `undelivered` event on the row.
+<order>` names the row; on `undelivered:expired` the SENDING DAEMON writes
+an `undelivered` event on that row (id, mailbox, TTL), and that is the only
+message outcome the ledger records — written by the infrastructure, never
+by an agent, because an ack is a fact about a mailbox, not about the work. The
+hand-appended `ACK:` note of the Codex inbox disappears with the inbox:
 `plan/inbox/codex.md` becomes a ten-line pointer to `msg recv`, and
-`plan_only_peers` gains `msg recv` as step 0 with the ledger unchanged as the
-record.
+`plan_only_peers` gains `msg recv` as step 0, run at the peer's own
+cadence, with the ledger unchanged as the record.
 
 ## Open questions for the operator
 

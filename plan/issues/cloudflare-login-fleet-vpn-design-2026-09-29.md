@@ -173,10 +173,10 @@ client names). The canonical names:
 
 | Thing | Canonical | Class |
 |---|---|---|
-| the network (virtual network + route suffix) | `tillandsias-vpn` | Display / Label |
-| Zero Trust team name | `tillandsias-vpn-<acct8>` (`acct8` = first 8 hex of the Cloudflare account id; team names are global, `tillandsias-vpn` alone may be taken) | Label |
+| the network (virtual network + route suffix) | `tillandsias-enclave-vpn` | Display / Label |
+| Zero Trust team name | `tillandsias-enclave-vpn-<github_login>` (the operator's GitHub login, normalized; public, unique, ≤ 39 chars so it fits 63; `-2`, `-3`… on a collision, reported; never an account id or email) | Label |
 | a participant (node, device, service token) | `tillandsias-<host>` where `<host>` is the normalized OS hostname, truncated so the whole label ≤ 63 | Label |
-| a service's hostname route | `<service>.tillandsias-vpn.internal` (e.g. `fleet-experts.tillandsias-vpn.internal`) | Label per component |
+| a service's hostname route | `<service>.tillandsias-enclave-vpn.internal` (e.g. `fleet-experts.tillandsias-enclave-vpn.internal`) | Label per component |
 | the OAuth App (operator-entered) | `Tillandsias` | Display |
 
 `.internal` is used as the suffix because Mesh hostname routes are private
@@ -219,7 +219,7 @@ names resolved by Gateway; a public TLD would collide with real DNS.
   dashboard — creating it via the API is unverified (open question).
 - **Fleet experts** — the hub host runs `tillandsias-plan expert-serve`
   bound to its Mesh IP behind a per-fleet bearer stored in Vault
-  (`secret/fleet/experts`), advertises `fleet-experts.tillandsias-vpn.internal`
+  (`secret/fleet/experts`), advertises `fleet-experts.tillandsias-enclave-vpn.internal`
   as a hostname route, and every spoke's forge gets a
   `tillandsias-fleet-experts` provider next to the local one; the tray shows
   reachability. Service-token devices share one identity, so the bearer is
@@ -254,23 +254,46 @@ names resolved by Gateway; a public TLD would collide with real DNS.
    Recommendation: start private; go public only when other operators
    should run their own fleets.
 6. A Zero Trust organization on the Free plan with team name
-   `tillandsias-vpn-<acct8>`; Gateway proxy TCP+UDP on; default device
+   `tillandsias-enclave-vpn-<github_login>`; Gateway proxy TCP+UDP on; default device
    profile on MASQUE; Split Tunnels include `100.96.0.0/12`; Mesh enabled.
 7. Hand the implementers: the `client_id` (public, embeddable like
    `GITHUB_APP_CLIENT_ID`), the registered redirect URIs, the team name, and
    the relay page's URL.
 
+## Operator ruling on names (2026-09-29, relayed by the coordinator)
+
+Supersedes the first canonical table (`tillandsias-vpn`,
+`tillandsias-vpn-<acct8>`); the table above already reads the ruled names.
+
+- Zero Trust TEAM name (the globally unique `<team>.cloudflareaccess.com`
+  label): `tillandsias-enclave-vpn-<github_username>`, normalized by
+  `cloudflare_names`; no Cloudflare account id or email in any name; on a
+  collision suffix `-2`, `-3`… and report it
+  (`note:fleet-vpn:team-name-suffixed:<name>`).
+- Virtual NETWORK name (account-scoped): `tillandsias-enclave-vpn`. The
+  route suffix follows it: `<service>.tillandsias-enclave-vpn.internal`
+  (design inference, not part of the ruling).
+- Cloudflare App: PRIVATE (operator-only) first; public later, revisions
+  expected.
+- Never delete the Zero Trust organization in tests or tooling: a deleted
+  organization's team name is permanently reserved (Cloudflare FAQ).
+- Applied by an amendment fragment on 1505-iky3 (the normalizer) and
+  1505-6w7d (init), not by a new packet: both rows are `ready` and
+  unimplemented, so the correction is a field flip plus an event, and the
+  fake (1505-svve) gains a never-DELETE assertion on the organization route
+  through 1505-6w7d's fixture.
+
 ## Open questions for the operator
 
 1. Do you own a domain to host the relay page (needed for QR login; also
    the Client URL if the App ever goes public)?
-2. Is one host daemon (`warp-svc`, root, rpm-ostree layered on Silverblue)
-   acceptable on hub hosts such as macuahuitl, or must every host stay
-   daemon-free (then only the proxy-mode research can unlock spokes)?
-3. Private App (your account only) or public App from day one?
+2. ANSWERED 2026-09-29: no host daemon anywhere; the client runs in a
+   rootless sidecar beside the router (milestone 1506-3xu7).
+3. ANSWERED 2026-09-29: private App first.
 4. Should macOS/Windows hosts join through their Linux guest only (host
    tools off-mesh), as designed, or do you want the host-native client too?
-5. Team name: `tillandsias-vpn-<acct8>` as proposed, or a name you choose?
+5. ANSWERED 2026-09-29: team `tillandsias-enclave-vpn-<github_login>`,
+   network `tillandsias-enclave-vpn`.
 
 ## Provenance
 
