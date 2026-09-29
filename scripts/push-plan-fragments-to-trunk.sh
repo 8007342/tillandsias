@@ -387,20 +387,28 @@ _trunk_fold_check() {
         "$PLAN" fragment-event-packets "$p" 2>/dev/null | grep -v OpenSpec >> "$tmp/addressed" || true
     done < "$tmp/paths"
     sort -u -o "$tmp/addressed" "$tmp/addressed"
+    # CANDIDATES FIRST, ONCE: only a local fragment that is NOT on trunk and
+    # NOT riding can be the dropped one, and that set is usually a handful.
+    # The first draft scanned every plan/index.d file (3,209 on yolanda) with
+    # one awk per file per packet. On Windows, process spawn made a one-
+    # fragment push run for over 30 minutes; measured and killed 2026-09-29.
+    [ -s "$tmp/addressed" ] || return 0
+    git ls-tree --name-only "$base" plan/index.d/ 2>/dev/null | sort > "$tmp/on-trunk"
+    ls plan/index.d/*.yaml 2>/dev/null | sort > "$tmp/local-frags"
+    comm -23 "$tmp/local-frags" "$tmp/on-trunk" | comm -23 - <(sort "$tmp/paths") > "$tmp/offtrunk"
     local f
     while IFS= read -r pid; do
         [ -n "$pid" ] || continue
-        for f in plan/index.d/*.yaml; do
-            [ -f "$f" ] || continue
-            grep -qxF "$f" "$tmp/paths" && continue
+        while IFS= read -r f; do
+            [ -n "$f" ] && [ -f "$f" ] || continue
+            grep -qF -- "$pid" "$f" 2>/dev/null || continue
             _status_write_for "$f" "$pid" || continue
-            git cat-file -e "$base:$f" 2>/dev/null && continue
             echo "fragments-to-trunk: '$f' writes the status of $pid and is not being carried, but the selected fragments address $pid — trunk would keep offering it at its old status" >&2
             echo "refused:fragments-to-trunk:trunk-fold:status-loss:$pid"
             _afford "an event pushed without the status fragment it belongs with leaves the trunk offering the row at its old status (a claimed row stays ready)" \
                 "name '$f' with the others (scripts/push-plan-fragments-to-trunk.sh $f <the rest>), then re-run"
             exit 1
-        done
+        done < "$tmp/offtrunk"
     done < "$tmp/addressed"
 }
 
