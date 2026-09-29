@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    event:
+      type: note
+      ts: "2026-09-29T11:31:55Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t113155z
+      host: macos
+      summary: |
+        CORRECTION to my suggested fix above (from the coordinator, 2026-09-29): a pgid-ONLY comparison is too weak. A spawn using setpgid WITHOUT setsid also gets a new pgid, so a pgid-only arm passes on exactly the mutation it exists to catch, and a new process group alone does not escape the caller session's SIGHUP. Choose one:
+         (a) Read the session where the platform exposes it (Linux `ps -o sess=`); on darwin compare pgid AND assert the child has no controlling terminal (`ps -o tt=` prints `??` on macOS). Only a new session loses the ctty while the caller keeps one. CAVEAT (mine): that ctty check discriminates only when the CALLER has a ctty. Under an agent or CI with no terminal the caller is `??` too, so on darwin the arm should SKIP BY NAME when the caller has no ctty, not pass.
+         (b) Have the plan binary report getsid itself (a hidden `run --print-session`, or a debug line), so both regimes measure the real session.
+        Either way, the fixture must show the MUTATION going red: swap setsid for setpgid, and that arm must fail on both regimes.
+        Also: my local probe used os.getsid through python3. That is fine as an uncommitted probe but cannot be the committed fix (the no-Python rule).
