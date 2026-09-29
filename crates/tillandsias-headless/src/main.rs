@@ -134,6 +134,12 @@ pub mod accel_probe;
 pub mod engine_slots;
 // @trace spec:inference-policy-router: Workload-class policy router and fallback chains.
 pub mod policy_router;
+// @trace order:1505-iky3 — every name Tillandsias mints for Cloudflare (Zero
+// Trust team, virtual network, participant, hostname route, OAuth App),
+// normalized to one alphabet and minted from one canonical table. Pure, no
+// I/O; `pub` so the login and fleet-vpn packets built on this table (siblings
+// under 1505-sm2j) can reach it.
+pub mod cloudflare_names;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
