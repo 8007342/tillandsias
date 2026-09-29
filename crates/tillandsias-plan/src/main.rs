@@ -4476,6 +4476,27 @@ fn run_predicate_cli(args: &[String]) {
 /// (consent); no child was spawned. A clipped capture is named on stderr.
 fn run_run_verb(args: &[String]) -> ! {
     use tillandsias_plan::run_verb as rv;
+    // ORDER 1375-amye: the detached-session fixture needs getsid(2), not
+    // ps(1)'s `sess` column (which reports 0 for every process on macOS).
+    // This is an observation only: no command is spawned or policy evaluated.
+    if args == ["--session-id"] {
+        #[cfg(unix)]
+        {
+            // SAFETY: getsid(0) reads the current process's session; no pointers.
+            let sid = unsafe { libc::getsid(0) };
+            if sid < 0 {
+                eprintln!("no_status: getsid: {}", std::io::Error::last_os_error());
+                std::process::exit(125);
+            }
+            println!("{sid}");
+            std::process::exit(0);
+        }
+        #[cfg(not(unix))]
+        {
+            eprintln!("usage: --session-id requires a Unix host");
+            std::process::exit(2);
+        }
+    }
     let usage = || -> ! {
         eprintln!(
             "usage: tillandsias-plan run [--json] [--caller run|mcp] [--cwd P] [--env K=V]… [--timeout <n>s|<n>ms] [--detach [--log F]] [--lock P [--lock-wait <dur>]] [--capture-bytes N] [--stdin-file F] -- <argv…>\n\

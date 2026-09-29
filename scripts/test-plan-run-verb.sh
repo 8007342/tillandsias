@@ -32,14 +32,14 @@ grep -Fxq 'a b*' "$WORK/argv.txt" \
 ok "argv remains tokenized; spaces and glob characters are not reinterpreted"
 
 if [ "$(uname -s)" = Linux ] || [ "$(uname -s)" = Darwin ]; then
-    caller_session="$(ps -o sess= -p "$$" | tr -d '[:space:]')"
+    caller_session="$("$PLAN_BIN" run --session-id)"
     child_record="$WORK/detached.txt"
     cat > "$WORK/detached-child.sh" <<'CHILD'
-printf '%s %s\n' "$$" "$(ps -o sess= -p $$ | tr -d '[:space:]')" > "$1"
+printf '%s %s\n' "$$" "$("$2" run --session-id)" > "$1"
 sleep 3
 CHILD
     start=$SECONDS
-    "$PLAN_BIN" run --detach -- sh "$WORK/detached-child.sh" "$child_record" \
+    "$PLAN_BIN" run --detach -- sh "$WORK/detached-child.sh" "$child_record" "$PLAN_BIN" \
         2>"$WORK/detach.err" \
         || fail "detached run refused: $(<"$WORK/detach.err")"
     elapsed=$((SECONDS - start))
@@ -47,8 +47,13 @@ CHILD
     for _ in {1..40}; do [ -s "$child_record" ] && break; sleep 0.025; done
     [ -s "$child_record" ] || fail "detached child did not start"
     read -r child_pid child_session < "$child_record"
+    case "$caller_session:$child_session" in
+        *[!0-9:]*|0:*|*:0) fail "getsid produced an invalid session ($caller_session:$child_session)" ;;
+    esac
     [ "$child_session" != "$caller_session" ] \
         || fail "detached session equals caller session ($caller_session)"
+    [ "$child_session" = "$child_pid" ] \
+        || fail "detached child is not a session leader (pid=$child_pid sid=$child_session)"
     sleep 3.2
     kill -0 "$child_pid" 2>/dev/null && fail "detached child did not finish" || true
     ok "detach returns promptly, enters a distinct session, and survives its caller"
