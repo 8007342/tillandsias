@@ -595,6 +595,31 @@ mod tests {
         assert_eq!(parse_cookie_value(&bad), None, "+ must reject");
     }
 
+    /// 1477-hff2. The length guard must hold on the LONG side too. A
+    /// well-formed base64url value that decodes to MORE than COOKIE_LEN bytes
+    /// must be rejected, never truncated to its first 32: a truncating parser
+    /// would let `/validate` accept any cookie whose prefix matches a live
+    /// token, with arbitrary trailing bytes. Pre-fix, a seeded truncating
+    /// defect passed every test in the workspace.
+    #[test]
+    fn parse_cookie_value_rejects_an_over_long_cookie_instead_of_truncating() {
+        let tok = generate_session_token();
+        for extra in [1usize, 16, 32] {
+            let mut long = tok.to_vec();
+            long.extend(std::iter::repeat_n(0xA5u8, extra));
+            let s = base64_url_no_pad(&long);
+            assert_eq!(
+                parse_cookie_value(&s),
+                None,
+                "a cookie decoding to {} bytes (COOKIE_LEN + {extra}) must reject, not truncate",
+                COOKIE_LEN + extra
+            );
+        }
+        // The exact-length form of the same token still parses: the guard is
+        // exact, not merely a ceiling.
+        assert_eq!(parse_cookie_value(&base64_url_no_pad(&tok)), Some(tok));
+    }
+
     #[test]
     fn store_push_and_validate_promotes_pending_to_active() {
         let store = OtpStore::new();
