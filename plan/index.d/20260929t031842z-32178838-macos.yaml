@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: everything-tillandsias-owns-on-a-host-lives-under-tillandsias-home-and-a-first-launch-migrates-the-legacy-roots
+    event:
+      type: note
+      ts: "2026-09-29T03:18:42Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t031842z
+      host: macos
+      summary: |
+        IMPLEMENTATION STATE, checked 2026-09-29 against origin/linux-next (asked by the coordinator after macuahuitl-forge's landed-but-open sweep flagged this row): NOTHING IS IMPLEMENTED YET. The three commits citing 1438-pk9j (49a36d7b5, 4722dd179, relayed in 7e88aa5c9) are SPEC + PLAN edits only (host-state-lifecycle req aed53110, the 1437-8c6p amendments, row fragments). The crates have no TILLANDSIAS_HOME resolver and no tillandsias_core::home: every '.tillandsias' path in crates/ is the PER-PROJECT <project>/.tillandsias/config.toml (tillandsias-core config.rs, scanner detect.rs, headless main.rs and remote_projects.rs, plan discipline_hooks.rs), not the host root. So 'ready' is correct; the sweep's hit is spec-only commits. A macOS slice starts from zero and must add the resolver the requirement names, not a path beside it. Note also that the per-project '.tillandsias' name overlaps the host root's name: the resolver should make the two unambiguous.
