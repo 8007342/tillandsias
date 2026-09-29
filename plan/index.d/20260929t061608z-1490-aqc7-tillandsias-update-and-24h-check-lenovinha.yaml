@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: tillandsias-update-and-a-24h-opt-out-background-check-install-silently-through-the-soft-hot-upgrade-path-and-fall-back-loudly
+    order: 1490-aqc7
+    parent_order: 1490-gttj
+    depends_on:
+      - 1490-52m5
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [updater, upgrade, lifecycle, release, linux, macos, windows]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-core/src/config.rs
+      - crates/tillandsias-core/src/updater.rs
+      - crates/tillandsias-headless/src/main.rs
+      - scripts/test-update-command.sh
+    title: |
+      tillandsias --update [--check-only] [--channel stable|next] resolves by channel tag (never releases/latest), verifies, installs atomically and execs --upgrade-handoff; the tray checks every UpdatesConfig.check_interval_hours (default 24, 0 disables), stages in the background and installs only when idle; every run ends with exactly one of upgraded / up-to-date / deferred:<reason> / refused:<reason>
+    context: |
+      No updater exists. UpdatesConfig (crates/tillandsias-core/src/config.rs:328;
+      check_interval_hours default 6 at :347; check_on_launch=true) is written
+      into config.toml (:678-679) and read by nothing;
+      openspec/specs/update-system/spec.md is marked obsolete (1397-eppt). The
+      only release downloads are the guest fetch scripts (vz.rs:1122
+      releases/latest; the WSL path pinned to the workspace version).
+      Downgrades are already refused by downgrade_refusal (main.rs:2869) via
+      version_guard. Channel tags are defined in openspec/specs/versioning
+      "Rolling channel tags"; signature verification follows
+      openspec/specs/binary-signing when it provides one. Staged downloads go
+      under downloads/updates/ and are recorded in the host-state-lifecycle
+      download manifest. The install step is the SOFT tier (hot upgrade); when
+      the handoff is refused the installed file is left staged, the running
+      instance is untouched, and the outcome names the relaunch command.
+      Design D6; spec delta update-system (obsolete -> draft).
+    exit_criteria:
+      - 'tillandsias --update --check-only against a file:// release fixture prints up-to-date or the available version and changes nothing on disk (pre-fix: unknown flag)'
+      - 'tillandsias --update with a live forge ends upgraded and the forge container id is unchanged (pre-fix: no updater)'
+      - 'with the handoff refused, the outcome is refused:<reason>, the running instance is untouched, and the relaunch command is printed'
+      - 'check_interval_hours = 0 makes zero network requests for updates and --diagnose reports updates: disabled (pre-fix: the field is never read)'
+      - 'a background check with a lane launched 2 minutes ago stages the update and reports deferred:busy'
+    verifiable_closure: |
+      bash scripts/test-update-command.sh exits 0 against a local file:// fixture. Pre-fix: the script does not exist and the flag is unknown.
+    notes: |
+      size: L  implementer_tier: opus
+      Changes the default check_interval_hours from 6 to 24 (operator: "every 24 hours or so"). The tray timer is shared code; the Linux tray lands first, macOS and Windows trays wire the same updater in follow-ups scoped by their hot-install rows.
+    next_action: 'write the release resolver against a file:// fixture and the four outcome tokens before any install code'
+    provenance: |
+      Filed by a Fable agent on lenovinha, 2026-09-29, from the hot-upgrade investigation (1490-gttj).
+    events:
+      - type: filed
+        ts: "2026-09-29T06:16:08Z"
+        agent_id: "claude-fable-lenovinha-20260929t061525z"
+        host: lenovinha
+        summary: |-
+          The user-facing surface of the hot-upgrade SOFT reset.

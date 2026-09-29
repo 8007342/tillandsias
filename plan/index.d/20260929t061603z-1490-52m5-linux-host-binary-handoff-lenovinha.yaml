@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: linux-upgrade-handoff-keeps-the-stack-and-the-forges-the-new-instance-adopts-instead-of-the-old-one-stopping
+    order: 1490-52m5
+    parent_order: 1490-gttj
+    depends_on:
+      - 1490-nczm
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lifecycle, upgrade, singleton, forge, linux, podman]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-core/src/singleton.rs
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/control_dispatch.rs
+      - scripts/test-host-upgrade-handoff.sh
+    title: |
+      tillandsias --upgrade-handoff on Linux: the old instance writes a handoff manifest, releases the singleton lock and exits 0 WITHOUT graceful_shutdown_async; the new instance adopts every owned running container; no handoff peer means refused:upgrade:no-handoff-peer, never a SIGTERM
+    context: |
+      Today a second non-CLI instance SIGTERMs the first through the singleton
+      lock (crates/tillandsias-core/src/singleton.rs:134-146 calls
+      terminate_process, defined at :192). The first then runs
+      graceful_shutdown_async (crates/tillandsias-headless/src/main.rs:19692),
+      which podman-stops every running container passing is_stack_managed_name
+      (:7497 via shutdown_escalation_targets :7478) and SIGKILLs stragglers.
+      Forges run --rm (build_opencode_forge_args main.rs:8027; status-check
+      :7872), so the stop IS the loss of the agent's session. 1452-ihxp is the
+      same loss through the lane-launch path. Startup already reuses running
+      shared containers by name (vault vault_bootstrap.rs:826, proxy
+      main.rs:3836, nix-cache :6419), so adoption is mostly a matter of NOT
+      stopping first and of registering forges/git mirrors that today are only
+      known to the launching process. The kill path stays for the non-handoff
+      case, logged as takeover:kill. The control socket is deleted at shutdown
+      today; the handoff must run before that. Design D1 in
+      openspec/changes/hot-upgrade-live-stack/design.md; spec delta
+      app-lifecycle "Upgrade handoff transfers the stack without stopping it"
+      and the MODIFIED shutdown_all requirement (handoff exit skips the sweep).
+    exit_criteria:
+      - 'with a forge running a sleeping agent process, swapping the installed binary and starting it with --upgrade-handoff leaves the forge container id and the agent PID unchanged, and the old instance exited 0 (pre-fix: the forge is stopped and removed)'
+      - 'the new instance --diagnose lists vault, proxy, git mirror and the forge as adopted (pre-fix: no such state)'
+      - 'when no instance answers the handoff within 5 s the new instance exits non-zero with refused:upgrade:no-handoff-peer, prints the relaunch command, and sends no SIGTERM (pre-fix: SIGTERM is unconditional)'
+      - 'vault/data is byte-identical across the handoff and no unseal prompt appears (Verified:KEEP; pre-fix: already true, positive control)'
+    verifiable_closure: |
+      bash scripts/test-host-upgrade-handoff.sh exits 0. Pre-fix: the script does not exist; a manual reproduction shows podman ps losing the forge within 35 s of the second start.
+    notes: |
+      size: L  implementer_tier: opus
+      Touches the singleton and the shutdown path — opus. Do not test on a host with someone else's forge running until the handoff is green in a fixture stack. Fixture written in the same commit as the handoff (1136-n8sh).
+    next_action: 'add HandoffRequest/HandoffAck to the control socket dispatch and a --upgrade-handoff arm in main that requests it before acquire()'
+    provenance: |
+      Filed by a Fable agent on lenovinha, 2026-09-29, from the hot-upgrade investigation (1490-gttj).
+    events:
+      - type: filed
+        ts: "2026-09-29T06:16:03Z"
+        agent_id: "claude-fable-lenovinha-20260929t061525z"
+        host: lenovinha
+        summary: |-
+          Linux host half of the hot-upgrade SOFT reset.
