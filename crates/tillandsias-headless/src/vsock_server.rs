@@ -2307,45 +2307,6 @@ mod tests {
         }
     }
 
-    /// Order 795-5itp: PIPELINED Hello+Subscribe must both survive the
-    /// handshake-to-read-loop handoff.
-    ///
-    /// THIS TEST CANNOT FAIL AGAINST THE HAND-ROLLED READER IT WAS WRITTEN
-    /// BESIDE, and that is stated rather than hidden: `read_exact` on the raw
-    /// stream buffers nothing, so bytes that arrive early simply wait in the
-    /// socket. It is a pin for the MIGRATION, not a red-first reproduction.
-    ///
-    /// What it guards: `Framed` OWNS a read buffer and fills it opportunistically
-    /// — a single `read` can pull the Subscribe frame in alongside the Hello.
-    /// Building a `Framed` for the handshake and then dropping it to reclaim the
-    /// stream (or calling `tokio::io::split` on the raw stream afterwards)
-    /// discards whatever the buffer already holds. No error, no log: the
-    /// Subscribe is simply gone, the client waits forever for a SubscribeAck,
-    /// and it only happens when the peer pipelines. Hand-falsified against
-    /// exactly that naive shape before this migration landed.
-    ///
-    /// The two frames are written in ONE `write_all` so they are guaranteed to
-    /// be available to a single read, which is what makes the buffer-loss
-    /// window reachable at all.
-    /// ORDER 1201-t6ms: the SERVER-side wire-version refusal actually fires.
-    ///
-    /// WHY THIS ARM AND NOT THE CLIENT'S. 1032-62rx tested the client refusing
-    /// a server that advertises a different version, and its own doc records
-    /// that against a CURRENT server that arm is UNREACHABLE — the server
-    /// validates the client's Hello and returns BEFORE any HelloAck. So the
-    /// tested arm serves only a peer old enough to answer without validating,
-    /// and the arm that gates a live mismatched peer today is THIS one, which
-    /// nothing exercised. Two wire-version transitions rest on it: 3 (997-e4v2)
-    /// and 4 (890-y72v). What was pinned instead was the CONSTANT — a number
-    /// standing proxy for a refusal.
-    ///
-    /// THE REFUSAL IS A CLOSE, NOT A MESSAGE: the handler logs and returns
-    /// without writing, so the peer observes EOF. The assertion is therefore
-    /// "read reaches end-of-stream", and it is bounded by a timeout because a
-    /// regression that leaves the connection OPEN would otherwise hang the
-    /// suite instead of failing it — and a hanging test reports nothing.
-    ///
-    /// @trace order:1201-t6ms, spec:vsock-transport
     /// litmus:headless-keepalive (order 148, criterion 3): the control listener
     /// is LONG-LIVED. It keeps accepting and HANDLING connections after an
     /// earlier one has closed; a one-shot listener (accept once and return,
@@ -2416,6 +2377,45 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Order 795-5itp: PIPELINED Hello+Subscribe must both survive the
+    /// handshake-to-read-loop handoff.
+    ///
+    /// THIS TEST CANNOT FAIL AGAINST THE HAND-ROLLED READER IT WAS WRITTEN
+    /// BESIDE, and that is stated rather than hidden: `read_exact` on the raw
+    /// stream buffers nothing, so bytes that arrive early simply wait in the
+    /// socket. It is a pin for the MIGRATION, not a red-first reproduction.
+    ///
+    /// What it guards: `Framed` OWNS a read buffer and fills it opportunistically
+    /// — a single `read` can pull the Subscribe frame in alongside the Hello.
+    /// Building a `Framed` for the handshake and then dropping it to reclaim the
+    /// stream (or calling `tokio::io::split` on the raw stream afterwards)
+    /// discards whatever the buffer already holds. No error, no log: the
+    /// Subscribe is simply gone, the client waits forever for a SubscribeAck,
+    /// and it only happens when the peer pipelines. Hand-falsified against
+    /// exactly that naive shape before this migration landed.
+    ///
+    /// The two frames are written in ONE `write_all` so they are guaranteed to
+    /// be available to a single read, which is what makes the buffer-loss
+    /// window reachable at all.
+    /// ORDER 1201-t6ms: the SERVER-side wire-version refusal actually fires.
+    ///
+    /// WHY THIS ARM AND NOT THE CLIENT'S. 1032-62rx tested the client refusing
+    /// a server that advertises a different version, and its own doc records
+    /// that against a CURRENT server that arm is UNREACHABLE — the server
+    /// validates the client's Hello and returns BEFORE any HelloAck. So the
+    /// tested arm serves only a peer old enough to answer without validating,
+    /// and the arm that gates a live mismatched peer today is THIS one, which
+    /// nothing exercised. Two wire-version transitions rest on it: 3 (997-e4v2)
+    /// and 4 (890-y72v). What was pinned instead was the CONSTANT — a number
+    /// standing proxy for a refusal.
+    ///
+    /// THE REFUSAL IS A CLOSE, NOT A MESSAGE: the handler logs and returns
+    /// without writing, so the peer observes EOF. The assertion is therefore
+    /// "read reaches end-of-stream", and it is bounded by a timeout because a
+    /// regression that leaves the connection OPEN would otherwise hang the
+    /// suite instead of failing it — and a hanging test reports nothing.
+    ///
+    /// @trace order:1201-t6ms, spec:vsock-transport
     #[tokio::test]
     async fn server_refuses_a_client_advertising_a_different_wire_version() {
         let state = VmStateHandle::new();
