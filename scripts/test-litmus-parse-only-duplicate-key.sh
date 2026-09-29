@@ -154,16 +154,20 @@ else
 fi
 
 # ---------------------------------------------------------------- ARM 6
-# THE CORPUS IS UNCHANGED. The row's criterion quotes a fixed count, but a
-# fixed number rots as the corpus grows; what must hold is that this change
-# adds no refusal. Compared against the neutralised copy on the SAME tree.
+# THE CORPUS IS UNCHANGED BY THIS DETECTOR. Check its own diagnostic on every
+# real file. PREFIX_RUNNER also disables YAML loading for ARM 1, so comparing
+# total parseable counts against it confounds load failures with detector
+# refusals. That false red varied from 488 -> 487 to 488 -> 483 under full
+# gates, while the standalone fixture read 488 -> 488. The separate YAML gate
+# owns load validity; this arm owns the duplicate-key detector's corpus effect.
 if [ "$mut_hits" -eq 0 ]; then
-    live_n="$(scripts/run-litmus-test.sh --parse-only openspec/${LIT}-tests/*.yaml 2>&1 | grep -c "^${OK_PARSEABLE}:")"
-    base_n="$("$PREFIX_RUNNER" --parse-only openspec/${LIT}-tests/*.yaml 2>&1 | grep -c "^${OK_PARSEABLE}:")"
-    if [ "$live_n" -eq "$base_n" ]; then
-        ok "ARM 6: real corpus unchanged — $live_n files parseable with the detector, $base_n without it"
+    live_out="$(scripts/run-litmus-test.sh --parse-only openspec/${LIT}-tests/*.yaml 2>&1)"
+    live_n="$(printf '%s\n' "$live_out" | grep -c "^${OK_PARSEABLE}:")"
+    duplicate_n="$(printf '%s\n' "$live_out" | grep -c 'duplicated mapping key in a critical_path item')"
+    if [ "$live_n" -gt 0 ] && [ "$duplicate_n" -eq 0 ]; then
+        ok "ARM 6: detector refuses no real corpus file ($live_n parseable; YAML loading judged separately)"
     else
-        bad "ARM 6: corpus changed ($base_n -> $live_n) — the detector fires on a file the loader accepts"
+        bad "ARM 6: detector reported $duplicate_n duplicate-key refusal(s) over the real corpus ($live_n parseable)"
     fi
 else
     bad "ARM 6: no usable baseline copy"
