@@ -3429,6 +3429,13 @@ fn spawn_host_clock_sync_on_wake(vz: Arc<VzRuntime>) {
 }
 
 /// One `HostClockSync` over a fresh control-wire connection.
+///
+/// MIXED VERSIONS. The host↔guest PSK is derived from the SHA-256 of the guest
+/// binary shipped with THIS tray build (`channel_psk_for_guest`) plus the build
+/// and wire versions (`derive_psk`), so a guest from another build fails the
+/// handshake closed and never sees this variant. Every step is time-bounded
+/// and there is no retry: a mismatched or wedged guest costs one logged
+/// failure per wake, never a hang or a storm.
 async fn send_host_clock_once(vz: &VzRuntime) -> Result<(), String> {
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
     use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
@@ -3443,9 +3450,9 @@ async fn send_host_clock_once(vz: &VzRuntime) -> Result<(), String> {
             port: CONTROL_WIRE_VSOCK_PORT,
         },
     );
-    client
-        .handshake()
+    tokio::time::timeout(Duration::from_secs(5), client.handshake())
         .await
+        .map_err(|_| "control-wire handshake: no answer within 5 s".to_string())?
         .map_err(|e| format!("control-wire handshake: {e}"))?;
     let host_unix_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
