@@ -51,19 +51,39 @@ cp "$ROOT/crates/tillandsias-headless/build.rs" "$wt/crates/tillandsias-headless
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
 
 # ── ARM 1 ────────────────────────────────────────────────────────────────
-if rustup target list --installed 2>/dev/null | grep -qx x86_64-pc-windows-gnu; then
+# "Target installed" is not "target buildable" (yolanda 2026-09-29): ring's
+# build script compiles C, so a host with the rustup target but no MinGW C
+# compiler fails in ring, which says nothing about this build.rs. Probe the
+# compiler, and judge ONLY on the sidecar panic: any other failure is a named
+# toolchain skip, never a pass and never this gate's failure.
+if ! rustup target list --installed 2>/dev/null | grep -qx x86_64-pc-windows-gnu; then
+    skip "ARM1 target x86_64-pc-windows-gnu not installed (named skip, not a pass)"
+elif ! command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
+    skip "ARM1 no x86_64-w64-mingw32-gcc: C dependencies (ring) cannot build for the target here (named skip, not a pass)"
+else
     out1="$(cd "$wt" && cargo check -q -p tillandsias-headless --bin tillandsias --target x86_64-pc-windows-gnu 2>&1)"; rc1=$?
     if [ "$rc1" -eq 0 ]; then
         ok "ARM1 a Windows-target check succeeds with the sidecar absent"
-    else bad "ARM1 Windows-target check rc=$rc1: $(grep -m1 -E 'required runtime asset missing|^error' <<<"$out1")"; fi
-else skip "ARM1 target x86_64-pc-windows-gnu not installed (named skip, not a pass)"; fi
+    elif grep -q 'required runtime asset missing' <<<"$out1"; then
+        bad "ARM1 a Windows-target build refuses for want of the Linux-only sidecar: $(grep -m1 'required runtime asset missing' <<<"$out1")"
+    else
+        skip "ARM1 the target toolchain failed before build.rs could be judged: $(grep -m1 -E '^error' <<<"$out1") (named skip, not a pass)"
+    fi
+fi
 
 # ── ARM 2 ────────────────────────────────────────────────────────────────
-out2="$(cd "$wt" && cargo check -q -p tillandsias-headless --bin tillandsias 2>&1)"; rc2=$?
-if [ "$rc2" -ne 0 ] && grep -q 'required runtime asset missing' <<<"$out2" \
-   && grep -q 'BUILD ARTIFACT' <<<"$out2"; then
-    ok "ARM2 negative control: a Linux-target build still refuses without the sidecar, naming the remedy"
-else bad "ARM2 Linux target rc=$rc2 did not refuse by name"; fi
+# The negative control needs a LINUX host target: on a Windows or macOS host
+# the host build is itself non-Linux and correctly does not refuse.
+host_triple="$(rustc -vV 2>/dev/null | sed -n 's/^host: //p')"
+case "$host_triple" in
+    *-linux-*)
+        out2="$(cd "$wt" && cargo check -q -p tillandsias-headless --bin tillandsias 2>&1)"; rc2=$?
+        if [ "$rc2" -ne 0 ] && grep -q 'required runtime asset missing' <<<"$out2" \
+           && grep -q 'BUILD ARTIFACT' <<<"$out2"; then
+            ok "ARM2 negative control: a Linux-target build still refuses without the sidecar, naming the remedy"
+        else bad "ARM2 Linux target rc=$rc2 did not refuse by name"; fi ;;
+    *) skip "ARM2 host target is ${host_triple:-unknown}, not Linux: the Linux refusal cannot be exercised here (named skip, not a pass)" ;;
+esac
 
 [ "$FAIL" -eq 0 ] && { echo "PASS: headless-sidecar-target-gate (1269-6fcn)"; exit 0; }
 echo "FAILED: headless-sidecar-target-gate (1269-6fcn)"; exit 1
