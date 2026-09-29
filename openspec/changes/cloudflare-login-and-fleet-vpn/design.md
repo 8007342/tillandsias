@@ -162,7 +162,56 @@ constructors: `network_name()` = `tillandsias-vpn`; `team_name(account_id)`
 `<service>.tillandsias-vpn.internal`. The table and the rule sources live in
 the design note; the module's doc comment cites them.
 
-## Decision 5 — the network is Cloudflare Mesh; hubs run the daemon, spokes are measured
+## Decision 5 — the network is Cloudflare Mesh; the client runs in a sidecar beside the router, never on a host OS
+
+AMENDED 2026-09-29 (milestone 1506-3xu7, design note
+`plan/issues/fleet-messaging-poc-design-2026-09-29.md`). The operator's
+direction — "install Cloudflare's software on the containers, inside the
+router likely, and always default to the FREE version only" — replaces the
+host-daemon paragraphs below. What now holds:
+
+- No host OS is enrolled, on any platform. The Cloudflare One Client runs
+  in a dedicated `tillandsias-warp` container (`images/warp/`, vendor
+  package pinned, `warp-svc` as PID 1) that SHARES the router container's
+  network namespace (`--network container:tillandsias-router`), so the
+  Mesh TUN and its routes live in the router's namespace. Its profile
+  carries exactly `--cap-drop=ALL --cap-add=NET_ADMIN`,
+  `--device /dev/net/tun`, `--sysctl net.ipv4.conf.all.src_valid_mark=1`,
+  `--userns=keep-id --user 0`, `--read-only` plus a named volume at
+  `/var/lib/cloudflare-warp` for `mdm.xml` and the registration. The
+  profile is a new `warp` entry in `container_spec` with its own
+  justification (972-6vaj forbids a generic `cap_add`);
+  `weakening_hardening_flag` admits one named capability today.
+- `--fleet-vpn join` writes `mdm.xml` from `secret/cloudflare/mesh` into
+  the volume, launches the sidecar, reads `warp-cli --accept-tos status`
+  and `registration show` through `podman exec`, and records `mesh_ip` in
+  Vault and in `plan/fleet/peers/<host>.yaml`. `leave` removes the
+  container and volume, deletes the host's service token, clears
+  `secret/cloudflare/mesh`. `status` reads the sidecar or prints
+  `unknown:<why>`. No `sudo`, no `systemctl`, no file outside the user's
+  podman store.
+- macOS and Windows: the guest's router runs the same sidecar; the guest
+  headless performs the join; the host tray relays status. Unchanged in
+  spirit from the earlier guest-only decision, now with no guest daemon
+  either.
+- The router sidecar (`tillandsias-router-sidecar`) gains a relay that
+  binds `<mesh_ip>:48640` in the router namespace and pipes bytes to
+  `host.containers.internal:48640`, the host's `--msg-serve` listener; it
+  binds only the Mesh IP and carries only ciphertext (the Noise session is
+  end to end between hosts).
+- Proxy mode is NOT a spoke option: the Mesh documentation states that
+  proxy-only and DNS-only modes are unsupported and Mesh requires Traffic
+  and DNS mode. 1505-m63i is obsoleted by that reading; 1506-euvq
+  measures instead whether WARP mode runs in the rootless sidecar,
+  recording one of `mesh-ip-acquired | tun-denied-rootless |
+  firewall-refused | package-refuses-container | registers-no-mesh-ip`,
+  and 1506-t97c (which replaces 1505-bhsb and 1505-g6zc) is blocked on
+  `mesh-ip-acquired`.
+- Free plan only: `init` prints the plan it read, calls no billing or
+  subscription route, and refuses `refused:fleet-vpn:paid-feature:<step>`.
+
+The paragraphs that follow are the SUPERSEDED host-daemon design, kept so
+the diff is readable; nothing in them is to be implemented.
 
 `tillandsias --fleet-vpn init` (needs the OAuth token; idempotent; every
 call is a named step with `ok:` / `skip:` / `refused:` output): resolve the

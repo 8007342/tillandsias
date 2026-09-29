@@ -43,8 +43,13 @@ implementation:
   the fake Cloudflare server every fixture runs against.
 - **ADDED** capability `fleet-vpn`: the `cloudflare_names` normalizer and
   the canonical name table; `tillandsias --fleet-vpn init|join|leave|status`;
-  per-platform join (Linux host daemon on hubs; macOS/Windows through the
-  Linux guest); the spoke research (proxy mode / rootless container).
+  the Cloudflare One Client in a `tillandsias-warp` sidecar container
+  sharing the router's network namespace on every platform (inside the
+  Linux guest on macOS/Windows) — AMENDED 2026-09-29 by
+  `openspec/changes/fleet-messaging-poc/` (operator: "inside the router
+  likely", "FREE version only"); the host-daemon join packets 1505-bhsb and
+  1505-g6zc and the proxy-mode research 1505-m63i are obsoleted by
+  1506-t97c and 1506-euvq.
 - **ADDED** capability `fleet-experts`: `expert-serve` bound to the Mesh IP
   behind a per-fleet bearer from Vault, the
   `fleet-experts.tillandsias-vpn.internal` hostname route, the

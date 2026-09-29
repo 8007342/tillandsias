@@ -1,0 +1,681 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator direction 2026-09-29: the fleet-messaging PROOF OF CONCEPT —
+# message passing between harnesses on the same host and the same LAN,
+# Cloudflare's client inside a container (the router), FREE tier only.
+# Milestone 1506-3xu7 and its eight children, filed together, ahead of the
+# rest of 1505-sm2j. Obsoletes 1505-bhsb, 1505-g6zc, 1505-m63i (fields and
+# events below); re-points 1505-br88 and 1505-hfim at the new join packet.
+# Research and sources: plan/issues/fleet-messaging-poc-design-2026-09-29.md
+packets:
+  - packet_id: fleet-messaging-poc-a-harness-agnostic-acknowledged-message-bus-between-harnesses-on-the-same-host-and-the-same-lan-proved-before-the-cloudflare-rung
+    order: 1506-3xu7
+    status: ready
+    kind: milestone
+    priority: p1
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [fleet-messaging, coordination, codex, mcp, noise, lan, cloudflare, mesh, milestone, plan-only-peer-ok]
+    estimated_hours: 6
+    owned_files:
+      - openspec/changes/fleet-messaging-poc/
+      - plan/issues/fleet-messaging-poc-design-2026-09-29.md
+    title: |
+      MILESTONE — fleet messaging PoC: a harness-agnostic, acknowledged message bus (tillandsias-plan msg send|recv|ack, forge-plan MCP msg_* tools) delivers between lanes on one host and between hosts on one LAN with Noise XX pinned to plan/fleet/peers, at-least-once with delivered and acked receipts; the Cloudflare rung is researched as a rootless WARP sidecar beside the router, not gated; today Codex cannot receive a message and no channel has a receipt
+    context: |
+      OPERATOR (2026-09-29): "install Cloudflare's software on the
+      containers, inside the router likely, and will always default to the
+      FREE version only"; "distinguish LOCAL NETWORK when available and
+      handle our own tunnels when possible ... we need to be careful with
+      SECURITY"; "start with the PROOF OF CONCEPT ... just for MESSAGE
+      PASSING BETWEEN HARNESSES in the same host, and in the same network.
+      This is the missing coordination layer our fleet needs."
+      PAIN ON THE LEDGER: plan/inbox/codex.md (fab17ec02) is a git-pushed
+      file with a hand-appended ACK: convention; plan_only_peers coordinate
+      only through the ledger, which is read AFTER work; SendMessage exists
+      only for Claude sessions and has no receipt; peers have confirmed
+      claims that never reached origin; plan/index.yaml is 31,678 lines.
+      RESEARCH (public docs, 2026-09-29; sources in the design note): the
+      Mesh docs say proxy-only and DNS-only modes are unsupported and Mesh
+      requires Traffic and DNS mode, so 1505-m63i is answered without
+      running; Cloudflare documents no container support for the client;
+      community practice runs warp-svc with NET_ADMIN and /dev/net/tun and
+      reports a firewall failure shape; Mesh is on the Free plan; limits 50
+      nodes and 50 service tokens. Every host's Vault is its own — there is
+      no fleet CA — so cross-host trust comes from the tree (a peer is a
+      host whose public key file is on the checkout).
+      DESIGN PRINCIPLES (binding on every child): the CLI is a verb of
+      tillandsias-plan (already on every host and in every forge, already
+      wrapped as MCP); the daemon is tillandsias --msg-serve in headless;
+      attribution is by mount on one host and by the authenticated static
+      key across hosts, never by what an envelope claims; bodies obey the
+      600-byte/8-line budget and a secret-shaped body is refused at send
+      AND at the mover; keys are not version-bound; mDNS is a hint, never a
+      peer; no host OS ever runs a Cloudflare daemon; the ledger stays the
+      record. PoC RUNGS: same host and same LAN on Linux hosts. ACCEPTANCE
+      DEMO: the Codex forge on macuahuitl receives and ACKs a HEADS-UP sent
+      by the Claude bare-metal session on yoga; yoga's msg status reads
+      acked; the ack event lands on the row the message named.
+    children:
+      - 1506-nvqt
+      - 1506-q7ab
+      - 1506-ssb5
+      - 1506-32k5
+      - 1506-7tq4
+      - 1506-euvq
+      - 1506-t97c
+      - 1506-b8du
+    exit_criteria:
+      - 'scripts/test-fleet-msg-same-host.sh exits 0 on one Linux host: a message queued by lane host is printed by msg recv in a Codex forge lane and msg ack flips the sender''s msg status <id> to acked: (pre-fix: tillandsias-plan msg is an unknown verb)'
+      - 'scripts/test-fleet-msg-lan.sh exits 0 (two daemons on one host, two state roots, Noise XX pinned to a temp peers directory): delivered:<ts>:via:lan then acked:; an unknown key is refused:msg:unknown-peer:<fp> with nothing stored; a replayed envelope is absorbed (pre-fix: no daemon, no listener)'
+      - 'one live run: a HEADS-UP from yoga/host to macuahuitl/<codex lane> ends with acked: on yoga and an ack event on the named row, recorded in this milestone''s events with both fingerprints and the rung (pre-fix: Codex cannot receive a message)'
+      - 'a body containing a GitHub-token-shaped string is refused at msg send and, written directly into an outbox directory, refused again by the mover; both arms named in the same-host fixture (pre-fix: no such check anywhere)'
+      - 'scripts/research-warp-sidecar-rootless.sh has recorded one of its five outcomes in the design note; the Cloudflare rung is NOT a gate of this milestone'
+      - 'plan/inbox/codex.md is a pointer to msg recv and plan_only_peers names msg recv as its first step; every child is completed or superseded and the fleet-messaging delta is synced into openspec/specs/'
+    unscoreable: milestone-scored-by-its-children — this row owns no fixture; each child names its scripts/test-*.sh; the nearest single mechanical proxy is scripts/test-fleet-msg-lan.sh (1506-7tq4), and the live arm is a two-host measurement recorded in this row's events.
+    next_action: >
+      Operator answers the five open questions in the design note (a second
+      granted capability on a dedicated sidecar; one shared bare-metal
+      mailbox per host; port 48640 and mDNS on by default; public keys
+      under plan/fleet/peers; which two hosts demo first); then children
+      drain in dependency order starting with the store and CLI
+      (1506-nvqt), which needs nothing from the operator.
+    notes: |
+      size: L
+      implementer_tier: opus
+      Coordinator note: this milestone lands AHEAD of the rest of
+      1505-sm2j; the login and init packets there are unchanged, the
+      host-daemon join packets are obsoleted here. Say in plain words that
+      no host OS will run warp-svc.
+    provenance: |
+      Filed by the design-lead Fable session on macuahuitl, 2026-09-29, in
+      worktree agent-a28b6190bda5c57aa on branch
+      work/fleet-messaging-poc-design, from linux-next 52e3bc32e merged
+      with worktree-agent-ae9525e76ba6c53c8 and work/1505-kyx8. Every
+      Cloudflare claim was read from the cited public page; community
+      sources are marked secondary; no account was created and no
+      credential handled.
+    events:
+      - type: filed
+        ts: "2026-09-29T22:25:18Z"
+        agent_id: claude-fable-macuahuitl-20260929t222518z
+        host: macuahuitl
+        summary: |-
+          Milestone for the fleet-messaging PoC; eight children filed in
+          the same fragment; design note and OpenSpec change written
+          alongside; three 1505 packets obsoleted below.
+
+  - packet_id: tillandsias-plan-msg-send-recv-ack-list-status-over-a-maildir-style-lane-store-with-idempotent-ids-per-sender-sequence-explicit-ack-shape-budget-and-secret-shaped-body-refusal
+    order: 1506-nvqt
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: fleet-messaging-poc-a-harness-agnostic-acknowledged-message-bus-between-harnesses-on-the-same-host-and-the-same-lan-proved-before-the-cloudflare-rung
+    pickup_role: any
+    capability_tags: [fleet-messaging, plan-binary, cli, security]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-plan/src/msg_store.rs
+      - crates/tillandsias-plan/src/msg_shape.rs
+      - crates/tillandsias-plan/src/main.rs
+      - scripts/test-fleet-msg-store.sh
+    title: |
+      tillandsias-plan msg whoami|send|recv|ack|list|status|lint|gc over a Maildir-shaped lane store ($XDG_STATE_HOME/tillandsias/msg/lanes/<lane>/{outbox,inbox,acked,dead,receipts}; tmp then rename), with ids m-<utc>-<8hex>, a persisted per-sender seq, recv that presents until ack, status read from receipt files, the 600-byte/8-line KIND-first shape budget and a secret-shaped body refusal, body from stdin or --body-file never argv
+    context: |
+      Decisions 1 and 2 of openspec/changes/fleet-messaging-poc/design.md.
+      The verb lives in tillandsias-plan because that binary is already on
+      every host and in every forge, wrapped by forge-plan.sh, and
+      advertised by capabilities so a wrapper can refuse honestly on an
+      old build. msg_shape is pure (no I/O): the budget from
+      distributed-work.yaml sibling_heads_up_protocol.size_budget (KIND in
+      HEADS-UP, ACK, LANDED, BLOCKED, ASK, FYI; every further line "- " plus
+      a ref of 7+ hex, an order token, work/<order> or a path) and
+      secret_shaped over ghp_/gho_/github_pat_, hvs./hvb., AKIA, sk-,
+      "-----BEGIN ... PRIVATE KEY", "Bearer ", three-part eyJ tokens and
+      any base64/hex run of 40+ chars. Refusals print
+      refused:msg:shape:<reason> or refused:msg:secret-shaped:<pattern>
+      and write nothing; the whole envelope is capped at 4096 bytes. The
+      CLI opens no network socket; delivery is 1506-q7ab and 1506-7tq4.
+      Addresses are <host>/<lane>; whoami reads TILLANDSIAS_MSG_LANE and
+      refuses refused:msg:no-lane rather than composing one
+      (agent-identity's rule). msg lint exposes the shape check alone so
+      1437-arjg can wrap it.
+    exit_criteria:
+      - 'scripts/test-fleet-msg-store.sh exits 0: a 9-line body is refused:msg:shape:lines>8 with an unchanged outbox; a body with ghp_ plus 36 chars is refused:msg:secret-shaped:github-token; a repeated --id prints skip:msg:duplicate:<id>; msg recv twice prints the same id and after msg ack prints nothing; msg status walks queued -> acked: when the receipt file is written by the fixture; a seq gap is printed with the gap: prefix; whoami with no lane is refused:msg:no-lane (pre-fix: msg is an unknown verb)'
+      - 'tillandsias-plan capabilities lists msg and the forge-plan capability probe sees it'
+    verifiable_closure: |
+      bash scripts/test-fleet-msg-store.sh exits 0 on the fixed tree with
+      seven named arms over a temp XDG_STATE_HOME; on today's tree the verb
+      is unknown. Negative control: TILLANDSIAS_MSG_SHAPE_LAX=1 (a fixture
+      seam that disables the secret check) makes the secret arm FAIL,
+      proving the arm reaches the check.
+    depends_on: []
+    next_action: >
+      Write msg_shape with unit tests first (pure), then msg_store and the
+      verb; the fixture drives the real binary over a temp state root.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Security-bearing: the secret refusal and the shape budget are the
+      contract every other child relies on; get the pattern list and the
+      refusal grammar right here once.
+    events:
+      - type: filed
+        ts: "2026-09-29T22:25:18Z"
+        agent_id: claude-fable-macuahuitl-20260929t222518z
+        host: macuahuitl
+        summary: |-
+          Store, shape and CLI; first in dependency order; needs nothing
+          from the operator.
+
+  - packet_id: the-resident-mover-delivers-between-lanes-on-one-host-attributing-the-sender-by-its-mounted-lane-never-by-the-envelope-and-mounts-a-per-lane-mailbox-into-every-forge
+    order: 1506-q7ab
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: fleet-messaging-poc-a-harness-agnostic-acknowledged-message-bus-between-harnesses-on-the-same-host-and-the-same-lan-proved-before-the-cloudflare-rung
+    pickup_role: linux
+    capability_tags: [fleet-messaging, tray, forge, podman, security]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-headless/src/msg_serve.rs
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/tray/mod.rs
+      - scripts/test-fleet-msg-same-host.sh
+    title: |
+      tillandsias --msg-serve (the resident, started by the Linux tray beside the control socket) watches every lane's outbox, refuses an envelope whose from.lane differs from the directory it sits in (refused:msg:from-lane-mismatch to dead/), runs the secret check a second time, hard-links into the destination lane's inbox/new, writes delivered:<ts>:via:local receipts, pokes $XDG_RUNTIME_DIR/tillandsias/msg.sock for recv --wait, fans <host>/* out to every lane, and every forge gets its own lane directory bind-mounted at /run/host/tillandsias-msg with TILLANDSIAS_MSG_LANE exported
+    context: |
+      Decision 3. The model is the mcp-tool-socket spec:
+      start_mcp_socket_server_for_lane(project_name, instance) and the
+      read-only mount at /run/host/tillandsias-mcp — attribution by what a
+      lane holds, never by what it claims. The lane label is the same
+      <project>-<instance> (instance defaults to default). The lane
+      directory lives on the HOST filesystem so a forge rebuild keeps its
+      mailbox. A lane can write its outbox directory directly, bypassing
+      the CLI, which is why the mover repeats secret_shaped: the fixture
+      proves it with a body only the mover could catch. Bare-metal
+      sessions share lane host (one uid, one domain; open question 2).
+      The mover never opens a network socket; that is 1506-7tq4.
+    exit_criteria:
+      - 'scripts/test-fleet-msg-same-host.sh exits 0 with two temp lanes and the real --msg-serve: a message from lane a-default reaches b-default''s inbox/new and a-default''s receipts/<id> reads delivered:<ts>:via:local; an envelope in a-default''s outbox claiming from b-default lands in dead/ with refused:msg:from-lane-mismatch logged and b-default unchanged; a well-formed envelope with hvs. plus 24 chars written straight into outbox/new lands in dead/ with refused:msg:secret-shaped:vault-token; recv --wait returns within 2 s of a delivery; <host>/* reaches both lanes (pre-fix: --msg-serve is an unknown flag)'
+      - 'the forge launch args carry --mount type=bind,source=<state>/msg/lanes/<project>-<instance>,target=/run/host/tillandsias-msg and --env TILLANDSIAS_MSG_LANE=<project>-<instance>, asserted by the existing launch-args unit tests beside the MCP mount assertion'
+    verifiable_closure: |
+      bash scripts/test-fleet-msg-same-host.sh exits 0 on the fixed tree
+      with five named arms; on today's tree the flag is unknown. Mutation
+      control: removing the mover's second secret_shaped call makes the
+      direct-write arm FAIL, which the fixture asserts by running once with
+      TILLANDSIAS_MSG_MOVER_LAX=1.
+    depends_on:
+      - tillandsias-plan-msg-send-recv-ack-list-status-over-a-maildir-style-lane-store-with-idempotent-ids-per-sender-sequence-explicit-ack-shape-budget-and-secret-shaped-body-refusal
+    next_action: >
+      Implement msg_serve as a tokio task started where the control socket
+      is started; add the lane mount and env to the forge launch args
+      beside the MCP mount; write the fixture.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Touches the forge launch args and a resident task in the tray; the
+      from-lane refusal is the whole same-host trust story.
+    events:
+      - type: filed
+        ts: "2026-09-29T22:25:18Z"
+        agent_id: claude-fable-macuahuitl-20260929t222518z
+        host: macuahuitl
+        summary: |-
+          Same-host rung; proves the first PoC rung.
+
+  - packet_id: forge-plan-mcp-gains-msg-send-recv-ack-list-tools-and-the-codex-and-opencode-entrypoints-print-pending-messages-at-session-start-so-non-claude-harnesses-are-first-class
+    order: 1506-ssb5
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: fleet-messaging-poc-a-harness-agnostic-acknowledged-message-bus-between-harnesses-on-the-same-host-and-the-same-lan-proved-before-the-cloudflare-rung
+    pickup_role: any
+    capability_tags: [fleet-messaging, mcp, codex, opencode, forge, plan-only-peer-ok]
+    estimated_hours: 4
+    owned_files:
+      - images/default/config-overlay/mcp/forge-plan.sh
+      - images/default/entrypoint-forge-codex.sh
+      - images/default/entrypoint-forge-opencode.sh
+      - scripts/test-fleet-msg-mcp.sh
+    title: |
+      forge-plan.sh serves msg_send, msg_recv, msg_ack, msg_list and msg_status over MCP by wrapping the tillandsias-plan msg verbs behind the existing capability probe (an old binary answers the degraded envelope, never a fake success), and the Codex and OpenCode forge entrypoints run msg recv at session start so a harness without MCP or without a vendor channel still sees its mail
+    context: |
+      Decision 1 and Decision 7. forge-plan.sh already wraps the plan
+      binary and refuses honestly when capabilities lacks a verb (order
+      569); the msg tools follow that contract exactly. Codex is the
+      harness that today cannot receive a message (plan/inbox/codex.md):
+      its entrypoint printing msg recv at start is the minimum that makes
+      it first-class; the CLI is its full protocol. Tool inputs mirror
+      the CLI flags; the body is passed as a JSON string and fed to the
+      verb on stdin, never on argv.
+    exit_criteria:
+      - 'scripts/test-fleet-msg-mcp.sh exits 0: a JSON-RPC tools/list from forge-plan.sh includes the five msg tools; msg_send then msg_recv then msg_ack round-trip through a temp lane; with a stub binary whose capabilities omits msg every msg tool answers the degraded envelope with confidence=unsupported; the Codex entrypoint under a dry-run seam prints the pending message count line (pre-fix: no such tools, entrypoint prints nothing)'
+    verifiable_closure: |
+      bash scripts/test-fleet-msg-mcp.sh exits 0 on the fixed tree with
+      four named arms driving forge-plan.sh over stdio; on today's tree
+      tools/list has no msg tools.
+    depends_on:
+      - tillandsias-plan-msg-send-recv-ack-list-status-over-a-maildir-style-lane-store-with-idempotent-ids-per-sender-sequence-explicit-ack-shape-budget-and-secret-shaped-body-refusal
+    next_action: >
+      Add the five tools beside plan_answer in forge-plan.sh; add the
+      recv-at-start lines to both entrypoints behind the dry-run seam;
+      write the fixture.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Shell wrapping of an existing contract plus two entrypoint lines.
+    events:
+      - type: filed
+        ts: "2026-09-29T22:25:18Z"
+        agent_id: claude-fable-macuahuitl-20260929t222518z
+        host: macuahuitl
+        summary: |-
+          MCP and non-Claude surfaces.
+
+  - packet_id: every-host-holds-one-x25519-msg-identity-in-its-own-vault-publishes-the-public-half-in-plan-fleet-peers-and-two-hosts-authenticate-with-noise-xx-pinned-to-that-directory
+    order: 1506-32k5
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: fleet-messaging-poc-a-harness-agnostic-acknowledged-message-bus-between-harnesses-on-the-same-host-and-the-same-lan-proved-before-the-cloudflare-rung
+    pickup_role: linux
+    capability_tags: [fleet-messaging, noise, vault, security, secure-channel]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-secure-channel/src/secure_stream.rs
+      - crates/tillandsias-headless/src/msg_serve.rs
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - images/vault/policies/
+      - plan/fleet/peers/README.md
+      - scripts/test-fleet-msg-identity.sh
+    title: |
+      tillandsias --msg-serve --mint [--rotate] generates one X25519 static key into secret/fleet/msg/static of the host's OWN Vault (no forge policy reads it) and writes plan/fleet/peers/<host>.yaml (host, noise_pub, fp, minted, optional lan_hints, mesh_ip); EncryptedStream gains a Noise_XX_25519_ChaChaPoly_BLAKE2s constructor with static keys and no version-bound PSK; after the handshake the remote static is looked up in the directory and an unknown key is refused:msg:unknown-peer:<fp> before any envelope is read; the first in-tunnel frame carries proto and an unknown major is refused naming it
+    context: |
+      Decision 4. Every host's Vault is its own — there is no fleet CA —
+      so the trust root is the tree: whoever can land on linux-next
+      already defines the fleet. The existing NNpsk0 pattern binds the
+      key to the build version (channel_psk), which is right for the
+      control channel and wrong for a coordination channel that must
+      survive a rollout; the new constructor sits beside it on the same
+      EncryptedStream type. Fingerprint is BLAKE2s-128 of the public key,
+      shown in every refusal so the remedy (merge the peer file) is
+      obvious. mDNS never adds a peer. The forge Vault policy grants
+      nothing under secret/data/fleet/msg/.
+    exit_criteria:
+      - 'scripts/test-fleet-msg-identity.sh exits 0: two daemons with keys in a temp peers directory complete the handshake and exchange a proto frame; a daemon whose key is absent from the directory is refused:msg:unknown-peer:<fp> and the receiver has read zero envelope bytes (asserted by a counting seam); proto major 2 is refused naming it; --mint twice without --rotate is skip:msg:key-exists and with --rotate rewrites the peer file (pre-fix: no key, no constructor, no directory)'
+      - 'the forge Vault policy grants nothing under secret/data/fleet/msg/ (fixture greps the rendered policy) and the git-mirror policy is unchanged'
+    verifiable_closure: |
+      bash scripts/test-fleet-msg-identity.sh exits 0 on the fixed tree
+      with five named arms over loopback and a temp peers directory; on
+      today's tree --mint is an unknown flag. Mutation control: moving the
+      directory lookup after the first envelope read makes the
+      zero-bytes arm FAIL.
+    depends_on:
+      - tillandsias-plan-msg-send-recv-ack-list-status-over-a-maildir-style-lane-store-with-idempotent-ids-per-sender-sequence-explicit-ack-shape-budget-and-secret-shaped-body-refusal
+    next_action: >
+      Add the XX constructor in secure_stream with snow; the mint path in
+      vault_bootstrap beside the GitHub bundle code; the peer file
+      reader/writer; the policy stanza; the fixture.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Cryptographic handshake and a Vault policy; the lookup-before-read
+      ordering is the property.
+    events:
+      - type: filed
+        ts: "2026-09-29T22:25:18Z"
+        agent_id: claude-fable-macuahuitl-20260929t222518z
+        host: macuahuitl
+        summary: |-
+          Host identity and the pinned handshake.
+
+  - packet_id: the-lan-rung-msg-serve-listens-on-tcp-discovers-peers-from-the-directory-and-mdns-hints-forwards-outboxes-with-stored-receipts-and-end-to-end-acks-and-drops-replays-by-id-and-sequence
+    order: 1506-7tq4
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: fleet-messaging-poc-a-harness-agnostic-acknowledged-message-bus-between-harnesses-on-the-same-host-and-the-same-lan-proved-before-the-cloudflare-rung
+    pickup_role: linux
+    capability_tags: [fleet-messaging, lan, mdns, noise, security, tray]
+    estimated_hours: 12
+    owned_files:
+      - crates/tillandsias-headless/src/msg_serve.rs
+      - crates/tillandsias-headless/src/msg_discovery.rs
+      - scripts/test-fleet-msg-lan.sh
+    title: |
+      --msg-serve listens on TCP TILLANDSIAS_MSG_PORT (default 48640), resolves a peer from plan/fleet/peers lan_hints then mDNS _tillandsias-msg._tcp hints (fp must match the directory, otherwise ignored and counted) then mesh_ip, forwards each outbox envelope inside a Noise XX session and keeps it queued until the receiver answers stored, retries 1 s doubling to 60 s until ttl_s then dead/ and expired:, refuses from.host not equal to the authenticated peer, absorbs a seen (from, id) while answering stored, drops seq more than 1000 behind, and carries the acked receipt back so the sender's status reads acked:
+    context: |
+      Decision 5. Two receipt levels named apart on purpose: delivered
+      (the daemon stored it) and acked (an agent read it and said so) —
+      the receipt the fleet never had. Ordering is per (from, to) by seq
+      with gaps delivered and flagged; nothing across senders. Framing is
+      the control-wire [u32][postcard] inside the tunnel with
+      MAX_MESSAGE_BYTES enforced both ways. The hermetic fixture runs two
+      daemons on ONE host with two state roots and two ports against a
+      temp peers directory; the live arm is the milestone's acceptance
+      demo (yoga/host to macuahuitl/<codex lane>) and is recorded, not
+      gated. mDNS is on by default pending open question 3; a
+      TILLANDSIAS_MSG_MDNS=off switch exists from day one.
+    exit_criteria:
+      - 'scripts/test-fleet-msg-lan.sh exits 0: a message between two loopback daemons ends delivered:<ts>:via:lan then, after msg ack on the receiving lane, acked:; a captured envelope replayed over a fresh session is answered stored and changes no inbox; an mDNS-shaped hint with a foreign fp is ignored and mdns_ignored increments; an envelope with from.host not matching the authenticated peer is refused:msg:from-host-mismatch; a --ttl 2 message to a dead port is in dead/ within 5 s with status expired:; a seq gap is delivered with gap: (pre-fix: no listener)'
+      - 'one live two-host run is recorded in the milestone 1506-3xu7 events as acked:<id> via:lan with both fingerprints'
+    verifiable_closure: |
+      bash scripts/test-fleet-msg-lan.sh exits 0 on the fixed tree with six
+      named arms over loopback; on today's tree --msg-serve has no
+      listener. Mutation control: disabling the seen-set makes the replay
+      arm FAIL (two files in inbox/new).
+    depends_on:
+      - the-resident-mover-delivers-between-lanes-on-one-host-attributing-the-sender-by-its-mounted-lane-never-by-the-envelope-and-mounts-a-per-lane-mailbox-into-every-forge
+      - every-host-holds-one-x25519-msg-identity-in-its-own-vault-publishes-the-public-half-in-plan-fleet-peers-and-two-hosts-authenticate-with-noise-xx-pinned-to-that-directory
+    next_action: >
+      Implement the listener, the forwarder with receipts and backoff, the
+      discovery module (directory, mDNS hints, mesh_ip) and the fixture;
+      then run the live arm with the coordinator on yoga and macuahuitl.
+    notes: |
+      size: L
+      implementer_tier: opus
+      The largest child; store-and-forward semantics, replay handling and
+      discovery in one daemon. Split the discovery module first if a
+      second implementer is available.
+    events:
+      - type: filed
+        ts: "2026-09-29T22:25:18Z"
+        agent_id: claude-fable-macuahuitl-20260929t222518z
+        host: macuahuitl
+        summary: |-
+          LAN rung; proves the second PoC rung; carries the acceptance
+          demo.
+
+  - packet_id: research-run-the-cloudflare-one-client-in-warp-mode-as-a-rootless-sidecar-container-sharing-the-router-network-namespace-with-net-admin-and-dev-net-tun-and-record-one-of-five-named-outcomes
+    order: 1506-euvq
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    release_target: fleet-messaging-poc-a-harness-agnostic-acknowledged-message-bus-between-harnesses-on-the-same-host-and-the-same-lan-proved-before-the-cloudflare-rung
+    pickup_role: linux
+    capability_tags: [cloudflare, mesh, warp, podman, research, router]
+    estimated_hours: 6
+    owned_files:
+      - images/warp/Containerfile
+      - images/warp/entrypoint.sh
+      - scripts/research-warp-sidecar-rootless.sh
+      - plan/issues/fleet-messaging-poc-design-2026-09-29.md
+    title: |
+      RESEARCH — build images/warp (vendor package pinned, warp-svc as PID 1, no systemd), launch it rootless as tillandsias-warp with --network container:tillandsias-router --cap-drop=ALL --cap-add=NET_ADMIN --device /dev/net/tun --sysctl net.ipv4.conf.all.src_valid_mark=1 --userns=keep-id --user 0 --read-only and an mdm.xml volume from an operator-minted service token, and record exactly one of outcome:mesh-ip-acquired | tun-denied-rootless | firewall-refused | package-refuses-container | registers-no-mesh-ip with the regime
+    context: |
+      Decision 6; supersedes 1505-m63i, whose proxy-mode question the Mesh
+      documentation answers (proxy-only and DNS-only modes are unsupported;
+      Mesh requires Traffic and DNS mode). Cloudflare documents no
+      container support; community images run warp-svc with NET_ADMIN and
+      /dev/net/tun and report a "Failed to start firewall" shape; whether
+      the client accepts an in-namespace root under keep-id, whether its
+      firewall step survives, and whether the package installs without
+      systemd are the unverified items. The router's own posture
+      (build_router_run_args: cap-drop ALL, no-new-privileges, keep-id,
+      read-only) is untouched: only the sidecar carries the capability,
+      and weakening_hardening_flag already admits one named capability.
+      A multi-outcome test, not a counter-claim: the script prints the
+      regime (client version, podman version, kernel, host) then the
+      outcome token as its last line. Needs a service token the operator
+      mints in the dashboard (the script never logs in). Blocked-by is a
+      capability ("a linux host with a running router and an
+      operator-minted service token"), not a host.
+    exit_criteria:
+      - 'scripts/research-warp-sidecar-rootless.sh ends with outcome:<one of the five tokens> and the design note''s research §2 carries the result with its regime (pre-fix: no script; the question is open)'
+      - 'the milestone''s Cloudflare rung is marked by the coordinator as "sidecar viable" or "sidecar blocked:<outcome>" citing this order, and 1506-t97c is unblocked only on mesh-ip-acquired'
+    unscoreable: "research-measurement: the deliverable is one recorded outcome token with its regime; a fixture cannot pin a fact about Cloudflare's client behaviour in a rootless namespace on real hardware"
+    depends_on: []
+    next_action: >
+      Write the Containerfile and entrypoint; write the script (build,
+      run beside the router, wait for warp-cli status, print the regime
+      and the token); run it on one Linux host with the operator's
+      service token; record the token in the design note and in this
+      packet's events.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Requires an operator-minted service token; the outcome decides
+      whether the Cloudflare rung is a join packet or a blocked question.
+    events:
+      - type: filed
+        ts: "2026-09-29T22:25:18Z"
+        agent_id: claude-fable-macuahuitl-20260929t222518z
+        host: macuahuitl
+        summary: |-
+          Rootless WARP sidecar measurement; replaces the proxy-mode
+          research 1505-m63i.
+
+  - packet_id: fleet-vpn-join-leave-status-launches-the-warp-sidecar-beside-the-router-from-secret-cloudflare-mesh-on-linux-and-inside-the-macos-and-windows-guests-so-no-host-os-ever-runs-a-cloudflare-daemon
+    order: 1506-t97c
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: fleet-messaging-poc-a-harness-agnostic-acknowledged-message-bus-between-harnesses-on-the-same-host-and-the-same-lan-proved-before-the-cloudflare-rung
+    pickup_role: linux
+    capability_tags: [cloudflare, fleet-vpn, mesh, warp, podman, router, macos, windows, vault]
+    estimated_hours: 12
+    owned_files:
+      - crates/tillandsias-headless/src/fleet_vpn.rs
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-podman/src/container_spec.rs
+      - crates/tillandsias-router-sidecar/src/main.rs
+      - crates/tillandsias-vm-layer/src/vz.rs
+      - crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+      - scripts/test-fleet-vpn-join-sidecar.sh
+    title: |
+      tillandsias --fleet-vpn join|leave|status writes mdm.xml from secret/cloudflare/mesh into a named volume, launches tillandsias-warp from a dedicated warp profile in container_spec (its own justification, no cap_add field) sharing the router's network namespace, reads registration and Mesh IP through podman exec warp-cli, records mesh_ip in Vault and plan/fleet/peers/<host>.yaml, and the router sidecar relays <mesh_ip>:48640 to host.containers.internal:48640 carrying only ciphertext; on macOS and Windows the guest headless does the same beside the guest's router; no sudo, no systemctl, no host file; init refuses paid features
+    context: |
+      Decision 6; replaces 1505-bhsb (host daemon, sudo tee of
+      /var/lib/cloudflare-warp/mdm.xml, rpm-ostree layering) and 1505-g6zc
+      (guest daemon) — the guest now runs the same sidecar beside its
+      router, so one code path serves three platforms. weakening_hardening_flag
+      refuses --privileged, non-keep-id userns and --cap-add ALL, and
+      admits a single named capability; 972-6vaj forbids a generic cap_add
+      field, so the warp profile is explicit. The relay in
+      tillandsias-router-sidecar binds only the Mesh IP (never the enclave
+      bridge address) and is a byte pipe; the Noise session is end to end
+      between hosts. Free plan only: init prints the plan it read, calls
+      no billing route, refuses refused:fleet-vpn:paid-feature:<step>.
+      BLOCKED on 1506-euvq recording mesh-ip-acquired; any other outcome
+      turns this row into a question for the operator, not a packet.
+    exit_criteria:
+      - 'scripts/test-fleet-vpn-join-sidecar.sh exits 0 with a fake podman that records its arguments and a fake warp-cli behind it: the recorded run carries --network container:tillandsias-router, --cap-drop=ALL, --cap-add=NET_ADMIN, --device /dev/net/tun, --userns=keep-id and no --privileged, no other --cap-add and no other --device; no sudo, systemctl or /var/lib/cloudflare-warp path is touched on the host; mesh_ip lands in both secret/cloudflare/mesh and plan/fleet/peers/<host>.yaml and mdm.xml carries the token client id and not the OAuth access token; leave removes container and volume and clears the secret; status prints unknown:<why> when the fake reports no registration (pre-fix: unknown flag)'
+      - 'the router sidecar relay bound to 127.0.0.2:48640 in a unit test forwards bytes verbatim to a loopback echo and refuses to bind any address not equal to the configured mesh_ip'
+      - 'one live run on a Linux host and one inside a macOS or Windows guest are recorded as joined:<mesh_ip> or a named refusal with client version and podman version'
+    verifiable_closure: |
+      bash scripts/test-fleet-vpn-join-sidecar.sh exits 0 on the fixed
+      tree with five named arms over a fake podman; on today's tree the
+      flag is unknown. The live arms are recorded measurements.
+    depends_on:
+      - research-run-the-cloudflare-one-client-in-warp-mode-as-a-rootless-sidecar-container-sharing-the-router-network-namespace-with-net-admin-and-dev-net-tun-and-record-one-of-five-named-outcomes
+      - tillandsias-fleet-vpn-init-idempotently-ensures-the-tillandsias-vpn-virtual-network-masque-profile-split-tunnel-gateway-policy-and-a-per-host-service-token-and-refuses-with-the-dashboard-step-when-the-zero-trust-org-is-absent
+      - every-host-holds-one-x25519-msg-identity-in-its-own-vault-publishes-the-public-half-in-plan-fleet-peers-and-two-hosts-authenticate-with-noise-xx-pinned-to-that-directory
+    next_action: >
+      Wait for 1506-euvq's outcome; then add the warp profile, the join
+      steps over the podman client, the relay in the router sidecar, the
+      guest-side call, and the fixture.
+    notes: |
+      size: L
+      implementer_tier: opus
+      Grants a capability to a container and exposes a Mesh-side port;
+      the profile's exact argument list and the relay's bind rule are the
+      safety properties.
+    events:
+      - type: filed
+        ts: "2026-09-29T22:25:18Z"
+        agent_id: claude-fable-macuahuitl-20260929t222518z
+        host: macuahuitl
+        summary: |-
+          The Cloudflare rung join; replaces 1505-bhsb and 1505-g6zc.
+
+  - packet_id: the-ledger-stays-the-record-expired-or-dead-messages-become-events-on-their-row-msg-ack-row-writes-the-ack-event-and-plan-inbox-codex-md-becomes-a-pointer-to-msg-recv
+    order: 1506-b8du
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: fleet-messaging-poc-a-harness-agnostic-acknowledged-message-bus-between-harnesses-on-the-same-host-and-the-same-lan-proved-before-the-cloudflare-rung
+    pickup_role: any
+    capability_tags: [fleet-messaging, ledger, plan-binary, methodology, codex, plan-only-peer-ok]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+      - crates/tillandsias-headless/src/msg_serve.rs
+      - plan/inbox/codex.md
+      - methodology/multi-host-development.yaml
+      - scripts/test-fleet-msg-ledger.sh
+    title: |
+      msg ack <id> --row <order> appends an ack event (id, from_agent) to that row through the append-event path, an expiry of a message that named a row appends an undelivered event (id, destination), plan/inbox/codex.md is reduced to a pointer to msg recv, and plan_only_peers names tillandsias-plan msg recv as step 0 and msg ack after reading with every ledger step unchanged — the bus is the fast acknowledged channel, the ledger stays the durable record
+    context: |
+      Decision 7. The Codex inbox asked for a hand-appended "ACK: <msg-id>"
+      note per message; the tool writes it now. The ledger remains the
+      only record the fleet reads across restarts and hosts; the bus
+      carries nothing the ledger would need to keep. 1437-arjg
+      (check-peer-message-shape.sh, blocked) can close by wrapping msg
+      lint; this row notes it and does not own it. Edits to
+      methodology/multi-host-development.yaml are the plan_only_peers
+      block only.
+    exit_criteria:
+      - 'scripts/test-fleet-msg-ledger.sh exits 0: msg ack <id> --row <temp order> writes a fragment whose event type is ack naming <id> and the from_agent; an expired message with --row writes an undelivered event naming <id> and <host>/<lane>; plan/inbox/codex.md is at most 12 lines and names msg recv; methodology_ask "plan-only peer protocol" returns a step 0 naming msg recv (pre-fix: no events, the inbox is a mailbox, plan_only_peers starts at 1_find)'
+    verifiable_closure: |
+      bash scripts/test-fleet-msg-ledger.sh exits 0 on the fixed tree with
+      four named arms over a temp ledger overlay; on today's tree msg is
+      an unknown verb and plan/inbox/codex.md holds messages.
+    depends_on:
+      - tillandsias-plan-msg-send-recv-ack-list-status-over-a-maildir-style-lane-store-with-idempotent-ids-per-sender-sequence-explicit-ack-shape-budget-and-secret-shaped-body-refusal
+      - the-lan-rung-msg-serve-listens-on-tcp-discovers-peers-from-the-directory-and-mdns-hints-forwards-outboxes-with-stored-receipts-and-end-to-end-acks-and-drops-replays-by-id-and-sequence
+    next_action: >
+      Add --row to ack and the expiry hook in msg_serve, both calling the
+      append-event writer; rewrite the inbox file as a pointer; add step 0
+      to plan_only_peers; write the fixture.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Two event writers over an existing path, one file rewrite, one
+      methodology block.
+    events:
+      - type: filed
+        ts: "2026-09-29T22:25:18Z"
+        agent_id: claude-fable-macuahuitl-20260929t222518z
+        host: macuahuitl
+        summary: |-
+          Ledger integration; retires the inbox file.
+
+fields:
+  - packet_id: tillandsias-fleet-vpn-join-leave-status-on-linux-bare-metal-detects-the-cloudflare-one-client-prints-the-install-step-per-substrate-instead-of-installing-writes-mdm-xml-from-the-service-token-and-proves-registration-through-warp-cli
+    field: status
+    value: obsoleted
+    ts: "2026-09-29T22:25:18Z"
+    host: macuahuitl
+  - packet_id: macos-and-windows-join-tillandsias-vpn-through-their-linux-guest-which-installs-the-cloudflare-one-client-at-provisioning-receives-the-service-token-over-the-host-guest-credential-channel-and-registers-so-the-host-os-is-never-enrolled
+    field: status
+    value: obsoleted
+    ts: "2026-09-29T22:25:18Z"
+    host: macuahuitl
+  - packet_id: research-whether-the-cloudflare-one-client-in-proxy-mode-inside-a-rootless-container-can-reach-a-hub-mesh-ip-so-spokes-can-stay-daemon-free-recorded-as-one-of-four-named-outcomes
+    field: status
+    value: obsoleted
+    ts: "2026-09-29T22:25:18Z"
+    host: macuahuitl
+  - packet_id: expert-serve-binds-the-mesh-only-behind-a-bearer-and-tillandsias-fleet-experts-serve-runs-it-on-the-hub-mesh-ip-advertising-fleet-experts-tillandsias-vpn-internal
+    field: depends_on
+    value:
+      - fleet-vpn-join-leave-status-launches-the-warp-sidecar-beside-the-router-from-secret-cloudflare-mesh-on-linux-and-inside-the-macos-and-windows-guests-so-no-host-os-ever-runs-a-cloudflare-daemon
+    ts: "2026-09-29T22:25:18Z"
+    host: macuahuitl
+  - packet_id: the-tray-offers-cloudflare-login-beside-github-login-while-no-bundle-is-stored-and-shows-fleet-vpn-and-fleet-experts-rows-afterwards-on-linux-macos-and-windows-from-one-menu-body
+    field: depends_on
+    value:
+      - tillandsias-cloudflare-login-completes-the-pkce-flow-through-one-of-three-receivers-loopback-qr-to-an-operator-relay-page-or-paste-stores-the-bundle-and-cloudflare-logout-revokes-it
+      - fleet-vpn-join-leave-status-launches-the-warp-sidecar-beside-the-router-from-secret-cloudflare-mesh-on-linux-and-inside-the-macos-and-windows-guests-so-no-host-os-ever-runs-a-cloudflare-daemon
+    ts: "2026-09-29T22:25:18Z"
+    host: macuahuitl
+
+events:
+  - packet_id: tillandsias-fleet-vpn-join-leave-status-on-linux-bare-metal-detects-the-cloudflare-one-client-prints-the-install-step-per-substrate-instead-of-installing-writes-mdm-xml-from-the-service-token-and-proves-registration-through-warp-cli
+    event:
+      type: note
+      ts: "2026-09-29T22:25:18Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        OBSOLETED by 1506-t97c (operator 2026-09-29: Cloudflare's software
+        runs inside the containers, the router likely — never on a host
+        OS). This row's host daemon, sudo tee of
+        /var/lib/cloudflare-warp/mdm.xml and rpm-ostree layering are not to
+        be implemented; the client runs in the tillandsias-warp sidecar
+        sharing the router's network namespace. Its refuse-not-install
+        rule survives as "no sudo, no systemctl, no host file".
+  - packet_id: macos-and-windows-join-tillandsias-vpn-through-their-linux-guest-which-installs-the-cloudflare-one-client-at-provisioning-receives-the-service-token-over-the-host-guest-credential-channel-and-registers-so-the-host-os-is-never-enrolled
+    event:
+      type: note
+      ts: "2026-09-29T22:25:18Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        OBSOLETED by 1506-t97c: the guest no longer installs a daemon at
+        provisioning; the guest's router hosts the same tillandsias-warp
+        sidecar and the guest headless performs the join over one code
+        path. The host-to-guest token hand-over and the status relay to
+        the host tray are folded into 1506-t97c.
+  - packet_id: research-whether-the-cloudflare-one-client-in-proxy-mode-inside-a-rootless-container-can-reach-a-hub-mesh-ip-so-spokes-can-stay-daemon-free-recorded-as-one-of-four-named-outcomes
+    event:
+      type: note
+      ts: "2026-09-29T22:25:18Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        OBSOLETED by documentation, replaced by 1506-euvq. The Cloudflare
+        Mesh get-started page states that DNS-only and proxy-only modes are
+        unsupported and nodes must run in Traffic and DNS mode; the
+        client-device guide repeats that Mesh connectivity requires Traffic
+        and DNS mode. The reaches-mesh outcome is therefore excluded and
+        the measurement is not worth a host's time. The open question that
+        remains — does WARP mode run in a rootless sidecar — is 1506-euvq
+        with five named outcomes. Sources in
+        plan/issues/fleet-messaging-poc-design-2026-09-29.md research §1.
+  - packet_id: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    event:
+      type: note
+      ts: "2026-09-29T22:25:18Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        AMENDED (Decision 5) by milestone 1506-3xu7: no host OS runs
+        warp-svc; the client runs in a rootless sidecar beside the router
+        on every platform; children 1505-bhsb, 1505-g6zc and 1505-m63i are
+        obsoleted and replaced by 1506-t97c and 1506-euvq; 1505-br88 and
+        1505-hfim now depend on 1506-t97c. The login, Vault, names, init
+        and fleet-experts children are unchanged. The messaging PoC lands
+        first; this milestone's third criterion (hub mesh_ip and spoke
+        reachable) is read against the sidecar, not a host daemon.
+  - packet_id: expert-serve-binds-the-mesh-only-behind-a-bearer-and-tillandsias-fleet-experts-serve-runs-it-on-the-hub-mesh-ip-advertising-fleet-experts-tillandsias-vpn-internal
+    event:
+      type: note
+      ts: "2026-09-29T22:25:18Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        depends_on re-pointed from 1505-bhsb (obsoleted) to 1506-t97c. The
+        Mesh IP the hub binds now lives in the router's network namespace,
+        so --fleet-experts serve reaches it the way the msg relay does: a
+        router-sidecar relay from <mesh_ip>:11436 to host.containers.internal,
+        bearer unchanged. Fold that relay into 1506-t97c's sidecar relay
+        with a second port rather than a second mechanism.
+  - packet_id: the-tray-offers-cloudflare-login-beside-github-login-while-no-bundle-is-stored-and-shows-fleet-vpn-and-fleet-experts-rows-afterwards-on-linux-macos-and-windows-from-one-menu-body
+    event:
+      type: note
+      ts: "2026-09-29T22:25:18Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        depends_on re-pointed from 1505-bhsb (obsoleted) to 1506-t97c; the
+        Fleet VPN row's third state reads "sidecar absent" instead of
+        "client absent".
