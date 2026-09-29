@@ -55,10 +55,14 @@ set -uo pipefail
 
 FLOOR_MB="${TILLANDSIAS_GATE_MEMORY_FLOOR_MB:-1024}"
 MEMINFO=/proc/meminfo
+MEMINFO_EXPLICIT=0
+# ORDER 1337-7jr5: the kernel identity file, a seam so a fixture can present a
+# WSL2 guest on any host.
+OSRELEASE="${TILLANDSIAS_GATE_MEMORY_OSRELEASE:-/proc/sys/kernel/osrelease}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --meminfo-from) MEMINFO="${2:-}"; shift 2 ;;
+        --meminfo-from) MEMINFO="${2:-}"; MEMINFO_EXPLICIT=1; shift 2 ;;
         --floor-mb)     FLOOR_MB="${2:-}"; shift 2 ;;
         *) echo "usage: check-gate-memory-floor.sh [--meminfo-from FILE] [--floor-mb N]" >&2; exit 2 ;;
     esac
@@ -70,6 +74,28 @@ case "$FLOOR_MB" in
         echo "skip:gate-memory:bad-floor"
         exit 3 ;;
 esac
+
+# ORDER 1337-7jr5. INSIDE A WSL2 GUEST, /proc/meminfo DESCRIBES THE WRONG MACHINE.
+# It is the utility VM's memory, capped at 8 GiB by WSL2 itself, while what
+# reaps the gate is the WINDOWS host's memory running out. Measured on yolanda
+# 2026-09-21 during a live gate: this check printed ok:gate-memory:5578MB while
+# the Windows host was at 28.7% available, and at 10.8% earlier the same hour,
+# which is below every harness reap this host has recorded. The two readings
+# are structurally independent, so an ok: from the guest is an accept that
+# cannot refuse.
+#
+# So the default read refuses to assert. A caller that HAS the host's figure
+# passes it through --meminfo-from (as a MemAvailable line) and is judged
+# normally; nothing here makes a Windows round-trip mandatory. Detection is
+# local and cheap: the WSL2 kernel names itself in osrelease.
+if [ "$MEMINFO_EXPLICIT" -eq 0 ] && [ -r "$OSRELEASE" ]; then
+    case "$(cat "$OSRELEASE" 2>/dev/null)" in
+        *[Mm]icrosoft*WSL2*|*WSL2*)
+            echo "could-not-run:gate-memory:wsl2-guest-meminfo-is-not-the-host (this is a WSL2 guest; its /proc/meminfo is the utility VM's, not the Windows host's that reaps the gate. Pass the host figure with --meminfo-from to assert)"
+            echo "skip:gate-memory:wsl2-guest"
+            exit 3 ;;
+    esac
+fi
 
 # NOT A PLATFORM CLAIM. A host with no /proc/meminfo (darwin, or a stripped
 # container) is one this check cannot answer for, and saying so is the honest
