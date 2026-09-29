@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: after-github-grants-the-device-flow-token-the-guest-is-silent-for-13-seconds-before-the-tray-shows-the-handle
+    order: 1486-y67a
+    status: ready
+    kind: investigation+bug-fix
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, github-login, headless, latency]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      After GitHub grants the device-flow token, the guest makes no GitHub call for ~13 s before the next step runs in the login container, so the tray shows the handle ~18.3 s after the grant; measured on macOS with the 1479-9hx6 timestamps
+    context: |
+      MEASURED 2026-09-29, tlatoanis-macbook-air, tray 0be6803ef (stamped tray.log),
+      operator sign-in through the tray device flow. Guest console lines carry
+      uptime; the proxy lines inside them carry epoch, which maps one to the other.
+        04:48:44.616Z  click (tray.log)
+        04:48:46..04:50:10  github.com polled every ~5 s (guest proxy)
+        04:50:10.187Z  LAST github.com poll: INFERRED token grant
+        04:50:10.3..11.7  api.github.com calls
+        04:50:11.9Z   podman exec_died in the login container
+                      (tillandsias-github-login-73518, image tillandsias-git)
+        -- 13.2 s: NO exec into the login container and NO GitHub traffic.
+           Only health checks every 3 s. --
+        04:50:25.06Z  next podman exec into the login container
+        04:50:25.1..28.3  api.github.com calls
+        04:50:28.512Z  tray: github-login menu_state updated (handle)
+        04:50:31.126Z  tray: cloud-projects menu_state updated (14 entries)
+      So ~18.3 s from grant to handle, ~13 s of it idle. The tray side is not the
+      delay: its fallback poll runs only while the push subscription is
+      unhealthy (should_poll_fallback), and it updated ~0.2 s after the guest's
+      last API burst. The trigger of the 04:50:25 exec is NOT identified (a
+      timer, a retry, or a wait on Vault or the mirror?). The two headless
+      sleeps checked (a browser container poll, a shutdown wait) are not it.
+      SIDE FINDING: the login container inherits the git image's HEALTHCHECK,
+      which does not apply to it. It went starting -> unhealthy 24 times in its
+      ~100 s life (a systemd unit failing every 3 s): noise in the journal, and
+      possibly load on the step that follows.
+      Coordinator direction (macuahuitl-fedora, 2026-09-29): measure first
+      (guest journal plus the login script's own step timings: Vault write,
+      gh setup-git, mirror notify), name the step, then decide the fix; it may
+      be a deliberate wait. macOS scope; note whether Linux's direct path shows
+      the same gap.
+    exit_criteria:
+      - 'the step that owns the ~13 s is NAMED from timestamps (the login script''s steps logged with times, or the guest journal), not inferred (pre-fix result: FAILS — unidentified)'
+      - 'if it is not a deliberate wait: token grant -> handle in the tray drops below 5 s on a macOS sign-in, measured from tray.log plus the guest proxy (pre-fix: 18.3 s); if it IS deliberate, the wait is named in the code with its reason, and the tray says what it is waiting for'
+      - 'Linux: the same sign-in timed on a Linux host, stating whether the direct path shows the gap'
+      - 'the login container does not inherit a health check that cannot pass (or the check is made meaningful)'
+    unscoreable: |
+      a latency investigation: the pin is the named step plus the before and
+      after timing pair, measured on a real sign-in.
