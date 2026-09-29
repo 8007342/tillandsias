@@ -386,6 +386,43 @@ mod tests {
         assert!(args.contains(&"-d".to_string()));
     }
 
+    /// ORDER 1469-q2r3: the launcher's real run argv carries the ForgeBudget
+    /// flags, asserted on the argv rather than on podman_args().
+    #[test]
+    fn build_args_carries_the_forge_budget() {
+        let launcher = ContainerLauncher::new(PodmanClient::new());
+        let config = ResolvedConfig {
+            image: "test:latest".to_string(),
+            port_range: "3000-3019".to_string(),
+            security: SecurityConfig {
+                cap_drop_all: true,
+                no_new_privileges: true,
+                userns_keep_id: true,
+            },
+            mounts: vec![],
+            runtime: None,
+        };
+        let args = launcher.build_run_args(
+            "test",
+            "tillandsias-test-aeranthos",
+            &config,
+            std::path::Path::new("/tmp/test-project"),
+            std::path::Path::new("/tmp/cache"),
+            (3000, 3019),
+        );
+        let budget = tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args();
+        assert!(
+            budget.iter().any(|a| a.starts_with("--memory=")),
+            "{budget:?}"
+        );
+        for flag in &budget {
+            assert!(
+                args.contains(flag),
+                "launcher argv is missing budget flag {flag}; argv={args:?}"
+            );
+        }
+    }
+
     #[test]
     fn build_args_has_container_name() {
         let launcher = ContainerLauncher::new(PodmanClient::new());

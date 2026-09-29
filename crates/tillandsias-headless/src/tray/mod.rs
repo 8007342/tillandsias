@@ -8649,3 +8649,43 @@ mod tests {
         );
     }
 }
+
+/// ORDER 1469-q2r3 — the tray's forge launch argv carries the ForgeBudget flags
+/// for every launch kind (the budget is asserted on the argv, not the helper).
+#[cfg(test)]
+mod forge_budget_argv_tests {
+    use super::*;
+
+    #[test]
+    fn every_tray_launch_kind_argv_carries_the_budget() {
+        let budget = tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args();
+        assert!(
+            budget.iter().any(|a| a.starts_with("--memory=")),
+            "{budget:?}"
+        );
+        let project = ProjectEntry {
+            name: "alpha".to_string(),
+            path: PathBuf::from("/tmp/alpha"),
+            full_name: None,
+        };
+        for kind in [
+            LaunchKind::OpenCode,
+            LaunchKind::OpenCodeWeb,
+            LaunchKind::Observatorium,
+            LaunchKind::Claude,
+            LaunchKind::Codex,
+            LaunchKind::Antigravity,
+            LaunchKind::Maintenance,
+        ] {
+            let args = build_launch_spec(&project, kind, "tillandsias-forge:v0.1.260506.6")
+                .build_run_argv()
+                .expect("hardening envelope");
+            for flag in &budget {
+                assert!(
+                    args.contains(flag),
+                    "tray {kind:?} launch argv is missing budget flag {flag}; argv={args:?}"
+                );
+            }
+        }
+    }
+}
