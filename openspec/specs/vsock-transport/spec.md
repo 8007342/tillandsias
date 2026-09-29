@@ -350,6 +350,7 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:vsock-handshake` — primary handshake verification.
 - `litmus:vm-shutdown-drains-forges` — exercises `VmShutdownRequest` semantics.
 - `litmus:vsock-exec-heartbeat` — pins capability-gated silent-work liveness, the unified timeout policy, and empty-frame suppression.
+- `litmus:headless-keepalive` — the control listener stays long-lived: it accepts and handles a second and third connection after earlier ones close (order 148; red on a one-shot listener).
 
 ## Litmus Chain
 
