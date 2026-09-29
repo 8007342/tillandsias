@@ -114,3 +114,19 @@ tillandsias-secure-channel = { path = "crates/tillandsias-secure-channel" }
 lto = true
 strip = true
 codegen-units = 1
+
+# ORDER 1476-5dfy. Optimise ONLY tillandsias-plan's test build. Its lib suite
+# includes compaction_on_the_real_ledger_preserves_every_comment_and_item, which
+# compacts the LIVE ledger on every gate (deliberately: a snapshot would drift
+# from what ships). In a debug build that one test was the majority of the
+# workspace test step. Measured on tlatoanis-macbook-air 2026-09-28:
+#   live test   134.3s (opt 0) -> 125.1s (opt 1) -> 64.4s (opt 2)
+#   lib suite   139.3s         -> 137.0s         -> 69.7s
+#   clean rebuild of the plan test binary   5.3s (opt 0) -> 18.4s (opt 2)
+# opt-level 1 buys almost nothing here; 2 halves the run for ~13s of compile
+# that is paid only when the plan crate itself changes.
+# The same row then fixed the algorithm: compact_text rebuilt the folded
+# index once PER FRAGMENT (~45 s of it). With that fixed, the live test is
+# 57.7s at opt 0 and 15.5s at opt 2, so the two changes compound.
+[profile.test.package.tillandsias-plan]
+opt-level = 2

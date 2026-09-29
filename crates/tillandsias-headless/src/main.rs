@@ -10969,6 +10969,53 @@ pub fn render_terminal_qr(url: &str) -> Result<String, String> {
     render_terminal_qr_in(url, qr_tier())
 }
 
+// Order 1475-uif4. OpenAI documents the device flow, but not a machine-readable
+// CLI output format or a permanent URL. Recognize only the currently observed
+// verification page as a complete whitespace-delimited token in Codex's own
+// stream. A changed or decorated URL leaves the CLI instructions untouched and
+// produces no QR; in particular, a query or path carrying a device code is
+// never encoded. This scanner retains at most one URL-sized window; it never
+// logs or persists the login output.
+const CODEX_DEVICE_VERIFICATION_URI: &str = "https://auth.openai.com/codex/device";
+
+struct CodexDeviceQrScanner {
+    tail: Vec<u8>,
+    displayed: bool,
+}
+
+impl CodexDeviceQrScanner {
+    fn new() -> Self {
+        Self {
+            tail: Vec::with_capacity(CODEX_DEVICE_VERIFICATION_URI.len() + 2),
+            displayed: false,
+        }
+    }
+
+    fn feed(&mut self, chunk: &[u8], tier: tillandsias_progress_tty::Tier) -> Option<String> {
+        if self.displayed {
+            return None;
+        }
+        let width = CODEX_DEVICE_VERIFICATION_URI.len() + 2;
+        for &byte in chunk {
+            self.tail.push(byte);
+            if self.tail.len() > width {
+                self.tail.remove(0);
+            }
+            if self.tail.len() == width
+                && self.tail[0].is_ascii_whitespace()
+                && self.tail[width - 1].is_ascii_whitespace()
+                && &self.tail[1..width - 1] == CODEX_DEVICE_VERIFICATION_URI.as_bytes()
+            {
+                self.displayed = true;
+                return render_terminal_qr_in(CODEX_DEVICE_VERIFICATION_URI, tier)
+                    .ok()
+                    .map(|qr| format!("\n{qr}\n"));
+            }
+        }
+        None
+    }
+}
+
 /// The one-time code, in blush on a colour tier and plain otherwise.
 fn styled_user_code(code: &str, tier: tillandsias_progress_tty::Tier) -> String {
     let open = qr_sgr(tier, tillandsias_progress_tty::palette::TIP_BLUSH, None);
@@ -11796,6 +11843,42 @@ fn provider_login_tool_cache_mount(provider: &ProviderId) -> Option<String> {
     None
 }
 
+/// Stream Codex's own device instructions byte-for-byte and add a QR only when
+/// the complete, code-free verification URI appears. The existing bounded
+/// Podman stream keeps the container PTY and its deadline; Codex needs no stdin
+/// for `login --device-auth`. No output chunk enters tracing or an argv/env.
+fn run_codex_device_login_with_qr(
+    mut login: tillandsias_podman::SyncPodmanCommand,
+    debug: bool,
+) -> Result<(), String> {
+    use std::io::Write;
+
+    if debug {
+        eprintln!("[tillandsias] running: {:?}", login.as_std());
+    }
+    let tier = qr_tier();
+    let mut scanner = CodexDeviceQrScanner::new();
+    let status = login
+        .status_bounded_with_stdin_streaming(
+            &[],
+            tillandsias_podman::OperationKind::Container.default_budget(),
+            move |chunk| {
+                let mut out = std::io::stdout().lock();
+                let _ = out.write_all(chunk);
+                if let Some(qr) = scanner.feed(chunk, tier) {
+                    let _ = out.write_all(qr.as_bytes());
+                }
+                let _ = out.flush();
+            },
+        )
+        .map_err(|e| format!("Failed to run Codex device login: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("Codex device login exited with status {status}"))
+    }
+}
+
 fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), String> {
     let provider_name = config.provider.name();
     let flag = format!("--{}-login", config.provider.id_str());
@@ -12001,7 +12084,13 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &config.token_script,
             config.input_mode,
         ));
-        run_podman_command(login, debug)?;
+        if matches!(config.provider, ProviderId::Codex)
+            && matches!(config.input_mode, LoginInputMode::Terminal)
+        {
+            run_codex_device_login_with_qr(login, debug)?;
+        } else {
+            run_podman_command(login, debug)?;
+        }
     }
 
     if matches!(config.provider, ProviderId::GitHub) {
@@ -24768,6 +24857,81 @@ mod tests {
     }
 
     #[test]
+    fn codex_device_qr_recognizes_every_stream_split_and_only_once() {
+        use tillandsias_progress_tty::{EnvView, Tier};
+
+        let non_tty = Tier::detect(&EnvView {
+            is_tty: false,
+            term: Some("xterm-256color".into()),
+            ..EnvView::default()
+        });
+        let no_color = Tier::detect(&EnvView {
+            is_tty: true,
+            term: Some("xterm-256color".into()),
+            no_color: Some(String::new()),
+            ..EnvView::default()
+        });
+        assert_eq!(non_tty, Tier::Plain);
+        assert_eq!(no_color, Tier::Plain);
+        let uri = CODEX_DEVICE_VERIFICATION_URI.as_bytes();
+        for tier in [non_tty, no_color] {
+            for split in 0..=uri.len() {
+                let mut scanner = CodexDeviceQrScanner::new();
+                let mut first = b"Open: \r\n  ".to_vec();
+                first.extend_from_slice(&uri[..split]);
+                assert!(scanner.feed(&first, tier).is_none(), "split={split}");
+                let mut second = uri[split..].to_vec();
+                second.extend_from_slice(b" \r\nEnter code: SECRET-1234\r\n");
+                let qr = scanner
+                    .feed(&second, tier)
+                    .expect("complete URI must render");
+                assert!(qr.lines().count() >= 10, "split={split}");
+                assert!(!qr.contains('\x1b'), "plain QR must have no escapes");
+                assert!(!qr.contains("SECRET-1234"), "code must not reach QR output");
+                assert!(scanner.tail.len() <= uri.len() + 2);
+                assert!(
+                    scanner
+                        .feed(b"\nhttps://auth.openai.com/codex/device \n", tier)
+                        .is_none(),
+                    "a login renders at most one QR"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn codex_device_qr_rejects_spoofed_or_code_bearing_urls() {
+        use tillandsias_progress_tty::Tier;
+
+        for output in [
+            "device code: SECRET-1234\n",
+            "\nhttp://auth.openai.com/codex/device \n",
+            "\nhttps://auth.openai.com.evil.invalid/codex/device \n",
+            "\nhttps://auth.openai.com/codex/device?user_code=SECRET-1234 \n",
+            "\nhttps://auth.openai.com/codex/device/SECRET-1234 \n",
+            "\nhttps://evil.invalid/?next=https://auth.openai.com/codex/device \n",
+        ] {
+            let mut scanner = CodexDeviceQrScanner::new();
+            assert!(
+                scanner.feed(output.as_bytes(), Tier::Plain).is_none(),
+                "{output:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn codex_device_qr_uses_the_existing_terminal_palette() {
+        use tillandsias_progress_tty::Tier;
+
+        let mut scanner = CodexDeviceQrScanner::new();
+        let output = format!("\r\n{CODEX_DEVICE_VERIFICATION_URI}\r\n");
+        let qr = scanner
+            .feed(output.as_bytes(), Tier::TrueColor)
+            .expect("verified URL must render");
+        assert!(qr.contains("\x1b[38;2;30;74;50;48;2;157;187;165m"));
+    }
+
+    #[test]
     fn codex_login_never_uses_generic_paste_token_script() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let start = source
@@ -32325,6 +32489,166 @@ mod flag_surface_tests {
             missing.is_empty(),
             "dispatched from user_args but NOT in known_flags, so the allow-list \
              refuses them with `Unsupported option` before the dispatch runs: {missing:?}"
+        );
+    }
+}
+
+/// ORDER 1469-q2r3 — the forge cgroup budget reaches the REAL launch argv.
+///
+/// 981-n5vx found the old memory ceiling computed by a helper nothing called,
+/// with every test on the pure helper. ForgeBudget (1375-xxzj) is wired, but
+/// its tests are all on `podman_args()`; these assert the argv each real
+/// builder returns, and a source scan enumerates the builders so a new forge
+/// launch site without the budget fails here rather than shipping green.
+#[cfg(test)]
+mod forge_budget_argv_tests {
+    use super::*;
+    use tillandsias_core::forge_budget::ForgeBudget;
+
+    /// Every budget flag, in the builder's argv. The exact strings come from
+    /// the budget itself, so a tier change cannot desynchronise the test; the
+    /// named-flag checks keep the list from being vacuously empty.
+    fn assert_budget(what: &str, args: &[String]) {
+        let budget = ForgeBudget::for_this_host().podman_args();
+        assert!(
+            budget.iter().any(|a| a.starts_with("--memory="))
+                && budget.iter().any(|a| a.contains("memory.high="))
+                && budget.iter().any(|a| a.contains("memory.swap.max=")),
+            "ForgeBudget::podman_args() no longer names --memory / memory.high / memory.swap.max: {budget:?}"
+        );
+        for flag in &budget {
+            assert!(
+                args.contains(flag),
+                "{what}: forge launch argv is missing budget flag {flag}; argv={args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn status_check_forge_argv_carries_the_budget() {
+        let args = build_status_check_forge_args(
+            &PathBuf::from("/tmp/workspace"),
+            "alpha",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+        );
+        assert_budget("build_status_check_forge_args", &args);
+    }
+
+    #[test]
+    fn opencode_forge_argv_carries_the_budget_in_both_modes() {
+        for mode in [ForgeMode::Cli, ForgeMode::Web] {
+            let args = build_opencode_forge_args(
+                std::path::Path::new("/tmp/probe-project"),
+                Some(std::path::Path::new("/tmp/probe-project")),
+                None,
+                "probe-project",
+                None,
+                None,
+                std::path::Path::new("/tmp/probe-certs"),
+                "0.0.0-test",
+                mode,
+                None,
+                false,
+                false,
+            );
+            assert_budget(&format!("build_opencode_forge_args({mode:?})"), &args);
+        }
+    }
+
+    #[test]
+    fn agent_forge_argv_carries_the_budget_for_every_agent() {
+        for mode in [
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Antigravity,
+            ForgeAgentMode::Maintenance,
+        ] {
+            for host_mount in [false, true] {
+                let args = build_forge_agent_run_args(
+                    &PathBuf::from("/tmp/project"),
+                    "alpha",
+                    None,
+                    &PathBuf::from("/tmp/ca"),
+                    "1.2.3",
+                    mode,
+                    false,
+                    host_mount,
+                    &test_cache_root(),
+                );
+                assert_budget(
+                    &format!("build_forge_agent_run_args({mode:?}, host_mount={host_mount})"),
+                    &args,
+                );
+            }
+        }
+    }
+
+    /// The enumeration, so the list above cannot silently fall behind: every
+    /// top-level function in the non-test part of main.rs that names the forge
+    /// image must carry the budget itself or through the shared common args.
+    #[test]
+    fn every_function_that_launches_the_forge_image_carries_the_budget() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs");
+        let src = std::fs::read_to_string(&path).expect("read main.rs");
+        let prod = src
+            .split("\n#[cfg(test)]\nmod tests")
+            .next()
+            .unwrap_or(&src);
+        let is_fn_start = |l: &str| {
+            [
+                "fn ",
+                "pub fn ",
+                "pub(crate) fn ",
+                "async fn ",
+                "pub(crate) async fn ",
+                "pub async fn ",
+            ]
+            .iter()
+            .any(|p| l.starts_with(p))
+        };
+        let lines: Vec<&str> = prod.lines().collect();
+        let starts: Vec<usize> = (0..lines.len())
+            .filter(|&i| is_fn_start(lines[i]))
+            .collect();
+        let mut launchers = Vec::new();
+        let mut missing = Vec::new();
+        for (k, &s) in starts.iter().enumerate() {
+            let e = starts.get(k + 1).copied().unwrap_or(lines.len());
+            let body = lines[s..e].join("\n");
+            let name = lines[s]
+                .split("fn ")
+                .nth(1)
+                .and_then(|r| r.split(['(', '<']).next())
+                .unwrap_or("?")
+                .to_string();
+            if name == "forge_image_tag" || !body.contains("forge_image_tag(") {
+                continue;
+            }
+            launchers.push(name.clone());
+            let budgeted = body.contains("ForgeBudget::for_this_host()")
+                || body.contains("build_forge_common_args(")
+                || body.contains("build_stack_common_args(");
+            if !budgeted {
+                missing.push(name);
+            }
+        }
+        // Vacuity floor: the builders this order was filed about must be found.
+        for known in [
+            "build_status_check_forge_args",
+            "build_opencode_forge_args",
+            "build_forge_agent_run_args_with_vault",
+        ] {
+            assert!(
+                launchers.iter().any(|n| n == known),
+                "the scan no longer finds {known}; it is asserting over the wrong set: {launchers:?}"
+            );
+        }
+        assert!(
+            missing.is_empty(),
+            "forge launch builder(s) naming the forge image without the ForgeBudget flags: {missing:?}"
         );
     }
 }

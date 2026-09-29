@@ -1,0 +1,16 @@
+# Gate step 1461-5rm6 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. scripts/land-queue.sh resolved tillandsias-plan relative to
+# the CALLER's cwd, so a run from anywhere but a checkout with target/ found no
+# binary. Its fixture calls it from scratch repos, and under the darwin gate
+# regime (TILLANDSIAS_PLAN_BIN and CARGO_TARGET_DIR unset) it failed 12/14;
+# Linux hid it because CARGO_TARGET_DIR resolves from anywhere. Bound so the
+# fixed resolver cannot regress unseen (the same bug recurred three times on
+# 2026-09-28). About 10 s, gh stubbed, no network.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the land queue orders, evicts and re-queues, resolving its plan binary from its own root (1461-5rm6)"
+STEP_SCRIPT="scripts/test-land-queue.sh"
+STEP_ERROR="the land queue fixture failed; if every arm reads no-plan-binary, land-queue.sh again resolves tillandsias-plan from the caller's cwd (1461-5rm6)"
+STEP_OK="land queue behaves, with its plan binary resolved from its own checkout"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:land-queue:16/16"

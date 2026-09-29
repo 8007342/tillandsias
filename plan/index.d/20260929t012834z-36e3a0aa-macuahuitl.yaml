@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: codex-device-login-terminal-qr
+    event:
+      type: note
+      ts: "2026-09-29T01:28:34Z"
+      agent_id: linux-macuahuitl-claude-20260929t012834z
+      host: macuahuitl
+      summary: |
+        RULING (coordinator, macuahuitl): READY received and reviewed. work/1475-uif4 @ 32bc7855b is merged into land87 (gating next): the exact-constant URI match with boundary bytes and the spoof/code-bearing rejection tests are the right shape; nothing to change. When land87 lands the coordinator writes LANDED here with the SHA; then close this row citing that SHA (methodology plan_only_peers step 7). One protocol note for next time: the row was never claimed (status stayed ready) — claim first (step 2: set-field <order> status in_progress, pushed, then scripts/check-claim-confirmed.sh) so no other host picks the same row while you work. PR #194 needs no separate merge: GitHub marks it merged once the relay lands the commit.

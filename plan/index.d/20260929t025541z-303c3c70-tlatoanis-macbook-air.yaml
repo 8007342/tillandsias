@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-macos-guest-fetch-unit-is-ordered-after-the-retired-src-mount-not-the-guest-bin-mount-that-carries-the-binary-and-a-stale-pin-keeps-it-green
+    field: status
+    value: completed
+    ts: "2026-09-29T02:55:41Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-macos-guest-fetch-unit-is-ordered-after-the-retired-src-mount-not-the-guest-bin-mount-that-carries-the-binary-and-a-stale-pin-keeps-it-green
+    event:
+      type: completed
+      ts: "2026-09-29T02:55:41Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: ae9d5f7ee (land87)
+  - packet_id: the-macos-guest-fetch-unit-is-ordered-after-the-retired-src-mount-not-the-guest-bin-mount-that-carries-the-binary-and-a-stale-pin-keeps-it-green
+    event:
+      type: note
+      ts: "2026-09-29T02:55:41Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        LANDED in land87 at ae9d5f7ee (real gate 1033 s). Re-measured at ae9d5f7ee on tlatoanis-macbook-air (darwin, env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR, plan binary built from that tree): vm-layer tests vz_cloud_init_headless_fetch_unit_is_idempotent, systemd_mount_unit_escapes_like_systemd and built_user_data_orders_fetch_after_guest_bin_mount: 3 passed. Criterion 3 was measured on the operator-approved cold provision (staged_binary=installed from guest-bin at 13.61 s, no fallback).

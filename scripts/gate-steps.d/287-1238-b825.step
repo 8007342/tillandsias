@@ -1,0 +1,16 @@
+# Gate step 1238-b825 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. VERSION is epoch CalVer, so the version IS the date; local
+# builds stamped whatever date the last bump left (a 2026-09-17 build shipped as
+# 56.9.13.1, and two days' builds shared one tarball name). Ruling: DERIVE,
+# never write VERSION. Each local build path answers `--print-version`, and the
+# fixture asks all three under a stub clock: 56.9.13.1 built on 56.9.17 reads
+# 56.9.13.1+built.56.9.17; same-day is unchanged; VERSION's bytes never change;
+# a release build (TILLANDSIAS_RELEASE_BUILD=1, set by release.yml) is verbatim.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking local builds label a stale CalVer date and never write VERSION (1238-b825)"
+STEP_SCRIPT="scripts/test-build-version-label.sh"
+STEP_ERROR="a local build path again stamps VERSION's stale date silently, writes VERSION, or labels a release build (1238-b825); see which arm failed above"
+STEP_OK="local builds label stale CalVer dates; VERSION untouched; releases verbatim"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:build-version-label-fixture:7/7"

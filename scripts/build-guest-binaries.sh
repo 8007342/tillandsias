@@ -14,6 +14,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VERSION_VAL="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+# 1238-b825: the guests EMBED VERSION unchanged (the host/guest version equality
+# and --verify both need it), so the derived label appears only in this log.
+. "$SCRIPT_DIR/lib-build-version.sh"
+if [[ "${1:-}" == "--print-version" ]]; then
+    build_version_label "$VERSION_VAL"
+    exit 0
+fi
+GUEST_BUILD_LABEL="$(build_version_label "$VERSION_VAL")"
 TARGET_DIR="$ROOT/target-guest"
 
 X86_64_NAME="tillandsias-headless-x86_64-unknown-linux-musl"
@@ -374,7 +382,7 @@ build_with_nix() {
         return 1
     fi
 
-    echo "[build-guest-binaries] Building guest binaries using Nix ($verdict)..."
+    echo "[build-guest-binaries] Building guest binaries using Nix ($verdict), label $GUEST_BUILD_LABEL..."
     mkdir -p "$ROOT/.nix-output"
     nix "${nix_args[@]}" build -L .#tillandsias-headless-x86_64-musl   --out-link "$ROOT/.nix-output/result-hx" || return 1
     nix "${nix_args[@]}" build -L .#tillandsias-headless-aarch64-musl  --out-link "$ROOT/.nix-output/result-ha" || return 1
@@ -412,7 +420,7 @@ build_with_cargo() {
         return 1
     fi
 
-    echo "[build-guest-binaries] Building guest binaries using local Cargo fallback..."
+    echo "[build-guest-binaries] Building guest binaries using local Cargo fallback, label $GUEST_BUILD_LABEL..."
     # Features MUST match the Nix packages (flake.nix tillandsias-headless-*-musl:
     # `--features listen-vsock`). `--features tray` does NOT enable the vsock
     # listener, producing a guest that boots but never binds the control wire

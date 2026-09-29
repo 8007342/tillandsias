@@ -1027,10 +1027,11 @@ impl FoldedIdentities {
 }
 
 /// Thin wrapper preserving the original signature for one-shot callers.
-fn fragment_coverage_gaps(result: &Value, frag: &Fragment) -> Vec<String> {
-    fragment_coverage_gaps_in(result, &FoldedIdentities::of(result), frag)
-}
-
+// 1476-5dfy: the convenience wrapper that rebuilt FoldedIdentities on every
+// call is GONE. 964-tzmp hoisted the index for `check` and left compact_text
+// calling the wrapper once per fragment, which cost ~45 s of every live-ledger
+// compaction. With no wrapper, a caller must build the index itself, so it
+// cannot be rebuilt per fragment by accident.
 /// `result` is still taken for the CHEAP top-level lookups (`capabilities`);
 /// only the packet walk, which is the expensive part, comes from `known`.
 fn fragment_coverage_gaps_in(
@@ -1585,9 +1586,13 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
     // (including a base `events:`) but AHEAD of events contributed by
     // fragments. Pushing events first put every newly-seen field on the wrong
     // side of them.
-    for (pid, ev) in &new_events {
-        candidate = crate::edit::push_event(&candidate, pid, &render_list_item(ev, 8))?;
-    }
+    // 1476-5dfy: one pass for every new event, not one full re-render each
+    // (push_event per event was O(events x text), ~10 s on the live ledger).
+    let blocks: Vec<(String, String)> = new_events
+        .iter()
+        .map(|(pid, ev)| (pid.clone(), render_list_item(ev, 8)))
+        .collect();
+    candidate = crate::edit::push_events(&candidate, &blocks)?;
 
     let mut lines: Vec<String> = candidate.lines().map(String::from).collect();
     for (pid, field, value, ts) in &lww_wins {
@@ -1731,8 +1736,14 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
         .map_err(|e| format!("compaction candidate does not parse: {e}"))?;
     let mut consumed = Vec::new();
     let mut refused = Vec::new();
+    // 1476-5dfy: index the written document ONCE. The old wrapper rebuilt
+    // FoldedIdentities over the whole candidate per call, and this
+    // loop runs once per fragment: on the live ledger (~3,000 fragments, a
+    // 5.9 MB base) that was ~45 s of a ~58 s compaction. Same answer; the
+    // index is a pure function of `written`.
+    let known = FoldedIdentities::of(&written);
     for f in &fragments {
-        let gaps = fragment_coverage_gaps(&written, f);
+        let gaps = fragment_coverage_gaps_in(&written, &known, f);
         if gaps.is_empty() {
             consumed.push(f.path.clone());
         } else {
@@ -4543,6 +4554,35 @@ plan_index:
             "refusal must name the bad anchor: {err}"
         );
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// 1476-5dfy: push_events must be BYTE-IDENTICAL to push_event applied
+    /// once per entry, in order. Covers a packet that already has events, one
+    /// with none (so `events:` is created), several events for one packet
+    /// interleaved with another's, and a packet that is the item's LAST field
+    /// versus one followed by further fields.
+    #[test]
+    fn push_events_equals_sequential_push_event() {
+        let base = "plan_index:\n  steps:\n    - packet_id: alpha\n      order: 1\n      events:\n        - type: filed\n          ts: \"2026-01-01T00:00:00Z\"\n      title: a\n    - packet_id: beta\n      order: 2\n      status: ready\n    - packet_id: gamma\n      order: 3\n      events:\n        - type: filed\n          ts: \"2026-01-02T00:00:00Z\"\n";
+        let ev = |t: &str| format!("        - type: note\n          summary: {t}\n");
+        let entries: Vec<(String, String)> = vec![
+            ("beta".into(), ev("b1")),
+            ("alpha".into(), ev("a1")),
+            ("beta".into(), ev("b2")),
+            ("gamma".into(), ev("g1")),
+            ("alpha".into(), ev("a2")),
+            ("beta".into(), ev("b3")),
+        ];
+        let mut sequential = base.to_string();
+        for (pid, b) in &entries {
+            sequential = crate::edit::push_event(&sequential, pid, b).expect("sequential push");
+        }
+        let batched = crate::edit::push_events(base, &entries).expect("batched push");
+        assert_eq!(
+            batched, sequential,
+            "push_events must equal push_event applied in order"
+        );
+        assert!(crate::edit::push_events(base, &[("nope".into(), ev("x"))]).is_err());
     }
 
     #[test]

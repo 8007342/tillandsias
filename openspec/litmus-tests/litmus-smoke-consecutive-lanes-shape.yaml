@@ -1,0 +1,45 @@
+# @trace spec:meta-orchestration
+name: litmus:smoke-consecutive-lanes-shape
+spec: ci-release
+phase: pre-build
+description: >
+  Order 767-qrbv. scripts/smoke-consecutive-lanes.sh is the OPT-IN smoke
+  variant that runs two consecutive forge lanes (both forced to the smoke
+  prompt) against the same stack and asserts the SECOND lane's health: both
+  opencode segfaults on record (604-vmcg) hit a non-first lane. This pins its
+  verdicts hermetically with a stub launcher and a stub podman: two green lanes
+  on a kept stack pass; a lane-1 failure stops before lane 2; a lane-2 failure,
+  a harness-supervisor crash verdict under rc 0, a replaced stack container,
+  and a missing stack each fail by name, with exit 0 only on ok:.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-smoke-consecutive-lanes.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-smoke-consecutive-lanes.sh && test -x scripts/test-smoke-consecutive-lanes.sh && test -x scripts/smoke-consecutive-lanes.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "every consecutive-lane verdict is produced by name"
+    command: "bash scripts/test-smoke-consecutive-lanes.sh 2>&1 | tail -n 1"
+    timeout_ms: 30000
+    expected_behavior: "PASS: smoke-consecutive-lanes"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "PASS: smoke-consecutive-lanes"
+  log_fields:
+    spec: "ci-release"
+    test: "smoke-consecutive-lanes-shape"
+    artifact: "scripts/smoke-consecutive-lanes.sh"
+
+rollback:
+  on_failure: >
+    A second lane that reads healthy while its harness crashed, or while it ran
+    against a different stack, is the defect: the variant exists to exercise
+    exactly that shape.
+  command: "bash scripts/test-smoke-consecutive-lanes.sh"

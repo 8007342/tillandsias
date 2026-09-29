@@ -67,7 +67,9 @@ mod terminal_attach;
 fn version_line() -> String {
     format!(
         "tillandsias-tray {} (git {}, built {})",
-        env!("WORKSPACE_VERSION"),
+        // 1238-b825: VERSION, or VERSION+built.<date> when built on a later
+        // day; always starts with WORKSPACE_VERSION.
+        env!("BUILD_VERSION_LABEL"),
         env!("TILLANDSIAS_GIT_SHA"),
         env!("TILLANDSIAS_BUILD_TIME"),
     )

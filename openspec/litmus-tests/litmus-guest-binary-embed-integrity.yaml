@@ -16,7 +16,11 @@ preconditions:
 critical_path:
   - step: "verify staged guest binaries with build-guest-binaries.sh --verify (stale/absent staging skips cleanly — order 447; a current-stamped binary with a genuine integrity defect still exits non-zero)"
     command: "bash scripts/build-guest-binaries.sh --verify"
-    success_pattern: "verify:(ok|skip-stale-staging)"
+    # ORDER 1479-yz4c: 1308-9ej7 (2026-09-20) added a second skip spelling,
+    # verify:skip-cannot-restage-here (stale AND this host has no nix and no
+    # aarch64 musl linker). It is a skip like skip-stale-staging; a real defect
+    # still exits non-zero. Refusing it read yoga's tier red on clean trunk.
+    success_pattern: "verify:(ok|skip-stale-staging|skip-cannot-restage-here)"
     timeout_ms: 10000
 
   - step: "the nix lane tests CAPABILITY and routes through the toolbox, and its out-link staging survives a non-host store (order 790-mbk9)"

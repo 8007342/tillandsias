@@ -151,6 +151,7 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:pre-push-trailer-states-what-it-saw
   - litmus:land-refusals-carry-affordance
   - litmus:plan-fragments-lane-refusals-carry-affordance
   - litmus:decider-retirement-shape
@@ -173,6 +174,7 @@ specs:
   # only because a binding names it; without this line the land-verdict fixture
   # would be a file rather than a gate.
   - litmus:land-verdict-through-a-pipe
+  - litmus:smoke-consecutive-lanes-shape
   - litmus:github-token-auto-rotation
   - litmus:mirror-upstream-auth-overwrite
   - litmus:exit-pause-host-hold
@@ -735,6 +737,7 @@ specs:
   - litmus:codex-e2e-launch-parity
   - litmus:smoke-lock-fd-isolation-shape
   - litmus:smoke-agent-watch-shape
+  - litmus:landed-but-open-shape
   - litmus:meta-orchestration-dirty-tree-safety
   - litmus:meta-orchestration-opsx-sync-merge
   - litmus:openspec-cli-pin-shape

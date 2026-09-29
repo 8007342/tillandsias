@@ -1,0 +1,44 @@
+# @trace spec:ci-release
+name: litmus:pre-push-trailer-states-what-it-saw
+spec: ci-release
+phase: pre-build
+description: >
+  Order 1352-qbrd. The pre-push hook's last line used to be an unconditional
+  "local gate: preflight clean, ./build.sh --check current for this tree",
+  reached on a work ref after every red decider had degraded to a warn — so the
+  tail of a push log asserted the state it had just denied. It now claims a
+  current gate only when no decider warned and gate-stamp.sh verify answered
+  ok:gate-fresh, and otherwise names the warned deciders and the stamp verdict
+  it read (the same words gate-stamp.sh prints). Exercised on a deliberately
+  staled tree: a partial scratch worktree, never the real checkout.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-pre-push-trailer-states-what-it-saw.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-pre-push-trailer-states-what-it-saw.sh && test -x scripts/test-pre-push-trailer-states-what-it-saw.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "on a staled tree the trailer reports warnings and the stamp verdict gate-stamp.sh prints; the green claim only for no warnings + ok:gate-fresh"
+    command: "bash scripts/test-pre-push-trailer-states-what-it-saw.sh 2>&1 | tail -n 1"
+    timeout_ms: 600000
+    expected_behavior: "PASS: pre-push-trailer-states-what-it-saw"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "PASS: pre-push-trailer-states-what-it-saw"
+  log_fields:
+    spec: "ci-release"
+    test: "pre-push-trailer-states-what-it-saw"
+    artifact: "scripts/hooks/pre-push-local-gate.sh trailer"
+
+rollback:
+  on_failure: >
+    A push log whose last line claims a current gate the hook did not see is the
+    defect: restore the counted refuse() and the conditional trailer.
+  command: "bash scripts/test-pre-push-trailer-states-what-it-saw.sh"
