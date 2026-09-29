@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-on-demand-forge-base-build-exits-127-after-a-complete-pull-and-its-log-names-no-command
+    event:
+      type: progress
+      ts: "2026-09-29T18:49:40Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t184939z
+      host: macos
+      summary: |
+        WHY NOTHING NAMED THE COMMAND (source, at origin/linux-next): the on-demand path, ensure_image_exists, calls build_image_with_logging(root, image_name, &identity, &build_args, &None, debug). With log_file=None and debug=false, podman's STDERR, where a failing RUN step prints "sh: X: not found", was read and DISCARDED; only the progress bars reached image-build-forge.log (via the detached helper's stdout). The remedy "tillandsias --init" is the Linux CLI.
+        FIX ON work/1502-utcy @ 9096d3e40 (NAMING, not the root cause): build_image_with_logging keeps the last 20 stderr lines regardless of log/debug and puts them in the error (build_failure_message); both on-demand error paths use one remedy naming the Linux CLI and the tray action ("launch the forge again; the build is retried on each launch"). Tests: build_failure_names_the_failing_step_from_podman_stderr (negative control; red on a mutation dropping the tail) and on_demand_build_remedy_is_runnable_from_the_macos_and_windows_tray; clippy -D warnings rc=0.
+        ROOT CAUSE NOT REPRODUCED: on the same guest at 18:5xZ, TILLANDSIAS_IMAGE_BUILD_DETACH=0 tillandsias-headless --internal-ensure-image <runtime root> forge localhost/tillandsias-forge:v56.9.27.2 --debug built forge-base (dnf 573 packages, then pip3/npm STEP 3/5) AND forge (77 steps): rc=0 (output in /Users/tlatoani/.tillandsias/scratch/evidence-20260929t184231z/forge-base-debug-build.txt). The failed attempt ran 18:31-18:33Z, ending as the guest went silent at 18:33:12 (1503-qrgz), so the 127 may be a symptom of that incident, not a missing command in the Containerfile. Undetermined. Side effect: the forge images now exist on this guest, so the operator's next forge launch skips the build.

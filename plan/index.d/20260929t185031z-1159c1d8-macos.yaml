@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    event:
+      type: note
+      ts: "2026-09-29T18:50:31Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t185030z
+      host: macos
+      summary: |
+        CORRECTION to this row's context and exit criterion 1: "NTP=no" is WRONG, my misreading. The probe was `timedatectl show -p NTPSynchronized -p NTP --value`, which prints NTP FIRST, so its "yes no" meant NTP=yes, NTPSynchronized=no. Re-measured 2026-09-29 ~18:50Z on a fresh boot (probe in /Users/tlatoani/.tillandsias/scratch/evidence-20260929t184231z/clock-probe.txt): chronyd active; NTP=yes; NTPSynchronized=no about 5 s after boot; 4 pool sources reachable (Reach 3, offsets about -480 ms, i.e. not yet stepped); guest-host skew about 0.5 s at boot; clocksource arch_sys_counter; NO /dev/ptp* (no host-provided clock device).
+        CANDIDATE MECHANISM (source-read of /etc/chrony.conf, NOT measured): "makestep 1.0 3" permits a STEP only during the first 3 clock updates after chronyd starts; after that chrony only SLEWS (default max rate about 83 ms/s), so a 69-min offset appearing mid-session (the guest clock stopping while the Mac sleeps) would take roughly 14 h to slew out. It fits "69 min behind in a boot that spanned a host sleep", but it is not proven that the guest clock stops during host sleep under VZ.
+        MEASUREMENT STILL NEEDED (the coordinator's step 3): guest-vs-host time right after a Mac resume, on a boot that has been up past chrony's first 3 updates. That needs the Mac to sleep with the VM running.
+        REVISED exit criterion 1: after a host sleep and resume, the guest clock is within a few seconds of the host within a minute of wake (e.g. chrony makestep with no update limit, or a host-driven clock set on resume); pre-fix: presumed FAILS (69 min, 2026-09-29), to be confirmed by the measurement above.
