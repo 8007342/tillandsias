@@ -79,6 +79,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "capabilities",
     "capability-matrix",
     "carry-forward-check",
+    "carry-forward-check-batch",
     "check",
     "closure-evidence-check",
     "collect",
@@ -235,6 +236,13 @@ const USAGE: &str = concat!(
     "                                     events block, so PROSE that quotes the marker inside a\n",
     "                                     block scalar is never read as a declaration. Backs the\n",
     "                                     closure-event pass of check-fragment-status-loss.sh.\n",
+    "           carry-forward-check-batch <fragment.yaml>...\n",
+    "                                     ORDER 1500-gu5r. carry-forward-check over MANY\n",
+    "                                     fragments in one process: one tab-separated line per\n",
+    "                                     result — `<path>\\tparsed`, `<path>\\tgap\\t<id>`,\n",
+    "                                     `<path>\\tunreadable\\t2`, `<path>\\tunparseable\\t3` —\n",
+    "                                     in argument order, exit 0. The per-file arm below is\n",
+    "                                     unchanged; a caller probes for this name and falls back.\n",
     "           carry-forward-check <fragment.yaml>\n",
     "                                     ORDER 831-ezea. Print the packet_ids this fragment\n",
     "                                     TOUCHED (has an event for) and LEFT OPEN (no terminal\n",
@@ -3654,6 +3662,33 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             // rather than in the main match precisely because it walks the
             // filesystem and never folds the plan — the 133ms ledger load would
             // be pure waste (the same reason the fragment-* arms moved here).
+            true
+        }
+        "carry-forward-check-batch" => {
+            // ORDER 1500-gu5r. The per-file arm below, over many fragments in ONE
+            // process. scripts/check-carry-forward.sh used to spawn this binary
+            // once per fragment (3,300+): 13 s on yoga, over the preflight door's
+            // 5 s deadline. Same parse, same carry_forward_gaps, same verdict per
+            // file; the caller reconstructs its counts and messages from these
+            // lines, in argument order, so its output is unchanged.
+            for path in args.iter().skip(1) {
+                let raw = match std::fs::read_to_string(path) {
+                    Ok(r) => r,
+                    Err(_) => {
+                        println!("{path}\tunreadable\t2");
+                        continue;
+                    }
+                };
+                match serde_yaml::from_str::<serde_yaml::Value>(&raw) {
+                    Ok(doc) => {
+                        println!("{path}\tparsed");
+                        for id in carry_forward_gaps(&doc) {
+                            println!("{path}\tgap\t{id}");
+                        }
+                    }
+                    Err(_) => println!("{path}\tunparseable\t3"),
+                }
+            }
             true
         }
         "carry-forward-check" => {

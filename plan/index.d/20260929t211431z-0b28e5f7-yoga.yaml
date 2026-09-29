@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-podman-tests-poison-a-shared-mutex-and-take-five-with-them
+    field: status
+    value: completed
+    ts: "2026-09-29T21:14:31Z"
+    host: yoga
+
+events:
+  - packet_id: macos-podman-tests-poison-a-shared-mutex-and-take-five-with-them
+    event:
+      type: completed
+      ts: "2026-09-29T21:14:31Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 586d6bb3e (833-u85z guard recovers from poisoning + ROOT 1 skips loudly off Linux) and 71496d6e5 (814-75yf diskstats fixture), both on origin/linux-next + cargo test -p tillandsias-podman --lib 179 passed, -p tillandsias-metrics --lib 73 passed (yoga 2026-09-29)
+  - packet_id: macos-podman-tests-poison-a-shared-mutex-and-take-five-with-them
+    event:
+      type: note
+      ts: "2026-09-29T21:14:31Z"
+      host: yoga
+      summary: |-
+        audit-dispose: all three roots fixed by other orders; the mutex, the desktop-session test and the /proc test

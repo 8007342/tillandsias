@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by the coordinator on 2026-09-29 while delivering Codex MSG-03.
+packets:
+  - packet_id: plan-inbox-files-are-refused-by-the-plan-only-lane-so-every-message-to-a-ledger-only-peer-costs-a-full-gate
+    order: 1507-e693
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [pre-push, plan-only-lane, coordination, codex]
+    estimated_hours: 1
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      plan/inbox/*.md (the stopgap mailbox for ledger-only peers like Codex) is refused by the plan-only lane, so each message to such a peer waits for a full gate.
+    context: |
+      MEASURED 2026-09-29 on macuahuitl: pushing an edit to plan/inbox/codex.md
+      alone was refused with "plan-only lane: not applicable —
+      'plan/inbox/codex.md' is outside plan/index.d/, plan/loop_status.d/,
+      plan/issues/, plan/deslop-sweeps.d/, and plan/mo-full-attestations.d/"
+      followed by "the tree changed since ./build.sh --check last passed". The
+      message had to wait for the next relay gate (about 20 minutes). The inbox
+      exists because Codex cannot receive direct messages (plan_only_peers). A
+      mailbox that needs a full gate per message defeats its purpose. The
+      message bus (1506-3xu7) will replace the file eventually; until then the
+      file is the channel.
+    outcome: |
+      A push whose only changes are plan/inbox/<name>.md files is admitted by the
+      plan-only lane like plan/issues/, with the same shape checks (a flat
+      markdown file directly under plan/inbox/, no nesting), and a push that
+      mixes plan/inbox/ with code still needs the full gate.
+    exit_criteria:
+      - "In a scratch repo with the hook installed, a commit changing only plan/inbox/x.md is admitted by the plan-only lane (today it prints 'plan-only lane: not applicable')."
+      - "A commit changing plan/inbox/x.md plus a scripts/ file is still refused without a gate stamp (negative control)."
+      - "A nested path plan/inbox/sub/x.md is refused by the lane (the shape check holds)."
+    verifiable_closure: |
+      The hook's plan-only-lane fixture gains three arms (inbox-only admitted,
+      inbox-plus-code refused, nested inbox refused), each red on the pre-fix
+      hook for the first arm and green after; the fixture is bound in
+      openspec/litmus-bindings.yaml.
+    unscoreable: "unpinnable-until-the-guard-exists: the three plan-only-lane arms are written by this row; the implementer pins them as a litmus under ci-release when they land"
+    next_action: >
+      Find the plan-only lane's path list in scripts/hooks/pre-push-local-gate.sh
+      (the case over plan/deslop-sweeps.d/?*.md), add plan/inbox/?*.md with the
+      same no-nesting rule, and extend its existing fixture.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Changes what the pre-push hook admits, so a sonnet implementer with an opus
+      review before landing.

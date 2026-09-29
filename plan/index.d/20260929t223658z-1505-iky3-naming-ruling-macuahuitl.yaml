@@ -1,0 +1,101 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator ruling on Cloudflare names, 2026-09-29 (relayed by the
+# coordinator): team tillandsias-enclave-vpn-<github_login> (suffix -2, -3
+# on collision, reported), network tillandsias-enclave-vpn, private App
+# first, never delete a Zero Trust organization. Applied as an AMENDMENT
+# (fields + events) to 1505-iky3 and 1505-6w7d — both are ready and
+# unimplemented, so no new packet is needed. Design files updated in the
+# same commit: openspec/changes/cloudflare-login-and-fleet-vpn/ (design.md
+# Decision 4, specs/fleet-vpn, specs/fleet-experts, proposal.md) and
+# plan/issues/cloudflare-login-fleet-vpn-design-2026-09-29.md.
+fields:
+  - packet_id: cloudflare-names-is-the-one-normalizer-every-cloudflare-object-name-passes-through-with-typed-label-and-display-classes-and-the-canonical-tillandsias-vpn-name-table
+    field: title
+    value: |
+      cloudflare_names normalizes every name Tillandsias mints for Cloudflare to the strictest documented rule (DNS label: [a-z0-9-], no edge or double hyphen, <=63; display <=255) with typed Label/Display results, and provides network_name = tillandsias-enclave-vpn, team_name(github_login, n) = tillandsias-enclave-vpn-<login> with -<n> for n>=2 on a collision, participant_name = tillandsias-<host>, service_route = <svc>.tillandsias-enclave-vpn.internal (operator ruling 2026-09-29; the earlier tillandsias-vpn / tillandsias-vpn-<acct8> table is superseded)
+    ts: "2026-09-29T22:36:58Z"
+    host: macuahuitl
+  - packet_id: cloudflare-names-is-the-one-normalizer-every-cloudflare-object-name-passes-through-with-typed-label-and-display-classes-and-the-canonical-tillandsias-vpn-name-table
+    field: exit_criteria
+    value:
+      - 'cargo test -p tillandsias-headless cloudflare_names passes: participant_name("Tlatoani''s MacBook Air") == "tillandsias-tlatoanis-macbook-air"; a 100-char hostname yields <=63 chars ending in [a-z0-9] that re-normalizes to itself; normalize_label("---") is Err; a Display cannot be passed to a function taking Label (compile-fail doctest) (pre-fix: module absent)'
+      - 'team_name("BullonCito", 1) == "tillandsias-enclave-vpn-bulloncito" and team_name("BullonCito", 2) == "tillandsias-enclave-vpn-bulloncito-2"; network_name() == "tillandsias-enclave-vpn"; no constructor accepts or embeds a Cloudflare account id or an email (a test greps the module for "acct" and "@" and finds neither) (pre-fix: module absent)'
+    ts: "2026-09-29T22:36:58Z"
+    host: macuahuitl
+  - packet_id: tillandsias-fleet-vpn-init-idempotently-ensures-the-tillandsias-vpn-virtual-network-masque-profile-split-tunnel-gateway-policy-and-a-per-host-service-token-and-refuses-with-the-dashboard-step-when-the-zero-trust-org-is-absent
+    field: exit_criteria
+    value:
+      - 'scripts/test-fleet-vpn-init.sh exits 0 against the fake: a first run prints ok: for every step and the ledger shows the virtual network tillandsias-enclave-vpn, profile, policy and token writes; a second run prints only skip: lines with zero writes between the markers; a fake with no org prints refused:fleet-vpn:no-zero-trust-org:tillandsias-enclave-vpn-<github_login> and mints no token; a fake whose org is tillandsias-enclave-vpn-<github_login>-2 prints note:fleet-vpn:team-name-suffixed:<that name> and continues; --github-user overrides the login read from the GitHub bundle (pre-fix: unknown flag)'
+      - 'secret/cloudflare/mesh holds client_id, client_secret, expires_at, team_name and never the OAuth access token'
+      - 'after every arm, including leave, the fake''s ledger holds no DELETE and no rename on the organization route (a deleted organization''s team name is permanently reserved); the fake refuses such a call with 403 so a regression is loud'
+    ts: "2026-09-29T22:36:58Z"
+    host: macuahuitl
+
+events:
+  - packet_id: cloudflare-names-is-the-one-normalizer-every-cloudflare-object-name-passes-through-with-typed-label-and-display-classes-and-the-canonical-tillandsias-vpn-name-table
+    event:
+      type: note
+      ts: "2026-09-29T22:36:58Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        AMENDED by operator ruling 2026-09-29 (relayed by the coordinator):
+        team name tillandsias-enclave-vpn-<github_login> (the login is
+        public, unique, <=39 chars, so the label fits 63; no account id or
+        email in any name; on a collision suffix -2, -3 and report it);
+        virtual network tillandsias-enclave-vpn; route suffix follows the
+        network name. team_name takes (login, n). Title and exit criteria
+        replaced by the fields in this fragment; the earlier
+        tillandsias-vpn / tillandsias-vpn-<acct8> table is superseded. Its
+        packet_id keeps the old words; ids are immutable.
+  - packet_id: tillandsias-fleet-vpn-init-idempotently-ensures-the-tillandsias-vpn-virtual-network-masque-profile-split-tunnel-gateway-policy-and-a-per-host-service-token-and-refuses-with-the-dashboard-step-when-the-zero-trust-org-is-absent
+    event:
+      type: note
+      ts: "2026-09-29T22:36:58Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        AMENDED by operator ruling 2026-09-29: init reads the GitHub login
+        (--github-user or the stored GitHub bundle's user), accepts the
+        account's organization iff its team name is team_name(login, n) for
+        some n and prints note:fleet-vpn:team-name-suffixed:<name> for n>=2;
+        the virtual network is tillandsias-enclave-vpn; NEVER delete or
+        rename a Zero Trust organization in init, leave, a fixture or the
+        fake (a deleted org's team name is permanently reserved) — the fake
+        answers 403 on that route and the fixture asserts the ledger holds
+        none. Exit criteria replaced by the field in this fragment.
+  - packet_id: every-forge-gets-a-tillandsias-fleet-experts-provider-beside-the-local-one-and-tillandsias-fleet-experts-status-resolves-the-route-and-prints-reachable-or-unreachable-with-a-reason
+    event:
+      type: note
+      ts: "2026-09-29T22:36:58Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        Route suffix follows the ruled network name: the provider baseURL
+        and the status route are fleet-experts.tillandsias-enclave-vpn.internal
+        (was tillandsias-vpn.internal). Read the name from
+        cloudflare_names service_route, never a literal.
+  - packet_id: expert-serve-binds-the-mesh-only-behind-a-bearer-and-tillandsias-fleet-experts-serve-runs-it-on-the-hub-mesh-ip-advertising-fleet-experts-tillandsias-vpn-internal
+    event:
+      type: note
+      ts: "2026-09-29T22:36:58Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        The advertised hostname route is
+        fleet-experts.tillandsias-enclave-vpn.internal (operator ruling on
+        names, 2026-09-29); the packet_id keeps the old words.
+  - packet_id: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    event:
+      type: note
+      ts: "2026-09-29T22:36:58Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        Operator ruling on names applied (2026-09-29): the network is
+        TILLANDSIAS-ENCLAVE-VPN (tillandsias-enclave-vpn), the team name is
+        tillandsias-enclave-vpn-<github_login> with reported -N suffixes on
+        collision, the App is private first, and no tooling or test ever
+        deletes a Zero Trust organization. Open questions 2, 3 and 5 of the
+        design note are answered; 1 (relay domain) and 4 (host-native
+        client on macOS/Windows) remain.

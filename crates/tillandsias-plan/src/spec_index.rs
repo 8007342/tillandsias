@@ -379,12 +379,18 @@ mod tests {
             resolved.starts_with(co.to_string_lossy().as_ref()),
             "the rung must anchor to the checkout {co:?}; got {resolved}"
         );
+        // ORDER 1505-78sn: compare against the HOME-derived RUNG (`$HOME/.cache`,
+        // see the xdg fallback above), component-wise, not against $HOME
+        // itself. On Windows the scratch checkout lives under %TEMP%, which IS
+        // under HOME, so a bare `starts_with(home)` fired on a correct answer
+        // (measured on yolanda 2026-09-29: 394 passed, 1 failed).
         if let Ok(home) = std::env::var("HOME")
             && !home.is_empty()
         {
+            let home_rung = std::path::Path::new(&home).join(".cache");
             assert!(
-                !resolved.starts_with(&home),
-                "the rung leaked into the HOME-derived cache path: {resolved}"
+                !std::path::Path::new(&resolved).starts_with(&home_rung),
+                "the rung leaked into the HOME-derived cache path {home_rung:?}: {resolved}"
             );
         }
 

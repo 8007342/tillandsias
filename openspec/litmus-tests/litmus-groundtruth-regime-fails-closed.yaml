@@ -1,0 +1,44 @@
+# @trace spec:ci-release
+name: litmus:groundtruth-regime-fails-closed
+spec: ci-release
+phase: pre-build
+description: >
+  Order 1500-gu5r. check-groundtruth-regime-invariance grades its sets
+  concurrently, and one grade can be killed or crash on a loaded host. The
+  check must FAIL CLOSED naming the set and regime
+  (unavailable:grade-incomplete:<set>:<regime>, exit 2) rather than compare the
+  survivors. Pre-fix, a killed grade became an empty verdict list and the check
+  printed a false divergence (or ok). A completed grade with a failing case
+  still reads as a divergence: the check keys on grade's summary line, never on
+  its exit status (which is the FAIL count).
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-groundtruth-regime-fails-closed.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-groundtruth-regime-fails-closed.sh && test -x scripts/test-groundtruth-regime-fails-closed.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "an incomplete grade fails closed by name; a failing case is still a divergence"
+    command: "bash scripts/test-groundtruth-regime-fails-closed.sh 2>&1 | tail -n 1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: groundtruth-regime-fails-closed"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "PASS: groundtruth-regime-fails-closed"
+  log_fields:
+    spec: "ci-release"
+    test: "groundtruth-regime-fails-closed"
+    artifact: "scripts/check-groundtruth-regime-invariance.sh"
+
+rollback:
+  on_failure: >
+    A regime check that compares a partial population and prints a verdict is
+    the defect: every grade must have printed its groundtruth-result line.
+  command: "bash scripts/test-groundtruth-regime-fails-closed.sh"

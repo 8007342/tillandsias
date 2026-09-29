@@ -10,8 +10,13 @@ use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+#[cfg(unix)] // ORDER 1506-ezv3: only the cfg(unix) legacy runner spawns.
 use std::process::Command;
 use std::sync::Mutex;
+// ORDER 1506-ezv3: unix-only, like the two cfg(unix) tests that are its only
+// users. Ungated, the Windows-target clippy refused this file as dead code,
+// a red Linux clippy cannot see.
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 use tillandsias_plan::lua_predicate::{PredicateClass, build_environment};
 
@@ -22,7 +27,10 @@ struct Manifest {
     cases: Vec<ManifestCase>,
 }
 
+// ORDER 1506-ezv3: every field is deserialized on all targets, but only the
+// cfg(unix) legacy comparison reads operation/source/hook/ensure/script/probe.
 #[derive(Debug, Deserialize)]
+#[cfg_attr(not(unix), allow(dead_code))]
 struct ManifestCase {
     id: String,
     operation: String,
@@ -191,12 +199,14 @@ fn explicit_manifest_cases_match_their_expected_guard_verdicts() {
     }
 }
 
+#[cfg(unix)]
 fn copy_to(root: &Path, destination: &str, bytes: Vec<u8>) {
     let target = root.join(destination);
     std::fs::create_dir_all(target.parent().expect("target parent")).expect("mkdir fixture parent");
     std::fs::write(target, bytes).expect("write fixture source");
 }
 
+#[cfg(unix)]
 fn legacy_outcome(case: &ManifestCase) -> (i64, String) {
     let root = repo_root();
     let temp = tempfile::tempdir().expect("temporary legacy root");
@@ -394,11 +404,13 @@ fn build_check_names_and_runs_this_nonempty_target() {
     );
 }
 
+#[cfg(unix)]
 fn percentile(mut values: Vec<Duration>, numerator: usize, denominator: usize) -> Duration {
     values.sort_unstable();
     values[(values.len() - 1) * numerator / denominator]
 }
 
+#[cfg(unix)]
 fn declared_input_bytes_per_run(cases: &[ManifestCase]) -> u64 {
     let mut total = std::fs::metadata(manifest_path())
         .expect("manifest metadata")

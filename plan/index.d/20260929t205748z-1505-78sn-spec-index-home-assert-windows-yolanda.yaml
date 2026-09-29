@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: spec-index-rung-test-asserts-not-under-home-which-is-false-on-windows-where-the-temp-checkout-lives-under-home
+    order: 1505-78sn
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    parent_order: 1268-fx87
+    pickup_role: windows
+    capability_tags: [windows, tests, spec-index]
+    estimated_hours: 1
+    owned_files: [crates/tillandsias-plan/src/spec_index.rs]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the guard is the existing unit test itself passing on Windows and Linux; no new litmus.
+    title: |
+      REGIME: Windows. spec_index::tests::the_repo_relative_rung_anchors_to_the_checkout_not_to_home fails: "the rung leaked into the HOME-derived cache path: C:\Users\bullo\AppData\Local\Temp\tilland-sie-repo-rung-3536\.cache\spec-index". The scratch checkout is under %TEMP%, which on Windows is under HOME, so asserting the result does not start with HOME is a false positive on a correct answer. It reds two litmus arms that run cargo test -p tillandsias-plan (1268-fx87 note).
+    verifiable_closure: |
+      The test asserts the property it names, that the rung did not fall through to the HOME-derived .cache rung, rather than a prefix that a temp checkout under HOME also matches. cargo test -p tillandsias-plan passes on Windows (yolanda) and on Linux. Pre-fix on yolanda 2026-09-29: 394 passed, 1 failed.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:57:48Z"
+        host: yolanda
+        summary: Filed and claimed by yolanda-windows while re-measuring 1268-fx87.

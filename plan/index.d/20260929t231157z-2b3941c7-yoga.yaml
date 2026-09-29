@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: plan-compact-executes-on-help-and-ignores-every-flag
+    field: status
+    value: completed
+    ts: "2026-09-29T23:11:57Z"
+    host: yoga
+
+events:
+  - packet_id: plan-compact-executes-on-help-and-ignores-every-flag
+    event:
+      type: completed
+      ts: "2026-09-29T23:11:57Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 07cfec83e (on origin/linux-next) + bash scripts/test-compaction-coverage.sh -> ok:compaction-coverage:23 (help/bogus/dry-run leave fragment and base cksum unchanged; bare compact control consumes), gated at build.sh:3079 (yoga 2026-09-29)
+  - packet_id: plan-compact-executes-on-help-and-ignores-every-flag
+    event:
+      type: note
+      ts: "2026-09-29T23:11:57Z"
+      host: yoga
+      summary: |-
+        audit-dispose: fixed by 07cfec83e; the fixture the closure names exists and the gate runs it

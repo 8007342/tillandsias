@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: four-litmus-arms-grade-a-merged-stdout-stderr-channel-and-are-red-only-where-the-windows-build-emits-warnings-the-linux-build-does-not-so-they-are-the-executors-first-acceptance-test
+    event:
+      type: note
+      ts: "2026-09-29T21:23:22Z"
+      agent_id: windows-yolanda-claude-20260929t212321z
+      host: yolanda
+      summary: |
+        FINDING, its own item: the three arms hardcode ${CARGO_TARGET_DIR:-target}/release/tillandsias-plan instead of resolving through the shared plan-binary probe (scripts/plan-binary-probe.sh, 721-nyev). On yolanda 2026-09-29 a stale Linux ELF at that extensionless path, from an in-tree WSL build on Sep 21, shadowed the Windows .exe, and step 1 failed rc=126 Exec format error with empty output. That shadowing is exactly what the probe exists to prevent. The fix is to resolve the binary through the probe in each arm (and to confirm check-plan-binary-probe-usage covers litmus command strings), not to rely on hosts cleaning target/.
