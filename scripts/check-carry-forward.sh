@@ -98,6 +98,35 @@ gap_packets=0
 unparseable=0
 report=""
 
+# ORDER 1500-gu5r: ONE PROCESS FOR THE WHOLE DIRECTORY when the binary has
+# carry-forward-check-batch. The per-fragment loop below spawned the plan binary
+# 3,300+ times: 13 s on yoga, over the preflight door's 5 s deadline. The batch
+# subcommand runs the same parse and carry_forward_gaps per file and prints
+# `<path>\tparsed`, `<path>\tgap\t<id>` or `<path>\t(unreadable|unparseable)\t<rc>`
+# in argument order, and this block rebuilds exactly the counts, notes and
+# report lines the loop produced. A binary without it takes the loop, unchanged.
+if plan_binary_has "$PLAN" carry-forward-check-batch; then
+    _cf_batch="$(printf '%s\0' "$FRAG_DIR"/*.yaml | xargs -0 "$PLAN" carry-forward-check-batch 2>/dev/null)"
+    # The reconstruction is ONE awk pass as well: per-fragment grep/sed here
+    # cost 2 spawns x 2,275 gap fragments. Notes go to stderr in file order,
+    # exactly as the loop printed them; report lines and counts go to stdout.
+    _cf_out="$(printf '%s\n' "$_cf_batch" | awk -F'\t' '
+        $1 == "" { next }
+        $2 == "parsed" { c++; next }
+        $2 == "gap" { if (!($1 in seen)) { seen[$1] = 1; gf++ } gp++; print "R\t" $1 ": " $3; next }
+        $2 == "unreadable" || $2 == "unparseable" {
+            u++
+            printf "  note: %s could not be read (exit %s) — its open packets are UNEXAMINED, not carried\n", $1, $3 > "/dev/stderr"
+        }
+        END { printf "C\t%d\t%d\t%d\t%d\n", c, gf, gp, u }')"
+    _cf_counts="$(printf '%s\n' "$_cf_out" | sed -n 's/^C.//p')"
+    checked="$(printf '%s' "$_cf_counts" | cut -f1)"
+    gap_fragments="$(printf '%s' "$_cf_counts" | cut -f2)"
+    gap_packets="$(printf '%s' "$_cf_counts" | cut -f3)"
+    unparseable="$(printf '%s' "$_cf_counts" | cut -f4)"
+    report="$(printf '%s\n' "$_cf_out" | sed -n 's/^R.//p')
+"
+else
 for f in "$FRAG_DIR"/*.yaml; do
     [ -f "$f" ] || continue
     # Command substitution, NOT a pipeline: $? here is the subcommand's own
@@ -123,6 +152,7 @@ for f in "$FRAG_DIR"/*.yaml; do
     report="${report}$(printf '%s\n' "$out" | sed "s|^|${f}: |")
 "
 done
+fi
 
 if [ "$gap_fragments" -eq 0 ]; then
     echo "ok:carry-forward:0 of ${checked} fragments"
