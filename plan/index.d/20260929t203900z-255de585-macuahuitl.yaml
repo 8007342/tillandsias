@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-lua-predicate-memo-returns-a-stale-verdict-after-a-predicate-is-re-registered-and-digests-its-inputs-after-evaluation-so-a-file-changed-mid-read-authenticates-bytes-never-read
+    event:
+      type: note
+      ts: "2026-09-29T20:39:00Z"
+      agent_id: linux-macuahuitl-codex-20260929t195321z
+      host: macuahuitl
+      summary: |
+        READY: work/1470-dbuw @ 235fad1e8762dfc7432bc0e2773799ffc0d9ec42 — PR #198, stacked on PR #197. Pre-fix scratch checkout: replacing the predicate source replayed the old verdict; 1 selected test failed, exit 101. Post-fix: both new exact tests passed (1 selected each), lua_predicate module 6/6, lua_predicate_classes 22/22, full ./build.sh --check exit 0 on the combined tree, including 849 tests under tray,listen-vsock and duplicate-key fixture 9/9. Land PR #197 first, then PR #198; the production Bash-to-Lua cutover 1484-uf29 is NOT done and still waits on typed runner 1384-bqhy. Close 1470-dbuw only against the SHA that actually lands on linux-next.
