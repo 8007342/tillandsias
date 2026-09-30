@@ -1,0 +1,27 @@
+packets:
+  - packet_id: podman-in-the-macos-guest-starts-segfaulting-on-every-invocation-and-every-container-action-fails-thousands-of-core-dumps
+    order: 1514-rxhw
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, guest, podman, crash]
+    estimated_hours: 4
+    observed_by: tlatoanis-macbook-air
+    unscoreable: |
+      unpinnable-until-measured: the cause is unknown; the next step is a backtrace from one of the dumped cores.
+    title: |
+      In the macOS guest, podman (as root) starts dying with SIGSEGV on EVERY invocation about 18 min into a boot and never recovers: 21,734 systemd-coredump services in one boot, every container healthcheck fails, and the Vault image build fails every 5 min ("Build exited with status signal: 11 (SIGSEGV) (core dumped)")
+    context: |
+      OBSERVED 2026-09-30, tlatoanis-macbook-air, tray built from work/1503-qrgz (launch 00:46:16Z, Ready 00:46:26Z), on the guest reprovisioned 2026-09-29 16:48Z. Host-side console log copied to /Users/tlatoani/.tillandsias/scratch/evidence-20260929t184231z/console.log.podman-segv.
+      Onset, guest console, uptime seconds: 1071-1074 s, normal healthcheck lines "podman[4480x]: container health_status …" every 3 s for 4 containers (31f31f6bc097…, 954ce7ad28ab…, a022af30d432…, 3c61623c9b88…). Then 1077.48 s (about 01:04:15Z): "Process 45699/45698/45697 (podman) of user 0 terminated abnormally with signal 11/SEGV", and the healthcheck units end "code=dumped, status=11/SEGV". From then on every podman invocation segfaults: grep over the console counts 141 "terminated abnormally with signal 11/SEGV" lines and 21,734 "systemd-coredump@" service starts (the coredump counter passed 10,840 at 3139 s). tray.log: "progress vault: FAILED — Build exited with status signal: 11 (SIGSEGV) (core dumped)" at 01:06:37, 01:11:37, 01:16:38, 01:23:58, 01:28:58, 01:33:59Z.
+      NOT CAUSED BY 1503-qrgz's clock step: the first step was at 01:23:20Z, 19 min after onset.
+      NOTHING UNUSUAL just before onset in the console (normal healthcheck, proxy and git-daemon lines).
+      CANDIDATES, none checked: on-disk corruption of the podman binary, its libraries or container storage, left by the earlier force-stops (1498-fn96 recorded "BTRFS critical … inode mode mismatch" at one); guest memory pressure; a podman bug triggered by container state. Note: the read-only btrfs check on 2026-09-29 showed zero device error counters, which do not count metadata inconsistencies.
+      Also: 21,734 coredump services is itself a load and disk problem (each writes a core under /var/lib/systemd/coredump).
+    verifiable_closure: |
+      the guest runs a full session (Ready plus 1 h, with a forge build) with zero podman SIGSEGV lines in the console and zero systemd-coredump starts; the cause is named from a backtrace; pre-fix result: FAILS (21,734 coredump starts, 2026-09-30)
+    exit_criteria:
+      - 'a backtrace (coredumpctl info or gdb on one core) names the crashing frame, stated on the row'
+      - 'the cause is fixed or the guest is recovered, and a full session shows zero podman SIGSEGV (pre-fix result: FAILS)'
