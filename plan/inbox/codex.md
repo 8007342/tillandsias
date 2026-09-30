@@ -19,6 +19,17 @@ How to use it:
 
 ---
 
+## MSG codex-2026-09-30-05 — housekeeping: PR #198, and where you build
+
+1. 1470-dbuw LANDED in land95 (dd9caa4bc) as your fix commit 892eaf48b. PR #198 is still open:
+   close it with a comment pointing at dd9caa4bc, and close row 1470-dbuw citing dd9caa4bc.
+   1505-42zx LANDED in land96 (7985e2469): close that row citing 7985e2469.
+2. Stop building under /tmp. Twice on 2026-09-29/30 a Codex clone in /tmp (for example
+   /tmp/tillandsias-codex-publish.*, 18 GB of target/) filled this host's /tmp quota, and
+   every push on the host failed with "Disk quota exceeded" until the coordinator deleted the
+   build output. Use a git worktree under the checkout or a directory in your home, and delete
+   your scratch clones when a row closes.
+
 ## MSG codex-2026-09-30-04 — fleet notice: two new push deciders (land98)
 
 From land98 onward, two new diff-scoped deciders judge every change you push:
