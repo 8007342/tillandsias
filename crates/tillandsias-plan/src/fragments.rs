@@ -4365,7 +4365,152 @@ plan_index:
         crate::collect_packets(&cand_doc, &mut cp);
         let mut mp = Vec::new();
         crate::collect_packets(&merged, &mut mp);
-        assert_eq!(cp, mp, "the rendered text must fold to the same state");
+        if let Some(diff) = first_fold_divergence(&cp, &mp) {
+            panic!("the rendered text must fold to the same state: {diff}");
+        }
+    }
+
+    /// ORDER 1330-j5is. Name the FIRST divergence (packet, field, and the two
+    /// values) instead of `assert_eq!` over both whole ledger states: that panic
+    /// was 22.5 MB and opened on whichever packet sorted first, which read as
+    /// evidence against the packet that actually diverged.
+    fn first_fold_divergence(cand: &[Value], merged: &[Value]) -> Option<String> {
+        let id = |p: &Value| {
+            p.get("packet_id")
+                .and_then(Value::as_str)
+                .unwrap_or("<no packet_id>")
+                .to_string()
+        };
+        let clip = |v: Option<&Value>| {
+            let s = v.map_or("<absent>".to_string(), |v| {
+                serde_yaml::to_string(v).unwrap_or_default()
+            });
+            if s.len() > 400 {
+                format!("{}…", &s[..s.floor_char_boundary(400)])
+            } else {
+                s
+            }
+        };
+        if cand.len() != merged.len() {
+            return Some(format!(
+                "packet count differs: rendered {} vs fold {}",
+                cand.len(),
+                merged.len()
+            ));
+        }
+        for (c, m) in cand.iter().zip(merged) {
+            if c == m {
+                continue;
+            }
+            if id(c) != id(m) {
+                return Some(format!(
+                    "packet order differs: rendered {} vs fold {}",
+                    id(c),
+                    id(m)
+                ));
+            }
+            let (Some(cm), Some(mm)) = (c.as_mapping(), m.as_mapping()) else {
+                return Some(format!("packet {} is not a mapping on one side", id(c)));
+            };
+            let mut keys: Vec<&Value> = cm.keys().chain(mm.keys()).collect();
+            keys.dedup();
+            for k in keys {
+                if cm.get(k) != mm.get(k) {
+                    return Some(format!(
+                        "packet {} field {}: rendered {} vs fold {}",
+                        id(c),
+                        k.as_str().unwrap_or("?"),
+                        clip(cm.get(k)),
+                        clip(mm.get(k))
+                    ));
+                }
+            }
+            return Some(format!("packet {} differs in key order only", id(c)));
+        }
+        None
+    }
+
+    #[test]
+    fn a_fold_divergence_names_the_packet_and_field_not_both_ledgers() {
+        let a: Vec<Value> =
+            serde_yaml::from_str("- {packet_id: aa, status: ready}\n- {packet_id: zz, title: x}")
+                .unwrap();
+        let b: Vec<Value> =
+            serde_yaml::from_str("- {packet_id: aa, status: ready}\n- {packet_id: zz, title: y}")
+                .unwrap();
+        let d = first_fold_divergence(&a, &b).expect("diverges");
+        assert!(
+            d.contains("packet zz field title"),
+            "names the diverging packet, not the first: {d}"
+        );
+        assert!(!d.contains("aa"), "does not dump the agreeing packet: {d}");
+        assert!(
+            first_fold_divergence(&a, &a).is_none(),
+            "equal states report nothing"
+        );
+    }
+
+    /// ORDER 1330-j5is. A line inside a block-scalar SUMMARY shaped
+    /// `<multi-word label>: <value BEGINNING with an ISO-8601 timestamp>` must
+    /// survive fold -> render -> fold. The shape is COMPOSED at run time and
+    /// never written literally in this file: carried literally in a ledger
+    /// fragment it redded every host's gate (d0ceea5b4, excised 6c372ed26).
+    #[test]
+    fn a_timestamp_valued_label_line_in_a_summary_survives_compaction() {
+        let ts = ["2026", "-09-20", "T17:37:30Z"].concat();
+        let spaced = ["2026", "-09-20 ", "17:37:30"].concat();
+        let label = ["Modify", " time"].concat();
+        let tail = " 1234567 -rw-r--r-- 1 lenovinha lenovinha /var/tmp/x";
+        let variants: Vec<String> = vec![
+            format!("first line\n  {label}: {ts}\nlast line"),
+            format!("first line\n  {label}: {ts}{tail}\nlast line"),
+            format!("first line\n{label}: {spaced}{tail}\nlast line"),
+            format!("first line \n  {label}: {ts}{tail}\nlast line"),
+            format!("first line\n  {label}: {ts}\tx\nlast line"),
+            format!("  leading indent\n{label}: {ts}\nlast line"),
+        ];
+        for (i, summary) in variants.iter().enumerate() {
+            let d = scratch(&format!("j5is-{i}"));
+            let index = d.join("plan/index.yaml");
+            let mut ev = serde_yaml::Mapping::new();
+            ev.insert("type".into(), "note".into());
+            ev.insert("ts".into(), "2026-09-28T00:00:00Z".into());
+            ev.insert("host".into(), "lenovinha".into());
+            ev.insert("summary".into(), summary.as_str().into());
+            let mut wrap = serde_yaml::Mapping::new();
+            wrap.insert("packet_id".into(), "alpha".into());
+            wrap.insert("event".into(), Value::Mapping(ev));
+            let mut doc = serde_yaml::Mapping::new();
+            doc.insert("events".into(), Value::Sequence(vec![Value::Mapping(wrap)]));
+            std::fs::write(
+                d.join(format!("plan/index.d/20260928t00000{i}z-j5is-h.yaml")),
+                serde_yaml::to_string(&Value::Mapping(doc)).expect("serializes"),
+            )
+            .expect("fragment");
+            let candidate = compact_text(&index)
+                .unwrap_or_else(|e| panic!("variant {i}: compaction refused: {e}"))
+                .candidate;
+            let cand: Value = serde_yaml::from_str(&candidate)
+                .unwrap_or_else(|e| panic!("variant {i}: rendered base does not parse: {e}"));
+            let mut ps = Vec::new();
+            crate::collect_packets(&cand, &mut ps);
+            let got = ps
+                .iter()
+                .filter(|p| p.get("packet_id").and_then(Value::as_str) == Some("alpha"))
+                .flat_map(|p| {
+                    p.get("events")
+                        .and_then(Value::as_sequence)
+                        .cloned()
+                        .unwrap_or_default()
+                })
+                .filter_map(|e| e.get("summary").and_then(Value::as_str).map(str::to_string))
+                .find(|s| s.contains("first line") || s.contains("leading indent"));
+            assert_eq!(
+                got.as_deref(),
+                Some(summary.as_str()),
+                "variant {i}: the summary line `{label}: <timestamp>...` did not survive compaction"
+            );
+        }
     }
 
     #[test]
