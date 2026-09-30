@@ -1,0 +1,40 @@
+# @trace spec:methodology-accountability
+# @trace order:1367-2sbc
+#
+# Order 1367-2sbc: set-field's claim path admitted an unbounded number of
+# claims, and hosts climbed to 10, 8 and 6 concurrent in_progress packets while
+# filing outran closing six days running (operator, 2026-09-23). The claim now
+# refuses past packet_discipline.wip_limit (read from methodology, not
+# restated), counts a --story as one unit, refuses a new story while another is
+# open, and admits a named --over-wip that is recorded on the row.
+name: litmus:claim-wip-limit-shape
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin 1367-2sbc on scratch ledgers: a host at its WIP limit of loose claims is
+  refused another, with the held orders named and nothing written; claims
+  sharing --story count as one and a different story waits for the open one;
+  completing a packet admits the next claim; --over-wip is admitted and recorded
+  with its reason; another host's claims never count.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-claim-wip-limit.sh
+  - a runnable tillandsias-plan is resolvable, or the fixture skips by name
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-claim-wip-limit.sh && test -x scripts/test-claim-wip-limit.sh && echo 'ok: claim-wip-limit-parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: claim-wip-limit-parses"
+
+  - step: "the WIP limit, story unit, release, override and other-host arms all hold"
+    command: "bash scripts/test-claim-wip-limit.sh"
+    timeout_ms: 300000
+    expected_behavior: "claim-wip-limit: 5 passed, 0 failed"
+
+  - step: "the cap lives in one place: methodology declares it and the binary reads that key"
+    command: "grep -q '^    wip_limit: [0-9]' methodology/distributed-work.yaml && grep -q '\"wip_limit\"' crates/tillandsias-plan/src/main.rs && echo 'ok: wip-limit-read-from-methodology'"
+    timeout_ms: 10000
+    expected_behavior: "ok: wip-limit-read-from-methodology"

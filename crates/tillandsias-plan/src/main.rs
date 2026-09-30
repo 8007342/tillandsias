@@ -1016,6 +1016,57 @@ fn field_is_list(packet: &serde_yaml::Value, field: &str) -> bool {
         .is_some()
 }
 
+/// ORDER 1367-2sbc — the story a live claim was made under, read from the
+/// winning status entry's own span (`story:` beside its `host:`). Read lazily on
+/// the claim path rather than carried through the fold and its cache.
+fn claim_story_of(
+    ledger: &tillandsias_plan::Ledger,
+    frag_dir: &std::path::Path,
+    pid: &str,
+) -> Option<String> {
+    let src = ledger.field_source_of(pid, "status")?;
+    let text = std::fs::read_to_string(frag_dir.join(&src.fragment_name)).ok()?;
+    text.lines()
+        .skip(src.line_start.saturating_sub(1))
+        .take(src.line_end + 1 - src.line_start)
+        .find_map(|l| {
+            l.trim()
+                .strip_prefix("story:")
+                .map(|v| v.trim().to_string())
+        })
+        .filter(|v| !v.is_empty())
+}
+
+/// ORDER 1367-2sbc — the WIP limit lives in ONE place, the methodology rule
+/// (`packet_discipline.wip_limit`). Returned with where it came from, so a
+/// refusal on a scratch ledger that has no methodology says it used the default.
+fn wip_limit_of(index: &std::path::Path) -> (usize, String) {
+    const DEFAULT: usize = 3;
+    let rule = index
+        .parent()
+        .and_then(|plan| plan.parent())
+        .map(|root| root.join("methodology/distributed-work.yaml"));
+    let read = rule.as_ref().and_then(|p| {
+        let doc: serde_yaml::Value =
+            serde_yaml::from_str(&std::fs::read_to_string(p).ok()?).ok()?;
+        doc.get("distributed_work")
+            .unwrap_or(&doc)
+            .get("packet_discipline")?
+            .get("wip_limit")?
+            .as_u64()
+    });
+    match read {
+        Some(n) => (
+            n as usize,
+            "methodology/distributed-work.yaml packet_discipline.wip_limit".into(),
+        ),
+        None => (
+            DEFAULT,
+            "the built-in default; no packet_discipline.wip_limit was readable".into(),
+        ),
+    }
+}
+
 fn resolve_writer_host() -> String {
     writer_host_from(std::env::var("TILLANDSIAS_HOST_KIND").ok())
 }
@@ -8982,6 +9033,8 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 "--evidence",
                 "--reopen-evidence",
                 "--value-file",
+                "--story",
+                "--over-wip",
             ];
             const BOOL_FLAGS: &[&str] = &["--append", "--replace", "--backfill"];
 
@@ -9005,6 +9058,7 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                                  \n\
                                  set-field accepts:\n\
                                    with a value: --ts --host --reason --evidence --reopen-evidence --value-file\n\
+                                                 --story --over-wip\n\
                                    on their own: --append --replace --backfill\n\
                                  \n\
                                  For long prose use --value-file <path>, so no shell ever sees the text."
@@ -9203,6 +9257,126 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                          value is unaffected; the 772-4se9 platform default is unchanged."
                     );
                     std::process::exit(2);
+                }
+            }
+            // ORDER 1367-2sbc — A HOST FINISHES OR RELEASES BEFORE IT STARTS MORE.
+            //
+            // Operator, 2026-09-23: "we have started a lot of plan work at the
+            // same time and now they're all incomplete". Measured over
+            // 2026-09-13..23: median concurrent claims per host was 1, but hosts
+            // climbed to 10, 8 and 6, and filing outran closing six days running.
+            // The rule (methodology/distributed-work.yaml packet_discipline) was
+            // prose; this makes it the claim path's own refusal.
+            //
+            // A claim is `status in_progress`. The host's LIVE claims are the
+            // packets whose winning status write is in_progress AND names this
+            // host (the 1065-4t7t lease). Packets claimed with `--story <id>`
+            // count as ONE unit; the cap (packet_discipline.wip_limit, read, not
+            // restated) bounds the loose ones. A new story is refused while any
+            // member of another held story is still in_progress.
+            //
+            // THE OVERRIDE IS NAMED AND RECORDED: `--over-wip "<why>"` admits the
+            // claim and writes the reason and the held orders as an event, so a
+            // coordinator can see every time the limit was set aside and by whom.
+            let claim_story = flagged("--story");
+            let over_wip = flagged("--over-wip");
+            let mut wip_override_note: Option<String> = None;
+            if let Some(ref s) = claim_story
+                && (s.is_empty()
+                    || !s
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'))
+            {
+                eprintln!(
+                    "error: --story '{s}' — a story id is lowercase letters, digits and '-' \
+                     (it is written into the claim's own entry) — REFUSED before any write"
+                );
+                std::process::exit(2);
+            }
+            if claim_story.is_some() && !(field == "status" && value == "in_progress") {
+                eprintln!(
+                    "error: --story applies only to a claim (status in_progress) — REFUSED before any write"
+                );
+                std::process::exit(2);
+            }
+            if field == "status" && value == "in_progress" {
+                let claim_host = flagged("--host").unwrap_or_else(resolve_writer_host);
+                let frag_dir = fragments::fragment_dir(&index);
+                let (cap, cap_source) = wip_limit_of(&index);
+                let mut loose: Vec<String> = Vec::new();
+                let mut stories: std::collections::BTreeMap<String, Vec<String>> =
+                    std::collections::BTreeMap::new();
+                for p in &ledger.packets {
+                    let Some(other) = str_field(p, "packet_id") else {
+                        continue;
+                    };
+                    if other == pid || str_field(p, "status") != Some("in_progress") {
+                        continue;
+                    }
+                    let Some((h, _)) = ledger.status_lease_of(other) else {
+                        continue;
+                    };
+                    if h != claim_host {
+                        continue;
+                    }
+                    let order = str_field(p, "order").unwrap_or(other).to_string();
+                    match claim_story_of(&ledger, &frag_dir, other) {
+                        Some(st) => stories.entry(st).or_default().push(order),
+                        None => loose.push(order),
+                    }
+                }
+                let other_story = claim_story.as_ref().and_then(|s| {
+                    stories
+                        .iter()
+                        .find(|(k, _)| *k != s)
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                });
+                let refusal = if let Some((open, members)) = other_story {
+                    Some(format!(
+                        "refused:set-field:story-open:{open} — {claim_host} still holds story \
+                         '{open}' ({}), and a new story waits until every member of the last \
+                         one is terminal or released (1367-2sbc).",
+                        members.join(", ")
+                    ))
+                } else if claim_story.is_none() && loose.len() >= cap {
+                    Some(format!(
+                        "refused:set-field:wip-limit:{}/{cap} — {claim_host} already holds {} \
+                         in_progress packet(s) outside a story: {} (1367-2sbc; the limit is \
+                         {cap}, from {cap_source}).",
+                        loose.len(),
+                        loose.len(),
+                        loose.join(", ")
+                    ))
+                } else {
+                    None
+                };
+                if let Some(why) = refusal {
+                    match over_wip {
+                        Some(ref r) if !r.trim().is_empty() => {
+                            wip_override_note = Some(format!(
+                                "wip-override by {claim_host}: {} — admitted past: {why}",
+                                r.replace('\n', " ")
+                            ));
+                        }
+                        _ => {
+                            eprintln!(
+                                "{why}\n\
+                                 \n\
+                                 WHY: hosts that claimed without finishing climbed to ten open \
+                                 packets each, and the fleet ended a week with most work open \
+                                 (operator, 2026-09-23; methodology packet_discipline).\n\
+                                 \n\
+                                 REMEDY: close or release one of the packets named above \
+                                 (set-field <order> status completed --evidence <sha>, or \
+                                 status ready with a next_action saying what is left), then \
+                                 claim again. Packets claimed together as one batch share \
+                                 --story <id> and count as one. If this claim genuinely must \
+                                 go past the limit, pass --over-wip \"<why>\"; the reason and \
+                                 the held orders are recorded on the row."
+                            );
+                            std::process::exit(2);
+                        }
+                    }
                 }
             }
             // ORDER 1184-tj2q — A LIST IS NOT AN UNSET SCALAR, AND TREATING IT
@@ -9610,8 +9784,15 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             if !reason.is_empty() {
                 event_blocks.push(("note".to_string(), reason.replace('\n', " ")));
             }
+            if let Some(note) = wip_override_note.take() {
+                event_blocks.push(("note".to_string(), note));
+            }
             let body =
                 fragments::set_field_fragment_body(&pid, &field, &value, &ts, &host, &event_blocks);
+            let body = match claim_story {
+                Some(ref st) => fragments::with_claim_story(&body, st),
+                None => body,
+            };
             // ORDER 1458-8y85. A DELIBERATE --replace of long-form prose writes
             // an acknowledgement into its own bytes: the sha256 of the exact
             // folded value it read and replaced. check-append-vs-origin-fold.sh

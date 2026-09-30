@@ -885,6 +885,26 @@ pub fn set_field_fragment_body(
     body
 }
 
+/// ORDER 1367-2sbc — insert `story: <id>` into the FIRST status entry of a
+/// set-field body, right after its `host:` line, so a claim records the story it
+/// was made under. The fold ignores the key; the claim path's WIP guard reads it
+/// back from the winning entry's span.
+pub fn with_claim_story(body: &str, story: &str) -> String {
+    let mut out = String::with_capacity(body.len() + 40);
+    let mut in_status = false;
+    let mut done = false;
+    for line in body.split_inclusive('\n') {
+        out.push_str(line);
+        if line.starts_with("status:") {
+            in_status = true;
+        } else if in_status && !done && line.starts_with("    host: ") {
+            out.push_str(&format!("    story: {story}\n"));
+            done = true;
+        }
+    }
+    out
+}
+
 /// ORDER 1458-8y85 — insert `replaces_sha256: "<hex>"` into the FIRST status
 /// entry of a set-field body (the one row set-field writes), right after its
 /// `host:` line. The fold ignores the key; check-append-vs-origin-fold.sh reads it.
