@@ -1533,10 +1533,22 @@ mod tests {
             e.verdict(),
             "refused:cloudflare-login:no-registered-port-free"
         );
-        // CONTROL: free one, and the same list binds it.
-        let freed = ports[1];
+        // CONTROL: a freed port in the list binds. A test running in
+        // parallel (the fake-server arms each bind an ephemeral port) can
+        // take a port in the instant after it is freed, so the control
+        // retries with fresh ports instead of racing one (land96, 2026-09-29).
         drop(held);
-        let (_l, got) = bind_first_free(&[freed]).unwrap();
+        let mut bound = None;
+        for _ in 0..5 {
+            let probe = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+            let freed = probe.local_addr().unwrap().port();
+            drop(probe);
+            if let Ok((_l, got)) = bind_first_free(&[freed]) {
+                bound = Some((freed, got));
+                break;
+            }
+        }
+        let (freed, got) = bound.expect("a freed port binds within five attempts");
         assert_eq!(got, freed);
     }
 
