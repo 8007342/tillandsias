@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-must-be-rock-solid-at-atomic-forward-upstream-and-must-refuse-to-advertise-itself-when-broken-so-agents-stop-instead-of-trusting-a-mirror-that-is-silently-failing
+    event:
+      type: progress
+      ts: "2026-09-30T07:11:52Z"
+      agent_id: linux-lenovinha-claude-20260930t071152z
+      host: lenovinha
+      summary: |
+        STEP 2 implemented on work/1310-rec6 (8d20803aa): publish-relay-state + litmus:mirror-relay-state (bound under git-mirror-service, no second-OS regime needed). FOLLOW-UP owed by lenovinha: add a gate step for scripts/test-mirror-relay-state.sh with a darwin or msys STEP_SECOND_REGIME once a second host is up (the fleet was down on 2026-09-30 night).
