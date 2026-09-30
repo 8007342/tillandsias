@@ -1601,18 +1601,22 @@ mod tests {
         });
         let page = http_get(port, &format!("{CALLBACK_PATH}?code=c0de&state=forged"));
         assert!(page.starts_with("HTTP/1.1 400"), "{page}");
+        // receive_loopback RETURNED with the refusal (the join). A
+        // "connect is refused now" check would only assert this test's own
+        // drop(l) and races parallel ephemeral binds (land112 relay-fix).
         let e = h.join().unwrap().unwrap_err();
         assert_eq!(e.verdict(), "refused:cloudflare-login:state-mismatch");
-        assert!(TcpStream::connect((Ipv4Addr::LOCALHOST, port)).is_err());
     }
 
     #[test]
     fn cloudflare_login_loopback_times_out_and_closes() {
-        let (l, port) = bind_first_free(&[0]).unwrap();
+        // The property is that receive_loopback RETURNS at its deadline with
+        // the named refusal. The former trailing "connect is refused" check
+        // asserted only this test's own drop(l) and raced parallel ephemeral
+        // binds (it reddened a gate on 2026-09-30; land112 relay-fix).
+        let (l, _port) = bind_first_free(&[0]).unwrap();
         let e = receive_loopback(&l, "x", Instant::now() + Duration::from_millis(200)).unwrap_err();
         assert_eq!(e.verdict(), "refused:cloudflare-login:timeout");
-        drop(l);
-        assert!(TcpStream::connect((Ipv4Addr::LOCALHOST, port)).is_err());
     }
 
     #[test]
