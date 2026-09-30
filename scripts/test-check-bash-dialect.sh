@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
-# Two-direction fixture for check-bash-dialect.sh (761-g36m criterion 3):
+# Two-direction fixture for check-bash-dialect (scripts/lua/check-bash-dialect.lua since 1384-ddua) (761-g36m criterion 3):
 # an UNGUARDED bash-4-ism fails the gate; the SAME construct behind a
 # BASH_VERSINFO refusal passes; a clean tree passes. Hermetic — scans a
 # temp dir via TILLANDSIAS_DIALECT_SCAN_DIR, never the live tree.
 # freshness: auditor=macos-tlatoanis-macbook-air-fable5 date=2026-08-16 verdict=refreshed scope=761-g36m authoring
 set -u
 
-CHECKER="$(cd "$(dirname "$0")" && pwd)/check-bash-dialect.sh"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# 1384-ddua: the checker is scripts/lua/check-bash-dialect.lua on the one
+# runner; its scratch scans reach /tmp through the script's declared
+# `-- @read-env TILLANDSIAS_DIALECT_SCAN_DIR` root, and nothing else.
+CHECKER="$ROOT/scripts/lua/check-bash-dialect.lua"
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || PLAN=""
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
+if [ -z "$PLAN" ] || ! grep -qx script <<<"$("$PLAN" capabilities 2>/dev/null)"; then
+  echo "could-not-run:check-bash-dialect-fixture:no-script-runner — build it: cargo build --release -p tillandsias-plan"
+  exit 3
+fi
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/bash-dialect-fixture.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 fails=0
@@ -14,7 +24,7 @@ fails=0
 expect() {
   # expect <name> <want-verdict> <want-exit>
   local name="$1" want="$2" want_rc="$3" got rc
-  got="$(TILLANDSIAS_DIALECT_SCAN_DIR="$TMP" bash "$CHECKER" 2>/dev/null)"
+  got="$(TILLANDSIAS_DIALECT_SCAN_DIR="$TMP" "$PLAN" script run "$CHECKER" 2>/dev/null)"
   rc=$?
   if [ "$got" != "$want" ] || [ "$rc" -ne "$want_rc" ]; then
     echo "FAIL: $name — got '$got' (rc=$rc), want '$want' (rc=$want_rc)" >&2
@@ -199,7 +209,7 @@ expect "case-outside-cs-passes" "ok:bash-dialect-clean" 0
 # litmus used that name, which was never read: a "one-file" check scanned the
 # whole tree). Ignored, this falls back to the clean live tree and reads ok.
 printf '#!/usr/bin/env bash\nx=$(%s "$1" in /*) echo a ;; esac)\n' "$C" > "$TMP/cics.sh"
-got="$(TILLANDSIAS_DIALECT_SCAN_FILES="$TMP/cics.sh" bash "$CHECKER" 2>/dev/null)"
+got="$(TILLANDSIAS_DIALECT_SCAN_FILES="$TMP/cics.sh" "$PLAN" script run "$CHECKER" 2>/dev/null)"
 [ "$got" = "blocked:bash4-unguarded:1" ] \
   || { echo "FAIL: scan-files-alias-scopes — got '$got'" >&2; fails=$((fails + 1)); }
 rm "$TMP/cics.sh"

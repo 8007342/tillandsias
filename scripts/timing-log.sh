@@ -105,7 +105,7 @@ _timing_clock_probe() {
     # get Tlatoani approval") and the gate enforces it — measured: this file was
     # refused on the first attempt for naming it, in a comment as well as in
     # code, because the scan matches the token. perl carries no such rule,
-    # ships with macOS, and is already relied on by scripts/check-bash-dialect.sh,
+    # ships with macOS, and is already relied on by scripts/lua/check-bash-dialect.lua,
     # so it adds no dependency this repo does not already have.
     #
     # NOT a Rust helper either, which is what the policy nudges toward: this is

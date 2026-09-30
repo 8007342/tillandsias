@@ -43,10 +43,13 @@ make_tree() {
 }
 
 # run_decider <name> <tree> → $W/<name>.out / .err
+# 1384-ddua: check-bash-dialect is scripts/lua/check-bash-dialect.lua.
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || PLAN=""
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
 run_decider() {
     local s="$ROOT/scripts/$1.sh"
     case "$1" in
-        check-bash-dialect) ( cd "$2" && bash "$s" ) ;;
+        check-bash-dialect) ( cd "$2" && "$PLAN" script run "$ROOT/scripts/lua/check-bash-dialect.lua" ) ;;
         check-jq-callsite-ratchet) bash "$s" --root "$2" ;;
         check-sigpipe-verdict-pipelines-added) TILLANDSIAS_SIGPIPE_ROOT="$2" bash "$s" ;;
     esac > "$W/$1.out" 2> "$W/$1.err"

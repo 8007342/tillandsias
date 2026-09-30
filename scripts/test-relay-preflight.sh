@@ -48,10 +48,18 @@ case "$_pb" in ./*) _pb="$ROOT/${_pb#./}" ;; esac
 # The deciders relay-preflight.sh shells out to, by their OWN relative
 # location — copied into every scratch repo's scripts/ dir so they judge the
 # SCRATCH tree, never this checkout's.
-DECIDER_FILES="timing-log.sh plan-binary-probe.sh check-bash-dialect.sh check-sigpipe-verdict-pipelines-added.sh check-plan-binary-probe-usage.sh check-litmus-pin-claims.sh check-script-exec-bits.sh check-added-fragments-parse.sh check-scorable-obligation-added.sh check-gate-step-regimes.sh check-added-test-is-referenced.sh check-refusal-affordance-added.sh check-rust-source-pin-added.sh check-no-python-scripts.sh check-jq-callsite-ratchet.sh preflight-fixtures-default-target.sh check-issue-citation-convention.sh trace-coverage.sh litmus-covering-specs.sh"
+DECIDER_FILES="timing-log.sh plan-binary-probe.sh check-sigpipe-verdict-pipelines-added.sh check-plan-binary-probe-usage.sh check-litmus-pin-claims.sh check-script-exec-bits.sh check-added-fragments-parse.sh check-scorable-obligation-added.sh check-gate-step-regimes.sh check-added-test-is-referenced.sh check-refusal-affordance-added.sh check-rust-source-pin-added.sh check-no-python-scripts.sh check-jq-callsite-ratchet.sh preflight-fixtures-default-target.sh check-issue-citation-convention.sh trace-coverage.sh litmus-covering-specs.sh"
 
 # _seed <dir>: a fresh repo at <dir> with relay-preflight.sh and every decider
 # it calls, one base commit, branch "linux-next".
+# 1384-ddua: the scratch clones run the Lua decider through the checkout's
+# own plan binary, which must know `script run`.
+if [ -z "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    TILLANDSIAS_PLAN_BIN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || TILLANDSIAS_PLAN_BIN=""
+    case "$TILLANDSIAS_PLAN_BIN" in ./*) TILLANDSIAS_PLAN_BIN="$ROOT/${TILLANDSIAS_PLAN_BIN#./}" ;; esac
+    export TILLANDSIAS_PLAN_BIN
+fi
+
 _seed() {
     local d="$1"
     mkdir -p "$d/scripts/lib"
@@ -65,6 +73,9 @@ _seed() {
     # sibling manifest. Both are data these deciders read, not code this
     # script calls, so DECIDER_FILES (a list of .sh basenames) never covers
     # them.
+    # 1384-ddua: check-bash-dialect is a Lua decider on the one runner.
+    mkdir -p "$d/scripts/lua"
+    cp "$ROOT/scripts/lua/check-bash-dialect.lua" "$d/scripts/lua/"
     [ -f "$ROOT/scripts/lib/exec-bits-filter.awk" ] && cp "$ROOT/scripts/lib/exec-bits-filter.awk" "$d/scripts/lib/"
     [ -f "$ROOT/scripts/test-reference-surfaces.manifest" ] && cp "$ROOT/scripts/test-reference-surfaces.manifest" "$d/scripts/"
     chmod +x "$d"/scripts/*.sh
@@ -226,7 +237,7 @@ fi
 CLONE_E="$W/clone-e"
 _clone "$BASE_BARE" "$CLONE_E"
 git -C "$CLONE_E" "${GC[@]}" checkout -qb work/bad-dialect
-# ASSEMBLED, never spelled literally: check-bash-dialect.sh's own gate
+# ASSEMBLED, never spelled literally: check-bash-dialect's own gate
 # scans THIS file's bytes too, and a literal bash4-ism here would trip it
 # on its own fixture (the same reason litmus-covering-specs.sh assembles
 # its "litmus:" prefix rather than spelling a fake claim outright).

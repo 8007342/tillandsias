@@ -627,6 +627,11 @@ _preflight_roster() {
     #    or line continuation. A guard with a mode is run in that mode.
     grep -oE '_run bash "\$SCRIPT_DIR/scripts/check-[a-z0-9-]+\.sh"[^;|&>)\\]*' "$SCRIPT_DIR/build.sh" \
         | sed -E 's#^_run bash "\$SCRIPT_DIR/(scripts/check-[a-z0-9-]+\.sh)"#\1\t#; s/[[:space:]]+[0-9]*$//; s/\t[[:space:]]+/\t/; s/\t$//'
+    # 5. every gate-inline LUA decider (1384-ddua): the literal
+    #    `_run_lua_decider "scripts/lua/check-X.lua"` calls, run at the door
+    #    through `script run` by _pf_run_guard's .lua runner.
+    grep -oE '_run_lua_decider "scripts/lua/check-[a-z0-9-]+\.lua"' "$SCRIPT_DIR/build.sh" \
+        | sed -E 's#^_run_lua_decider "(scripts/lua/check-[a-z0-9-]+\.lua)"#\1#'
 }
 
 # Guards that cannot simply be run here, each with the reason the verdict prints.
@@ -1919,6 +1924,25 @@ if [ -n "$GATE_STEPS_ROOT" ]; then
     _run_gate_steps "$(cd "$GATE_STEPS_ROOT" && pwd)"
     exit $?
 fi
+
+# ORDER 1384-ddua — a gate-inline decider that is a .lua runs through the ONE
+# runner. A host whose plan binary is absent or predates `script run` gets a
+# LOUD could-not-run (exit 3), which the gate refuses like any failure: a stale
+# binary on a Mac must never wave a bash-4 idiom through by reading as a pass.
+# The literal `_run_lua_decider "scripts/lua/…"` form is what the preflight
+# door's roster scans for (source 5), so a Lua decider cannot drop out of it.
+_run_lua_decider() {  # $1 = scripts/lua/<name>.lua, relative to the checkout
+    local _ld_bin=""
+    _ld_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _ld_bin=""
+    case "$_ld_bin" in ./*) _ld_bin="$SCRIPT_DIR/${_ld_bin#./}" ;; esac
+    if [ -z "$_ld_bin" ] || ! grep -qx script <<<"$("$_ld_bin" capabilities 2>/dev/null)"; then
+        echo "could-not-run:lua-decider:${1##*/}:no-script-runner"
+        _afford "no tillandsias-plan with \`script run\` resolves, so ${1##*/} was not run and says nothing about this tree" \
+            "cargo build --release -p tillandsias-plan (or refresh the installed copy), then re-run"
+        return 3
+    fi
+    _run "$_ld_bin" script run "$SCRIPT_DIR/$1"
+}
 
 _run_litmus_phase() {
     local phase="$1"
@@ -4411,7 +4435,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Guest unit hardening guard passed"
 
     _step "Checking scripts/ bash dialect (761-g36m)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-bash-dialect.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-bash-dialect.lua" 2>&1; then
         _error "a shared script carries an unguarded bash-4-only construct — see the verdict line above (761-g36m)"
         exit 1
     fi

@@ -143,7 +143,7 @@ trap cleanup EXIT
 # THE RESPONDER IS perl, NOT THE OTHER OBVIOUS INTERPRETER: 1087-h2z9 bars that
 # runtime anywhere in the harness and its scan matches the TOKEN, so even naming
 # it in a comment refuses the file. perl carries no such rule, ships with macOS,
-# and scripts/check-bash-dialect.sh and scripts/timing-log.sh already rely on it.
+# and scripts/lua/check-bash-dialect.lua and scripts/timing-log.sh already rely on it.
 cat > "$TMPD/responder.pl" <<'PL'
 use strict; use warnings; use IO::Socket::INET;
 my $port = $ARGV[0];
