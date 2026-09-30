@@ -3372,6 +3372,109 @@ fn heartbeat_status_line(status_text: &str) -> String {
     }
 }
 
+/// The VM whose clock the next wake corrects (1503-qrgz). Replaced on every
+/// boot, so a re-provisioned guest is the one that gets the host's time.
+static WAKE_CLOCK_VM: Mutex<Option<Arc<VzRuntime>>> = Mutex::new(None);
+
+/// Tell the guest the host's wall clock every time the Mac wakes (1503-qrgz).
+///
+/// MEASURED 2026-09-29: the VM does not run while the Mac sleeps, so its clock
+/// falls behind by the sleep, and chrony then takes about 3.5 min to re-acquire
+/// and hours to slew (see `ControlMessage::HostClockSync`). The host knows the
+/// right time at wake; this carries it.
+///
+/// EVENT-DRIVEN, NO POLLING: one NSWorkspace did-wake observer, registered once
+/// per process. Its block only forwards the event to a channel; a tokio task
+/// does the connect, handshake and request. The observer is kept for the life
+/// of the process (the tray never stops caring about wakes).
+fn spawn_host_clock_sync_on_wake(vz: Arc<VzRuntime>) {
+    *WAKE_CLOCK_VM.lock().unwrap() = Some(vz);
+    static REGISTERED: OnceLock<()> = OnceLock::new();
+    if REGISTERED.set(()).is_err() {
+        return;
+    }
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    let block = block2::RcBlock::new(
+        move |_note: std::ptr::NonNull<objc2_foundation::NSNotification>| {
+            let _ = tx.send(());
+        },
+    );
+    // SAFETY: the shared workspace and its notification centre are process-wide
+    // singletons; the observer token is leaked deliberately (see above).
+    unsafe {
+        let center = objc2_app_kit::NSWorkspace::sharedWorkspace().notificationCenter();
+        let token = center.addObserverForName_object_queue_usingBlock(
+            Some(objc2_app_kit::NSWorkspaceDidWakeNotification),
+            None,
+            None,
+            &block,
+        );
+        std::mem::forget(token);
+    }
+    tokio::spawn(async move {
+        while rx.recv().await.is_some() {
+            let Some(vz) = WAKE_CLOCK_VM.lock().unwrap().clone() else {
+                continue;
+            };
+            match send_host_clock_once(&vz).await {
+                Ok(()) => eprintln!(
+                    "[tillandsias-tray] wake: sent the host clock to the guest (1503-qrgz)"
+                ),
+                Err(e) => eprintln!(
+                    "[tillandsias-tray] wake: could not send the host clock to the guest: {e}"
+                ),
+            }
+        }
+    });
+}
+
+/// One `HostClockSync` over a fresh control-wire connection.
+///
+/// MIXED VERSIONS. The host↔guest PSK is derived from the SHA-256 of the guest
+/// binary shipped with THIS tray build (`channel_psk_for_guest`) plus the build
+/// and wire versions (`derive_psk`), so a guest from another build fails the
+/// handshake closed and never sees this variant. Every step is time-bounded
+/// and there is no retry: a mismatched or wedged guest costs one logged
+/// failure per wake, never a hang or a storm.
+async fn send_host_clock_once(vz: &VzRuntime) -> Result<(), String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let stream =
+        open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5)).await?;
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    tokio::time::timeout(Duration::from_secs(5), client.handshake())
+        .await
+        .map_err(|_| "control-wire handshake: no answer within 5 s".to_string())?
+        .map_err(|e| format!("control-wire handshake: {e}"))?;
+    let host_unix_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("host clock before 1970: {e}"))?
+        .as_millis() as u64;
+    let seq = client.allocate_seq();
+    let env = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::HostClockSync { seq, host_unix_ms },
+    };
+    let reply = tokio::time::timeout(Duration::from_secs(5), client.request(&env))
+        .await
+        .map_err(|_| "no reply within 5 s".to_string())?
+        .map_err(|e| format!("HostClockSync: {e}"))?;
+    match reply.body {
+        ControlMessage::IssueAck { .. } => Ok(()),
+        ControlMessage::Error { message, .. } => Err(message),
+        other => Err(format!("unexpected reply {}", other.kind())),
+    }
+}
+
 fn spawn_vm_status_poller(
     vz: Arc<VzRuntime>,
     status_text: Arc<Mutex<String>>,
@@ -3400,6 +3503,7 @@ fn spawn_vm_status_poller(
     // — the burst intent is served push-natively (login-transition
     // CloudRefreshRequest); see the comment at the wait site.
     let poll_request = tokio::sync::Notify::new();
+    spawn_host_clock_sync_on_wake(vz.clone());
     tokio::spawn(run_push_listener(
         vz.clone(),
         status_text.clone(),

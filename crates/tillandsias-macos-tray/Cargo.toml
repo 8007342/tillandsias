@@ -33,6 +33,7 @@ serde_json = { workspace = true }
 # 1420-inak: dup2 for the GUI-mode tray log (src/tray_log.rs). Already in the lock.
 libc = "0.2"
 objc2 = "0.5"
+block2 = "0.5"
 objc2-app-kit = { version = "0.2", features = [
     "NSApplication",
     "NSResponder",
@@ -57,6 +58,10 @@ objc2-app-kit = { version = "0.2", features = [
     "NSAttributedString",
 ] }
 objc2-foundation = { version = "0.2", features = [
+    # 1503-qrgz: the did-wake observer (addObserverForName:object:queue:usingBlock:).
+    "NSNotification",
+    "NSOperation",
+    "block2",
     "NSData",
     "NSString",
     "NSURL",
