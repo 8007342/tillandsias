@@ -531,6 +531,7 @@ specs:
   - litmus:git-mirror-seed-failure-surfaced-shape
   - litmus:forge-clone-reachability-probe-shape
   - litmus:forge-seeds-from-salvage-ref
+  - litmus:mirror-relay-state
   - litmus:running-image-freshness
   - litmus:git-mirror-no-anonymous-http-write
   - litmus:git-mirror-no-anonymous-daemon-write
