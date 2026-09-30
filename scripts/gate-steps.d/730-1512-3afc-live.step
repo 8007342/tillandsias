@@ -1,0 +1,14 @@
+# Gate step 1512-3afc (live) — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. The tree being gated: a NEWLY ADDED gate step whose prefix
+# is already held on origin/linux-next, or on another recent unlanded
+# origin/work/* ref, is refused by name before it lands and costs a relaunch
+# (three collisions on 2026-09-30). Reads fetched remote-tracking refs only;
+# skips by name when the trunk ref is not fetched.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking new gate steps do not reuse a prefix another ref holds (1512-3afc)"
+STEP_SCRIPT="scripts/check-gate-step-prefix-across-refs.sh"
+STEP_ERROR="a newly added gate step reuses a prefix that trunk or another unlanded work ref already holds (1512-3afc); rename it to the free prefix the remedy names"
+STEP_OK="no new gate step reuses a prefix held on trunk or another unlanded ref"
+STEP_SECOND_REGIME="yolanda 2026-09-30 msys live: ok on this branch (2 added)"
