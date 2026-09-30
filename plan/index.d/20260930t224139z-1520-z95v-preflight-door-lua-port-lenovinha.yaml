@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-preflight-door-is-ported-to-scripts-lua-preflight-on-script-run-with-proc-spawn-so-guards-run-concurrently-under-group-kill-and-its-wall-time-does-not-regress
+    order: 1520-z95v
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [lua, ci-gate, portability, macos, preflight]
+    estimated_hours: 8
+    depends_on:
+      - proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    owned_files: [scripts/lua/preflight.lua, build.sh, scripts/test-preflight-front-door.sh]
+    title: |
+      the preflight door (build.sh _pf_run_guard, its launcher and accounting) is ported to scripts/lua/preflight.lua on script run, running guards CONCURRENTLY through proc.spawn under group kill, with its wall time measured before and after on the same host — split out of 1384-ddua arm 3, absorbing 1353-ryhq
+    context: |
+      SPLIT FROM 1384-ddua on the coordinator's ruling (macuahuitl, 2026-09-30).
+      ddua's arm 3 asked for the door as Lua. The door runs about 228 guards
+      concurrently (TILLANDSIAS_PREFLIGHT_JOBS) under per-guard deadlines, and
+      the only landed process primitive is 1384-aixy slice 1's proc.run, which
+      is synchronous. A preflight.lua on proc.run alone would run the guards
+      SERIALLY, and the door would go from about 90 s (lenovinha, 2026-09-30:
+      wall=86-88s) to many minutes, with every verdict matching. A SERIAL DOOR
+      IS A REGRESSION EVEN WHEN EVERY VERDICT MATCHES, and the accounting
+      arms would not catch it. So this row depends on aixy's proc.spawn slice.
+      The classifier already lives in one place (1384-bqhy: script_run::classify,
+      which the door calls through script classify). This row moves the
+      LAUNCHER: setsid probe, group kill, the tenth-second poll, deadline
+      accounting. It absorbs 1353-ryhq (the door behaves differently per
+      platform: dead on macOS without setsid, deadline skips on Windows, phantom
+      refusals on a full forge tmpfs), and says so in its closing event.
+    exit_criteria:
+      - 'WALL TIME, same host, same tree, before and after: ./build.sh --preflight wall= on the parent commit and on this commit, both pasted; the port is not slower beyond noise (three runs each)'
+      - 'the ran/declared-skip/skipped-by-deadline/could-not-run/refused accounting is identical to the shell door on the same tree, and a tree carrying a fresh printf|grep -qF verdict fixture is refused by both (1359-qf3p instance 1)'
+      - 'a guard that forks a grandchild sleeping 30 s is gone after the deadline (no pgrep hit), on Linux and recorded on macOS'
+      - 'the shell _pf_run_guard launcher is deleted in the same commit'
+    verifiable_closure: |
+      bash scripts/test-preflight-front-door.sh green on the Lua door, plus the
+      wall-time pair and the macOS grandchild event pasted on the closing event.
+    events:
+      - type: filed
+        ts: "2026-09-30T22:41:39Z"
+        agent_id: "linux-lenovinha-claude-20260930t224139z"
+        host: lenovinha
+        summary: |-
+          Filed on the coordinator's ruling splitting 1384-ddua: ddua closes on check-seam-writers-canonical + check-bash-dialect, and the door port moves here, blocked on 1384-aixy's proc.spawn slice.
