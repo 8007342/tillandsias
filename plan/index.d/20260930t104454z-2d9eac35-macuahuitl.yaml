@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: plan-inbox-files-are-refused-by-the-plan-only-lane-so-every-message-to-a-ledger-only-peer-costs-a-full-gate
+    field: status
+    value: completed
+    ts: "2026-09-30T10:44:54Z"
+    host: macuahuitl
+
+events:
+  - packet_id: plan-inbox-files-are-refused-by-the-plan-only-lane-so-every-message-to-a-ledger-only-peer-costs-a-full-gate
+    event:
+      type: completed
+      ts: "2026-09-30T10:44:54Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 3d28cd5a5
+  - packet_id: plan-inbox-files-are-refused-by-the-plan-only-lane-so-every-message-to-a-ledger-only-peer-costs-a-full-gate
+    event:
+      type: note
+      ts: "2026-09-30T10:44:54Z"
+      host: macuahuitl
+      summary: |-
+        landed in land108; lane admits inbox-only pushes, refuses mixed/nested/non-md/rewrites
