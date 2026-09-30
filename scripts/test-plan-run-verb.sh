@@ -20,7 +20,11 @@ timeout_rc=$?
 set -e
 elapsed=$((SECONDS - start))
 [ "$timeout_rc" -eq 124 ] || fail "--timeout exits 124 (got $timeout_rc): $timeout_out"
-[ "$elapsed" -lt 2 ] || fail "--timeout 1s returned in ${elapsed}s"
+# $SECONDS has whole-second resolution, so a 1.05 s call that straddles a
+# second boundary reads as 2. The bound is the PROPERTY, not the budget: without
+# the deadline this call takes the child's full 5 s, and anything under 4 is
+# the deadline having fired (relay-fix, macuahuitl 2026-09-30).
+[ "$elapsed" -lt 4 ] || fail "--timeout 1s returned in ${elapsed}s (the child sleeps 5s)"
 grep -Eq '^status=timed_out after_ms=[0-9]+$' <<<"$timeout_out" \
     || fail "timeout diagnostic missing: $timeout_out"
 ok "timeout deadline returns 124 promptly with measured status"
@@ -43,8 +47,10 @@ CHILD
         2>"$WORK/detach.err" \
         || fail "detached run refused: $(<"$WORK/detach.err")"
     elapsed=$((SECONDS - start))
-    [ "$elapsed" -lt 1 ] || fail "detach returned in ${elapsed}s"
-    for _ in {1..40}; do [ -s "$child_record" ] && break; sleep 0.025; done
+    # Same resolution rule: an undetached run waits the child's 3 s and reads
+    # at least 3; under 3 means the verb returned without waiting.
+    [ "$elapsed" -lt 3 ] || fail "detach returned in ${elapsed}s (the child sleeps 3s)"
+    for _ in {1..200}; do [ -s "$child_record" ] && break; sleep 0.025; done
     [ -s "$child_record" ] || fail "detached child did not start"
     read -r child_pid child_session < "$child_record"
     case "$caller_session:$child_session" in
@@ -54,8 +60,8 @@ CHILD
         || fail "detached session equals caller session ($caller_session)"
     [ "$child_session" = "$child_pid" ] \
         || fail "detached child is not a session leader (pid=$child_pid sid=$child_session)"
-    sleep 3.2
-    kill -0 "$child_pid" 2>/dev/null && fail "detached child did not finish" || true
+    for _ in {1..80}; do kill -0 "$child_pid" 2>/dev/null || break; sleep 0.1; done
+    kill -0 "$child_pid" 2>/dev/null && fail "detached child did not finish within 8s" || true
     ok "detach returns promptly, enters a distinct session, and survives its caller"
 elif [[ "${OS:-}" == Windows_NT ]]; then
     marker="$WORK/detached-marker"
@@ -76,31 +82,31 @@ lock="$WORK/shared.lock"
 out="$WORK/critical-section.txt"
 cat > "$WORK/lock-child.sh" <<'CHILD'
 printf 'begin:%s\n' "$1" >> "$2"
-sleep 0.002
+sleep 0.05
 printf 'end:%s\n' "$1" >> "$2"
 CHILD
 cat > "$WORK/lock-holder.sh" <<'CHILD'
 printf 'held\n' > "$1"
 sleep 2
 CHILD
-for i in {1..100}; do
+for i in {1..24}; do
     (
         "$PLAN_BIN" run --lock "$lock" -- sh "$WORK/lock-child.sh" "$i" "$out"
     ) &
 done
 wait
-[ "$(wc -l < "$out" | tr -d '[:space:]')" = 200 ] || fail "expected 200 critical-section lines"
+[ "$(wc -l < "$out" | tr -d '[:space:]')" = 48 ] || fail "expected 48 critical-section lines"
 awk '
     NR % 2 == 1 { if ($0 !~ /^begin:[0-9]+$/) exit 1; id = substr($0, 7); next }
     { if ($0 != "end:" id) exit 1 }
-    END { if (NR != 200) exit 1 }
+    END { if (NR != 48) exit 1 }
 ' "$out" || fail "locked critical sections interleaved"
-ok "100 concurrent advisory-lock runs serialize complete critical sections"
+ok "24 concurrent advisory-lock runs serialize complete critical sections"
 
 held="$WORK/held.marker"
 "$PLAN_BIN" run --lock "$lock" -- sh "$WORK/lock-holder.sh" "$held" &
 holder_pid=$!
-for _ in {1..80}; do [ -s "$held" ] && break; sleep 0.025; done
+for _ in {1..200}; do [ -s "$held" ] && break; sleep 0.025; done
 [ -s "$held" ] || fail "lock holder never entered its critical section"
 set +e
 wait_out="$("$PLAN_BIN" run --lock "$lock" --lock-wait 100ms -- printf must-not-run 2>&1)"

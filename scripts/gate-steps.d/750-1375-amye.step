@@ -1,0 +1,20 @@
+# Gate step 1375-amye — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. `tillandsias-plan run` is the portable door that replaces
+# timeout(1), setsid(1) and flock(1) in scripts being ported off bash: those
+# three differ across GNU, BSD and MSYS, and a Lua decider cannot shell out to
+# them. The fixture pins four contracts: --timeout returns 124 without waiting
+# the child out; argv stays tokenized; --detach starts a child that leads its
+# own session (sid == pid, != caller's — a setpgid-only spawn fails this arm);
+# --lock serializes 24 concurrent critical sections and --lock-wait expires
+# with 75 without spawning.
+#
+# Moved here from an inline build.sh step by the coordinator's relay-fix
+# (2026-09-30): inline, it ran on every host's --check with no second-regime
+# measurement, and its Darwin arm had never executed on a Mac.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the plan run verb's timeout, detach, argv and lock contracts (1375-amye)"
+STEP_SCRIPT="scripts/test-plan-run-verb.sh"
+STEP_ERROR="the plan run verb contract failed (1375-amye); see which arm failed above"
+STEP_OK="plan run verb: timeout, argv, detach and lock contracts hold"
