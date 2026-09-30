@@ -14,3 +14,4 @@ STEP_DESC="Checking the git mirror's healthcheck writes nothing to the daemon lo
 STEP_SCRIPT="scripts/test-mirror-healthcheck-quiet.sh"
 STEP_ERROR="the git mirror healthcheck again writes to git-daemon's log (fatal: the remote end hung up) or no longer detects a dead daemon (1310-rec6)"
 STEP_OK="mirror healthcheck is silent and still a liveness check"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin skip:mirror-healthcheck-quiet:no-versioned-git-image (named skip at f81e095aa: the git image lives only in the macOS guest)"
