@@ -1148,6 +1148,85 @@ expert_capability_report() {
     return 0
 }
 
+# ── ORDER 1506-ssb5: msg_send / msg_recv / msg_list / msg_status ───────────
+#
+# Every msg tool wraps `tillandsias-plan msg <verb>` behind the SAME capability
+# probe every other tool uses. `msg` is ONE capability token in
+# capabilities.txt covering every verb, so a single `capability_gap "msg"`
+# check gates all four tools — an old binary answers the degraded envelope,
+# never a fake success.
+#
+# THE DEGRADED PATH IS THE JSON ENVELOPE, deliberately unlike plan_query's
+# plain-text "ERROR: ...": operator rulings 2026-09-29 amended this packet's
+# exit criteria to require "every msg tool answers the degraded envelope with
+# confidence=unsupported" — the same {answer, citations, freshness,
+# confidence} shape plan_answer's degraded path uses (`unsupported_envelope`),
+# so a caller that already knows to read `.confidence` handles a stale-binary
+# msg_send exactly like a stale-binary plan_answer. The ANSWERED path is left
+# alone: it is the CLI's own plain-text grammar (`ok:msg:queued:<id>`,
+# `pending`, `acked:<host>/<lane>@<ts>` …), because msg_send / msg_status name
+# that grammar directly in their exit criteria.
+#
+# NO msg_ack TOOL EXISTS AND NONE IS ADDED HERE. The ack is written by the
+# infrastructure (the mover or the receiving mailbox daemon) after fsync,
+# never by an agent or a verb — `tillandsias-plan msg ack` is itself refused
+# as an unknown verb (msg_store.rs). Read the ack with msg_status.
+#
+# A message BODY travels on STDIN, never argv: msg_send_tool takes it as a
+# shell variable (built from the JSON-RPC arguments, never re-typed into the
+# tillandsias-plan argv) and PIPES it, so it can never appear in `ps` or shell
+# history the way a `--body`/`-m` flag would (msg_store.rs refuses those
+# flags outright for the same reason).
+msg_capability_gap() {
+    [ -n "$PLAN_BIN" ] || PLAN_BIN="$(resolve_plan_bin)"
+    [ -n "$PLAN_INDEX" ] || PLAN_INDEX="$(resolve_plan_index)"
+    if [ -z "$PLAN_BIN" ]; then
+        printf 'the msg tools need tillandsias-plan — experts state: %s' "$(experts_state_line)"
+        return 0
+    fi
+    capability_gap "msg"
+}
+
+# msg_query <verb> [args...] — recv | list | status. Reads no stdin (msg_send
+# is the only verb that consumes a body, and it has its own function below).
+msg_query() {
+    local verb="$1"
+    shift
+    local gap
+    gap="$(msg_capability_gap)"
+    if [ -n "$gap" ]; then
+        unsupported_envelope "$gap"
+        return 0
+    fi
+    # `|| true`: an assignment from a failing substitution exits the WHOLE
+    # server under `set -e` (`out=$(cmd)` where cmd's exit status is nonzero is
+    # the assignment's own exit status) — every refusal below status=1/2 and
+    # this is the one guard that keeps a refused msg_status from taking the
+    # transport down with it, exactly like plan_query's own `|| true`.
+    if [ -n "$PLAN_INDEX" ]; then
+        "$PLAN_BIN" --index "$PLAN_INDEX" msg "$verb" "$@" </dev/null 2>&1 || true
+    else
+        "$PLAN_BIN" msg "$verb" "$@" </dev/null 2>&1 || true
+    fi
+}
+
+# msg_send_tool <body> [args...] — the body is piped to the CLI's stdin.
+msg_send_tool() {
+    local body="$1"
+    shift
+    local gap
+    gap="$(msg_capability_gap)"
+    if [ -n "$gap" ]; then
+        unsupported_envelope "$gap"
+        return 0
+    fi
+    if [ -n "$PLAN_INDEX" ]; then
+        printf '%s' "$body" | "$PLAN_BIN" --index "$PLAN_INDEX" msg send "$@" 2>&1 || true
+    else
+        printf '%s' "$body" | "$PLAN_BIN" msg send "$@" 2>&1 || true
+    fi
+}
+
 # ── JSON-RPC FRAMING (order 569) ────────────────────────────────────────────
 #
 # Every frame below is BUILT BY jq, never by string concatenation.
@@ -1280,7 +1359,11 @@ while IFS= read -r line; do
                 {"name":"spec_answer","description":"FAT SPEC EXPERT (L1 RAG, orders 547/548). Answer a cross-cutting question about the whole spec corpus (openspec/specs + cheatsheets + methodology, ~950k tokens — too big for any context) as the same CITED envelope {answer, citations[], freshness, confidence=retrieved}. Retrieves the top spec sections (cosine over a local embedding index), synthesizes prose grounded ONLY in them, and keeps ONLY citations the answer actually used — verify with `tillandsias-plan verify-answer`. Use for JOIN-across-specs questions the deterministic plan/methodology experts refuse; those single-node lookups still go to plan_answer/methodology_ask. Fail-soft: returns confidence=unsupported (never a guess) when the index or an inference endpoint is unavailable, or when nothing retrieved scores above the coverage floor (out-of-corpus refusal, orders 821-73es/920-pxg6; TILLANDSIAS_RETRIEVE_REFUSAL_FLOOR / TILLANDSIAS_RETRIEVE_MIN_SCORE tune it).","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"how does the forge stay isolated from the host and control outbound network access?\", \"which specs govern async inference launch?\", \"how do the browser isolation specs interact with the enclave CA?\""}},"required":["question"]}},
                 {"name":"plan_decompose","description":"ADVERSARIAL DECOMPOSITION (order 920-pxg6). Decompose a natural-language query into adversarial prompt variants for concurrent hallucination-reducing dispatch. Returns a JSON array of {prompt, kind} pairs. Consumer is unaware this happens — transparent black box.","inputSchema":{"type":"object","properties":{"query":{"type":"string","description":"The natural-language query to decompose, e.g. \"how does the plan expert work\""}},"required":["query"]}},
                 {"name":"plan_collect","description":"COLLECTION DEDUP (order 920-pxg6). Collect and deduplicate validated adversarial inference responses (first-wins seen-set dedup). Reads a JSON array of response objects from stdin, returns the collected envelope. All validated responses survive — no confidence threshold, no merging.","inputSchema":{"type":"object","properties":{"responses":{"type":"array","description":"Array of validated response objects with answer, citations, confidence, query_kind, source_prompt, why, affordances, why_not fields"}},"required":["responses"]}},
-                {"name":"expert_capability","description":"ORDER 569. Answer three questions about this session's expert WITHOUT reading source: what can I use RIGHT NOW, what would be available if this forge were RELAUNCHED (i.e. what the mounted checkout's sources provide), and is my current work therefore BLOCKED pending a relaunch. Returns the pinned machine line `expert_capability: now=<csv|none|stale-binary> after_relaunch=<csv|none> skew=<none|pending-build|relaunch-required|relaunch-regresses> blocked_capabilities=<csv|-> lost_on_relaunch=<csv|->` plus the one-sentence action. Read `skew` first: `pending-build` means WAIT AND RETRY (the async launch build will deliver it in this session); `relaunch-required` means retrying is FUTILE and you must relaunch the forge or rebuild by hand. Call this whenever an expert tool returns confidence=unsupported — it distinguishes 'the plan has no answer' from 'this binary cannot answer'.","inputSchema":{"type":"object","properties":{}}}
+                {"name":"expert_capability","description":"ORDER 569. Answer three questions about this session's expert WITHOUT reading source: what can I use RIGHT NOW, what would be available if this forge were RELAUNCHED (i.e. what the mounted checkout's sources provide), and is my current work therefore BLOCKED pending a relaunch. Returns the pinned machine line `expert_capability: now=<csv|none|stale-binary> after_relaunch=<csv|none> skew=<none|pending-build|relaunch-required|relaunch-regresses> blocked_capabilities=<csv|-> lost_on_relaunch=<csv|->` plus the one-sentence action. Read `skew` first: `pending-build` means WAIT AND RETRY (the async launch build will deliver it in this session); `relaunch-required` means retrying is FUTILE and you must relaunch the forge or rebuild by hand. Call this whenever an expert tool returns confidence=unsupported — it distinguishes 'the plan has no answer' from 'this binary cannot answer'.","inputSchema":{"type":"object","properties":{}}},
+                {"name":"msg_send","description":"FLEET MESSAGING (order 1506-ssb5). Send a message from this lane to one or more <host>/<lane> addresses or @groups, wrapping `tillandsias-plan msg send`. The body travels as a JSON-RPC argument, never as a CLI argv token — it is piped to the CLI on stdin. Prints the stable receipt id at once (`ok:msg:queued:<id>`); msg_status answers whether it was delivered. Refused, with why + remedy, when the body is over the 600-byte/8-line KIND-first budget, looks secret-shaped (a GitHub/Vault/AWS token, a private key, a bearer/JWT-shaped string, …), the TTL is out of 60..604800 bounds, or the reply target is unknown or a broadcast. THERE IS NO msg_ack TOOL: an ack means the destination mailbox durably accepted the message and is written by the infrastructure alone, never by an agent (operator ruling 2026-09-29) — read it with msg_status.","inputSchema":{"type":"object","properties":{"to":{"type":"array","items":{"type":"string","minLength":1},"description":"one or more <host>/<lane> addresses (ask the recipient for msg_recv's whoami line), or @group / @all-hosts / @<host>/*"},"body":{"type":"string","description":"KIND on line 1 (HEADS-UP, ACK, LANDED, BLOCKED, ASK, FYI), at most 8 lines and 600 bytes total"},"kind":{"type":"string","description":"must agree with the KIND on line 1 of body when both are given"},"row":{"type":"string","description":"a ledger order token this message is about, e.g. 1506-ssb5"},"in_reply_to":{"type":"string","description":"an id this lane received or sent; refused when that id named a broadcast"},"ttl":{"type":"integer","minimum":60,"maximum":604800,"description":"seconds before an unread message is dropped; default 86400"},"id":{"type":"string","minLength":1,"description":"an idempotent id; a repeated id is skip:msg:duplicate:<id> rather than a second send"}},"required":["to","body"],"additionalProperties":false}},
+                {"name":"msg_recv","description":"FLEET MESSAGING (order 1506-ssb5). List this lane's inbox (new then cur, ordered by from/seq), wrapping `tillandsias-plan msg recv`. Reading is LOCAL bookkeeping only and is NEVER reported back to the sender — there is no read receipt. `keep:true` leaves inbox/new untouched instead of moving read messages to cur (what a session start uses, so it can never silently consume mail); the default moves them. A seq gap since the last recv in this lane is printed with a `gap:` prefix. Messages past their TTL are dropped and not printed.","inputSchema":{"type":"object","properties":{"keep":{"type":"boolean","description":"leave inbox/new untouched instead of moving read messages to inbox/cur"},"wait":{"type":"integer","minimum":0,"maximum":3600,"description":"block up to this many seconds for a new message to arrive"}},"additionalProperties":false}},
+                {"name":"msg_list","description":"FLEET MESSAGING (order 1506-ssb5). List envelope headers in this lane's inbox, outbox and/or dead boxes (id, from, to, kind, ts), wrapping `tillandsias-plan msg list`. Unlike msg_recv this never moves anything and never drops expired messages.","inputSchema":{"type":"object","properties":{"box":{"type":"string","enum":["inbox","outbox","dead"],"description":"omit to list all three"}},"additionalProperties":false}},
+                {"name":"msg_status","description":"FLEET MESSAGING (order 1506-ssb5). Read one message's receipt by the id msg_send returned, wrapping `tillandsias-plan msg status`: `pending` | `acked:<host>/<lane>@<ts>` then `via:<rung>` | `undelivered:<reason>`; a broadcast prints `broadcast:<n>` then one line per recipient. THERE IS NO msg_ack TOOL — this is the only way to learn whether a send was delivered; the ack itself is written by the infrastructure, never by an agent (operator ruling 2026-09-29).","inputSchema":{"type":"object","properties":{"id":{"type":"string","minLength":1,"description":"the id msg_send printed after ok:msg:queued:"}},"required":["id"],"additionalProperties":false}}
 ]
 TOOLS_JSON
             )"
@@ -1516,6 +1599,99 @@ TOOLS_JSON
                     # mounted checkout, and letting a caller parameterise it
                     # would invite asking about a tree nobody is running.
                     result=$(expert_capability_report)
+                    ;;
+                "msg_send")
+                    # Order 1506-ssb5. Strict schema (additionalProperties
+                    # false via the keys check) so a typo'd field name is a
+                    # protocol error, not a silently-ignored argument.
+                    if ! printf '%s' "$args" | jq -e '
+                        type == "object"
+                        and ([keys[] | select(
+                            . != "to" and . != "body" and . != "kind"
+                            and . != "row" and . != "in_reply_to"
+                            and . != "ttl" and . != "id"
+                        )] | length == 0)
+                        and ((.to | type) == "array") and ((.to | length) > 0)
+                        and (all(.to[]; type == "string" and length > 0))
+                        and ((.body | type) == "string")
+                        and ((has("kind") | not) or ((.kind|type)=="string" and (.kind|length)>0))
+                        and ((has("row") | not) or ((.row|type)=="string" and (.row|length)>0))
+                        and ((has("in_reply_to") | not) or ((.in_reply_to|type)=="string" and (.in_reply_to|length)>0))
+                        and ((has("id") | not) or ((.id|type)=="string" and (.id|length)>0))
+                        and ((has("ttl") | not) or ((.ttl|type)=="number" and (.ttl|floor)==.ttl))
+                    ' >/dev/null 2>&1; then
+                        invalid_params=1
+                        invalid_message="Invalid msg_send arguments: 'to' (non-empty string array) and 'body' (string) are required; optional kind/row/in_reply_to/id are non-empty strings and ttl is an integer"
+                    else
+                        _ms_args=()
+                        while IFS= read -r _ms_to; do
+                            [ -n "$_ms_to" ] && _ms_args+=(--to "$_ms_to")
+                        done < <(printf '%s' "$args" | jq -r '.to[]')
+                        _ms_kind=$(printf '%s' "$args" | jq -r '.kind // empty')
+                        _ms_row=$(printf '%s' "$args" | jq -r '.row // empty')
+                        _ms_irt=$(printf '%s' "$args" | jq -r '.in_reply_to // empty')
+                        _ms_ttl=$(printf '%s' "$args" | jq -r '.ttl // empty')
+                        _ms_id=$(printf '%s' "$args" | jq -r '.id // empty')
+                        [ -n "$_ms_kind" ] && _ms_args+=(--kind "$_ms_kind")
+                        [ -n "$_ms_row" ] && _ms_args+=(--row "$_ms_row")
+                        [ -n "$_ms_irt" ] && _ms_args+=(--in-reply-to "$_ms_irt")
+                        [ -n "$_ms_ttl" ] && _ms_args+=(--ttl "$_ms_ttl")
+                        [ -n "$_ms_id" ] && _ms_args+=(--id "$_ms_id")
+                        # The body itself is the ONE value here that must never
+                        # touch argv; msg_send_tool pipes it to the CLI's stdin.
+                        _ms_body=$(printf '%s' "$args" | jq -r '.body')
+                        result=$(msg_send_tool "$_ms_body" "${_ms_args[@]}")
+                    fi
+                    ;;
+                "msg_recv")
+                    if ! printf '%s' "$args" | jq -e '
+                        type == "object"
+                        and ([keys[] | select(. != "keep" and . != "wait")] | length == 0)
+                        and ((has("keep") | not) or (.keep|type)=="boolean")
+                        and ((has("wait") | not) or (
+                            (.wait|type)=="number" and (.wait|floor)==.wait and .wait>=0
+                        ))
+                    ' >/dev/null 2>&1; then
+                        invalid_params=1
+                        invalid_message="Invalid msg_recv arguments: optional boolean keep and non-negative integer wait"
+                    else
+                        _mr_args=()
+                        _mr_keep=$(printf '%s' "$args" | jq -r '.keep // false')
+                        [ "$_mr_keep" = "true" ] && _mr_args+=(--keep)
+                        _mr_wait=$(printf '%s' "$args" | jq -r '.wait // empty')
+                        [ -n "$_mr_wait" ] && _mr_args+=(--wait "$_mr_wait")
+                        result=$(msg_query recv "${_mr_args[@]}")
+                    fi
+                    ;;
+                "msg_list")
+                    if ! printf '%s' "$args" | jq -e '
+                        type == "object"
+                        and ([keys[] | select(. != "box")] | length == 0)
+                        and ((has("box") | not) or (.box=="inbox" or .box=="outbox" or .box=="dead"))
+                    ' >/dev/null 2>&1; then
+                        invalid_params=1
+                        invalid_message="Invalid msg_list arguments: optional box is one of inbox, outbox, dead"
+                    else
+                        _ml_box=$(printf '%s' "$args" | jq -r '.box // empty')
+                        if [ -n "$_ml_box" ]; then
+                            result=$(msg_query list --box "$_ml_box")
+                        else
+                            result=$(msg_query list)
+                        fi
+                    fi
+                    ;;
+                "msg_status")
+                    if ! printf '%s' "$args" | jq -e '
+                        type == "object"
+                        and ([keys[] | select(. != "id")] | length == 0)
+                        and ((.id | type) == "string") and ((.id | length) > 0)
+                    ' >/dev/null 2>&1; then
+                        invalid_params=1
+                        invalid_message="Invalid msg_status arguments: expected exactly one non-empty string field 'id'"
+                    else
+                        _mst_id=$(printf '%s' "$args" | jq -r '.id')
+                        result=$(msg_query status "$_mst_id")
+                    fi
                     ;;
                 *)
                     # An unhandled tool name is a PROTOCOL error, not a successful

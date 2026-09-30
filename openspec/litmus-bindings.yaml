@@ -236,6 +236,9 @@ specs:
   - litmus:fleet-msg-store-shape
   # 1506-q7ab. Same fallback: the same-host mover (--msg-serve).
   - litmus:fleet-msg-same-host
+  # 1506-ssb5. Same fallback: the forge-plan MCP msg_* tools and the Codex /
+  # OpenCode entrypoints' pending-mail-at-session-start line.
+  - litmus:fleet-msg-mcp
   coverage_ratio: 75
   last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher
