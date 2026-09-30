@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-forge-entrypoint-sources-agent-profile-from-a-path-the-image-never-installs-so-no-forge-has-run-it-since-2026-05-14
+    field: status
+    value: in_progress
+    ts: "2026-09-30T18:05:29Z"
+    host: lenovinha
+
+events:
+  - packet_id: every-forge-entrypoint-sources-agent-profile-from-a-path-the-image-never-installs-so-no-forge-has-run-it-since-2026-05-14
+    event:
+      type: note
+      ts: "2026-09-30T18:05:29Z"
+      host: lenovinha
+      summary: |-
+        claimed by linux-lenovinha-claude-20260930t180529z
