@@ -5053,6 +5053,7 @@ quietly.
 ## Skills
 
 Available skills are under \`.claude/skills/\` (Claude Code), \`.codex/skills/\` (Codex), \`.gemini/skills/\` (Antigravity), or \`.opencode/skills/\` (OpenCode).
+Skills come from two places: the project checkout (the directories above, current with the branch you cloned) and, for every project, the generic ones such as \`/project-discipline\`, which agent-profile.sh links from \`/opt/skills\` into your user skill directory (\`~/.claude/skills/\` and siblings). \`/opt/skills\` is frozen at image build; to change a skill, edit the checkout copy, never \`/opt/skills\`.
 Key skills: \`/forge-quick-intro\`, \`meta-orchestration\`, \`advance-work-from-plan\`, \`merge-to-main-and-release\`.
 
 ## Tooling actually present here — check this before reaching for something
