@@ -176,6 +176,7 @@ specs:
   - litmus:land-verdict-through-a-pipe
   - litmus:deciders-within-door-deadline
   - litmus:groundtruth-regime-fails-closed
+  - litmus:spec-script-paths
   - litmus:smoke-consecutive-lanes-shape
   - litmus:github-token-auto-rotation
   - litmus:mirror-upstream-auth-overwrite
