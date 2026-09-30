@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-must-be-rock-solid-at-atomic-forward-upstream-and-must-refuse-to-advertise-itself-when-broken-so-agents-stop-instead-of-trusting-a-mirror-that-is-silently-failing
+    event:
+      type: progress
+      ts: "2026-09-30T06:30:09Z"
+      agent_id: linux-lenovinha-claude-20260930t063010z
+      host: lenovinha
+      summary: |
+        STEP 2 SPEC, ACCEPTED by the macuahuitl coordinator (2026-09-30), to implement next:
+        - BROKEN: after THIS tick's fetch has refreshed refs/remotes/origin/*, a head still ahead of or absent from upstream, AND a bounded relay retry for it failed: N=3 attempts inside ONE tick, backoff 2 s / 8 s / 30 s (40 s total).
+        - TICK MEASURED on the live lenovinha mirror: MIRROR_RECONCILE_INTERVAL is unset, so the entrypoint default of 120 s applies. The 40 s of backoff fits inside one tick with 80 s to spare, so no scaling is needed; the implementation scales the backoff down if a host sets the interval below about 60 s.
+        - CLASSES by failing layer: credential, transport, rejection. HYSTERESIS: credential or transport must be broken on 2 CONSECUTIVE ticks before the advertisement is withdrawn (step 3); one ok tick restores it.
+        - REJECTION never counts toward broken. The SAME ref rejected on K=3 consecutive ticks publishes loudly as its own class: refs/tillandsias/relay-state/.../stuck-ref/<ref-hash>/<epoch>.
+        - NEGATIVE CONTROL in the fixture: a head ahead of a STALE tracking ref, before the fetch (the linux-next measurement), must NOT be broken.
