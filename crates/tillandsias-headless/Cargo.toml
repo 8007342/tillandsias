@@ -23,6 +23,9 @@ tillandsias-progress-tty = { path = "../tillandsias-progress-tty" }
 # reached a dispatcher that had never heard of browser.*.
 tillandsias-browser-mcp = { path = "../tillandsias-browser-mcp" }
 tillandsias-logging = { path = "../tillandsias-logging" }
+# Order 1506-q7ab: the fleet message bus's lane store and body checks, the same
+# code the `tillandsias-plan msg` CLI links, for the resident `--msg-serve`.
+tillandsias-msg = { path = "../tillandsias-msg" }
 tillandsias-metrics = { path = "../tillandsias-metrics" }
 tillandsias-otp = { path = "../tillandsias-otp" }
 tillandsias-podman = { path = "../tillandsias-podman" }

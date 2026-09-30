@@ -1,13 +1,15 @@
 // @trace order:1506-nvqt, openspec/changes/fleet-messaging-poc/specs/fleet-messaging/spec.md
 //
-// msg_store — the LOCAL half of the fleet message bus (1506-nvqt): a
-// Maildir-shaped lane store and the `tillandsias-plan msg` verbs over it.
+// msg_store — the `tillandsias-plan msg` verbs (1506-nvqt) over the lane store.
 //
 // WHAT THIS MODULE IS NOT. It opens no socket and moves nothing between lanes:
-// delivery is the resident mover (1506-q7ab) on one host and the LAN daemon
-// (1506-7tq4) across hosts. The only thing here that the infrastructure calls
-// and no verb reaches is [`mailbox_accept`] + [`record_ack`]: the durable
-// (fsync'd) write into a destination mailbox and the ack that may follow it.
+// delivery is the resident mover (`tillandsias --msg-serve`, 1506-q7ab) on one
+// host and the LAN daemon (1506-7tq4) across hosts. The store itself — the
+// envelope and receipt formats and the infrastructure's writes
+// ([`mailbox_accept`], [`record_ack`], [`record_undelivered`], the TTL sweep) —
+// lives in the `tillandsias-msg` crate (moved there by 1506-q7ab so the mover
+// can link it without the plan engine) and is re-exported here; no verb here
+// reaches mailbox_accept or record_ack.
 //
 // OPERATOR RULINGS 2026-09-29 (plan fragment ...-1506-3xu7-ack-semantics-ruling):
 //   * ACK means DELIVERED — the destination mailbox durably accepted the
@@ -21,367 +23,23 @@
 //   * Broadcasts ack per recipient and are never replied to.
 //   * At-least-once with idempotent ids, deduplicated at the mailbox.
 //
-// LAYOUT (design Decision 2), per lane:
-//   <lane>/outbox/{tmp,new}  inbox/{tmp,new,cur}  dead/  receipts/
-//   <lane>/seq          the sender's per-destination counters (YAML map)
-//   <lane>/seen         the mailbox's (from, id, expires) dedupe set
-//   <lane>/recv-state   recv's local gap bookkeeping (never reported)
-// Every write is tmp → fsync → rename → fsync(dir).
-//
 // COORDINATOR DEFAULTS (reversible; operator questions 2 and 3 are open): one
 // bare-metal mailbox per host, lane `host` (sessions pass `--lane host`), and
 // one lane per forge `<project>-<instance>`; no network discovery at all.
 
 use crate::msg_shape as shape;
-use chrono::{DateTime, NaiveDateTime, SecondsFormat, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::fs::{self, File};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-
-/// Where a forge's own lane directory is bind-mounted (1506-q7ab).
-pub const FORGE_LANE_MOUNT: &str = "/run/host/tillandsias-msg";
-
-// ── envelope and receipt ─────────────────────────────────────────────────────
-
-/// One message. On disk as YAML so a human can read a mailbox. In an outbox,
-/// `to` lists every recipient of the send; the copy a mailbox holds carries
-/// exactly one.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct Envelope {
-    pub id: String,
-    pub from: String,
-    pub to: Vec<String>,
-    #[serde(default)]
-    pub from_agent: String,
-    /// Per (sender lane, destination) counter for a unicast; 0 on a broadcast,
-    /// which is unsequenced (no gap can be judged across differing groups).
-    #[serde(default)]
-    pub seq: u64,
-    pub ts: String,
-    pub ttl_s: u64,
-    #[serde(default)]
-    pub broadcast: bool,
-    pub kind: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub row: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub in_reply_to: Option<String>,
-    pub body: String,
-}
-
-impl Envelope {
-    pub fn sent_at(&self) -> Option<DateTime<Utc>> {
-        parse_ts(&self.ts)
-    }
-
-    /// True once `now` is at or past `ts + ttl_s`. An unparseable `ts` is not
-    /// judged here; callers skip such a file rather than guess its age.
-    pub fn expired(&self, now: DateTime<Utc>) -> bool {
-        self.sent_at()
-            .is_some_and(|t| now >= t + chrono::Duration::seconds(self.ttl_s as i64))
-    }
-}
-
-/// One recipient's delivery state, written by `send` as `pending` and changed
-/// only by the infrastructure ([`record_ack`], [`record_undelivered`]) or by
-/// the TTL sweep.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct RecipientState {
-    pub to: String,
-    /// `pending` | `acked` | `undelivered`
-    pub state: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub at: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub via: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-}
-
-/// `receipts/<id>` in the SENDER's lane.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct Receipt {
-    pub id: String,
-    pub from: String,
-    pub ts: String,
-    pub ttl_s: u64,
-    pub broadcast: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub row: Option<String>,
-    pub recipients: Vec<RecipientState>,
-}
-
-impl Receipt {
-    /// The latest terminal time when EVERY recipient is terminal, else None.
-    fn terminal_at(&self) -> Option<DateTime<Utc>> {
-        let mut last: Option<DateTime<Utc>> = None;
-        for r in &self.recipients {
-            if r.state == "pending" {
-                return None;
-            }
-            let at = r.at.as_deref().and_then(parse_ts)?;
-            last = Some(last.map_or(at, |l| l.max(at)));
-        }
-        last
-    }
-
-    /// `status` output lines, exactly the grammar of the spec.
-    pub fn status_lines(&self) -> Vec<String> {
-        let one = |r: &RecipientState, bcast: bool| -> Vec<String> {
-            match r.state.as_str() {
-                "acked" => {
-                    let mut v = vec![format!("acked:{}@{}", r.to, r.at.as_deref().unwrap_or("?"))];
-                    if !bcast && let Some(via) = &r.via {
-                        v.push(format!("via:{via}"));
-                    }
-                    v
-                }
-                "undelivered" => {
-                    let reason = r.reason.as_deref().unwrap_or("unknown");
-                    if bcast {
-                        vec![format!("undelivered:{reason}:{}", r.to)]
-                    } else {
-                        vec![format!("undelivered:{reason}")]
-                    }
-                }
-                _ if bcast => vec![format!("pending:{}", r.to)],
-                _ => vec!["pending".to_string()],
-            }
-        };
-        if !self.broadcast && self.recipients.len() == 1 {
-            return one(&self.recipients[0], false);
-        }
-        let mut out = vec![format!("broadcast:{}", self.recipients.len())];
-        for r in &self.recipients {
-            out.extend(one(r, true));
-        }
-        out
-    }
-}
-
-// ── time, ids, tokens ────────────────────────────────────────────────────────
-
-pub fn fmt_ts(t: DateTime<Utc>) -> String {
-    t.to_rfc3339_opts(SecondsFormat::Secs, true)
-}
-
-pub fn parse_ts(s: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(s)
-        .ok()
-        .map(|t| t.with_timezone(&Utc))
-}
-
-/// `[a-z0-9][a-z0-9-]*`, at most 63 bytes: a host or a lane label.
-pub fn valid_label(s: &str) -> bool {
-    !s.is_empty()
-        && s.len() <= 63
-        && s.bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-        && !s.starts_with('-')
-}
-
-/// `<host>/<lane>`.
-pub fn valid_address(s: &str) -> bool {
-    s.split_once('/')
-        .is_some_and(|(h, l)| valid_label(h) && valid_label(l))
-}
-
-/// A receipt id: `m-<utc>-<8 hex>` or a caller's `--id` of the same alphabet.
-pub fn valid_id(s: &str) -> bool {
-    !s.is_empty()
-        && s.len() <= 80
-        && s.bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.')
-        && !s.starts_with('.')
-        && !s.starts_with('-')
-}
-
-fn valid_order(s: &str) -> bool {
-    let Some((n, t)) = s.split_once('-') else {
-        return false;
-    };
-    (3..=5).contains(&n.len())
-        && n.bytes().all(|b| b.is_ascii_digit())
-        && t.len() == 4
-        && t.bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
-}
-
-fn random_hex8() -> String {
-    let mut buf = [0u8; 4];
-    let ok = File::open("/dev/urandom")
-        .and_then(|mut f| f.read_exact(&mut buf))
-        .is_ok();
-    if !ok {
-        let seed = format!(
-            "{:?}{}{:?}",
-            std::time::SystemTime::now(),
-            std::process::id(),
-            std::thread::current().id()
-        );
-        let h = crate::host_verbs::sha256_hex(seed.as_bytes());
-        return h[..8].to_string();
-    }
-    buf.iter().map(|b| format!("{b:02x}")).collect()
-}
-
-pub fn new_id(now: DateTime<Utc>) -> String {
-    format!("m-{}-{}", now.format("%Y%m%dt%H%M%Sz"), random_hex8())
-}
-
-/// The send time a generated id encodes, if it is one.
-fn id_time(id: &str) -> Option<DateTime<Utc>> {
-    let stamp = id.strip_prefix("m-")?.get(..16)?;
-    NaiveDateTime::parse_from_str(stamp, "%Y%m%dt%H%M%Sz")
-        .ok()
-        .map(|n| n.and_utc())
-}
-
-/// Lowercase, domain-stripped, `[a-z0-9-]` only: `agent-identity.sh node-name`'s rule.
-pub fn sanitize_host(raw: &str) -> String {
-    let short = raw.split('.').next().unwrap_or("").to_ascii_lowercase();
-    let mut out = String::new();
-    for c in short.chars() {
-        let c = if c.is_ascii_lowercase() || c.is_ascii_digit() {
-            c
-        } else {
-            '-'
-        };
-        if !(c == '-' && out.ends_with('-')) {
-            out.push(c);
-        }
-    }
-    let out = out.trim_matches('-').to_string();
-    if out.is_empty() {
-        "unknown-host".into()
-    } else {
-        out
-    }
-}
-
-// ── durable writes ───────────────────────────────────────────────────────────
-
-fn sync_dir(dir: &Path) {
-    #[cfg(unix)]
-    if let Ok(f) = File::open(dir) {
-        let _ = f.sync_all();
-    }
-    #[cfg(not(unix))]
-    let _ = dir;
-}
-
-/// tmp → fsync → rename → fsync(dir). `tmp_dir` and `dir` share a filesystem.
-pub fn write_durable(tmp_dir: &Path, dir: &Path, name: &str, bytes: &[u8]) -> io::Result<PathBuf> {
-    fs::create_dir_all(tmp_dir)?;
-    fs::create_dir_all(dir)?;
-    let tmp = tmp_dir.join(format!(".{name}.{}.{}", std::process::id(), random_hex8()));
-    {
-        let mut f = OpenOptions::new().write(true).create_new(true).open(&tmp)?;
-        f.write_all(bytes)?;
-        f.sync_all()?;
-    }
-    let dst = dir.join(name);
-    if let Err(e) = fs::rename(&tmp, &dst) {
-        let _ = fs::remove_file(&tmp);
-        return Err(e);
-    }
-    sync_dir(dir);
-    Ok(dst)
-}
-
-pub fn ensure_lane(lane_dir: &Path) -> io::Result<()> {
-    for sub in [
-        "outbox/tmp",
-        "outbox/new",
-        "inbox/tmp",
-        "inbox/new",
-        "inbox/cur",
-        "dead",
-        "receipts",
-    ] {
-        fs::create_dir_all(lane_dir.join(sub))?;
-    }
-    Ok(())
-}
-
-fn read_yaml<T: for<'de> Deserialize<'de>>(p: &Path) -> Option<T> {
-    serde_yaml::from_str(&fs::read_to_string(p).ok()?).ok()
-}
-
-pub fn read_receipt(lane_dir: &Path, id: &str) -> Option<Receipt> {
-    read_yaml(&lane_dir.join("receipts").join(id))
-}
-
-fn write_receipt(lane_dir: &Path, r: &Receipt) -> io::Result<()> {
-    let y = serde_yaml::to_string(r).map_err(io::Error::other)?;
-    write_durable(
-        &lane_dir.join("outbox/tmp"),
-        &lane_dir.join("receipts"),
-        &r.id,
-        y.as_bytes(),
-    )
-    .map(|_| ())
-}
-
-/// Files of a box directory, dot-files (in-flight tmp names) excluded.
-fn box_files(dir: &Path) -> Vec<PathBuf> {
-    let mut v: Vec<PathBuf> = fs::read_dir(dir)
-        .map(|rd| {
-            rd.filter_map(Result::ok)
-                .map(|e| e.path())
-                .filter(|p| {
-                    p.is_file()
-                        && !p
-                            .file_name()
-                            .and_then(|n| n.to_str())
-                            .is_some_and(|n| n.starts_with('.'))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    v.sort();
-    v
-}
-
-/// A tiny exclusive lock for read-modify-write of a lane file (`seq`, `seen`).
-struct LaneLock(PathBuf);
-impl LaneLock {
-    fn take(path: PathBuf) -> io::Result<Self> {
-        for _ in 0..200 {
-            match OpenOptions::new().write(true).create_new(true).open(&path) {
-                Ok(_) => return Ok(Self(path)),
-                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-                    // A lock older than 10 s belongs to a dead process.
-                    let stale = fs::metadata(&path)
-                        .and_then(|m| m.modified())
-                        .ok()
-                        .and_then(|m| m.elapsed().ok())
-                        .is_some_and(|age| age.as_secs() > 10);
-                    if stale {
-                        let _ = fs::remove_file(&path);
-                    } else {
-                        std::thread::sleep(std::time::Duration::from_millis(10));
-                    }
-                }
-                Err(e) => return Err(e),
-            }
-        }
-        Err(io::Error::new(
-            io::ErrorKind::WouldBlock,
-            format!("lock busy: {}", path.display()),
-        ))
-    }
-}
-impl Drop for LaneLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
-    }
-}
+pub use tillandsias_msg::lanefs::Lane;
+pub use tillandsias_msg::store::*;
 
 fn next_seq(lane_dir: &Path, to: &str) -> io::Result<u64> {
-    let _lock = LaneLock::take(lane_dir.join(".seq.lock"))?;
+    let lane = Lane::open(lane_dir)?;
+    let _lock = LaneLock::take(&lane, ".seq.lock")?;
     let path = lane_dir.join("seq");
     let mut map: BTreeMap<String, u64> = read_yaml(&path).unwrap_or_default();
     let n = map.get(to).copied().unwrap_or(0) + 1;
@@ -389,118 +47,6 @@ fn next_seq(lane_dir: &Path, to: &str) -> io::Result<u64> {
     let y = serde_yaml::to_string(&map).map_err(io::Error::other)?;
     write_durable(&lane_dir.join("outbox/tmp"), lane_dir, "seq", y.as_bytes())?;
     Ok(n)
-}
-
-// ── the infrastructure side (called by the mover / daemon, never by a verb) ──
-
-/// What a mailbox did with an arriving copy.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Accept {
-    /// Written into `inbox/new` and fsync'd: the caller may now ack.
-    Accepted,
-    /// `(from, id)` was already seen: nothing written, and the caller acks
-    /// AGAIN (at-least-once, deduplicated at the mailbox).
-    Duplicate,
-    /// Past its TTL on arrival: nothing written, no ack.
-    Expired,
-}
-
-/// The mailbox's durable acceptance of one copy (`to` = this mailbox). This is
-/// the fact an ack reports; it is exported for 1506-q7ab / 1506-7tq4 and no
-/// `msg` verb calls it.
-pub fn mailbox_accept(
-    dest_lane_dir: &Path,
-    copy: &Envelope,
-    now: DateTime<Utc>,
-) -> io::Result<Accept> {
-    if copy.expired(now) {
-        return Ok(Accept::Expired);
-    }
-    ensure_lane(dest_lane_dir)?;
-    let _lock = LaneLock::take(dest_lane_dir.join(".seen.lock"))?;
-    let seen_path = dest_lane_dir.join("seen");
-    let seen = fs::read_to_string(&seen_path).unwrap_or_default();
-    let key = format!("{} {} ", copy.from, copy.id);
-    if seen.lines().any(|l| l.starts_with(&key)) {
-        return Ok(Accept::Duplicate);
-    }
-    let y = serde_yaml::to_string(copy).map_err(io::Error::other)?;
-    write_durable(
-        &dest_lane_dir.join("inbox/tmp"),
-        &dest_lane_dir.join("inbox/new"),
-        &copy.id,
-        y.as_bytes(),
-    )?;
-    let expires = copy
-        .sent_at()
-        .map(|t| t.timestamp() + copy.ttl_s as i64)
-        .unwrap_or(0);
-    let mut f = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&seen_path)?;
-    writeln!(f, "{key}{expires}")?;
-    f.sync_all()?;
-    sync_dir(dest_lane_dir);
-    Ok(Accept::Accepted)
-}
-
-fn set_recipient(
-    sender_lane_dir: &Path,
-    id: &str,
-    mailbox: &str,
-    update: impl Fn(&mut RecipientState),
-) -> io::Result<()> {
-    let mut r = read_receipt(sender_lane_dir, id)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, format!("no receipt for {id}")))?;
-    match r.recipients.iter_mut().find(|x| x.to == mailbox) {
-        Some(x) => update(x),
-        None => {
-            // A wildcard group (`@<host>/*`) is resolved at delivery time: the
-            // concrete lane joins the receipt when the infrastructure reports it.
-            let mut x = RecipientState {
-                to: mailbox.to_string(),
-                state: "pending".into(),
-                at: None,
-                via: None,
-                reason: None,
-            };
-            update(&mut x);
-            r.recipients.push(x);
-        }
-    }
-    write_receipt(sender_lane_dir, &r)
-}
-
-/// The ack: `mailbox` durably accepted `id`. Infrastructure only.
-pub fn record_ack(
-    sender_lane_dir: &Path,
-    id: &str,
-    mailbox: &str,
-    at: DateTime<Utc>,
-    via: &str,
-) -> io::Result<()> {
-    set_recipient(sender_lane_dir, id, mailbox, |x| {
-        x.state = "acked".into();
-        x.at = Some(fmt_ts(at));
-        x.via = Some(via.to_string());
-        x.reason = None;
-    })
-}
-
-/// A terminal failure for one recipient (`expired`, `refused:<verdict>`).
-pub fn record_undelivered(
-    sender_lane_dir: &Path,
-    id: &str,
-    mailbox: &str,
-    reason: &str,
-    at: DateTime<Utc>,
-) -> io::Result<()> {
-    set_recipient(sender_lane_dir, id, mailbox, |x| {
-        x.state = "undelivered".into();
-        x.at = Some(fmt_ts(at));
-        x.reason = Some(reason.to_string());
-    })
 }
 
 // ── the CLI ──────────────────────────────────────────────────────────────────
@@ -525,6 +71,9 @@ pub struct MsgEnv {
     pub agent_id: Option<String>,
     /// `plan/fleet` of the checkout (peers/ and groups.yaml).
     pub fleet_dir: PathBuf,
+    /// The mover's wake socket (TILLANDSIAS_MSG_WAKE_SOCK, else
+    /// `$XDG_RUNTIME_DIR/tillandsias/msg.sock`), read by `recv --wait`.
+    pub wake_sock: Option<PathBuf>,
     /// TILLANDSIAS_MSG_SHAPE_LAX=1 — a fixture seam that disables the secret
     /// check. Honoured ONLY with an explicit TILLANDSIAS_MSG_ROOT, so it can
     /// never switch the check off for a real store; the mover (1506-q7ab)
@@ -535,7 +84,6 @@ pub struct MsgEnv {
 impl MsgEnv {
     pub fn from_process(fleet_dir: PathBuf) -> Self {
         let var = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
-        let host = var("TILLANDSIAS_MSG_HOST").unwrap_or_else(crate::command_policy::this_host);
         Self {
             root_override: var("TILLANDSIAS_MSG_ROOT").map(PathBuf::from),
             lane_dir_override: var("TILLANDSIAS_MSG_LANE_DIR").map(PathBuf::from),
@@ -545,11 +93,17 @@ impl MsgEnv {
             xdg_state_home: var("XDG_STATE_HOME").map(PathBuf::from),
             home: var("HOME").map(PathBuf::from),
             lane: var("TILLANDSIAS_MSG_LANE"),
-            host: sanitize_host(&host),
+            // TILLANDSIAS_MSG_HOST, else gethostname: the rule the mover and
+            // the forge launcher use, so all three name this host alike.
+            host: local_host_label(),
             agent_id: var("TILLANDSIAS_AGENT_ID"),
             fleet_dir: var("TILLANDSIAS_MSG_FLEET_DIR")
                 .map(PathBuf::from)
                 .unwrap_or(fleet_dir),
+            wake_sock: wake_socket_path(
+                var("TILLANDSIAS_MSG_WAKE_SOCK").map(PathBuf::from),
+                var("XDG_RUNTIME_DIR").map(PathBuf::from),
+            ),
             shape_lax: var("TILLANDSIAS_MSG_SHAPE_LAX").as_deref() == Some("1"),
         }
     }
@@ -567,13 +121,9 @@ impl MsgEnv {
         {
             return m.clone();
         }
-        let state = self.xdg_state_home.clone().unwrap_or_else(|| {
-            self.home
-                .clone()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".local/state")
-        });
-        state.join("tillandsias/msg/lanes").join(lane)
+        default_store_root(self.xdg_state_home.clone(), self.home.clone())
+            .join("lanes")
+            .join(lane)
     }
 
     fn lax(&self) -> bool {
@@ -1133,26 +683,6 @@ struct RecvState {
     #[serde(default)]
     gaps: BTreeSet<String>,
 }
-
-/// Drop every inbox message past its TTL, read or unread. Returns the count.
-fn sweep_inbox(lane_dir: &Path, now: DateTime<Utc>) -> usize {
-    let mut n = 0;
-    for sub in ["inbox/new", "inbox/cur"] {
-        for p in box_files(&lane_dir.join(sub)) {
-            if read_yaml::<Envelope>(&p).is_some_and(|e| e.expired(now))
-                && fs::remove_file(&p).is_ok()
-            {
-                n += 1;
-            }
-        }
-    }
-    if n > 0 {
-        sync_dir(&lane_dir.join("inbox/new"));
-        sync_dir(&lane_dir.join("inbox/cur"));
-    }
-    n
-}
-
 fn recv(env: &MsgEnv, f: &Flags, now: DateTime<Utc>) -> Outcome {
     let lane = match resolve_lane(env, f) {
         Ok(l) => l,
@@ -1170,13 +700,8 @@ fn recv(env: &MsgEnv, f: &Flags, now: DateTime<Utc>) -> Outcome {
                 "pass --wait <seconds> (at most 3600), or omit it",
             );
         };
-        // Filesystem poll; the wake socket is 1506-q7ab's.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs.min(3600));
-        while box_files(&lane_dir.join("inbox/new")).is_empty()
-            && std::time::Instant::now() < deadline
-        {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-        }
+        wait_for_mail(&lane_dir, env.wake_sock.as_deref(), deadline);
     }
     sweep_inbox(&lane_dir, now);
     let mut msgs = inbox_envelopes(&lane_dir, now);
@@ -1361,86 +886,6 @@ fn status(env: &MsgEnv, f: &Flags, now: DateTime<Utc>) -> Outcome {
             }
         }
     }
-}
-
-/// Counts of what one sweep removed or expired.
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct Swept {
-    pub inbox: usize,
-    pub outbox_expired: usize,
-    pub dead: usize,
-    pub receipts: usize,
-}
-
-/// The TTL sweep of one lane: expired inbox copies dropped; expired outbox
-/// entries to `dead/` with `undelivered:expired` for every still-pending
-/// recipient; dead entries and terminal receipts dropped after the retention.
-pub fn sweep_lane(lane_dir: &Path, now: DateTime<Utc>) -> io::Result<Swept> {
-    ensure_lane(lane_dir)?;
-    let mut s = Swept {
-        inbox: sweep_inbox(lane_dir, now),
-        ..Swept::default()
-    };
-    let retention = chrono::Duration::seconds(shape::RECEIPT_RETENTION_S as i64);
-    for p in box_files(&lane_dir.join("outbox/new")) {
-        let Some(e) = read_yaml::<Envelope>(&p) else {
-            continue;
-        };
-        if !e.expired(now) {
-            continue;
-        }
-        fs::rename(&p, lane_dir.join("dead").join(&e.id))?;
-        if let Some(r) = read_receipt(lane_dir, &e.id) {
-            for x in r.recipients.iter().filter(|x| x.state == "pending") {
-                record_undelivered(lane_dir, &e.id, &x.to, "expired", now)?;
-            }
-        }
-        s.outbox_expired += 1;
-    }
-    sync_dir(&lane_dir.join("outbox/new"));
-    for p in box_files(&lane_dir.join("dead")) {
-        let old = read_yaml::<Envelope>(&p).is_some_and(|e| {
-            e.sent_at()
-                .is_some_and(|t| now >= t + chrono::Duration::seconds(e.ttl_s as i64) + retention)
-        });
-        if old && fs::remove_file(&p).is_ok() {
-            s.dead += 1;
-        }
-    }
-    for p in box_files(&lane_dir.join("receipts")) {
-        let old = read_yaml::<Receipt>(&p)
-            .and_then(|r| r.terminal_at())
-            .is_some_and(|t| now >= t + retention);
-        if old && fs::remove_file(&p).is_ok() {
-            s.receipts += 1;
-        }
-    }
-    // Prune seen entries whose message has expired.
-    let seen_path = lane_dir.join("seen");
-    if let Ok(seen) = fs::read_to_string(&seen_path) {
-        let keep: Vec<&str> = seen
-            .lines()
-            .filter(|l| {
-                l.rsplit(' ')
-                    .next()
-                    .and_then(|x| x.parse::<i64>().ok())
-                    .is_none_or(|exp| exp > now.timestamp())
-            })
-            .collect();
-        if keep.len() != seen.lines().count() {
-            let mut body = keep.join("\n");
-            if !body.is_empty() {
-                body.push('\n');
-            }
-            write_durable(
-                &lane_dir.join("inbox/tmp"),
-                lane_dir,
-                "seen",
-                body.as_bytes(),
-            )?;
-        }
-    }
-    Ok(s)
 }
 
 fn gc_verb(env: &MsgEnv, f: &Flags, now: DateTime<Utc>) -> Outcome {

@@ -1,10 +1,12 @@
 // @trace order:1506-nvqt, openspec/changes/fleet-messaging-poc/specs/fleet-messaging/spec.md
 //
-// msg_shape — the PURE half of the fleet message bus (1506-nvqt): the body
+// @trace order:1506-q7ab (moved here from tillandsias-plan so the mover can link it)
+//
+// shape — the PURE half of the fleet message bus (1506-nvqt): the body
 // budget, the secret-shaped refusal and the TTL bounds. No I/O, no clock, no
-// environment. Two sites run these checks — `tillandsias-plan msg send` (here)
-// and the mover (1506-q7ab), because a lane can write its outbox directory
-// directly — so the rule lives in ONE place both can call.
+// environment. Two sites run these checks — `tillandsias-plan msg send` and
+// the mover (`tillandsias --msg-serve`, 1506-q7ab), because a lane can write
+// its outbox directory directly — so the rule lives in ONE place both link.
 //
 // Sources: openspec/changes/fleet-messaging-poc/design.md Decisions 2 and 5a;
 // methodology/distributed-work.yaml sibling_heads_up_protocol.size_budget.

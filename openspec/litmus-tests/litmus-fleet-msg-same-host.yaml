@@ -1,0 +1,67 @@
+# @trace order:1506-q7ab, openspec/changes/fleet-messaging-poc/specs/fleet-messaging/spec.md
+#
+# Pins the fleet message bus's SAME-HOST rung (1506-q7ab): the real
+# `tillandsias --msg-serve` mover and the real `tillandsias-plan msg` CLI over
+# a temp store. Bound under ci-release so a gate actually executes it; the
+# fleet-messaging capability is still an unsynced change
+# (openspec/changes/fleet-messaging-poc/), so it has no spec_id of its own yet.
+name: litmus:fleet-msg-same-host
+spec: ci-release
+phase: pre-build
+description: >
+  The mover acks a delivery (acked:<host>/<lane>@<ts> + via:local) only after
+  fsync and before any recv runs in the destination lane; attributes a sender
+  by the lane directory it writes in, refusing from-lane-mismatch to its own
+  dead/ with the claimed lane untouched; refuses a secret-shaped body and a
+  reply to a broadcast both at msg send and when written straight into an
+  outbox; drops an acked message from the mailbox at its TTL while the ack
+  stands; wakes recv --wait within 2 s; resolves @<host>/* to every other lane
+  with one ack each; and refuses a lane whose directory holds a symlink.
+  Mutation controls: the mover-LAX seam makes the direct-write secret arm fail,
+  the skip-fsync seam makes the ack arm fail, and neither seam reaches a store
+  not named by TILLANDSIAS_MSG_ROOT.
+severity: critical
+size: long
+
+# PRE-FIX RESULT: FAILS — `--msg-serve` is an unknown flag. Measured: pointing
+# TILLANDSIAS_MSG_SERVE_BIN at the pre-1506-q7ab installed tillandsias prints
+# "FAIL: every arm — --msg-serve is an unknown flag" and
+# fail:fleet-msg-same-host:0/8.
+
+preconditions:
+  - workspace contains scripts/test-fleet-msg-same-host.sh
+  - workspace contains crates/tillandsias-headless/src/msg_serve.rs
+  - workspace contains crates/tillandsias-msg/src/store.rs
+  - workspace contains crates/tillandsias-msg/src/lanefs.rs
+  - cargo is available in PATH (the fixture builds tillandsias and tillandsias-plan)
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-fleet-msg-same-host.sh && test -x scripts/test-fleet-msg-same-host.sh && echo 'ok: fleet-msg-same-host-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: fleet-msg-same-host-fixture-parses"
+
+  - step: "eight arms (ack, mount, secret, reply, ttl, wake, wildcard, plain) and three controls pass by name"
+    command: "out=$(bash scripts/test-fleet-msg-same-host.sh 2>&1); rc=$?; case \"$out\" in (*'ok:fleet-msg-same-host:8/8+3-controls'*) [ \"$rc\" = 0 ] && echo 'ok: fleet-msg-same-host 8/8+3' ;; (*) printf '%s\\n' \"$out\" | grep -E '^(FAIL|fail:)' | head -12; exit 1 ;; esac"
+    timeout_ms: 900000
+    expected_behavior: "ok: fleet-msg-same-host 8/8+3"
+
+observability:
+  traces:
+    - "@trace order:1506-q7ab"
+    - "@trace openspec/changes/fleet-messaging-poc/design.md#decision-3"
+  expected_log: "ok:fleet-msg-same-host:8/8+3-controls"
+  log_fields:
+    spec: "ci-release"
+    test: "fleet-msg-same-host"
+    artifact: "crates/tillandsias-headless/src/msg_serve.rs"
+
+rollback:
+  on_failure: >
+    A named arm or control failed. Re-run `bash scripts/test-fleet-msg-same-host.sh`
+    and read its FAIL lines and the mover log it prints. Do not let the mover
+    ack before mailbox_accept_with returned (the fsync proof), trust an
+    envelope's `from` over the lane directory it sits in, drop the mover's
+    second secret check, honour a seam without an explicit
+    TILLANDSIAS_MSG_ROOT, or follow a symlink inside a lane to make it pass.
+  command: "bash scripts/test-fleet-msg-same-host.sh"

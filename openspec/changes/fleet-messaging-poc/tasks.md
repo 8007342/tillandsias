@@ -60,18 +60,47 @@ Implementation notes for 1506-nvqt (what the mover and the daemon inherit):
 
 ## 2. Same-host mover and lane mounts [1506-q7ab, opus]
 
-- [ ] 2.1 `tillandsias --msg-serve`: watch outboxes, verify `from.lane`
+- [x] 2.1 `tillandsias --msg-serve`: watch outboxes, verify `from.lane`
       by directory, second `secret_shaped`, reply-to-broadcast refusal at
       the exchange layer, hard-link delivery, fsync, the `acked:` receipt,
       TTL sweep of mailboxes, wake socket, `@<host>/*` fan-out with one
       receipt per lane.
-- [ ] 2.2 Forge launch args: bind-mount the lane directory at
+- [x] 2.2 Forge launch args: bind-mount the lane directory at
       `/run/host/tillandsias-msg` and export `TILLANDSIAS_MSG_LANE`, beside
       the MCP mount.
-- [ ] 2.3 `scripts/test-fleet-msg-same-host.sh`: two lanes on one host,
+- [x] 2.3 `scripts/test-fleet-msg-same-host.sh`: two lanes on one host,
       an ack with no `recv` ever run, a lane that lies about `from.lane`, a
       body written straight into an outbox directory that only the mover
       can refuse, a reply-to-broadcast written straight into an outbox.
+
+Implementation notes for 1506-q7ab (what 1506-7tq4 and 1506-ssb5 inherit):
+
+- The store moved out of `tillandsias-plan` into the `tillandsias-msg` crate
+  (`shape`, `store`, `lanefs`); the plan CLI re-exports it unchanged. The
+  mover ships in the musl tray binary, which must not link the plan
+  engine's vendored Lua and redb.
+- Delivery is not a hard link: the mailbox copy carries exactly one `to`,
+  so it is a new file written by `store::mailbox_accept_with` (tmp, fsync,
+  rename, fsync(dir), then `seen` appended and fsync'd). The ack function
+  takes a proof value only a durable delivery constructs; an injected fsync
+  failure leaves the receipt pending and the outbox entry for the retry.
+- Every read and write the infrastructure makes inside a lane is fd-relative
+  and O_NOFOLLOW per component (`lanefs::Lane`): a forge holds its lane
+  directory read-write, and a symlinked `outbox/new` would otherwise let it
+  read and move another lane's inbox through the host-side mover. Such a
+  lane is `refused:msg:lane-not-plain:<lane>` and nothing in it moves.
+- `@<host>/*` resolves to every lane present EXCEPT the sender's; with none,
+  the wildcard entry is `undelivered:refused:empty-group`.
+- A local recipient whose lane directory does not exist yet stays pending
+  (the forge may launch later) and expires at its TTL like any other.
+- One mover per store (`<root>/.mover.lock`, flock): the tray runs it beside
+  the control socket; a foreground `--msg-serve` on the same store is
+  refused `refused:msg-serve:already-running` and vice versa.
+- The launcher also exports `TILLANDSIAS_MSG_HOST`: inside a forge
+  gethostname is the container's, and the mover refuses any `from` that is
+  not `<host>/<lane>` for the directory it sits in.
+- The guest headless on macOS/Windows does not start a mover yet (the tray
+  is Linux's); that start is left to the rung that needs it.
 
 ## 3. MCP tools and non-Claude entrypoints [1506-ssb5, sonnet]
 
