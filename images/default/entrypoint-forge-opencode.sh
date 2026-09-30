@@ -6,6 +6,38 @@
 #
 # Secrets: git identity env only; GitHub token stays in git service.
 
+# ── Fleet messaging: pending mail at session start (order 1506-ssb5) ───────
+# @trace order:1506-ssb5, openspec/changes/fleet-messaging-poc/design.md
+#
+# `msg recv --keep` is LOCAL READ BOOKKEEPING (msg_store.rs), never reported
+# to the sender, and `--keep` skips the inbox/new -> inbox/cur move entirely,
+# so a session start can never silently consume a message the way a bare
+# `msg recv` would. See entrypoint-forge-codex.sh for the same block and its
+# full rationale (Codex is the harness this order is written for; OpenCode
+# gets the identical treatment per task 3.2).
+#
+# Placed BEFORE `source lib-common.sh` on purpose: this block must run — and
+# a fixture must be able to run it — on a bare shell carrying none of this
+# forge's runtime. TILLANDSIAS_FORGE_MSG_DRY_RUN=1 is that fixture seam
+# (scripts/test-fleet-msg-mcp.sh): it runs exactly this block and exits
+# before any of the container-only setup below.
+tillandsias_print_pending_fleet_messages() {
+    command -v tillandsias-plan >/dev/null 2>&1 || return 0
+    local out count who
+    out="$(tillandsias-plan msg recv --keep 2>/dev/null)" || return 0
+    count=$(printf '%s\n' "$out" | grep -cE '^(gap:)?msg:' 2>/dev/null) || true
+    case "$count" in '' | *[!0-9]*) count=0 ;; esac
+    if [ "$count" -gt 0 ]; then
+        who="$(tillandsias-plan msg whoami 2>/dev/null)" || who="unknown"
+        printf '[fleet-msg] %s pending message(s) in %s -- run `tillandsias-plan msg recv` to read them\n' \
+            "$count" "$who"
+    fi
+}
+tillandsias_print_pending_fleet_messages
+if [ "${TILLANDSIAS_FORGE_MSG_DRY_RUN:-}" = "1" ]; then
+    exit 0
+fi
+
 source /usr/local/lib/tillandsias/lib-common.sh
 
 # @trace gap:ON-008

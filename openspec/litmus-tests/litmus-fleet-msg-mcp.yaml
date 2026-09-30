@@ -1,0 +1,68 @@
+# @trace order:1506-ssb5, openspec/changes/fleet-messaging-poc/specs/fleet-messaging/spec.md
+#
+# Pins the fleet message bus's MCP surface (1506-ssb5): forge-plan.sh's
+# msg_send/msg_recv/msg_list/msg_status tools, wrapping `tillandsias-plan msg`
+# behind the same capability probe every other tool uses, and the Codex /
+# OpenCode forge entrypoints' pending-mail-at-session-start line. Bound under
+# ci-release so a gate actually executes it; the fleet-messaging capability is
+# still an unsynced change (openspec/changes/fleet-messaging-poc/), so it has
+# no spec_id of its own yet.
+name: litmus:fleet-msg-mcp
+spec: ci-release
+phase: pre-build
+description: >
+  tools/list carries msg_send, msg_recv, msg_list, msg_status and NO msg_ack
+  (the ack is the infrastructure's, never an agent's or a verb's — operator
+  ruling 2026-09-29); msg_send prints the receipt id at once and msg_status
+  reads pending then acked:<host>/<lane>@<ts> + via:local once the mailbox
+  acks; a secret-shaped body is refused with why + remedy and writes nothing
+  to the outbox; with a stub tillandsias-plan whose capabilities omits msg,
+  every msg tool answers the degraded {confidence:"unsupported"} envelope
+  instead of a fake success; the message body never reaches argv (stdin only);
+  the Codex and OpenCode entrypoints print the pending-message count line
+  under a dry-run seam without moving anything out of inbox/new; and an
+  invalid msg_send call is a JSON-RPC protocol error, not a silently-executed
+  tool.
+severity: critical
+size: instant
+
+# PRE-FIX RESULT: FAILS — tools/list has no msg tools, msg_send/msg_recv/
+# msg_list/msg_status do not exist, and both entrypoints print nothing under
+# the dry-run seam. Measured: 0/8 arms on the pre-1506-ssb5 tree.
+
+preconditions:
+  - workspace contains scripts/test-fleet-msg-mcp.sh
+  - workspace contains images/default/config-overlay/mcp/forge-plan.sh
+  - workspace contains images/default/entrypoint-forge-codex.sh
+  - workspace contains images/default/entrypoint-forge-opencode.sh
+  - a built tillandsias-plan (resolved by scripts/plan-binary-probe.sh)
+  - jq is available in PATH
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-fleet-msg-mcp.sh && test -x scripts/test-fleet-msg-mcp.sh && echo 'ok: fleet-msg-mcp-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: fleet-msg-mcp-fixture-parses"
+
+  - step: "eight arms: surface (with the no-msg_ack negative control), round-trip, secret (negative control), degraded, argv, codex entrypoint, opencode entrypoint, protocol error"
+    command: "out=$(bash scripts/test-fleet-msg-mcp.sh 2>&1); rc=$?; case \"$out\" in (*'ok:fleet-msg-mcp:8/8'*) [ \"$rc\" = 0 ] && echo 'ok: fleet-msg-mcp 8/8' ;; (*) printf '%s\\n' \"$out\" | grep -E '^(FAIL|fail:)' | head -12; exit 1 ;; esac"
+    timeout_ms: 120000
+    expected_behavior: "ok: fleet-msg-mcp 8/8"
+
+observability:
+  traces:
+    - "@trace order:1506-ssb5"
+    - "@trace openspec/changes/fleet-messaging-poc/design.md#decision-1"
+  expected_log: "ok:fleet-msg-mcp:8/8"
+  log_fields:
+    spec: "ci-release"
+    test: "fleet-msg-mcp"
+    artifact: "images/default/config-overlay/mcp/forge-plan.sh"
+
+rollback:
+  on_failure: >
+    A named arm failed. Re-run `bash scripts/test-fleet-msg-mcp.sh` and read
+    its FAIL lines. Do not add a msg_ack tool, let a body reach argv, skip the
+    capability_gap probe on an old binary, or have the entrypoints' dry-run
+    seam move anything out of inbox/new to make it pass.
+  command: "bash scripts/test-fleet-msg-mcp.sh"
