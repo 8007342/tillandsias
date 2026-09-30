@@ -1,0 +1,37 @@
+packets:
+  - packet_id: the-answer-verifier-re-reads-plan-index-yaml-once-per-citation-so-the-groundtruth-regime-check-outlives-the-door-deadline
+    order: 1511-n4y8
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [preflight, deciders, performance, plan-binary, experts]
+    estimated_hours: 3
+    owned_files: [crates/tillandsias-plan/src/answer.rs]
+    title: |
+      check-groundtruth-regime-invariance outlived the 5 s door deadline on macuahuitl because answer::verify_inner re-reads and re-splits each cited file PER CITATION; the ready-for-linux answer has 588 citations, about half into the 5.9 MB plan/index.yaml
+    context: |
+      MEASURED on macuahuitl (coordinator, trunk 7985e2469, load 1.06, Fedora
+      44, run alone): "FAIL: check-groundtruth-regime-invariance outlived the
+      5s door deadline (5s)"; bash-dialect 3 s there (fixed by 1510-pfuj).
+      Coordinator ruling: a faster grade in the plan binary, NOT a re-measured
+      cap; exit under 5 s on macuahuitl, byte-identical verdicts, and the
+      fail-closed arm from 900fe18ed still green.
+      PROFILE on yoga (no perf/strace on host or builder; measured by
+      splitting the set into one-case files): the regime check's floor is its
+      slowest grade, expert-groundtruth-rung1 (2.0-3.7 s). Within it one case
+      dominates, plan-ready-for-linux-excludes-done (1.24 s alone), whose
+      `tillandsias-plan answer "what is ready for linux"` takes 710-890 ms
+      against 67 ms for `ready linux` with the same ledger load. The emitter's
+      order-523 self-verify (answer::verify_inner) did std::fs::read_to_string
+      plus lines().collect() of the cited file for EVERY citation: 588
+      citations, ~1.8 GB re-read and re-split per answer.
+      REMEDY: cache each cited file's lines per path for the duration of one
+      verification. Same bytes, same checks, read once.
+    exit_criteria:
+      - check-groundtruth-regime-invariance under 5 s on macuahuitl (the coordinator measures; yoga is not the floor)
+      - every grade's output byte-identical to the previous binary in both regimes, elapsed_ms masked
+      - test-groundtruth-regime-fails-closed.sh 3/3 (the 900fe18ed arm) and cargo test -p tillandsias-plan green
+    verifiable_closure: 'litmus:deciders-within-door-deadline PASS 6/6 on macuahuitl, and bash scripts/test-groundtruth-regime-fails-closed.sh 3/3'
