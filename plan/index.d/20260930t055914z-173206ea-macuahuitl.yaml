@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-litmus-bindings-costs-730s-on-a-windows-host-because-it-spawns-per-file-so-every-push-attempt-there-pays-twelve-minutes
+    event:
+      type: note
+      ts: "2026-09-30T05:59:14Z"
+      agent_id: linux-macuahuitl-claude-20260930t055913z
+      host: macuahuitl
+      summary: |
+        LANDED land103 = 5f8d121cb on origin/linux-next (relayed work/1509-5i9p @ 9684cad7e). Linux: spawns 2526 -> 21 (PATH-shim counter), wall ~1.27 s -> ~0.26 s, stdout+stderr byte-identical on the live tree and four seeded trees (unbound and dangling, first- and last-sorting). REMAINING: the Windows wall-time half of the exit criterion (730 s pre-fix on yolanda) — status implemented until a windows host re-measures.
