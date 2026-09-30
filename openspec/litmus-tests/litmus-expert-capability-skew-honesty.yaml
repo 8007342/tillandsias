@@ -70,7 +70,7 @@ critical_path:
     # files, so a stale fixture from a previous run would let them all pass
     # while nothing was actually built — the dead-check trap this project
     # closed for exit codes, applied to fixture state.
-    command: "rm -rf /tmp/.litmus-569 && mkdir -p /tmp/.litmus-569/bin /tmp/.litmus-569/checkout/plan /tmp/.litmus-569/checkout/crates/tillandsias-plan /tmp/.litmus-569/state && cargo build -q -p tillandsias-plan --release && B=${CARGO_TARGET_DIR:-target}/release/tillandsias-plan && test -x $B && cp $B /tmp/.litmus-569/bin/plan && cp crates/tillandsias-plan/capabilities.txt /tmp/.litmus-569/checkout/crates/tillandsias-plan/capabilities.txt && cp plan/index.yaml /tmp/.litmus-569/checkout/plan/index.yaml && echo 'ok: fixture-ready'"
+    command: "rm -rf /tmp/.litmus-569 && mkdir -p /tmp/.litmus-569/bin /tmp/.litmus-569/checkout/plan /tmp/.litmus-569/checkout/crates/tillandsias-plan /tmp/.litmus-569/state && cargo build -q -p tillandsias-plan --release && B=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) && test -x $B && cp $B /tmp/.litmus-569/bin/plan && cp crates/tillandsias-plan/capabilities.txt /tmp/.litmus-569/checkout/crates/tillandsias-plan/capabilities.txt && cp plan/index.yaml /tmp/.litmus-569/checkout/plan/index.yaml && echo 'ok: fixture-ready'"
     timeout_ms: 300000
     expected_behavior: "ok: fixture-ready"
 

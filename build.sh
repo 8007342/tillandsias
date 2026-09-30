@@ -4037,6 +4037,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Expression-pinning enforcement passed"
 
+    # Order 1473-scdq: the Rust half of the rule above. A NEWLY ADDED Rust test
+    # may not pin a literal in source text read by include_str! (or a window
+    # cut from it) without a negative control or a reasoned `source-pin-ok:`.
+    # 827-d3dc found 92 such pins; four of the ten costliest were this shape,
+    # and one kept a product defect green (1472-3d29). Diff-scoped.
+    _step "Checking newly-added Rust source-literal pins (1473-scdq)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-rust-source-pin-added.sh" 2>&1; then
+        _error "a newly-added Rust test pins source text with no negative control or reason (1473-scdq); the site and the remedy are printed above"
+        exit 1
+    fi
+    _info "Rust source-pin enforcement passed"
+
     # Order 792-ksr8. Refuse a NEWLY ADDED pipeline whose verdict SIGPIPE can
     # decide: an unbounded producer into an early-exiting consumer, under
     # pipefail, in an if/while condition. A match then surfaces as a failure
@@ -4053,6 +4065,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "SIGPIPE verdict-pipeline enforcement passed"
+
+    # Order 1470-v67y (1247-amcu criterion 1). Refuse a NEWLY ADDED refusal
+    # verdict (refused:/blocked:/violation:) that ships without its
+    # affordance: why it refused and what clears it (operator ruling
+    # 2026-09-17). Diff-scoped like the two above, so the ~500 bare standing
+    # sites (`check-refusal-affordance-added.sh --audit`, per site) are
+    # converted by the 1247 slices rather than blocking every push.
+    _step "Checking newly-added refusals carry an affordance (1470-v67y)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-refusal-affordance-added.sh" 2>&1; then
+        _error "a newly-added refusal says neither why it refused nor what clears it (1247-amcu); the site and the remedy are printed above"
+        exit 1
+    fi
+    _info "Refusal affordance enforcement passed"
 
     # Order 1401-x76w. RUN every added scripts/test-*.sh in the regime an
     # ordinary checkout has: CARGO_TARGET_DIR and TILLANDSIAS_PLAN_BIN unset and

@@ -1,0 +1,16 @@
+# Gate step 1473-scdq — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. A Rust test that asserts a literal is present in source text
+# read by include_str! (or a window cut from it) passes while the product may
+# be wrong and fails on correct refactors. 827-d3dc counted 92; four of its ten
+# costliest pins were this shape, and one kept a product defect green
+# (1472-3d29). build.sh --check runs check-rust-source-pin-added.sh, which
+# refuses a newly added pin with no negative control or reasoned
+# `source-pin-ok:`. The fixture drives it over scratch repos.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a newly-added Rust test cannot pin source text without a negative control (1473-scdq)"
+STEP_SCRIPT="scripts/test-rust-source-pin-added.sh"
+STEP_ERROR="the Rust source-pin guard no longer refuses an added include_str! pin, or admits one it should not (1473-scdq); see which arm failed above"
+STEP_OK="added Rust source-literal pins need a negative control or a stated reason"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin ok:rust-source-pin-added-fixture:7/7"

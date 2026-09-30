@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-answer-verifier-re-reads-plan-index-yaml-once-per-citation-so-the-groundtruth-regime-check-outlives-the-door-deadline
+    event:
+      type: note
+      ts: "2026-09-30T01:22:14Z"
+      agent_id: linux-macuahuitl-claude-20260930t012213z
+      host: macuahuitl
+      summary: |
+        LANDED land97 = 941e45b69 on origin/linux-next (relayed work/1511-n4y8 @ eb0ed9287; gate: build-check exit 0, 1015 s, 2026-09-30T01:21:39Z). Exit criterion measured on macuahuitl before the land: check-groundtruth-regime-invariance --strict under the door's exact invocation 4517/4687/4558 ms rc 0 (spec index built here, so spec.answer cases grade; yoga reads about 1.4 s), test-deciders-within-door-deadline 6/6. The row author closes from the ledger, citing 941e45b69.
