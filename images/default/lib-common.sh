@@ -5230,3 +5230,45 @@ show_banner() {
     echo "========================================"
     echo ""
 }
+
+# ORDER 1517-p83m — LOAD THE AGENT PROFILE FROM WHERE THE IMAGE PUTS IT, LOUDLY.
+# Every agent entrypoint used to run `[ -f /opt/config-overlay/mcp/agent-profile.sh ]
+# && source` — a path the image never installs (the Containerfile COPYs
+# config-overlay/mcp/ to /home/forge/.config-overlay/mcp/, the ConfigOverlay
+# mount point in container_profile.rs). The guard made the miss silent, so from
+# 2026-05-14 no forge exported AGENT_PROFILE or linked the generic skills
+# (1446-qkx4). One resolver now, and a missing profile says so on stderr.
+load_agent_profile() {
+    local p="${TILLANDSIAS_AGENT_PROFILE_SH:-${HOME:-/home/forge}/.config-overlay/mcp/agent-profile.sh}"
+    if [ -f "$p" ]; then
+        # The profile opens with `set -euo pipefail` and had never run in a real
+        # forge before 1517-p83m, so it must not be able to kill the entrypoint.
+        # An `if` suppresses -e for the sourced body, but NOT -u: an unset
+        # variable still exits a non-interactive shell. So probe it in a
+        # subshell first (its link step never overwrites, so running it twice
+        # is harmless), source it for real only if the probe survived, and
+        # restore the caller's options either way.
+        local _opts _rc=0
+        _opts="$(set +o)"
+        # shellcheck source=/dev/null
+        ( source "$p" ) >/dev/null 2>&1 || _rc=$?
+        if [ "$_rc" -eq 0 ]; then
+            # shellcheck source=/dev/null
+            if source "$p"; then
+                eval "$_opts"
+                return 0
+            else
+                _rc=$?   # read HERE: after `fi`, $? is the if statement's own 0
+            fi
+        fi
+        eval "$_opts"
+        echo "[forge] WARNING: agent profile at $p failed (rc=$_rc) — AGENT_PROFILE may be unset and generic skills such as /project-discipline may not be linked; the forge continues" >&2
+        echo "[forge]   why: the profile's own set -euo pipefail turns any failing line into a failure of the whole file, and it must not take the entrypoint down with it (1517-p83m)" >&2
+        echo "[forge]   remedy: run it by hand to see the failing line: bash -x $p" >&2
+        return 0
+    fi
+    echo "[forge] WARNING: agent profile not found at $p — AGENT_PROFILE is unset and generic skills such as /project-discipline are not linked" >&2
+    echo "[forge]   why: the image installs config-overlay/mcp/ at /home/forge/.config-overlay/mcp/, and a drifted path was skipped silently for months (1517-p83m)" >&2
+    echo "[forge]   remedy: rebuild the forge image; if this persists, report 1517-p83m with the output of: ls -la ~/.config-overlay/mcp/" >&2
+    return 0
+}
