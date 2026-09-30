@@ -756,6 +756,54 @@ attempt_plan_only_lane() {
                     fi
                     bases+=("")
                     ;;
+                plan/inbox/?*.md)
+                    # ORDER 1507-e693. plan/inbox/<host>.md (currently
+                    # plan/inbox/codex.md only) is the STOPGAP mailbox for a
+                    # plan_only_peer that cannot receive a direct message
+                    # (Codex today; the message bus at 1506-3xu7 replaces it).
+                    # This lane never listed plan/inbox/, so every message —
+                    # the coordinator appending a new MSG section, or a peer
+                    # appending a RECEIVED/ASK note to an existing row — took
+                    # the whole push onto the full gate. MEASURED 2026-09-29 on
+                    # macuahuitl: a push touching only plan/inbox/codex.md was
+                    # refused with "outside plan/index.d/, ..., and
+                    # plan/deslop-sweeps.d/ ... (full gate required)", and the
+                    # message waited ~20 minutes for the next relay gate. A
+                    # mailbox that needs a full gate per message defeats its
+                    # purpose.
+                    #
+                    # SAME SHAPE AS plan/deslop-sweeps.d, the closest
+                    # precedent this lane already carries: a flat per-mailbox
+                    # .md file, no nesting, and the SAME A-OR-M-APPEND-ONLY
+                    # reasoning as the sweep and work-queue arms — SEVERAL
+                    # PARTIES WRITE THE SAME FILE (the coordinator posts
+                    # messages; a peer appends a RECEIVED/ASK note to an
+                    # EXISTING row), so the lane cannot tell a correction from
+                    # erasing another party's row, and a rewrite still takes
+                    # the full gate exactly as it does for a work-queue ledger
+                    # or a sweep record.
+                    if [[ "$status" != "A" && "$status" != "M" ]]; then
+                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; inbox mailboxes qualify as new (A) or appended (M) only (full gate required)" >&2
+                        return 1
+                    fi
+                    if [[ "${path#plan/inbox/}" == */* ]]; then
+                        echo "plan-only lane: not applicable — '$path' is nested below plan/inbox/ (full gate required)" >&2
+                        return 1
+                    fi
+                    # APPEND-ONLY ON M, the sweep/work-queue reasoning above: a
+                    # rewrite cannot be told apart from erasing another
+                    # party's message or acknowledgement.
+                    if [[ "$status" == "M" ]]; then
+                        _ib_removed="$(git diff "$remote_sha" "$local_sha" -- "$path" 2>/dev/null \
+                            | grep '^-' | grep -v '^---' | head -3)"
+                        if [[ -n "$_ib_removed" ]]; then
+                            echo "plan-only lane: not applicable — '$path' is an inbox mailbox and this edit REMOVES or REWRITES lines, which the lane cannot tell from erasing another party's message or RECEIVED/ASK note (full gate required)" >&2
+                            printf '%s\n' "$_ib_removed" | sed 's/^/    /' >&2
+                            return 1
+                        fi
+                    fi
+                    bases+=("")
+                    ;;
                 plan/issues/?*.md)
                     # Order 889-twhe. The Reduction Engine makes filing a
                     # plan/issues capture a NON-NEGOTIABLE exit condition of
@@ -934,7 +982,7 @@ attempt_plan_only_lane() {
                             continue
                         fi
                     fi
-                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, plan/deslop-sweeps.d/, and plan/mo-full-attestations.d/, and differs from origin/linux-next (full gate required)" >&2
+                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, plan/deslop-sweeps.d/, plan/inbox/, and plan/mo-full-attestations.d/, and differs from origin/linux-next (full gate required)" >&2
                     return 1
                     ;;
             esac
