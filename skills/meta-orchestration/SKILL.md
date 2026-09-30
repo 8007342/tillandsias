@@ -2288,9 +2288,12 @@ Before exit:
 
    On `blocked:credential-expired-mid-cycle` the credential WORKED and then
    stopped; that is distinct from never having had one, and the printed remedy
-   is `gh auth refresh`, not seeding a store. Do NOT discard the cycle's work to
-   get unstuck — salvage first (872-c9nd) and report blocked with the salvage
-   ref.
+   is the OPERATOR re-seeding the token (`tillandsias --github-login`), not
+   seeding a store. An agent never runs `gh auth refresh` or `gh auth login`
+   itself (1025-a896: a re-auth on one host evicts the token on every other;
+   1497-ahmd corrected the guard, which used to print it). Do NOT discard the
+   cycle's work to get unstuck — salvage first (872-c9nd) and report blocked
+   with the salvage ref.
 
 3c. **EVERY LEDGER WRITE HAPPENS BEFORE THE GATE, NOT AFTER IT** (yolanda,
    2026-09-02). The gate stamp hashes the CONTENT of every tracked and

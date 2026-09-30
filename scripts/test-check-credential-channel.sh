@@ -379,9 +379,11 @@ esac
 grep -q 'DIED DURING THIS CYCLE' "$D/.rv" \
     && ok "the diagnosis states it worked and then stopped" \
     || bad "stderr must say the credential died, not that it is absent"
-grep -q 'gh auth refresh' "$D/.rv" \
-    && ok "the remedy names the token refresh" \
-    || bad "remedy must name gh auth refresh"
+# 1497-ahmd: the remedy is the OPERATOR's re-seed. It used to be
+# `gh auth refresh`, the re-auth 1025-a896 forbids an agent to run.
+grep -q 'tillandsias --github-login' "$D/.rv" \
+    && ok "the remedy names the operator's token re-seed" \
+    || bad "remedy must name tillandsias --github-login (the operator re-seeds; 1025-a896)"
 grep -q 'salvage-dirty-worktree' "$D/.rv" \
     && ok "it points at the 872-c9nd salvage path instead of discarding work" \
     || bad "a wedged host must be told how to preserve its work"
