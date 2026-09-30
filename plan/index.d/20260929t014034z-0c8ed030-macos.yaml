@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-oscillation-root-cause
+    event:
+      type: progress
+      ts: "2026-09-29T01:40:34Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t014033z
+      host: macos
+      summary: |
+        Claimed on macOS at the coordinator's routing (re-roled: it needs a live guest wire). SUBSTRATE: tlatoanis-macbook-air, a freshly COLD-provisioned VM (operator-approved wipe, 2026-09-29), tray and guest from trunk + 1472-3d29 (1ffb606bc). Tray: VM Ready, podman_ready=true, and "push subscription established (vm-status/login/cloud/local polls demoted to fallback, SC-07)". Headless: active, NRestarts 0 at provision.
+        METHOD (a bound, not yet a reproduction): a detached recorder from 2026-09-29T01:40:21Z for 3 h logs every CHANGE of the tray's heartbeat status (heartbeat.state, rewritten every 30 s; an oscillation shows as alternating Ready and "Wire unreachable" lines). At the end it counts in-guest `tillandsias-headless.service: Main process exited|Scheduled restart|Failed` lines in the guest console (journald forwards to console) and captures the tray-log tail. Baseline at start: 0 headless restart lines.
+        NAMED CONDITION NOT YET MET: the row's trigger is "after GitHub Login succeeds". This VM has no GitHub login yet: the operator owes a tray sign-in for 1420-4grt / 1453-bnmt, and I am not seeding a token so that their measurement stays clean. So this first window bounds the PRE-login state only. A second window after the operator's sign-in is the one that tests the reported trigger.

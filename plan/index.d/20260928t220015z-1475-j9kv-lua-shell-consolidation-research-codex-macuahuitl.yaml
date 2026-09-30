@@ -1,0 +1,120 @@
+# Research-only filing; implementation remains unclaimed for Terra or Sol.
+packets:
+  - packet_id: lua-source-agreement-consolidation-shadow-pilot
+    order: 1475-j9kv
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [lua, rust, testing, portability, consolidation, pilot]
+    estimated_hours: 3
+    depends_on: []
+    owned_files:
+      - scripts/lua/source-agreements.lua
+      - scripts/fixtures/source-agreements.yaml
+      - crates/tillandsias-plan/tests/lua_source_agreements.rs
+      - build.sh
+    title: >
+      Consolidate three explicit-file agreement guards into one pure Lua
+      evaluator with case data and executed parity controls; shadow-only
+      first slice for Terra or Sol, leaving production guards active until
+      the existing typed-verdict runner permits an atomic four-script cutover
+    context: |
+      Operator asked for research only in this cycle, followed by a narrowly
+      claimable Terra/Sol implementation packet. Research is complete in
+      plan/issues/lua-shell-consolidation-research-2026-09-28.md; its sibling
+      TSV records 860 scripts/**/*.sh at 2b14460571e3d1d5b2f1f4d883c225dafb6057d0.
+      Tests (465) and deciders (158) are 623/860, but only 234 of them are
+      at most 120 physical lines. These are screening counts, not a claim
+      that most scripts can safely be deleted. Six scripts/ Lua files exist.
+      First reviewed family: check-tray-process-running-naming.sh (68 lines),
+      check-dev-embed-model-agreement.sh (74),
+      check-inference-container-name-agreement.sh (74), plus its 117-line
+      test-inference-container-name-agreement.sh: 4 shell files/333 lines
+      available for a LATER cutover. This packet's deletion metric is zero.
+      Reuse build_environment(PredicateClass::Cacheable), fs.read, Lua string
+      operations and explicit data. No subprocesses in evaluation; Rust test
+      harness owns scratch fixtures and legacy comparison subprocesses.
+      Do not extend runtime APIs or invent a generic regex DSL. No memo use:
+      1470-dbuw and 1471-bvjy own memo soundness/replay. Avoid dynamic file
+      walks: fs.list is observing-only/nonrecursive by operator ruling.
+      No overlap in implementation scope with 1384-ddua's seam-writer,
+      preflight and Bash-dialect pilots. Production cutover needs 1384-bqhy
+      (script run + STEP_LUA, absent today); 1384-bxhk owns the ratchet.
+      Those are FOLLOW-UP dependencies, not dependencies of this executable
+      shadow slice. Keep legacy guards/callers untouched except adding this
+      slice's named Rust test target to build.sh --check. Coordinate that
+      shared build.sh hunk with active owners before implementation.
+    exit_criteria:
+      - >
+        One Lua evaluator plus explicit case data reproduces the three
+        guards' decisions and diagnostic payloads on the live tree and
+        scratch inputs; no production .sh or caller is replaced, and the
+        evaluator spawns zero child processes.
+      - >
+        Existing three dev-model selftests and six inference-name fixture
+        arms remain represented; independent injected old-field, removed
+        new-field, changed-model, renamed-container, prose-only-match,
+        missing-file/declaration, empty-manifest and duplicate-ID controls
+        each fail the appropriate named case. CRLF and space-bearing paths
+        get explicit coverage. A pure environment cannot reach proc/sh/time
+        or fs.write/list. No empty or unselected suite may pass.
+      - >
+        A named Rust integration target loads the real Lua module through
+        the existing runtime and runs uncached. build.sh --check executes
+        that target with a nonzero selected test count. Removing the Lua
+        module or making the evaluator always accept makes the target red;
+        a known agreeing pair is the positive control.
+      - >
+        Publish paired timing and process-count evidence for 30 warm runs
+        plus separate cold-start measurements, exact case counts and Linux
+        regime. Record macOS/native-Windows verification as still required
+        if not executed; do not advertise a fleet-wide speedup or cache gain.
+      - >
+        File a bounded cutover follow-up only after parity is demonstrated,
+        depending on the actual completed runner contract of 1384-bqhy.
+        Specify all four deletions, callers, preservation of per-case
+        obligations, ratchet delta and whole-commit rollback. Close only
+        this shadow slice; never close the parent migration milestone.
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test lua_source_agreements
+      selects and passes a nonempty parity/mutation suite; then
+      ./build.sh --check passes and actually runs that target.
+      Pre-fix: the named test target, Lua evaluator and case manifest are
+      absent, so that cargo command cannot pass. Execute the absence control
+      first. Preserve old guards as the production decision until a later
+      cross-platform, typed-runner cutover. Research inventory is an input,
+      not evidence that the implementation or speedup already exists.
+    next_action: >
+      Terra or Sol: verify folded status and cross-branch claims, claim this
+      order, then work on its work ref per advance-work-from-plan. Read the
+      linked research and the three guards plus existing fixture. Start by
+      observing the missing test target; implement one evaluator and case
+      table, execute old/new mutation parity, and wire the Rust target into
+      the existing gate. Stop at the shadow slice, with a measured handoff.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Requested worker: Terra or Sol (methodology fleet naming).
+      Research-only filing; no worker launched and no implementation claim.
+      Broad Lua/command-policy redesign remains owned by 1443-6r3q.
+      Full design and versioned 860-file inventory accompany this work ref.
+    provenance: |
+      Codex research on macuahuitl, operator request 2026-09-28. Snapshot
+      2b14460571e3d1d5b2f1f4d883c225dafb6057d0. Filesystem fallback:
+      unavailable project-plan/project-info MCP. Effective branch level 2.
+      Sources: lua_predicate.rs, lua_std.rs, lua_runtime.rs, run_lua_cli,
+      Cargo.lock, build.sh gate-step loop, all tracked scripts/**/*.sh,
+      three named guards, existing 1384/1443 design packets and 1459-mqvd.
+    events:
+      - type: filed
+        ts: "2026-09-28T22:00:15Z"
+        agent_id: linux-macuahuitl-codex-20260928t214907z
+        host: macuahuitl
+        summary: |
+          Research delivered with exact inventory and actual-versus-planned
+          API map. Pure source-agreement family selected for a ready shadow
+          slice; four-file deletion explicitly deferred to typed-runner
+          cutover. No implementation/runtime/scripts changed or claimed.

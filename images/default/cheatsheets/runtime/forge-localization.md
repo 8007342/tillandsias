@@ -47,16 +47,18 @@ source "$_LOCALE_FILE"
 **Location**: `/etc/tillandsias/locales/`
 
 **Files**:
-- `en.sh` — English (82 variables)
-- `es.sh` — Spanish (82 variables)
-- `de.sh` — German (82 variables)
-- `fr.sh` — French (82 variables)
-- `ja.sh` — Japanese (82 variables)
+- `en.sh` — English (50 variables)
+- `es.sh` — Spanish (50 variables)
+- `de.sh` — German (50 variables)
+- `fr.sh` — French (50 variables)
+- `ja.sh` — Japanese (50 variables)
 
 **Variable Structure**: All `L_*` prefixed bash variables exported for use by entrypoint scripts and welcome banner.
 
-**Coverage** (all locales have 82 variables):
-- Entrypoint messages: `L_INSTALLING_OPENCODE`, `L_INSTALLED_CLAUDE`, `L_WARN_*`, etc.
+**Coverage** (the five full bundles have 50 variables; the other twelve are stubs
+that source `en.sh` and override a few. 792-7bt5, 2026-09-29, removed 34 keys
+that no script read — the entrypoint install/warning strings, never wired):
+- Banner: `L_BANNER_FORGE`, `L_BANNER_PROJECT`, `L_BANNER_AGENT`
 - Welcome banner: `L_WELCOME_TITLE`, `L_WELCOME_PROJECT`, etc.
 - Tips (20 rotating): `L_TIP_1` through `L_TIP_20`
 - Error messages: `L_ERROR_CONTAINER_FAILED`, `L_ERROR_NETWORK`, etc.
@@ -77,7 +79,7 @@ source "$_LOCALE_FILE"
    ```dockerfile
    COPY locales/ /etc/tillandsias/locales/
    ```
-6. **Run coverage test** to verify all 82 variables are present:
+6. **Run coverage test** to verify all 50 variables are present:
    ```bash
    bash scripts/test-locale-coverage.sh
    ```
@@ -136,8 +138,8 @@ COPY locales/ /etc/tillandsias/locales/
 
 Help scripts are copied:
 ```dockerfile
-COPY ../../scripts/help.sh /usr/local/share/tillandsias/help.sh
-COPY ../../scripts/help-es.sh /usr/local/share/tillandsias/help-es.sh
+COPY help.sh /usr/local/share/tillandsias/help.sh
+COPY help-de.sh help-es.sh help-fr.sh help-ja.sh /usr/local/share/tillandsias/
 # ... etc for all locales
 RUN chmod +x /usr/local/share/tillandsias/help*.sh || true
 ```

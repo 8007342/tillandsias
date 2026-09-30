@@ -134,15 +134,32 @@ export GIT_TERMINAL_PROMPT GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 
 # All three defaults are UNSET-ONLY: a launcher serving a non-Tillandsias
 # project may export them EMPTY to disable grammar warnings and gate
 # exemptions entirely — the hook is silent when they are empty or absent.
-TILLANDSIAS_DEFAULT_BRANCH_CREATION_REGEX='^refs/heads/(main|gh-pages|(linux|windows|osx)-next|release/[A-Za-z0-9._/-]+|revert-[A-Za-z0-9-]+|claude/[A-Za-z0-9._-]+|agent/[a-z0-9][a-z0-9-]{0,31}/[a-z0-9][a-z0-9._-]{0,47}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}|salvage/[a-z0-9][a-z0-9-]{0,31}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47})$'
+TILLANDSIAS_DEFAULT_BRANCH_CREATION_REGEX='^refs/heads/(main|gh-pages|(linux|windows|osx)-next|release/[A-Za-z0-9._/-]+|revert-[A-Za-z0-9-]+|claude/[A-Za-z0-9._-]+|agent/[a-z0-9][a-z0-9-]{0,31}/[a-z0-9][a-z0-9._-]{0,47}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}|work/[0-9]{3,4}-[a-z0-9]{4}|salvage/[a-z0-9][a-z0-9-]{0,31}/20[0-9]{6}-[a-z0-9][a-z0-9-]{0,47})$'
 if [ "${TILLANDSIAS_BRANCH_CREATION_REGEX+set}" != "set" ]; then
     TILLANDSIAS_BRANCH_CREATION_REGEX="$TILLANDSIAS_DEFAULT_BRANCH_CREATION_REGEX"
 fi
 if [ "${TILLANDSIAS_BRANCH_GRAMMAR_HINT+set}" != "set" ]; then
-    TILLANDSIAS_BRANCH_GRAMMAR_HINT='main | linux-next | windows-next | osx-next | gh-pages | release/* | claude/* | revert-* | agent/<host>/<base>/<yyyymmdd>-<slug> | salvage/<host>/<yyyymmdd>-<slug>'
+    TILLANDSIAS_BRANCH_GRAMMAR_HINT='main | linux-next | windows-next | osx-next | gh-pages | release/* | claude/* | revert-* | agent/<host>/<base>/<yyyymmdd>-<slug> | work/<order> | salvage/<host>/<yyyymmdd>-<slug>'
 fi
 if [ "${TILLANDSIAS_YAML_GATE_EXEMPT_REFS+set}" != "set" ]; then
     TILLANDSIAS_YAML_GATE_EXEMPT_REFS='refs/heads/salvage/*'
+fi
+# The rescue-ref namespace the discipline check (1443-uit6) always admits, and
+# how its messages name it. Config, not hook code, like every other branch
+# convention (order-462 leak class; litmus:git-mirror-yaml-gate-shape).
+if [ "${TILLANDSIAS_RESCUE_REF_GLOB+set}" != "set" ]; then
+    TILLANDSIAS_RESCUE_REF_GLOB='salvage/*/*'
+fi
+if [ "${TILLANDSIAS_RESCUE_REF_HINT+set}" != "set" ]; then
+    TILLANDSIAS_RESCUE_REF_HINT='salvage/<host>/<yyyymmdd>-<slug>'
+fi
+# Where the discipline seed lives (1490-zw87). A level-2 project carries its
+# seed on the INTEGRATION branch long before the default branch (HEAD) gets it
+# through a release, so reading HEAD first published level 0 for a level-2
+# project on the first live mirror. Space-separated refs, tried in order,
+# before HEAD. Config, not hook code (order-462 class).
+if [ "${TILLANDSIAS_DISCIPLINE_SEED_REFS+set}" != "set" ]; then
+    TILLANDSIAS_DISCIPLINE_SEED_REFS='refs/heads/linux-next'
 fi
 # CI workflow budget (order 598). UNSET-ONLY like the rest: an end-user project
 # that legitimately runs its own GitHub Actions exports this EMPTY and the gate
@@ -152,7 +169,7 @@ fi
 if [ "${TILLANDSIAS_CI_WORKFLOW_ALLOWLIST+set}" != "set" ]; then
     TILLANDSIAS_CI_WORKFLOW_ALLOWLIST='release.yml'
 fi
-export TILLANDSIAS_BRANCH_CREATION_REGEX TILLANDSIAS_BRANCH_GRAMMAR_HINT TILLANDSIAS_YAML_GATE_EXEMPT_REFS
+export TILLANDSIAS_BRANCH_CREATION_REGEX TILLANDSIAS_BRANCH_GRAMMAR_HINT TILLANDSIAS_YAML_GATE_EXEMPT_REFS TILLANDSIAS_RESCUE_REF_GLOB TILLANDSIAS_RESCUE_REF_HINT TILLANDSIAS_DISCIPLINE_SEED_REFS
 export TILLANDSIAS_CI_WORKFLOW_ALLOWLIST
 if [ -n "$TILLANDSIAS_BRANCH_CREATION_REGEX" ]; then
     echo "[git-service] branch-name grammar active (warn-only, rung 2); yaml-gate exempt refs: ${TILLANDSIAS_YAML_GATE_EXEMPT_REFS:-none}"
@@ -367,6 +384,23 @@ run_sync_state() {
     return 0
 }
 
+# @trace spec:git-mirror-service, spec:branch-discipline
+# Order 1443-uit6: publish the branch discipline this mirror enforces as
+# refs/tillandsias/discipline/<level>/<enforcement>/<derived>/<digest>/<epoch>,
+# on the same lifecycle as the auth verdict and the sync state: once after the
+# startup sweep and on every reconcile tick, right after the fetch that may
+# have brought in a changed seed. A missing publisher is announced.
+PUBLISH_DISCIPLINE="${PUBLISH_DISCIPLINE:-/usr/local/share/git-service/publish-discipline}"
+run_publish_discipline() {
+    if [ ! -x "$PUBLISH_DISCIPLINE" ]; then
+        retry_msg "[git-mirror] discipline NOT published: $PUBLISH_DISCIPLINE missing"
+        return 0
+    fi
+    OUT="$("$PUBLISH_DISCIPLINE" "$1" 2>&1)" || true
+    [ -n "$OUT" ] && retry_msg "[git-mirror] discipline: $OUT"
+    return 0
+}
+
 start_mirror_reconciler() {
     if [ ! -x "$RECONCILE_HEADS" ]; then
         retry_msg "[git-mirror] periodic reconciler NOT started: $RECONCILE_HEADS missing"
@@ -385,6 +419,7 @@ start_mirror_reconciler() {
                 # And the sync state, immediately after the reconcile that
                 # refreshed the tracking refs it reads (order 1350-ku7v).
                 run_sync_state "$m"
+                run_publish_discipline "$m"
             done
         done
     ) &
@@ -702,6 +737,8 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
     # publish that runs on a LOCAL-ONLY mirror, where the honest answer is
     # heads-unknown/no-tracking-data rather than silence.
     run_sync_state "$mirror"
+    # Order 1443-uit6: and the first discipline ref, for the same reason.
+    run_publish_discipline "$mirror"
 done
 
 echo "$(date -Is) [git-service] startup sweep complete" >> "$SLOG"

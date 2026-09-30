@@ -1,0 +1,33 @@
+packets:
+  - packet_id: the-forge-runtime-ca-trust-fixture-refuses-a-correct-host-for-lacking-node-which-only-ever-runs-inside-the-forge-container
+    order: 1495-p7ek
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [litmus, fixture, forge, ca-trust]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-forge-runtime-ca-trust.sh
+    title: |
+      scripts/test-forge-runtime-ca-trust.sh prechecks `openssl gcc git curl node` on the HOST, but node only runs inside the forge container (the NODE_USE_SYSTEM_CA fetch probe in the podman run -euc body), so a host without node is refused with "required host command is absent: node" before any container arm runs
+    context: |
+      MEASURED on yoga 2026-09-29 (no node on the host PATH):
+      litmus:forge-config-trust-cross-platform-parity (git-mirror-service,
+      quick) fails, and test-forge-runtime-ca-trust.sh prints
+      "FAIL: required host command is absent: node" and exits before the
+      container arms. On the host, openssl, gcc, git and curl are each used
+      (curl is the readiness probe); node is used only inside the container
+      body. Diagnosis by the coordinator (macuahuitl-fedora, 2026-09-29): a
+      FIXTURE defect, not a missing host tool; node is not a required host tool
+      and the litmus must not skip on its absence.
+    exit_criteria:
+      - 'on a host with no node on PATH, test-forge-runtime-ca-trust.sh no longer prints "required host command is absent: node" and proceeds to the container arms (pre-fix: FAILS, refuses exactly as on yoga)'
+      - 'a forge image without node fails BY NAME inside the container body, not with a bare command-not-found'
+    verifiable_closure: |
+      litmus:forge-config-trust-cross-platform-parity passes on yoga (a host
+      with no node).
+    provenance: |
+      Filed and claimed 2026-09-29 by yoga on the coordinator's direction.

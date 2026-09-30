@@ -150,10 +150,16 @@ say() { printf '%s\n' "$*"; }
 
 # ORDER 1375-2x4e: the queue JSON is read with `tillandsias-plan json get`, the jq
 # subset on the binary every gate host already has, not with jq. Resolved from
-# THIS script's directory: the fixture runs it against scratch repositories.
+# THIS script's CHECKOUT ROOT, not the caller's cwd (1461-5rm6): the fixture
+# runs it from scratch repositories with no target/, and resolve_plan_binary's
+# `./target/...` arm reads the cwd. Resolved inside the root, then made
+# absolute, so a later cd cannot orphan a relative path. An exported
+# TILLANDSIAS_PLAN_BIN still wins (the probe's first arm).
+_lq_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/plan-binary-probe.sh
-. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/plan-binary-probe.sh" 2>/dev/null || true
-PLAN="$(resolve_plan_binary 2>/dev/null)" || { say "fail:land-queue:no-plan-binary — the queue is read with tillandsias-plan json get"; exit 1; }
+. "$_lq_root/scripts/plan-binary-probe.sh" 2>/dev/null || true
+PLAN="$(cd "$_lq_root" && resolve_plan_binary 2>/dev/null)" || { say "fail:land-queue:no-plan-binary — the queue is read with tillandsias-plan json get"; exit 1; }
+case "$PLAN" in /*) ;; */*) PLAN="$_lq_root/${PLAN#./}" ;; esac
 
 # pr_comment <number> <text> — record a verdict where the author will see it.
 # A failure to comment is NOT a failure to evict: the eviction already happened

@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-refusal-in-the-tree-must-say-why-it-refused-and-what-would-make-it-not-a-refusal-because-a-verdict-token-alone-tells-an-agent-it-is-stuck-without-telling-it-how-to-stop-being-stuck
+    event:
+      type: progress
+      ts: "2026-09-29T15:05:23Z"
+      agent_id: linux-lenovinha-claude-20260929t150523z
+      host: lenovinha
+      summary: |
+        CONVERSION ORDER (1494-kkbi, criterion 3): the bare refusal verdicts ranked by how often agents RECORDED hitting them in plan/index.d and plan/issues, 2026-09-29, via scripts/rank-refusal-hits.sh on work/1494-kkbi (built on 1470-v67y's --audit). Gate logs are not the rank: fixture-provoked refusals would dominate. Convert in this order:
+        1 hits=43 logs=0 sites=2 refused:preflight: build.sh:902
+        2 hits=24 logs=0 sites=1 blocked:gh-cli-only scripts/check-credential-channel.sh:1050
+        3 hits=22 logs=0 sites=1 refused:finalize:record-failed scripts/finalize-cycle.sh:150
+        4 hits=15 logs=0 sites=1 blocked:upstream-no-credential scripts/check-credential-channel.sh:321
+        5 hits=14 logs=0 sites=2 blocked:plan-ledger-incomplete scripts/release-preflight.sh:193
+        6 hits=13 logs=0 sites=3 blocked:nix-toolbox: scripts/nix-toolbox.sh:510
+        7 hits=12 logs=0 sites=1 violation:missing-from-runtime: scripts/check-skills-single-source.sh:226
+        8 hits=11 logs=0 sites=1 blocked:bash4-unguarded: scripts/check-bash-dialect.sh:575
+        9 hits=11 logs=0 sites=1 blocked:upstream-auth-unpublished scripts/check-credential-channel.sh:278
+        10 hits=9 logs=0 sites=1 blocked:linux-next-not-merged: scripts/hooks/pre-push-linux-next-merged.sh:112
+        rank-refusal-hits:tokens=439 with-hits=80 sites=517

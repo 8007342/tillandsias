@@ -1,0 +1,65 @@
+# @trace order:1475-j9kv
+# Explicit fixed inputs for the shadow-only Lua source-agreement evaluator.
+# `expected` is test data; the evaluator never trusts it to choose a verdict.
+version: 1
+cases:
+  - id: tray-live
+    operation: tray_process_naming
+    source: crates/tillandsias-macos-tray/src/diagnose.rs
+    expected: { exit: 0, verdict: "ok:tray-process-naming:3 checked" }
+  - id: tray-old-field
+    operation: tray_process_naming
+    source: scripts/fixtures/source-agreements/tray-old-field.rs
+    expected: { exit: 1, verdict: "violation:tray-process-naming:1" }
+  - id: tray-removed-new-field
+    operation: tray_process_naming
+    source: scripts/fixtures/source-agreements/tray-removed-new-field.rs
+    expected: { exit: 1, verdict: "violation:tray-process-naming:1" }
+  - id: tray-prose-only
+    operation: tray_process_naming
+    source: scripts/fixtures/source-agreements/tray-prose-only.rs
+    expected: { exit: 0, verdict: "ok:tray-process-naming:3 checked" }
+  - id: tray-crlf-space-path
+    operation: tray_process_naming
+    source: "scripts/fixtures/source agreements/tray-crlf.rs"
+    expected: { exit: 0, verdict: "ok:tray-process-naming:3 checked" }
+  - id: dev-model-live
+    operation: dev_embed_model_agreement
+    hook: images/default/config-overlay/mcp/lib-dev-env.sh
+    ensure: scripts/dev-inference-ensure.sh
+    expected: { exit: 0, verdict: "ok:dev-embed-model-agreement:nomic-embed-text" }
+  - id: dev-model-changed
+    operation: dev_embed_model_agreement
+    hook: scripts/fixtures/source-agreements/dev-hook-model-a.sh
+    ensure: scripts/fixtures/source-agreements/dev-ensure-model-b.sh
+    expected: { exit: 1, verdict: "violation:dev-embed-model-mismatch:hook=model-a ensure=model-b" }
+  - id: dev-model-missing-declaration
+    operation: dev_embed_model_agreement
+    hook: scripts/fixtures/source-agreements/dev-hook-missing.sh
+    ensure: scripts/fixtures/source-agreements/dev-ensure-model-b.sh
+    expected: { exit: 1, verdict: "violation:dev-embed-model-mismatch:could not read a default (hook='' ensure='model-b')" }
+  - id: inference-live
+    operation: inference_container_name_agreement
+    script: scripts/dev-inference-ensure.sh
+    probe: crates/tillandsias-headless/src/accel_probe.rs
+    expected: { exit: 0, verdict: "ok:inference-container-name-agreement:tillandsias-dev-inference" }
+  - id: inference-renamed-container
+    operation: inference_container_name_agreement
+    script: scripts/fixtures/source-agreements/inference-script-renamed.sh
+    probe: scripts/fixtures/source-agreements/inference-probe-product.rs
+    expected: { exit: 1, verdict: "violation:inference-container-name-drift:creates=tillandsias-dev-inference:candidates=tillandsias-inference,tillandsias-prod-inference" }
+  - id: inference-prose-only-match
+    operation: inference_container_name_agreement
+    script: scripts/fixtures/source-agreements/inference-script-prose-only.sh
+    probe: scripts/fixtures/source-agreements/inference-probe-prose-only.rs
+    expected: { exit: 1, verdict: "violation:inference-container-name-drift:creates=tillandsias-totally-different:candidates=tillandsias-inference,tillandsias-dev-inference" }
+  - id: inference-missing-declaration
+    operation: inference_container_name_agreement
+    script: scripts/fixtures/source-agreements/inference-script-missing.sh
+    probe: scripts/fixtures/source-agreements/inference-probe-product.rs
+    expected: { exit: 2, verdict: "blocked:no-dev-container-assignment-in:scripts/fixtures/source-agreements/inference-script-missing.sh" }
+  - id: inference-missing-file
+    operation: inference_container_name_agreement
+    script: scripts/fixtures/source-agreements/does-not-exist.sh
+    probe: scripts/fixtures/source-agreements/inference-probe-product.rs
+    expected: { exit: 2, verdict: "blocked:script-unreadable:scripts/fixtures/source-agreements/does-not-exist.sh" }

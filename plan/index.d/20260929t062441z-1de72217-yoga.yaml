@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-rustc-panics-during-build-check
+    field: notes
+    value: |-
+      ROOT CAUSE, measured live on yoga 2026-09-29 (in-forge ./build.sh --check via podman exec; WD PC SN7100S 512G NVMe, btrfs, 12 cores, 14 GiB; forge pids.max=6144 memory.max=6 GiB). Runs 3 and 4 (unfixed shim): pids.current rose linearly ~40/s from 199 to the 6144 ceiling (pids.peak=6144), composed of sleeping `bash brew.sh install --formula ruby` + `timeout 150 brew install --formula ruby` + `tillandsias-brew-shim-exec ruby` chains (2233 bash + 559 timeout at one sample; zombies=1), then every fork failed ("sh: fork: retry: Resource temporarily unavailable") and rustc panicked "Unable to install ctrlc handler: … code 11 … Resource temporarily unavailable" — the EAGAIN class of this row's jobserver.rs:124 panic. Container io.pressure and host /proc/pressure/io avg10 stayed 0.00 throughout, so the disk-thrash hypothesis does NOT hold on this disk. Mechanism: brew (Ruby) re-resolves `ruby` to the shim; 966-rq7f's guard was in the image but its marker TILLANDSIAS_BREW_SHIM_INSTALLING read 0 in every nested shim's /proc/<pid>/environ beside 61 HOMEBREW_* vars, because brew.sh re-execs with a filtered environment. FIX on work/667-se87 53acde1ca: the marker is carried as HOMEBREW_TILLANDSIAS_SHIM_INSTALLING; the fixture's fake brew now filters env like real brew (trunk shim: 25 nested invocations to the hard stop; fix: 6/6). Run 5 with the fixed shim copied into the forge: same build ran 974 s through compile and 2673 tests at pids.peak=99. Remaining red in that run is unrelated (tillandsias::tests::source_built_init_and_status_check_smoke_uses_fake_podman: ensure_ca_bundle "No such file or directory (os error 2)" inside the forge). Criterion 3 (a green in-forge --check) needs the fix in the IMAGE (a forge-image rebuild) plus that unrelated test. Evidence: /var/home/tlatoani/claudia/se87/run{3,4}-*.log and run.log/samples.log on yoga.
+
+      [2026-09-29T04:45:48Z yoga] REGIME (coordinator 2026-09-29): the disk result is 'IO pressure 0.00 on a WD PC SN7100S 512G NVMe (btrfs)'; the thrash hypothesis is falsified on THAT disk only, not everywhere (the operator may have seen it on another). Criterion 3 closes on the first forge built after 53acde1ca lands (the fix must be in the image), together with 1485-d3f5 (the unrelated in-forge openssl red).
+
+      [2026-09-29T06:24:41Z yoga] LANDED in land89 f18c63c63 (the brew-shim marker as HOMEBREW_TILLANDSIAS_SHIM_INSTALLING, with the env-filtering fixture). Criteria 1 and 2 met (root cause measured live; the fix bounds the chain to pids.peak=99 in the live control). Criterion 3 (a green in-forge --check) closes on the first forge IMAGE built after f18c63c63, together with 1485-d3f5.
+    ts: "2026-09-29T06:24:41Z"
+    host: yoga
+
+events:
+  - packet_id: forge-rustc-panics-during-build-check
+    event:
+      type: progress
+      ts: "2026-09-29T06:24:41Z"
+      host: yoga
+      summary: |-
+        status 'ROOT CAUSE, measured live on yoga 2026-09-29 (in-forge ./build.sh --check via podman exec; WD PC SN7100S 512G NVMe, btrfs, 12 cores, 14 GiB; forge pids.max=6144 memory.max=6 GiB). Runs 3 and 4 (unfixed shim): pids.current rose linearly ~40/s from 199 to the 6144 ceiling (pids.peak=6144), composed of sleeping `bash brew.sh install --formula ruby` + `timeout 150 brew install --formula ruby` + `tillandsias-brew-shim-exec ruby` chains (2233 bash + 559 timeout at one sample; zombies=1), then every fork failed ("sh: fork: retry: Resource temporarily unavailable") and rustc panicked "Unable to install ctrlc handler: … code 11 … Resource temporarily unavailable" — the EAGAIN class of this row's jobserver.rs:124 panic. Container io.pressure and host /proc/pressure/io avg10 stayed 0.00 throughout, so the disk-thrash hypothesis does NOT hold on this disk. Mechanism: brew (Ruby) re-resolves `ruby` to the shim; 966-rq7f's guard was in the image but its marker TILLANDSIAS_BREW_SHIM_INSTALLING read 0 in every nested shim's /proc/<pid>/environ beside 61 HOMEBREW_* vars, because brew.sh re-execs with a filtered environment. FIX on work/667-se87 53acde1ca: the marker is carried as HOMEBREW_TILLANDSIAS_SHIM_INSTALLING; the fixture's fake brew now filters env like real brew (trunk shim: 25 nested invocations to the hard stop; fix: 6/6). Run 5 with the fixed shim copied into the forge: same build ran 974 s through compile and 2673 tests at pids.peak=99. Remaining red in that run is unrelated (tillandsias::tests::source_built_init_and_status_check_smoke_uses_fake_podman: ensure_ca_bundle "No such file or directory (os error 2)" inside the forge). Criterion 3 (a green in-forge --check) needs the fix in the IMAGE (a forge-image rebuild) plus that unrelated test. Evidence: /var/home/tlatoani/claudia/se87/run{3,4}-*.log and run.log/samples.log on yoga.
+        
+        [2026-09-29T04:45:48Z yoga] REGIME (coordinator 2026-09-29): the disk result is 'IO pressure 0.00 on a WD PC SN7100S 512G NVMe (btrfs)'; the thrash hypothesis is falsified on THAT disk only, not everywhere (the operator may have seen it on another). Criterion 3 closes on the first forge built after 53acde1ca lands (the fix must be in the image), together with 1485-d3f5 (the unrelated in-forge openssl red).
+        
+        [2026-09-29T06:24:41Z yoga] LANDED in land89 f18c63c63 (the brew-shim marker as HOMEBREW_TILLANDSIAS_SHIM_INSTALLING, with the env-filtering fixture). Criteria 1 and 2 met (root cause measured live; the fix bounds the chain to pids.peak=99 in the live control). Criterion 3 (a green in-forge --check) closes on the first forge IMAGE built after f18c63c63, together with 1485-d3f5.' (not terminal) with evidence_refs: f18c63c63
+  - packet_id: forge-rustc-panics-during-build-check
+    event:
+      type: note
+      ts: "2026-09-29T06:24:41Z"
+      host: yoga
+      summary: |-
+        landed

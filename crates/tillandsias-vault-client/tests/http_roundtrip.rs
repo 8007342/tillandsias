@@ -96,6 +96,45 @@ async fn write_secret_wraps_in_data_envelope() {
         .expect("write_secret should succeed");
 }
 
+/// @trace order:1505-kc5f — logout destroys every version (metadata path),
+/// is idempotent on an absent path, and surfaces a refusal as an error.
+#[tokio::test]
+async fn delete_secret_all_versions_hits_metadata_path() {
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path("/v1/secret/metadata/cloudflare/token"))
+        .and(header("X-Vault-Token", "tray-root"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/v1/secret/metadata/cloudflare/absent"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/v1/secret/metadata/cloudflare/refused"))
+        .respond_with(ResponseTemplate::new(403).set_body_string("{\"errors\":[\"denied\"]}"))
+        .mount(&server)
+        .await;
+
+    let client = VaultClient::new(server.uri(), "tray-root");
+    client
+        .delete_secret_all_versions("secret/cloudflare/token")
+        .await
+        .expect("delete should succeed");
+    client
+        .delete_secret_all_versions("secret/cloudflare/absent")
+        .await
+        .expect("an absent path is already deleted");
+    let err = client
+        .delete_secret_all_versions("secret/cloudflare/refused")
+        .await
+        .expect_err("a refused delete must be an error, never Ok");
+    assert!(matches!(err, VaultError::Unauthorized(_)), "got: {err:?}");
+}
+
 #[tokio::test]
 async fn issue_approle_token_returns_client_token_field() {
     let server = MockServer::start().await;

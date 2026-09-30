@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator 2026-09-28: "Fix the defects found, and start packets for the
+# recommended pilots, let's have Antigravity and Codex implement some of them."
+packets:
+  - packet_id: centicolon-evidence-pilots-2026-09-28
+    order: 1474-p9rz
+    status: ready
+    kind: milestone
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [centicolon, evidence, pilot, milestone, plan-only-peer-ok]
+    estimated_hours: 1
+    depends_on: []
+    owned_files: [plan/issues/stockfish-centicolon-lessons-research-2026-09-28.md, plan/issues/centicolon-transient-work-scope-research-2026-09-27.md]
+    unscoreable: |
+      A milestone closes when its members close; it has no behaviour of its own.
+    title: |
+      CentiColon evidence program (operator 2026-09-28): fix the graders' over-credit (1469-vhuk) and the predicate memo (1470-dbuw), then the three report-only pilots the Stockfish/CentiColon research recommends — B exact replay cache (1471-bvjy), A evidence envelope + attribution report (1472-5t4b), C preventive-closure measurement (1473-k4bw)
+    context: |
+      Source: Codex's research 1453-p9gb and Antigravity's position, both in
+      plan/issues/stockfish-centicolon-lessons-research-2026-09-28.md and
+      plan/issues/centicolon-transient-work-scope-research-2026-09-27.md;
+      parent question 1447-9sne. The operator chose on 2026-09-28: fix the
+      executed defects now, and run pilots A-C (the prerequisites for any
+      enforcement) as REPORT-ONLY work, implemented largely by Antigravity
+      and Codex, who coordinate through ./plan only
+      (methodology/multi-host-development.yaml -> plan_only_peers).
+      NOT in this program yet: pilots D (incremental scoring — waits on B's
+      equivalence oracle), E (work selection) and F (release claims); and
+      any change to the published CentiColon number, the ratchet or an
+      enforcement bar, which stays the operator's decision on the pilots'
+      reports. Order of work: 1469 and 1470 first (bugs), then 1472 (after
+      1469) and 1471 (after 1470); 1473 is independent and can start now.

@@ -2022,6 +2022,45 @@ pub(crate) fn fetch_cloud_projects() -> (Vec<CloudProjectEntry>, CloudRefreshOut
 mod tests {
     use super::*;
 
+    /// ORDER 828-itr9. THE REGION A SOURCE SCAN READS, OR A RED TEST.
+    /// `str::split(end).next()` on an end anchor that no longer occurs yields
+    /// the WHOLE remaining string, so renaming the function that closes a
+    /// region silently widened the scan to the rest of the file, and every
+    /// assertion about that region kept passing while it guarded nothing. These
+    /// return the region only when BOTH anchors are present, and panic naming
+    /// the missing one otherwise: a rename is a red test, never a wider scan.
+    fn scan_region<'a>(src: &'a str, start: &str, end: &str) -> &'a str {
+        let (_, tail) = src
+            .split_once(start)
+            .unwrap_or_else(|| panic!("scan start anchor `{start}` is gone: repoint this scan"));
+        scan_until(tail, end)
+    }
+
+    /// The text before `end`, or a red test when `end` is absent.
+    fn scan_until<'a>(src: &'a str, end: &str) -> &'a str {
+        src.split_once(end)
+            .map(|(head, _)| head)
+            .unwrap_or_else(|| {
+                panic!(
+                    "scan end anchor `{end}` is gone: the region would silently widen \
+                 to the rest of the file (828-itr9)"
+                )
+            })
+    }
+
+    #[test]
+    fn scan_region_is_red_when_its_end_anchor_is_renamed() {
+        let src = "head START body END tail";
+        assert_eq!(scan_region(src, "START", "END"), " body ");
+        let renamed = std::panic::catch_unwind(|| scan_region(src, "START", "RENAMED").len());
+        assert!(
+            renamed.is_err(),
+            "a missing end anchor must panic, not return the tail"
+        );
+        let gone = std::panic::catch_unwind(|| scan_region(src, "GONE", "END").len());
+        assert!(gone.is_err(), "a missing start anchor must panic");
+    }
+
     /// Order 828-r2ek NEGATIVE CONTROL: the guest refuses to EMIT a frame its
     /// own reader would refuse to accept.
     ///
@@ -2305,6 +2344,76 @@ mod tests {
             Err(broadcast::error::TryRecvError::Lagged(_)) => {}
             other => panic!("expected Lagged, got {other:?}"),
         }
+    }
+
+    /// litmus:headless-keepalive (order 148, criterion 3): the control listener
+    /// is LONG-LIVED. It keeps accepting and HANDLING connections after an
+    /// earlier one has closed; a one-shot listener (accept once and return,
+    /// or exit after the first request) was the hypothesis for the 2026-06-30
+    /// Ready <-> "Wire unreachable" oscillation.
+    ///
+    /// Runs the REAL `serve_listener` loop on a Unix socket (the same
+    /// `Listener` type the vsock bind returns). Each of three sequential
+    /// connections sends a malformed frame and must be CLOSED BY THE HANDLER
+    /// within 5 s. That needs an accept plus a live `handle_connection`, so a
+    /// listener that stopped accepting (the second connect refused, or left
+    /// parked in the kernel backlog) fails, not just one that exited.
+    ///
+    /// @trace order:148, spec:vsock-transport
+    #[tokio::test]
+    async fn serve_listener_keeps_serving_after_earlier_connections_close() {
+        let dir =
+            std::env::temp_dir().join(format!("tillandsias-keepalive-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let sock = dir.join("control.sock");
+        let transport = Transport::Unix(sock.clone());
+        let mut listener = bind(&transport).await.expect("bind a unix listener");
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let server_shutdown = Arc::clone(&shutdown);
+        let server = tokio::spawn(async move {
+            serve_listener(&mut listener, server_shutdown, VmStateHandle::new()).await;
+        });
+
+        for n in 1..=3 {
+            let mut client = tillandsias_control_wire::transport::connect(&transport)
+                .await
+                .unwrap_or_else(|e| panic!("connection {n}: the listener must still accept: {e}"));
+            // Not a valid frame for any wire mode: a live handler closes it.
+            client
+                .write_all(&[0xFF, 0xFF, 0xFF, 0xF0, 0, 1, 2, 3])
+                .await
+                .unwrap_or_else(|e| panic!("connection {n}: write: {e}"));
+            let _ = client.flush().await;
+            let mut buf = [0u8; 256];
+            let mut closed = false;
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            while tokio::time::Instant::now() < deadline {
+                match tokio::time::timeout_at(deadline, client.read(&mut buf)).await {
+                    Ok(Ok(0)) | Ok(Err(_)) => {
+                        closed = true;
+                        break;
+                    }
+                    Ok(Ok(_)) => continue, // e.g. a refusal notice before the close
+                    Err(_) => break,
+                }
+            }
+            assert!(
+                closed,
+                "connection {n}: not handled within 5 s. The listener accepted nothing after \
+                 an earlier connection closed (a one-shot listener)"
+            );
+            drop(client);
+        }
+        assert!(
+            !server.is_finished(),
+            "the serve loop must still be running after three connections"
+        );
+
+        shutdown.store(true, Ordering::SeqCst);
+        shutdown_notify().notify_waiters();
+        let _ = tokio::time::timeout(Duration::from_secs(5), server).await;
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Order 795-5itp: PIPELINED Hello+Subscribe must both survive the
@@ -2741,11 +2850,11 @@ mod tests {
     #[test]
     fn post_store_connection_exits_share_pty_cleanup() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/vsock_server.rs"));
-        let post_store = source
-            .split("let (pty_tx, mut pty_rx)")
-            .nth(1)
-            .and_then(|tail| tail.split("\nasync fn read_envelope").next())
-            .expect("post-store handle_connection source");
+        let post_store = scan_region(
+            source,
+            "let (pty_tx, mut pty_rx)",
+            "\nasync fn read_envelope",
+        );
         assert!(
             !post_store.contains("return;"),
             "post-store connection exits must break to shared PTY cleanup"
@@ -2762,11 +2871,11 @@ mod tests {
     #[test]
     fn empty_vault_handover_reply_keeps_later_first_boot_retry_eligible() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/vsock_server.rs"));
-        let handler = source
-            .split("ControlMessage::GetVaultHandover { seq } =>")
-            .nth(1)
-            .and_then(|tail| tail.split("ControlMessage::").next())
-            .expect("GetVaultHandover handler source");
+        let handler = scan_region(
+            source,
+            "ControlMessage::GetVaultHandover { seq } =>",
+            "ControlMessage::",
+        );
         assert!(
             handler.contains("handover_reply_delivers_unseal_share(")
                 && handler.contains("unseal_share_b64.as_deref()"),

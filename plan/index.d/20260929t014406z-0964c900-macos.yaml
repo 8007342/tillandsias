@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: wire-oscillation-root-cause
+    event:
+      type: progress
+      ts: "2026-09-29T01:44:06Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t014404z
+      host: macos
+      summary: |
+        WINDOW 2 STARTED (post-login, the row's named trigger): the login landed and a detached recorder began 2026-09-29T01:43:23Z for 3 h, headless restart lines 0 at start. Window 1 (pre-login) keeps running to 04:40Z. Results follow on this row.

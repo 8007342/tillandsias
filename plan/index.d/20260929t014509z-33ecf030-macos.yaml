@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-side-install-and-login-output-reaches-the-host-as-raw-bytes-not-structured-progress
+    event:
+      type: note
+      ts: "2026-09-29T01:45:09Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t014509z
+      host: macos
+      summary: |
+        The 2026-09-29 operator tray sign-in (projects 'near immediately', event 20260929t014405z-23a624f8) meets NONE of this row's criteria as worded. Its closure is about macOS --github-login STDERR rendering structured guest events instead of interleaved raw '[github-login] guest output (' lines, which a tray-menu sign-in does not observe. Row stays open. The observation belonged to 1453-bnmt, now closed.

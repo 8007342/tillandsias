@@ -1205,7 +1205,7 @@ cat > /etc/systemd/system/tillandsias-headless-fetch.service << 'EOF'
 Description=Ensure tillandsias-headless is present
 After=network-online.target
 Wants=network-online.target
-After=home-forge-src.mount
+After=var-lib-tillandsias-guest\x2dbin.mount
 Before=tillandsias-headless.service
 [Service]
 Type=oneshot
@@ -1685,8 +1685,63 @@ fn convert_qcow2_to_raw(
 /// BYTES, not a `"250G"` string, since 980-xcaf replaced `qemu-img resize`
 /// with `File::set_len` and there is no longer a command line to format for.
 /// See `convert_qcow2_to_raw`.
-const GUEST_DISK_SIZE_GIB: u64 = 250;
+// Order 1481-2bth, operator ruling 2026-09-29: "Why is the VM trying to take
+// 250gb? ... limit that to MAX 50GB, but start much lower ... and let it grow".
+// The 250 GiB disk was sparse (it cost only written bytes: 11.33 GiB measured
+// after forge builds, per scripts/uninstall.sh), but it showed as 250 GB, and
+// it let the guest fill the host. It now STARTS at GUEST_DISK_SIZE_GIB, which
+// fits the measured ~11 GiB with headroom, and GROWS at VM start in
+// GUEST_DISK_GROW_STEP_GIB steps (next_guest_disk_size) up to
+// GUEST_DISK_MAX_GIB. The guest extends its partition and filesystem on the
+// next boot (cloud-init growpart/resizefs: measured on a real boot, 20 -> 30 GiB,
+// on branch exploration/raw-xz-rootfs).
+const GUEST_DISK_SIZE_GIB: u64 = 20;
 const GUEST_DISK_SIZE_BYTES: u64 = GUEST_DISK_SIZE_GIB * 1024 * 1024 * 1024;
+const GUEST_DISK_MAX_GIB: u64 = 50;
+const GUEST_DISK_GROW_STEP_GIB: u64 = 10;
+/// Grow when the disk's ALLOCATED bytes exceed this share of its size. The
+/// host can measure this with no guest query: a sparse file's allocated bytes
+/// track what the guest has written.
+const GUEST_DISK_GROW_AT_PERCENT: u64 = 75;
+
+/// The size the guest disk should have before the next boot, or `None` to
+/// leave it. Pure, so the policy is unit-tested. Never shrinks, never exceeds
+/// GUEST_DISK_MAX_GIB, and grows one step at a time.
+pub fn next_guest_disk_size(allocated: u64, logical: u64) -> Option<u64> {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    let max = GUEST_DISK_MAX_GIB * GIB;
+    if logical >= max || logical == 0 {
+        return None;
+    }
+    if allocated.saturating_mul(100) < logical.saturating_mul(GUEST_DISK_GROW_AT_PERCENT) {
+        return None;
+    }
+    Some((logical + GUEST_DISK_GROW_STEP_GIB * GIB).min(max))
+}
+
+/// Apply [`next_guest_disk_size`] to `rootfs` (VM stopped). Growing a sparse
+/// file with `set_len` only adds a hole, so this is O(1) and costs no space.
+#[cfg(unix)]
+fn grow_guest_disk_if_needed(rootfs: &std::path::Path) -> Result<(), String> {
+    use std::os::unix::fs::MetadataExt;
+    let md = std::fs::metadata(rootfs).map_err(|e| format!("stat {}: {e}", rootfs.display()))?;
+    let allocated = md.blocks().saturating_mul(512);
+    if let Some(new_len) = next_guest_disk_size(allocated, md.len()) {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(rootfs)
+            .and_then(|f| f.set_len(new_len))
+            .map_err(|e| format!("grow {} to {new_len}: {e}", rootfs.display()))?;
+        eprintln!(
+            "[tillandsias-vz] guest disk grown {} -> {} GiB ({} GiB allocated; cap {} GiB)",
+            md.len() >> 30,
+            new_len >> 30,
+            allocated >> 30,
+            GUEST_DISK_MAX_GIB
+        );
+    }
+    Ok(())
+}
 
 /// Fetch the xz-compressed asset at `xz_url` to `xz_temp_dest`,
 /// decompress to `final_dest` via `xz -d`, then SHA-256-verify the
@@ -2518,6 +2573,70 @@ pub mod boot {
     }
 }
 
+/// Is the calling thread the process's main thread? (1429-u2wd)
+#[cfg(target_os = "macos")]
+fn on_main_thread() -> bool {
+    unsafe extern "C" {
+        fn pthread_main_np() -> std::ffi::c_int;
+    }
+    // SAFETY: no arguments, no state; documented to return 1 on the main thread.
+    unsafe { pthread_main_np() == 1 }
+}
+
+/// How long an off-main caller waits for the main queue to run one VZ call.
+/// The tray's main thread services the queue continuously; a caller whose
+/// main thread is blocked (never servicing the queue) gets an error naming
+/// that, not a hang.
+#[cfg(target_os = "macos")]
+const VM_QUEUE_WAIT: Duration = Duration::from_secs(10);
+
+/// Run `f` against the VM on the queue VZ requires (1429-u2wd).
+///
+/// The VM is created and started on the MAIN dispatch queue, and every VZ
+/// call asserts that queue. On the main thread `f` runs inline (pumping the
+/// run loop, as `stop()` always did). Off it, `f` is dispatched to the main
+/// queue and this thread blocks until it has run.
+#[cfg(target_os = "macos")]
+fn on_vm_queue<R, F>(
+    vm: &objc2::rc::Retained<objc2_virtualization::VZVirtualMachine>,
+    f: F,
+) -> Result<R, VmError>
+where
+    F: FnOnce(&objc2_virtualization::VZVirtualMachine) -> R + Send + 'static,
+    R: Send + 'static,
+{
+    if on_main_thread() {
+        return Ok(f(vm));
+    }
+    let handle = vm_handle::VmHandle(vm.clone());
+    let (tx, rx) = std::sync::mpsc::channel::<R>();
+    boot::dispatch_to_main_queue(move || {
+        // `let` moves the WHOLE handle into the closure: naming only
+        // `handle.0` would capture the non-Send field (see vm_handle).
+        let handle = handle;
+        let _ = tx.send(f(&handle.0));
+    });
+    rx.recv_timeout(VM_QUEUE_WAIT).map_err(|_| {
+        format!(
+            "VzRuntime: the main dispatch queue did not run a VM call within {}s \
+             (called off the main thread while the main thread is not servicing its queue)",
+            VM_QUEUE_WAIT.as_secs()
+        )
+    })
+}
+
+/// Wait between VZ state reads: pump the run loop on the main thread (VZ
+/// delivers there), plain sleep elsewhere (a worker's run loop delivers
+/// nothing; the main thread's own loop runs the dispatched calls).
+#[cfg(target_os = "macos")]
+fn wait_for_vz(d: Duration) {
+    if on_main_thread() {
+        boot::pump_cf_loop_for(d);
+    } else {
+        std::thread::sleep(d);
+    }
+}
+
 #[cfg(target_os = "macos")]
 #[async_trait::async_trait]
 impl VmRuntime for VzRuntime {
@@ -2572,6 +2691,13 @@ impl VmRuntime for VzRuntime {
             if slot.is_some() {
                 return Err("VzRuntime::start: VM already running".into());
             }
+        }
+
+        // Order 1481-2bth: grow the disk before it is attached.
+        // A failure here is reported, never fatal: the VM boots at its
+        // current size.
+        if let Err(e) = grow_guest_disk_if_needed(&rootfs) {
+            eprintln!("[tillandsias-vz] guest disk growth skipped: {e}");
         }
 
         let cidata_iso_path = self.image_root.join("cidata.iso");
@@ -2984,12 +3110,20 @@ impl VmRuntime for VzRuntime {
         // 690-xeda windows near-miss (a guest that killed itself every 30s,
         // caught only by a measurement guard) says not to rewire casually.
         // If the delegate lands, remove this justification with it.
-        let request_result = unsafe { vm.requestStopWithError() };
-        if let Err(e) = request_result {
-            // The VM may already be stopped or in an invalid state for stop;
-            // log + fall through to force-stop to honor the drain_timeout
-            // contract.
-            let msg = e.localizedDescription().to_string();
+        //
+        // 1429-u2wd: EVERY VZ call below goes through `on_vm_queue`. The VM
+        // was created on the main dispatch queue (start() dispatches there),
+        // and VZ asserts that queue on each call. Called from a tokio worker
+        // (the tray's Stop VM and Reset guest), a direct call trapped in
+        // dispatch_assert_queue (EXC_BREAKPOINT, tillandsias-tray-2026-09-26-
+        // 211531.ips). On the main thread the call runs inline, exactly as
+        // before; off it, the call hops to the main queue and this thread
+        // waits for the answer.
+        let request_result = on_vm_queue(vm, |vm| {
+            unsafe { vm.requestStopWithError() }.map_err(|e| e.localizedDescription().to_string())
+        })?;
+        if let Err(msg) = request_result {
+            // The VM may already be stopped or in an invalid state for stop.
             // Returning here would leak the VM in a weird state; better to
             // surface and let the caller decide.
             return Err(format!("VzRuntime::stop: requestStop failed: {msg}"));
@@ -2999,7 +3133,7 @@ impl VmRuntime for VzRuntime {
         let stop_res = loop {
             // VZ state enum: 0=Stopped, 1=Running, 2=Paused, 3=Error, 4=Starting,
             // 5=Pausing, 6=Resuming, 7=Stopping, 8=Saving, 9=Restoring.
-            let state = unsafe { vm.state() }.0;
+            let state = on_vm_queue(vm, |vm| unsafe { vm.state() }.0)?;
             if state == 0 {
                 // Stopped cleanly.
                 break Ok(());
@@ -3009,23 +3143,26 @@ impl VmRuntime for VzRuntime {
                 // is the force-stop variant; we wait briefly for it then
                 // return regardless.
                 let (tx, rx) = std::sync::mpsc::channel::<()>();
-                let handler = block2::RcBlock::new(move |_err: *mut objc2_foundation::NSError| {
-                    let _ = tx.send(());
-                });
-                unsafe { vm.stopWithCompletionHandler(&handler) };
+                on_vm_queue(vm, move |vm| {
+                    let handler =
+                        block2::RcBlock::new(move |_err: *mut objc2_foundation::NSError| {
+                            let _ = tx.send(());
+                        });
+                    unsafe { vm.stopWithCompletionHandler(&handler) };
+                })?;
                 let force_deadline = Instant::now() + Duration::from_secs(5);
                 while Instant::now() < force_deadline {
                     if rx.try_recv().is_ok() {
                         break;
                     }
-                    boot::pump_cf_loop_for(Duration::from_millis(100));
+                    wait_for_vz(Duration::from_millis(100));
                 }
                 break Err(format!(
                     "VzRuntime::stop: drain_timeout ({}s) expired; force-stop dispatched",
                     drain_timeout.as_secs()
                 ));
             }
-            boot::pump_cf_loop_for(Duration::from_millis(250));
+            wait_for_vz(Duration::from_millis(250));
         };
 
         // Explicitly drop handle to release VZ and unlock any files.
@@ -3445,6 +3582,86 @@ impl VmRuntime for VzRuntime {
 mod tests {
     use super::*;
 
+    /// VZ calls in `text` that are NOT inside an `on_vm_queue(...)` call
+    /// (1429-u2wd): each returned string is the offending line, trimmed.
+    fn unmarshalled_vz_calls(text: &str) -> Vec<String> {
+        const CALLS: [&str; 3] = [
+            "requestStopWithError()",
+            "vm.state()",
+            "stopWithCompletionHandler(",
+        ];
+        // Byte spans covered by each `on_vm_queue(` ... matching `)`.
+        let mut spans = Vec::new();
+        let mut from = 0;
+        while let Some(i) = text[from..].find("on_vm_queue(") {
+            let open = from + i + "on_vm_queue".len();
+            let mut depth = 0i32;
+            let mut end = text.len();
+            for (j, c) in text[open..].char_indices() {
+                match c {
+                    '(' => depth += 1,
+                    ')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = open + j;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            spans.push((open, end));
+            from = open;
+        }
+        let mut bad = Vec::new();
+        for call in CALLS {
+            for (at, _) in text.match_indices(call) {
+                if !spans.iter().any(|&(s, e)| s < at && at < e) {
+                    let line_start = text[..at].rfind('\n').map_or(0, |n| n + 1);
+                    let line_end = text[at..].find('\n').map_or(text.len(), |n| at + n);
+                    bad.push(text[line_start..line_end].trim().to_string());
+                }
+            }
+        }
+        bad
+    }
+
+    /// 1429-u2wd: `VzRuntime::stop` makes NO VZ call outside `on_vm_queue`,
+    /// so a stop from a tokio worker (the tray's Stop VM and Reset guest)
+    /// hops to the VM's queue instead of trapping in dispatch_assert_queue.
+    /// An ABSENCE scan: it cannot be satisfied by a literal being present.
+    ///
+    /// NEGATIVE CONTROL: the pre-fix body (direct `vm.state()` and
+    /// `requestStopWithError()`) must be flagged, and a marshalled call must not.
+    #[test]
+    fn stop_makes_no_vz_call_outside_the_vm_queue() {
+        let neg = "let r = unsafe { vm.requestStopWithError() };\n\
+                   let state = unsafe { vm.state() }.0;\n\
+                   let ok = on_vm_queue(vm, |vm| unsafe { vm.state() }.0)?;\n";
+        assert_eq!(
+            unmarshalled_vz_calls(neg).len(),
+            2,
+            "negative control: the two direct calls are flagged, the marshalled one is not"
+        );
+
+        let source = include_str!("vz.rs");
+        let window = source
+            .split("async fn stop(&self, drain_timeout: Duration)")
+            .nth(1)
+            .and_then(|t| t.split("async fn exec(").next())
+            .expect("VzRuntime::stop must exist, followed by exec()");
+        assert!(
+            window.contains("requestStopWithError"),
+            "the stop window holds no requestStop at all — this scan is checking nothing"
+        );
+        let bad = unmarshalled_vz_calls(window);
+        assert!(
+            bad.is_empty(),
+            "VZ calls in VzRuntime::stop outside on_vm_queue trap when stop runs on a \
+             tokio worker (1429-u2wd): {bad:?}"
+        );
+    }
+
     /// ORDER 690-w94k item 1 — the pump must PARK, not SPIN, when the run
     /// loop mode has no sources.
     ///
@@ -3778,6 +3995,22 @@ mod tests {
     /// self-matching needle here would have made the assertion permanently and
     /// invisibly true.
     #[test]
+    fn guest_disk_grows_in_steps_to_the_cap_and_never_shrinks() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        // Plenty of room: leave it.
+        assert_eq!(next_guest_disk_size(5 * GIB, 20 * GIB), None);
+        // 75% used: one step.
+        assert_eq!(next_guest_disk_size(15 * GIB, 20 * GIB), Some(30 * GIB));
+        // A step past the cap is clamped to the cap.
+        assert_eq!(next_guest_disk_size(40 * GIB, 45 * GIB), Some(50 * GIB));
+        // At the cap: never grows further.
+        assert_eq!(next_guest_disk_size(50 * GIB, 50 * GIB), None);
+        // An existing oversized disk (the old 250 GiB default) is never shrunk.
+        assert_eq!(next_guest_disk_size(12 * GIB, 250 * GIB), None);
+        assert_eq!(next_guest_disk_size(0, 0), None);
+    }
+
+    #[test]
     fn convert_grows_raw_disk_before_first_boot() {
         let source = include_str!("vz.rs");
         assert!(
@@ -3801,9 +4034,17 @@ mod tests {
             .and_then(|t| t.split(';').next())
             .and_then(|t| t.trim().parse().ok())
             .expect("GUEST_DISK_SIZE_GIB must be a plain integer literal");
+        // Order 1481-2bth: the >= 32 GiB floor (forge toolchain +
+        // overlay store) is now met by GROWTH up to GUEST_DISK_MAX_GIB rather
+        // than by a large initial size. The initial size must still hold the
+        // measured ~11 GiB post-forge footprint.
         assert!(
-            gib >= 32,
-            "guest disk must be >= 32 GiB for the forge toolchain + overlay store, got {gib}"
+            gib >= 16,
+            "initial guest disk must hold the measured ~11 GiB footprint, got {gib}"
+        );
+        const _: () = assert!(
+            GUEST_DISK_MAX_GIB >= 32 && GUEST_DISK_MAX_GIB <= 50,
+            "the growth cap must reach the 32 GiB forge floor and stay <= 50 GiB"
         );
     }
 
@@ -4467,9 +4708,23 @@ mod tests {
         // started at 4.461s — but the margin was only 1.456s, small enough that
         // a slower virtiofs mount closes it, and the failure is SILENT: the
         // script kept the old binary and exited 0.
+        //
+        // 1472-3d29: this pinned `After=home-forge-src.mount`, the share the
+        // binary came from when 701-iu9b wrote it. 1019-ivia moved staging to
+        // the guest-bin share and the literal stayed, so the unit raced the
+        // mount that actually carries the binary while this test stayed green.
+        // The expected unit is now DERIVED from GUEST_BIN_MOUNT, so moving the
+        // mount again reds this test instead of leaving a stale literal green.
+        let guest_bin_unit = systemd_mount_unit(tillandsias_core::guest_bin_path::GUEST_BIN_MOUNT);
         assert!(
-            fetch_unit.contains("After=home-forge-src.mount"),
-            "the fetch unit must be ordered after the share that carries the staged binary"
+            fetch_unit.contains(&format!("After={guest_bin_unit}")),
+            "the fetch unit must be ordered after {guest_bin_unit}, the guest-bin share that \
+             carries the staged binary (GUEST_BIN_MOUNT)"
+        );
+        assert!(
+            !fetch_unit.contains("After=home-forge-src.mount"),
+            "the ~/src share no longer carries the staged binary (1019-ivia); ordering on it \
+             leaves the unit racing the guest-bin mount"
         );
         // ...but NOT via RequiresMountsFor, which implies Requires=. The fstab
         // entry is deliberately `nofail` because a VZ config may legitimately
@@ -4487,6 +4742,52 @@ mod tests {
             !fetch_unit.contains("ConditionPathExists=!/usr/local/bin/tillandsias-headless"),
             "systemd must run the idempotent oneshot instead of skipping it"
         );
+    }
+
+    /// systemd's mount-unit name for an absolute path (systemd-escape --path
+    /// --suffix=mount): drop the leading `/`, escape `-` as `\x2d`, and join the
+    /// components with `-`. Enough for the plain ASCII paths used here.
+    fn systemd_mount_unit(path: &str) -> String {
+        let escaped: Vec<String> = path
+            .trim_start_matches('/')
+            .split('/')
+            .map(|c| c.replace('-', "\\x2d"))
+            .collect();
+        format!("{}.mount", escaped.join("-"))
+    }
+
+    #[test]
+    fn systemd_mount_unit_escapes_like_systemd() {
+        assert_eq!(
+            systemd_mount_unit("/var/lib/tillandsias/guest-bin"),
+            "var-lib-tillandsias-guest\\x2dbin.mount"
+        );
+        assert_eq!(
+            systemd_mount_unit("/home/forge/src"),
+            "home-forge-src.mount"
+        );
+    }
+
+    /// 1472-3d29, behavioural: the user-data this host actually BUILDS orders
+    /// the fetch unit after the guest-bin mount.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn built_user_data_orders_fetch_after_guest_bin_mount() {
+        let ud = super::provision_user_data_for_test();
+        let unit = ud
+            .split("tillandsias-headless-fetch.service << 'EOF'")
+            .nth(1)
+            .and_then(|t| t.split("\nEOF").next())
+            .expect("built user-data writes the fetch unit");
+        let want = format!(
+            "After={}",
+            systemd_mount_unit(tillandsias_core::guest_bin_path::GUEST_BIN_MOUNT)
+        );
+        assert!(
+            unit.contains(&want),
+            "built fetch unit lacks {want}:\n{unit}"
+        );
+        assert!(!unit.contains("RequiresMountsFor="));
     }
 
     /// 701-iu9b TRAP 1, the diagnostic half. Ordering makes the race unlikely;

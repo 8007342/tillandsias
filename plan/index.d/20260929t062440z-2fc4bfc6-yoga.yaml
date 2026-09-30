@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: mirror-seed-failure-invisible-to-health-and-launch-surfaces
+    field: notes
+    value: 'CRITERION 3 LANDED in land89 f18c63c63 (the seeded-gate surfaces the mirror''s own seed-fetch failure while waiting and on give-up; litmus:git-mirror-seed-failure-surfaced-shape). Criterion 2 was met earlier. CRITERION 1 IS STILL OPEN AND UNTAKEN: a cheap surface (healthcheck state or a published ref) that distinguishes a mirror with an origin, zero refs and a failing seed from a healthy or seeding one. The row is therefore NOT closed; yoga releases its claim so criterion 1 stays selectable.'
+    ts: "2026-09-29T06:24:40Z"
+    host: yoga
+
+events:
+  - packet_id: mirror-seed-failure-invisible-to-health-and-launch-surfaces
+    event:
+      type: progress
+      ts: "2026-09-29T06:24:40Z"
+      host: yoga
+      summary: |-
+        status 'CRITERION 3 LANDED in land89 f18c63c63 (the seeded-gate surfaces the mirror's own seed-fetch failure while waiting and on give-up; litmus:git-mirror-seed-failure-surfaced-shape). Criterion 2 was met earlier. CRITERION 1 IS STILL OPEN AND UNTAKEN: a cheap surface (healthcheck state or a published ref) that distinguishes a mirror with an origin, zero refs and a failing seed from a healthy or seeding one. The row is therefore NOT closed; yoga releases its claim so criterion 1 stays selectable.' (not terminal) with evidence_refs: f18c63c63
+  - packet_id: mirror-seed-failure-invisible-to-health-and-launch-surfaces
+    event:
+      type: note
+      ts: "2026-09-29T06:24:40Z"
+      host: yoga
+      summary: |-
+        criterion 3 landed; criterion 1 open

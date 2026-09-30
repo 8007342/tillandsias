@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-github-device-flow-qr-is-drawn-with-half-block-glyphs-in-low-contrast-greens-so-line-spacing-or-a-large-font-stripes-it-and-phone-cameras-rarely-read-it
+    event:
+      type: progress
+      ts: "2026-09-29T07:43:25Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t074325z
+      host: macos
+      summary: |
+        work/1480-eqkh @ 99767ae6c ready for relay (tlatoanis-macbook-air).
+        - COLOUR TIERS: render_terminal_qr_in draws each module as two spaces on a leaf-deepest (dark) or leaf-light (light) BACKGROUND, one text row per module row, with a 4-module quiet zone (render_qr_background_cells). No Dense1x2 half-block glyphs, so terminal line spacing cannot open gaps between rows. The palette of 1420-2pav is kept: option (b), maximum contrast, was NOT applied, since the palette is an operator ruling. If decoding is still poor after this, contrast is the next lever, and it is the operator's call.
+        - PLAIN TIER: unchanged (Dense1x2, zero escape bytes, quiet zone), per criterion 2.
+        - BOTH CALL SITES: the GitHub device QR and Codex's device QR (1475-uif4) already share render_terminal_qr_in, so one fix covers both, as the coordinator noted. The Codex test now checks the palette backgrounds and no half-blocks. The clickable device URL is unchanged (criterion 3).
+        - TESTS: colour_qr_is_background_cells_one_row_per_module_and_decodes_to_the_code decodes the rendered cells back into a module grid and compares it with the qrcode crate's to_colors (quiet zone included) on truecolor and 256-colour. The palette tests and the plain escape-free test are adjusted. headless 648 and 823 (tray,listen-vsock) passed; clippy listen-vsock and aarch64 musl clean; the scdq and v67y guards ok.
+        PENDING (criterion 1, visual): on the operator's Terminal.app with enlarged font and line spacing, no stripes, and the phone decodes it on the first try. It needs a tray built from the landed commit plus one device-flow sign-in. Proposed to fold into the post-land sign-in with 1486-y67a and 1487-6dz2 if it lands by then.

@@ -373,8 +373,14 @@ _phase_close() {
 # traps. Returns 124 on expiry, matching timeout's convention, so the caller is
 # unchanged. A door that returns quickly while leaving background work behind is
 # a door whose next run collides with its own last one.
-_pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile
+_pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, $4 = args
     local _p="$1" _d="$2" _out="$3" _pid _ticks=0 _tick _per_s _max
+    # ORDER 1499-m9fj: THE GATE'S ARGUMENTS, WORD FOR WORD. A guard run without
+    # the mode the gate gives it is a different guard: check-mcp-live-build with
+    # no argument checks HOST state and refused a tree the gate passes (it runs
+    # it as `fixture`). The roster carries them as literal words.
+    local -a _a=()
+    [ -z "${4:-}" ] || read -r -a _a <<< "$4"
     # POLL IN TENTHS, NOT SECONDS. A one-second poll puts a ONE-SECOND FLOOR
     # under every guard, including the 54 that finish in under 250ms: measured
     # here, that floor alone took the run from 148s to 196s — the deadline
@@ -409,9 +415,9 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile
     if sleep 0.1 2>/dev/null; then _tick=0.1; _per_s=10; else _tick=1; _per_s=1; fi
     _max=$(( _d * _per_s ))
     if [ -n "$_PF_SETSID" ]; then
-        ( cd "$SCRIPT_DIR" && exec setsid bash "$_p" ) >"$_out" 2>&1 </dev/null &
+        ( cd "$SCRIPT_DIR" && exec setsid bash "$_p" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
     else
-        ( cd "$SCRIPT_DIR" && exec bash "$_p" ) >"$_out" 2>&1 </dev/null &
+        ( cd "$SCRIPT_DIR" && exec bash "$_p" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
     fi
     _pid=$!
     while kill -0 "$_pid" 2>/dev/null; do
@@ -421,13 +427,152 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile
     done
     if kill -0 "$_pid" 2>/dev/null; then
         kill -TERM "-$_pid" 2>/dev/null || kill -TERM "$_pid" 2>/dev/null
-        sleep 1
+        # ORDER 1496-w25b: POLL THE GRACE, do not sleep it. An unconditional
+        # `sleep 1` charged every deadline-skipped guard a full second even
+        # when its group died on TERM at once, and with 11-14 guards reaching
+        # the deadline that was 11-14 s of the front door's 150 s budget spent
+        # waiting on processes that were already gone. Same 1 s ceiling.
+        _grace=0
+        while kill -0 "$_pid" 2>/dev/null && [ "$_grace" -lt "$_per_s" ]; do
+            sleep "$_tick"
+            _grace=$((_grace + 1))
+        done
         kill -KILL "-$_pid" 2>/dev/null || kill -KILL "$_pid" 2>/dev/null
         wait "$_pid" 2>/dev/null
         return 124
     fi
     wait "$_pid"
     return $?
+}
+
+# ORDER 1499-m9fj. WHETHER THE DOOR RUNS A GUARD, decided in ONE place, because
+# two passes ask it: the launcher (which must never start a guard the door does
+# not run: a gate-only fixture leaves a marker) and the reporter (which prints
+# the verdict). Prints what the door says about the guard; returns 0 = run it,
+# 10 = declared skip, 11 = could not run, 12 = run it ALONE (serial, below).
+_pf_predecide() {  # $1 = roster path, $2 = label
+    local _p="$1" _l="$2" _b="${1##*/}" _pre _kind _why _bin _go _reason
+    _pre="$(_preflight_preconditions | awk -F'|' -v s="$_b" '$1 == s { print $2 "|" $3; exit }')"
+    if [ -n "$_pre" ]; then
+        _kind="${_pre%%|*}"; _why="${_pre#*|}"
+        if [ "$_kind" != "policy-binary" ]; then
+            echo "skip:preflight:$_l:$_kind — $_why"
+            return 10
+        fi
+        _bin=""
+        if [ -f "$SCRIPT_DIR/scripts/plan-binary-probe.sh" ]; then
+            _bin="$( . "$SCRIPT_DIR/scripts/plan-binary-probe.sh" 2>/dev/null
+                     resolve_target_binary tillandsias-policy debug "$SCRIPT_DIR" 2>/dev/null || true )"
+        fi
+        if [ -z "$_bin" ]; then
+            echo "skip:preflight:$_l:$_kind — $_why"
+            return 10
+        fi
+    fi
+    if [ ! -f "$SCRIPT_DIR/$_p" ]; then
+        echo "could-not-run:preflight:$_l:absent — the file is not in this checkout, so nothing was learned about the tree"
+        return 11
+    fi
+    # ORDER 1496-w25b (coordinator ruling 2026-09-29): A GUARD MAY DECLARE
+    # ITSELF GATE-ONLY in its own header, `# preflight: gate-only — <reason>`,
+    # when running it at all costs more than the door's deadline (it drives
+    # the litmus runner, folds the ledger, builds, spawns). Such a guard
+    # reached the deadline on every run, answered nothing here and cost ~5 s
+    # each time. The declaration keeps scan-not-curate (the author says it,
+    # in the guard, as STEP_SECOND_REGIME does) and feeds the SAME
+    # declared-skip category as the table above, with the same line shape.
+    # Three limits, each enforced here: the REASON is required (a bare
+    # declaration runs anyway); only fixtures (scripts/test-*) may declare,
+    # because a check-* is a push decider the door exists to run; and the
+    # full gate still runs every declared guard.
+    _go="$(sed -n '1,40{s/^# preflight: gate-only[[:space:]]*//p}' "$SCRIPT_DIR/$_p" | head -n 1)"
+    if [ -n "$(sed -n '1,40{/^# preflight: gate-only/p}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+        _reason="$(printf '%s' "$_go" | sed 's/^[—-][[:space:]]*//')"
+        case "$_p" in
+            scripts/test-*)
+                if [ -n "$_reason" ]; then
+                    echo "skip:preflight:$_l:gate-only — $_reason"
+                    return 10
+                fi
+                echo "note:preflight:$_l:gate-only-without-a-reason — a declaration must name its cost; running it (1496-w25b)"
+                ;;
+            *)
+                echo "note:preflight:$_l:gate-only-ignored — a push decider cannot be gate-only at the door; running it (1496-w25b)"
+                ;;
+        esac
+    fi
+    # ORDER 1499-m9fj (coordinator ruling 2026-09-29): A GUARD THAT WRITES
+    # SHARED STATE RUNS ALONE. The door runs guards concurrently, and a guard
+    # that writes a fixed path another guard reads or writes (a fixed /tmp log,
+    # the checkout's own sources, a binary in target/) can make its neighbour
+    # PASS falsely, which no refusal count would show. Such a guard says so in
+    # its own header, `# preflight: serial — <reason>`, the same scan-not-curate
+    # shape as gate-only; the launcher then waits for every running guard,
+    # runs it with nothing beside it, and only then launches the next. The
+    # reason is required: a bare declaration runs concurrently, with a note.
+    if [ -n "$(sed -n '1,40{/^# preflight: serial/p}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        if [ -n "$_reason" ]; then
+            return 12
+        fi
+        echo "note:preflight:$_l:serial-without-a-reason — a declaration must name the shared state; running it concurrently (1499-m9fj)"
+    fi
+    return 0
+}
+
+# ORDER 1499-m9fj (coordinator ruling 2026-09-29). BOUNDED CONCURRENCY. 191
+# independent guards at up to 5 s each, one after another, measured 226 s on
+# yoga against a 150 s budget. The launcher starts them JOBS at a time; each
+# keeps its OWN deadline (measured per guard, in _pf_run_guard, from its own
+# start), its own session and group kill, stdin from /dev/null, and its own
+# output file. It writes `<rc> <elapsed>` when the guard ends, via a rename so
+# the reporter never reads half a line. JOBS is a fraction of the cores
+# (max(2, cores/4); coordinator ruling 2026-09-29: past the budget the thing to
+# minimise is deadline SKIPS, not seconds; nproc/2 cost bash-dialect its
+# deadline on yoga) so a 4-core floor host is not overcommitted into deadline
+# skips; TILLANDSIAS_PREFLIGHT_JOBS overrides, and 1 is the old serial door.
+_pf_launcher() {  # $1 = work dir, $2 = deadline, $3 = jobs; roster on stdin
+    local _dir="$1" _dl="$2" _jobs="$3" _i=0 _line _p _args _pids="" _pid _live _n _pd _cap _t _r
+    while IFS= read -r _line; do
+        [ -n "$_line" ] || continue
+        _i=$((_i + 1))
+        _p="${_line%%$'\t'*}"; _args=""
+        [ "$_p" = "$_line" ] || _args="${_line#*$'\t'}"
+        _pd=0
+        _pf_predecide "$_p" "x" >/dev/null 2>&1 || _pd=$?
+        case $_pd in
+            0) _cap="$_jobs" ;;
+            12) _cap=1 ;;   # serial: drain EVERY running guard first
+            *) echo "not-launched 0" > "$_dir/$_i.rc"; continue ;;
+        esac
+        while :; do
+            _live=""; _n=0
+            for _pid in $_pids; do
+                if kill -0 "$_pid" 2>/dev/null; then _live="$_live $_pid"; _n=$((_n + 1)); fi
+            done
+            _pids="$_live"
+            [ "$_n" -ge "$_cap" ] || break
+            sleep 0.1 2>/dev/null || sleep 1
+        done
+        if [ "$_pd" -eq 12 ]; then
+            # ALONE: run in the foreground, so nothing launches until it ends.
+            _t=$SECONDS
+            _r=0
+            _pf_run_guard "$_p" "$_dl" "$_dir/$_i.out" "$_args" </dev/null || _r=$?
+            echo "$_r $(( SECONDS - _t ))" > "$_dir/$_i.rc.tmp" && mv "$_dir/$_i.rc.tmp" "$_dir/$_i.rc"
+            continue
+        fi
+        (
+            _t=$SECONDS
+            # `|| _r=$?`, never a bare call then `$?`: this runs under set -e,
+            # and a guard that refuses would end the subshell before it wrote rc.
+            _r=0
+            _pf_run_guard "$_p" "$_dl" "$_dir/$_i.out" "$_args" || _r=$?
+            echo "$_r $(( SECONDS - _t ))" > "$_dir/$_i.rc.tmp" && mv "$_dir/$_i.rc.tmp" "$_dir/$_i.rc"
+        ) </dev/null &
+        _pids="$_pids $!"
+    done
+    wait
 }
 
 # ORDER 1305-udgs. THE THREE ROSTERS a guard must be wired into to refuse a push.
@@ -458,16 +603,24 @@ _preflight_roster() {
         | sed 's/STEP_SCRIPT="//; s/"$//'
     # 3. the pre-push lane's own checks
     grep -ohE 'scripts/check-[a-z0-9-]+\.sh' "$SCRIPT_DIR"/scripts/hooks/*.sh 2>/dev/null
+    # 4. every decider the gate runs INLINE (1499-m9fj): the literal
+    #    `_run bash "$SCRIPT_DIR/scripts/check-X.sh"` lines anywhere in this
+    #    file. Sources 1-3 missed 48 of them, so a push the gate refuses could
+    #    pass the door.
+    #    Each carries the ARGUMENTS the gate passes, as `path<TAB>words`: the
+    #    words after the closing quote up to the first redirect, pipe, `;`, `)`
+    #    or line continuation. A guard with a mode is run in that mode.
+    grep -oE '_run bash "\$SCRIPT_DIR/scripts/check-[a-z0-9-]+\.sh"[^;|&>)\\]*' "$SCRIPT_DIR/build.sh" \
+        | sed -E 's#^_run bash "\$SCRIPT_DIR/(scripts/check-[a-z0-9-]+\.sh)"#\1\t#; s/[[:space:]]+[0-9]*$//; s/\t[[:space:]]+/\t/; s/\t$//'
 }
 
 # Guards that cannot simply be run here, each with the reason the verdict prints.
 # A guard is NEVER silently dropped: it is run, or it is named.
 _preflight_preconditions() {
     cat <<'PRECONDS'
-check-no-python-scripts.sh|policy-binary|compiles before it resolves (its line 7 is `cargo build -p tillandsias-policy`); runs only when that binary already exists
+check-no-python-scripts.sh|policy-binary|compiles before it resolves (its first command is `cargo build -p tillandsias-policy`); runs only when that binary already exists
 check-no-competing-gate.sh|gate-context|answers about a RUNNING gate's dispatch, not about the tree; it has no subject outside one
 check-tracked-files-unwritten.sh|gate-context|compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
-test-pending-capability-row-does-not-wedge.sh|live-ledger|plants probe fragments in the checkout's OWN plan/index.d and relies on its exit trap to remove them; the door's deadline kill (SIGKILL of the group) mid-arm leaves them behind and the release preflight then refuses the whole ledger as incomplete (v56.9.20.1 release gate, 2026-09-20, twice); the gate step 275 runs it in full — the door does not, until the fixture is hermetic
 PRECONDS
 }
 
@@ -717,6 +870,31 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     # fetch it scans nothing and prints a green that means nothing.
     git -C "$SCRIPT_DIR" fetch -q origin 2>/dev/null || true
 
+    # ORDER 1247-9pr8 — A STALE PLAN BINARY IS ONE CAUSE, SO SAY IT ONCE. Measured
+    # on yolanda 2026-09-28 (1462-trch): with a plan binary older than the tree,
+    # this door refused bsd-count-shapes, json-query-jq-parity, lua-determinism
+    # and plan-hash-time-verbs. Four refusals, four unrelated-looking names, and
+    # no mention of the binary. All four went green once the binary was rebuilt.
+    # The binary answers its own currency in ~0.3s, so ask it once, up front,
+    # and refuse by name instead of running guards that would only echo it.
+    # Only a definite `stale:` answer refuses. With no binary, or one too old to
+    # answer, the door behaves as before: the guards skip or answer for
+    # themselves.
+    # BEGIN-STALE-PLAN-BINARY-CHECK
+    _pf_plan_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _pf_plan_bin=""
+    if [ -n "$_pf_plan_bin" ]; then
+        _pf_vs="$(cd "$SCRIPT_DIR" && "$_pf_plan_bin" validator-surface-hash --check 2>&1)" || true
+        case "$_pf_vs" in
+            *stale:validator-surface*)
+                echo "refused:preflight:stale-plan-binary — $_pf_plan_bin was built from a different validator surface than this checkout (${_pf_vs##*stale:validator-surface })" >&2
+                echo "  WHY: the guards below resolve this binary, so each would refuse for this one cause under its own name." >&2
+                echo "  REMEDY: cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh, then re-run ./build.sh --preflight." >&2
+                echo "  No guard was run. A stale binary says nothing about the tree." >&2
+                exit 1 ;;
+        esac
+    fi
+    # END-STALE-PLAN-BINARY-CHECK
+
     # 5s, SET FROM THE DISTRIBUTION AND NOT CHOSEN. Measured over all 105 roster
     # entries on pirria: 94 finish under 5s for 55.3s of work, and the next costs
     # are 6.6, 9.1, 14.6, 16.8, 22.1, three at a 25s cap, 89 and 316 seconds — a
@@ -734,9 +912,22 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         _pf_deadline="${TILLANDSIAS_PREFLIGHT_TIMEOUT:-5}"
     fi
 
-    _pf_tmp="$(mktemp "${TMPDIR:-/tmp}/preflight.XXXXXX")" || _pf_tmp=""
-    [ -n "$_pf_tmp" ] && trap 'rm -f "$_pf_tmp"' EXIT
+    _pf_dir="$(mktemp -d "${TMPDIR:-/tmp}/preflight.XXXXXX")" || _pf_dir=""
+    if [ -z "$_pf_dir" ]; then
+        echo "could-not-run:preflight:no-tmp — the door cannot buffer guard output; nothing was run" >&2
+        exit 1
+    fi
+    _pf_jobs="${TILLANDSIAS_PREFLIGHT_JOBS:-}"
+    if [ -z "$_pf_jobs" ]; then
+        _pf_cores="$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)"
+        _pf_jobs=$(( _pf_cores / 4 ))
+        [ "$_pf_jobs" -ge 2 ] || _pf_jobs=2
+    fi
+    _pf_roster="$(_preflight_roster | sort -u)"
     _pf_wall0=$SECONDS
+    printf '%s\n' "$_pf_roster" | _pf_launcher "$_pf_dir" "$_pf_deadline" "$_pf_jobs" &
+    _pf_launcher_pid=$!
+    trap 'kill "$_pf_launcher_pid" 2>/dev/null || true; wait "$_pf_launcher_pid" 2>/dev/null || true; rm -rf "$_pf_dir"' EXIT
     # ORDER 1353-ryhq — FIVE CATEGORIES, NOT TWO. `skipped` conflated a guard
     # that DECLARED its own skip with a guard the runner never got an answer
     # from, and the summary then vouched for both with `ok:`. Measured on
@@ -762,35 +953,25 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
     _pf_ran=0; _pf_declskip=0; _pf_deadline_n=0; _pf_cantrun=0; _pf_failed=0
     _pf_total=0
 
-    while IFS= read -r _pf_path; do
-        [ -n "$_pf_path" ] || continue
+    _pf_i=0
+    while IFS= read -r _pf_line; do
+        [ -n "$_pf_line" ] || continue
+        _pf_i=$((_pf_i + 1))
+        _pf_path="${_pf_line%%$'\t'*}"; _pf_args=""
+        [ "$_pf_path" = "$_pf_line" ] || _pf_args="${_pf_line#*$'\t'}"
         _pf_base="${_pf_path##*/}"
+        # One script can be a roster entry twice, in two modes (check and
+        # source), so a guard with arguments is NAMED with them.
+        _pf_label="${_pf_base%.sh}${_pf_args:+[$_pf_args]}"
         _pf_total=$((_pf_total + 1))
 
-        _pf_pre="$(_preflight_preconditions | awk -F'|' -v s="$_pf_base" '$1 == s { print $2 "|" $3; exit }')"
-        if [ -n "$_pf_pre" ]; then
-            _pf_kind="${_pf_pre%%|*}"; _pf_why="${_pf_pre#*|}"
-            if [ "$_pf_kind" != "policy-binary" ]; then
-                echo "skip:preflight:${_pf_base%.sh}:$_pf_kind — $_pf_why"
-                _pf_declskip=$((_pf_declskip + 1))
-                continue
-            fi
-            _pf_bin=""
-            if [ -f "$SCRIPT_DIR/scripts/plan-binary-probe.sh" ]; then
-                _pf_bin="$( . "$SCRIPT_DIR/scripts/plan-binary-probe.sh" 2>/dev/null
-                            resolve_target_binary tillandsias-policy debug "$SCRIPT_DIR" 2>/dev/null || true )"
-            fi
-            if [ -z "$_pf_bin" ]; then
-                echo "skip:preflight:${_pf_base%.sh}:$_pf_kind — $_pf_why"
-                _pf_declskip=$((_pf_declskip + 1))
-                continue
-            fi
-        fi
-        if [ ! -f "$SCRIPT_DIR/$_pf_path" ]; then
-            echo "could-not-run:preflight:${_pf_base%.sh}:absent — the file is not in this checkout, so nothing was learned about the tree"
-            _pf_cantrun=$((_pf_cantrun + 1))
-            continue
-        fi
+        _pf_pd=0
+        _pf_predecide "$_pf_path" "$_pf_label" || _pf_pd=$?
+        case $_pf_pd in
+            12) echo "note:preflight:$_pf_label:serial — declares shared state; run with no other guard beside it" ;;
+            10) _pf_declskip=$((_pf_declskip + 1)); continue ;;
+            11) _pf_cantrun=$((_pf_cantrun + 1)); continue ;;
+        esac
 
         # OUTPUT TO A FILE, NEVER A COMMAND SUBSTITUTION. `out="$(timeout N cmd)"`
         # reads the pipe until EOF, and EOF does not arrive while the guard's
@@ -801,24 +982,40 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         # ~110s projection. The deadline bounded nothing for exactly the guards it
         # exists to bound, and it was visible only because the skip line carries
         # the MEASURED cost rather than the configured one.
-        _pf_t0=$SECONDS
-        : > "$_pf_tmp"
-        # ITS OWN PROCESS GROUP, AND KILL THE GROUP. The file above stops the
-        # door WAITING for a killed guard's children; it does not stop those
-        # children RUNNING. MEASURED here 2026-09-20: after a door run, `pgrep -f`
-        # found SEVEN orphans from two killed fixtures still polling — a door that
-        # returns in two minutes while leaving background work behind is a door
-        # whose next run collides with its own last one. `setsid` makes the guard
-        # a session leader so the signal reaches the whole group, and -k 2 follows
-        # TERM with KILL for a guard that traps.
         #
-        # NOT `timeout --foreground`: that is for interactive use and is exactly
-        # the mode in which timeout does NOT signal the group.
-        if _pf_run_guard "$_pf_path" "$_pf_deadline" "$_pf_tmp"; then
+        # ITS OWN PROCESS GROUP, AND KILL THE GROUP (_pf_run_guard, run by the
+        # launcher). MEASURED here 2026-09-20: after a door run, `pgrep -f` found
+        # SEVEN orphans from two killed fixtures still polling. NOT `timeout
+        # --foreground`: that is exactly the mode in which timeout does NOT
+        # signal the group.
+        #
+        # 1499-m9fj: the guard is already running (or done) under the launcher;
+        # this pass only WAITS for it, in roster order, so the verdict prints in
+        # the same order whatever finished first. The elapsed figure is the
+        # guard's own, measured from its own start.
+        _pf_tmp="$_pf_dir/$_pf_i.out"
+        while [ ! -f "$_pf_dir/$_pf_i.rc" ]; do
+            if ! kill -0 "$_pf_launcher_pid" 2>/dev/null && [ ! -f "$_pf_dir/$_pf_i.rc" ]; then
+                echo "not-launched 0" > "$_pf_dir/$_pf_i.rc"
+                break
+            fi
+            sleep 0.1 2>/dev/null || sleep 1
+        done
+        read -r _pf_rc _pf_el < "$_pf_dir/$_pf_i.rc"
+        if [ "$_pf_rc" = "not-launched" ]; then
+            # The launcher and this pass disagreed (or the launcher died): run
+            # it here, serially, rather than report a guard nobody ran.
+            _pf_t=$SECONDS
+            _pf_rc=0
+            _pf_run_guard "$_pf_path" "$_pf_deadline" "$_pf_tmp" "$_pf_args" || _pf_rc=$?
+            _pf_el=$(( SECONDS - _pf_t ))
+        fi
+        _pf_t0=$(( SECONDS - _pf_el ))
+        [ -f "$_pf_tmp" ] || : > "$_pf_tmp"
+        if [ "$_pf_rc" -eq 0 ]; then
             _pf_ran=$((_pf_ran + 1))
             grep -E '^note:' "$_pf_tmp" || true
         else
-            _pf_rc=$?
             if grep -qE '^skip:' "$_pf_tmp"; then
                 # A NAMED SKIP IS NOT A FAILURE, whatever it exits with
                 # (1273-4mak). MEASURED: test-uninstall-matcher-spares-bystanders
@@ -851,7 +1048,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                 grep -E '^could-not-run:' "$_pf_tmp" | head -2
                 _pf_cantrun=$((_pf_cantrun + 1))
             elif [ "$_pf_rc" -eq 124 ]; then
-                echo "skip:preflight:${_pf_base%.sh}:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_deadline}s front-door deadline; the gate still runs it"
+                echo "skip:preflight:$_pf_label:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_deadline}s front-door deadline; the gate still runs it"
                 _pf_deadline_n=$((_pf_deadline_n + 1))
             elif [ "$_pf_rc" -eq 127 ] || grep -qE '(^|: )(exec: )?[A-Za-z0-9_.-]+: (not found|command not found)$' "$_pf_tmp"; then
                 # THE RUNNER COULD NOT START IT. A missing interpreter or helper
@@ -862,7 +1059,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                 # The guard is not at fault and the tree was never examined.
                 _pf_cantrun=$((_pf_cantrun + 1))
                 sed 's/^/  /' "$_pf_tmp" >&2
-                echo "could-not-run:preflight:${_pf_base%.sh}:rc=$_pf_rc — the runner could not start it; nothing was learned about the tree" >&2
+                echo "could-not-run:preflight:$_pf_label:rc=$_pf_rc — the runner could not start it; nothing was learned about the tree" >&2
             elif grep -qE 'No space left on device' "$_pf_tmp"; then
                 # ORDER 1349-53h6 — RUNNER RESOURCE EXHAUSTION IS NOT TREE REFUSAL.
                 # When a guard fails because the checkout or /tmp filesystem ran out
@@ -871,16 +1068,17 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
                 # with "the runner ran out of disk".
                 _pf_cantrun=$((_pf_cantrun + 1))
                 sed 's/^/  /' "$_pf_tmp" >&2
-                echo "could-not-run:preflight:${_pf_base%.sh}:no-space — runner resource exhaustion (No space left on device); nothing was learned about the tree" >&2
+                echo "could-not-run:preflight:$_pf_label:no-space — runner resource exhaustion (No space left on device); nothing was learned about the tree" >&2
             else
                 _pf_failed=$((_pf_failed + 1))
                 cat "$_pf_tmp" >&2
-                echo "refused:preflight:${_pf_base%.sh}" >&2
+                echo "refused:preflight:$_pf_label" >&2
             fi
         fi
     done <<PFEOF
-$(_preflight_roster | sort -u)
+$_pf_roster
 PFEOF
+    wait "$_pf_launcher_pid" 2>/dev/null || true
 
     # ORDER 1352-vmbc. NAME THE ISOLATION MODE IN THE VERDICT. A run without
     # setsid keeps every deadline and every convention but loses process-GROUP
@@ -2319,7 +2517,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # fixture drives this block under set -e with a stub exiting 3 and
     # asserts the gate PROCEEDS.
     _mem_rc=0
-    _mem_out="$(bash "$SCRIPT_DIR/scripts/check-gate-memory-floor.sh" 2>&1)" || _mem_rc=$?
+    # ORDER 1471-8ydv — inside a WSL2 guest the floor refuses to judge its own
+    # meminfo (1337-7jr5), because the Windows host is what reaps the gate.
+    # with-wsl2-builder.sh samples the HOST's free memory on the Windows side
+    # and forwards it here. Hand it to the floor as a one-line meminfo through
+    # the floor's existing judged path, so a WSL gate is guarded again. Unset
+    # (every non-WSL host) leaves the call exactly as it was.
+    # (No case/esac here: the consumer fixture cuts this block at its first
+    # four-space `esac`.)
+    _mem_src=""
+    if [[ "${TILLANDSIAS_GATE_HOST_MEMAVAILABLE_KB:-}" =~ ^[0-9]+$ ]]; then
+        _mem_src="$(mktemp "${TMPDIR:-/tmp}/gate-host-meminfo.XXXXXX")" \
+            && printf 'MemAvailable:   %s kB\n' "$TILLANDSIAS_GATE_HOST_MEMAVAILABLE_KB" > "$_mem_src" \
+            || _mem_src=""
+    fi
+    _mem_out="$(bash "$SCRIPT_DIR/scripts/check-gate-memory-floor.sh" ${_mem_src:+--meminfo-from "$_mem_src"} 2>&1)" || _mem_rc=$?
+    [ -n "$_mem_src" ] && rm -f "$_mem_src"
     case "$_mem_rc" in
         0) _info "${_mem_out%%$'\n'*}" ;;
         1) _error "${_mem_out%%$'\n'*}"
@@ -3333,7 +3546,42 @@ if [[ "$FLAG_CHECK" == true ]]; then
     #       not drift". Same cause as the tray-contract pin fixed at ae85ee471
     #       (1022-y7kc cause 1) — one change, two stale pins, and this one sat
     #       in a target no gate ran.
-    _step "Running workspace tests (cargo test --workspace, all targets)..."
+    # ORDER 1475-j9kv. Shadow-only source-agreement parity must execute as its
+    # own target: the workspace suite would compile it, but a named target and
+    # its nonzero test count make an unwired migration visible. The legacy Bash
+    # guards remain the production decision; this is evidence for a later
+    # typed-runner cutover, not a replacement.
+    _step "Running Lua source-agreement shadow parity (1475-j9kv)..."
+    if ! _run cargo test -p tillandsias-plan --test lua_source_agreements \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1; then
+        _error "the Lua source-agreement shadow parity target failed (1475-j9kv)"
+        exit 1
+    fi
+    _info "Lua source-agreement shadow parity passed"
+
+    # ORDER 1118-pifa: THIS STEP IS LOAD-BEARING. Do not skip or memoise it on
+    # its run count. It tops `skippable:` on two hosts at ~95s with fail_pct=0,
+    # but a step that never fails is as consistent with "nothing regressed" as
+    # with "tests nothing", so the question was answered by SEEDING DEFECTS
+    # (tlatoanis-macbook-air, 2026-09-28, against each cargo command this gate
+    # runs):
+    #   tillandsias-otp parse_cookie_value accepting a short cookie
+    #     clippy -D warnings: green   feature-gated pass (below): green
+    #     THIS STEP: red (otp's own unit test + router-sidecar's e2e test)
+    #   headless INIT_IMAGES dropping "web"
+    #     clippy: green   feature-gated pass: red   THIS STEP: red
+    # So every crate except the headless bin is tested ONLY here. The one
+    # overlap is small: the headless bin's default-feature suite (632 tests,
+    # ~5s) is a strict subset of the feature-gated pass (809), with no
+    # default-only tests.
+    # WHERE THE TIME GOES (the same run): one test,
+    # tillandsias-plan fragments::compaction_on_the_real_ledger_preserves_every_comment_and_item,
+    # was 117s of this step's ~196s (debug; 32s in release). It compacts a copy
+    # of the LIVE ledger, so its cost grows with plan/ rather than with the
+    # code. It is also load-bearing, and deliberately live. Speed it up
+    # (optimise that crate's test profile, or move it to a tier that owns
+     # ledger-scale checks) rather than cutting this step.
+     _step "Running workspace tests (cargo test --workspace, all targets)..."
     _WS_TEST_TRANSCRIPT="$SCRIPT_DIR/target/test-transcript-workspace-gate.log"
     mkdir -p "$(dirname "$_WS_TEST_TRANSCRIPT")"
     _ws_test_rc=0

@@ -86,6 +86,9 @@ pub struct RoutingTable {
     pub classes: BTreeMap<String, FallbackChain>,
 }
 
+/// ORDER 968-uhzg: the inference policy table schema this reader understands.
+pub const POLICY_TABLE_VERSION: u32 = 1;
+
 impl RoutingTable {
     // @trace spec:inference-policy-router
     pub fn parse_toml(input: &str) -> Result<Self, String> {
@@ -96,7 +99,12 @@ impl RoutingTable {
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if self.version != 1 {
+        // exact-version: a reader must not accept a table schema it does not
+        // understand, so this is a deliberate exact match, not a floor. The
+        // number lives in POLICY_TABLE_VERSION so a bump changes one place
+        // (order 968-uhzg: an exact pin against a bare literal made the first
+        // bump of host-capability-probe's schema unpublishable).
+        if self.version != POLICY_TABLE_VERSION {
             return Err(format!(
                 "unsupported inference policy table version {}",
                 self.version

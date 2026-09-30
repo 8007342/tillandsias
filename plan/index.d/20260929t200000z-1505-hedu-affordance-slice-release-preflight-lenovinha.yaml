@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-release-preflight-every-blocked-verdict-says-why-and-what-clears-it
+    order: 1505-hedu
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [fail-loud, affordance, release]
+    estimated_hours: 3
+    depends_on:
+      - affordance-slice-4-a-guard-refuses-a-newly-added-refusal-verdict-with-no-affordance-and-the-audit-counts-per-verdict
+    owned_files:
+      - scripts/release-preflight.sh
+      - scripts/test-release-preflight-affordances.sh
+    title: |
+      1247-amcu conversion slice: the 10 bare blocked: verdicts of release-preflight.sh (plan-ledger-incomplete ranked #5 by recorded hits, 1494-kkbi) say WHY and WHAT CLEARS IT; an actionable remedy is carried out in a fixture and clears its refusal
+    context: |
+      release-preflight.sh is the one-host, one-moment gate before a release
+      cut. The slice-4 audit counts 10 bare sites. blocked:plan-ledger-incomplete
+      (14 recorded hits) already names the fold's complaint but not the
+      command that proves the repair. Tokens and exit codes are unchanged.
+      Criterion 5 is exercised on blocked:unsanctioned-workflow (Gate 4),
+      which a hermetic scratch root can reach (Gate 1 stubbed, no binary for
+      Gate 2, no plan binary so Gate 3 skips by name).
+    exit_criteria:
+      - 'the slice-4 audit reports 0 bare sites in scripts/release-preflight.sh (pre-fix: 10 bare)'
+      - 'every verdict token and exit code is unchanged'
+      - 'CRITERION 5: in a scratch root, blocked:unsanctioned-workflow is reproduced, the remedy it prints is carried out, and the re-run no longer refuses with that token; NEGATIVE CONTROL: without it the refusal stands'
+    verifiable_closure: |
+      bash scripts/test-release-preflight-affordances.sh exits 0.
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixture is this row's own
+      deliverable and lands with the conversion.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:00:00Z"
+        agent_id: linux-lenovinha-claude-20260929t200000z
+        host: lenovinha
+        summary: |-
+          Filed from lenovinha as a 1247-amcu conversion slice chosen by the
+          1494-kkbi ranking; no in-flight work ref touches release-preflight.sh.

@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: third-exec-driver-transcript-uncapped-contradicting-a-done-closure
+    field: notes
+    value: |-
+      CRITERION 2, recorded HERE because 690-eug2 (exec-seam-observability-and-bounds) is ARCHIVED and the plan tool refuses writes to it (a field set there lands in a fragment no reader folds):
+      CLOSURE CORRECTION (795-vq6b, yoga 2026-09-29): this row's exit criterion 'the exec transcript is capped' was true for the EXPECT driver (exec_over_stream_expect_dynamic_with_output, trim_transcript) and FALSE for the collecting driver exec_over_stream_with_input in crates/tillandsias-vm-layer/src/vsock_exec.rs, which accumulated into an unbounded Vec<u8>. Fixed by 795-vq6b on work/795-vq6b 3d52ec4ab (retain_tail over the same trim_transcript policy), pinned by litmus:exec-transcript-capped-in-every-driver, which fails on the pre-fix file. The status is left as-is because the fix is landing under 795-vq6b; this event exists so the DONE no longer reads as covering all drivers.
+
+      DISPOSITION for exit criterion 3 (yoga 2026-09-29): the three drivers REMAIN, because their contracts differ: exec_over_stream_with_input COLLECTS the whole output as the result, exec_over_stream_with_input_streaming* STREAMS each chunk to a callback and accumulates nothing, and the expect driver matches needles and may drop what matching is done with. Merging them would push a flag through every caller for no shared behaviour beyond framing, which is already shared (frame_stream, read_exec_envelope). The mechanism that makes the next divergence loud is litmus:exec-transcript-capped-in-every-driver: every stdout.extend_from_slice in the non-test part of vsock_exec.rs must reach retain_tail( or trim_transcript( within 12 lines, with a floor of 2 accumulators so a rename cannot make it vacuous. Criterion 2 is an event on 690-eug2. Implemented on work/795-vq6b 3d52ec4ab.
+    ts: "2026-09-29T09:11:03Z"
+    host: yoga
+
+events:
+  - packet_id: third-exec-driver-transcript-uncapped-contradicting-a-done-closure
+    event:
+      type: progress
+      ts: "2026-09-29T09:11:03Z"
+      host: yoga
+      summary: |-
+        status 'CRITERION 2, recorded HERE because 690-eug2 (exec-seam-observability-and-bounds) is ARCHIVED and the plan tool refuses writes to it (a field set there lands in a fragment no reader folds):
+        CLOSURE CORRECTION (795-vq6b, yoga 2026-09-29): this row's exit criterion 'the exec transcript is capped' was true for the EXPECT driver (exec_over_stream_expect_dynamic_with_output, trim_transcript) and FALSE for the collecting driver exec_over_stream_with_input in crates/tillandsias-vm-layer/src/vsock_exec.rs, which accumulated into an unbounded Vec<u8>. Fixed by 795-vq6b on work/795-vq6b 3d52ec4ab (retain_tail over the same trim_transcript policy), pinned by litmus:exec-transcript-capped-in-every-driver, which fails on the pre-fix file. The status is left as-is because the fix is landing under 795-vq6b; this event exists so the DONE no longer reads as covering all drivers.
+        
+        DISPOSITION for exit criterion 3 (yoga 2026-09-29): the three drivers REMAIN, because their contracts differ: exec_over_stream_with_input COLLECTS the whole output as the result, exec_over_stream_with_input_streaming* STREAMS each chunk to a callback and accumulates nothing, and the expect driver matches needles and may drop what matching is done with. Merging them would push a flag through every caller for no shared behaviour beyond framing, which is already shared (frame_stream, read_exec_envelope). The mechanism that makes the next divergence loud is litmus:exec-transcript-capped-in-every-driver: every stdout.extend_from_slice in the non-test part of vsock_exec.rs must reach retain_tail( or trim_transcript( within 12 lines, with a floor of 2 accumulators so a rename cannot make it vacuous. Criterion 2 is an event on 690-eug2. Implemented on work/795-vq6b 3d52ec4ab.' (not terminal) with evidence_refs: 3d52ec4ab
+  - packet_id: third-exec-driver-transcript-uncapped-contradicting-a-done-closure
+    event:
+      type: note
+      ts: "2026-09-29T09:11:03Z"
+      host: yoga
+      summary: |-
+        criterion 2 (on this row; 690-eug2 archived) and criterion 3 disposition

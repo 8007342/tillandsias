@@ -84,3 +84,11 @@ fn a_failed_lane_exit_holds_the_window_and_passes_the_code_through() {
 fn a_lane_that_cannot_start_still_holds() {
     assert_holds(&["/nonexistent/lane-binary"], 127, "could not start");
 }
+
+/// 1457-r8yi: the lane runs with TILLANDSIAS_HOST_HOLDS_WINDOW=1, which the
+/// forge receives by name and which makes the entrypoint's exit_pause skip its
+/// own pause — so a failure inside the container asks for ONE keypress.
+#[test]
+fn the_lane_is_told_the_host_holds_the_window() {
+    assert_holds(&["printenv", "TILLANDSIAS_HOST_HOLDS_WINDOW"], 0, "1\n");
+}

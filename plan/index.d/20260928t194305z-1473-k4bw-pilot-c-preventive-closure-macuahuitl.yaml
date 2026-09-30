@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator 2026-09-28: start packets for the recommended pilots (A-C).
+packets:
+  - packet_id: pilot-c-for-a-sample-of-closed-bug-packets-re-run-each-closure-test-on-the-pre-fix-commit-and-a-semantic-mutant-and-report-whether-the-fix-actually-prevents-its-own-recurrence
+    order: 1473-k4bw
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    release_target: centicolon-evidence-pilots-2026-09-28
+    pickup_role: any
+    capability_tags: [centicolon, evidence, prevention, mutation, pilot, plan-only-peer-ok]
+    estimated_hours: 8
+    owned_files:
+      - scripts/centicolon-prevention-sample.sh
+      - plan/issues/centicolon-prevention-pilot-2026-09-28.md
+    title: |
+      PILOT C (CentiColon evidence program, operator 2026-09-28): measure whether a transient fix yields PREVENTION — for a sample of recently closed bug packets, run each closure's test on the pre-fix commit (and on a semantic mutant of the fix) and on the fix, per required regime, and report which closures really fail for the intended reason before and pass after
+    context: |
+      Design source: plan/issues/stockfish-centicolon-lessons-research-2026-09-28.md
+      experiment table row C ("Preventive closure": actual pre-fix or
+      semantic mutant fails for the intended reason; corrected behaviour
+      passes in every required regime), the parent review 1447-9sne (the
+      transient-work question: does a bug fix leave a "Y and Z prevent X"
+      behind?), and macbookair's baseline there: only 13% of bug closures'
+      fixtures SAY their pre-fix fails, and that was a textual count, never
+      executed. This pilot executes it.
+      Method: pick >= 12 bug packets closed since 2026-09-20 whose closure
+      names a runnable fixture (list them with their landed SHA); for each,
+      in a SCRATCH worktree (never the real checkout; see
+      cheatsheets/test/litmus-fixture-writing.md): run the fixture at the
+      fix's first parent (expect FAIL), at the landed fix (expect PASS), and
+      against one hand-written semantic mutant of the fix (expect FAIL);
+      record the failure reason and whether it is the INTENDED one, per
+      regime you can run (name the regimes you cannot).
+      SCOPE LIMIT: research and a report; no scoring, ratchet or enforcement
+      change. Recommendations go to 1447-9sne as an ASK: for the operator.
+      Plan-only peers: methodology/multi-host-development.yaml -> plan_only_peers.
+    verifiable_closure: |
+      plan/issues/centicolon-prevention-pilot-2026-09-28.md exists with a
+      table of >= 12 closures (order, landed SHA, fixture, pre-fix verdict +
+      reason, fix verdict, mutant verdict + reason, regimes run / not run)
+      and a summary of how many show real prevention; and
+      scripts/centicolon-prevention-sample.sh reproduces the table's
+      verdicts for any listed order from a clean checkout (running it for one
+      order prints the same three verdicts the table records).
+    unscoreable: "research deliverable; the report and its reproduction script are the evidence"
+    next_action: >
+      List candidate closures (plan query for kind=bug, status completed,
+      since 2026-09-20, closure naming scripts/test-*.sh), pick 12+ across
+      different subsystems, write the reproduction script against ONE of
+      them first, then run the rest.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Open to plan-only peers; independent of 1469/1470, so it can start at
+      once. Siblings: Pilot A (1472), Pilot B (1471).

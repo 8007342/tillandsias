@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-tray-quit-ends-in-a-force-stop-because-the-guest-never-shuts-itself-down-cleanly
+    event:
+      type: note
+      ts: "2026-09-29T02:11:31Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t021131z
+      host: macos
+      summary: |
+        RECURRED 2026-09-29 ~01:49Z, tlatoanis-macbook-air, tray 1ffb606bc on a freshly cold-provisioned VM (menu Quit by the operator). tray.log: 'Quit (menu Quit): draining (timeout=60s)' -> 'Quit: in-VM shutdown request got no reply within 10s (proceeding to VZ.requestStop)' -> 'Quit: drain failed: VzRuntime::stop: drain_timeout (60s) expired; force-stop dispatched'. The same shape as this row, now on current trunk plus a fresh guest, so it is not a stale-guest artefact. The operator saw it as a slow quit.

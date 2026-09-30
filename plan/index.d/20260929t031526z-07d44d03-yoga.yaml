@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: github-login-device-flow-only
+    field: notes
+    value: 'CRITERION 2 AMENDED (coordinator ruling 2026-09-29, reconciling the operator directive of 2026-08-16 with 1025-a896): the INTERACTIVE token-paste prompt (GH_LOGIN_TOKEN_SCRIPT, LoginInputMode::Terminal) is removed, not hidden, so a person at a terminal running --github-login always gets the device flow. The NON-INTERACTIVE `--github-login --with-token` stdin seed STAYS: it runs no device flow and so cannot evict other hosts'' tokens, which is 1025-a896''s reason, and initialize-bare-metal-host §3 and join-the-fleet step 5 depend on it. A --with-token seed carries no refresh token, so 1461-8tyy''s rotation never runs for it, by design (the operator re-seeds). Literally device-only (retiring --with-token) is a SEPARATE row that must solve the eviction hazard first. Implemented on work/777-kyjp 8f1eb7922.'
+    ts: "2026-09-29T03:15:26Z"
+    host: yoga
+
+events:
+  - packet_id: github-login-device-flow-only
+    event:
+      type: progress
+      ts: "2026-09-29T03:15:26Z"
+      host: yoga
+      summary: |-
+        status 'CRITERION 2 AMENDED (coordinator ruling 2026-09-29, reconciling the operator directive of 2026-08-16 with 1025-a896): the INTERACTIVE token-paste prompt (GH_LOGIN_TOKEN_SCRIPT, LoginInputMode::Terminal) is removed, not hidden, so a person at a terminal running --github-login always gets the device flow. The NON-INTERACTIVE `--github-login --with-token` stdin seed STAYS: it runs no device flow and so cannot evict other hosts' tokens, which is 1025-a896's reason, and initialize-bare-metal-host §3 and join-the-fleet step 5 depend on it. A --with-token seed carries no refresh token, so 1461-8tyy's rotation never runs for it, by design (the operator re-seeds). Literally device-only (retiring --with-token) is a SEPARATE row that must solve the eviction hazard first. Implemented on work/777-kyjp 8f1eb7922.' (not terminal) with evidence_refs: 8f1eb7922
+  - packet_id: github-login-device-flow-only
+    event:
+      type: note
+      ts: "2026-09-29T03:15:26Z"
+      host: yoga
+      summary: |-
+        amend criterion 2 per coordinator ruling 2026-09-29

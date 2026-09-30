@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: proxy-cache-policy-test-pins-a-launch-literal-a-supervisor-broke
+    field: status
+    value: completed
+    ts: "2026-09-29T21:03:12Z"
+    host: yoga
+
+events:
+  - packet_id: proxy-cache-policy-test-pins-a-launch-literal-a-supervisor-broke
+    event:
+      type: completed
+      ts: "2026-09-29T21:03:12Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: c53a62d2a (1022-px54, on origin/linux-next) + cargo test -p tillandsias-headless --test proxy_cache_policy: 3 passed incl bumped_origin_tls_and_signed_url_logs_fail_closed (yoga 2026-09-29)
+  - packet_id: proxy-cache-policy-test-pins-a-launch-literal-a-supervisor-broke
+    event:
+      type: note
+      ts: "2026-09-29T21:03:12Z"
+      host: yoga
+      summary: |-
+        audit-dispose: already fixed by 1022-px54, which asserts the supervised launch line and ends_with squid -N; the literal this row names is gone

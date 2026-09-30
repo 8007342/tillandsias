@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# preflight: serial — with TILLANDSIAS_SET_FIELD_MUTANT=1 (inherited from the environment) it rewrites crates/tillandsias-plan/src/main.rs and rebuilds the shared plan binary
 # @trace order:1285-vz27, spec:spec-traceability
 #
 # THE DEFECT. set-field's positional scan skipped `i += 2` for ANY token

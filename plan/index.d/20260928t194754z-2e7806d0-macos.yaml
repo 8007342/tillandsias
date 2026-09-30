@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: affordance-slice-4-a-guard-refuses-a-newly-added-refusal-verdict-with-no-affordance-and-the-audit-counts-per-verdict
+    event:
+      type: progress
+      ts: "2026-09-28T19:47:54Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t194754z
+      host: macos
+      summary: |
+        work/1470-v67y @ 91e539908 ready for relay (tlatoanis-macbook-air, darwin).
+        - scripts/check-refusal-affordance-added.sh (1247-amcu criterion 1) is diff-scoped. It refuses an ADDED line that EMITS (echo/printf/say/die/_error/fail/warn/log) a refused:, blocked: or violation: token unless an affordance sits within 3 lines before or 8 after: an *afford* helper call, both why and remedy in the text, or `# affordance-ok: <reason>` (an empty marker does not count). Case arms, grep patterns and comments are not emissions. Fixtures are skipped. The guard is NOT self-exempt; its own verdict carries why/remedy. It is wired into build.sh --check beside the sigpipe decider.
+        - `--audit` (criterion 2) prints one line per verdict SITE, covered|bare file:line token. MEASURED today on origin/linux-next: covered=28 bare=526 sites=554. It is strict to the why/remedy convention, so a site explained in other words counts bare; treat it as a floor. The file-level heuristic's 289/339 undercounts.
+        - Fixture scripts/test-refusal-affordance-added.sh 8/8: bare refused naming file:line, _afford after, afford-before-token look-back, text why/remedy, affordance-ok with and without a reason, match-not-emit, the diff-scope negative control plus the fixture skip, and per-site audit. Gate step 288 with a darwin STEP_SECOND_REGIME. Clean-checkout deciders all ok.
+        - Run against the four queued macbookair refs, it refused 968-uhzg (1 site) and 1235-rfub (3 sites). Both are fixed and re-pushed (uhzg 2c0455485, rfub ccbd36616), so neither bounces whichever lands first.
+        Not in this slice: criteria 3 (rank by gate-log hit frequency) and 5 (remedy executed in a fixture), which belong to the conversion slices.

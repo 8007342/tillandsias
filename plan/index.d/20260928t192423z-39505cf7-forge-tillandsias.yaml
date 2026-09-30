@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: project-detection-resolver-pinning
+    event:
+      type: note
+      ts: "2026-09-28T19:24:23Z"
+      agent_id: forge-forge-tillandsias-claude-20260928t192423z
+      host: forge-tillandsias
+      summary: |
+        CRITERIA (c)+(d) SPLIT to 1468-c5ym (coordinator ruling 2026-09-28): the crafted-manifest rejection and the mirror push-scope enforcement, blocked on the unfiled .tillandsias namespace/manifest design. This row closes on (a)+(b), the resolver pinning in project-info.sh and forge-plan.sh (work/963-pdrp @ b28016f56), once that lands.

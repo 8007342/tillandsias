@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: windows-target-clippy-refuses-lua-source-agreements-tests-because-unix-only-helpers-are-not-cfg-gated
+    order: 1506-ezv3
+    status: in_progress
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    parent_order: 1268-fx87
+    pickup_role: windows
+    capability_tags: [windows, clippy, dead-code, tests]
+    estimated_hours: 1
+    owned_files: [crates/tillandsias-plan/tests/lua_source_agreements.rs]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the guard is the existing check-windows-tray-clippy going clean on the Windows target; no new litmus.
+    title: |
+      REGIME: Windows target only. check-windows-tray-clippy refuses trunk with 6 dead-code errors in crates/tillandsias-plan/tests/lua_source_agreements.rs (1475-j9kv): ManifestCase fields never read, copy_to, legacy_outcome, percentile and declared_input_bytes_per_run never used, and an unused Instant import. Their only users are the two cfg(unix) tests. Same shape as 1491-dnp6 TrayNotify.
+    verifiable_closure: |
+      check-windows-tray-clippy is clean on yolanda, and Linux cargo clippy -p tillandsias-plan --all-targets -D warnings stays clean. Pre-fix on yolanda 2026-09-29: refused:windows-tray-clippy:6-errors.
+    events:
+      - type: filed
+        ts: "2026-09-29T21:23:25Z"
+        host: yolanda
+        summary: Filed and claimed by yolanda-windows at the coordinator's request (1475-j9kv's author is pointed elsewhere).

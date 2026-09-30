@@ -26,7 +26,9 @@ ok()  { printf 'ok:   %s\n' "$1"; }
 bad() { printf 'FAIL: %s\n' "$1"; FAIL=1; }
 
 # Known instances, each owned by a row. Remove an entry when its row lands.
-DECLARED="openspec/litmus-tests/litmus-ca-ephemeral.yaml:1266-75tr openspec/litmus-tests/litmus-mount-cleanup.yaml:1266-75tr"
+# 1266-75tr landed in land86 (the second of the pair), which removed its two
+# entries here as agreed between its author and 1459-mqvd's.
+DECLARED=""
 
 # A blocking guard never skips for want of a binary: build it if absent.
 BIN=""

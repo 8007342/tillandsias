@@ -559,6 +559,31 @@ transparently and survive Vault/container/image wipes and recreation."
 - **AND** the permission-bypass consent is NOT part of this document and SHALL
   NOT prompt (see `default-image`).
 
+### Requirement: Codex device sign-in offers a code-free terminal QR
+<!-- req-id: 62b2a747 -->
+
+Operator-approved on packet 1475-uif4. While `codex login --device-auth`
+prints its device instructions, Tillandsias SHALL render a terminal QR only
+for the complete, allowlisted verification URI actually present in that
+output. It SHALL leave the CLI's one-time code and instructions visible as
+Codex emits them. The QR SHALL never contain the one-time code or a URI with
+query, fragment, or extra path bytes. An absent or changed URI SHALL leave
+Codex's own device flow usable without inventing a destination. Non-TTY and
+`NO_COLOR` output SHALL have no escape codes in the QR.
+
+@trace order:1475-uif4, spec:tillandsias-vault
+
+#### Scenario: Codex emits its known verification page
+- **WHEN** Codex prints the verification URI during device sign-in
+- **THEN** the same terminal stream SHALL show one QR for that page
+- **AND** the one-time code SHALL remain outside the QR, launcher argv, env,
+  logs, and telemetry.
+
+#### Scenario: Codex output does not contain a safe verification URI
+- **WHEN** Codex prints no URI, a malformed URI, or one with additional
+  query or path bytes
+- **THEN** Tillandsias SHALL show no QR and SHALL preserve Codex's output.
+
 ## Invariants
 
 ### Invariant: Vault listener is boundary-scoped

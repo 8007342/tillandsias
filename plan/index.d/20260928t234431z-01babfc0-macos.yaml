@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: one-live-ledger-compaction-test-is-sixty-percent-of-the-workspace-test-step-and-its-cost-grows-with-the-plan-not-the-code
+    event:
+      type: progress
+      ts: "2026-09-28T23:44:31Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t234430z
+      host: macos
+      summary: |
+        work/1476-5dfy @ 991bcc11e (supersedes 512c0a656): the SECOND quadratic, per the coordinator's routing. compact_text appended each of the 748 new events with its own edit::push_event, re-rendering the whole candidate each time (~10 s). The new edit::push_events splits once, maps every packet_id to its item span in one scan, groups each packet's blocks in order, and inserts bottom-up.
+        BYTE-IDENTICAL: pinned by push_events_equals_sequential_push_event (a packet with and without `events:`, interleaved packets, trailing fields, an unknown id errors), and checked ONCE on the live ledger with a temporary assert_eq against the old sequential loop: 748 events, 12.5 MB candidate, equal. The assertion was then removed.
+        RESULT (Mac, opt 2): live-ledger test 134 s (trunk) -> 64 s (opt 2) -> 15.5 s (+ index-once) -> 6.3 s (+ push_events). Plan suite 398 passed. clippy -D warnings rc=0 (captured directly; an intermediate push, 2e52cd4b8, failed clippy on sort_by, fixed at 991bcc11e), fmt and zigbuild clean.

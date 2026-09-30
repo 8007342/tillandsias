@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: one-live-ledger-compaction-test-is-sixty-percent-of-the-workspace-test-step-and-its-cost-grows-with-the-plan-not-the-code
+    order: 1476-5dfy
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [gate, performance, tests, measure-before-optimize]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/fragments.rs
+      - Cargo.toml
+    title: |
+      tillandsias-plan's compaction_on_the_real_ledger_preserves_every_comment_and_item is 117 s of the workspace test step's ~196 s on a Mac (debug; 32 s in release), because it compacts the LIVE ledger (68,841-line base, 2,990 fragments), so the gate's largest step grows with plan/ and not with the code
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-09-28 while answering 1118-pifa
+      (which found the step load-bearing; see the note next to it in build.sh):
+        cargo test --workspace --no-fail-fast            ~196 s wall, 2,762 tests
+        tillandsias-plan lib suite                        130 s  (392 tests)
+          that ONE test alone                              117 s
+          the other 391 tests                               12 s
+        the same test, --release                            32 s  (62 s one-time build)
+        plan/index.yaml 68,841 lines / 5.9 MB; plan/index.d 2,990 fragments
+      1406-9ctt already halved it once, by removing a second render (201 s of
+      203 s then). What remains is compact_text over the real ledger in a debug
+      build. The test is DELIBERATELY live, and it must stay load-bearing: a
+      compaction that destroys a comment on the real ledger must not pass CI.
+      So the fix is making it cheaper, not cutting it.
+      Candidates, unmeasured: a [profile.test.package.tillandsias-plan]
+      opt-level for just this crate (release is ~3.6x faster here; the
+      compile-time cost needs measuring across hosts); or a fixed-size snapshot
+      of the ledger for --check, with the live-ledger run moved to a tier that
+      owns ledger-scale checks and a signal when the two diverge. Either is a
+      gate-policy call.
+    exit_criteria:
+      - 'the workspace step''s wall time on a Mac and a Linux host is re-measured after the change, and the live-ledger test is no longer the majority of it (pre-fix: 117 s of ~196 s here)'
+      - 'the live-ledger compaction property is still checked on every land OR a named tier owns it, with its cadence stated; it is never silently dropped'
+      - 'the test''s cost no longer grows unboundedly with plan/ in the per-land gate, or the growth is measured and bounded'
+    unscoreable: |
+      a performance decision with a policy half: the pin is the before/after
+      timing pair on two hosts plus the preserved live-ledger assertion, which
+      depends on the option the coordinator chooses.

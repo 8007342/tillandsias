@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: four-litmus-arms-grade-a-merged-stdout-stderr-channel-and-are-red-only-where-the-windows-build-emits-warnings-the-linux-build-does-not-so-they-are-the-executors-first-acceptance-test
+    event:
+      type: note
+      ts: "2026-09-29T20:57:31Z"
+      agent_id: windows-yolanda-claude-20260929t205729z
+      host: yolanda
+      summary: |
+        Re-measured on yolanda-windows 2026-09-29, Git Bash, with run-litmus-test.sh --test litmus:<name>. The MERGED-CHANNEL contaminant this row names NO LONGER REPRODUCES: every failing step printed output= EMPTY, with no cargo warnings in the verdict.
+        The three tests are still red on this host, for three OTHER causes:
+        (1) A stale LINUX ELF target/release/tillandsias-plan (and tillandsias-policy), left by an in-tree WSL build on Sep 21, shadowed the .exe. The arms hardcode that extensionless path, so step 1 failed rc=126 Exec format error. Host state; I removed the files. The arms bypass the plan-binary probe.
+        (2) After that, methodology-path-query-citability step 21 and plan-answer-envelope-citability step 20 (cargo test -p tillandsias-plan) fail on ONE unit test, spec_index::tests::the_repo_relative_rung_anchors_to_the_checkout_not_to_home. On Windows the scratch checkout lives under %TEMP%, which is under HOME, so its not-under-HOME assert is a false positive. Filed separately.
+        (3) expert-capability-skew-honesty step 24 (escapes-survive-strict) fails with empty output. Not yet triaged.
+        The stdout-only verdict property this row wants from the executor is still unproven; it just is not what reds these arms today.

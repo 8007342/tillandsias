@@ -515,6 +515,9 @@ jobs:
           echo "Resolved macOS release version: v${VERSION}"
 
       - name: Build Tillandsias.app + tarball
+        # 1238-b825: a release stamps VERSION verbatim, never VERSION+built.<date>.
+        env:
+          TILLANDSIAS_RELEASE_BUILD: "1"
         run: scripts/build-macos-tray.sh
 
       - name: Verify bundle (sanity checks before signing)
@@ -660,11 +663,22 @@ jobs:
           # (needs:) already published the source-matched sidecar to THIS
           # release, so stage it the same way the guest is staged. Fail the job
           # if absent: a tray built without it does not build at all.
+          # ORDER 1269-6fcn: select by RUNNER ARCH. An x86_64 sidecar staged
+          # under the arch-neutral name on an ARM64 runner would embed the
+          # wrong binary, and a size test cannot see it (v56.9.11.1 shipped no
+          # Windows tray from exactly this class of arch disagreement).
+          case "${{ runner.arch }}" in
+            X64) sidecar_arch=x86_64 ;;
+            ARM64) sidecar_arch=aarch64 ;;
+            *) echo "::error::no router sidecar mapping for runner.arch=${{ runner.arch }} (1269-6fcn)"; exit 1 ;;
+          esac
           mkdir -p images/router
           gh release download "v${{ steps.version.outputs.version }}" \
-            --pattern 'tillandsias-router-sidecar-x86_64-unknown-linux-musl' \
+            --pattern "tillandsias-router-sidecar-${sidecar_arch}-unknown-linux-musl" \
             --dir images/router
-          mv images/router/tillandsias-router-sidecar-x86_64-unknown-linux-musl \
+          test -s "images/router/tillandsias-router-sidecar-${sidecar_arch}-unknown-linux-musl" \
+            || { echo "::error::release has no tillandsias-router-sidecar-${sidecar_arch}-unknown-linux-musl for this ${{ runner.arch }} runner (1269-6fcn)"; exit 1; }
+          mv "images/router/tillandsias-router-sidecar-${sidecar_arch}-unknown-linux-musl" \
              images/router/tillandsias-router-sidecar
           ls -la images/router
           test -s images/router/tillandsias-router-sidecar

@@ -1,0 +1,251 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator direction 2026-09-29: research the CODING EXPERT for the milestone
+# after v0.6. Milestone 1505-33dh and its four research children.
+# Exploration: plan/issues/coding-expert-research-2026-09-29.md
+packets:
+  - packet_id: the-coding-expert-is-researched-a-one-method-mcp-whose-signature-and-affordances-are-minted-per-call-by-lua-rag-over-the-git-mirror-and-eagerly-loaded-cheatsheets-served-locally-and-as-a-fleet-expert
+    order: 1505-33dh
+    status: ready
+    kind: milestone
+    priority: p2
+    desired_release: v0.7
+    pickup_role: any
+    capability_tags: [coding-expert, mcp, lua, rag, cheatsheets, expert-serve, research, milestone]
+    estimated_hours: 4
+    owned_files:
+      - openspec/changes/coding-expert-research/
+      - plan/issues/coding-expert-research-2026-09-29.md
+    title: |
+      MILESTONE (research) — the CODING EXPERT: an MCP server offering ONE method write_function_for_file whose signature and affordances are minted per call as a ONE-TIME surface by the embedded Lua runtime, backed by RAG over the project's git mirror and eagerly loaded cheatsheets for its technologies, served locally and as a fleet expert; four measurements with named outcomes precede any implementation
+    context: |
+      OPERATOR (2026-09-29, verbatim): "a CODING EXPERT. An MCP server gives
+      the agent harness ONE method, write_function_for_file(contents), whose
+      signature and affordances are generated dynamically per call: the MCP
+      receives a request for a code change, mints a ONE-TIME MCP signature +
+      affordances (leverage the project's embedded Lua runtime for this
+      dynamic surface), and issues it to the Coding Expert. The Coding
+      Expert is RAG-enhanced with embeddings from the project's git mirror
+      AND from EAGERLY LOADED cheatsheets for the project's technologies
+      (Rust, Lua, Tokio, ...), refreshed as fresh RAG. It can be served
+      locally and as a fleet expert." Research only, for the milestone after
+      v0.6.
+      WHAT EXISTS: run_grounded (one pipeline behind expert-serve and the
+      pipeline CLI; spec expert-serve-grounded-pipeline R1/R2); spec-index,
+      experts-probe, corpus-coverage; mlua 0.10 with lua_predicate, lua_std,
+      the sandboxed tillandsias-plan lua CLI and hooks/*.lua; the
+      command-runtime / command-policies capabilities (1443-6r3q);
+      tillandsias-browser-mcp framing/server (protocol 2025-06-18); the tray
+      mcp.sock and the dev-control-mcp change; cheatsheets/ with
+      license-allowlist.toml and cheatsheet-sources/; the per-project git
+      mirror at /srv/git/<project>; fleet serving from 1505-br88.
+      METHOD (binding on every child): each packet declares a closed
+      vocabulary of outcome tokens before measuring and closes only on
+      outcome:<token> plus the regime; prose without the token is not
+      closure. No product code lands; prototypes live where each packet
+      names and touch no gate.
+    children:
+      - 1505-ga5f
+      - 1505-k4xs
+      - 1505-w2kq
+      - 1505-pv3s
+    exit_criteria:
+      - 'four outcome:<token> lines exist, one per child, each with its regime, recorded in the child''s events and in the exploration note (pre-fix: none of the four questions has a measured answer)'
+      - 'an implementation change is proposed with exit criteria that fail on today''s tree and depends_on naming 1505-pv3s'
+      - 'openspec/changes/coding-expert-research/ is archived as research once the implementation change is filed'
+    unscoreable: milestone-scored-by-its-children — research outcomes are recorded measurements, not fixtures; the nearest mechanical proxy is the mint prototype's fixture set in 1505-ga5f.
+    next_action: >
+      Children 1505-ga5f, 1505-k4xs and 1505-pv3s can start now; 1505-w2kq
+      waits on 1505-br88 (v0.6 fleet serving). The coordinator relays the
+      outcomes to the operator in words before an implementation change is
+      filed.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Research milestone; nothing here ships in v0.7 without a follow-on
+      implementation change.
+    provenance: |
+      Filed by the design-lead Fable session on macuahuitl, 2026-09-29, in
+      worktree worktree-agent-ae9525e76ba6c53c8 on linux-next 552af2544.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Research milestone for the Coding Expert; four children filed in
+          the same fragment.
+
+  - packet_id: research-whether-an-mcp-tool-surface-can-be-minted-per-call-by-sandboxed-lua-with-a-one-time-nonce-and-narrowed-schema-and-whether-claude-code-opencode-and-codex-honour-tools-list-changed
+    order: 1505-ga5f
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.7
+    release_target: the-coding-expert-is-researched-a-one-method-mcp-whose-signature-and-affordances-are-minted-per-call-by-lua-rag-over-the-git-mirror-and-eagerly-loaded-cheatsheets-served-locally-and-as-a-fleet-expert
+    pickup_role: linux
+    capability_tags: [coding-expert, mcp, lua, research]
+    estimated_hours: 10
+    owned_files:
+      - plan/issues/coding-expert-research-2026-09-29.md
+      - scripts/research-coding-expert-mint.sh
+    title: |
+      RESEARCH — a stdio MCP prototype whose tools/list changes after every tools/call (emitting notifications/tools/list_changed) and a sandboxed coding_expert/mint.lua that turns a request table into a one-time surface (nonce, expiry, schema narrowed to one file and function, affordances); measure whether Claude Code, OpenCode and Codex re-list, ending outcome:relist-honoured | relist-ignored-static-surface-needed | harness-specific
+    context: |
+      The operator's "ONE method whose signature and affordances are
+      generated dynamically per call". Two readings are explored: the
+      JSON-Schema signature the harness sees (minted per call) and a
+      cryptographic one-time token the expert's output must carry back. The
+      mint runs under tillandsias-plan lua with no proc.run and no write
+      verbs; lua_std.hash gains a keyed digest for the prototype only. Ten
+      fixture requests with expected surfaces; the path-escape request
+      ../etc/passwd must yield refused:coding-expert:path-escape. The
+      harness measurement records each harness's version. If no harness
+      re-lists, the fallback (ONE static tool carrying a minted surface
+      argument) keeps the one-time token, which is the real control.
+    exit_criteria:
+      - 'scripts/research-coding-expert-mint.sh ends with outcome:<one of the three tokens> and the exploration note carries the per-harness table with versions (pre-fix: the question is open)'
+      - 'two mints of one request differ only in nonce and expires_at; the path-escape request is refused; both asserted by the script'
+    unscoreable: "research-measurement: the harness behaviour is a fact about third-party tools at their versions; the mint fixture arms are pinned inside the script but the outcome token is a recorded measurement"
+    depends_on: []
+    next_action: >
+      Build the prototype server over tillandsias-browser-mcp framing, the
+      mint script and fixtures; run each harness against it; record the
+      token.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Protocol and sandbox design judgement; the security packet reads its
+      output.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Dynamic surface research.
+
+  - packet_id: research-a-coding-domain-index-built-from-the-git-mirror-at-a-named-commit-with-eagerly-loaded-cheatsheets-for-the-detected-technologies-measured-for-size-build-time-hit-rate-and-post-commit-refresh-on-a-fat-and-a-floor-host
+    order: 1505-k4xs
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.7
+    release_target: the-coding-expert-is-researched-a-one-method-mcp-whose-signature-and-affordances-are-minted-per-call-by-lua-rag-over-the-git-mirror-and-eagerly-loaded-cheatsheets-served-locally-and-as-a-fleet-expert
+    pickup_role: linux
+    capability_tags: [coding-expert, rag, spec-index, cheatsheets, git-mirror, research]
+    estimated_hours: 10
+    owned_files:
+      - plan/issues/coding-expert-research-2026-09-29.md
+      - scripts/research-coding-expert-corpus.sh
+    title: |
+      RESEARCH — build a coding-domain index from /srv/git/<project> at the mirror's integration HEAD (commit recorded in the freshness frame) with cheatsheets for the detected technologies (Cargo.toml deps, *.lua, flake.nix) loaded eagerly through the license allowlist; measure index size, build time, a 20-question hit rate and the post-commit refresh cost on one fat and one floor host, ending outcome:eager-fits-floor | eager-exceeds-floor | delta-rebuild-viable | delta-rebuild-unviable
+    context: |
+      Today the code domain embeds the working tree and cheatsheets are
+      retrieved lazily. The mirror at a named commit makes every host's
+      entry identical so a fleet expert's citations resolve on a spoke.
+      Read 1259-dgaq (per-model ground-truth vectors) before proposing a
+      delta rebuild; the post-commit.lua hook is the trigger to measure.
+      The floor-tier measurement is routed to a floor host (esme or macneo
+      class) because that is the regime that decides eager-vs-lazy; a fat
+      host's green is not the floor's.
+    exit_criteria:
+      - 'scripts/research-coding-expert-corpus.sh ends with outcome:<one of the four tokens> and the exploration note carries the two-host table: index bytes, build seconds, hit rate /20, refresh seconds, with the mirror commit and the loaded cheatsheet ids (pre-fix: the question is open)'
+    unscoreable: "research-measurement: the outcome depends on host tier and corpus size at measurement time; the script pins its method, the numbers are recorded"
+    depends_on: []
+    next_action: >
+      Write the script over tillandsias-plan spec-index with a mirror
+      source and eager cheatsheet loading; run on one fat and one floor
+      host; record.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Measurement over existing tools; clear method; two hosts.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Corpus research.
+
+  - packet_id: research-serving-the-coding-expert-as-one-more-run-grounded-domain-on-the-existing-endpoint-locally-and-over-tillandsias-vpn-measuring-token-budget-per-call-and-mesh-latency
+    order: 1505-w2kq
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.7
+    release_target: the-coding-expert-is-researched-a-one-method-mcp-whose-signature-and-affordances-are-minted-per-call-by-lua-rag-over-the-git-mirror-and-eagerly-loaded-cheatsheets-served-locally-and-as-a-fleet-expert
+    pickup_role: linux
+    capability_tags: [coding-expert, expert-serve, fleet-experts, mesh, research]
+    estimated_hours: 6
+    owned_files:
+      - plan/issues/coding-expert-research-2026-09-29.md
+      - scripts/research-coding-expert-serving.sh
+    title: |
+      RESEARCH — expose the Coding Expert as a run_grounded domain named coding on the existing expert-serve endpoint (tillandsias-experts/coding locally, tillandsias-fleet-experts/coding over the mesh, no second server) on a prototype branch; measure the token budget of surface plus retrieved chunks per call and mesh latency p50/p95 between two joined hosts, ending outcome:fleet-latency-acceptable | fleet-latency-unacceptable | local-only
+    context: |
+      Keeps the "one pipeline, two front-ends" rule of
+      expert-serve-grounded-pipeline: the MCP is a thin front-end that
+      mints, calls the endpoint, verifies and returns. Needs 1505-br88's
+      bearer-protected mesh bind and two joined hosts; blocked by "two
+      joined hosts", a capability, until then.
+    exit_criteria:
+      - 'scripts/research-coding-expert-serving.sh ends with outcome:<one of the three tokens> and the exploration note carries tokens-per-call (surface, chunks, total) and p50/p95 ms over ten calls between two named hosts (pre-fix: the question is open)'
+    unscoreable: "research-measurement: latency over Cloudflare Mesh is a property of the live network at measurement time"
+    depends_on:
+      - expert-serve-binds-the-mesh-only-behind-a-bearer-and-tillandsias-fleet-experts-serve-runs-it-on-the-hub-mesh-ip-advertising-fleet-experts-tillandsias-vpn-internal
+    next_action: >
+      After 1505-br88 has one live hub and one spoke, add the coding domain
+      on a prototype branch and run the script from the spoke.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Serving research; waits on v0.6 fleet serving.
+
+  - packet_id: research-the-security-model-of-the-one-time-coding-expert-signature-a-threat-table-with-one-test-per-row-and-the-hmac-keyed-versus-memory-random-nonce-decision-that-gates-every-implementation-packet
+    order: 1505-pv3s
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.7
+    release_target: the-coding-expert-is-researched-a-one-method-mcp-whose-signature-and-affordances-are-minted-per-call-by-lua-rag-over-the-git-mirror-and-eagerly-loaded-cheatsheets-served-locally-and-as-a-fleet-expert
+    pickup_role: any
+    capability_tags: [coding-expert, security, mcp, vault, research]
+    estimated_hours: 6
+    owned_files:
+      - plan/issues/coding-expert-research-2026-09-29.md
+    title: |
+      RESEARCH — a threat table for the one-time Coding Expert signature (replay, affordance widening by the model, path escape, unsolicited signing, cross-project impersonation via the shared MCP socket, injection through retrieved chunks) with one test per row that an implementation must pass, and a recorded decision outcome:hmac-keyed | memory-random for the nonce; no implementation packet may be filed without depends_on naming this order
+    context: |
+      A coding expert that WRITES code changes the safety posture of a
+      pipeline that only ever answered. The cross-project row inherits the
+      dev-control-mcp attribution hole (a shared socket directory mounted
+      into every forge). The prototype verifier from 1505-ga5f must refuse
+      a re-presented nonce with refused:coding-expert:nonce-spent; that arm
+      is this packet's one executable check.
+    exit_criteria:
+      - 'the exploration note carries the six-row table (threat, mechanism, required test) and ends the section with outcome:hmac-keyed or outcome:memory-random with the reasoning (pre-fix: no threat model exists)'
+      - 'the prototype verifier refuses a replayed nonce with refused:coding-expert:nonce-spent, asserted by the 1505-ga5f script'
+    unscoreable: "research-design: a threat table is reviewed, not executed; its single executable arm lives in 1505-ga5f's script"
+    depends_on:
+      - research-whether-an-mcp-tool-surface-can-be-minted-per-call-by-sandboxed-lua-with-a-one-time-nonce-and-narrowed-schema-and-whether-claude-code-opencode-and-codex-honour-tools-list-changed
+    next_action: >
+      Write the table against the prototype from 1505-ga5f; decide the
+      nonce scheme; record the outcome.
+    notes: |
+      size: S
+      implementer_tier: opus
+      Security judgement; gates implementation.
+    events:
+      - type: filed
+        ts: "2026-09-29T20:55:32Z"
+        agent_id: claude-fable-macuahuitl-20260929t205532z
+        host: macuahuitl
+        summary: |-
+          Security research; gates the implementation change.

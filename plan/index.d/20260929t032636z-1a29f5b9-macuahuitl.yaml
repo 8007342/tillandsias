@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-source-agreement-consolidation-shadow-pilot
+    event:
+      type: completed
+      ts: "2026-09-29T03:26:36Z"
+      agent_id: linux-macuahuitl-codex-20260928t214907z
+      host: macuahuitl
+      summary: |-
+        Shadow pilot landed as 09555eec4f8da90da237c03c9ed2eb38300e2052 (PR #195 merged); targeted parity suite and full ./build.sh --check passed on the integrated tree. Filed bounded production cutover 1484-uf29, which waits on typed runner 1384-bqhy; this closes only the shadow pilot, not the Bash-to-Lua migration milestone.

@@ -53,15 +53,42 @@ echo "handed-container-host=[${CONTAINER_HOST:-<unset>}]"
 exit 0
 STUB
 
+# ORDER 1462-ruq9: a host that cannot build this fixture's AF_UNIX socket
+# cannot run it. That is not a broken tree, so skip BY NAME on the last line
+# (the litmus runner's skip rule) rather than print FAIL. MEASURED on yolanda
+# 2026-09-29: Windows Git Bash DOES have a python3 (the WindowsApps one), and
+# its socket module has NO AF_UNIX attribute. So the probe asks for the
+# capability, not just the interpreter. Where python3 has AF_UNIX, nothing
+# changes: a bind that fails is still a FAIL below.
+# The probe lives INSIDE the one grandfathered interpreter call, whose line is
+# kept byte-identical (the harness refuses new interpreter references,
+# 1087-h2z9). The script drops a marker when it starts and another when the
+# runtime has no AF_UNIX, so the failure branch can tell: never started = no
+# runtime (skip), no AF_UNIX = skip, anything else = a real FAIL.
+FIXTURE_MARK="$SANDBOX/fixture-runtime"
+rm -f "$FIXTURE_MARK.started" "$FIXTURE_MARK.no-af-unix"
 if ! python3 - "$SANDBOX/run/podman/podman.sock" <<'PY'
 import socket
 import sys
 
+mark = sys.argv[1].rsplit("/run/podman/", 1)[0] + "/fixture-runtime"
+open(mark + ".started", "w").close()
+if not hasattr(socket, "AF_UNIX"):
+    open(mark + ".no-af-unix", "w").close()
+    sys.exit(3)
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 s.bind(sys.argv[1])
 s.listen(1)
 PY
 then
+    if [[ ! -e "$FIXTURE_MARK.started" ]]; then
+        echo "skip:gate-podman-mode:no-fixture-runtime (no interpreter on PATH builds the AF_UNIX fixture socket; nothing was asserted)"
+        exit 0
+    fi
+    if [[ -e "$FIXTURE_MARK.no-af-unix" ]]; then
+        echo "skip:gate-podman-mode:runtime-has-no-af-unix (this runtime cannot create unix sockets, e.g. Windows; nothing was asserted)"
+        exit 0
+    fi
     echo "FAIL: could not create the AF_UNIX fixture socket (python3 required)"
     exit 1
 fi
@@ -107,6 +134,25 @@ else
     _fail "build.sh did not pass the caller's remote URL through: $out2"
 fi
 
+# ORDER 1485-m9m8. Scenarios 3 and 4 source the REAL common.sh, whose mode
+# branches are only reachable when it RESOLVES a podman binary: with none,
+# it sets PODMAN=podman and pins nothing, which is correct product behaviour.
+# The WSL tillandsias-build guest has no podman at all (measured on yolanda
+# 2026-09-29: command -v podman -> none), so scenario 4's positive control
+# read pinned-bin=[<unset>] there while bare-metal macuahuitl, which has
+# podman, passed. On a host with no podman, put a stub on PATH (the resolver
+# searches PATH first) so both scenarios test the MODE and not the host's
+# package list. A host that has podman is untouched.
+if ! command -v podman >/dev/null 2>&1 \
+   && [[ ! -x /usr/bin/podman && ! -x /bin/podman && ! -x /usr/local/bin/podman ]]; then
+    mkdir -p "$SANDBOX/fakebin"
+    printf '#!/usr/bin/env bash\n[ "${1:-}" = --version ] && { echo "podman version 5.0.0"; exit 0; }\nexit 0\n' \
+        > "$SANDBOX/fakebin/podman"
+    chmod +x "$SANDBOX/fakebin/podman"
+    export PATH="$SANDBOX/fakebin:$PATH"
+    echo "  note: no podman on this host; scenarios 3-4 resolve a stub at $SANDBOX/fakebin/podman (1485-m9m8)"
+fi
+
 # ---------------------------------------------------------------------------
 # Scenario 3 — THE CONSEQUENCE THAT ACTUALLY BROKE THE GATE. Against the REAL
 # scripts/common.sh: local mode must leave TILLANDSIAS_PODMAN_BIN unset, which
@@ -141,6 +187,59 @@ if grep -Fq "pinned-bin=[$wrapper_dir/podman]" <<<"$out4"; then
     _ok "explicit remote mode still pins the generated wrapper"
 else
     _fail "explicit remote mode no longer reaches the wrapper branch: $out4"
+fi
+
+# ---------------------------------------------------------------------------
+# Scenarios 5-7 — ORDER 798-rvqb: the three launchers OFF the gate path that
+# inferred remote mode the same way. Each runs from a sandbox copy whose next
+# hop is a stub that reports what it was handed.
+# ---------------------------------------------------------------------------
+L="$SANDBOX/launchers"
+mkdir -p "$L/scripts" "$L/bin"
+cat > "$L/scripts/common.sh" <<'STUB'
+echo "handed-remote-url=[${TILLANDSIAS_PODMAN_REMOTE_URL:-<unset>}]"
+exit 0
+STUB
+cp "$L/scripts/common.sh" "$L/scripts/build-image.sh"
+cp "$L/scripts/common.sh" "$L/scripts/launch-chromium.sh"
+chmod +x "$L/scripts/build-image.sh" "$L/scripts/launch-chromium.sh"
+# A podman that answers `--remote --url … info`: build-forge.sh's old inference
+# probed reachability first, so without this the scenario would pass pre-fix
+# for the wrong reason (the fake socket answers nothing).
+printf '#!/bin/sh\nexit 0\n' > "$L/bin/podman"
+chmod +x "$L/bin/podman"
+cp "$ROOT/build-forge.sh" "$ROOT/run-forge-standalone.sh" "$L/"
+cp "$ROOT/scripts/run-safe-browser.sh" "$L/scripts/"
+launch() { # launch <script> [args] — caller silent, real socket present
+    env -u TILLANDSIAS_PODMAN_REMOTE_URL -u CONTAINER_HOST PATH="$L/bin:$PATH" \
+        XDG_RUNTIME_DIR="$SANDBOX/run" bash "$@" 2>&1
+}
+out5="$(launch "$L/build-forge.sh")"
+out5b="$(env -u CONTAINER_HOST PATH="$L/bin:$PATH" XDG_RUNTIME_DIR="$SANDBOX/run" \
+    TILLANDSIAS_PODMAN_REMOTE_URL="unix:///caller/chosen/podman.sock" bash "$L/build-forge.sh" 2>&1)"
+if grep -Fq 'handed-remote-url=[<unset>]' <<<"$out5" \
+    && grep -Fq 'handed-remote-url=[unix:///caller/chosen/podman.sock]' <<<"$out5b"; then
+    _ok "build-forge.sh: socket present + reachable, caller silent => no inferred remote mode; a caller's URL survives"
+else
+    _fail "build-forge.sh inferred remote mode or dropped the caller's URL: [$out5] [$out5b]"
+fi
+out6="$(launch "$L/run-forge-standalone.sh")"
+if grep -Fq 'handed-remote-url=[<unset>]' <<<"$out6"; then
+    _ok "run-forge-standalone.sh: socket present, caller silent => no inferred remote mode"
+else
+    _fail "run-forge-standalone.sh inferred remote podman mode from a socket file: $out6"
+fi
+# run-safe-browser.sh looked at the HARDCODED /run/user/1000, so this arm only
+# discriminates on a host where that socket exists; it says which it was.
+out7="$(launch "$L/scripts/run-safe-browser.sh" --url example.invalid)"
+if grep -Fq 'handed-remote-url=[<unset>]' <<<"$out7"; then
+    if [[ -S /run/user/1000/podman/podman.sock ]]; then
+        _ok "run-safe-browser.sh: /run/user/1000 socket present, caller silent => no inferred remote mode"
+    else
+        _ok "run-safe-browser.sh: no inferred remote mode (NOT discriminating here: no /run/user/1000 socket on this host)"
+    fi
+else
+    _fail "run-safe-browser.sh inferred remote podman mode from a socket file: $out7"
 fi
 
 if [[ "$FAILED" -ne 0 ]]; then

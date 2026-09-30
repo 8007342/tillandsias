@@ -1,0 +1,43 @@
+# @trace spec:litmus-framework
+name: litmus:fake-backend-under-remote-podman-shape
+spec: litmus-framework
+phase: pre-build
+description: >
+  Order 798-9xpq. A `backend: fake` litmus test is refused up front
+  ([ENV-FAIL] refused:litmus-gate:fake-backend-under-remote-podman, naming the
+  variable) when TILLANDSIAS_PODMAN_REMOTE_URL or CONTAINER_HOST is set,
+  because common.sh's remote mode pins TILLANDSIAS_PODMAN_BIN ahead of the
+  harness's fake and the fixture would silently drive the real podman. The
+  same fake test with neither set still passes, and a non-fake test under a
+  remote URL is untouched. The pre-fix runner lets the fake test pass under both.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-litmus-fake-backend-under-remote-podman.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-litmus-fake-backend-under-remote-podman.sh && test -x scripts/test-litmus-fake-backend-under-remote-podman.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "a fake-backend test under a remote podman is refused by name; the negative controls hold"
+    command: "bash scripts/test-litmus-fake-backend-under-remote-podman.sh 2>&1 | tail -n 1"
+    timeout_ms: 300000
+    expected_behavior: "PASS: litmus-fake-backend-under-remote-podman"
+
+observability:
+  traces:
+    - "@trace spec:litmus-framework"
+  expected_log: "PASS: litmus-fake-backend-under-remote-podman"
+  log_fields:
+    spec: "litmus-framework"
+    test: "fake-backend-under-remote-podman-shape"
+    artifact: "scripts/run-litmus-test.sh (run_litmus_test_file)"
+
+rollback:
+  on_failure: >
+    A fake-backend fixture that runs under a remote podman exercises the real
+    one while reporting a fake's verdict; restore the up-front refusal.
+  command: "bash scripts/test-litmus-fake-backend-under-remote-podman.sh"

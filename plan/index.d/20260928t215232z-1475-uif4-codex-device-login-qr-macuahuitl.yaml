@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, immutable after push.
+packets:
+  - packet_id: codex-device-login-terminal-qr
+    order: 1475-uif4
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [auth, codex, login, qr, ux]
+    deliverable: Codex device-login terminal QR for the verification URI
+    depends_on: []
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - images/default/codex-device-auth.sh
+      - openspec/specs/tillandsias-vault/spec.md
+      - openspec/litmus-tests/litmus-codex-device-auth-shape.yaml
+    title: |
+      Show a scannable QR for the Codex device-login verification URI
+    operator_note: |
+      Operator approval, 2026-09-28, exact words: “Yes, add the QR code to the device login, looks like the rest is already in place.”
+      Scope: the existing Codex device-login terminal flow gains a QR for the verification URI.
+    context: |
+      Codex already authenticates through codex login --device-auth and stores
+      its opaque auth document in Vault. OpenAI's Codex authentication docs
+      describe opening a link and entering a one-time code, but do not promise
+      a fixed verification URI or stable CLI output layout.
+    exit_criteria:
+      - |
+          Render the actual verified Codex verification URI as a terminal QR when safely obtained; do not guess or hardcode a URI on malformed or absent CLI output.
+      - |
+          Preserve Codex CLI device authentication, the one-time code's existing terminal presentation, and the opaque credential-to-Vault path. No one-time code enters argv, env, logs, or telemetry through Tillandsias' new path.
+      - |
+          Adversarial tests cover URI extraction, malformed and absent URI, secret nonleakage, and plain/non-TTY output.
+    verifiable_closure: |
+      litmus:codex-device-auth-shape and ./build.sh --check pass; a live login remains operator-driven because it needs account authorization.
+events:
+  - packet_id: codex-device-login-terminal-qr
+    event:
+      type: operator_note
+      ts: "2026-09-28T21:52:32Z"
+      agent_id: linux-macuahuitl-codex-20260928t215232z
+      host: macuahuitl
+      summary: |
+        Operator approval, exact words: “Yes, add the QR code to the device login, looks like the rest is already in place.”

@@ -126,6 +126,17 @@ scanned=0
 en_checked=0
 en_scanned=0
 
+# ORDER 1500-gu5r: ONE BULK grep NAMES THE ONLY FILES THE PER-FILE WORK CAN
+# COUNT. Both loops below spawned several processes per file (~880 scripts, ~500
+# litmus files): 6 s on yoga, over the preflight door's 5 s deadline. Every
+# file a loop can count or flag must name target/(release|debug)/tillandsias-plan
+# (or, for litmus, mf_plan_binary) in its RAW text, a superset of what the loops
+# test, so files outside the list are passed over exactly as before; every file
+# is still COUNTED as scanned.
+_pbp_candidates="
+$(_population | tr '\n' '\0' | xargs -0 grep -lE 'target/(release|debug)/tillandsias-plan' 2>/dev/null || true)
+"
+
 while IFS= read -r f; do
     # The probe itself defines the candidate paths; it cannot source itself.
     scanned=$((scanned + 1))
@@ -147,6 +158,12 @@ while IFS= read -r f; do
     # legitimately -- and a checker that flagged its own explanatory comment
     # would be the "gate that greps its own comment" antipattern 601-462g
     # names, one level up.
+    case "$_pbp_candidates" in
+        *"
+$f
+"*) ;;
+        *) continue ;;
+    esac
     code="$(sed 's/#.*//' "$f")"
     if ! grep -qE 'target/(release|debug)/tillandsias-plan' <<<"$code"; then # sigpipe-ok: safe pipeline
         continue
@@ -216,8 +233,17 @@ LITMUS_DIR="${LITMUS_SCAN_DIR:-openspec/litmus-tests}"
 lit_checked=0
 lit_scanned=0
 if [ -d "$LITMUS_DIR" ]; then
+    _pbp_lit_candidates="
+$(find "$LITMUS_DIR" -name '*.yaml' -type f -print0 2>/dev/null | xargs -0 grep -lE 'target/(release|debug)/tillandsias-plan|mf_plan_binary' 2>/dev/null || true)
+"
     while IFS= read -r f; do
         lit_scanned=$((lit_scanned + 1))
+        case "$_pbp_lit_candidates" in
+            *"
+$f
+"*) ;;
+            *) continue ;;
+        esac
         # Only `command:` lines execute. A precondition or a comment naming the
         # path is documentation, and flagging it would be the "gate that greps
         # its own comment" antipattern 601-462g names.

@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator 2026-09-28: start packets for the recommended pilots (A-C of the
+# Stockfish/CentiColon research), to be implemented by Antigravity and Codex.
+packets:
+  - packet_id: pilot-b-a-cached-predicate-verdict-is-replayed-as-the-same-structured-result-the-uncached-run-produced-and-any-changed-input-invalidates-it
+    order: 1471-bvjy
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    release_target: centicolon-evidence-pilots-2026-09-28
+    pickup_role: any
+    capability_tags: [centicolon, lua, predicate, cache, evidence, pilot, plan-only-peer-ok]
+    estimated_hours: 8
+    depends_on: [the-lua-predicate-memo-returns-a-stale-verdict-after-a-predicate-is-re-registered-and-digests-its-inputs-after-evaluation-so-a-file-changed-mid-read-authenticates-bytes-never-read]
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - scripts/test-predicate-replay-equivalence.sh
+    title: |
+      PILOT B (CentiColon evidence program, operator 2026-09-28): the predicate cache stores and replays the STRUCTURED result (verdict, reasons, input manifest), identical to an uncached run, and every input that could change it — predicate source, runtime/validator version, policy, each read file, a file that APPEARS later — invalidates reuse; report-only, no scoring or enforcement change
+    context: |
+      Design source: plan/issues/stockfish-centicolon-lessons-research-2026-09-28.md
+      section "2. Typed cache entries" and the experiment table row B; parent
+      review 1447-9sne. The research's rule: a cached result carries its
+      evidence level, subject and applicability, not one Boolean; a cache
+      miss, eviction, timeout, missing dependency or conflict can never
+      become a pass; full content identities, explicit validator and policy
+      versions, atomic publication.
+      Today (after 1470 lands): the memo keys on (name, arg[, source]) and
+      replays only a Boolean, while an uncached run can emit structured JSON
+      through log_info, so a hit and a miss answer DIFFERENT things.
+      SCOPE LIMIT (operator: pilots are report-only until adopted): this
+      changes what the cache stores and replays, and adds the equivalence
+      fixture. It does NOT change how CentiColon scores, and does NOT raise
+      any enforcement bar. Findings that suggest a scoring change go in a
+      RULING-request (ASK: event) on 1447-9sne, not into code.
+      Plan-only peers: methodology/multi-host-development.yaml -> plan_only_peers.
+    verifiable_closure: |
+      bash scripts/test-predicate-replay-equivalence.sh prints its ok summary
+      over a corpus of predicates run twice (cold, then warm): (1) the warm
+      structured result (verdict + reasons + manifest) is byte-identical to
+      the cold one; (2) each of these invalidates reuse and the re-run
+      matches a cold run: predicate source edited, validator/runtime version
+      changed, policy changed, a read file edited, a read file deleted, a
+      file the predicate probed for and did not find is created, a symlink
+      retargeted; (3) NEGATIVE CONTROL: nothing changed -> a hit, and the
+      hit is counted. PRE-FIX RESULT: FAILS (1) — a hit replays only the
+      Boolean.
+    unscoreable: "unpinnable-until-the-guard-exists: litmus-predicate-replay-equivalence.yaml wraps the fixture and is written with it (1136-n8sh)"
+    next_action: >
+      After 1470 lands: define the stored entry (verdict, reasons, manifest
+      of (path, digest-at-read, present/absent), source digest, runtime and
+      policy versions); make a hit replay the whole entry; write the
+      equivalence fixture and watch (1) fail first.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Open to plan-only peers. Pilots A (1472) and C (1473) are its siblings;
+      D (incremental scoring) waits on B's equivalence oracle.

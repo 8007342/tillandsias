@@ -1,0 +1,17 @@
+# Gate step 1471-8ydv — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. A WSL2 gate's memory floor judges the WINDOWS host again.
+# with-wsl2-builder.sh samples the host's MemFree on the Windows side (Git
+# Bash's /proc/meminfo, which matched CIM FreePhysicalMemory within 1.5%) and
+# exports TILLANDSIAS_GATE_HOST_MEMAVAILABLE_KB, which lib-env-forward.sh
+# carries into the guest. build.sh's floor consumer passes it with
+# --meminfo-from. The fixture cuts both real blocks and drives them against
+# the REAL floor script. A sabotage that drops --meminfo-from reds arms 3, 4
+# and 6.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a WSL2 gate's memory floor judges the Windows host's figure (1471-8ydv)"
+STEP_SCRIPT="scripts/test-gate-host-memory-figure.sh"
+STEP_ERROR="the host memory figure no longer reaches the gate's memory floor, so a WSL2 gate runs unguarded again (1471-8ydv); see which arm failed above"
+STEP_OK="the Windows host's memory figure is sampled, forwarded and judged by the floor"
+STEP_SECOND_REGIME="yolanda 2026-09-29 msys ok:gate-host-memory-figure:6/6; live: the tillandsias-build guest received 4332300 kB through the wrapper"

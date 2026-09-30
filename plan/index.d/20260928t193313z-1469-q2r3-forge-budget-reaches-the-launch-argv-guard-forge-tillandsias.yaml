@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: nothing-asserts-the-forge-cgroup-budget-reaches-a-real-launch-argv-or-the-live-cgroup-so-a-launch-site-that-drops-it-is-green-exactly-as-981-n5vx-found-for-the-old-ceiling
+    order: 1469-q2r3
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.6
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [forge, podman, cgroup, fail-loud, tests]
+    estimated_hours: 3
+    owned_files: []
+    title: |
+      THE PART OF 981-n5vx THE NEW DESIGN DOES NOT COVER: ForgeBudget (1375-xxzj) is wired at the forge launch sites, but every test asserts only the pure podman_args(); nothing asserts that a real forge launch argv carries the --memory / --cgroup-conf budget, or that the live cgroup holds it, so a launch site that drops it stays green — the exact shape 981 found for the old ceiling
+    context: |
+      981-n5vx is obsoleted by the 2026-09-26 forge memory/swap design
+      (plan/issues/forge-memory-swap-architecture-design-2026-09-26.md,
+      crates/tillandsias-core/src/forge_budget.rs): the budget writes the cgroup
+      files deliberately and never uses --memory-swap, because that flag measured
+      differently across hosts (lenovinha 1 GiB, yoga 2 GiB, for the same flags).
+      981's MECHANISM (a helper nothing calls) is fixed: for_this_host() is
+      called at crates/tillandsias-headless/src/main.rs (2 argv builders + the
+      ContainerSpec path), tray/mod.rs, and tillandsias-podman launch.rs.
+      981's GUARD INTENT is NOT covered, measured 2026-09-28 by forge-tillandsias:
+      `git grep "cgroup-conf\|--memory="` finds no assertion in the headless,
+      tray or podman tests, and forge_budget.rs's tests (tiers, anon peaks,
+      pids clamp, no --memory-swap, meminfo) are all on the pure computation.
+      981's own words apply unchanged: "the guard asserts the ARGV or the
+      resulting live cgroup, not the pure helper", "verified to FAIL when the
+      flags are removed".
+    exit_criteria:
+      - 'every forge launch-argv builder (the headless agent/opencode lanes, the ContainerSpec path, the tray) has a test asserting its argv carries the ForgeBudget flags (--memory=… and the --cgroup-conf memory.high / memory.swap.max entries), enumerated from the builders rather than a hand list, so a new builder without the budget fails'
+      - 'a mutation control: removing the budget from one builder turns that test red'
+      - 'optionally, where podman is available, one live check reads memory.max / memory.high / memory.swap.max from a launched forge''s cgroup and compares it with ForgeBudget::for_this_host()'
+    unscoreable: |
+      unpinnable-until-the-guard-exists — the guard is the deliverable; intended
+      litmus:forge-budget-reaches-the-launch-argv-shape, written in the same
+      commit as the tests.
+    provenance: |
+      Filed 2026-09-28 by forge-tillandsias on the coordinator's ruling
+      obsoleting 981-n5vx: "If any part of the row's intent isn't covered by the
+      new design, name it and file that part."
+    events:
+      - type: filed
+        ts: "2026-09-28T19:33:13Z"
+        agent_id: "forge-forge-tillandsias-claude-20260928"
+        host: forge-tillandsias
+        summary: |-
+          The uncovered guard half of 981-n5vx.

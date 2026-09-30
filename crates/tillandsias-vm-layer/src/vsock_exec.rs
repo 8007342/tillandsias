@@ -244,6 +244,23 @@ fn trim_transcript(
     drop_to
 }
 
+/// Keep the most recent `cap` bytes of a transcript that nothing matches
+/// against, returning how many were dropped (order 795-vq6b).
+///
+/// ONE POLICY, NOT A SECOND IMPLEMENTATION: this is `trim_transcript` with the
+/// cursor at `len - cap` and a one-byte window, which marks exactly the bytes
+/// older than the last `cap` as dead. The expect driver passes `None` once
+/// matching is over (everything dead); a collecting driver cannot, because its
+/// transcript IS the result the caller parses, so it keeps the tail.
+fn retain_tail(stdout: &mut Vec<u8>, cap: usize) -> usize {
+    if cap == 0 || stdout.len() <= cap {
+        return 0;
+    }
+    let mut cursor = stdout.len() - cap;
+    let mut scan = cursor;
+    trim_transcript(stdout, &mut cursor, &mut scan, Some(1), cap)
+}
+
 /// Escape hatch for the deadlock report, mirroring the ceiling's own env.
 ///
 /// Set to `0` to disable. Present because a new terminal condition on a path
@@ -691,6 +708,12 @@ where
     // liveness heartbeats and reset the per-frame idle deadline without
     // changing collected output.
     let idle_timeout = exec_idle_timeout()?;
+    // ORDER 795-vq6b: this driver accumulated into an unbounded Vec while
+    // 690-eug2's closure said the transcript was capped (true only for the
+    // expect driver). Same cap, same trim function, keeping the newest bytes;
+    // the elision is reported on stderr, never injected into `stdout`.
+    let transcript_cap = exec_transcript_cap();
+    let mut elided_bytes: usize = 0;
     let mut stdout = Vec::new();
     loop {
         let env = read_exec_envelope(&mut stream, idle_timeout).await?;
@@ -699,11 +722,30 @@ where
                 session_id: sid,
                 direction: PtyDirection::ToHost,
                 bytes,
-            } if sid == session_id => stdout.extend_from_slice(&bytes),
+            } if sid == session_id => {
+                stdout.extend_from_slice(&bytes);
+                let dropped = retain_tail(&mut stdout, transcript_cap);
+                if dropped > 0 && elided_bytes == 0 {
+                    eprintln!(
+                        "[vsock_exec] transcript cap reached ({transcript_cap} bytes): keeping the most \
+                         recent output and eliding earlier bytes (order 795-vq6b)."
+                    );
+                }
+                elided_bytes += dropped;
+            }
             ControlMessage::PtyClose {
                 session_id: sid,
                 exit,
-            } if sid == session_id => return Ok(ExecOutput { exit, stdout }),
+            } if sid == session_id => {
+                if elided_bytes > 0 {
+                    eprintln!(
+                        "[vsock_exec] {elided_bytes} bytes of earlier guest output were elided by the \
+                         transcript cap; the returned output is the most recent {} bytes.",
+                        stdout.len()
+                    );
+                }
+                return Ok(ExecOutput { exit, stdout });
+            }
             // A guest-reported error (e.g. PtyOpen rejected by the exec
             // allowlist) is terminal for the session. Without this arm the
             // drain loop ignored it and hung until the idle timeout —
@@ -1573,6 +1615,45 @@ where
 #[cfg(test)]
 mod tests {
 
+    /// ORDER 828-itr9. THE REGION A SOURCE SCAN READS, OR A RED TEST.
+    /// `str::split(end).next()` on an end anchor that no longer occurs yields
+    /// the WHOLE remaining string, so renaming the function that closes a
+    /// region silently widened the scan to the rest of the file, and every
+    /// assertion about that region kept passing while it guarded nothing. These
+    /// return the region only when BOTH anchors are present, and panic naming
+    /// the missing one otherwise: a rename is a red test, never a wider scan.
+    fn scan_region<'a>(src: &'a str, start: &str, end: &str) -> &'a str {
+        let (_, tail) = src
+            .split_once(start)
+            .unwrap_or_else(|| panic!("scan start anchor `{start}` is gone: repoint this scan"));
+        scan_until(tail, end)
+    }
+
+    /// The text before `end`, or a red test when `end` is absent.
+    fn scan_until<'a>(src: &'a str, end: &str) -> &'a str {
+        src.split_once(end)
+            .map(|(head, _)| head)
+            .unwrap_or_else(|| {
+                panic!(
+                    "scan end anchor `{end}` is gone: the region would silently widen \
+                 to the rest of the file (828-itr9)"
+                )
+            })
+    }
+
+    #[test]
+    fn scan_region_is_red_when_its_end_anchor_is_renamed() {
+        let src = "head START body END tail";
+        assert_eq!(scan_region(src, "START", "END"), " body ");
+        let renamed = std::panic::catch_unwind(|| scan_region(src, "START", "RENAMED").len());
+        assert!(
+            renamed.is_err(),
+            "a missing end anchor must panic, not return the tail"
+        );
+        let gone = std::panic::catch_unwind(|| scan_region(src, "GONE", "END").len());
+        assert!(gone.is_err(), "a missing start anchor must panic");
+    }
+
     /// ORDER 926-bin4 — the same ENUMERATION discipline 925-eofi's failure
     /// taught, applied to the open frame. Every exec entry point must choose
     /// its open frame through `exec_open_frame`, never construct `PtyOpen`
@@ -1582,7 +1663,7 @@ mod tests {
     #[test]
     fn every_exec_entry_point_chooses_its_open_frame() {
         let source = include_str!("vsock_exec.rs");
-        let code = source.split("#[cfg(test)]").next().expect("code region");
+        let code = scan_until(source, "#[cfg(test)]");
         let mut checked = 0;
         for chunk in code.split("async fn ").skip(1) {
             let name = chunk
@@ -1653,7 +1734,7 @@ mod tests {
         let source = include_str!("vsock_exec.rs");
         // Function bodies, split on the `async fn` boundary; the test module is
         // excluded so its own quoted needles do not count as senders.
-        let code = source.split("#[cfg(test)]").next().expect("code region");
+        let code = scan_until(source, "#[cfg(test)]");
         let mut checked = 0;
         for chunk in code.split("async fn ").skip(1) {
             let name = chunk.split('<').next().unwrap_or("");
@@ -1688,11 +1769,11 @@ mod tests {
     #[test]
     fn stdin_eof_is_gated_on_the_advertised_capability_not_the_wire_version() {
         let source = include_str!("vsock_exec.rs");
-        let window = source
-            .split("pub async fn exec_over_stream_with_input<S>")
-            .nth(1)
-            .and_then(|t| t.split("pub async fn ").next())
-            .expect("the with_input entry point moved — repoint this scan");
+        let window = scan_region(
+            source,
+            "pub async fn exec_over_stream_with_input<S>",
+            "pub async fn ",
+        );
         assert!(
             window.contains("server_caps.iter().any(|c| c == CAP_PTY_STDIN_EOF)"),
             "the EOF frame must be gated on the advertised capability"
@@ -1726,7 +1807,7 @@ mod tests {
             .split("3b) Tell the guest the input is finished")
             .nth(1)
             .expect("the 3b block moved — repoint this scan");
-        let guard = window.split("if peer_supports_stdin_eof").next().unwrap();
+        let guard = scan_until(window, "if peer_supports_stdin_eof");
         assert!(
             guard.contains("if !input.is_empty()"),
             "the EOF path must be inside an input-non-empty guard"
@@ -2239,6 +2320,37 @@ mod tests {
         );
     }
 
+    /// ORDER 795-vq6b: the collecting driver's policy, over explicit caps (no
+    /// env mutation; see the note below). Keeps the NEWEST bytes, drops the
+    /// oldest, and — the negative control — leaves a short transcript whole.
+    #[test]
+    fn retain_tail_keeps_the_newest_bytes_and_leaves_short_output_whole() {
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        assert_eq!(retain_tail(&mut buf, 10), 90);
+        assert_eq!(buf, (90..100u8).collect::<Vec<u8>>());
+
+        let short: Vec<u8> = b"hello guest".to_vec();
+        let mut kept = short.clone();
+        assert_eq!(
+            retain_tail(&mut kept, 1024),
+            0,
+            "a short transcript must not be trimmed"
+        );
+        assert_eq!(kept, short, "a short transcript must come back unmodified");
+
+        let mut exact: Vec<u8> = (0..10u8).collect();
+        assert_eq!(retain_tail(&mut exact, 10), 0);
+        assert_eq!(exact.len(), 10);
+
+        let mut uncapped: Vec<u8> = (0..100u8).collect();
+        assert_eq!(
+            retain_tail(&mut uncapped, 0),
+            0,
+            "cap 0 disables trimming, as for the expect driver"
+        );
+        assert_eq!(uncapped.len(), 100);
+    }
+
     /// NO END-TO-END TRIM TEST, deliberately, and this is the second time the
     /// same trap has been recorded in this file.
     ///
@@ -2683,10 +2795,7 @@ mod tests {
         // file and flagged its own filter expression — a check that reads its
         // own source as evidence, which is the antipattern 601-462g's problem
         // statement names ("a freshness gate that greps its own comment").
-        let production = src
-            .split_once("#[cfg(test)]")
-            .map(|(before, _)| before)
-            .unwrap_or(src);
+        let production = scan_until(src, "#[cfg(test)]");
         let offenders: Vec<&str> = production
             .lines()
             .filter(|l| !l.trim_start().starts_with("//"))

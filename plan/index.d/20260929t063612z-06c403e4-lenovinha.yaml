@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-mirror-reads-the-branch-discipline-seed-from-head-first-and-head-is-the-default-branch-which-lacks-the-seed-so-a-live-level-2-project-publishes-level-0-and-enforces-nothing
+    field: context
+    value: |-
+      MEASURED LIVE on lenovinha 2026-09-29, the first run of 1443-uit6
+      (landed in land86 eced00b48) on a real mirror: tillandsias-git-tillandsias
+      has HEAD -> refs/heads/main; main lacks .tillandsias/branch-discipline.yaml;
+      refs/heads/linux-next has it (level 2, default_branch enforced). The
+      published ref reads refs/tillandsias/discipline/0/advised/unknown/none/<epoch>.
+
+      CAUSE (the author's own, lenovinha): discipline_load and describe() read
+      the seed at HEAD to LEARN the integration branch, and only then read the
+      seed on that branch. When HEAD has no seed, they stop at "no seed". The
+      hermetic fixture seeded main AND linux-next with the same seed, so it
+      never modelled the real state: a seed that has reached the integration
+      branch but not yet the default branch, which is the NORMAL state of a
+      level-2 project between releases.
+
+      FAILS SAFE, NOT LOUD: nothing is refused wrongly (level 0 refuses
+      nothing), but enforcement is dormant until main catches up, and
+      1443-z3vb reads digest none. A checkout WITH a seed then reads mirror
+      disagreement where the intent was agreement.
+
+      FIX DIRECTION, no branch constants in hook code
+      (litmus:git-mirror-yaml-gate-shape, order-462 class): the entrypoint
+      exports the candidate ref(s) to read the seed from (for example
+      TILLANDSIAS_DISCIPLINE_SEED_REFS, defaulting to this project's integration
+      branch beside the other conventions), and hook plus publisher try those
+      before HEAD.
+
+
+      [2026-09-29T06:36:12Z lenovinha] USER PROJECTS (coordinator request, 2026-09-29): the default TILLANDSIAS_DISCIPLINE_SEED_REFS=refs/heads/linux-next is a Tillandsias convention baked into a mirror image that serves every project. For a project with no linux-next the configured ref is absent, the lookup skips it and falls through to HEAD, so the project's own seed is still read, published and enforced. Pinned by test-mirror-discipline.sh arm 14 (seed only on main, no linux-next: published level 2 from HEAD, enforced push rejected).
+    ts: "2026-09-29T06:36:12Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-mirror-reads-the-branch-discipline-seed-from-head-first-and-head-is-the-default-branch-which-lacks-the-seed-so-a-live-level-2-project-publishes-level-0-and-enforces-nothing
+    event:
+      type: note
+      ts: "2026-09-29T06:36:12Z"
+      host: lenovinha
+      summary: |-
+        user-project fallthrough

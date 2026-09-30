@@ -531,6 +531,48 @@ fn floor_on(argv: &[String], ctx: &Context, workspace: &Path) -> Option<cp::Deci
     cp::floor_decide(&req, &ctx.protected)
 }
 
+/// A stage's leading `NAME=value` words, unquoted: the environment the
+/// command it prefixes runs under, on top of the shell's own.
+fn leading_assignments(stage: &[String]) -> Vec<(String, String)> {
+    stage
+        .iter()
+        .map(|w| unquote(w))
+        .map_while(|w| {
+            let (k, v) = w.split_once('=')?;
+            (!k.is_empty() && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+                .then(|| (k.to_string(), v.to_string()))
+        })
+        .collect()
+}
+
+/// Whether the consent engine's env arm pre-authorises this stage's consent
+/// class: a leading assignment wins over the hook's environment, as it does
+/// for the command the shell runs. Bare metal by the context AND by evidence.
+fn stage_env_preauthorises(
+    stage: &[String],
+    class: &str,
+    host_kind: cp::HostKind,
+    evidence: cp::HostKind,
+) -> bool {
+    if host_kind != cp::HostKind::BareMetal || evidence != cp::HostKind::BareMetal {
+        return false;
+    }
+    let inline = leading_assignments(stage);
+    let var = |name: &str| {
+        inline
+            .iter()
+            .rev()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.clone())
+            .or_else(|| std::env::var(name).ok())
+    };
+    cp::env_preauthorises(
+        class,
+        var("TILLANDSIAS_DESTRUCTIVE_RESET_OK").as_deref(),
+        var("TILLANDSIAS_SKILL").as_deref(),
+    )
+}
+
 /// Classify one raw Bash-tool command.
 pub fn classify(cmd: &str, ctx: &Context) -> Classification {
     if let Some(t) = token_literal(cmd) {
@@ -666,6 +708,18 @@ pub fn classify(cmd: &str, ctx: &Context) -> Classification {
                             .iter()
                             .any(|root| floor_on(&argv, ctx, root).is_none())
                     {
+                        continue;
+                    }
+                    // The smoke skills' env pre-authorisation (1462-qvxj):
+                    // the same arm `policy eval` honours, read from the
+                    // hook's environment and the stage's own leading
+                    // assignments, on bare-metal evidence only.
+                    if stage_env_preauthorises(
+                        stage,
+                        &d.rule_id,
+                        ctx.host_kind,
+                        cp::read_host_kind(&ctx.cwd).kind,
+                    ) {
                         continue;
                     }
                     if ask.is_none() {
@@ -832,5 +886,36 @@ mod tests {
         );
         assert_eq!(classify("rm -rf /etc/x", &c).verdict, Verdict::Ask);
         assert_eq!(classify("git status", &c).verdict, Verdict::Allow);
+    }
+
+    #[test]
+    fn inline_smoke_env_preauthorises_soft_reset_on_bare_metal_only() {
+        let bm = cp::HostKind::BareMetal;
+        let stage = |cmd: &str| lex(cmd).pipelines[0][0].clone();
+        let ok = stage(
+            "TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 TILLANDSIAS_SKILL=smoke-curl-install-and-test-e2e tillandsias --reset-state",
+        );
+        assert!(stage_env_preauthorises(&ok, "soft-reset", bm, bm));
+        assert!(!stage_env_preauthorises(&ok, "hard-reset", bm, bm));
+        assert!(!stage_env_preauthorises(
+            &ok,
+            "soft-reset",
+            cp::HostKind::Forge,
+            bm
+        ));
+        assert!(!stage_env_preauthorises(
+            &ok,
+            "soft-reset",
+            bm,
+            cp::HostKind::Forge
+        ));
+        let foreign = stage(
+            "TILLANDSIAS_DESTRUCTIVE_RESET_OK=1 TILLANDSIAS_SKILL=some-other-skill tillandsias --reset-state",
+        );
+        assert!(!stage_env_preauthorises(&foreign, "soft-reset", bm, bm));
+        let opt_out = stage(
+            "TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 TILLANDSIAS_SKILL=smoke-curl-install-and-test-e2e tillandsias --reset-state",
+        );
+        assert!(!stage_env_preauthorises(&opt_out, "soft-reset", bm, bm));
     }
 }

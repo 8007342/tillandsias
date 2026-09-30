@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-tray-consumes-github-login-stored-instead-of-polling-for-the-login
+    field: outcome
+    value: 'CORRECTION to this row''s closure wording (it stays CLOSED; the push-vs-poll question is answered): ''near immediately'' described only handle -> projects (2.6 s). The TIMED sign-in on 2026-09-29 (1479-9hx6 stamps plus the guest proxy) gives ~18.3 s from the inferred token grant to the handle in the menu, and ~20.9 s to the projects. ~13 s of that is guest-side idle, filed and being measured under 1486-y67a. The tray reacts ~0.2 s after the guest reports, so completion is pushed, not polled.'
+    ts: "2026-09-29T04:53:02Z"
+    host: macos
+
+events:
+  - packet_id: macos-tray-consumes-github-login-stored-instead-of-polling-for-the-login
+    event:
+      type: progress
+      ts: "2026-09-29T04:53:02Z"
+      host: macos
+      summary: |-
+        status 'CORRECTION to this row's closure wording (it stays CLOSED; the push-vs-poll question is answered): 'near immediately' described only handle -> projects (2.6 s). The TIMED sign-in on 2026-09-29 (1479-9hx6 stamps plus the guest proxy) gives ~18.3 s from the inferred token grant to the handle in the menu, and ~20.9 s to the projects. ~13 s of that is guest-side idle, filed and being measured under 1486-y67a. The tray reacts ~0.2 s after the guest reports, so completion is pushed, not polled.' (not terminal) with evidence_refs: plan/index.d/20260929t045125z-13cee858-macos.yaml
+  - packet_id: macos-tray-consumes-github-login-stored-instead-of-polling-for-the-login
+    event:
+      type: note
+      ts: "2026-09-29T04:53:02Z"
+      host: macos
+      summary: |-
+        coordinator: correct 'near immediately' to the measured 18.3 s, keep closed

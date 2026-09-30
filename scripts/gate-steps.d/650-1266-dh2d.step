@@ -1,0 +1,19 @@
+# Gate step 1266-dh2d — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. The plan-only lane reported ok while dropping a claim's
+# STATUS fragment (esmeraldinha 2026-09-19, 793-zumy), so trunk kept offering
+# a claimed row as ready. Cause: when trunk has gained another host's
+# near-identical set-field fragment, the base->HEAD diff pairs the new status
+# fragment with it as a RENAME and --diff-filter=A drops it. The selection now
+# uses --no-renames, and a new status-loss guard refuses any carried event
+# whose local status fragment is not riding. The fixture reproduces the
+# collision in a scratch repo with a bare remote (--dry-run only).
+# Pre-fix: 1/4. With the selection mutated back to renames-on, the guard alone
+# refuses (arm 2).
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the plan-only lane never drops a claim's status fragment (1266-dh2d)"
+STEP_SCRIPT="scripts/test-plan-fragments-lane-carries-status.sh"
+STEP_ERROR="the plan-only lane can again push a claim's events without its status fragment, so trunk keeps offering a claimed row (1266-dh2d); see which arm failed above"
+STEP_OK="the plan-only lane carries or refuses a claim's status fragment, never drops it"
+STEP_SECOND_REGIME="yolanda 2026-09-29 msys ok:plan-fragments-lane-carries-status:4/4"

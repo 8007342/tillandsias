@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: one-live-ledger-compaction-test-is-sixty-percent-of-the-workspace-test-step-and-its-cost-grows-with-the-plan-not-the-code
+    event:
+      type: progress
+      ts: "2026-09-28T22:40:10Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t224010z
+      host: macos
+      summary: |
+        work/1476-5dfy @ 0212a395c ready for relay: [profile.test.package.tillandsias-plan] opt-level = 2 in the workspace Cargo.toml, with the measurements in a comment. The LIVE ledger stays in every gate, per the coordinator's ruling.
+        MEASURED on tlatoanis-macbook-air 2026-09-28 (plan/index.yaml 68,841 lines, ~3,000 fragments):
+          opt-level 0 (trunk): live test 134.3 s, lib suite 139.3 s
+          opt-level 1:         live test 125.1 s, lib suite 137.0 s  (almost nothing)
+          opt-level 2:         live test  64.4 s, lib suite  69.7 s  (post-commit re-run 70.9 s, 397 passed)
+          compile cost: a clean rebuild of the plan lib test binary takes 5.3 s at opt 0 and 18.4 s at opt 2, so +13 s, paid only when the plan crate changes. The touch-based incremental numbers (<1 s) were not a clean rebuild and are not used.
+        Net: about 70 s off every Mac gate, against 13 s on the lands that edit the plan crate. STILL OVER the coordinator's ~40 s line at 64 s, so tiering goes back to the coordinator (as ruled). The Linux delta is not measured here.

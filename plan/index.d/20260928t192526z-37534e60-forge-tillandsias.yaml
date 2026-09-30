@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-pre-push-hooks-last-line-claims-build-sh-check-is-current-for-this-tree-unconditionally-after-a-decider-chain-whose-refuse-degraded-to-a-warn-and-returned-so-the-tail-of-a-push-log-reports-a-check-that-no-check-made
+    field: status
+    value: in_progress
+    ts: "2026-09-28T19:25:26Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: the-pre-push-hooks-last-line-claims-build-sh-check-is-current-for-this-tree-unconditionally-after-a-decider-chain-whose-refuse-degraded-to-a-warn-and-returned-so-the-tail-of-a-push-log-reports-a-check-that-no-check-made
+    event:
+      type: note
+      ts: "2026-09-28T19:25:26Z"
+      host: forge-tillandsias
+      summary: |-
+        claim (self-selected): the pre-push trailer states what it saw; work/1352-qbrd

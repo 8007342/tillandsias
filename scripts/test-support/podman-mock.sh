@@ -449,14 +449,53 @@ case "$subcommand" in
                 printf '%s' "$secret_value" >"$secret_dir/$secret_name"
                 printf 'mock-secret-id\n'
                 ;;
+            # ORDER 813-frih: the NAMES are the positional arguments AFTER the
+            # sub-subcommand ($1=secret, $2=rm|inspect), never $2 itself. Reading
+            # $2 made `rm` delete a file literally named "rm" (exit 0, secret
+            # still on disk) and `inspect` stat a file named "inspect" (always
+            # absent): a no-op removal and a blind absence check, both passing.
             rm)
-                secret_name="${2:-}"
-                rm -f "$secret_dir/$secret_name"
-                exit 0
+                shift 2
+                sr_all=0; sr_ignore=0; sr_names=()
+                for arg in "$@"; do
+                    case "$arg" in
+                        -a|--all) sr_all=1 ;;
+                        -i|--ignore) sr_ignore=1 ;;
+                        -*) ;;
+                        *) sr_names+=("$arg") ;;
+                    esac
+                done
+                if [[ "$sr_all" == 1 ]]; then
+                    rm -f "$secret_dir"/*
+                    exit 0
+                fi
+                [[ "${#sr_names[@]}" -gt 0 ]] || { echo "Error: at least one secret name or ID must be specified" >&2; exit 125; }
+                sr_rc=0
+                for secret_name in "${sr_names[@]}"; do
+                    if [[ -f "$secret_dir/$secret_name" ]]; then
+                        rm -f "$secret_dir/$secret_name"
+                    elif [[ "$sr_ignore" != 1 ]]; then
+                        # Real podman refuses a missing secret; a mock that
+                        # answered 0 here is the silent pass this order removes.
+                        echo "Error: no secret with name or id \"$secret_name\": no such secret" >&2
+                        sr_rc=1
+                    fi
+                done
+                exit "$sr_rc"
                 ;;
             inspect)
-                secret_name="${2:-}"
-                if [[ -f "$secret_dir/$secret_name" ]]; then
+                shift 2
+                secret_name=""
+                sr_skip=0
+                for arg in "$@"; do
+                    if [[ "$sr_skip" == 1 ]]; then sr_skip=0; continue; fi
+                    case "$arg" in
+                        -f|--format) sr_skip=1 ;;
+                        -*) ;;
+                        *) secret_name="$arg"; break ;;
+                    esac
+                done
+                if [[ -n "$secret_name" && -f "$secret_dir/$secret_name" ]]; then
                     printf '{"Name":"%s"}\n' "$secret_name"
                     exit 0
                 fi

@@ -133,10 +133,16 @@ work_lane_affordance() {
 # per-decider edit; a decider added later inherits the behaviour without its
 # author having to know this row exists.
 WORK_REF_LANE="${WORK_REF_LANE:-0}"
+# ORDER 1352-qbrd: every degraded refusal is COUNTED, so the trailer at the end
+# of the hook can say what it saw instead of claiming a clean gate.
+_PREPUSH_WARNED=0
+_PREPUSH_WARNED_NAMES=""
 
 refuse() {
     if [[ "$WORK_REF_LANE" == "1" ]]; then
         local _d="${TILLANDSIAS_HOOK_DECIDER:-pre-push}"
+        _PREPUSH_WARNED=$((_PREPUSH_WARNED + 1))
+        case ",${_PREPUSH_WARNED_NAMES}," in *",${_d},"*) ;; *) _PREPUSH_WARNED_NAMES="${_PREPUSH_WARNED_NAMES:+$_PREPUSH_WARNED_NAMES,}${_d}" ;; esac
         echo "warn:pre-push:${_d}: $1" >&2
         shift
         for line in "$@"; do echo "  $line" >&2; done
@@ -2103,5 +2109,23 @@ if [[ -f scripts/check-windows-tray-clippy.sh ]]; then
             ;;
     esac
 fi
-echo "${GRN}✓ local gate: preflight clean, ./build.sh --check current for this tree${RST}" >&2
+# ORDER 1352-qbrd — THE TRAILER STATES WHAT THE HOOK SAW. It used to be an
+# UNCONDITIONAL "preflight clean, ./build.sh --check current for this tree",
+# reached on a work ref after every red decider had degraded to a warn and
+# returned — so the tail of a push log, the one line most likely to be read
+# alone, asserted exactly the state it had just denied (macneo 2026-09-22: a
+# `warn:pre-push:… tree changed since ./build.sh --check last passed` on line
+# 5, the green claim on the last line, and a report one step from saying the
+# push was clean). The claim is now made only when it is true — no decider
+# warned AND gate-stamp.sh verify answered ok:gate-fresh — and otherwise the
+# trailer names the warned deciders and the stamp verdict it read, the same
+# words `bash scripts/gate-stamp.sh verify` prints (the two must not disagree).
+_trailer_stamp="${stamp:-unknown:gate-stamp-not-read}"
+if [[ "$_PREPUSH_WARNED" -gt 0 ]]; then
+    echo "${YLW}⚠ work-ref lane: ${_PREPUSH_WARNED} decider(s) warned (${_PREPUSH_WARNED_NAMES}), gate-stamp ${_trailer_stamp} — NOT a clean gate; the landing queue gates this on arrival${RST}" >&2
+elif [[ "$_trailer_stamp" != "ok:gate-fresh" ]]; then
+    echo "${YLW}⚠ local gate: no decider refused, gate-stamp ${_trailer_stamp} — ./build.sh --check is NOT confirmed current for this tree${RST}" >&2
+else
+    echo "${GRN}✓ local gate: preflight clean, gate-stamp ok:gate-fresh — ./build.sh --check current for this tree${RST}" >&2
+fi
 exit 0

@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-landed-but-open-counts-a-spec-only-commit-as-a-landing-so-a-row-whose-spec-landed-but-whose-code-did-not-is-reported-as-landed-but-open
+    order: 1483-8zct
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [instrument, plan, fleet]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-landed-but-open.sh
+      - scripts/test-landed-but-open.sh
+    title: |
+      scripts/check-landed-but-open.sh (1367-emjg) counts any non-merge commit touching a path outside plan/ as a landing, so SPEC-ONLY commits under openspec/ (and docs/, cheatsheets/) make a row with no code look landed-but-open
+    context: |
+      MEASURED 2026-09-29: macuahuitl-forge's landed-but-open sweep listed
+      1438-pk9j as landed and still ready. Checked against origin/linux-next:
+      its three citing commits (49a36d7b5, 4722dd179, relayed in 7e88aa5c9)
+      are spec and plan edits only, and the crates have no TILLANDSIAS_HOME
+      resolver, so "ready" is correct and the suspect is false. Cause:
+      check-landed-but-open.sh keeps a commit as a landing when
+      0 is non-zero, and openspec/ is
+      outside plan/.
+      Coordinator direction (macuahuitl-fedora, 2026-09-29): file and fix,
+      size S; the author (macuahuitl-forge) is down.
+    exit_criteria:
+      - 'a commit touching only openspec/, docs/ or cheatsheets/ (optionally with plan/) is not a landing: a spec-only commit citing a ready order produces no suspect and does not raise landings= (pre-fix result: FAILS — it is counted)'
+      - 'CONTROL: a code commit citing a ready order is still a suspect (the existing arm 1)'
+    unscoreable: |
+      the pin is the new arm in scripts/test-landed-but-open.sh, written in the
+      same change.

@@ -1,0 +1,39 @@
+packets:
+  - packet_id: the-source-built-init-smoke-test-panics-inside-a-forge-because-ensure-ca-bundle-shells-out-to-openssl-which-the-forge-image-does-not-ship
+    order: 1485-d3f5
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [forge, tests, image, ca-trust]
+    estimated_hours: 2
+    owned_files: []
+    title: |
+      tillandsias::tests::source_built_init_and_status_check_smoke_uses_fake_podman panics inside a forge with ensure_ca_bundle "Failed to run command: No such file or directory (os error 2)": ensure_ca_bundle runs Command::new("openssl"), and the forge image does not ship openssl, so an in-forge ./build.sh --check is red on a test that is green on bare metal
+    context: |
+      MEASURED on yoga 2026-09-29 (667-se87 run 5, in-forge ./build.sh --check
+      on 7b726c8f1 with the fixed brew shim): the workspace suite ran 2673
+      tests and reported exactly one new red,
+      tillandsias::tests::source_built_init_and_status_check_smoke_uses_fake_podman,
+      panicking at main.rs (the test's ensure_ca_bundle expectation) with
+      `ensure_ca_bundle: "Failed to run command: No such file or directory (os
+      error 2)"`. ensure_ca_bundle shells out to `openssl` (main.rs, the
+      Command::new("openssl") inside fn ensure_ca_bundle). The test passes on
+      bare metal, where openssl exists. Either the forge image gains openssl, or
+      the test names the dependency and skips by name where openssl is absent
+      (a forge is not a CA-minting host: ensure_ca_bundle already exempts
+      TILLANDSIAS_HOST_KIND=forge elsewhere). Which one is the implementer's
+      call; the second keeps the image small. Blocks 667-se87 criterion 3 (a
+      green in-forge --check).
+    exit_criteria:
+      - 'an in-forge ./build.sh --check does not report this test red (pre-fix: FAILS, measured above)'
+      - 'on bare metal the test still runs and still exercises ensure_ca_bundle (it is not skipped where openssl exists)'
+    unscoreable: |
+      host-regime: the failing test is green on bare metal and red only in a
+      forge; the verdict is the in-forge workspace suite, which no litmus runs
+      today. Closes on an in-forge ./build.sh --check that runs it green.
+    provenance: |
+      Filed 2026-09-29 by yoga on the coordinator's direction, from 667-se87's
+      live run 5.

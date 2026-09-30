@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-two-smoke-skills-tell-an-agent-to-export-the-exact-env-the-consent-engine-honours-and-a-fixture-pins-the-skill-text-against-a-policy-eval-and-the-bash-bridge-under-that-env
+    field: notes
+    value: |-
+      size: S (docs + env), plus the bridge routing named in context.
+      Leave pickup open; the coordinator routes it.
+
+
+      [2026-09-28T19:22:56Z yoga] Framing (coordinator macuahuitl-fedora, 2026-09-28): the bridge reads the pair from the hook env OR the stage's leading VAR=val words, so any agent can write the prefix. For soft reset the env arm is therefore a self-asserted convenience marker, NOT an authorization boundary; that is acceptable only because the operator pre-authorises soft reset everywhere. It cannot widen past soft: command_policy::env_preauthorises is false unless class == soft-reset, and fixture arm 4 pins the same prefix on `wsl --unregister x` as an ask (bridge rc=4) and consent:policy:hard-reset (eval). Work ref 63b9efa54.
+    ts: "2026-09-28T19:22:56Z"
+    host: yoga
+
+events:
+  - packet_id: the-two-smoke-skills-tell-an-agent-to-export-the-exact-env-the-consent-engine-honours-and-a-fixture-pins-the-skill-text-against-a-policy-eval-and-the-bash-bridge-under-that-env
+    event:
+      type: progress
+      ts: "2026-09-28T19:22:56Z"
+      host: yoga
+      summary: |-
+        status 'size: S (docs + env), plus the bridge routing named in context.
+        Leave pickup open; the coordinator routes it.
+        
+        
+        [2026-09-28T19:22:56Z yoga] Framing (coordinator macuahuitl-fedora, 2026-09-28): the bridge reads the pair from the hook env OR the stage's leading VAR=val words, so any agent can write the prefix. For soft reset the env arm is therefore a self-asserted convenience marker, NOT an authorization boundary; that is acceptable only because the operator pre-authorises soft reset everywhere. It cannot widen past soft: command_policy::env_preauthorises is false unless class == soft-reset, and fixture arm 4 pins the same prefix on `wsl --unregister x` as an ask (bridge rc=4) and consent:policy:hard-reset (eval). Work ref 63b9efa54.' (not terminal) with evidence_refs: 63b9efa54
+  - packet_id: the-two-smoke-skills-tell-an-agent-to-export-the-exact-env-the-consent-engine-honours-and-a-fixture-pins-the-skill-text-against-a-policy-eval-and-the-bash-bridge-under-that-env
+    event:
+      type: note
+      ts: "2026-09-28T19:22:56Z"
+      host: yoga
+      summary: |-
+        record the self-asserted framing of the env prefix
