@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by the coordinator on 2026-09-29 (land94 failed twice on it).
+packets:
+  - packet_id: grep-code-and-its-recall-fixture-search-agent-worktrees-inside-the-checkout-so-both-answer-about-other-copies-of-the-repo
+    order: 1515-e49s
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [mcp, project-info, litmus, agent-worktrees]
+    estimated_hours: 1
+    owned_files:
+      - images/default/config-overlay/mcp/project-info.sh
+      - scripts/test-project-info-grep-code-recall.sh
+    title: |
+      project-info grep_code and its recall fixture both search .claude/worktrees, the agent-harness worktrees inside the checkout, so they answer about copies of the repo, not this checkout.
+    context: |
+      MEASURED 2026-09-29 on macuahuitl: land94's gate went red at
+      test-project-info-grep-code-recall L6 ("truth=101 > cap but truncation not
+      announced with the true count"). 98 of the truth's 108 lines were inside
+      14 agent worktrees under .claude/worktrees/ (gitignored, each a full copy
+      of the repo; 11 left over from 2026-09-27). `find -path '*/.git' -prune`
+      prunes a linked worktree's .git FILE, never the directory beside it, so
+      both the tool (grep_code in project-info.sh) and the fixture's truth()
+      walked into every copy. The same shape was relay-fixed for the no-python
+      scan in land94 (tillandsias-policy should_skip_dir skips a nested checkout).
+    outcome: |
+      grep_code and the recall fixture's truth prune */.claude/worktrees as well
+      as */.git, so an answer names only files of this checkout.
+    exit_criteria:
+      - "With a nested worktree planted under .claude/worktrees/ holding 60 matching lines, the pre-fix tree's L6 truth counts 67 (the plant included) and the post-fix tree's counts 7 (measured on macuahuitl 2026-09-30); grep_code's answer names no .claude/worktrees path post-fix."
+      - "With nothing planted, the fixture stays ok:grep-code-recall:13 (negative control: the prune removes no real file)."
+    verifiable_closure: |
+      The measurement above, recorded on this row; the fixture is already bound
+      (litmus and gate) and stays green.
+    unscoreable: "no-new-arm: a fixture arm would have to plant files inside the live checkout, which fixtures must not write; the planted-worktree measurement is recorded instead"
+    next_action: >
+      Land with the coordinator's next relay; close citing the landed sha.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Filed and implemented by the coordinator (operator: advance freely overnight).

@@ -88,8 +88,14 @@ else bad "H5 control: got: $(printf '%s' "$out" | head -1)"; fi
 # ── live parity: the survey's queries against this checkout ──────────────────
 # truth <pattern> <include> <path> — grep -rIE over the same file set grep_code
 # searches (find -name include, .git pruned). Prints "file:line:" prefixes.
+# ORDER 1515-e49s: .claude/worktrees is pruned too. Agent-harness worktrees
+# live there, inside the checkout (gitignored), each a FULL copy of the repo;
+# with fourteen of them the truth counted 98 of its 108 lines in copies and L6
+# went red on the land94 gate. `-path '*/.git'` prunes a linked worktree's
+# .git FILE, never the directory beside it.
 truth() {
-    (cd "$ROOT" && find "$3" -path '*/.git' -prune -o -type f -name "$2" -print0 2>/dev/null \
+    (cd "$ROOT" && find "$3" \( -path '*/.git' -o -path '*/.claude/worktrees' \) -prune \
+        -o -type f -name "$2" -print0 2>/dev/null \
         | xargs -0 grep -InE -e "$1" -- 2>/dev/null) || true
 }
 live() { # <label> <pattern> <include> <path>
