@@ -53,7 +53,9 @@ ARMS=$((ARMS + 1))
 
 # Arm 2: and there is a branch that runs the guard WITHOUT it. A probe whose
 # only outcome is the setsid path would be a probe that changes nothing.
-grep -q 'exec bash "\$_p"' "$B" || {
+# 1384-bqhy: the guard runs as "${_runner[@]}", which is `bash "$_p"` unless
+# the guard is a .lua, so the no-setsid branch is the runner exec'd bare.
+{ grep -q 'cd "\$SCRIPT_DIR" && exec "\${_runner\[@\]}"' "$B" && grep -q 'local -a _runner=(bash "\$_p")' "$B"; } || {
     echo "violation:preflight-setsid-probe:no-fallback-exec-without-setsid"
     exit 1
 }

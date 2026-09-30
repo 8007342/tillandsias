@@ -388,19 +388,10 @@ fn run_to_verdict(path: &str, src: &str, args: &[String]) -> (String, Option<Str
         }
         let _ = lua.globals().set("arg", t);
     }
-    let body = if src.starts_with("#!") {
-        match src.find('\n') {
-            Some(p) => {
-                format!("--{}", &src[2..])
-                    .chars()
-                    .take(p + 2)
-                    .collect::<String>()
-                    + &src[p..]
-            }
-            None => String::new(),
-        }
-    } else {
-        src.to_string()
+    // A shebang line becomes a comment, so line numbers in errors stay true.
+    let body = match src.strip_prefix("#!") {
+        Some(rest) => format!("--{rest}"),
+        None => src.to_string(),
     };
     let res = lua.load(&body).set_name(path).exec();
     if let Some(v) = slot.lock().unwrap().clone() {
