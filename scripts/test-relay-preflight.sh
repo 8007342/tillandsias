@@ -216,7 +216,11 @@ fi
 CLONE_E="$W/clone-e"
 _clone "$BASE_BARE" "$CLONE_E"
 git -C "$CLONE_E" "${GC[@]}" checkout -qb work/bad-dialect
-_lower='${x,,}'
+# ASSEMBLED, never spelled literally: check-bash-dialect.sh's own gate
+# scans THIS file's bytes too, and a literal bash4-ism here would trip it
+# on its own fixture (the same reason litmus-covering-specs.sh assembles
+# its "litmus:" prefix rather than spelling a fake claim outright).
+_lower='$'"{x,,}"
 printf '#!/usr/bin/env bash\nx="A"\ny=%s\necho "$y"\n' "$_lower" > "$CLONE_E/scripts/bad-dialect.sh"
 chmod +x "$CLONE_E/scripts/bad-dialect.sh"
 git -C "$CLONE_E" "${GC[@]}" add -A
