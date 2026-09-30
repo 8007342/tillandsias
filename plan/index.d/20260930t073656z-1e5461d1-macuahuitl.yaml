@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-coordinator-skill-never-names-the-claim-guards-its-routing-and-claim-steps-need
+    event:
+      type: note
+      ts: "2026-09-30T07:36:56Z"
+      agent_id: linux-macuahuitl-claude-20260930t073655z
+      host: macuahuitl
+      summary: |
+        IMPLEMENTED on work/1513-pppk by the coordinator. skills/meta-orchestration/SKILL.md now names check-claims-across-branches.sh (before implementing or ROUTING a row, with its claimed-elsewhere/ok/blocked verdicts), check-claim-confirmed.sh (right after the claim push, with ok/refused/unknown verdicts; unknown is never a pass), and check-plan-binary-current.sh (Start Of Cycle step 0 and after any merge touching crates/tillandsias-plan/src, ending ok:plan-binary-current). grep hits: 1, 2, 1. check-skills-single-source ok:5:19, skills-canonical ok, markdown distillation ok. Closes when it lands.

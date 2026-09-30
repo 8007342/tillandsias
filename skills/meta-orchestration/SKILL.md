@@ -765,6 +765,17 @@ filing — not the prompt.
    compiles what it validates, and rebuilding everything on a schedule is a
    heavier decision than this step is making.
 
+   Confirm the rebuilt instrument is CURRENT before minting or writing, and
+   again after any merge that touches crates/tillandsias-plan/src (a relay of
+   a plan-binary change makes the binary you built an hour ago stale; the
+   next `next-order` then refuses with `stale-plan-binary`) (1513-pppk):
+
+   ```bash
+   bash scripts/check-plan-binary-current.sh
+   # -> ends ok:plan-binary-current; any stale:* or blocked:* line is a stop:
+   #    cargo build --release -p tillandsias-plan, then re-run
+   ```
+
    A `blocked:preflight:*` verdict means do not start the cycle — selecting work
    with an unverified instrument is the one failure the loop cannot reason its
    way out of, because the tool it would reason WITH is the stale thing. That is
@@ -1839,16 +1850,33 @@ claims older than 24h so a dead host cannot strand work permanently. As of
 all, so every host is offered every packet, and on 2026-08-18 two hosts
 implemented 798-tk7b six minutes apart (order 814-iyu7, ~4h duplicated).
 
-So, before you implement anything from the batch:
+So, before you implement anything from the batch — and before a coordinator
+ROUTES a row to another host — ask whether a sibling branch already holds it
+(order 1513-pppk):
+
+```bash
+scripts/check-claims-across-branches.sh --batch <order>...
+# -> claimed-elsewhere:<order>:<branch> per held row, then ok:cross-branch-claims:<n>
+#    blocked:* means the fold could not be read: do not treat it as "free"
+```
+
+A trunk-only read cannot see a claim that sits on osx-next or windows-next
+until the relay, and on 2026-09-29 the coordinator nearly re-assigned a row
+another host had claimed that morning. Then claim:
 
 ```bash
 tillandsias-plan set-field <order> status in_progress \
     --host "$(hostname -s)" --reason "claimed for cycle <UTC ts>"
 git add plan/index.d && git commit -m "claim(<order>): <host>" && git push
+scripts/check-claim-confirmed.sh <order>
+# -> ok:claim-confirmed:<order> | refused:claim-not-on-origin | refused:claim-lost:<order>
+#    | unknown:claim-origin-unreachable (never a pass)
 ```
 
 Push the claim BEFORE the work, not with it — an unpushed claim separates
-nobody. Then:
+nobody, and a push that failed quietly (a locked keyring, 2026-09-29) looks
+exactly like one that landed until `check-claim-confirmed` asks origin
+(1493-d93i). Then:
 
 - **Losing the race is normal and cheap.** The ledger is a CRDT; two hosts can
   claim in the same window. On your next fetch, if another host's claim event
