@@ -6,6 +6,34 @@
 # way it can lie has to be pinned.
 set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || exit 1
+# ORDER 1516-wru4: NEVER PLANT IN THE LIVE CHECKOUT. The arms below plant
+# guards and gate steps and append to build.sh; run in place, a concurrent gate
+# or boundary snapshot in this checkout saw them. So the fixture re-execs itself
+# inside a detached scratch worktree (target/ is ignored, so the live status
+# does not move), overlaid with the live tracked files so uncommitted edits are
+# still what is tested. A sampler watches the live tree the whole run and the
+# outer half refuses if its status or build.sh moved.
+if [ -z "${FRONT_DOOR_SCRATCH:-}" ]; then
+    mkdir -p "$ROOT/target/plan-scratch"
+    SCR="$(mktemp -d "$ROOT/target/plan-scratch/front-door.XXXXXX")"
+    git worktree add -q --detach "$SCR" HEAD >/dev/null 2>&1 || { echo "FAIL: cannot create scratch worktree"; exit 1; }
+    git diff --name-only -z HEAD | while IFS= read -r -d '' f; do
+        if [ -e "$f" ]; then mkdir -p "$SCR/$(dirname "$f")"; cp -p "$f" "$SCR/$f"; else rm -f "$SCR/$f"; fi
+    done
+    _live() { git -C "$ROOT" status --porcelain; sha256sum "$ROOT/build.sh"; }
+    before="$(_live)"
+    ( while :; do [ "$(_live)" = "$before" ] || { [ -e "$SCR.moved" ] || { date +%T; diff <(printf '%s\n' "$before") <(_live); } > "$SCR.moved"; }; sleep 1; done ) & sampler=$!
+    ( cd "$SCR" && FRONT_DOOR_SCRATCH=1 bash scripts/test-preflight-front-door.sh ); rc=$?
+    kill "$sampler" 2>/dev/null; wait "$sampler" 2>/dev/null
+    moved=0; [ "$(_live)" = "$before" ] || moved=1
+    [ -e "$SCR.moved" ] && { moved=1; sed 's/^/        /' "$SCR.moved"; }
+    git worktree remove --force "$SCR" >/dev/null 2>&1; rm -rf "$SCR" "$SCR.moved"
+    if [ "$moved" -ne 0 ]; then
+        echo "  [FAIL] the live checkout moved while the door ran (status or build.sh changed) — 1516-wru4"; exit 1
+    fi
+    echo "  [OK]   the live checkout's status and build.sh never moved during the run (1516-wru4)"
+    exit "$rc"
+fi
 pass=0; fail=0
 # Orphan baseline BEFORE this fixture runs the door: a host may have background
 # work of its own, and an arm that counts globally would blame this door for it.
