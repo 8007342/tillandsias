@@ -73,8 +73,9 @@ pub mod lua_runtime;
 pub mod lua_std;
 pub mod methodology;
 /// ORDER 1506-nvqt — the fleet message bus's pure checks (body budget, secret
-/// shapes, TTL bounds), shared by `msg send` and the mover.
-pub mod msg_shape;
+/// shapes, TTL bounds), shared by `msg send` and the mover. Lives in the
+/// `tillandsias-msg` crate since 1506-q7ab so the mover can link it.
+pub use tillandsias_msg::shape as msg_shape;
 /// ORDER 1506-nvqt — the Maildir-shaped lane store behind `tillandsias-plan
 /// msg`; no networking, no ack verb (the ack is the infrastructure's).
 pub mod msg_store;

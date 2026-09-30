@@ -2531,6 +2531,18 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
                 "/run/host/tillandsias-mcp/mcp.sock",
             );
     }
+    // ORDER 1506-q7ab: the lane mailbox, value-aligned with the live launcher
+    // (main.rs build_forge_agent_run_args_with_vault).
+    if let Some(lane) = crate::msg_serve::prepare_forge_lane(project_name, Some(instance)) {
+        spec = spec
+            .bind_mount(
+                lane.source.display().to_string(),
+                tillandsias_msg::store::FORGE_LANE_MOUNT,
+                false,
+            )
+            .env("TILLANDSIAS_MSG_LANE", lane.lane)
+            .env("TILLANDSIAS_MSG_HOST", lane.host);
+    }
 
     match kind {
         LaunchKind::OpenCode => spec
@@ -4943,6 +4955,13 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // @trace spec:graceful-shutdown, spec:app-lifecycle
     service.attach_signal_shutdown(Arc::clone(&shutdown));
     start_control_socket_server(Arc::clone(&shutdown))?;
+    // Order 1506-q7ab: the same-host mover of the fleet message bus, beside
+    // the control socket and stopped by the same latch. It refuses to start
+    // (and says why) when a foreground `--msg-serve` already holds the store.
+    {
+        let mover_shutdown = Arc::clone(&shutdown);
+        crate::msg_serve::spawn_resident(move || mover_shutdown.is_triggered());
+    }
     // Order 1461-8tyy: the Linux tray is this host's resident process, so it
     // keeps the GitHub token in Vault alive (due-check at start, then every
     // 15 min, rotating inside the 30-minute window). No desktop-session gate:
@@ -7897,6 +7916,15 @@ mod tests {
         assert!(args.contains(&"--entrypoint".to_string()));
         assert!(args.contains(&"/usr/local/bin/entrypoint-forge-claude.sh".to_string()));
         assert!(args.contains(&"tillandsias-forge:v0.1.260506.6".to_string()));
+        // ORDER 1506-q7ab: this legacy path mounts the lane mailbox like the
+        // live launcher — read-write, only its own lane — with the lane label.
+        let lane = crate::msg_serve::store_root().join("lanes/alpha-default");
+        let want = format!(
+            "type=bind,source={},target=/run/host/tillandsias-msg,relabel=shared",
+            lane.display()
+        );
+        assert!(args.contains(&want), "missing {want}; argv={args:?}");
+        assert!(args.contains(&"TILLANDSIAS_MSG_LANE=alpha-default".to_string()));
     }
 
     // @trace spec:tray-ux, spec:browser-isolation-tray-integration
