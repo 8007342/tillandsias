@@ -838,6 +838,15 @@ fn verify_inner(
     }
 
     // (1) Every citation resolves and its span carries the claimed content.
+    //
+    // ORDER 1511 (groundtruth regime check over the door deadline). READ EACH
+    // FILE ONCE. This loop used to `read_to_string` and re-split the cited file
+    // for EVERY citation: `what is ready for linux` carries 588 citations, about
+    // half into plan/index.yaml (5.9 MB, 31k lines), so one answer re-read and
+    // re-split ~1.8 GB. The bytes are the same on every read inside one
+    // verification, so the lines are cached per path and every check below sees
+    // exactly what it saw before.
+    let mut file_lines: BTreeMap<std::path::PathBuf, Option<Vec<String>>> = BTreeMap::new();
     for c in &envelope.citations {
         if c.path.is_empty() {
             violations.push("citation with an empty path".to_string());
@@ -856,7 +865,12 @@ fn verify_inner(
             continue;
         }
         let full = root.join(rel);
-        let Ok(text) = std::fs::read_to_string(&full) else {
+        let cached = file_lines.entry(full.clone()).or_insert_with(|| {
+            std::fs::read_to_string(&full)
+                .ok()
+                .map(|t| t.lines().map(str::to_owned).collect())
+        });
+        let Some(lines) = cached.as_ref() else {
             let unreadable = format!(
                 "{}: citation path does not resolve to a readable file ({})",
                 c.path,
@@ -877,7 +891,6 @@ fn verify_inner(
             }
             continue;
         };
-        let lines: Vec<&str> = text.lines().collect();
         if c.line_start == 0 || c.line_end < c.line_start {
             // Malformed in EVERY frame — an inverted range cites nothing
             // anywhere, so there is nothing for a commit to rescue.
