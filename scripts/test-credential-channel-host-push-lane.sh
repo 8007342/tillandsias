@@ -33,7 +33,7 @@ bad() { printf 'FAIL: %s\n' "$1"; FAIL=1; }
 skip(){ printf 'skip: %s\n' "$1"; }
 
 extract() { awk -v n="$1" '$0 ~ "^"n"\\(\\) \\{" { p = 1 } p { print } p && /^}$/ { exit }' "$SRC"; }
-for f in _ccc_timeout _ccc_lane_banner _ccc_host_push_lane _ccc_verdict_with_lane forge_upstream_auth_verdict; do
+for f in _ccc_timeout _ccc_lane_banner _ccc_host_push_lane _ccc_verdict_with_lane forge_upstream_auth_verdict _afford _ccc_relay_state; do
     body="$(extract "$f")"
     [ -n "$body" ] || { echo "FAIL: $f not found in $SRC"; exit 1; }
     eval "$body"
@@ -56,6 +56,10 @@ sshd_silent()    { _ccc_lane_banner() { return 1; }; }
 upstream_ok()     { forge_upstream_auth_verdict() { echo "ok:forge-git-mirror"; return 0; }; }
 upstream_denied() { forge_upstream_auth_verdict() { echo "blocked:upstream-push-unauthorized"; return 1; }; }
 upstream_stale()  { forge_upstream_auth_verdict() { echo "blocked:upstream-auth-stale"; return 1; }; }
+# 1310-rec6: the mirror's relay-state, stubbed (the real read is a podman exec).
+relay_ok()     { _ccc_relay_state() { echo "ok/none/0"; }; }
+relay_broken() { _ccc_relay_state() { echo "broken/credential/1"; }; }
+relay_ok
 
 keyring_fails; sshd_up; upstream_ok
 out="$(_ccc_verdict_with_lane 2>"$scratch/err")"; rc=$?
@@ -118,6 +122,18 @@ if command -v podman >/dev/null 2>&1 && podman container exists "tillandsias-git
         *) bad "ARM9 unexpected live verdict: '$out'" ;;
     esac
 else skip "ARM9 no tillandsias-git-$project container on this host (named skip, not a pass)"; fi
+
+# ARM 10 (1310-rec6 step 4, host class): the credential is authorized but the
+# mirror is BROKEN (two failing ticks): not a push path, named, with a remedy;
+# an ok relay-state restores it with nothing else changed.
+keyring_fails; sshd_up; upstream_ok; relay_broken
+out="$(_ccc_verdict_with_lane 2>"$scratch/err10")"; rc=$?
+relay_ok
+out_ok="$(_ccc_verdict_with_lane 2>/dev/null)"; rc_ok=$?
+if [ "$rc" -eq 1 ] && [ "$out" = "blocked:mirror-broken:credential" ] && grep -q '  remedy: the operator re-seeds' "$scratch/err10" \
+   && [ "$rc_ok" -eq 0 ] && [ "$out_ok" = "ok:host-push-lane:git-v0test" ]; then
+    ok "ARM10 a broken mirror is not a push path (blocked:mirror-broken:credential, with remedy); an ok tick restores the lane"
+else bad "ARM10 broken rc=$rc out='$out'; restored rc=$rc_ok out='$out_ok'"; fi
 
 [ "$FAIL" -eq 0 ] && { echo "PASS: credential-channel-host-push-lane (1456-ib6i)"; exit 0; }
 echo "FAILED: credential-channel-host-push-lane (1456-ib6i)"; exit 1

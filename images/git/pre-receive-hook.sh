@@ -501,6 +501,40 @@ SEEN_REFS="$TMPDIR_WORK/seen-refs"
 : > "$SEEN_REFS"
 discipline_load
 
+# --- A BROKEN mirror refuses up front (order 1310-rec6 steps 3+4) ---
+# @trace spec:git-mirror-service
+# publish-relay-state (step 2) publishes refs/tillandsias/relay-state/broken/
+# <class>/... only after TWO consecutive failing ticks. While it stands, every
+# ref update is refused HERE, before any relay attempt, with the remedy for the
+# failing LAYER and then for WHO is pushing (coordinator ruling 2026-09-30):
+#   credential: the operator re-seeds the GitHub token, whoever pushes; a forge
+#               rebuild would not help
+#   transport:  a host restores connectivity; a forge cannot, so it stops and
+#               asks for a tillandsias upgrade and a forge rebuild
+# The pusher is known without a new flag: the host-push lane's sshd wrapper
+# exports TILLANDSIAS_PUSH_PRINCIPAL=til:host-push:<host>; anything else is a
+# forge. Reads stay open (the daemon keeps exporting) so the verdict refs are
+# readable, and one ok tick replaces the broken ref, so service returns with
+# no restart.
+relay_state_refusal() {
+    local st cls who remedy
+    st="$(git for-each-ref --count=1 --format='%(refname)' refs/tillandsias/relay-state/broken 2>/dev/null)"
+    [ -n "$st" ] || return 0
+    cls="${st#refs/tillandsias/relay-state/broken/}"; cls="${cls%%/*}"
+    case "${TILLANDSIAS_PUSH_PRINCIPAL:-}" in til:host-push:*) who=host ;; *) who=forge ;; esac
+    case "$cls:$who" in
+        credential:*) remedy="the operator re-seeds the GitHub token (tillandsias --github-login); nothing to rebuild. Service returns on the mirror's next ok tick, no restart" ;;
+        transport:host) remedy="restore this host's connectivity to upstream (DNS, proxy, network); tillandsias --sync <project> shows when it answers. Service returns on the next ok tick, no restart" ;;
+        transport:forge) remedy="stop and report: a forge cannot repair the mirror's upstream; ask the operator for a tillandsias upgrade and a forge rebuild" ;;
+        *) remedy="read the mirror's [relay-state] log for the failing layer before retrying" ;;
+    esac
+    log_msg "REJECT: this mirror cannot relay to upstream (relay-state: broken/$cls), so nothing is accepted until it can"
+    log_msg "  why: two consecutive reconcile ticks failed to relay at the $cls layer; accepting a push now would only fail at the relay"
+    log_msg "  remedy: $remedy"
+    log_msg "blocked:mirror-broken:$cls"
+    return 1
+}
+
 # --- Validate transaction + enforce policy before privileged relay (order 579) ---
 # @trace spec:git-mirror-service
 # receive-pack runs pre-receive BEFORE it evaluates receive.denyDeletes and
@@ -516,6 +550,7 @@ discipline_load
 # check is what protects tag and custom namespaces. New ref creation remains
 # allowed.
 RECEIVE_POLICY_REJECTED=0
+relay_state_refusal || exit 1
 while read -r OLDSHA NEWSHA REFNAME EXTRA; do
     if [ -z "$OLDSHA" ] || [ -z "$NEWSHA" ] || [ -z "$REFNAME" ] || [ -n "${EXTRA:-}" ]; then
         log_msg "REJECT: malformed receive transaction record"
