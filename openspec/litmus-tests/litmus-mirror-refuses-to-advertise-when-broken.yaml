@@ -1,0 +1,45 @@
+# @trace spec:git-mirror-service
+name: litmus:mirror-refuses-to-advertise-when-broken
+spec: git-mirror-service
+phase: pre-build
+description: A mirror whose relay-state is broken refuses every push up front with the remedy for the failing layer and the pusher, keeps reads open, stops an unattended forge lane before work, warns an interactive one, and restores with one ok tick and no restart
+severity: high
+size: instant
+inputs:
+  - images/git/pre-receive-hook.sh
+  - images/default/lib-common.sh
+  - scripts/test-mirror-refuses-when-broken.sh
+
+# Order 1310-rec6 steps 3+4 (coordinator ruling 2026-09-30, on the row). This
+# is the litmus the row's unscoreable text named in advance. The pre-receive
+# already relays synchronously, so a push into a broken mirror was never
+# silently stranded; the cost of a broken mirror that keeps answering is
+# EARLIER, a forge that works for hours and learns at push time. So the
+# refusal acts up front, by failing layer (credential: the operator re-seeds,
+# whoever pushes; transport: a host restores connectivity, a forge asks for an
+# upgrade and rebuild), and by lane (unattended lanes stop, interactive ones
+# are warned).
+#
+# Falsified against the pre-change hook: arms 1-3 go red (the push is admitted
+# and relayed). Hermetic: a scratch bare mirror, a stub relay, host git only.
+
+preconditions:
+  - images/git/pre-receive-hook.sh defines relay_state_refusal
+  - images/default/lib-common.sh defines forge_mirror_relay_gate
+
+critical_path:
+  - step: "a broken mirror refuses by layer and pusher, keeps reads open, gates the forge by lane, and one ok tick restores"
+    command: "bash scripts/test-mirror-refuses-when-broken.sh"
+    timeout_ms: 120000
+    expected_behavior: "PASS: mirror-refuses-when-broken (1310-rec6)"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "mirror broken: pushes refused up front by layer and pusher, reads open, unattended forge lanes stop, interactive ones warned, one ok tick restores"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "mirror-refuses-to-advertise-when-broken"
+
+rollback:
+  on_failure: "restore relay_state_refusal (images/git/pre-receive-hook.sh) and forge_mirror_relay_gate (images/default/lib-common.sh) from git history"

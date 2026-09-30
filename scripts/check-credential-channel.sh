@@ -1364,9 +1364,35 @@ _ccc_host_push_lane() {
   project="${TILLANDSIAS_HOST_PUSH_PROJECT:-$(basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")")}"
   upstream="$(forge_upstream_auth_verdict "podman-exec:tillandsias-git-$project:/srv/git/$project")"
   case "$upstream" in
-    ok:*) echo "ok:host-push-lane:$alias"; return 0 ;;
+    ok:*) ;;
     *) echo "$upstream"; return 2 ;;
   esac
+  # ORDER 1310-rec6 step 4 (host class): an authorized credential is not a
+  # working mirror. publish-relay-state marks the mirror BROKEN after two
+  # failing ticks; the mirror then refuses every push, so the lane is not a
+  # push path until one ok tick restores it.
+  local rstate cls
+  rstate="$(_ccc_relay_state "$project")"
+  case "$rstate" in
+    broken/*)
+      cls="${rstate#broken/}"; cls="${cls%%/*}"
+      case "$cls" in
+        credential) _afford "the mirror cannot relay to GitHub at the credential layer (two failing ticks), so every push through the lane is refused" \
+                        "the operator re-seeds the GitHub token (tillandsias --github-login); the mirror recovers on its next ok tick, no restart" ;;
+        *) _afford "the mirror cannot relay to GitHub at the $cls layer (two failing ticks), so every push through the lane is refused" \
+               "fix the mirror from this host: restore its connectivity to upstream (tillandsias --sync <project> shows when it answers); it recovers on the next ok tick" ;;
+      esac
+      echo "blocked:mirror-broken:$cls"; return 2 ;;
+  esac
+  echo "ok:host-push-lane:$alias"; return 0
+}
+
+# _ccc_relay_state <project>: the mirror's published relay-state path segment
+# (ok/none/0, degraded/transport/1, broken/credential/1, ...) or empty.
+_ccc_relay_state() {
+  podman exec "tillandsias-git-$1" git -C "/srv/git/$1" for-each-ref --count=1 \
+      --format='%(refname)' refs/tillandsias/relay-state 2>/dev/null \
+    | sed -n 's#^refs/tillandsias/relay-state/##p' | head -n 1
 }
 
 # The final verdict: the keyring path first, then the lane (1456-ib6i). On a
