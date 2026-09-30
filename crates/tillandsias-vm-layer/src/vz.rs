@@ -4301,7 +4301,10 @@ mod tests {
     /// BUILT user-data (provision_user_data_for_test), then executed with
     /// /etc/chrony.conf pointed at the scratch file.
     /// NEGATIVE CONTROL: a config with no makestep line gains exactly one.
-    #[cfg(unix)]
+    /// macos-only like the shim it calls (provision_user_data_for_test is
+    /// `cfg(all(test, target_os = "macos"))`); `cfg(unix)` also admitted Linux
+    /// and broke every Linux `cargo test` build (land101 relay-fix).
+    #[cfg(target_os = "macos")]
     #[test]
     fn provision_user_data_lets_chrony_step_on_any_large_offset() {
         let ud = provision_user_data_for_test();
