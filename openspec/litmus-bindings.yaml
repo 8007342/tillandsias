@@ -231,6 +231,9 @@ specs:
   - litmus:cloudflare-oauth-core
   - litmus:cloudflare-token-rotation
   - litmus:cloudflare-login
+  # 1506-nvqt. Same fallback: the fleet-messaging capability lives in the
+  # unsynced openspec/changes/fleet-messaging-poc/ change.
+  - litmus:fleet-msg-store-shape
   coverage_ratio: 75
   last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher

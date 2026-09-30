@@ -72,6 +72,12 @@ pub mod lua_predicate;
 pub mod lua_runtime;
 pub mod lua_std;
 pub mod methodology;
+/// ORDER 1506-nvqt — the fleet message bus's pure checks (body budget, secret
+/// shapes, TTL bounds), shared by `msg send` and the mover.
+pub mod msg_shape;
+/// ORDER 1506-nvqt — the Maildir-shaped lane store behind `tillandsias-plan
+/// msg`; no networking, no ack verb (the ack is the infrastructure's).
+pub mod msg_store;
 pub mod run_verb;
 
 /// Order 977-56fd — the seven-state obligation lattice, the product order over
