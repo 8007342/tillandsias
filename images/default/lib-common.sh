@@ -5256,8 +5256,9 @@ load_agent_profile() {
             if source "$p"; then
                 eval "$_opts"
                 return 0
+            else
+                _rc=$?   # read HERE: after `fi`, $? is the if statement's own 0
             fi
-            _rc=$?
         fi
         eval "$_opts"
         echo "[forge] WARNING: agent profile at $p failed (rc=$_rc) — AGENT_PROFILE may be unset and generic skills such as /project-discipline may not be linked; the forge continues" >&2
