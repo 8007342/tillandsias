@@ -5229,3 +5229,29 @@ show_banner() {
     echo "========================================"
     echo ""
 }
+
+# ORDER 1517-p83m — LOAD THE AGENT PROFILE FROM WHERE THE IMAGE PUTS IT, LOUDLY.
+# Every agent entrypoint used to run `[ -f /opt/config-overlay/mcp/agent-profile.sh ]
+# && source` — a path the image never installs (the Containerfile COPYs
+# config-overlay/mcp/ to /home/forge/.config-overlay/mcp/, the ConfigOverlay
+# mount point in container_profile.rs). The guard made the miss silent, so from
+# 2026-05-14 no forge exported AGENT_PROFILE or linked the generic skills
+# (1446-qkx4). One resolver now, and a missing profile says so on stderr.
+load_agent_profile() {
+    local p="${TILLANDSIAS_AGENT_PROFILE_SH:-${HOME:-/home/forge}/.config-overlay/mcp/agent-profile.sh}"
+    if [ -f "$p" ]; then
+        # The profile opens with `set -euo pipefail`. It was never actually
+        # sourced before 1517-p83m, so letting that leak would silently turn on
+        # -e/-u for the rest of every entrypoint. Restore the caller's options.
+        local _opts
+        _opts="$(set +o)"
+        # shellcheck source=/dev/null
+        source "$p"
+        eval "$_opts"
+        return 0
+    fi
+    echo "[forge] WARNING: agent profile not found at $p — AGENT_PROFILE is unset and generic skills such as /project-discipline are not linked" >&2
+    echo "[forge]   why: the image installs config-overlay/mcp/ at /home/forge/.config-overlay/mcp/, and a drifted path was skipped silently for months (1517-p83m)" >&2
+    echo "[forge]   remedy: rebuild the forge image; if this persists, report 1517-p83m with the output of: ls -la ~/.config-overlay/mcp/" >&2
+    return 0
+}

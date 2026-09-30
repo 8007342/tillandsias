@@ -1,0 +1,34 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:1517-p83m
+#
+# Order 1517-p83m: the four agent entrypoints sourced agent-profile.sh from
+# /opt/config-overlay, a path the image never installs, behind a silent [ -f ]
+# guard, so from 2026-05-14 no forge exported AGENT_PROFILE or linked the
+# generic skills (1446-qkx4). One loader in lib-common now resolves the COPY
+# target, restores the caller's shell options, and warns loudly on a miss.
+name: litmus:forge-entrypoints-source-agent-profile
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Static: each agent entrypoint calls load_agent_profile after lib-common and
+  its default is the Containerfile COPY target. Behavioural: against an
+  image-shaped scratch HOME the loader exports AGENT_PROFILE and links
+  /project-discipline; a missing profile warns with why and remedy; the
+  profile's set -euo pipefail does not leak. Negative control: the pre-fix
+  block exports nothing and prints nothing.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-forge-entrypoints-source-agent-profile.sh
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-forge-entrypoints-source-agent-profile.sh && test -x scripts/test-forge-entrypoints-source-agent-profile.sh && echo 'ok: entrypoints-profile-parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: entrypoints-profile-parses"
+
+  - step: "static, behavioural, loud-miss, options and negative-control arms hold"
+    command: "bash scripts/test-forge-entrypoints-source-agent-profile.sh"
+    timeout_ms: 60000
+    expected_behavior: "forge-entrypoints-source-agent-profile: 5 passed, 0 failed"
