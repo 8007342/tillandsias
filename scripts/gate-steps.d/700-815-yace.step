@@ -14,3 +14,4 @@ STEP_DESC="Checking every script path an active spec names resolves in the tree 
 STEP_SCRIPT="scripts/test-spec-script-paths.sh"
 STEP_ERROR="a spec names a script the tree does not have, or the spec-path check stopped refusing one (815-yace); see which arm failed above"
 STEP_OK="every script path the specs name resolves, is baselined, or is marked absent on purpose"
+STEP_SECOND_REGIME="yolanda 2026-09-30 msys PASS: spec-script-paths 6/6 (rc=0, 113s, relayed by the coordinator)"
