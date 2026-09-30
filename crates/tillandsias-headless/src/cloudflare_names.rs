@@ -547,12 +547,12 @@ mod tests {
         // The ledger's own worked example, verbatim (fields on 1505-iky3,
         // operator ruling 2026-09-29).
         assert_eq!(
-            team_name("BullonCito", 1).expect("valid login").as_str(),
-            "tillandsias-enclave-vpn-bulloncito"
+            team_name("OctoCat", 1).expect("valid login").as_str(),
+            "tillandsias-enclave-vpn-octocat"
         );
         assert_eq!(
-            team_name("BullonCito", 2).expect("valid login").as_str(),
-            "tillandsias-enclave-vpn-bulloncito-2"
+            team_name("OctoCat", 2).expect("valid login").as_str(),
+            "tillandsias-enclave-vpn-octocat-2"
         );
 
         // Uppercase AND underscore in the same login: both normalized.
@@ -600,8 +600,8 @@ mod tests {
     #[test]
     fn team_name_candidate_matches_team_name() {
         assert_eq!(
-            team_name_candidate("BullonCito", 2).unwrap(),
-            team_name("BullonCito", 2).unwrap()
+            team_name_candidate("OctoCat", 2).unwrap(),
+            team_name("OctoCat", 2).unwrap()
         );
     }
 
