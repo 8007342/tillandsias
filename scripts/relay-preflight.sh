@@ -106,7 +106,12 @@ _item() { # name verdict t0 — t0=0 (or absent) means "no instrument", print 0
 # Run "$@", captured (stdout+stderr) into $_CAP_OUT, return its exit code.
 # Command substitution, not a temp file: no /tmp path, no PID-reuse race,
 # and nothing survives this process to clean up.
-_cap() { _CAP_OUT="$("$@" 2>&1)"; return $?; }
+# ORDER 1520-zjmk: every child gets /dev/null for stdin. The fixture, crate and
+# litmus phases run children INSIDE `while read … done <<heredoc` loops, so a
+# child that reads stdin (test-preflight-front-door did) drains the list and
+# the loop ends early with nothing refused — measured on land115: fixtures=6,
+# two ran, verdict ok.
+_cap() { _CAP_OUT="$("$@" 2>&1 </dev/null)"; return $?; }
 
 STUB=0
 [ "${TILLANDSIAS_RELAY_PREFLIGHT_STUB:-0}" = 1 ] && STUB=1
@@ -411,10 +416,12 @@ $fixtures
 FXEOF
 
 if [ "$PLAN_MODE" != 1 ]; then
+    _fx_ran=0
     while IFS= read -r _fx; do
         [ -n "$_fx" ] || continue
         _name="fixture:$(basename "$_fx" .sh)"
         _t="$(timing_now_ms)"
+        _fx_ran=$((_fx_ran + 1))
         if _cap bash "$_fx"; then
             _item "$_name" ok "$_t"
         else
@@ -433,6 +440,16 @@ if [ "$PLAN_MODE" != 1 ]; then
     done <<FXEOF2
 $fixtures
 FXEOF2
+    # The count this phase reports is the count it RAN (1520-zjmk): a loop that
+    # ends early must refuse, never print fixtures=<selected> over a subset.
+    if [ "$_fx_ran" != "$fixture_n" ]; then
+        echo "refused:relay-preflight:fixtures:population:ran=$_fx_ran:selected=$fixture_n"
+        _afford "the fixture phase selected $fixture_n fixture(s) but ran $_fx_ran; the loop ended early, so the rest were never judged" \
+            "run the unlisted fixtures directly (the selected list is above), and report the loop against 1520-zjmk"
+        _restore_clean
+        timing_emit relay-preflight relay "$T0" 1
+        exit 1
+    fi
 fi
 
 # ── phase 6: crate tests for touched crates ─────────────────────────────────

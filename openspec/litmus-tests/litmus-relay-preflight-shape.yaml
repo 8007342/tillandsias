@@ -3,12 +3,13 @@
 # Pins `scripts/relay-preflight.sh`: the ONE-command relay preflight (T2 of
 # plan/issues/efficiency-trims-design-2026-09-27.md) that merges work refs
 # onto a scratch branch and runs every pre-gate check a relay needs, with
-# ONE stdout verdict line. The six arms pin: one verdict line with per-item
+# ONE stdout verdict line. The seven arms pin: one verdict line with per-item
 # stderr lines; a red decider refuses by exact token and stops every later
 # phase; --plan is deterministic across two runs; a diff touching a script
 # selects every fixture that names it, listed before any of them run; a
 # merge conflict refuses and restores the tree; and a dirty worktree is
-# refused before any fetch (the negative control).
+# refused before any fetch (the negative control); and a fixture that
+# drains stdin cannot end the fixture loop early (1520-zjmk).
 name: litmus:relay-preflight-shape
 spec: ci-release
 phase: pre-build
@@ -34,7 +35,7 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: relay-preflight-parses"
 
-  - step: "six arms, exit 0"
-    command: "out=$(TILLANDSIAS_RELAY_PREFLIGHT_STUB=1 bash scripts/test-relay-preflight.sh); rc=$?; case \"$out\" in (*'ok:relay-preflight:6/6'*) [ \"$rc\" = 0 ] && echo 'ok: relay-preflight 6/6' ;; (*) printf '%s\\n' \"$out\"; exit 1 ;; esac"
+  - step: "seven arms, exit 0"
+    command: "out=$(TILLANDSIAS_RELAY_PREFLIGHT_STUB=1 bash scripts/test-relay-preflight.sh); rc=$?; case \"$out\" in (*'ok:relay-preflight:7/7'*) [ \"$rc\" = 0 ] && echo 'ok: relay-preflight 7/7' ;; (*) printf '%s\\n' \"$out\"; exit 1 ;; esac"
     timeout_ms: 90000
-    expected_behavior: "ok: relay-preflight 6/6"
+    expected_behavior: "ok: relay-preflight 7/7"
