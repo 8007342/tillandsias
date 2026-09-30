@@ -1003,10 +1003,14 @@ ${preview}"
                         result="grep_code: path is not a directory: $path"
                     else
                         # || true prevents set -e killing the script on SIGPIPE.
+                        # ORDER 1515-e49s: .claude/worktrees holds agent-harness
+                        # worktrees, each a full copy of the repo; searching them
+                        # answers about other checkouts. `-path '*/.git'` prunes a
+                        # linked worktree's .git FILE, not the directory beside it.
                         if [[ "$glob_for_find" == *"/"* ]]; then
-                            files=$(find "$path" -path '*/.git' -prune -o -type f -path "*/$glob_for_find" -print 2>/dev/null || true)
+                            files=$(find "$path" \( -path '*/.git' -o -path '*/.claude/worktrees' \) -prune -o -type f -path "*/$glob_for_find" -print 2>/dev/null || true)
                         else
-                            files=$(find "$path" -path '*/.git' -prune -o -type f -name "$glob_for_find" -print 2>/dev/null || true)
+                            files=$(find "$path" \( -path '*/.git' -o -path '*/.claude/worktrees' \) -prune -o -type f -name "$glob_for_find" -print 2>/dev/null || true)
                         fi
                         file_count=$(printf '%s' "$files" | grep -c . || true)
                         if [ "${file_count:-0}" -eq 0 ]; then
