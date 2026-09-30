@@ -182,6 +182,7 @@ specs:
   - litmus:mirror-upstream-auth-overwrite
   - litmus:exit-pause-host-hold
   - litmus:covering-relay-scope-shape
+  - litmus:relay-preflight-shape
   - litmus:command-policy-evaluator-shape
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
