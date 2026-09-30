@@ -81,13 +81,13 @@ rpc() {
         bash "$FP" 2>"$W/rpc.err" <<<"$1"
 }
 call() { rpc "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}"; }
-text() { jq -r '.result.content[0].text // empty' <<<"$1" 2>/dev/null; }
+text() { "$PLAN" json get -r '.result.content[0].text // empty' <<<"$1" 2>/dev/null; }
 
 # ── arm 1: surface — the tool list, and the negative control ────────────────
 list="$(rpc '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')"
 names="$(jq -c '[.result.tools[].name] | sort' <<<"$list" 2>/dev/null)"
 has_ack=0
-jq -e '.result.tools[] | select(.name == "msg_ack")' <<<"$list" >/dev/null 2>&1 && has_ack=1
+"$PLAN" json get -e '.result.tools[] | select(.name == "msg_ack")' <<<"$list" >/dev/null 2>&1 && has_ack=1
 if grep -qF '"msg_send"' <<<"$names" \
     && grep -qF '"msg_recv"' <<<"$names" \
     && grep -qF '"msg_list"' <<<"$names" \
@@ -166,7 +166,7 @@ d_list="$(text "$(degraded msg_list '{}')")"
 d_status="$(text "$(degraded msg_status '{"id":"m-x"}')")"
 d4=1
 for t in "$d_send" "$d_recv" "$d_list" "$d_status"; do
-    [ "$(jq -r '.confidence // empty' <<<"$t" 2>/dev/null)" = "unsupported" ] || d4=0
+    [ "$("$PLAN" json get -r '.confidence // empty' <<<"$t" 2>/dev/null)" = "unsupported" ] || d4=0
 done
 if [ "$d4" = 1 ]; then
     ok "4 degraded: with a stub binary whose capabilities omits msg, msg_send/msg_recv/msg_list/msg_status all answer the degraded envelope with confidence=unsupported"
@@ -236,8 +236,8 @@ fi
 
 # ── arm 8: invalid params is a protocol error, not a silent tool call ───────
 resp8="$(call msg_send '{"body":"FYI:x:y"}')"
-if [ "$(jq -r '.error.code // empty' <<<"$resp8" 2>/dev/null)" = "-32602" ] \
-    && [ "$(jq -r '.result // empty' <<<"$resp8" 2>/dev/null)" = "" ]; then
+if [ "$("$PLAN" json get -r '.error.code // empty' <<<"$resp8" 2>/dev/null)" = "-32602" ] \
+    && [ "$("$PLAN" json get -r '.result // empty' <<<"$resp8" 2>/dev/null)" = "" ]; then
     ok "8 protocol: msg_send with no 'to' is a JSON-RPC -32602 error, not a tool result"
 else
     bad "8 resp=[$resp8]"
