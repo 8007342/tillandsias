@@ -143,7 +143,21 @@ git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/origin | sort > /tm
 comm -23 /tmp/m.txt /tmp/o.txt        # refs the mirror holds that origin lacks; empty == relayed
 ```
 
-Fixing the noise is 1310-rec6's job; until then this command is the answer.
+**The noise was the health probe, not the relay, and a current image no
+longer makes it** (1310-rec6). The sweep logs a relay's output only when that
+relay FAILS; the `hung up` lines came from git-daemon logging every
+half-finished connection the old `nc` HEALTHCHECK opened every 2 s. The
+healthcheck now checks for a listening socket and never connects. Measured on
+lenovinha 2026-09-30, both images run for 60 s on the same seed with their own
+HEALTHCHECK: v56.9.27.2 logged 21 `hung up` fatals; an image built from trunk
+logged 0, and was healthy.
+
+So on a mirror **built from an image at or above 1310-rec6**, a `fatal:` line
+in its log is a real failure. On an older image the lines above are still
+probe noise: rebuild the mirror (it is yours to restart, §4), or keep using
+the outcome check. For whether the relay itself is working, read the verdict
+the mirror publishes, `refs/tillandsias/relay-state/<ok|degraded|broken>/…`;
+a `broken` mirror refuses pushes with the remedy (1310-rec6 steps 2-4).
 
 ### A container name is held by a running container
 
