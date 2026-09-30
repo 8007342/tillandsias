@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# preflight: serial — deletes, writes and restores the fixed /tmp/tillandsias-timing.jsonl and asserts its ABSENCE, so a neighbour writing it reds or greens this falsely
 # @trace order:1204-3s2s, order:1096-p3tn, spec:observability-metrics
 #
 # test-gate-step-metrics-isolation.sh — a gate step must not write into the

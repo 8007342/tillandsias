@@ -2067,6 +2067,45 @@ pub(crate) fn fetch_cloud_projects() -> (Vec<CloudProjectEntry>, CloudRefreshOut
 mod tests {
     use super::*;
 
+    /// ORDER 828-itr9. THE REGION A SOURCE SCAN READS, OR A RED TEST.
+    /// `str::split(end).next()` on an end anchor that no longer occurs yields
+    /// the WHOLE remaining string, so renaming the function that closes a
+    /// region silently widened the scan to the rest of the file, and every
+    /// assertion about that region kept passing while it guarded nothing. These
+    /// return the region only when BOTH anchors are present, and panic naming
+    /// the missing one otherwise: a rename is a red test, never a wider scan.
+    fn scan_region<'a>(src: &'a str, start: &str, end: &str) -> &'a str {
+        let (_, tail) = src
+            .split_once(start)
+            .unwrap_or_else(|| panic!("scan start anchor `{start}` is gone: repoint this scan"));
+        scan_until(tail, end)
+    }
+
+    /// The text before `end`, or a red test when `end` is absent.
+    fn scan_until<'a>(src: &'a str, end: &str) -> &'a str {
+        src.split_once(end)
+            .map(|(head, _)| head)
+            .unwrap_or_else(|| {
+                panic!(
+                    "scan end anchor `{end}` is gone: the region would silently widen \
+                 to the rest of the file (828-itr9)"
+                )
+            })
+    }
+
+    #[test]
+    fn scan_region_is_red_when_its_end_anchor_is_renamed() {
+        let src = "head START body END tail";
+        assert_eq!(scan_region(src, "START", "END"), " body ");
+        let renamed = std::panic::catch_unwind(|| scan_region(src, "START", "RENAMED").len());
+        assert!(
+            renamed.is_err(),
+            "a missing end anchor must panic, not return the tail"
+        );
+        let gone = std::panic::catch_unwind(|| scan_region(src, "GONE", "END").len());
+        assert!(gone.is_err(), "a missing start anchor must panic");
+    }
+
     /// Order 828-r2ek NEGATIVE CONTROL: the guest refuses to EMIT a frame its
     /// own reader would refuse to accept.
     ///
@@ -2856,11 +2895,11 @@ mod tests {
     #[test]
     fn post_store_connection_exits_share_pty_cleanup() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/vsock_server.rs"));
-        let post_store = source
-            .split("let (pty_tx, mut pty_rx)")
-            .nth(1)
-            .and_then(|tail| tail.split("\nasync fn read_envelope").next())
-            .expect("post-store handle_connection source");
+        let post_store = scan_region(
+            source,
+            "let (pty_tx, mut pty_rx)",
+            "\nasync fn read_envelope",
+        );
         assert!(
             !post_store.contains("return;"),
             "post-store connection exits must break to shared PTY cleanup"
@@ -2877,11 +2916,11 @@ mod tests {
     #[test]
     fn empty_vault_handover_reply_keeps_later_first_boot_retry_eligible() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/vsock_server.rs"));
-        let handler = source
-            .split("ControlMessage::GetVaultHandover { seq } =>")
-            .nth(1)
-            .and_then(|tail| tail.split("ControlMessage::").next())
-            .expect("GetVaultHandover handler source");
+        let handler = scan_region(
+            source,
+            "ControlMessage::GetVaultHandover { seq } =>",
+            "ControlMessage::",
+        );
         assert!(
             handler.contains("handover_reply_delivers_unseal_share(")
                 && handler.contains("unseal_share_b64.as_deref()"),

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# preflight: serial — cargo-builds the tillandsias-policy binary into the shared target/ that other guards execute
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"

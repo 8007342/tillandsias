@@ -1615,6 +1615,45 @@ where
 #[cfg(test)]
 mod tests {
 
+    /// ORDER 828-itr9. THE REGION A SOURCE SCAN READS, OR A RED TEST.
+    /// `str::split(end).next()` on an end anchor that no longer occurs yields
+    /// the WHOLE remaining string, so renaming the function that closes a
+    /// region silently widened the scan to the rest of the file, and every
+    /// assertion about that region kept passing while it guarded nothing. These
+    /// return the region only when BOTH anchors are present, and panic naming
+    /// the missing one otherwise: a rename is a red test, never a wider scan.
+    fn scan_region<'a>(src: &'a str, start: &str, end: &str) -> &'a str {
+        let (_, tail) = src
+            .split_once(start)
+            .unwrap_or_else(|| panic!("scan start anchor `{start}` is gone: repoint this scan"));
+        scan_until(tail, end)
+    }
+
+    /// The text before `end`, or a red test when `end` is absent.
+    fn scan_until<'a>(src: &'a str, end: &str) -> &'a str {
+        src.split_once(end)
+            .map(|(head, _)| head)
+            .unwrap_or_else(|| {
+                panic!(
+                    "scan end anchor `{end}` is gone: the region would silently widen \
+                 to the rest of the file (828-itr9)"
+                )
+            })
+    }
+
+    #[test]
+    fn scan_region_is_red_when_its_end_anchor_is_renamed() {
+        let src = "head START body END tail";
+        assert_eq!(scan_region(src, "START", "END"), " body ");
+        let renamed = std::panic::catch_unwind(|| scan_region(src, "START", "RENAMED").len());
+        assert!(
+            renamed.is_err(),
+            "a missing end anchor must panic, not return the tail"
+        );
+        let gone = std::panic::catch_unwind(|| scan_region(src, "GONE", "END").len());
+        assert!(gone.is_err(), "a missing start anchor must panic");
+    }
+
     /// ORDER 926-bin4 — the same ENUMERATION discipline 925-eofi's failure
     /// taught, applied to the open frame. Every exec entry point must choose
     /// its open frame through `exec_open_frame`, never construct `PtyOpen`
@@ -1624,7 +1663,7 @@ mod tests {
     #[test]
     fn every_exec_entry_point_chooses_its_open_frame() {
         let source = include_str!("vsock_exec.rs");
-        let code = source.split("#[cfg(test)]").next().expect("code region");
+        let code = scan_until(source, "#[cfg(test)]");
         let mut checked = 0;
         for chunk in code.split("async fn ").skip(1) {
             let name = chunk
@@ -1695,7 +1734,7 @@ mod tests {
         let source = include_str!("vsock_exec.rs");
         // Function bodies, split on the `async fn` boundary; the test module is
         // excluded so its own quoted needles do not count as senders.
-        let code = source.split("#[cfg(test)]").next().expect("code region");
+        let code = scan_until(source, "#[cfg(test)]");
         let mut checked = 0;
         for chunk in code.split("async fn ").skip(1) {
             let name = chunk.split('<').next().unwrap_or("");
@@ -1730,11 +1769,11 @@ mod tests {
     #[test]
     fn stdin_eof_is_gated_on_the_advertised_capability_not_the_wire_version() {
         let source = include_str!("vsock_exec.rs");
-        let window = source
-            .split("pub async fn exec_over_stream_with_input<S>")
-            .nth(1)
-            .and_then(|t| t.split("pub async fn ").next())
-            .expect("the with_input entry point moved — repoint this scan");
+        let window = scan_region(
+            source,
+            "pub async fn exec_over_stream_with_input<S>",
+            "pub async fn ",
+        );
         assert!(
             window.contains("server_caps.iter().any(|c| c == CAP_PTY_STDIN_EOF)"),
             "the EOF frame must be gated on the advertised capability"
@@ -1768,7 +1807,7 @@ mod tests {
             .split("3b) Tell the guest the input is finished")
             .nth(1)
             .expect("the 3b block moved — repoint this scan");
-        let guard = window.split("if peer_supports_stdin_eof").next().unwrap();
+        let guard = scan_until(window, "if peer_supports_stdin_eof");
         assert!(
             guard.contains("if !input.is_empty()"),
             "the EOF path must be inside an input-non-empty guard"
@@ -2756,10 +2795,7 @@ mod tests {
         // file and flagged its own filter expression — a check that reads its
         // own source as evidence, which is the antipattern 601-462g's problem
         // statement names ("a freshness gate that greps its own comment").
-        let production = src
-            .split_once("#[cfg(test)]")
-            .map(|(before, _)| before)
-            .unwrap_or(src);
+        let production = scan_until(src, "#[cfg(test)]");
         let offenders: Vec<&str> = production
             .lines()
             .filter(|l| !l.trim_start().starts_with("//"))

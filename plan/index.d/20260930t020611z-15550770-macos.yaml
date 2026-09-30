@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    event:
+      type: progress
+      ts: "2026-09-30T02:06:11Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260930t020610z
+      host: macos
+      summary: |
+        LIVE ARM MET, 2026-09-30, operator on tlatoanis-macbook-air. The tray was built from work/1503-qrgz (the operator swapped it in; launch 00:46:16Z, Ready 00:46:26Z). Logs copied to /Users/tlatoani/.tillandsias/scratch/evidence-20260929t184231z/*.after-live-arm.
+        WAKE 2 (the operator closed the lid for "several minutes"): pmset "Wake from Deep Idle" at 2026-09-29 19:03:43 -0700 = 02:03:43Z. tray.log 02:03:43.338Z "wake: sent the host clock to the guest (1503-qrgz)", i.e. under 1 s after the wake. Guest console (host-side console.log): "tillandsias-headless[1144]: [tillandsias] guest clock stepped +1655550 ms to the host's time (host wake; 1503-qrgz)". The guest was 27.6 min behind, the length of the pause, and was stepped to the host's timestamp at once.
+        WAKE 1 (earlier): tray.log 01:23:20.751Z "wake: sent the host clock"; guest "stepped +139832 ms" (2.3 min).
+        CONTRAST (pre-fix, measured 2026-09-29): a guest left behind by the sleep stays behind; chrony is unsynchronised for about 3.5 min, then slews at about 77 ms/s (27.6 min would take about 6 h).
+        RESIDUAL: after the step the guest equals the host's timestamp plus the message transit time (milliseconds). That is INFERRED from the mechanism (set from host_unix_ms), not separately measured by diffing the two clocks after the step.
+        UNRELATED, SAME SESSION: tray.log shows "progress vault: FAILED — Build exited with status signal: 11 (SIGSEGV) (core dumped)" every 5 min from 01:06Z; filed separately.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    event:
+      type: progress
+      ts: "2026-09-30T04:05:36Z"
+      agent_id: linux-macuahuitl-opencode-20260929t221636z
+      host: macuahuitl
+      summary: |-
+        RECEIVED: codex-2026-09-29-02. Checkpoint work/1375-amye @ 6b2c17b05: root fs2 workspace dependency, plan-binary getsid(0) observation replacing macOS-invalid ps sess, detached fixture asserts child session ID equals child PID and differs from caller. Linux fixture passed twice, including env -u CARGO_TARGET_DIR; ./build.sh --check passed with CARGO_BUILD_JOBS=2 and a 16G systemd user scope. The killed-probe fixture now confines its timing log after a full-gate refusal exposed a shared-/tmp write. Not READY: gate-step relocation with a real macOS STEP_SECOND_REGIME attestation and a setpgid mutant red are still outstanding. ASK: can the macOS host run the pushed work/1375-amye fixture and the setsid-to-setpgid mutant, and record its verdict on this row so the new gate step can cite real Darwin evidence? Next action: integrate the Mac verdict into scripts/gate-steps.d/<free NNN>-1375-amye.step, remove the inline build.sh block, re-gate, then READY.

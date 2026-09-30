@@ -58,8 +58,11 @@ fn an_observing_verdict_is_never_served_from_cache() {
     let probe = dir.join("state");
     std::fs::write(&probe, "absent").expect("write");
 
+    // A Lua LONG string ([==[ ... ]==]) takes the path verbatim. In a quoted
+    // string a Windows path's backslashes are escapes, and `C:\U...` is a Lua
+    // syntax error (order 1505-78sn, measured on yolanda 2026-09-29).
     let src = format!(
-        "function observes(arg) local r = expert.shell{{'cat', '{}'}}; \
+        "function observes(arg) local r = expert.shell{{'cat', [==[{}]==]}}; \
          return r.stdout == 'present' end",
         probe.display()
     );

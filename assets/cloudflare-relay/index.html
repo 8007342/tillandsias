@@ -1,0 +1,89 @@
+<!doctype html>
+<!--
+  @trace order:1505-kc5f, openspec/changes/cloudflare-login-and-fleet-vpn/design.md (Decision 1)
+
+  The Tillandsias Cloudflare sign-in relay page. The operator hosts this ONE
+  static file at https://<relay-host>/tillandsias/cloudflare/callback and
+  registers that URL with the Cloudflare App; `tillandsias --cloudflare-login
+  --via qr` then points the phone's redirect here.
+
+  What it sees: the `code` and `state` from its own query string. Never a
+  token, never the PKCE verifier: those exist only inside the tillandsias
+  process that started the login, and the code is single-use and useless
+  without that verifier, so a compromised relay can at most deny a login.
+
+  What it does: shows ONE line to paste into the waiting terminal
+  (`code=...&state=...`) and a copy button. It NEVER calls out: no fetch, no
+  XHR, no beacon, no form, no external script, style, font or image, and the
+  Content-Security-Policy below forbids all of them (connect-src 'none').
+  Values are written with textContent only, and the query is removed from the
+  address bar and history as soon as it has been read.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tillandsias sign-in</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1e4a32; --bg: #f4f8f5; --box: #ffffff; --muted: #4d6b58; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #dcebe1; --bg: #10231a; --box: #173327; --muted: #9dbba5; } }
+  body { margin: 0; padding: 16px; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+  main { max-width: 36rem; margin: 0 auto; }
+  #line { display: block; width: 100%; box-sizing: border-box; padding: 12px; font: 14px/1.4 ui-monospace, monospace;
+          word-break: break-all; background: var(--box); border: 1px solid var(--muted); border-radius: 6px; }
+  button { margin-top: 12px; padding: 10px 16px; font: inherit; border-radius: 6px; border: 1px solid var(--muted);
+           background: var(--box); color: var(--fg); }
+  .muted { color: var(--muted); font-size: 14px; }
+  [hidden] { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tillandsias sign-in</h1>
+  <section id="ok" hidden>
+    <p>Paste this line into the terminal that is running <code>tillandsias --cloudflare-login</code>:</p>
+    <output id="line"></output>
+    <button id="copy" type="button">Copy</button>
+    <p class="muted">This is a one-time authorization code, not a password or a token. It only works in the terminal
+      that started this sign-in, and only once.</p>
+  </section>
+  <section id="denied" hidden>
+    <p>The sign-in was not approved (<span id="err"></span>). Run <code>tillandsias --cloudflare-login</code> again to retry.</p>
+  </section>
+  <section id="bad" hidden>
+    <p>This page did not receive a usable sign-in. Run <code>tillandsias --cloudflare-login</code> again.</p>
+  </section>
+</main>
+<script>
+(function () {
+  "use strict";
+  var q = new URLSearchParams(window.location.search);
+  // Remove the code from the address bar and the session history at once.
+  try { window.history.replaceState(null, "", window.location.pathname); } catch (e) { /* best effort */ }
+  var safe = /^[A-Za-z0-9._~-]{1,2048}$/;
+  var code = q.get("code"), state = q.get("state"), error = q.get("error");
+  function show(id) { document.getElementById(id).hidden = false; }
+  if (error !== null) {
+    document.getElementById("err").textContent = /^[a-z_]{1,64}$/.test(error) ? error : "error";
+    show("denied");
+    return;
+  }
+  if (code === null || state === null || !safe.test(code) || !safe.test(state)) {
+    show("bad");
+    return;
+  }
+  var line = "code=" + code + "&state=" + state;
+  document.getElementById("line").textContent = line;
+  show("ok");
+  document.getElementById("copy").addEventListener("click", function () {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(line);
+    }
+  });
+})();
+</script>
+</body>
+</html>

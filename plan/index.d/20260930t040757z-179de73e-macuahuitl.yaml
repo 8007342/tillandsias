@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: codex-host-launcher-must-not-offer-rejected-github-token-seeding
+    field: status
+    value: completed
+    ts: "2026-09-30T04:07:57Z"
+    host: macuahuitl
+
+events:
+  - packet_id: codex-host-launcher-must-not-offer-rejected-github-token-seeding
+    event:
+      type: completed
+      ts: "2026-09-30T04:07:57Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 7985e2469 on origin/linux-next (land96); PR #199 merged; litmus:codex-device-auth-shape passed 5/5 and ./build.sh --check passed before relay
+  - packet_id: codex-host-launcher-must-not-offer-rejected-github-token-seeding
+    event:
+      type: note
+      ts: "2026-09-30T04:07:57Z"
+      host: macuahuitl
+      summary: |-
+        closed after coordinator land96

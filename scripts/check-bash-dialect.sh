@@ -370,7 +370,68 @@ if [ -z "$SCAN_FILES" ]; then
   exit 1
 fi
 
+# ORDER 1500-gu5r: ONE BULK PREFILTER, THEN THE PER-FILE WORK ONLY WHERE IT CAN
+# FIND SOMETHING. The loop below spawns a dozen or more processes per file
+# (code_of's sed, a grep per rule, awk twice) across ~880 files: 15 s on yoga,
+# three times the preflight door's deadline, so the door could only ever skip
+# this decider. Every rule's report requires its own trigger to match the RAW
+# file (a superset of the comment-stripped code_of text): the ten PAT_* rules,
+# awk -v NAME="$... for awkv_multiline_sites, and `$(` followed by `case ` or a
+# line ending in `$(` for case_in_cs_sites (the only two ways its state machine
+# is entered). Allowlisted files are always kept, for the "shrink the allowlist"
+# note. So one grep -lE over the population names every file any rule could
+# report, and skipping the rest changes no verdict (the fixture pins the
+# rules; the live-tree run is unchanged).
+_dialect_trigger="$PAT_EXPANSION|$PAT_BUILTIN|$PAT_ASSOC|$PAT_PRINTF_T|$PAT_GNUDATE|$PAT_GNUDU|$PAT_GNUSED|$PAT_BASH4|$PAT_PROCSUB_SOURCE|$PAT_EMPTYARR"
+_dialect_trigger="$_dialect_trigger"'|-v[[:space:]]*[A-Za-z_][A-Za-z0-9_]*="?\$|\$\(.*case[[:space:]]|\$\([[:space:]]*$'
+# shellcheck disable=SC2086
+_dialect_candidates="$(grep -lE -- "$_dialect_trigger" $SCAN_FILES 2>/dev/null || true)"
+_dialect_candidates="
+$_dialect_candidates
+"
+
+# ORDER 1500-gu5r follow-up (coordinator, 2026-09-30: litmus:deciders-within-
+# door-deadline FAIL 5/6 on macuahuitl). The prefilter above left ~200 files,
+# and each still paid a sed+grep pair PER RULE plus two awk passes: ~20
+# spawns, 3.6-4.1 s on yoga, over 5 s on a slower host. ONE bulk grep -l PER
+# RULE over the candidates names the files that rule can flag: every rule
+# greps code_of's output, which is the raw text with comments REMOVED, so a
+# raw-text match is a superset and a file outside a rule's list cannot produce
+# a hit for it. Skipping the rule there changes no verdict.
+_bd_list() { # _bd_list <ERE>: the candidates whose raw text matches, newline-framed
+  local _l
+  # shellcheck disable=SC2086
+  _l="$(printf '%s\n' $_dialect_candidates | grep . | tr '\n' '\0' | xargs -0 grep -lE -- "$1" 2>/dev/null || true)"
+  printf '\n%s\n' "$_l"
+}
+_bd_in() { # _bd_in <list> <file>. The list's LAST name has no newline after
+  # it: $( ) strips the trailing one, so a file at the end matches the 2nd arm.
+  case "$1" in
+    *"
+$2
+"*) return 0 ;;
+    *"
+$2") return 0 ;;
+  esac
+  return 1
+}
+_bd_l_main="$(_bd_list "$PAT_EXPANSION|$PAT_BUILTIN|$PAT_ASSOC|$PAT_PRINTF_T")"
+_bd_l_gd="$(_bd_list "$PAT_GNUDATE")"
+_bd_l_du="$(_bd_list "$PAT_GNUDU")"
+_bd_l_gs="$(_bd_list "$PAT_GNUSED")"
+_bd_l_b4="$(_bd_list "$PAT_BASH4")"
+_bd_l_ps="$(_bd_list "$PAT_PROCSUB_SOURCE")"
+_bd_l_ea="$(_bd_list "$PAT_EMPTYARR")"
+_bd_l_awkv="$(_bd_list '-v[[:space:]]*[A-Za-z_][A-Za-z0-9_]*="?\$')"
+_bd_l_cics="$(_bd_list '\$\(.*case[[:space:]]|\$\([[:space:]]*$')"
+
 for f in $SCAN_FILES; do
+  case "$_dialect_candidates" in
+    *"
+$f
+"*) ;;
+    *) in_allowlist "${f##*/}" || continue ;;
+  esac
   # 1374-4u6i: count FILES, as the summary line says. Each rule below used to
   # increment the counter itself, so one mapfile line (PAT_BUILTIN and PAT_BASH4
   # both match it) was reported as two files and the fixture arm expecting :1
@@ -380,7 +441,8 @@ for f in $SCAN_FILES; do
   base="${f##*/}"
   [ "$base" = "$SELF_NAME" ] && continue
   case "$base" in test-check-bash-dialect*) continue ;; esac
-  hits="$(code_of "$f" | grep -nE "$PAT_EXPANSION|$PAT_BUILTIN|$PAT_ASSOC|$PAT_PRINTF_T" || true)"
+  hits=""
+  _bd_in "$_bd_l_main" "$f" && hits="$(code_of "$f" | grep -nE "$PAT_EXPANSION|$PAT_BUILTIN|$PAT_ASSOC|$PAT_PRINTF_T" || true)"
   if [ -n "$hits" ]; then
     if has_refusal_guard "$f"; then
       :
@@ -400,7 +462,8 @@ for f in $SCAN_FILES; do
   # raw-line `# gnu-date: ok (<reason>)` marking a digit-validated fallback
   # or provably-harmless garbage.
   gnudate_bad=""
-  _gd="$(code_of "$f" | grep -nE "$PAT_GNUDATE" || true)"
+  _gd=""
+  _bd_in "$_bd_l_gd" "$f" && _gd="$(code_of "$f" | grep -nE "$PAT_GNUDATE" || true)"
   if [ -n "$_gd" ]; then
     while IFS= read -r _h; do
       [ -n "$_h" ] || continue
@@ -439,7 +502,8 @@ for f in $SCAN_FILES; do
   # fallback in a `||` chain) makes the line self-portable, so scan a small
   # following window before flagging — a lint that cries wolf gets muted.
   gnudu_bad=""
-  _du="$(code_of "$f" | grep -nE "$PAT_GNUDU" || true)"
+  _du=""
+  _bd_in "$_bd_l_du" "$f" && _du="$(code_of "$f" | grep -nE "$PAT_GNUDU" || true)"
   if [ -n "$_du" ]; then
     while IFS= read -r _h; do
       [ -n "$_h" ] || continue
@@ -466,7 +530,8 @@ for f in $SCAN_FILES; do
   # can put beside a non-portable one — the substitution either uses a bracket
   # expression or it does not. Exempt only via the raw-line marker.
   gnused_bad=""
-  _gs="$(code_of "$f" | grep -nE "$PAT_GNUSED" || true)"
+  _gs=""
+  _bd_in "$_bd_l_gs" "$f" && _gs="$(code_of "$f" | grep -nE "$PAT_GNUSED" || true)"
   if [ -n "$_gs" ]; then
     while IFS= read -r _h; do
       [ -n "$_h" ] || continue
@@ -487,7 +552,8 @@ for f in $SCAN_FILES; do
   # bash-4 builtins / builtin options. No `set -u` precondition: these are
   # absent from 3.2 unconditionally.
   bash4_bad=""
-  _b4="$(code_of "$f" | grep -nE "$PAT_BASH4" || true)"
+  _b4=""
+  _bd_in "$_bd_l_b4" "$f" && _b4="$(code_of "$f" | grep -nE "$PAT_BASH4" || true)"
   if [ -n "$_b4" ]; then
     while IFS= read -r _h; do
       [ -n "$_h" ] || continue
@@ -508,7 +574,8 @@ for f in $SCAN_FILES; do
   # Sourcing a process substitution: silently empty on bash 3.2. No `set -u`
   # precondition — the definition is missing under every option set.
   procsub_bad=""
-  _ps="$(code_of "$f" | grep -nE "$PAT_PROCSUB_SOURCE" || true)"
+  _ps=""
+  _bd_in "$_bd_l_ps" "$f" && _ps="$(code_of "$f" | grep -nE "$PAT_PROCSUB_SOURCE" || true)"
   if [ -n "$_ps" ]; then
     while IFS= read -r _h; do
       [ -n "$_h" ] || continue
@@ -530,7 +597,7 @@ for f in $SCAN_FILES; do
   # actually runs under -u; without it bash 3.2 expands an empty array to
   # nothing exactly like bash 4, and there is nothing to catch.
   emptyarr_bad=""
-  if grep -qE '^set -[a-z]*u' "$f"; then
+  if _bd_in "$_bd_l_ea" "$f" && grep -qE '^set -[a-z]*u' "$f"; then
     _ea="$(code_of "$f" | grep -nE "$PAT_EMPTYARR" || true)"
     if [ -n "$_ea" ]; then
       while IFS= read -r _h; do
@@ -554,14 +621,16 @@ for f in $SCAN_FILES; do
     _file_bad=1
   fi
   # Multi-line value in `awk -v` (1399-wtpq): silent-empty on BSD awk.
-  awkv_bad="$(awkv_multiline_sites "$f")"
+  awkv_bad=""
+  _bd_in "$_bd_l_awkv" "$f" && awkv_bad="$(awkv_multiline_sites "$f")"
   if [ -n "$awkv_bad" ]; then
     echo "[check-bash-dialect] MULTI-LINE awk -v value in '$f' (BSD awk — the awk macOS ships — rejects a newline in a -v assignment with 'newline in string' and prints nothing; the program splits this variable on \"\\n\", so it IS multi-line. Silent on darwin, and fully silent under 2>/dev/null or || true; 1399-wtpq). Pass it via the environment: NAME=\"\$var\" awk '... ENVIRON[\"NAME\"] ...':" >&2
     printf '%s\n' "$awkv_bad" | head -3 | sed "s|^|  $f:|" >&2
     _file_bad=1
   fi
   # Unparenthesised case arm inside $( ) (1413-8bee): does not PARSE on 3.2.
-  caseincs_bad="$(case_in_cs_sites "$f")"
+  caseincs_bad=""
+  _bd_in "$_bd_l_cics" "$f" && caseincs_bad="$(case_in_cs_sites "$f")"
   if [ -n "$caseincs_bad" ]; then
     echo "[check-bash-dialect] UNPARENTHESISED case pattern inside \$( ) in '$f' (bash 3.2 — the only bash macOS ships — ends the substitution at the pattern's ')' and the script does not parse; quoted \"\$( )\" passes bash -n, then yields EMPTY or the rest of the line as the value; redded every Mac gate via 84f37ff24, 1413-8bee). Write EVERY arm as (pat), or call a function through \$(f):" >&2
     printf '%s\n' "$caseincs_bad" | head -3 | sed "s|^|  $f:|" >&2

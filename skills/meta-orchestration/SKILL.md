@@ -776,6 +776,27 @@ filing — not the prompt.
    segment reads `degraded:<reason>` (never `blocked:*` — the gate word is
    reserved for `blocked:preflight:*`); continue the cycle.
 
+0b. **Name yourself before the first ledger write** (orders 756-hn3a, 885-zvzu):
+
+   ```bash
+   agent_id="$(scripts/agent-identity.sh id <backend>)" || exit 1   # claude|codex|opencode|gemini
+   ```
+
+   Every `append-event`, `set-field` reason and loop-status entry this cycle
+   writes carries an `agent_id`, and the plan binary REFUSES a non-canonical
+   one (874-idnt): `<platform>-<workstation>-<backend>-<utc-timestamp>`,
+   sanitised to `[a-z0-9-]`. Never hand-compose it. The helper resolves it
+   from stable sources and itself refuses
+   (`refused:agent-identity:empty-<component>`, empty stdout) rather than mint
+   an incomplete id; on that refusal append, claim and push nothing.
+
+   WHY IT IS HERE: this skill is the whole bootstrap contract, and it never
+   named the helper. Measured on macuahuitl 2026-08-25: the first
+   `append-event` of a cycle driven by the documented prompt hand-wrote an id
+   and was refused, and the cycle recovered only by reading the error text.
+   Same class as the two gate variables in "How to invoke the gate", which
+   lived in operator prompt text for ten cycles.
+
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
    Report this host's scheduler posture in the same breath — it is one line and
    it answers the question an operator otherwise has to read a transcript for:
@@ -1342,6 +1363,9 @@ never let an observed problem evaporate.
 Any time a worker notices "welp, this isn't great" — an inefficiency, a rough
 edge, a fragile assumption, an advisory-only guard, a repeated manual step, a
 log warning, a deprecation notice — it MUST be filed before the cycle exits.
+
+Every capture is a ledger write, so it carries the `agent_id` from Start Of
+Cycle step 0b (`scripts/agent-identity.sh id <backend>`), never a hand-typed one.
 
 **CAPTURE IS MANDATORY. A NEW ROW IS NOT.** These are different acts and
 conflating them is what grew the ready queue to 410 rows against a service rate
@@ -2288,9 +2312,12 @@ Before exit:
 
    On `blocked:credential-expired-mid-cycle` the credential WORKED and then
    stopped; that is distinct from never having had one, and the printed remedy
-   is `gh auth refresh`, not seeding a store. Do NOT discard the cycle's work to
-   get unstuck — salvage first (872-c9nd) and report blocked with the salvage
-   ref.
+   is the OPERATOR re-seeding the token (`tillandsias --github-login`), not
+   seeding a store. An agent never runs `gh auth refresh` or `gh auth login`
+   itself (1025-a896: a re-auth on one host evicts the token on every other;
+   1497-ahmd corrected the guard, which used to print it). Do NOT discard the
+   cycle's work to get unstuck — salvage first (872-c9nd) and report blocked
+   with the salvage ref.
 
 3c. **EVERY LEDGER WRITE HAPPENS BEFORE THE GATE, NOT AFTER IT** (yolanda,
    2026-09-02). The gate stamp hashes the CONTENT of every tracked and

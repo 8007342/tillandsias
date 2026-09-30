@@ -136,6 +136,23 @@ pub mod accel_probe;
 pub mod engine_slots;
 // @trace spec:inference-policy-router: Workload-class policy router and fallback chains.
 pub mod policy_router;
+// @trace order:1505-iky3 — every name Tillandsias mints for Cloudflare (Zero
+// Trust team, virtual network, participant, hostname route, OAuth App),
+// normalized to one alphabet and minted from one canonical table. Pure, no
+// I/O; `pub` so the login and fleet-vpn packets built on this table (siblings
+// under 1505-sm2j) can reach it.
+pub mod cloudflare_names;
+// @trace order:1505-kyx8 — cloudflare_oauth::{begin, exchange, refresh,
+// revoke}: Authorization Code + PKCE (S256) as pure functions over an
+// injected HttpClient trait object, since Cloudflare has no device grant.
+// `pub` so the redirect-receiver packet (1505-kc5f) and the rotation
+// scheduler (siblings under 1505-sm2j) can reach it.
+pub mod cloudflare_oauth;
+// @trace order:1505-kc5f — `--cloudflare-login [--via loopback|qr|paste]` and
+// `--cloudflare-logout`: the three redirect receivers over cloudflare_oauth,
+// storing through the 1505-iysn Vault functions. Needs Vault, so `vault`-gated.
+#[cfg(feature = "vault")]
+mod cloudflare_login;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
@@ -298,6 +315,31 @@ fn main() {
     if user_args.iter().any(|a| a == "--help" || a == "-h") {
         print_usage(version);
         return;
+    }
+
+    // Order 1505-kc5f: `--cloudflare-login` / `--cloudflare-logout`. Dispatched
+    // early and exits, like --swap: the module parses its own arguments
+    // (refusing anything it does not take, and never echoing a positional
+    // argument, which might be a pasted code), runs on the HOST binary (no
+    // container, no singleton) and stores only through the 1505-iysn Vault
+    // store. Also listed in known_flags below, per the five-sites rule.
+    if user_args
+        .iter()
+        .any(|a| a == "--cloudflare-login" || a == "--cloudflare-logout")
+    {
+        #[cfg(feature = "vault")]
+        std::process::exit(cloudflare_login::run_cli(&user_args));
+        #[cfg(not(feature = "vault"))]
+        {
+            eprintln!("refused:cloudflare-login:vault-not-compiled");
+            eprintln!(
+                "  why: the Cloudflare credential is stored only in Vault, and this binary was built without the `vault` feature"
+            );
+            eprintln!(
+                "  remedy: use a default build of tillandsias (the `vault` feature is on by default)"
+            );
+            std::process::exit(2);
+        }
     }
 
     // Order 828-h7kw: `--hold-window -- <command...>`. The terminal a lane
@@ -724,6 +766,11 @@ fn main() {
         "--sync",
         "--github-login",
         "--with-token",
+        // Order 1505-kc5f: dispatched early (cloudflare_login::run_cli), listed
+        // here too so no reorder can make them `Unsupported option`.
+        "--cloudflare-login",
+        "--cloudflare-logout",
+        "--via",
         "--refresh-github-token",
         "--github-refresh",
         "--claude-login",
@@ -1594,6 +1641,8 @@ fn print_usage(version: &str) {
     println!("       tillandsias --status-check [--debug]");
     println!("       tillandsias --swap on|off|status [--prefix DIR] [--user NAME]");
     println!("       tillandsias --github-login [--with-token] [--debug]");
+    println!("       tillandsias --cloudflare-login [--via loopback|qr|paste] [--debug]");
+    println!("       tillandsias --cloudflare-logout [--debug]");
     println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
     println!("       tillandsias --codex-login [--debug]");
@@ -1656,6 +1705,16 @@ fn print_usage(version: &str) {
     );
     println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
+    println!(
+        "  --cloudflare-login Sign in to Cloudflare (OAuth code + PKCE; Cloudflare has no device flow) and store the token pair in Vault. \
+         --via loopback: a browser on this desktop (127.0.0.1 ports 48631-48633); \
+         --via qr: a phone scans a QR whose redirect is the relay page ($TILLANDSIAS_CLOUDFLARE_RELAY_URL); \
+         --via paste: paste the authorization CODE the relay page (or the address bar) shows. A code, never a token: \
+         it is single-use and useless without the verifier that stays in this process"
+    );
+    println!(
+        "  --cloudflare-logout Revoke (best effort) and delete the stored Cloudflare sign-in; the fleet-vpn mesh credential is kept"
+    );
     println!(
         "  --refresh-github-token Refresh GitHub OAuth access token using refresh token in Vault"
     );
@@ -2951,7 +3010,7 @@ pub(crate) fn ensure_image_exists(
         ensure_image_exists(root, dependency, &dependency_tag, debug).map_err(|e| {
             format!(
                 "Required base image '{}' is absent or stale and failed to build on demand: {}.\n\
-                 Please ensure the base image is built by running: tillandsias --init",
+                 {IMAGE_BUILD_REMEDY}",
                 dependency_tag, e
             )
         })?;
@@ -3005,10 +3064,36 @@ pub(crate) fn ensure_image_exists(
     Ok(())
 }
 
+/// How many trailing lines of podman's stderr a failed build carries into its
+/// error (order 1502-utcy).
+const BUILD_STDERR_TAIL_LINES: usize = 20;
+
+/// The error for a failed `podman build` (order 1502-utcy): the status, then
+/// podman's last stderr lines, which is where a failing RUN step names the
+/// command (`sh: foo: not found` for exit 127). Without them the operator got
+/// the bare status and nothing to act on.
+fn build_failure_message<'a>(status: &str, stderr_tail: impl Iterator<Item = &'a str>) -> String {
+    let tail: Vec<&str> = stderr_tail.filter(|l| !l.trim().is_empty()).collect();
+    if tail.is_empty() {
+        return format!("Build exited with status {status} (podman printed nothing on stderr)");
+    }
+    format!(
+        "Build exited with status {status}; podman's last stderr lines:\n  {}",
+        tail.join("\n  ")
+    )
+}
+
+/// The remedy line for an image that failed to build (order 1502-utcy). The
+/// guest cannot tell which host it runs under, so it names the action for each:
+/// "tillandsias --init" alone is Linux-only and unrunnable for a tray user.
+const IMAGE_BUILD_REMEDY: &str = "To retry: on Linux run `tillandsias --init`; from the macOS or \
+     Windows tray, launch the forge again (the build is retried on each launch). The lines above \
+     name the step that failed.";
+
 fn format_on_demand_image_build_error(image_tag: &str, error: &str) -> String {
     format!(
         "Required image '{image_tag}' is absent and failed to build on demand: {error}.\n\
-         Build it explicitly with: tillandsias --init"
+         {IMAGE_BUILD_REMEDY}"
     )
 }
 
@@ -9747,8 +9832,13 @@ pub(crate) fn build_image_with_logging(
     // podman build can be very noisy on stderr (e.g. download bars).
     let image_name_str = image_name.to_string();
     let log_handle_stderr = log_handle.clone();
+    // Order 1502-utcy: keep the LAST lines of podman's stderr, whatever the
+    // log/debug settings. The on-demand path passes no log file and no debug,
+    // so a failing RUN step's "sh: foo: not found" (exit 127) used to vanish:
+    // the operator saw only "Build exited with status 127".
     let stderr_thread = std::thread::spawn(move || {
         use std::io::BufRead;
+        let mut tail = std::collections::VecDeque::with_capacity(BUILD_STDERR_TAIL_LINES);
         if let Some(stderr_reader) = stderr {
             let buf_reader = std::io::BufReader::new(stderr_reader);
             for line in buf_reader.lines().map_while(Result::ok) {
@@ -9760,8 +9850,13 @@ pub(crate) fn build_image_with_logging(
                 {
                     let _ = writeln!(f, "{}", line);
                 }
+                if tail.len() == BUILD_STDERR_TAIL_LINES {
+                    tail.pop_front();
+                }
+                tail.push_back(line);
             }
         }
+        tail
     });
 
     // @trace gap:ON-005 — read and parse output for progress tracking
@@ -9813,7 +9908,7 @@ pub(crate) fn build_image_with_logging(
         .map_err(|e| format!("Failed to wait for build process: {e}"))?;
 
     // Wait for the stderr thread to finish logging
-    let _ = stderr_thread.join();
+    let stderr_tail = stderr_thread.join().unwrap_or_default();
 
     let result = if status.success() {
         if last_reported != Some(100) {
@@ -9821,7 +9916,10 @@ pub(crate) fn build_image_with_logging(
         }
         Ok(())
     } else {
-        Err(format!("Build exited with status {}", status))
+        Err(build_failure_message(
+            &status.to_string(),
+            stderr_tail.iter().map(String::as_str),
+        ))
     };
     let finished = progress.finish(&result);
     if let Some(ref log) = log_handle
@@ -15742,6 +15840,11 @@ fn build_project_browser_spec(
 ///
 /// @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
 /// What the login CLI's tray notify achieved (order 679-rp9m).
+///
+/// `cfg(unix)` like its only producer and consumer (order 1491-dnp6): without
+/// it the Windows-target clippy refuses the tray build with "enum is never
+/// used", a red that Linux clippy cannot see.
+#[cfg(unix)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum TrayNotify {
     /// The tray acked `GithubLoginStored`.
@@ -16960,6 +17063,9 @@ pub(crate) fn ensure_enclave_for_project(
     // 8 h. Idempotent per process; the tray's own start is deduplicated.
     #[cfg(feature = "vault")]
     crate::vault_bootstrap::spawn_github_token_rotation_scheduler(debug, None);
+    // Order 1505-iysn: and the Cloudflare OAuth bundle, from the same entry.
+    #[cfg(feature = "vault")]
+    crate::vault_bootstrap::spawn_cloudflare_token_rotation_scheduler(debug);
 
     Ok((certs_dir, mirror_identity))
 }
@@ -18481,6 +18587,10 @@ fn maybe_spawn_vsock_listener(
     // 30-minute window. The Linux tray starts the same scheduler.
     #[cfg(feature = "vault")]
     crate::vault_bootstrap::spawn_github_token_rotation_scheduler(false, None);
+    // Order 1505-iysn: the guest's resident service keeps the Cloudflare OAuth
+    // bundle alive too.
+    #[cfg(feature = "vault")]
+    crate::vault_bootstrap::spawn_cloudflare_token_rotation_scheduler(false);
     Some(tokio::spawn(async move {
         // One VmStateHandle drives three concurrent tasks below — the
         // accept loop (reads it on every VmStatusRequest), the phase
@@ -30994,6 +31104,42 @@ esac
         assert!(message.contains("localhost/tillandsias-router:v1.2.3"));
         assert!(message.contains("fixture build failure"));
         assert!(message.contains("tillandsias --init"));
+    }
+
+    /// 1502-utcy: a failed build carries podman's last stderr lines, so an exit
+    /// 127 names the command that was not found.
+    /// NEGATIVE CONTROL: with no stderr the message says so instead of implying
+    /// a cause, and blank lines never make a tail.
+    #[test]
+    fn build_failure_names_the_failing_step_from_podman_stderr() {
+        let lines = [
+            "STEP 3/5: RUN pip3 install pyright",
+            "/bin/sh: line 1: pip3: command not found",
+            "Error: building at STEP \"RUN pip3 install pyright\": exit status 127",
+        ];
+        let msg = build_failure_message("exit status: 127", lines.iter().copied());
+        assert!(
+            msg.starts_with("Build exited with status exit status: 127;"),
+            "{msg}"
+        );
+        assert!(msg.contains("pip3: command not found"), "{msg}");
+        assert!(msg.contains("exit status 127"), "{msg}");
+
+        let silent = build_failure_message("exit status: 127", ["", "  "].into_iter());
+        assert_eq!(
+            silent,
+            "Build exited with status exit status: 127 (podman printed nothing on stderr)"
+        );
+    }
+
+    /// 1502-utcy: the remedy names an action for a tray user, not only the
+    /// Linux CLI, on both on-demand error paths.
+    #[test]
+    fn on_demand_build_remedy_is_runnable_from_the_macos_and_windows_tray() {
+        let message = format_on_demand_image_build_error("localhost/tillandsias-forge:v1", "x");
+        assert!(message.contains("tillandsias --init"), "{message}");
+        assert!(message.contains("macOS or Windows tray"), "{message}");
+        assert!(message.contains("launch the forge again"), "{message}");
     }
 
     #[test]

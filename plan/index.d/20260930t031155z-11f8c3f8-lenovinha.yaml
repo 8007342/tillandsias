@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-must-be-rock-solid-at-atomic-forward-upstream-and-must-refuse-to-advertise-itself-when-broken-so-agents-stop-instead-of-trusting-a-mirror-that-is-silently-failing
+    event:
+      type: progress
+      ts: "2026-09-30T03:11:55Z"
+      agent_id: linux-lenovinha-claude-20260930t031155z
+      host: lenovinha
+      summary: |
+        STEP 1 DONE on work/1310-rec6 (f81e095aa): the git mirror healthcheck no longer makes git-daemon log a fatal line. Measured on lenovinha 2026-09-29: 23,209 'fatal: the remote end hung up unexpectedly' lines in one tillandsias-git log, every one directly after the image HEALTHCHECK's 127.0.0.1 connection (nc -w 1 127.0.0.1 9418, every 2 s), none from a relay. The 59-per-sweep attribution to relay retries (2026-09-20) was this healthcheck, not the relay.
+        LIVENESS IS NOT WEAKENED, stated for a reviewer: the old nc -w 1 connect proved only that the kernel ACCEPTED a connection, which the listen backlog does even when git-daemon is wedged. The new probe checks the LISTEN socket in /proc/net/tcp and tcp6, which proves the same thing, fails the moment the daemon dies, and writes nothing to any log. A git-speaking probe was measured and rejected: ls-remote still leaves the fatal on about 1 percent (protocol v0) to 3 percent (v2) of runs, and every connection adds a Connection-from line.
+        Real WEDGE detection (the daemon listening but not serving) is a separate step and would need its own row; this one does not claim it.
+        Steps 2 to 5 (define broken in the mirror's own terms, withdraw the advertisement, the two agent classes, the litmus) remain.

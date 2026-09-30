@@ -247,6 +247,16 @@ TILLANDSIAS_HOST_PUSH_HOST=$(hostname -s) \
 Exiting the shell leaves the stack up. `RC=124` from a `timeout` wrapper is the
 interactive shell being cut off, not a failure.
 
+**ALL THREE VARIABLES, EVERY LAUNCH — the push identity is re-minted only then.**
+The host's AppRole document (`~/.config/tillandsias/host-push/<host>.approle.json`)
+is written by a lane launch that carries `TILLANDSIAS_HOST_PUSH_HOST` (with
+`TILLANDSIAS_MIRROR_SSHD=1`). A plain `tillandsias --bash <project>` brings the
+mirror up but leaves that document as it was, and once its secret is no longer
+valid the 6.2 mint answers `fail:host-push-cert:approle-login-refused`.
+Measured on lenovinha 2026-09-29: the document was two days old after a soft
+reset and a plain lane; relaunching with all three variables re-minted it and
+the cert mint and push worked at once.
+
 **CORRECTED 2026-09-21 — THE BINARY IS FINE; THE MEASUREMENT WAS NOT.** This
 paragraph used to say, on yoga's report, that `tillandsias --bash <name>
 --debug` on an unresolvable project exits 0. **It does not: it exits 1.**
@@ -359,6 +369,36 @@ A `[pre-receive] Push rejected: configured upstream did not durably accept the
 ref transaction` means the relay failed and **refused rather than stranding your
 ref** — that is correct behaviour. Read the `[relay]` line above it for the
 cause; it names the layer.
+
+### 6.3a — Testing an UNCOMMITTED edit inside a forge (1350-8hmy)
+
+A forge clones a fresh tree from THIS host's mirror; it never sees your
+working copy. The sequence, with the commands verbatim, because you meet it
+when something is already broken:
+
+```bash
+# 1. put the edit on a ref (from the REPO ROOT)
+scripts/salvage-dirty-worktree.sh <slug>          # a tree you cannot gate
+#    or: git switch -c work/<order> && git commit … # work in progress
+# 2. make the mirror current, then push the ref THROUGH THIS LANE (6.2 + 6.3)
+tillandsias --sync <project>                       # ok:sync:<project>:linux-next:heads-current
+scripts/tillandsias-host-push-cert.sh              # a fresh 30-minute cert
+GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=$KH -o StrictHostKeyChecking=yes \
+  -o HostKeyAlias=$ALIAS -o BatchMode=yes -o IdentitiesOnly=yes -i $K -p 2223" \
+  git push "ssh://git@127.0.0.1/srv/git/<project>" <ref>:refs/heads/<ref>
+# 3. launch the forge (6.1's three variables) and, inside it:
+git checkout <ref>
+```
+
+`receive-pack` writes the ref into the mirror as the push happens, so step 3
+finds it without waiting for a reconcile tick. A ref that reached GitHub some
+OTHER way (another host's) is in your mirror after the next tick or after
+`tillandsias --sync <project>`.
+
+The pinned proof is `litmus:forge-seeds-from-salvage-ref`: a sentinel placed
+on a `salvage/*` ref is read back out of the seeded forge tree, not merely a
+seed that exited 0, and a never-pushed seed stays fail-soft and loud. The same
+sequence is summarised for workers in skills/join-the-fleet section 3.
 
 ### 6.4 — The three acceptance legs, and their artifacts
 

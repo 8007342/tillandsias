@@ -1,0 +1,41 @@
+# @trace spec:ci-release
+name: litmus:spec-script-paths
+spec: ci-release
+phase: pre-build
+description: >
+  Order 815-yace. Every `scripts/...` path an active spec names must resolve,
+  be marked absent on purpose (`spec-path-absent: ok (<reason>)`), or sit in
+  the named burndown baseline. The fixture refuses a seeded missing path by
+  name and refuses the pre-fix project-summarizers spec, naming all six
+  summarizer paths it required under a directory that never existed.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-spec-script-paths.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-spec-script-paths.sh && test -x scripts/test-spec-script-paths.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "the spec-path check refuses unresolved paths by name and passes the live tree"
+    command: "bash scripts/test-spec-script-paths.sh 2>&1 | tail -n 1"
+    timeout_ms: 60000
+    expected_behavior: "PASS: spec-script-paths"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "PASS: spec-script-paths"
+  log_fields:
+    spec: "ci-release"
+    test: "spec-script-paths"
+    artifact: "scripts/check-spec-script-paths.sh"
+
+rollback:
+  on_failure: >
+    A spec names a script the tree does not have: correct the spec, commit the
+    script, or mark a deliberate negative. Never grow the baseline.
+  command: "bash scripts/test-spec-script-paths.sh"

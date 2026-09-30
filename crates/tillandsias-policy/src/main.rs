@@ -1140,6 +1140,11 @@ fn should_skip_dir(name: &str, path: &Path) -> bool {
     ) || path.components().any(|component| {
         component.as_os_str() == "plan" && path.components().any(|c| c.as_os_str() == "archive")
     })
+    // A subdirectory with its own `.git` (a file for a linked worktree, a
+    // directory for a clone) is a DIFFERENT checkout: agent worktrees under
+    // .claude/worktrees/ are one. Scanning it judges another tree's
+    // unreviewed work as this one's (land94, 2026-09-29).
+    || path.join(".git").exists()
 }
 
 fn is_script_or_harness(root: &Path, path: &Path) -> bool {
@@ -5363,6 +5368,28 @@ fn plan_orders(args: &[String]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // land94 (2026-09-29): agent worktrees under .claude/worktrees/ carry a
+    // `.git` FILE and are separate checkouts; the harness scans must not
+    // judge them. A plain directory stays in scope (negative control).
+    #[test]
+    fn should_skip_dir_skips_a_nested_checkout_but_not_a_plain_dir() {
+        let base = std::env::temp_dir().join(format!("policy-skip-{}", std::process::id()));
+        let wt = base.join("worktrees").join("agent-x");
+        let plain = base.join("scripts");
+        fs::create_dir_all(&wt).unwrap();
+        fs::create_dir_all(&plain).unwrap();
+        fs::write(wt.join(".git"), "gitdir: /elsewhere\n").unwrap();
+        assert!(
+            should_skip_dir("agent-x", &wt),
+            "a linked worktree must be skipped"
+        );
+        assert!(
+            !should_skip_dir("scripts", &plain),
+            "a plain directory must stay in scope"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
 
     // @trace spec:tray-app — litmus:tray-parity-matrix-complete semantics
     const PARITY_FIXTURE: &str = "features:\n  - capability: \"Feature A\"\n    linux: \"done\"\n    macos: \"todo\"\n    windows: \"todo\"\n    parity: \"required\"\n  - capability: \"Feature B\"\n    linux: \"n/a\"\n    macos: \"n/a\"\n    windows: \"n/a\"\n    parity: \"platform-specific\"\n";

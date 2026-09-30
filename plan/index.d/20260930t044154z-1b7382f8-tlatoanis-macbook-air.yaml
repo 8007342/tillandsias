@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: affordance-slice-4-a-guard-refuses-a-newly-added-refusal-verdict-with-no-affordance-and-the-audit-counts-per-verdict
+    field: status
+    value: completed
+    ts: "2026-09-30T04:41:54Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: affordance-slice-4-a-guard-refuses-a-newly-added-refusal-verdict-with-no-affordance-and-the-audit-counts-per-verdict
+    event:
+      type: completed
+      ts: "2026-09-30T04:41:54Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: LANDED at 45fbaaccd on linux-next (land98; ancestry checked 2026-09-30). All four exit criteria are on trunk: scripts/check-refusal-affordance-added.sh refuses an added bare verdict naming file:line and admits one with why/remedy; it is diff-scoped (a standing bare verdict is not refused: negative control); --audit prints per-site covered|bare lines plus a total; and the fixture is bound as gate step scripts/gate-steps.d/288-1470-v67y.step with STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:refusal-affordance-added-fixture:8/8". It is also wired into build.sh as a push decider.
+  - packet_id: affordance-slice-4-a-guard-refuses-a-newly-added-refusal-verdict-with-no-affordance-and-the-audit-counts-per-verdict
+    event:
+      type: note
+      ts: "2026-09-30T04:41:54Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        landed; every criterion met on trunk

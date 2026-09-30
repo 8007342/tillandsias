@@ -1,0 +1,15 @@
+# Gate step 1505-hedu — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. release-preflight.sh is the last gate before a release cut;
+# blocked:plan-ledger-incomplete is the fifth most recorded bare refusal
+# (1494-kkbi). Every verdict now says why and what clears it, the tokens and
+# exit codes are pinned, and unsanctioned-workflow's remedy is carried out in
+# a hermetic scratch root and shown to clear the refusal, with a no-remedy
+# negative control.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking every release-preflight refusal says why and what clears it (1505-hedu)"
+STEP_SCRIPT="scripts/test-release-preflight-affordances.sh"
+STEP_ERROR="a release-preflight refusal lost its why/remedy, changed its token or exit code, or its remedy no longer clears it (1505-hedu)"
+STEP_OK="release-preflight refusals carry working affordances"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: release-preflight-affordances (1505-hedu) at 0a1b111ab, 3 arms, bash 3.2, NO tillandsias-plan on PATH (Gate 3 skipped by name there; the Linux run exercises it with a plan binary)"

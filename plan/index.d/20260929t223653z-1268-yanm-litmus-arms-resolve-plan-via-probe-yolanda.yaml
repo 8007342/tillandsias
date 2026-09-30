@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: three-litmus-specs-hardcode-the-plan-binary-path-so-a-stale-elf-shadows-the-windows-exe-resolve-it-through-the-probe
+    order: 1268-yanm
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    parent_order: 1268-fx87
+    pickup_role: windows
+    capability_tags: [windows, litmus, plan-binary, probe]
+    estimated_hours: 2
+    owned_files:
+      - openspec/litmus-tests/litmus-methodology-path-query-citability.yaml
+      - openspec/litmus-tests/litmus-expert-capability-skew-honesty.yaml
+      - openspec/litmus-tests/litmus-plan-answer-envelope-citability.yaml
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the guard is the three existing litmus tests themselves getting past step 1 on a Windows host whose target/release also holds a stale Linux ELF; no new litmus.
+    title: |
+      The three litmus specs of 1268-fx87 invoke ${CARGO_TARGET_DIR:-target}/release/tillandsias-plan by hardcoded path (19 sites) instead of resolving it through scripts/plan-binary-probe.sh. On yolanda 2026-09-29 a stale Linux ELF at that extensionless path shadowed the Windows .exe, and step 1 failed rc=126 Exec format error. The probe keeps only a candidate that runs, so it skips such an ELF.
+    verifiable_closure: |
+      Every command step in the three specs resolves the plan binary through the probe. On a Windows host with a non-runnable file planted at target/release/tillandsias-plan, all three tests get past their first step (pre-fix: rc=126 at step 1).
+    events:
+      - type: filed
+        ts: "2026-09-29T22:36:54Z"
+        host: yolanda
+        summary: Filed and claimed by yolanda-windows from the 1268-fx87 probe finding.

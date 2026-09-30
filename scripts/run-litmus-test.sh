@@ -357,7 +357,14 @@ if [[ -f "$PROJECT_ROOT/scripts/plan-binary-probe.sh" ]]; then
     # shellcheck source=scripts/plan-binary-probe.sh
     . "$PROJECT_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
     if command -v resolve_plan_binary &>/dev/null; then
-        LITMUS_PLAN_BIN="$(resolve_plan_binary 2>/dev/null)" || LITMUS_PLAN_BIN=""
+        # Resolve INSIDE the checkout and absolutise: resolve_plan_binary can
+        # answer a cwd-relative ./target/... path, so a caller running this
+        # runner from a scratch cwd with no plan binary on PATH (the
+        # default-target regime, 1401-x76w) got nothing (see 84f37ff24).
+        LITMUS_PLAN_BIN="$(cd "$PROJECT_ROOT" && resolve_plan_binary 2>/dev/null)" || LITMUS_PLAN_BIN=""
+        case "$LITMUS_PLAN_BIN" in
+            ./*) LITMUS_PLAN_BIN="$PROJECT_ROOT/${LITMUS_PLAN_BIN#./}" ;;
+        esac
     fi
 fi
 # Whether that binary answers `yaml get` (1375-6pnd), decided ONCE here: _yaml_jq
