@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1437-664a, spec:ci-release
+# @trace order:1437-664a, order:1520-zjmk, spec:ci-release
 #
 # Fixture for scripts/relay-preflight.sh (1437-664a): the SIX ARMS the
 # packet's verifiable_closure names, over a scratch repo carrying a base
@@ -28,7 +28,7 @@ W="$(mktemp -d "$_tmpbase/relay-preflight.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 
 pass=0
-total=6
+total=7
 ok()  { echo "ok:   $1"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $1: $2"; }
 
@@ -285,6 +285,50 @@ if [ "$RC" = 1 ] && [ "$OUT" = "refused:relay-preflight:dirty-worktree" ] && [ "
 else
     bad "arm6" "rc=$RC out=[$OUT] relay_before=$_relay_before relay_after=$_relay_after"
     printf '%s\n' "$ERR" | sed 's/^/    err: /' | head -20
+fi
+
+
+# ── arm 7: a fixture that READS STDIN cannot end the loop early (1520-zjmk) ─
+# The fixture loop is `while read; do _cap bash "$_fx"; done <<heredoc`, so a
+# fixture inherits the loop's stdin. MEASURED on land115 (2026-09-30): the
+# real test-preflight-front-door read it to EOF, the four fixtures sorted
+# after it never ran, and the verdict still printed fixtures=6 and ok. Here
+# test-zz-a drains stdin and test-zz-b refuses; the relay must run b and
+# refuse naming it. PRE-FIX: a eats the list, b never runs, rc=0 — this arm
+# FAILS.
+Z_SEED="$W/zz-seed"
+_seed "$Z_SEED"
+printf '#!/usr/bin/env bash\necho v1\n' > "$Z_SEED/scripts/zz-subject.sh"
+cat > "$Z_SEED/scripts/test-zz-a.sh" <<'EOF'
+#!/usr/bin/env bash
+# exercises scripts/zz-subject.sh, and drains whatever stdin it was handed
+cat >/dev/null
+echo "ok: zz-a 1"
+EOF
+cat > "$Z_SEED/scripts/test-zz-b.sh" <<'EOF'
+#!/usr/bin/env bash
+# exercises scripts/zz-subject.sh, and refuses
+echo "FAIL: zz-b refuses on purpose"
+exit 1
+EOF
+chmod +x "$Z_SEED"/scripts/zz-subject.sh "$Z_SEED"/scripts/test-zz-a.sh "$Z_SEED"/scripts/test-zz-b.sh
+git -C "$Z_SEED" "${GC[@]}" add -A
+git -C "$Z_SEED" "${GC[@]}" commit -qm "zz-subject and two fixtures that mention it"
+Z_BARE="$W/zz-origin.git"
+_origin "$Z_SEED" "$Z_BARE"
+CLONE_Z="$W/clone-z"
+_clone "$Z_BARE" "$CLONE_Z"
+git -C "$CLONE_Z" "${GC[@]}" checkout -qb work/zz
+printf '#!/usr/bin/env bash\necho v2\n' > "$CLONE_Z/scripts/zz-subject.sh"
+git -C "$CLONE_Z" "${GC[@]}" add -A
+git -C "$CLONE_Z" "${GC[@]}" commit -qm "work/zz: touch zz-subject"
+git -C "$CLONE_Z" "${GC[@]}" checkout -q linux-next
+_run "$CLONE_Z" work/zz --base origin/linux-next
+if [ "$RC" != 0 ] && [ "$OUT" = "refused:relay-preflight:fixtures:test-zz-b" ]; then
+    ok "arm7: a fixture that drains stdin does not end the loop; the next fixture runs and its refusal is reported"
+else
+    bad "arm7" "rc=$RC out=[$OUT] (pre-fix shape: rc=0 and an ok: verdict — test-zz-b never ran)"
+    printf '%s\n' "$ERR" | grep -E 'fixture:' | sed 's/^/    err: /' | head -10
 fi
 
 [ "$pass" = "$total" ] && echo "ok:relay-preflight:$pass/$total" || echo "fail:relay-preflight:$pass/$total"
