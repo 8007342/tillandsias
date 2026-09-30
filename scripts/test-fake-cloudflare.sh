@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # @trace order:1505-svve
-# @trace openspec:changes/cloudflare-login-and-fleet-vpn/design.md#decision-3
+# @trace openspec/changes/cloudflare-login-and-fleet-vpn/design.md#decision-3
 #
 # Self-test of tillandsias-fake-cloudflare, the fake Cloudflare every fixture
 # in the cloudflare-login-and-fleet-vpn milestone (1505-sm2j) runs against

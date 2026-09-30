@@ -2,7 +2,7 @@
 //! cloudflare-login-and-fleet-vpn milestone runs against.
 //!
 //! @trace order:1505-svve
-//! @trace openspec:changes/cloudflare-login-and-fleet-vpn/design.md#decision-3
+//! @trace openspec/changes/cloudflare-login-and-fleet-vpn/design.md#decision-3
 //!
 //! Serves, on `127.0.0.1:0` (the OS-assigned port is printed to stdout as a
 //! single line the instant the socket is bound, before any request is

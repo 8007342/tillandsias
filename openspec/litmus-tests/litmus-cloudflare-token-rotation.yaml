@@ -42,7 +42,7 @@ critical_path:
 observability:
   traces:
     - "@trace order:1505-iysn"
-    - "@trace openspec:changes/cloudflare-login-and-fleet-vpn/design.md#decision-2"
+    - "@trace openspec/changes/cloudflare-login-and-fleet-vpn/design.md#decision-2"
   expected_log: "ok:cloudflare-token-rotation:6/6+controls"
   log_fields:
     spec: "ci-release"

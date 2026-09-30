@@ -45,8 +45,8 @@ critical_path:
 observability:
   traces:
     - "@trace order:1505-kyx8"
-    - "@trace openspec:changes/cloudflare-login-and-fleet-vpn/design.md#decision-1"
-    - "@trace openspec:changes/cloudflare-login-and-fleet-vpn/specs/cloudflare-auth/spec.md"
+    - "@trace openspec/changes/cloudflare-login-and-fleet-vpn/design.md#decision-1"
+    - "@trace openspec/changes/cloudflare-login-and-fleet-vpn/specs/cloudflare-auth/spec.md"
   expected_log: "ok:cloudflare-oauth-core:5/5+note"
   log_fields:
     spec: "ci-release"

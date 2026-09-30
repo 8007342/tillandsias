@@ -48,7 +48,7 @@ critical_path:
 observability:
   traces:
     - "@trace order:1505-kc5f"
-    - "@trace openspec:changes/cloudflare-login-and-fleet-vpn/design.md#decision-1"
+    - "@trace openspec/changes/cloudflare-login-and-fleet-vpn/design.md#decision-1"
   expected_log: "ok:cloudflare-login:all-arms+controls"
   log_fields:
     spec: "ci-release"

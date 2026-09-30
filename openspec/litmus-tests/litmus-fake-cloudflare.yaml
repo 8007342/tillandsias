@@ -1,4 +1,4 @@
-# @trace order:1505-svve, openspec:changes/cloudflare-login-and-fleet-vpn/design.md#decision-3
+# @trace order:1505-svve, openspec/changes/cloudflare-login-and-fleet-vpn/design.md#decision-3
 name: litmus:fake-cloudflare
 spec: ci-release
 phase: pre-build
@@ -40,7 +40,7 @@ critical_path:
 observability:
   traces:
     - "@trace order:1505-svve"
-    - "@trace openspec:changes/cloudflare-login-and-fleet-vpn/design.md#decision-3"
+    - "@trace openspec/changes/cloudflare-login-and-fleet-vpn/design.md#decision-3"
   expected_log: "ok:fake-cloudflare:5/5+control"
   log_fields:
     spec: "ci-release"
