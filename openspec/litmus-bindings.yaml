@@ -151,6 +151,7 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:script-run-verb
   - litmus:pre-push-trailer-states-what-it-saw
   - litmus:land-refusals-carry-affordance
   - litmus:plan-fragments-lane-refusals-carry-affordance

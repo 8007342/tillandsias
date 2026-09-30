@@ -137,7 +137,7 @@ else
     else
         bad "STEP_SKIP_EXIT is not reset between steps — a nomination would leak to every later step"
     fi
-    if printf '%s' "$loop" | grep -q 'STEP_ERROR:-\$STEP_SCRIPT failed'; then
+    if grep -q 'STEP_ERROR:-\$_step_path failed' <<<"$loop"; then
         ok "the refusal branch survives and still prints STEP_ERROR for every non-nominated non-zero exit"
     else
         bad "the refusal branch is gone or no longer prints STEP_ERROR"
