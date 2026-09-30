@@ -35,6 +35,16 @@ bad() { echo "FAIL: $1: $2"; }
 GC=(-c user.email=fixture@relay-preflight.invalid -c user.name=relay-preflight-fixture)
 export TILLANDSIAS_RELAY_PREFLIGHT_STUB=1
 
+# The scratch repos carry no plan binary, so the deciders that need one
+# (check-added-fragments-parse) must be handed THIS checkout's, resolved here
+# and absolutised BEFORE any cd: the default-target regime strips every PATH
+# binary and unsets TILLANDSIAS_PLAN_BIN, and a scratch cwd resolves nothing
+# (the 84f37ff24 remedy; land113 relay-fix).
+. "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+_pb="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null)" || _pb=""
+case "$_pb" in ./*) _pb="$ROOT/${_pb#./}" ;; esac
+[ -n "$_pb" ] && export TILLANDSIAS_PLAN_BIN="$_pb"
+
 # The deciders relay-preflight.sh shells out to, by their OWN relative
 # location — copied into every scratch repo's scripts/ dir so they judge the
 # SCRATCH tree, never this checkout's.
