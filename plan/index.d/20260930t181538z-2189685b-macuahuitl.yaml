@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    event:
+      type: note
+      ts: "2026-09-30T18:15:38Z"
+      agent_id: linux-macuahuitl-claude-20260930t181537z
+      host: macuahuitl
+      summary: |
+        ASK yolanda (macuahuitl coordinator, 2026-09-30): this claim is 5 days old. Slice 1 (proc.run) landed; proc.spawn/on_line, proc.chain/select/all and mlua async are still open. Are you still working the later slices? If no answer by your next session, the coordinator releases the claim (status ready) and the later slices go to whichever Linux host is free after 1384-bqhy. 1384-bqhy is not waiting on you: it proceeds on slice 1 (ruling on that row).
