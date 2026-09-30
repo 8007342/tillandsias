@@ -10,22 +10,53 @@ is ephemeral; broadcasts ack per recipient and are never replied to.
 
 ## 1. Store, shape and CLI [1506-nvqt, opus]
 
-- [ ] 1.1 `msg_shape` (pure): the 600-byte/8-line budget with the KIND
+- [x] 1.1 `msg_shape` (pure): the 600-byte/8-line budget with the KIND
       vocabulary and the ref rule; `secret_shaped` with the pattern list
       from the design note; TTL bounds.
-- [ ] 1.2 `msg_store`: lane directories, `tmp` → `rename` → fsync writes,
+- [x] 1.2 `msg_store`: lane directories, `tmp` → `rename` → fsync writes,
       `seq`, `seen`, receipts (`pending`, `acked:<host>/<lane>@<ts>`,
       `undelivered:<reason>`, per-recipient for broadcasts), TTL sweep;
       envelope YAML on disk with `ttl_s`, `broadcast`, `in_reply_to`.
-- [ ] 1.3 `tillandsias-plan msg whoami|send|recv [--keep]|list|status|lint|gc`
+- [x] 1.3 `tillandsias-plan msg whoami|send|recv [--keep]|list|status|lint|gc`
       and the `capabilities` entry; `send` with several `--to`, groups
       from `plan/fleet/groups.yaml`, `--ttl`, `--in-reply-to` with the
       reply-to-broadcast and unknown-reply-target refusals.
-- [ ] 1.4 `scripts/test-fleet-msg-store.sh`: shape refusals, secret
+- [x] 1.4 `scripts/test-fleet-msg-store.sh`: shape refusals, secret
       refusals, duplicate id, `send` returns the id with no daemon, `recv`
       twice with the sender's receipt byte-identical, `status` transitions
       from fixture-written receipts, TTL bounds refusal, unread message
       dropped at TTL, reply-to-broadcast refused at the CLI, gap flag.
+
+Implementation notes for 1506-nvqt (what the mover and the daemon inherit):
+
+- COORDINATOR DEFAULT, REVERSIBLE (operator questions 2 and 3 still open):
+  one bare-metal mailbox per host, `<host>/host` (bare-metal sessions pass
+  `--lane host`; `whoami` still refuses `no-lane` rather than guess), plus
+  one lane per forge, `<project>-<instance>`; no network discovery of any
+  kind — `@all-hosts` reads `plan/fleet/peers/` and nothing else.
+- Receipts are YAML (`id`, `from`, `ts`, `ttl_s`, `broadcast`, `row`,
+  `recipients: [{to, state: pending|acked|undelivered, at, via, reason}]`);
+  `status` renders the spec's grammar from it. The infrastructure writes
+  them through `msg_store::mailbox_accept` (durable, fsync'd, deduplicated
+  by the `seen` set) then `msg_store::record_ack` / `record_undelivered`;
+  no verb reaches either.
+- The secret check runs BEFORE the shape check, so a credential is named as
+  one whatever else is wrong with the body.
+- `seq` is per (sender lane, destination address); a broadcast is
+  unsequenced (`seq: 0`) and never flagged `gap:`, because one counter
+  cannot be gap-free for several different groups.
+- `@<host>/*` stays literal in the outbox and the receipt; the mover
+  resolves it and adds one receipt entry per lane (`record_ack` appends an
+  unknown mailbox).
+- `recv --wait` polls `inbox/new`; the wake socket is 2.1's.
+- `msg gc` moves an outbox entry past its TTL to `dead/` and marks its
+  still-pending recipients `undelivered:expired`, as the daemon's sweep will.
+- `TILLANDSIAS_MSG_SHAPE_LAX=1` (the fixture's negative-control seam) is
+  honoured only with an explicit `TILLANDSIAS_MSG_ROOT`; it cannot switch
+  the CLI's secret check off for a real store, and the mover repeats the
+  check regardless.
+- Inside a forge the CLI uses `/run/host/tillandsias-msg` as its lane
+  directory when that mount exists (2.2 provides it).
 
 ## 2. Same-host mover and lane mounts [1506-q7ab, opus]
 
