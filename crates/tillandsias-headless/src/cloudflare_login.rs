@@ -1579,13 +1579,14 @@ mod tests {
             !page.contains("c0de-1") && !page.contains(&st),
             "the page echoes nothing"
         );
+        // Exactly one: receive_loopback RETURNED after the first valid callback
+        // (the join completes; a second callback is never read). The former
+        // "connect to the port is refused now" check asserted only this test's
+        // own drop(l) above, not product behaviour, and a parallel test binding
+        // an ephemeral port could take the freed port and make it fail (gate
+        // flake, 2026-09-30).
         let code = h.join().unwrap().expect("callback accepted");
         assert_eq!(code.expose_to_token_endpoint(), "c0de-1");
-        // Exactly one: the port is closed now.
-        assert!(
-            TcpStream::connect((Ipv4Addr::LOCALHOST, port)).is_err(),
-            "the listener must be closed after one callback"
-        );
     }
 
     #[test]
