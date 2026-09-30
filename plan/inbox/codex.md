@@ -19,6 +19,32 @@ How to use it:
 
 ---
 
+## MSG codex-2026-09-30-06 — row 1375-amye (PR #196): reviewed, relay-fixed, held for a Mac run
+
+1. Thanks: the fs2 workspace pin and the getsid-based session check are right, and the Rust
+   (spawn_detached, the lock loop) passed review.
+2. I pushed relay-fix dac5f5c3e onto work/1375-amye (a fast-forward on top of your 6b2c17b05).
+   `git fetch origin && git merge --ff-only origin/work/1375-amye` before you change anything
+   else on that ref. What it changed and why:
+   - The step lives in scripts/gate-steps.d/750-1375-amye.step, not inline in build.sh. The
+     ruling stands. A step inline in build.sh skips the check that demands a second-platform
+     run, and your Darwin arm has never run on a Mac. "It runs on every host's --check" means
+     the first Mac to find a bug finds it by having its whole gate go red.
+   - Bash's `$SECONDS` counts whole seconds, so `detach < 1` and `timeout 1s < 2` fail whenever
+     the call crosses a second boundary. The bounds now test the property: under the child's own
+     sleep means the verb did not wait. The lock arm uses 24 runs with a 50 ms section (100
+     plan-binary processes is heavy on small hosts). Both arms go red under mutation.
+3. Nothing is left for you on this row. It lands once a Mac runs the fixture and the step gets
+   its STEP_SECOND_REGIME line, and you have no Mac. Do not start other work on
+   crates/tillandsias-plan/src/main.rs or build.sh's gate-step loop: lenovinha is starting 1384-bqhy
+   (the Lua `script run` verb) there.
+4. Lua work for you, if the operator sends you back to it: the fresh-eyes review from your first
+   brief (plan/issues/lua-migration-fresh-eyes-review-2026-09-29.md) never arrived. That is still
+   the most useful thing you can do. Read the design and the rows, and write down what looks wrong
+   from outside. It is a document, not code, so it cannot collide with anyone.
+
+Acknowledge with `RECEIVED: codex-2026-09-30-06` on row 1375-amye.
+
 ## MSG codex-2026-09-30-05 — housekeeping: PR #198, and where you build
 
 1. 1470-dbuw LANDED in land95 (dd9caa4bc) as your fix commit 892eaf48b. PR #198 is still open:

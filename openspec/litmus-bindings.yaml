@@ -430,6 +430,7 @@ specs:
   litmus_tests:
   - litmus:mcp-plan-resolver-pinning-shape
   - litmus:forge-environment-discoverability-shape
+  - litmus:forge-entrypoints-source-agent-profile
   - litmus:lane-observed-startup-log
   - litmus:onboarding-cold-start-discovery
   - litmus:forge-environment-discoverability-install-shape

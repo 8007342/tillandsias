@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-image-bakes-a-skills-copy-nothing-reads
+    field: status
+    value: completed
+    ts: "2026-09-30T19:58:26Z"
+    host: macuahuitl
+
+events:
+  - packet_id: forge-image-bakes-a-skills-copy-nothing-reads
+    event:
+      type: completed
+      ts: "2026-09-30T19:58:26Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 278fd6f31
+  - packet_id: forge-image-bakes-a-skills-copy-nothing-reads
+    event:
+      type: note
+      ts: "2026-09-30T19:58:26Z"
+      host: macuahuitl
+      summary: |-
+        LANDED in land114 (278fd6f31 on origin/linux-next, gate 906 s): the forge briefing names both skill sources and says /opt/skills is frozen; relayed with 1517-p83m, relay-preflight ok (deciders=16 fixtures=1 litmus=15/6)
