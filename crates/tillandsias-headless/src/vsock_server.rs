@@ -1644,6 +1644,51 @@ async fn serve_ready_stream(
                     }
                 }
             }
+            ControlMessage::HostClockSync { host_unix_ms, .. } => {
+                // ORDER 1503-qrgz. The Mac woke; the VM did not run while it
+                // slept, so our clock is behind by the sleep. Set it from the
+                // host's reading now rather than waiting hours for chrony.
+                match crate::clock_sync::apply_host_clock(host_unix_ms) {
+                    Ok(delta) => {
+                        if delta != 0 {
+                            eprintln!(
+                                "[tillandsias] guest clock stepped {delta:+} ms to the host's time \
+                                 (host wake; 1503-qrgz)"
+                            );
+                        }
+                        // Exactly one reply per request (see the variant's doc).
+                        let ack = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: env.seq,
+                            body: ControlMessage::IssueAck { seq_acked: env.seq },
+                        };
+                        if write_envelope_with_shutdown(&mut write_half, &ack, &mut shutdown)
+                            .await
+                            .is_err()
+                        {
+                            break 'connection;
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("[tillandsias] could not set the guest clock from the host: {err}");
+                        let err_env = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: env.seq,
+                            body: ControlMessage::Error {
+                                seq_in_reply_to: Some(env.seq),
+                                code: ErrorCode::Internal,
+                                message: format!("HostClockSync failed: {err}"),
+                            },
+                        };
+                        if write_envelope_with_shutdown(&mut write_half, &err_env, &mut shutdown)
+                            .await
+                            .is_err()
+                        {
+                            break 'connection;
+                        }
+                    }
+                }
+            }
             #[cfg(unix)]
             ControlMessage::PtyStdinEof { session_id } => {
                 // Order 925-eofi. Same bounded queue as the input bytes, so an

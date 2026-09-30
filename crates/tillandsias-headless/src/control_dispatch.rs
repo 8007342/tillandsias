@@ -156,6 +156,12 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         (SetVsockForwardTarget { .. }, Vsock) => Handle,
         (SetVsockForwardTarget { .. }, UnixSocket) => Unsupported,
 
+        // HostClockSync (1503-qrgz) is vsock-only and host->guest: only the
+        // host knows its wall clock survived a sleep the VM did not run through.
+        // A unix-socket peer is already on the host's clock.
+        (HostClockSync { .. }, Vsock) => Handle,
+        (HostClockSync { .. }, UnixSocket) => Unsupported,
+
         // DeliverCredentials and GetVaultHandover are vsock-only (for in-VM credential delivery/handover)
         (DeliverCredentials { .. } | GetVaultHandover { .. }, Vsock) => Handle,
         (DeliverCredentials { .. } | GetVaultHandover { .. }, UnixSocket) => Unsupported,
@@ -248,6 +254,25 @@ mod tests {
             ),
             DispatchOutcome::Unsupported,
             "nothing on the unix path can know the host's vsock port"
+        );
+    }
+
+    /// ORDER 1503-qrgz. The host's clock reading is HANDLED on vsock and
+    /// refused BY NAME on the unix socket (a unix peer already shares the
+    /// host's clock).
+    #[test]
+    fn host_clock_sync_is_vsock_only() {
+        let msg = ControlMessage::HostClockSync {
+            seq: 1,
+            host_unix_ms: 1_790_706_540_000,
+        };
+        assert_eq!(
+            decide_route(&msg, TransportKind::Vsock),
+            DispatchOutcome::Handle
+        );
+        assert_eq!(
+            decide_route(&msg, TransportKind::UnixSocket),
+            DispatchOutcome::Unsupported
         );
     }
 

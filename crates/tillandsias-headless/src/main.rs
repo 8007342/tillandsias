@@ -80,6 +80,8 @@ mod image_build_progress;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
+#[cfg(feature = "listen-vsock")]
+mod clock_sync;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 mod cloud_projects;
 mod container_deps;

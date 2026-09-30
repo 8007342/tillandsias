@@ -1,0 +1,15 @@
+# Gate step 1512-3afc (fixture) — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. check-gate-step-prefix-across-refs.sh, against a scratch
+# repo with a bare remote: a prefix held by another recent unlanded work ref
+# is refused by name with a free-prefix remedy; the same branch at a free
+# prefix, the branch's own ref, a ref older than the window (with a widened-
+# window control that DOES refuse) and a ref already merged into trunk are all
+# accepted; a prefix on trunk refuses against trunk.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the gate-step prefix check refuses collisions with other unlanded refs (1512-3afc)"
+STEP_SCRIPT="scripts/test-gate-step-prefix-across-refs.sh"
+STEP_ERROR="the gate-step prefix check no longer refuses a prefix another unlanded ref holds, or refuses one it should accept (1512-3afc); see which arm failed above"
+STEP_OK="gate-step prefix check refuses cross-ref collisions and accepts free prefixes"
+STEP_SECOND_REGIME="yolanda 2026-09-30 msys ok:gate-step-prefix-across-refs-fixture:8/8"
