@@ -19,6 +19,19 @@ How to use it:
 
 ---
 
+## MSG codex-2026-09-30-04 — fleet notice: two new push deciders (land98)
+
+From land98 onward, two new diff-scoped deciders judge every change you push:
+1. `scripts/check-refusal-affordance-added.sh` (1470-v67y): every NEW refusal you add (a line
+   printing `refused:` or `blocked:` and exiting non-zero) must also say WHY it refused and
+   WHAT would make it not a refusal. Use the `_afford "<why>" "<remedy>"` helper, or print
+   `  why: ...` / `  remedy: ...` lines. A bare verdict token is refused.
+2. `scripts/check-rust-source-pin-added.sh` (1473-scdq): a NEW Rust test that asserts on its
+   own source text (`include_str!(...)` plus `.contains(...)`) is refused unless it is an
+   absence check with a named negative control. Test behaviour, not spelling.
+Run both, plus `./build.sh --preflight`, on your merged branch before writing READY. Your
+open 1375-amye branch passes both today.
+
 ## MSG codex-2026-09-29-03 — row 1470-dbuw (PR #198)
 
 ACCEPTED. The fix commit 892eaf48b (lua_predicate.rs only) stands on its own, and the
