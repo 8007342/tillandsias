@@ -1,5 +1,8 @@
 // @trace order:1505-iky3, plan/issues/cloudflare-login-fleet-vpn-design-2026-09-29.md (naming
-// table, research §3), openspec/changes/cloudflare-login-and-fleet-vpn/design.md (Decision 4)
+// table, research §3, "Operator ruling on names"), openspec/changes/cloudflare-login-and-fleet-vpn/design.md
+// (Decision 4), plan/index.d/20260929t223658z-1505-iky3-naming-ruling-macuahuitl.yaml (operator
+// ruling 2026-09-29: team tillandsias-enclave-vpn-<github_login>, network tillandsias-enclave-vpn,
+// no account id or email in any name)
 //! Every name Tillandsias mints for Cloudflare, normalized by ONE rule and
 //! minted from ONE table.
 //!
@@ -35,14 +38,30 @@
 //!
 //! | Thing | Canonical | Class |
 //! |---|---|---|
-//! | the network (virtual network + route suffix) | [`network_name`] = `tillandsias-vpn` | Label (widens to Display) |
-//! | Zero Trust team name | [`team_name`] = `tillandsias-vpn-<acct8>` | Label |
+//! | the network (virtual network + route suffix) | [`network_name`] = `tillandsias-enclave-vpn` | Label (widens to Display) |
+//! | Zero Trust team name | [`team_name`] = `tillandsias-enclave-vpn-<github_login>` (`-2`, `-3`... on a collision) | Label |
 //! | a participant (node, device, service token) | [`participant_name`] = `tillandsias-<host>` | Label |
-//! | a service's hostname route | [`service_route`] = `<service>.tillandsias-vpn.internal` | Display (each dot-separated component is a Label) |
+//! | a service's hostname route | [`service_route`] = `<service>.tillandsias-enclave-vpn.internal` | Display (each dot-separated component is a Label) |
 //! | the OAuth App (operator-entered in the dashboard) | [`app_name`] = `Tillandsias` | Display |
 //!
 //! `.internal` is the route suffix because Mesh hostname routes are private
 //! names resolved by Gateway; a public TLD would collide with real DNS.
+//!
+//! # Operator ruling on names (2026-09-29)
+//!
+//! Supersedes the earlier `tillandsias-vpn` / `tillandsias-vpn-<acct8>` table
+//! (an account-id-based team name): the Zero Trust team name is
+//! `tillandsias-enclave-vpn-<github_login>`, never a Cloudflare account id or
+//! an email — [`team_name`] takes the operator's GitHub login, not an
+//! account id, and there is no constructor anywhere in this module that
+//! accepts or embeds either. A GitHub login is public, unique, and at most
+//! 39 characters, so the fixed `tillandsias-enclave-vpn-` prefix (24 bytes)
+//! plus the login always fits inside the 63-byte [`Label`] ceiling with no
+//! truncation needed. On a collision (the team name is already taken by
+//! another Cloudflare account) the caller retries with the next attempt
+//! number; [`team_name`] appends `-2`, `-3`, ... and, if that would overflow
+//! 63 bytes, truncates the LOGIN portion — never the numeric suffix, which
+//! is what actually distinguishes the retry.
 //!
 //! This module does no I/O and depends on nothing beyond `std`.
 
@@ -282,25 +301,63 @@ pub fn normalize_display(input: &str) -> Result<Display, NameError> {
     normalize_ascii(input, DISPLAY_MAX).map(Display::from_normalized)
 }
 
-/// The one Tillandsias virtual network / route-suffix name: `tillandsias-vpn`.
+/// The one Tillandsias virtual network / route-suffix name: `tillandsias-enclave-vpn`.
 ///
-/// Returned as a [`Label`] (it fits, at 15 bytes) and widens to [`Display`]
+/// Returned as a [`Label`] (it fits, at 23 bytes) and widens to [`Display`]
 /// via `.into()` wherever the virtual-network-`name` API field is needed.
+///
+/// Operator ruling, 2026-09-29: replaces the earlier `tillandsias-vpn`.
 pub fn network_name() -> Label {
-    normalize_label("tillandsias-vpn").expect("the literal \"tillandsias-vpn\" is always valid")
+    normalize_label("tillandsias-enclave-vpn")
+        .expect("the literal \"tillandsias-enclave-vpn\" is always valid")
 }
 
-/// The Zero Trust team name for one Cloudflare account: `tillandsias-vpn-<acct8>`.
+/// The fixed prefix every Zero Trust team name starts with. 24 bytes, so a
+/// GitHub login (public, unique, <= 39 bytes) always fits the remaining
+/// budget of a 63-byte [`Label`] with room to spare, even before any
+/// collision suffix.
+const TEAM_NAME_PREFIX: &str = "tillandsias-enclave-vpn-";
+
+/// The Zero Trust team name for one GitHub account:
+/// `tillandsias-enclave-vpn-<github_login>`, with a numbered suffix on a
+/// naming collision.
 ///
-/// `acct8` is the first 8 normalized characters of `account_id` (Cloudflare
-/// account ids are lowercase hex already; normalization here is defensive,
-/// not transliteration). Team names are global across all of Cloudflare, so
-/// `tillandsias-vpn` alone may already be taken — the account suffix is what
-/// keeps this collision-resistant, not secret.
-pub fn team_name(account_id: &str) -> Result<Label, NameError> {
-    const PREFIX: &str = "tillandsias-vpn-";
-    let acct8 = normalize_ascii(account_id, 8)?;
-    Ok(Label::from_normalized(format!("{PREFIX}{acct8}")))
+/// `github_login` is the operator's GitHub login (normalized by this
+/// function — never a Cloudflare account id or an email; this module has no
+/// constructor that accepts or embeds either). `attempt` is the collision
+/// counter: `1` (or `0`) mints the bare name; `2`, `3`, ... append `-2`,
+/// `-3`, ... because the FIRST candidate was already taken by another
+/// Cloudflare account. Team names are global across all of Cloudflare, so a
+/// collision is expected behavior, not an error — the caller reports it
+/// (`note:fleet-vpn:team-name-suffixed:<name>`) and retries with the next
+/// attempt.
+///
+/// If the fixed prefix, the normalized login, and the numeric suffix
+/// together would exceed the 63-byte [`Label`] ceiling, the LOGIN is
+/// truncated to make room — never the suffix, since the suffix is what
+/// actually distinguishes one candidate from the next.
+pub fn team_name(github_login: &str, attempt: u32) -> Result<Label, NameError> {
+    let suffix = if attempt >= 2 {
+        format!("-{attempt}")
+    } else {
+        String::new()
+    };
+    let budget = LABEL_MAX
+        .saturating_sub(TEAM_NAME_PREFIX.len())
+        .saturating_sub(suffix.len());
+    let login = normalize_ascii(github_login, budget)?;
+    Ok(Label::from_normalized(format!(
+        "{TEAM_NAME_PREFIX}{login}{suffix}"
+    )))
+}
+
+/// The suffixed collision candidate for one GitHub login: an explicit alias
+/// for [`team_name`] under the name the collision-retry call site reads
+/// most naturally at the call (`team_name_candidate(login, attempt)`).
+/// Identical behavior to [`team_name`]; kept as a separate `pub fn` so
+/// either name documents the intent at its call site.
+pub fn team_name_candidate(github_login: &str, attempt: u32) -> Result<Label, NameError> {
+    team_name(github_login, attempt)
 }
 
 /// The name for one participant (node, device, or service token):
@@ -315,16 +372,18 @@ pub fn participant_name(hostname: &str) -> Result<Label, NameError> {
     Ok(Label::from_normalized(format!("{PREFIX}{host}")))
 }
 
-/// The Mesh hostname route for one service: `<service>.tillandsias-vpn.internal`.
+/// The Mesh hostname route for one service: `<service>.tillandsias-enclave-vpn.internal`.
 ///
 /// `service` is normalized to a [`Label`] first (each dot-separated
 /// component of a hostname route must itself be a valid label); the
-/// `.tillandsias-vpn.internal` suffix is fixed and always well inside the
-/// 255-byte Mesh hostname-route ceiling, so the combined [`Display`] cannot
-/// overflow it.
+/// `.tillandsias-enclave-vpn.internal` suffix is fixed and always well
+/// inside the 255-byte Mesh hostname-route ceiling, so the combined
+/// [`Display`] cannot overflow it. The suffix follows [`network_name`]
+/// (operator ruling, 2026-09-29): replaces the earlier
+/// `.tillandsias-vpn.internal`.
 pub fn service_route(service: &str) -> Result<Display, NameError> {
     let label = normalize_label(service)?;
-    let route = format!("{}.tillandsias-vpn.internal", label.as_str());
+    let route = format!("{}.tillandsias-enclave-vpn.internal", label.as_str());
     debug_assert!(
         route.len() <= DISPLAY_MAX,
         "fixed suffix cannot push a Label-bounded route over 255"
@@ -467,26 +526,107 @@ mod tests {
     // ───────────────────────── the canonical table ──────────────────────────
 
     #[test]
-    fn network_name_is_tillandsias_vpn() {
-        assert_eq!(network_name().as_str(), "tillandsias-vpn");
+    fn network_name_is_tillandsias_enclave_vpn() {
+        assert_eq!(network_name().as_str(), "tillandsias-enclave-vpn");
     }
 
     #[test]
     fn network_name_widens_to_display() {
         let display: Display = network_name().into();
-        assert_eq!(display.as_str(), "tillandsias-vpn");
+        assert_eq!(display.as_str(), "tillandsias-enclave-vpn");
     }
 
+    /// Table-driven: the operator ruling's name shape (2026-09-29) — every
+    /// row would fail against the OLD single-argument `team_name` (it took
+    /// the Cloudflare account id, not a login and an attempt number, so a
+    /// two-argument call was a compile error before this fix: the pre-fix
+    /// probe run this session hit `E0061: this function takes 1 argument
+    /// but 2 arguments were supplied`).
     #[test]
-    fn team_name_is_prefixed_and_suffixed_with_the_account_id() {
-        let got = team_name("0123456789abcdef0123456789abcdef").expect("valid account id");
-        assert_eq!(got.as_str(), "tillandsias-vpn-01234567");
+    fn team_name_table() {
+        // The ledger's own worked example, verbatim (fields on 1505-iky3,
+        // operator ruling 2026-09-29).
+        assert_eq!(
+            team_name("BullonCito", 1).expect("valid login").as_str(),
+            "tillandsias-enclave-vpn-bulloncito"
+        );
+        assert_eq!(
+            team_name("BullonCito", 2).expect("valid login").as_str(),
+            "tillandsias-enclave-vpn-bulloncito-2"
+        );
+
+        // Uppercase AND underscore in the same login: both normalized.
+        assert_eq!(
+            team_name("Bullon_Cito", 1).expect("valid login").as_str(),
+            "tillandsias-enclave-vpn-bullon-cito"
+        );
+
+        // A 39-char GitHub login (GitHub's own max login length) plus the
+        // 24-byte prefix is exactly 63 bytes: fits with NO truncation.
+        let login39 = "a".repeat(39);
+        let got = team_name(&login39, 1).expect("39-char login fits");
+        assert_eq!(got.as_str(), format!("tillandsias-enclave-vpn-{login39}"));
+        assert_eq!(got.as_str().len(), 63);
+
+        // Same login, attempt 2: the "-2" suffix would push the bare
+        // concatenation to 65 bytes, so the LOGIN (not the suffix) is
+        // truncated to fit: 24 (prefix) + 37 (login) + 2 ("-2") = 63.
+        let got2 = team_name(&login39, 2).expect("attempt 2 fits by truncating the login");
+        let truncated37 = "a".repeat(37);
+        assert_eq!(
+            got2.as_str(),
+            format!("tillandsias-enclave-vpn-{truncated37}-2")
+        );
+        assert_eq!(got2.as_str().len(), 63);
+        assert!(got2.as_str().ends_with("-2"), "suffix must survive intact");
+
+        // Same login, attempt 10: the "-10" suffix (3 bytes) truncates the
+        // login further: 24 + 36 + 3 = 63.
+        let got10 = team_name(&login39, 10).expect("attempt 10 fits by truncating the login");
+        let truncated36 = "a".repeat(36);
+        assert_eq!(
+            got10.as_str(),
+            format!("tillandsias-enclave-vpn-{truncated36}-10")
+        );
+        assert_eq!(got10.as_str().len(), 63);
+        assert!(
+            got10.as_str().ends_with("-10"),
+            "suffix must survive intact"
+        );
     }
 
+    /// `team_name_candidate` is the same behavior under the name a
+    /// collision-retry call site reads most naturally.
     #[test]
-    fn team_name_refuses_an_account_id_that_normalizes_to_empty() {
-        let err = team_name("---").unwrap_err();
+    fn team_name_candidate_matches_team_name() {
+        assert_eq!(
+            team_name_candidate("BullonCito", 2).unwrap(),
+            team_name("BullonCito", 2).unwrap()
+        );
+    }
+
+    /// An empty-after-normalization GitHub login is refused with the SAME
+    /// named error every other constructor in this module uses — never
+    /// silently minted as `tillandsias-enclave-vpn-` with nothing after it.
+    #[test]
+    fn team_name_refuses_a_login_that_normalizes_to_empty() {
+        let err = team_name("---", 1).unwrap_err();
         assert_eq!(err, NameError::EmptyAfterNormalization);
+    }
+
+    /// No constructor in this module takes a Cloudflare account id anymore:
+    /// [`team_name`] takes a GitHub login and a collision-attempt number,
+    /// full stop. Asserted directly against the retired parameter's spelling
+    /// (built piecewise, and this function deliberately avoids spelling it
+    /// out itself, so the assertion doesn't trip on its own source text).
+    #[test]
+    fn team_name_signature_has_no_retired_id_parameter() {
+        let retired_param: String = ["acco", "unt", "_i", "d"].concat();
+        let source = include_str!("cloudflare_names.rs");
+        assert!(
+            !source.contains(&retired_param),
+            "module must not reference the retired {retired_param:?} parameter"
+        );
     }
 
     #[test]
@@ -526,15 +666,21 @@ mod tests {
     }
 
     #[test]
-    fn service_route_is_service_dot_tillandsias_vpn_dot_internal() {
+    fn service_route_is_service_dot_tillandsias_enclave_vpn_dot_internal() {
         let got = service_route("fleet-experts").expect("valid service name");
-        assert_eq!(got.as_str(), "fleet-experts.tillandsias-vpn.internal");
+        assert_eq!(
+            got.as_str(),
+            "fleet-experts.tillandsias-enclave-vpn.internal"
+        );
     }
 
     #[test]
     fn service_route_normalizes_the_service_component() {
         let got = service_route("Fleet Experts").expect("valid service name");
-        assert_eq!(got.as_str(), "fleet-experts.tillandsias-vpn.internal");
+        assert_eq!(
+            got.as_str(),
+            "fleet-experts.tillandsias-enclave-vpn.internal"
+        );
     }
 
     #[test]
