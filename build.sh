@@ -4037,6 +4037,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Expression-pinning enforcement passed"
 
+    # Order 1473-scdq: the Rust half of the rule above. A NEWLY ADDED Rust test
+    # may not pin a literal in source text read by include_str! (or a window
+    # cut from it) without a negative control or a reasoned `source-pin-ok:`.
+    # 827-d3dc found 92 such pins; four of the ten costliest were this shape,
+    # and one kept a product defect green (1472-3d29). Diff-scoped.
+    _step "Checking newly-added Rust source-literal pins (1473-scdq)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-rust-source-pin-added.sh" 2>&1; then
+        _error "a newly-added Rust test pins source text with no negative control or reason (1473-scdq); the site and the remedy are printed above"
+        exit 1
+    fi
+    _info "Rust source-pin enforcement passed"
+
     # Order 792-ksr8. Refuse a NEWLY ADDED pipeline whose verdict SIGPIPE can
     # decide: an unbounded producer into an early-exiting consumer, under
     # pipefail, in an if/while condition. A match then surfaces as a failure
