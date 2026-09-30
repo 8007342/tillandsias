@@ -4054,6 +4054,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "SIGPIPE verdict-pipeline enforcement passed"
 
+    # Order 1470-v67y (1247-amcu criterion 1). Refuse a NEWLY ADDED refusal
+    # verdict (refused:/blocked:/violation:) that ships without its
+    # affordance: why it refused and what clears it (operator ruling
+    # 2026-09-17). Diff-scoped like the two above, so the ~500 bare standing
+    # sites (`check-refusal-affordance-added.sh --audit`, per site) are
+    # converted by the 1247 slices rather than blocking every push.
+    _step "Checking newly-added refusals carry an affordance (1470-v67y)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-refusal-affordance-added.sh" 2>&1; then
+        _error "a newly-added refusal says neither why it refused nor what clears it (1247-amcu); the site and the remedy are printed above"
+        exit 1
+    fi
+    _info "Refusal affordance enforcement passed"
+
     # Order 1401-x76w. RUN every added scripts/test-*.sh in the regime an
     # ordinary checkout has: CARGO_TARGET_DIR and TILLANDSIAS_PLAN_BIN unset and
     # every PATH entry holding a plan binary stripped, from a cwd outside the

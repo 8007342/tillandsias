@@ -1,0 +1,15 @@
+# Gate step 1494-kkbi — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. 1247-amcu converts bare refusal verdicts in the order agents
+# actually hit them. rank-refusal-hits.sh ranks the audit's bare sites by how
+# often plan ledger events and issues quote them, never by gate logs, whose
+# fixture-provoked refusals would put the best-tested verdicts first. The
+# fixture pins the exact order and a negative control: log-only hits must not
+# enter the rank. Hermetic: scratch audit, ledger and log files.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the bare-refusal ranker orders by recorded hits, not log noise (1494-kkbi)"
+STEP_SCRIPT="scripts/test-rank-refusal-hits.sh"
+STEP_ERROR="rank-refusal-hits.sh no longer ranks bare refusals by recorded hits, or lets log-only hits into the rank (1494-kkbi)"
+STEP_OK="bare refusals ranked by recorded hits"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: rank-refusal-hits (1494-kkbi) at 8339a3761, 6 arms, bash 3.2"
