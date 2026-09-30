@@ -87,6 +87,8 @@ ready
 # relaunch" sets can never drift apart the way a hardcoded list in the wrapper
 # run: order 1443-8pur — the agent door (argv through the policy engine, then tillandsias-exec).
 run
+# script: order 1384-bqhy — `script run <file.lua>` (Lua decider runner) and `script classify`.
+script
 score-checks
 select-rows
 # session-tokens: order 1437-3pj7 — billed tokens from the harness transcript.

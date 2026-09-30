@@ -80,6 +80,8 @@ pub use tillandsias_msg::shape as msg_shape;
 /// msg`; no networking, no ack verb (the ack is the infrastructure's).
 pub mod msg_store;
 pub mod run_verb;
+// ORDER 1384-bqhy: `script run` (the Lua decider runner) and the one classify.
+pub mod script_run;
 
 /// Order 977-56fd — the seven-state obligation lattice, the product order over
 /// spec and project states, and the refinement operator that

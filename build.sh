@@ -376,6 +376,14 @@ _phase_close() {
 # traps. Returns 124 on expiry, matching timeout's convention, so the caller is
 # unchanged. A door that returns quickly while leaving background work behind is
 # a door whose next run collides with its own last one.
+# ORDER 1384-bqhy: the door's one call into the binary's classifier. Prints
+# ok|skip|could-not-run|timed-out|cannot-start|no-space|refused, or nothing when
+# no binary can answer (the caller books that as could-not-run, never a pass).
+_pf_classify() {  # $1 = rc, $2 = captured output file
+    [ -n "${_pf_plan_bin:-}" ] || return 0
+    "$_pf_plan_bin" script classify --rc "$1" --file "$2" 2>/dev/null || true
+}
+
 _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, $4 = args
     local _p="$1" _d="$2" _out="$3" _pid _ticks=0 _tick _per_s _max
     # ORDER 1499-m9fj: THE GATE'S ARGUMENTS, WORD FOR WORD. A guard run without
@@ -384,6 +392,10 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
     # it as `fixture`). The roster carries them as literal words.
     local -a _a=()
     [ -z "${4:-}" ] || read -r -a _a <<< "$4"
+    # ORDER 1384-bqhy: a .lua guard runs through `tillandsias-plan script run`,
+    # the one runner, never `bash`; every other guard is unchanged.
+    local -a _runner=(bash "$_p")
+    case "$_p" in *.lua) _runner=("${_pf_plan_bin:-tillandsias-plan}" script run "$_p") ;; esac
     # POLL IN TENTHS, NOT SECONDS. A one-second poll puts a ONE-SECOND FLOOR
     # under every guard, including the 54 that finish in under 250ms: measured
     # here, that floor alone took the run from 148s to 196s — the deadline
@@ -418,9 +430,9 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
     if sleep 0.1 2>/dev/null; then _tick=0.1; _per_s=10; else _tick=1; _per_s=1; fi
     _max=$(( _d * _per_s ))
     if [ -n "$_PF_SETSID" ]; then
-        ( cd "$SCRIPT_DIR" && exec setsid bash "$_p" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
+        ( cd "$SCRIPT_DIR" && exec setsid "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
     else
-        ( cd "$SCRIPT_DIR" && exec bash "$_p" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
+        ( cd "$SCRIPT_DIR" && exec "${_runner[@]}" ${_a[@]+"${_a[@]}"} ) >"$_out" 2>&1 </dev/null &
     fi
     _pid=$!
     while kill -0 "$_pid" 2>/dev/null; do
@@ -602,8 +614,8 @@ _preflight_roster() {
     awk '/# .. FAST REFUSALS \(order 1009-gccx\)/,/_info "Fast refusals passed"/' "$SCRIPT_DIR/build.sh" \
         | grep -ohE 'scripts/check-[a-z0-9-]+\.sh'
     # 2. the gate's steps (data, not code — 1072-b7eq)
-    grep -h '^STEP_SCRIPT=' "$SCRIPT_DIR"/scripts/gate-steps.d/*.step 2>/dev/null \
-        | sed 's/STEP_SCRIPT="//; s/"$//'
+    grep -hE '^STEP_(SCRIPT|LUA)=' "$SCRIPT_DIR"/scripts/gate-steps.d/*.step 2>/dev/null \
+        | sed -E 's/^STEP_(SCRIPT|LUA)="//; s/"$//'
     # 3. the pre-push lane's own checks
     grep -ohE 'scripts/check-[a-z0-9-]+\.sh' "$SCRIPT_DIR"/scripts/hooks/*.sh 2>/dev/null
     # 4. every decider the gate runs INLINE (1499-m9fj): the literal
@@ -707,6 +719,10 @@ FLAG_CHECK=false
 # exits, and NEVER compiles.
 FLAG_PREFLIGHT=false
 FLAG_PREFLIGHT_FULL=false
+# ORDER 1384-bqhy — run ONLY the gate-steps.d loop over <root> (whose
+# scripts/gate-steps.d it reads). The fixture's way into the real loop over a
+# scratch tree; --check calls the same function over the checkout.
+GATE_STEPS_ROOT=""
 FLAG_CLEAN=false
 FLAG_INSTALL=false
 FLAG_REMOVE=false
@@ -729,6 +745,12 @@ while [[ $# -gt 0 ]]; do
         --test)           FLAG_TEST=true ;;
         --check)          FLAG_CHECK=true ;;
         --preflight)      FLAG_PREFLIGHT=true ;;
+        --gate-steps)
+            GATE_STEPS_ROOT="${2:-}"
+            [ -n "$GATE_STEPS_ROOT" ] || { echo "error: --gate-steps needs a root directory" >&2; exit 2; }
+            shift 2
+            continue
+            ;;
         # The same enumeration with NO per-guard deadline, for a host that wants
         # the whole set before a large land. A deadline-skipped guard still runs
         # in the gate, which is its home, so nothing is lost by the default.
@@ -1019,66 +1041,51 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
             _pf_ran=$((_pf_ran + 1))
             grep -E '^note:' "$_pf_tmp" || true
         else
-            if grep -qE '^skip:' "$_pf_tmp"; then
-                # A NAMED SKIP IS NOT A FAILURE, whatever it exits with
-                # (1273-4mak). MEASURED: test-uninstall-matcher-spares-bystanders
-                # prints `skip:not-darwin …` and exits non-zero, and this door
-                # called it `refused` — 1309-fhxb's shape inside the fix for 1305.
-                grep -E '^skip:' "$_pf_tmp" | head -2
-                _pf_declskip=$((_pf_declskip + 1))
-            elif grep -qE '^could-not-run:' "$_pf_tmp"; then
-                # SECOND, DELIBERATELY — the `^skip:` arm above wins a tie.
-                # MEASURED 2026-09-22: after 1354-apns, check-gate-memory-floor
-                # prints BOTH `could-not-run:gate-memory:no-meminfo:...` and
-                # `skip:gate-memory:no-meminfo`, and it RAN. A guard that ran
-                # and named its own reason is a DECLARED SKIP (965-sxec), not a
-                # gap; scoring it could-not-run would put it in `unanswered`
-                # and make the door report partial: for a guard that gave its
-                # considered statement. With the arms in the other order this
-                # change quietly demoted a properly-named skip, which is arm 4's
-                # own principle broken by the fix for arm 5.
-                # THIS ARM IS FOR A GUARD THAT SAYS ONLY `could-not-run:`.
-                # THE GUARD RAN AND SAID IT COULD NOT ASK. Distinct from the
-                # launch failure below, which is the RUNNER failing to start it,
-                # and distinct from a refusal: nothing was learned about the
-                # tree either way, so it belongs in could-not-run rather than in
-                # refused. FOUND BY RUNNING THIS DOOR ON macOS, 2026-09-22:
-                # check-gate-memory-floor prints
-                # `could-not-run:gate-memory:no-meminfo` and exits 3 on a host
-                # with no /proc/meminfo, and this runner booked it as a REFUSAL
-                # — the exact conflation this order exists to remove, in the
-                # order's own runner, one branch below the one it fixed.
-                grep -E '^could-not-run:' "$_pf_tmp" | head -2
-                _pf_cantrun=$((_pf_cantrun + 1))
-            elif [ "$_pf_rc" -eq 124 ]; then
-                echo "skip:preflight:$_pf_label:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_deadline}s front-door deadline; the gate still runs it"
-                _pf_deadline_n=$((_pf_deadline_n + 1))
-            elif [ "$_pf_rc" -eq 127 ] || grep -qE '(^|: )(exec: )?[A-Za-z0-9_.-]+: (not found|command not found)$' "$_pf_tmp"; then
-                # THE RUNNER COULD NOT START IT. A missing interpreter or helper
-                # is not the guard refusing the tree, and booking it as a refusal
-                # is what made macOS print 110 `refused:` lines naming 110 guards
-                # when the thing that failed was one absent binary (macneo,
-                # 2026-09-22: exec: setsid: not found, ran=0, failed=110).
-                # The guard is not at fault and the tree was never examined.
-                _pf_cantrun=$((_pf_cantrun + 1))
-                sed 's/^/  /' "$_pf_tmp" >&2
-                echo "could-not-run:preflight:$_pf_label:rc=$_pf_rc — the runner could not start it; nothing was learned about the tree" >&2
-            elif grep -qE 'No space left on device' "$_pf_tmp"; then
-                # ORDER 1349-53h6 — RUNNER RESOURCE EXHAUSTION IS NOT TREE REFUSAL.
-                # When a guard fails because the checkout or /tmp filesystem ran out
-                # of space, the runner failed to execute the guard; the tree was never
-                # examined. Booking this as refused: conflated "the subject is wrong"
-                # with "the runner ran out of disk".
-                _pf_cantrun=$((_pf_cantrun + 1))
-                sed 's/^/  /' "$_pf_tmp" >&2
-                echo "could-not-run:preflight:$_pf_label:no-space — runner resource exhaustion (No space left on device); nothing was learned about the tree" >&2
-            else
-                _pf_failed=$((_pf_failed + 1))
-                cat "$_pf_tmp" >&2
-                _afford "the guard $_pf_label refused this tree; its own output is printed just above" \
-                    "fix what that output names, then confirm with the guard alone: bash $_pf_path${_pf_args:+ $_pf_args} (a full re-check is ./build.sh --preflight)"
-                echo "refused:preflight:$_pf_label" >&2
-            fi
+            # ORDER 1384-bqhy — ONE CLASSIFIER. This branch used to grep the
+            # merged capture for ^skip:, ^could-not-run:, `not found` and `No
+            # space left` itself, while the gate loop judged by exit code alone:
+            # two readers over text drift, and 1359-qf3p is the door passing what
+            # the gate refuses. The precedence (a named skip wins over
+            # could-not-run; the guard's own words win over the runner's rc;
+            # 124 is a deadline only when the guard said neither) now lives in
+            # tillandsias-plan's script_run::classify, with its reasons, and the
+            # gate loop reads the same function.
+            _pf_kind="$(_pf_classify "$_pf_rc" "$_pf_tmp")"
+            case "$_pf_kind" in
+                skip)
+                    # A NAMED SKIP IS NOT A FAILURE, whatever it exits with (1273-4mak).
+                    grep -E '^skip:' "$_pf_tmp" | head -2
+                    _pf_declskip=$((_pf_declskip + 1)) ;;
+                could-not-run)
+                    # THE GUARD RAN AND SAID IT COULD NOT ASK (macOS, 2026-09-22).
+                    grep -E '^could-not-run:' "$_pf_tmp" | head -2
+                    _pf_cantrun=$((_pf_cantrun + 1)) ;;
+                timed-out)
+                    echo "skip:preflight:$_pf_label:deadline:$(( SECONDS - _pf_t0 ))s — outlived the ${_pf_deadline}s front-door deadline; the gate still runs it"
+                    _pf_deadline_n=$((_pf_deadline_n + 1)) ;;
+                cannot-start)
+                    # THE RUNNER COULD NOT START IT (macneo 2026-09-22: exec: setsid: not found).
+                    _pf_cantrun=$((_pf_cantrun + 1))
+                    sed 's/^/  /' "$_pf_tmp" >&2
+                    echo "could-not-run:preflight:$_pf_label:rc=$_pf_rc — the runner could not start it; nothing was learned about the tree" >&2 ;;
+                no-space)
+                    # ORDER 1349-53h6 — RUNNER RESOURCE EXHAUSTION IS NOT TREE REFUSAL.
+                    _pf_cantrun=$((_pf_cantrun + 1))
+                    sed 's/^/  /' "$_pf_tmp" >&2
+                    echo "could-not-run:preflight:$_pf_label:no-space — runner resource exhaustion (No space left on device); nothing was learned about the tree" >&2 ;;
+                refused)
+                    _pf_failed=$((_pf_failed + 1))
+                    cat "$_pf_tmp" >&2
+                    _afford "the guard $_pf_label refused this tree; its own output is printed just above" \
+                        "fix what that output names, then confirm with the guard alone: bash $_pf_path${_pf_args:+ $_pf_args} (a full re-check is ./build.sh --preflight)"
+                    echo "refused:preflight:$_pf_label" >&2 ;;
+                *)
+                    # No classifier answered (no plan binary, or one too old to
+                    # know `script classify`). Never booked as a pass or a refusal.
+                    _pf_cantrun=$((_pf_cantrun + 1))
+                    sed 's/^/  /' "$_pf_tmp" >&2
+                    echo "could-not-run:preflight:$_pf_label:no-classifier — the plan binary could not classify rc=$_pf_rc; rebuild it (cargo build --release -p tillandsias-plan)" >&2 ;;
+            esac
         fi
     done <<PFEOF
 $_pf_roster
@@ -1783,6 +1790,135 @@ _run() {
     _PHASE_RAN_WORK=1
     return "$_run_rc"
 }
+
+# ORDER 1384-bqhy — the gate-steps.d loop, as a function over a ROOT whose
+# scripts/gate-steps.d it reads, so --check runs it over the checkout and the
+# fixture over a scratch tree, through the SAME code. A step names STEP_SCRIPT
+# (run with bash) or STEP_LUA (run with `tillandsias-plan script run`), never
+# both; both are literals (1063-nraf).
+_run_gate_steps() {  # $1 = root
+    local _gs_root="$1" _gs_plan=""
+    _gs_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _gs_plan=""
+    case "$_gs_plan" in ./*) _gs_plan="$SCRIPT_DIR/${_gs_plan#./}" ;; esac
+    for _step_file in "$_gs_root"/scripts/gate-steps.d/*.step; do
+        [ -e "$_step_file" ] || continue
+        STEP_DESC=""; STEP_SCRIPT=""; STEP_LUA=""; STEP_ERROR=""; STEP_OK=""
+        STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""
+        # shellcheck disable=SC1090
+        . "$_step_file"
+        if [ -z "$STEP_DESC" ] || { [ -z "$STEP_SCRIPT" ] && [ -z "$STEP_LUA" ]; }; then
+            _error "gate step ${_step_file##*/} declares no STEP_DESC, or neither STEP_SCRIPT nor STEP_LUA (1072-b7eq, 1384-bqhy)"
+            exit 1
+        fi
+        # ORDER 1384-bqhy: ONE RUNNER PER STEP. A step naming both would run one
+        # and leave a reader of the .step guessing which.
+        if [ -n "$STEP_SCRIPT" ] && [ -n "$STEP_LUA" ]; then
+            _error "gate step ${_step_file##*/} names both STEP_SCRIPT and STEP_LUA — a step names exactly one (1384-bqhy)"
+            exit 1
+        fi
+        _step_path="${STEP_SCRIPT:-$STEP_LUA}"
+        if [ ! -f "$_gs_root/$_step_path" ]; then
+            _error "gate step ${_step_file##*/} names $_step_path, which does not exist — a step that cannot run must refuse, not skip (1072-b7eq)"
+            exit 1
+        fi
+        if [ -n "$STEP_LUA" ] && [ -z "$_gs_plan" ]; then
+            _error "gate step ${_step_file##*/} is a Lua step and no tillandsias-plan binary resolves to run it — refused, not skipped (1384-bqhy)"
+            exit 1
+        fi
+        _step "$STEP_DESC..."
+        # STEP_SKIP_EXIT (1087-h2z9 follow-up): a step may nominate ONE exit
+        # code that means "this check could not run here", as distinct from
+        # "this check ran and failed". Without it every non-zero exit printed
+        # STEP_ERROR, so a host merely lacking the tool was told a cheatsheet
+        # reference does not resolve — a content verdict about nothing that was
+        # examined, and it refused the land. The sibling tier check already had
+        # the right shape (it prints its own skip: line and exits 0); this
+        # gives the DATA-wired steps the same vocabulary.
+        #
+        # NEGATIVE CONTROL, load-bearing: the skip path is reached only on an
+        # EXACT match against the nominated code. Any other non-zero exit —
+        # notably exit 1, the genuine content failure — still takes the
+        # refusal branch below. A step that nominates nothing behaves exactly
+        # as it did before.
+        # ORDER 1204-3s2s — A STEP MUST NOT WRITE INTO THE SHARED METRICS PATH.
+        #
+        # A fixture that runs the litmus runner from a scratch dir is not in a
+        # git checkout, so metrics_default_log correctly falls back to /tmp —
+        # and the fallback uses the SAME BASENAME as production, so the records
+        # land in /tmp/tillandsias-timing.jsonl carrying the real host name.
+        # cycle-metrics.sh then sees two timing logs and refuses (1096-p3tn,
+        # correctly: a runs= from either half is a partition presenting as a
+        # total), the refusal emits nothing, every arm driving it observes
+        # zeros, pre-build fails, ci-full never reaches post-build, and
+        # check-release-tier-freshness.sh answers never:release-tier forever.
+        # One missing env export makes the whole release tier unmeasurable on
+        # the host that runs it.
+        #
+        # WHY THIS IS BEHAVIOURAL AND NOT A GREP. 1096-p3tn fixed this BY HAND
+        # in eleven fixtures and wrote the convention in their comments; six of
+        # sixteen did not have it and nothing enforced it, so the next fixture
+        # reintroduced it the same day without any way to know. A static scan
+        # for the export would be the ritual line the row's own negative control
+        # forbids: a fixture that produces NO timing output should not have to
+        # declare one. Observing the path is the check that distinguishes them,
+        # and it costs nothing here because the steps already run.
+        #
+        # It also catches writers a name-based scan cannot see — a step that
+        # reaches the runner indirectly, or code nobody has written yet.
+        _metrics_shared_before=""
+        if [ -f /tmp/tillandsias-timing.jsonl ]; then
+            _metrics_shared_before="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"
+        fi
+
+        # The output streams as before AND is kept, so a refusal can be named
+        # by the one classifier the preflight door also reads (1384-bqhy).
+        _step_rc=0
+        _step_out="$(mktemp "${TMPDIR:-/tmp}/gate-step.XXXXXX")"
+        if [ -n "$STEP_LUA" ]; then
+            _run "$_gs_plan" script run "$_gs_root/$STEP_LUA" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+        else
+            _run bash "$_gs_root/$STEP_SCRIPT" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+        fi
+        wait "$!" 2>/dev/null || true
+
+        if [ -f /tmp/tillandsias-timing.jsonl ]; then
+            _metrics_shared_after="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"
+            if [ "${_metrics_shared_after:-0}" -gt "${_metrics_shared_before:-0}" ]; then
+                _error "gate step ${_step_path##*/} wrote $(( _metrics_shared_after - ${_metrics_shared_before:-0} )) record(s) into /tmp/tillandsias-timing.jsonl (1204-3s2s)"
+                _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
+                _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
+                _error "  refuse to publish any number, every arm driving it reads zero, and"
+                _error "  check-release-tier-freshness.sh answers never:release-tier on this host from now on."
+                _error "  FIX: export TILLANDSIAS_TIMING_LOG (and any other TILLANDSIAS_*_LOG the step drives)"
+                _error "  to a path inside the step's own scratch dir, so a hermetic fixture cannot reach the"
+                _error "  host's metrics. See the eleven fixtures 1096-p3tn already converted for the shape."
+                exit 1
+            fi
+        fi
+
+        if [ "$_step_rc" -ne 0 ] \
+           && [ -n "$STEP_SKIP_EXIT" ] \
+           && [ "$_step_rc" -eq "$STEP_SKIP_EXIT" ]; then
+            rm -f "$_step_out"
+            _info "skip:${_step_path##*/}:could-not-run (exit $_step_rc; ${STEP_SKIP_DESC:-the step nominated this code as could-not-run}; check not run — see the reason above)"
+            continue
+        fi
+        if [ "$_step_rc" -ne 0 ]; then
+            _step_kind="refused"
+            [ -z "$_gs_plan" ] || _step_kind="$("$_gs_plan" script classify --rc "$_step_rc" --file "$_step_out" 2>/dev/null || echo refused)"
+            rm -f "$_step_out"
+            _error "${STEP_ERROR:-$_step_path failed} — see the verdict line above (class: ${_step_kind:-refused}; 1384-bqhy)"
+            exit 1
+        fi
+        rm -f "$_step_out"
+        _info "${STEP_OK:-${_step_path##*/} passed}"
+    done
+}
+
+if [ -n "$GATE_STEPS_ROOT" ]; then
+    _run_gate_steps "$(cd "$GATE_STEPS_ROOT" && pwd)"
+    exit $?
+fi
 
 _run_litmus_phase() {
     local phase="$1"
@@ -4679,95 +4815,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     #
     # Numeric prefixes fix the order and are spaced by ten so a later step can
     # land between two without renaming either.
-    for _step_file in "$SCRIPT_DIR"/scripts/gate-steps.d/*.step; do
-        [ -e "$_step_file" ] || continue
-        STEP_DESC=""; STEP_SCRIPT=""; STEP_ERROR=""; STEP_OK=""
-        STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""
-        # shellcheck disable=SC1090
-        . "$_step_file"
-        if [ -z "$STEP_DESC" ] || [ -z "$STEP_SCRIPT" ]; then
-            _error "gate step ${_step_file##*/} declares no STEP_DESC/STEP_SCRIPT (1072-b7eq)"
-            exit 1
-        fi
-        if [ ! -f "$SCRIPT_DIR/$STEP_SCRIPT" ]; then
-            _error "gate step ${_step_file##*/} names $STEP_SCRIPT, which does not exist — a step that cannot run must refuse, not skip (1072-b7eq)"
-            exit 1
-        fi
-        _step "$STEP_DESC..."
-        # STEP_SKIP_EXIT (1087-h2z9 follow-up): a step may nominate ONE exit
-        # code that means "this check could not run here", as distinct from
-        # "this check ran and failed". Without it every non-zero exit printed
-        # STEP_ERROR, so a host merely lacking the tool was told a cheatsheet
-        # reference does not resolve — a content verdict about nothing that was
-        # examined, and it refused the land. The sibling tier check already had
-        # the right shape (it prints its own skip: line and exits 0); this
-        # gives the DATA-wired steps the same vocabulary.
-        #
-        # NEGATIVE CONTROL, load-bearing: the skip path is reached only on an
-        # EXACT match against the nominated code. Any other non-zero exit —
-        # notably exit 1, the genuine content failure — still takes the
-        # refusal branch below. A step that nominates nothing behaves exactly
-        # as it did before.
-        # ORDER 1204-3s2s — A STEP MUST NOT WRITE INTO THE SHARED METRICS PATH.
-        #
-        # A fixture that runs the litmus runner from a scratch dir is not in a
-        # git checkout, so metrics_default_log correctly falls back to /tmp —
-        # and the fallback uses the SAME BASENAME as production, so the records
-        # land in /tmp/tillandsias-timing.jsonl carrying the real host name.
-        # cycle-metrics.sh then sees two timing logs and refuses (1096-p3tn,
-        # correctly: a runs= from either half is a partition presenting as a
-        # total), the refusal emits nothing, every arm driving it observes
-        # zeros, pre-build fails, ci-full never reaches post-build, and
-        # check-release-tier-freshness.sh answers never:release-tier forever.
-        # One missing env export makes the whole release tier unmeasurable on
-        # the host that runs it.
-        #
-        # WHY THIS IS BEHAVIOURAL AND NOT A GREP. 1096-p3tn fixed this BY HAND
-        # in eleven fixtures and wrote the convention in their comments; six of
-        # sixteen did not have it and nothing enforced it, so the next fixture
-        # reintroduced it the same day without any way to know. A static scan
-        # for the export would be the ritual line the row's own negative control
-        # forbids: a fixture that produces NO timing output should not have to
-        # declare one. Observing the path is the check that distinguishes them,
-        # and it costs nothing here because the steps already run.
-        #
-        # It also catches writers a name-based scan cannot see — a step that
-        # reaches the runner indirectly, or code nobody has written yet.
-        _metrics_shared_before=""
-        if [ -f /tmp/tillandsias-timing.jsonl ]; then
-            _metrics_shared_before="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"
-        fi
-
-        _step_rc=0
-        _run bash "$SCRIPT_DIR/$STEP_SCRIPT" 2>&1 || _step_rc=$?
-
-        if [ -f /tmp/tillandsias-timing.jsonl ]; then
-            _metrics_shared_after="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"
-            if [ "${_metrics_shared_after:-0}" -gt "${_metrics_shared_before:-0}" ]; then
-                _error "gate step ${STEP_SCRIPT##*/} wrote $(( _metrics_shared_after - ${_metrics_shared_before:-0} )) record(s) into /tmp/tillandsias-timing.jsonl (1204-3s2s)"
-                _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
-                _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
-                _error "  refuse to publish any number, every arm driving it reads zero, and"
-                _error "  check-release-tier-freshness.sh answers never:release-tier on this host from now on."
-                _error "  FIX: export TILLANDSIAS_TIMING_LOG (and any other TILLANDSIAS_*_LOG the step drives)"
-                _error "  to a path inside the step's own scratch dir, so a hermetic fixture cannot reach the"
-                _error "  host's metrics. See the eleven fixtures 1096-p3tn already converted for the shape."
-                exit 1
-            fi
-        fi
-
-        if [ "$_step_rc" -ne 0 ] \
-           && [ -n "$STEP_SKIP_EXIT" ] \
-           && [ "$_step_rc" -eq "$STEP_SKIP_EXIT" ]; then
-            _info "skip:${STEP_SCRIPT##*/}:could-not-run (exit $_step_rc; ${STEP_SKIP_DESC:-the step nominated this code as could-not-run}; check not run — see the reason above)"
-            continue
-        fi
-        if [ "$_step_rc" -ne 0 ]; then
-            _error "${STEP_ERROR:-$STEP_SCRIPT failed} — see the verdict line above"
-            exit 1
-        fi
-        _info "${STEP_OK:-${STEP_SCRIPT##*/} passed}"
-    done
+    _run_gate_steps "$SCRIPT_DIR"
 
     # 965-sxec: a missing or unusable ruby must read as COULD-NOT-RUN (exit 3),
     # never as a claim about the ready set. Inside a forge `command -v ruby`
