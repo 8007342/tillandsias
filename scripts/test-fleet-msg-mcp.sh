@@ -85,7 +85,9 @@ text() { "$PLAN" json get -r '.result.content[0].text // empty' <<<"$1" 2>/dev/n
 
 # ── arm 1: surface — the tool list, and the negative control ────────────────
 list="$(rpc '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')"
-names="$(jq -c '[.result.tools[].name] | sort' <<<"$list" 2>/dev/null)"
+# One tool name per line, each wrapped in quotes so the "\"msg_send\"" checks
+# below keep matching whole names (no jq: the call-site ratchet, 1375-tsfu).
+names="$("$PLAN" json get -r '.result.tools[].name' <<<"$list" 2>/dev/null | sort | sed 's/.*/"&"/')"
 has_ack=0
 "$PLAN" json get -e '.result.tools[] | select(.name == "msg_ack")' <<<"$list" >/dev/null 2>&1 && has_ack=1
 if grep -qF '"msg_send"' <<<"$names" \
@@ -101,11 +103,14 @@ fi
 # ── arm 2: send -> status round trip ─────────────────────────────────────────
 send_body='FYI:1506-ssb5:mcp round trip
 - 1506-ssb5'
-send_args="$(jq -nc --arg body "$send_body" '{to: ["'"$H"'/b-default"], body: $body}')"
+# JSON string literal without jq (call-site ratchet, 1375-tsfu): escape
+# backslash, double quote and newline, which is all these fixed bodies carry.
+json_str() { local s="$1"; s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//$'\n'/\\n}"; printf '"%s"' "$s"; }
+send_args="{\"to\":[\"$H/b-default\"],\"body\":$(json_str "$send_body")}"
 resp="$(call msg_send "$send_args")"
 send_text="$(text "$resp")"
 id="${send_text#ok:msg:queued:}"
-status1="$(text "$(call msg_status "$(jq -nc --arg id "$id" '{id:$id}')")")"
+status1="$(text "$(call msg_status "{\"id\":$(json_str "$id")}")")"
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 cat >"$LANES/a-default/receipts/$id" <<EOF
 id: $id
@@ -119,7 +124,7 @@ recipients:
   at: $NOW
   via: local
 EOF
-status2="$(text "$(call msg_status "$(jq -nc --arg id "$id" '{id:$id}')")")"
+status2="$(text "$(call msg_status "{\"id\":$(json_str "$id")}")")"
 want2="$(printf 'acked:%s/b-default@%s\nvia:local' "$H" "$NOW")"
 case "$id" in
     m-*) idshape=1 ;;
@@ -134,8 +139,8 @@ fi
 # ── arm 3: secret-shaped body — refused, nothing written ────────────────────
 before="$(snap "$LANES/a-default/outbox")"
 tok="ghp_$(printf 'a%.0s' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36)"
-secret_args="$(jq -nc --arg body "FYI:creds:leak
-- 1506-ssb5 $tok" '{to: ["'"$H"'/b-default"], body: $body}')"
+secret_args="{\"to\":[\"$H/b-default\"],\"body\":$(json_str "FYI:creds:leak
+- 1506-ssb5 $tok")}"
 resp3="$(call msg_send "$secret_args")"
 text3="$(text "$resp3")"
 after="$(snap "$LANES/a-default/outbox")"
