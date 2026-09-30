@@ -40,6 +40,10 @@ SPECS="${TILLANDSIAS_SPEC_PATHS_SPECS:-$ROOT/openspec/specs}"
 RESOLVE_ROOT="${TILLANDSIAS_SPEC_PATHS_ROOT:-$ROOT}"
 BASELINE="${TILLANDSIAS_SPEC_PATHS_BASELINE:-$ROOT/scripts/spec-script-paths-baseline.txt}"
 
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+AFF_WHY="a spec's list of scripts is a claim about the tree; a path that does not resolve is drift an implementer would build to (815-yace)"
+AFF_REMEDY="correct the path in the spec, commit the script it describes, or for a deliberate negative mark the line <!-- spec-path-absent: ok (<reason>) -->; never grow the baseline, it is a burndown list"
+
 [ -d "$SPECS" ] || { echo "unavailable:spec-script-paths:no-spec-dir:$SPECS"; exit 2; }
 
 # One pass over every spec: `<spec>\t<path>\t<exempt 0|1>` per token, in file
@@ -100,13 +104,14 @@ $key
     fi
     unresolved=$((unresolved + 1))
     echo "violation:spec-script-paths:$spec:$path — the spec names a script that is not in the tree" >&2
+    _afford "$AFF_WHY" "$AFF_REMEDY"
 done <<EOF
 $rows
 EOF
 
 if [ "$unresolved" -gt 0 ]; then
-    echo "  REMEDY: correct the path in the spec, commit the script it describes, or — for a deliberate negative — mark the line <!-- spec-path-absent: ok (<reason>) -->. Do not add to the baseline: it is a burndown list (815-yace)." >&2
     echo "blocked:spec-script-paths:${unresolved}-unresolved"
+    _afford "$AFF_WHY" "$AFF_REMEDY"
     exit 1
 fi
 echo "ok:spec-script-paths:${resolved}-resolved,${baselined}-baselined,${exempt}-exempt"
