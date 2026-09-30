@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: bound-litmus-pins-a-specs-shape-but-never-its-enumerations
+    field: status
+    value: completed
+    ts: "2026-09-30T03:47:46Z"
+    host: yoga
+
+events:
+  - packet_id: bound-litmus-pins-a-specs-shape-but-never-its-enumerations
+    event:
+      type: completed
+      ts: "2026-09-30T03:47:46Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 15e83188c (land100, on origin/linux-next) + bash scripts/test-spec-script-paths.sh on trunk -> PASS 6/6; step 700-815-yace carries yolanda's msys STEP_SECOND_REGIME (relay-fix)
+  - packet_id: bound-litmus-pins-a-specs-shape-but-never-its-enumerations
+    event:
+      type: note
+      ts: "2026-09-30T03:47:46Z"
+      host: yoga
+      summary: |-
+        landed: check-spec-script-paths refuses unresolved script paths in active specs; pre-fix project-summarizers spec refused naming all six
