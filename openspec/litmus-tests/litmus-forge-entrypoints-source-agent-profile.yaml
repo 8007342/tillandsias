@@ -14,7 +14,7 @@ description: >
   its default is the Containerfile COPY target. Behavioural: against an
   image-shaped scratch HOME the loader exports AGENT_PROFILE and links
   /project-discipline; a missing profile warns with why and remedy; the
-  profile's set -euo pipefail does not leak. Negative control: the pre-fix
+  profile's set -euo pipefail does not leak, and a failing profile never kills the entrypoint. Negative control: the pre-fix
   block exports nothing and prints nothing.
 severity: high
 size: instant
@@ -31,4 +31,4 @@ critical_path:
   - step: "static, behavioural, loud-miss, options and negative-control arms hold"
     command: "bash scripts/test-forge-entrypoints-source-agent-profile.sh"
     timeout_ms: 60000
-    expected_behavior: "forge-entrypoints-source-agent-profile: 5 passed, 0 failed"
+    expected_behavior: "forge-entrypoints-source-agent-profile: 6 passed, 0 failed"

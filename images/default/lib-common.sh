@@ -5240,14 +5240,29 @@ show_banner() {
 load_agent_profile() {
     local p="${TILLANDSIAS_AGENT_PROFILE_SH:-${HOME:-/home/forge}/.config-overlay/mcp/agent-profile.sh}"
     if [ -f "$p" ]; then
-        # The profile opens with `set -euo pipefail`. It was never actually
-        # sourced before 1517-p83m, so letting that leak would silently turn on
-        # -e/-u for the rest of every entrypoint. Restore the caller's options.
-        local _opts
+        # The profile opens with `set -euo pipefail` and had never run in a real
+        # forge before 1517-p83m, so it must not be able to kill the entrypoint.
+        # An `if` suppresses -e for the sourced body, but NOT -u: an unset
+        # variable still exits a non-interactive shell. So probe it in a
+        # subshell first (its link step never overwrites, so running it twice
+        # is harmless), source it for real only if the probe survived, and
+        # restore the caller's options either way.
+        local _opts _rc=0
         _opts="$(set +o)"
         # shellcheck source=/dev/null
-        source "$p"
+        ( source "$p" ) >/dev/null 2>&1 || _rc=$?
+        if [ "$_rc" -eq 0 ]; then
+            # shellcheck source=/dev/null
+            if source "$p"; then
+                eval "$_opts"
+                return 0
+            fi
+            _rc=$?
+        fi
         eval "$_opts"
+        echo "[forge] WARNING: agent profile at $p failed (rc=$_rc) — AGENT_PROFILE may be unset and generic skills such as /project-discipline may not be linked; the forge continues" >&2
+        echo "[forge]   why: the profile's own set -euo pipefail turns any failing line into a failure of the whole file, and it must not take the entrypoint down with it (1517-p83m)" >&2
+        echo "[forge]   remedy: run it by hand to see the failing line: bash -x $p" >&2
         return 0
     fi
     echo "[forge] WARNING: agent profile not found at $p — AGENT_PROFILE is unset and generic skills such as /project-discipline are not linked" >&2

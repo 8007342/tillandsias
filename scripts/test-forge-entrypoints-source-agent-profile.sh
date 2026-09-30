@@ -25,6 +25,9 @@
 #                  the entrypoint that loaded it
 #   5 NEGATIVE     the pre-fix block, same scratch HOME: nothing exported,
 #                  nothing linked, NOTHING printed (the silence this row fixes)
+#   6 HOSTILE      from a `set -e` caller (as an entrypoint is), a profile that
+#                  fails mid-body, trips -u, or ends on a failure never kills
+#                  the caller; the last two print a warning naming the path
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pass=0; fail=0
@@ -94,6 +97,24 @@ if grep -qx 'AGENT_PROFILE=' <<<"$out5" && [ ! -e "$H5/home/.claude/skills/proje
 else
     bad "ARM 5: pre-fix block out='$out5' (a host with a real /opt/config-overlay would explain this)"
 fi
+
+# ── ARM 6: A FAILING PROFILE NEVER KILLS THE ENTRYPOINT ────────────────────
+# The profile opens with set -euo pipefail and had never run in a real forge.
+# Sourced bare from a set -e entrypoint, one failing line exits the forge.
+arm6=ok; why6=""
+for case in 'mid:false; export AGENT_PROFILE=x' 'nounset:echo "$TILLANDSIAS_SURELY_UNSET_1517"' 'last:export AGENT_PROFILE=y; false'; do
+    label="${case%%:*}"; body="${case#*:}"
+    H6="$W/h6-$label"; mkdir -p "$H6/.config-overlay/mcp"
+    printf '#!/usr/bin/env bash\nset -euo pipefail\n%s\n' "$body" > "$H6/.config-overlay/mcp/agent-profile.sh"
+    o6="$(env -i PATH="$PATH" HOME="$H6" bash -c "set -e; $LOADER"'; load_agent_profile; echo "survived AGENT_PROFILE=${AGENT_PROFILE:-}"' 2>"$W/err6")"
+    grep -q '^survived' <<<"$o6" || { arm6=bad; why6="$why6 $label: the caller died;"; continue; }
+    if [ "$label" != mid ]; then
+        grep -q "agent profile at $H6/.config-overlay/mcp/agent-profile.sh failed" "$W/err6" \
+            || { arm6=bad; why6="$why6 $label: no warning naming the path;"; }
+    fi
+done
+[ "$arm6" = ok ] && ok "ARM 6: a profile failing mid-body, on -u, or at its last line never kills a set -e entrypoint; a failed profile is named on stderr" \
+    || bad "ARM 6:$why6"
 
 echo "forge-entrypoints-source-agent-profile: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
