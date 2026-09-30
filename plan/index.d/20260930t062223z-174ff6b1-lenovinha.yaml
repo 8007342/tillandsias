@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-must-be-rock-solid-at-atomic-forward-upstream-and-must-refuse-to-advertise-itself-when-broken-so-agents-stop-instead-of-trusting-a-mirror-that-is-silently-failing
+    event:
+      type: progress
+      ts: "2026-09-30T06:22:23Z"
+      agent_id: linux-lenovinha-claude-20260930t062223z
+      host: lenovinha
+      summary: |
+        STEP 2 PROPOSAL (lenovinha, for review before code): what BROKEN means, in the mirror's own terms.
+        MEASURED on the live lenovinha mirror, 2026-09-30: 560 heads; 0 absent from the upstream TRACKING namespace; 1 (linux-next) one commit AHEAD of its tracking ref. That one is NOT unrelayed: a host-push through the lane updates GitHub first (pre-receive relays synchronously), but refs/remotes/origin/* only move on the next fetch. So "local ahead of tracking" is a false positive by construction, and any definition built on the tracking namespace alone would cry broken after every successful push.
+        PROPOSED DEFINITION. A mirror is BROKEN when, after the reconcile tick's fetch has refreshed the tracking refs, a local head is still ahead of or absent from upstream AND a bounded relay retry for it (N attempts, default 3, backoff) has failed. It is classified by the LAYER that failed, from the same probe vocabulary 894-scxy and probe-upstream-auth already use:
+          credential  : upstream-auth denied or agent-unauthenticated (the Vault or GitHub token), remedy: the operator re-seeds the credential or the mirror is recreated
+          transport   : the fetch or push could not reach upstream (DNS, TLS, network), remedy: restore connectivity, nothing to re-seed
+          rejection   : upstream reached and REFUSED the ref (non-fast-forward, protected branch, hook), remedy: the ref's owner reconciles it; not a mirror fault
+        Only credential and transport withdraw the advertisement (step 3); rejection is per-ref and reported, because one bad ref must not take a healthy mirror off the air.
+        PUBLISHED AS refs/tillandsias/relay-state/<ok|broken>/<class>/<n-refs>/<epoch>, the same single-ref, empty-blob, ls-remote-readable shape as upstream-auth and sync-state.
+        Open for the coordinator: N and the backoff; and whether rejection should count toward BROKEN at any threshold.
