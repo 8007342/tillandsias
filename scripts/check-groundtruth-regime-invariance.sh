@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# preflight: gate-only-decider — its live regime synthesises one answer per run (plan-current-direction-bootstrap-question, ~4 s on lenovinha 2026-09-30, 0.1 s with inference down); capping synthesis would blind it to rendering flips (1518-8p5k)
 # freshness: added 2026-08-29 linux-yoga (order 928-qm8k)
 # @trace order:928-qm8k, order:920-pxg6, order:764-p9w7
 #

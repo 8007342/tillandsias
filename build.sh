@@ -488,8 +488,9 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # declaration runs anyway); only fixtures (scripts/test-*) may declare,
     # because a check-* is a push decider the door exists to run; and the
     # full gate still runs every declared guard.
-    _go="$(sed -n '1,40{s/^# preflight: gate-only[[:space:]]*//p}' "$SCRIPT_DIR/$_p" | head -n 1)"
-    if [ -n "$(sed -n '1,40{/^# preflight: gate-only/p}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+    # (`gate-only-decider`, 1518-8p5k below, is a different token: excluded here.)
+    _go="$(sed -n '1,40{/^# preflight: gate-only-decider/d;s/^# preflight: gate-only[[:space:]]*//p}' "$SCRIPT_DIR/$_p" | head -n 1)"
+    if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/d;/^# preflight: gate-only/p}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
         _reason="$(printf '%s' "$_go" | sed 's/^[—-][[:space:]]*//')"
         case "$_p" in
             scripts/test-*)
@@ -501,6 +502,30 @@ _pf_predecide() {  # $1 = roster path, $2 = label
                 ;;
             *)
                 echo "note:preflight:$_l:gate-only-ignored — a push decider cannot be gate-only at the door; running it (1496-w25b)"
+                ;;
+        esac
+    fi
+    # ORDER 1518-8p5k (coordinator ruling 2026-09-30): A GATE-INLINE DECIDER
+    # WHOSE FLOOR IS A HOST PROPERTY MAY SAY SO, under its own token, so the
+    # door NAMES it instead of deadline-skipping it in silence. Measured: one
+    # live-synthesis case in check-groundtruth-regime-invariance costs ~4 s on
+    # lenovinha (0.1 s without inference), and capping synthesis would blind the
+    # decider to the rendering flips it exists for. Distinct from `gate-only`
+    # above, which a check-* may not use: this token is honoured only for a
+    # check-* that NO pre-push hook runs (the push lane keeps every decider it
+    # has), only with a reason, and the full gate still runs it.
+    if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/p}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+        _reason="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        case "$_p" in
+            scripts/check-*)
+                if grep -qF "${_p##*/}" "$SCRIPT_DIR"/scripts/hooks/* 2>/dev/null; then
+                    echo "note:preflight:$_l:gate-only-decider-ignored — a pre-push hook runs it, so the door must too; running it (1518-8p5k)"
+                elif [ -n "$_reason" ]; then
+                    echo "skip:preflight:$_l:gate-only — $_reason"
+                    return 10
+                else
+                    echo "note:preflight:$_l:gate-only-decider-without-a-reason — a declaration must name its cost; running it (1518-8p5k)"
+                fi
                 ;;
         esac
     fi
