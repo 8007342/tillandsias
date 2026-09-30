@@ -231,16 +231,15 @@ there.
      check-plan-binary-probe-usage, check-litmus-pin-claims,
      check-script-exec-bits, check-added-fragments-parse,
      check-scorable-obligation-added, and `cargo fmt --check`.
-     ONE COMMAND FOR THE WHOLE SEQUENCE (trims 2026-09-27, 1437-664a):
-     `scripts/relay-preflight.sh work/<order>` merges onto a scratch
-     branch, runs cycle-preflight, the deciders above plus
+     ONE COMMAND FOR THE WHOLE SEQUENCE (trims 2026-09-27, 1437-664a,
+     landed): `scripts/relay-preflight.sh work/<order>` merges onto a
+     scratch branch, runs cycle-preflight, the deciders above plus
      check-gate-step-regimes, check-added-test-is-referenced,
      check-jq-callsite-ratchet, preflight-fixtures-default-target and
      check-issue-citation-convention, `cargo fmt --check`, the touched
      fixtures, the touched crates' tests and the SCOPED covering litmus
      (`litmus-covering-specs.sh --relay-scope`, 1437-yfuh), and prints
-     ONE verdict line on stdout with per-item lines on stderr. Until it
-     lands, the list above is the hand-typed sequence. Canonical:
+     ONE verdict line on stdout with per-item lines on stderr. Canonical:
      `methodology/multi-host-development.yaml` →
      `pull_merge_cadence.relay_preflight`.
      ONE COMMAND, FOUR BEHAVIOURS (measured 2026-09-22, one row:
