@@ -68,6 +68,8 @@ methodology
 methodology-ask
 methodology-index
 metrics-log-path
+# msg: order 1506-nvqt — the fleet message bus's local lane store (no ack verb).
+msg
 next
 next-order
 # One filename, two readers, so the "available now" and "available after a

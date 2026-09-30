@@ -111,6 +111,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "methodology-ask",
     "metrics-log-path",
     "methodology-index",
+    "msg",
     "next",
     "next-order",
     "validator-surface-hash",
@@ -455,6 +456,15 @@ const USAGE: &str = concat!(
     "                                     force-push) plus .tillandsias/command-policies.yaml, which can\n",
     "                                     only tighten it. Token on stdout, why:/remedy: on stderr;\n",
     "                                     exit 0 allow, 1 deny, 4 consent.\n",
+    "           msg whoami|send|recv|list|status|lint|gc [--lane <lane>]\n",
+    "                                     ORDER 1506-nvqt. The fleet message bus's LOCAL store: send\n",
+    "                                     (body on stdin or --body-file, never argv) checks the 600-byte/\n",
+    "                                     8-line shape, refuses secret-shaped bodies and out-of-bounds\n",
+    "                                     --ttl (60..604800, default 86400), resolves --to lists and\n",
+    "                                     @groups from plan/fleet/, and prints ok:msg:queued:<id> at once;\n",
+    "                                     status reads the receipt (pending | acked:<mailbox>@<ts> +\n",
+    "                                     via:<rung> | undelivered:<reason>). There is no ack verb: the\n",
+    "                                     ack is the infrastructure's. `msg` alone prints the grammar.\n",
     "           metrics-log-path <basename> [repo-root]\n",
     "                                     ORDER 1125-92xa. Where THIS BINARY would put a metrics log:\n",
     "                                     <checkout>/.cache/metrics/<basename>, falling back to /tmp when\n",
@@ -5010,6 +5020,39 @@ fn run_policy(args: &[String]) -> ! {
     }
 }
 
+/// ORDER 1506-nvqt — `tillandsias-plan msg <verb>`. The verbs live in
+/// `msg_store::run` so every one is testable against a temp store; this shim
+/// only gathers the environment and decides whether stdin is a body.
+fn run_msg(args: &[String], index: &Path) -> ! {
+    use tillandsias_plan::msg_store;
+    let fleet_dir = root_for(index).join("plan").join("fleet");
+    let env = msg_store::MsgEnv::from_process(fleet_dir);
+    // A terminal on stdin is not a body: reading it would block an agent that
+    // forgot the pipe, so it reads as empty and the shape check refuses.
+    let wants_body = matches!(args.first().map(String::as_str), Some("send" | "lint"))
+        && !args.iter().any(|a| a == "--body-file");
+    let mut empty: &[u8] = &[];
+    let mut stdin = std::io::stdin();
+    let reader: &mut dyn std::io::Read = if wants_body && !stdin_is_terminal() {
+        &mut stdin
+    } else {
+        &mut empty
+    };
+    let o = msg_store::run(args, &env, reader, chrono::Utc::now());
+    if !o.out.is_empty() {
+        print!("{}", o.out);
+    }
+    if !o.err.is_empty() {
+        eprint!("{}", o.err);
+    }
+    std::process::exit(o.code);
+}
+
+fn stdin_is_terminal() -> bool {
+    use std::io::IsTerminal;
+    std::io::stdin().is_terminal()
+}
+
 fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
     use tillandsias_plan::branch_discipline as bd;
     use tillandsias_plan::discipline_hooks as dh;
@@ -5300,6 +5343,11 @@ fn main() {
         let answer = tillandsias_plan::session_tokens::measure(path.as_deref(), since.as_deref());
         println!("{}", answer.line());
         std::process::exit(0);
+    }
+    // ORDER 1506-nvqt — the fleet message bus's local store. Early: it reads the
+    // lane store and plan/fleet, never the ledger, and opens no socket.
+    if args[0] == "msg" {
+        run_msg(&args[1..], &index);
     }
     // ORDER 1443-w79y — branch discipline. Early, beside metrics-log-path: it
     // reads the seed and the git dir, never the ledger, so it answers on a
