@@ -26,9 +26,15 @@
 #   3 LIVENESS with the daemon stopped the new probe FAILS: still a real check
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE="${TILLANDSIAS_GIT_IMAGE:-localhost/tillandsias-git:latest}"
 command -v podman >/dev/null 2>&1 || { echo "skip:mirror-healthcheck-quiet:no-podman (named skip, not a pass)"; exit 0; }
-podman image exists "$IMAGE" 2>/dev/null || { echo "skip:mirror-healthcheck-quiet:no-image:$IMAGE (named skip, not a pass)"; exit 0; }
+# A VERSIONED image, never a mutable tag (check-container-bases). The exact
+# VERSION tag may not be built yet on a fresh bump, so fall back to the newest
+# versioned git image: this tests git-daemon's behaviour, not version freshness.
+IMAGE="${TILLANDSIAS_GIT_IMAGE:-localhost/tillandsias-git:v$(tr -d '[:space:]' < "$ROOT/VERSION")}"
+if ! podman image exists "$IMAGE" 2>/dev/null; then
+    IMAGE="$(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -E '^localhost/tillandsias-git:v[0-9]' | sort -V | tail -n 1)"
+fi
+[ -n "$IMAGE" ] || { echo "skip:mirror-healthcheck-quiet:no-versioned-git-image (named skip, not a pass)"; exit 0; }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/hc-quiet.XXXXXX")"; trap 'rm -rf "$W"' EXIT
 cp "$ROOT/images/git/healthcheck.sh" "$W/healthcheck.sh"
