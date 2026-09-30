@@ -289,6 +289,9 @@ NC='\033[0m'
 _info()  { [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${GREEN}[build]${NC} $*"; }
 _warn()  { [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${YELLOW}[build]${NC} $*"; }
 _error() { echo -e "${RED}[build]${NC} $*" >&2; }
+# ORDER 1515-iwb3 (1247-amcu): a refusal says the rule that refused and what
+# clears it, in the fleet's why/remedy shape.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
 # ── Per-phase timing (order 758-jw6v) ────────────────────────────────────────
 #
 # WHY THIS EXISTS. `./build.sh --check` is the largest fixed cost in a
@@ -1072,6 +1075,8 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
             else
                 _pf_failed=$((_pf_failed + 1))
                 cat "$_pf_tmp" >&2
+                _afford "the guard $_pf_label refused this tree; its own output is printed just above" \
+                    "fix what that output names, then confirm with the guard alone: bash $_pf_path${_pf_args:+ $_pf_args} (a full re-check is ./build.sh --preflight)"
                 echo "refused:preflight:$_pf_label" >&2
             fi
         fi
@@ -1111,6 +1116,8 @@ PFEOF
     if [ "$_pf_sum" -ne "$_pf_total" ]; then
         # A CATEGORY SET THAT DOES NOT ADD UP CANNOT BE READ AT ALL, and a
         # miscount here would hide exactly what this row exists to surface.
+        _afford "the preflight door counted a different number of verdicts than guards it enumerated, so none of its answers can be trusted; that is a defect in the door, not in your tree" \
+            "re-run ./build.sh --preflight once; if the mismatch repeats, report the counts on this line against the preflight door (1305-udgs, 1499-m9fj) and use ./build.sh --check, which runs every guard itself"
         echo "refused:preflight:accounting-mismatch: $_pf_counts sum=$_pf_sum roster=$_pf_total $_pf_iso — the door cannot account for every guard it enumerated, so no verdict it prints can be trusted" >&2
         exit 1
     fi
@@ -1121,6 +1128,8 @@ PFEOF
     _pf_unanswered=$(( _pf_deadline_n + _pf_cantrun ))
 
     if [ "$_pf_failed" -gt 0 ]; then
+        _afford "$_pf_failed guard(s) refused this tree; each is named above as refused:preflight:<guard> with its own why and remedy" \
+            "fix each named guard's complaint, then re-run ./build.sh --preflight until refused=0"
         echo "refused:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s" >&2
         exit 1
     fi
@@ -1759,7 +1768,9 @@ _run() {
         local _oom_out _oom_rc
         _oom_out="$(bash "$SCRIPT_DIR/scripts/check-oom-postmortem.sh" --since -30min 2>&1)"; _oom_rc=$?
         case "$_oom_rc" in
-            1) _error "refused:gate:oom-killed — a child died on signal $(( _run_rc - 128 )) and the kernel records an OOM kill (1176-fn2p)"
+            1) _afford "the kernel killed a gate child for memory (the OOM record below names it), so the gate proved nothing about the tree" \
+                   "free memory (stop other gates, builds or containers on this host) and re-run the gate; the tree itself needs no change"
+               _error "refused:gate:oom-killed — a child died on signal $(( _run_rc - 128 )) and the kernel records an OOM kill (1176-fn2p)"
                printf '%s\n' "$_oom_out" >&2 ;;
             0) _warn "a child died on signal $(( _run_rc - 128 )) and the kernel records NO OOM kill — this is not a memory kill (1176-fn2p)" ;;
             *) _warn "a child died on signal $(( _run_rc - 128 )); the OOM record could not be read, so the cause is UNDETERMINED, not cleared (1176-fn2p)"
@@ -2388,7 +2399,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
                     PLAN="$(resolve_plan_binary)" || PLAN=""
                     if [ -z "$PLAN" ]; then
                         echo "violation:plan-ledger-unverifiable:0" >&2
-                        echo "  no runnable tillandsias-plan resolved, so the fold was not checked (1127-waxf)" >&2
+                        echo "  why: no runnable tillandsias-plan resolved, so the fold was not checked (1127-waxf)" >&2
+                        echo "  remedy: build it (cargo build --release -p tillandsias-plan), then re-run" >&2
                         exit 2
                     fi
                     "$PLAN" check --strict-fragments' "$SCRIPT_DIR" 2>&1; then

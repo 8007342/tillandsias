@@ -71,6 +71,18 @@ if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'zz-1305-planted'; then
 else
     bad "a newly wired guard was invisible to the front door (rc=$rc)"
 fi
+# ── ARM 2b (1515-iwb3, 1247-amcu criterion 5): THE REFUSAL'S REMEDY RUNS ─────
+# The per-guard refusal must say why and name the command that reruns that
+# guard alone, and that command, EXECUTED, must reproduce the guard's own
+# verdict: a remedy that names a command which does not exist or does not
+# reach the guard would be confidently wrong.
+remedy_cmd="$(grep -A1 'the guard check-zz-1305-planted refused' <<<"$out" | sed -n 's/.*confirm with the guard alone: \(bash [^ ]*\).*/\1/p' | head -n 1)"
+if grep -q '  why: the guard check-zz-1305-planted refused this tree' <<<"$out" && [ -n "$remedy_cmd" ]; then
+    again="$($remedy_cmd 2>&1)"; again_rc=$?
+    if [ "$again_rc" -ne 0 ] && grep -q 'violation:planted-guard' <<<"$again"; then
+        ok "the refusal names its why and a remedy command that, executed ($remedy_cmd), reproduces the guard's verdict"
+    else bad "the remedy command '$remedy_cmd' did not reproduce the guard (rc=$again_rc)"; fi
+else bad "the per-guard refusal carries no why/remedy with a runnable command"; fi
 cleanup; trap - EXIT INT TERM HUP PIPE
 
 # ── ARM 2c: A GUARD THE GATE RUNS INLINE IS A ROSTER ENTRY (1499-m9fj) ──────
