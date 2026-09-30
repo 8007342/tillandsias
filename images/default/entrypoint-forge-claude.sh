@@ -12,9 +12,7 @@ source /usr/local/lib/tillandsias/lib-common.sh
 # Load agent profile configuration from config overlay.
 # This exports AGENT_PROFILE, AGENT_SUPPORTS_WEB, and related variables
 # based on the user's preferred agent (claude, opencode, opencode-web).
-if [ -f /opt/config-overlay/mcp/agent-profile.sh ]; then
-    source /opt/config-overlay/mcp/agent-profile.sh
-fi
+load_agent_profile   # lib-common; 1517-p83m (the /opt path never existed)
 
 # @trace spec:forge-git-identity-anonymization
 # Agent attribution for git commit trailers.
