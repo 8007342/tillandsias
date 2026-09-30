@@ -1,0 +1,35 @@
+packets:
+  - packet_id: the-coordinator-skill-never-names-the-claim-guards-its-routing-and-claim-steps-need
+    order: 1513-pppk
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [docs, skills, claims, fail-loud]
+    estimated_hours: 1
+    owned_files: [skills/meta-orchestration/SKILL.md]
+    title: |
+      skills/meta-orchestration never names check-claims-across-branches.sh, check-claim-confirmed.sh or check-plan-binary-current.sh, though its routing and claim steps need them; the coordinator nearly re-assigned a claimed Lua rung on 2026-09-30 for lack of the first
+    context: |
+      FOUND by 885-zvzu's audit (event on that row, trunk df7640b60): 21
+      script names the worker skills carry and meta-orchestration never names.
+      Most are worker-lane by design. Three are plausible COORDINATOR gaps, and
+      the coordinator confirmed the first bit it the same day (macuahuitl,
+      2026-09-30): check-claims-across-branches.sh, which folds sibling
+      branches before calling a packet unclaimed (1034-whsp);
+      check-claim-confirmed.sh, the post-push claim control (1370-tjme); and
+      check-plan-binary-current.sh, the named instrument for the binary the
+      skill tells the cycle to rebuild (1287-h6qn).
+      Filed as its own row rather than a next_action on 885-zvzu because that
+      row closes when land100 lands, and a next_action on a closed row goes
+      unread.
+    exit_criteria:
+      - skills/meta-orchestration/SKILL.md names each of the three at the step that needs it (routing/assignment, claim, instrument rebuild), with the verdict line to read
+      - a grep for each name in that file returns a hit
+    unscoreable: |
+      unpinnable-until-the-guard-exists: a documentation change; the future pin
+      is a skills-coverage check (scripts/check-skill-names-called-scripts.sh,
+      not yet written) comparing the scripts a skill's steps must call against
+      the ones it names.
