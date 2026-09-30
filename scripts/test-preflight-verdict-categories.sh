@@ -146,8 +146,12 @@ fi
 # instead of naming the wrong order. It red, but for the wrong reason, which is
 # the defect macbookair recorded in their own needle hours earlier. Keyed on the
 # grep pattern alone, the mutation now names what it actually did.
-_skip_ln="$(grep -nE "^[[:space:]]*(el)?if grep -qE '\^skip:'" <<<"$src" | head -1 | cut -d: -f1)"
-_cnr_ln="$(grep -nE "^[[:space:]]*(el)?if grep -qE '\^could-not-run:'" <<<"$src" | head -1 | cut -d: -f1)"
+# 1384-bqhy: the precedence now lives in ONE place, script_run::classify, which
+# the door calls through `tillandsias-plan script classify`. Keyed on the
+# check calls, not on if/else, for the reason above.
+_rs="$(cat "$ROOT/crates/tillandsias-plan/src/script_run.rs" 2>/dev/null)"
+_skip_ln="$(grep -nF 'line_starts(text, "skip:")' <<<"$_rs" | head -1 | cut -d: -f1)"
+_cnr_ln="$(grep -nF 'line_starts(text, "could-not-run:")' <<<"$_rs" | head -1 | cut -d: -f1)"
 if [ -z "$_skip_ln" ] || [ -z "$_cnr_ln" ]; then
     bad "arm8:could not find both arms to compare (skip=${_skip_ln:-none} could-not-run=${_cnr_ln:-none}) — the selector has gone stale, which is not the same as the order being right"
 elif [ "$_skip_ln" -ge "$_cnr_ln" ]; then

@@ -5432,6 +5432,22 @@ fn main() {
         return;
     }
 
+    // ORDER 1384-bqhy — `script run <file.lua>`, the ONE runner for a Lua
+    // decider, and `script classify`, the ONE classifier the gate loop and the
+    // preflight door both call. Early: neither reads the ledger.
+    if args[0] == "script" {
+        match args.get(1).map(String::as_str) {
+            Some("run") => tillandsias_plan::script_run::cli_run(&args[2..]),
+            Some("classify") => tillandsias_plan::script_run::cli_classify(&args[2..]),
+            _ => {
+                eprintln!(
+                    "usage: tillandsias-plan script run <file.lua> [--timeout <dur>] [--trace] [-- args...]\n       tillandsias-plan script classify --rc <n> [--status <s>] [--file <path>]"
+                );
+                std::process::exit(2);
+            }
+        }
+    }
+
     // ORDER 1443-8pur — the agent door. Early: it reads no ledger.
     if args[0] == "run" {
         run_run_verb(&args[1..]);

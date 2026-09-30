@@ -249,7 +249,11 @@ ser_cleanup; trap - EXIT INT TERM HUP PIPE
 # MEASURED: test-uninstall-matcher-spares-bystanders prints skip:not-darwin and
 # exits non-zero, and this door called it `refused` — 1309-fhxb's shape inside
 # the fix for 1305, written by the host that filed 1309-fhxb the same evening.
-if grep -qE "grep -qE '\^skip:'" build.sh; then
+# 1384-bqhy: the door no longer greps for ^skip: itself; it asks the one
+# classifier (script classify, whose precedence puts a named skip first) and
+# books its `skip` kind as a declared skip.
+if grep -q '_pf_kind="$(_pf_classify "$_pf_rc" "$_pf_tmp")"' build.sh \
+   && grep -qE '^[[:space:]]+skip\)$' build.sh && grep -q '_pf_declskip=$((_pf_declskip + 1)) ;;' build.sh; then
     ok "a skip: line is treated as a skip whatever the guard exits with"
 else
     bad "the door does not recognise a named skip"
