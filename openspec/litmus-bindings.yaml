@@ -715,6 +715,7 @@ specs:
   - litmus:pre-push-deletion-only
   - litmus:expire-claims-reads-the-status-write
   - litmus:a-claim-names-a-workstation
+  - litmus:claim-wip-limit-shape
   - litmus:fragment-keys-are-read
   - litmus:gate-step-prefix-allocation
   - litmus:methodology-accountability-shape

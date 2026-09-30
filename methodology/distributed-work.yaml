@@ -1621,6 +1621,9 @@ distributed_work:
       TTL to `ready`).
 
   packet_discipline:
+    # ORDER 1367-2sbc: read by tillandsias-plan set-field's claim path. The ONE
+    # place the number lives; the WIP LIMIT rule below states it in prose.
+    wip_limit: 3
     authority: >
       Operator direction 2026-09-23: "we have started a lot of plan work at the
       same time and now they're all incomplete; we might need some packet
