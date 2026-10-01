@@ -1766,6 +1766,18 @@ enforce_stamp_scope() {
     done
 
     if [[ ${#missing[@]} -gt 0 ]]; then
+        # ORDER 1521-y72e — OFFER THE PLAN-ONLY LANE BEFORE REFUSING, as the
+        # stale:* arms below do. The digest excludes plan fragments (930-i6x4),
+        # so a stamp written by a SCOPED gate stays ok:gate-fresh when a fragment
+        # lands on top, and this branch used to refuse that fragment's class
+        # (plan-ledger) without asking the lane. MEASURED on land117: every
+        # coordinator closure after a scoped land was refused here. The lane
+        # validates the whole outgoing diff and declines anything that is not
+        # plan-only, so a code class outside the scope still reaches the refusal
+        # below (test-gate-stamp-scope.sh case 9).
+        if attempt_plan_only_lane; then
+            exit 0
+        fi
         local missing_csv
         missing_csv="$(printf '%s,' "${missing[@]}")"; missing_csv="${missing_csv%,}"
         refuse "the gate stamp is scoped to '$scope' but this push also changes: $missing_csv" \
