@@ -206,4 +206,37 @@ printf '%s' "$out" | grep -q 'plan-only lane clean' || fail "case 7: lane did no
 [ "$before" != "$after" ] || fail "case 7: lane accepted but the remote did not advance"
 echo "ok: case 7 — the 668-2xeh plan-only lane is preserved intact"
 
-echo "PASS: gate-stamp-scope (8/8)"
+
+# ── case 8: a FRESH stamp scoped to code still admits a plan-only push ────────
+# ORDER 1521-y72e. The digest excludes plan fragments (930-i6x4), so a stamp
+# written after a scoped gate stays ok:gate-fresh when a fragment is added on
+# top — and that arm used to run only the scope check, which refused the
+# fragment's class (plan-ledger) without ever offering the plan-only lane that
+# the stale arms offer. MEASURED on land117 (2026-10-01): the coordinator's
+# closing fragment after a build-scripts-scoped land was refused this way.
+D="$WORK/c8"; make_repo "$D"
+before="$(remote_head "$D")"
+out="$(cd "$D/work" && issue_pass_token && bash scripts/gate-stamp.sh write --scope rust --dispatch check >/dev/null && printf 'packets: []\n' > plan/index.d/close.yaml && git add -A && git commit -qm close >/dev/null 2>&1 && TILLANDSIAS_PLAN_BIN="$LANE_PLAN_BIN" git push origin main 2>&1)"
+rc=$?
+after="$(remote_head "$D")"
+[ "$rc" = 0 ] || fail "case 8: a plan-only push was refused under a fresh scoped stamp: $out"
+grep -q 'plan-only lane clean' <<<"$out" || fail "case 8: the plan-only lane did not accept it: $out"
+[ "$before" != "$after" ] || fail "case 8: accepted but the remote did not advance"
+echo "ok: case 8 — a fresh stamp scoped to rust admits a plan-only push through the plan-only lane"
+
+# ── case 9 (NEGATIVE CONTROL for case 8): the lane does not launder a class ───
+# Same fresh rust-scoped stamp, but the stamped tree carries a README change
+# (class docs) the scope never validated, plus a fragment. The lane must
+# decline (the diff is not plan-only) and the scope refusal must stand.
+D="$WORK/c9"; make_repo "$D"
+before="$(remote_head "$D")"
+out="$(cd "$D/work" && printf 'edited\n' >> README.md && git add -A && git commit -qm readme >/dev/null 2>&1 && issue_pass_token && bash scripts/gate-stamp.sh write --scope rust --dispatch check >/dev/null && printf 'packets: []\n' > plan/index.d/close.yaml && git add -A && git commit -qm close >/dev/null 2>&1 && TILLANDSIAS_PLAN_BIN="$LANE_PLAN_BIN" git push origin main 2>&1)"
+rc=$?
+after="$(remote_head "$D")"
+[ "$rc" != 0 ] || fail "case 9: an out-of-scope README change rode a fragment through: $out"
+grep -q "scoped to .rust." <<<"$out" || fail "case 9: refusal did not name the scope: $out"
+grep -q 'changes: docs' <<<"$out" || fail "case 9: refusal did not name the missing class (docs): $out"
+[ "$before" = "$after" ] || fail "case 9: remote advanced despite the refusal"
+echo "ok: case 9 — the plan-only lane does not carry an out-of-scope class past a fresh scoped stamp"
+
+echo "PASS: gate-stamp-scope (10/10)"
