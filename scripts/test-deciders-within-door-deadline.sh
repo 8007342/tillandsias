@@ -25,6 +25,8 @@ DECIDERS="check-bash-dialect check-terminology check-all-fragments-intact check-
 # stop, so its declaration is ASSERTED below and removing it turns this red.
 DECLARED="check-groundtruth-regime-invariance"
 command -v setsid >/dev/null 2>&1 && SETSID=setsid || SETSID=""
+PLAN="$(. scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || PLAN=""
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
 fail=0
 n=0
 for d in $DECIDERS; do
@@ -32,7 +34,12 @@ for d in $DECIDERS; do
     t0=$SECONDS
     rc=0
     # shellcheck disable=SC2086
-    timeout -k 1 "$DEADLINE" $SETSID bash "scripts/$d.sh" >/dev/null 2>&1 </dev/null || rc=$?
+    # 1384-ddua: a ported decider is scripts/lua/<d>.lua on the one runner.
+    if [ -f "scripts/lua/$d.lua" ]; then
+        timeout -k 1 "$DEADLINE" $SETSID "$PLAN" script run "scripts/lua/$d.lua" >/dev/null 2>&1 </dev/null || rc=$?
+    else
+        timeout -k 1 "$DEADLINE" $SETSID bash "scripts/$d.sh" >/dev/null 2>&1 </dev/null || rc=$?
+    fi
     took=$((SECONDS - t0))
     if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
         echo "FAIL: $d outlived the ${DEADLINE}s door deadline (${took}s) — the door would skip it, not refuse" >&2

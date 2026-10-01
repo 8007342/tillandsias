@@ -777,7 +777,7 @@ pub const CACHEABLE_STDLIB_GLOBALS: &[&str] = &[
 /// would make every absolute path "inside the repository", so an unlocatable
 /// root is a named refusal at `fs.read` time, never a guess. `/` itself is
 /// never accepted as a root, whichever route proposed it.
-fn find_repo_root() -> Result<PathBuf, String> {
+pub(crate) fn find_repo_root() -> Result<PathBuf, String> {
     let root = locate_repo_root().ok_or_else(|| {
         "fs.read: refused — no repository root found (set TILLANDSIAS_REPO_ROOT, or run \
          inside a checkout containing plan/index.yaml or .git)"

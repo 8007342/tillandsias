@@ -260,7 +260,7 @@ verification:
           exit-code guard cannot catch it; the day-boundary fixture reproduced
           exactly that on 2026-09-02 before its reconstruction used BSD -r first.
         enforced_by: >
-          scripts/check-bash-dialect.sh refuses GNU-date and (since 886-yizb)
+          scripts/lua/check-bash-dialect.lua refuses GNU-date and (since 886-yizb)
           GNU-du forms in shared scripts; wired into ./build.sh --check.
       - id: measure_a_host_against_itself
         kind: judgment

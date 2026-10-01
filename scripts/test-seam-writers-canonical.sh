@@ -17,10 +17,20 @@
 # would pass a test that never fed it one.
 set -u
 
-CHECK="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-seam-writers-canonical.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# 1384-ddua: the checker is a Lua decider on the one runner.
+CHECK="$ROOT/scripts/lua/check-seam-writers-canonical.lua"
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || PLAN=""
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
+if [ -z "$PLAN" ] || ! grep -qx script <<<"$("$PLAN" capabilities 2>/dev/null)"; then
+    echo "could-not-run:seam-writers-canonical-fixture:no-script-runner — build it: cargo build --release -p tillandsias-plan"
+    exit 3
+fi
 VAR="TILLANDSIAS_PODMAN_BIN"
 CANON="podman_seam_lock"
-tmp="$(mktemp -d)"
+# Scratch INSIDE the checkout: the runner's fs is repo-rooted (1384-ddua).
+mkdir -p "$ROOT/target/plan-scratch"
+tmp="$(mktemp -d "$ROOT/target/plan-scratch/seam-writers.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 fails=0
 
@@ -39,7 +49,7 @@ writer_file() {  # $1=path  $2=extra line
 
 # ARM 1 — a writer with NO canonical reference is refused and NAMED.
 a1="$tmp/a1/src"; writer_file "$a1/lonely.rs" ""
-out="$(bash "$CHECK" "$a1" "$VAR" "$CANON" 2>&1)"; rc=$?
+out="$("$PLAN" script run "$CHECK" "$a1" "$VAR" "$CANON" 2>&1)"; rc=$?
 if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q "refused:seam-writer-uncanonical:.*lonely.rs"; then
     pass "ARM 1: an uncanonical writer is refused and named"
 else
@@ -51,7 +61,7 @@ fi
 a2="$tmp/a2/src"
 writer_file "$a2/main.rs" "fn l() { let _g = crate::runtime_assets::${CANON}(); }"
 writer_file "$a2/accel_probe.rs" 'fn l() { static SEAM_LOCK: Mutex<()> = Mutex::new(()); let _g = SEAM_LOCK.lock(); }'
-out="$(bash "$CHECK" "$a2" "$VAR" "$CANON" 2>&1)"; rc=$?
+out="$("$PLAN" script run "$CHECK" "$a2" "$VAR" "$CANON" 2>&1)"; rc=$?
 if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q "accel_probe.rs" \
    && ! printf '%s' "$out" | grep -q "refused:seam-writer-uncanonical:.*main.rs"; then
     pass "ARM 2: the private-mutex module is named, the canonical one is not"
@@ -61,7 +71,7 @@ fi
 
 # ARM 3a — a real CODE reference satisfies the check.
 a3="$tmp/a3/src"; writer_file "$a3/ok.rs" "fn l() { let _g = crate::runtime_assets::${CANON}(); }"
-out="$(bash "$CHECK" "$a3" "$VAR" "$CANON" 2>&1)"; rc=$?
+out="$("$PLAN" script run "$CHECK" "$a3" "$VAR" "$CANON" 2>&1)"; rc=$?
 if [ $rc -eq 0 ] && printf '%s' "$out" | grep -q "^ok:seam-writers-canonical:1$"; then
     pass "ARM 3a: a real code reference passes"
 else
@@ -70,7 +80,7 @@ fi
 
 # ARM 3b — the SAME symbol, present only inside a comment, must NOT satisfy it.
 a3b="$tmp/a3b/src"; writer_file "$a3b/commented.rs" "// serialised by ${CANON}, honest"
-out="$(bash "$CHECK" "$a3b" "$VAR" "$CANON" 2>&1)"; rc=$?
+out="$("$PLAN" script run "$CHECK" "$a3b" "$VAR" "$CANON" 2>&1)"; rc=$?
 if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q "refused:seam-writer-uncanonical:.*commented.rs"; then
     pass "ARM 3b: a comment-only reference does NOT satisfy the check"
 else
@@ -79,7 +89,7 @@ fi
 
 # ARM 4 — POSITIVE CONTROL. No writers at all must refuse, never report ok:0.
 a4="$tmp/a4/src"; mkdir -p "$a4"; echo 'fn nothing() {}' > "$a4/empty.rs"
-out="$(bash "$CHECK" "$a4" "$VAR" "$CANON" 2>&1)"; rc=$?
+out="$("$PLAN" script run "$CHECK" "$a4" "$VAR" "$CANON" 2>&1)"; rc=$?
 if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q "refused:seam-var-has-no-writers:$VAR"; then
     pass "ARM 4: a vanished target refuses rather than passing vacuously"
 else
@@ -123,7 +133,7 @@ done >> "$a5/large.rs"
 # sabotaged check for exactly that reason — it was asserting cardinality without
 # ever reaching the code path that breaks it. `bash -o pipefail` stands in for
 # the future caller who adds the option, or sources this from a stricter script.
-out="$(bash -o pipefail "$CHECK" "$a5" "$VAR" "$CANON" 2>&1)"; rc=$?
+out="$(bash -o pipefail -c '"$0" script run "$@"' "$PLAN" "$CHECK" "$a5" "$VAR" "$CANON" 2>&1)"; rc=$?
 if [ $rc -eq 0 ] && printf '%s' "$out" | grep -q "^ok:seam-writers-canonical:3$"; then
     pass "ARM 5: all three writers counted under pipefail, the large one included"
 else

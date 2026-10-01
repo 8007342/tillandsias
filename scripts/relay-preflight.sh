@@ -281,7 +281,19 @@ fi
 _run_decider() { # name -> sets DEC_OUT, returns rc
     local name="$1"
     case "$name" in
-        check-bash-dialect) _cap bash "$SELF_DIR/check-bash-dialect.sh" ;;
+        # 1384-ddua: a Lua decider through the one runner. No runner is a
+        # loud could-not-run (rc 3), which this phase refuses like any rc.
+        check-bash-dialect)
+            local _lb=""
+            command -v resolve_plan_binary >/dev/null 2>&1 && _lb="$(resolve_plan_binary 2>/dev/null || true)"
+            if [ -z "$_lb" ] || ! grep -qx script <<<"$("$_lb" capabilities 2>/dev/null)"; then
+                DEC_OUT="could-not-run:check-bash-dialect:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+                return 3
+            fi
+            # The runner finds its repo root from TILLANDSIAS_REPO_ROOT, then
+            # PROJECT_ROOT, then cwd; a caller (the litmus runner) may export
+            # PROJECT_ROOT for another tree, so pin THIS one.
+            _cap env TILLANDSIAS_REPO_ROOT="$ROOT" "$_lb" script run "$SELF_DIR/lua/check-bash-dialect.lua" ;;
         check-sigpipe-verdict-pipelines-added) DEC_OUT="$(TILLANDSIAS_SIGPIPE_BASE="$BASE" bash "$SELF_DIR/check-sigpipe-verdict-pipelines-added.sh" 2>&1)"; return $? ;;
         check-plan-binary-probe-usage) _cap bash "$SELF_DIR/check-plan-binary-probe-usage.sh" ;;
         check-litmus-pin-claims) _cap bash "$SELF_DIR/check-litmus-pin-claims.sh" ;;

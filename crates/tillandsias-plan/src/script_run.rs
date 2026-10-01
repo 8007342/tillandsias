@@ -155,6 +155,10 @@ pub fn parse_duration(s: &str) -> Option<Duration> {
 pub struct Header {
     pub cacheable: bool,
     pub env: Vec<String>,
+    /// `-- @read-env NAME ...`: env vars whose VALUE (a file or directory)
+    /// widens fs.read / fs.walk beyond the repo, read-only, Observing only
+    /// (1384-ddua, coordinator ruling 2026-09-30).
+    pub read_env: Vec<String>,
 }
 
 pub fn parse_header(src: &str) -> Header {
@@ -168,6 +172,8 @@ pub fn parse_header(src: &str) -> Header {
         let c = c.trim();
         if let Some(v) = c.strip_prefix("@class") {
             h.cacheable = v.trim() == "cacheable";
+        } else if let Some(v) = c.strip_prefix("@read-env") {
+            h.read_env.extend(v.split_whitespace().map(str::to_string));
         } else if let Some(v) = c.strip_prefix("@env") {
             h.env.extend(v.split_whitespace().map(str::to_string));
         }
@@ -194,6 +200,38 @@ fn verdict_value_str(v: &LuaValue) -> Option<String> {
         LuaValue::Boolean(b) => Some(b.to_string()),
         other => Some(format!("<{}>", other.type_name())),
     }
+}
+
+/// The canonical read roots this run widened to, for the trace and the timing
+/// record (1384-ddua: "the run trace records every widened read root").
+static READ_ROOTS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Regular files under `base`, recursively, relative to it, symlinks not followed.
+fn walk_files(base: &std::path::Path, suffix: Option<&str>) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut stack = vec![base.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            let Ok(ft) = e.file_type() else { continue };
+            let p = e.path();
+            if ft.is_dir() {
+                stack.push(p);
+            } else if ft.is_file() {
+                let rel = p
+                    .strip_prefix(base)
+                    .unwrap_or(&p)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                if suffix.is_none_or(|x| rel.ends_with(x)) {
+                    found.push(rel);
+                }
+            }
+        }
+    }
+    found
 }
 
 /// Register verdict, log, out, text and (observing only) env.
@@ -256,6 +294,32 @@ fn register(
             })?,
         )?;
     }
+    // verdict.emit(line, code, detail?): a LEGACY verdict line with its own
+    // exit code, for a byte-identical port whose grammar predates the house
+    // mapping (check-bash-dialect prints `blocked:…` with exit 1). The line
+    // must still start with a known kind, so classify reads it as before.
+    {
+        let slot = slot.clone();
+        verdict.set(
+            "emit",
+            lua.create_function(move |_, (line, code, detail): (String, i32, LuaValue)| {
+                let kind_ok = ["ok:", "skip:", "refused:", "blocked:", "could-not-run:", "violation:"]
+                    .iter()
+                    .any(|k| line.starts_with(k));
+                if !kind_ok || !(0..=3).contains(&code) {
+                    return Err(LuaError::RuntimeError(format!(
+                        "verdict.emit: '{line}' with code {code} — the line must start with ok:/skip:/refused:/blocked:/could-not-run:/violation: and the code be 0-3"
+                    )));
+                }
+                slot.lock().unwrap().get_or_insert(Verdict {
+                    line,
+                    detail: verdict_value_str(&detail),
+                    code,
+                });
+                Err::<(), _>(LuaError::RuntimeError(VERDICT_EXIT.to_string()))
+            })?,
+        )?;
+    }
     // verdict.classify{rc=, status=, text=} -> kind token: THE classifier.
     verdict.set(
         "classify",
@@ -281,6 +345,15 @@ fn register(
             })?,
         )?;
     }
+    // log.raw(s): one unprefixed stderr line, for a port whose diagnostics
+    // are part of its contract (1384-ddua).
+    log.set(
+        "raw",
+        lua.create_function(|_, msg: String| {
+            eprintln!("{msg}");
+            Ok(())
+        })?,
+    )?;
     g.set("log", log)?;
 
     // out.line(s): one line on stdout, for a decider that reports (note: lines).
@@ -331,11 +404,229 @@ fn register(
         "contains",
         lua.create_function(|_, (s, p): (String, String)| Ok(s.contains(&p)))?,
     )?;
+    // ORDER 1384-ddua — the operations the pilot deciders reached for grep,
+    // sed and wc for, as pure functions over strings. The regex engine is
+    // Rust's on every host: no `\b`-on-BSD silence, no GNU/BSD flag split.
+    // Compiled ONCE per pattern per run: the awk-state-machine ports call
+    // is_match per line, and recompiling made check-bash-dialect.lua miss the
+    // door's 5 s deadline that the .sh met (1384-ddua).
+    let re_of = |name: &'static str, pat: &str| -> LuaResult<regex::Regex> {
+        thread_local! {
+            static CACHE: std::cell::RefCell<std::collections::HashMap<String, regex::Regex>> =
+                std::cell::RefCell::new(std::collections::HashMap::new());
+        }
+        CACHE.with(|c| {
+            if let Some(r) = c.borrow().get(pat) {
+                return Ok(r.clone());
+            }
+            let r = regex::Regex::new(pat)
+                .map_err(|e| LuaError::RuntimeError(format!("text.{name}: bad regex: {e}")))?;
+            c.borrow_mut().insert(pat.to_string(), r.clone());
+            Ok(r)
+        })
+    };
+    text.set(
+        "escape",
+        lua.create_function(|_, s: String| Ok(regex::escape(&s)))?,
+    )?;
+    // count_lines(s, re): lines of s matching re — `grep -c` semantics, an
+    // integer rather than an exit status, so there is no consumer to SIGPIPE.
+    text.set(
+        "count_lines",
+        lua.create_function(move |_, (s, pat): (String, String)| {
+            let re = re_of("count_lines", &pat)?;
+            Ok(s.lines().filter(|l| re.is_match(l)).count() as i64)
+        })?,
+    )?;
+    // first_match(s, re, {lines = n}?): the first matching line (within the
+    // first n lines when given), or nil.
+    text.set(
+        "first_match",
+        lua.create_function(
+            move |_, (s, pat, opts): (String, String, Option<LuaTable>)| {
+                let re = re_of("first_match", &pat)?;
+                let limit = match opts {
+                    Some(o) => o.get::<Option<usize>>("lines")?.unwrap_or(usize::MAX),
+                    None => usize::MAX,
+                };
+                Ok(s.lines()
+                    .take(limit)
+                    .find(|l| re.is_match(l))
+                    .map(str::to_string))
+            },
+        )?,
+    )?;
+    text.set(
+        "is_match",
+        lua.create_function(move |_, (s, pat): (String, String)| {
+            Ok(re_of("is_match", &pat)?.is_match(&s))
+        })?,
+    )?;
+    // captures_all(s, re): capture group 1 of every non-overlapping match, in order.
+    text.set(
+        "captures_all",
+        lua.create_function(move |lua, (s, pat): (String, String)| {
+            let re = re_of("captures_all", &pat)?;
+            let t = lua.create_table()?;
+            for (i, c) in re.captures_iter(&s).enumerate() {
+                t.set(i + 1, c.get(1).map(|m| m.as_str()).unwrap_or(""))?;
+            }
+            Ok(t)
+        })?,
+    )?;
+    // find(s, re): 1-based inclusive (start, end) of the first match, or nil —
+    // awk's RSTART/RLENGTH, for ports of awk state machines.
+    text.set(
+        "find",
+        lua.create_function(move |_, (s, pat): (String, String)| {
+            Ok(match re_of("find", &pat)?.find(&s) {
+                Some(m) => (Some(m.start() as i64 + 1), Some(m.end() as i64)),
+                None => (None, None),
+            })
+        })?,
+    )?;
+    // strip_line_comments(s, marker): each line cut at the first marker —
+    // `sed 's://.*::'` semantics, without the fork.
+    text.set(
+        "strip_line_comments",
+        lua.create_function(|_, (s, marker): (String, String)| {
+            if marker.is_empty() {
+                return Err(LuaError::RuntimeError(
+                    "text.strip_line_comments: empty marker".into(),
+                ));
+            }
+            let mut out = String::with_capacity(s.len());
+            for l in s.split_inclusive('\n') {
+                match l.find(marker.as_str()) {
+                    Some(i) => {
+                        out.push_str(&l[..i]);
+                        if l.ends_with('\n') {
+                            out.push('\n');
+                        }
+                    }
+                    None => out.push_str(l),
+                }
+            }
+            Ok(out)
+        })?,
+    )?;
     g.set("text", text)?;
 
     // env.get(name): DECLARED names only (`-- @env NAME ...`); os.getenv stays
     // gone. Observing only — an environment read is not pure.
     if !header.cacheable {
+        // fs.walk(dir, {suffix = ".rs"}?): every regular FILE under dir,
+        // recursively, as repo-relative paths in byte order; symlinks are not
+        // followed (GNU `grep -r` semantics, which BSD differs from: 1087-h2z9).
+        // OBSERVING ONLY: a directory listing is not content-addressed, so a
+        // cacheable script could not be memoised soundly over it.
+        // ORDER 1384-ddua — DECLARED READ ROOTS. Each `-- @read-env NAME`
+        // whose value is set becomes one canonical (realpath) root that fs.read
+        // and fs.walk may read under, read-only. A path is judged by ITS OWN
+        // realpath, so a symlink inside a root that points outside it is
+        // refused. Nothing undeclared widens anything: an absolute path outside
+        // the repo and every root falls through to lua_predicate's repo-rooted
+        // fs.read, which refuses it.
+        let roots: Vec<std::path::PathBuf> = header
+            .read_env
+            .iter()
+            .filter_map(std::env::var_os)
+            .filter(|v| !v.is_empty())
+            .filter_map(|v| std::fs::canonicalize(v).ok())
+            .collect();
+        if let Ok(mut r) = READ_ROOTS.lock() {
+            *r = roots.iter().map(|p| p.display().to_string()).collect();
+        }
+        let within = {
+            let roots = roots.clone();
+            move |p: &str| -> Option<std::path::PathBuf> {
+                let c = std::fs::canonicalize(p).ok()?;
+                roots.iter().any(|r| c.starts_with(r)).then_some(c)
+            }
+        };
+        if let Ok(fs_t) = g.get::<LuaTable>("fs") {
+            if !roots.is_empty() {
+                let orig: LuaFunction = fs_t.get("read")?;
+                let within = within.clone();
+                fs_t.set(
+                    "read",
+                    lua.create_function(move |_, p: String| {
+                        if std::path::Path::new(&p).is_absolute()
+                            && let Some(c) = within(&p)
+                        {
+                            return std::fs::read_to_string(&c)
+                                .map_err(|e| LuaError::RuntimeError(format!("fs.read: {p}: {e}")));
+                        }
+                        orig.call::<String>(p)
+                    })?,
+                )?;
+            }
+            let within = within.clone();
+            fs_t.set(
+                "walk",
+                lua.create_function(move |lua, (dir, opts): (String, Option<LuaTable>)| {
+                    if std::path::Path::new(&dir).is_absolute() {
+                        // An absolute path is walkable when its realpath is inside
+                        // the repo (a fixture's target/plan-scratch) or inside a
+                        // declared read root; anywhere else is refused.
+                        let in_repo = crate::lua_predicate::find_repo_root()
+                            .ok()
+                            .and_then(|r| std::fs::canonicalize(&dir).ok().filter(|c| c.starts_with(&r)));
+                        let Some(base) = in_repo.or_else(|| within(&dir)) else {
+                            return Err(LuaError::RuntimeError(format!(
+                                "fs.walk: '{dir}' is outside the repo and every declared read root (-- @read-env)"
+                            )));
+                        };
+                        let suffix: Option<String> = match opts {
+                            Some(o) => o.get("suffix")?,
+                            None => None,
+                        };
+                        let mut found = walk_files(&base, suffix.as_deref());
+                        found.sort();
+                        let t = lua.create_table()?;
+                        for (i, f) in found.into_iter().enumerate() {
+                            // prefixed by the dir AS THE CALLER SPELLED IT, so a
+                            // port prints the same paths the shell form did.
+                            t.set(i + 1, format!("{}/{}", dir.trim_end_matches('/'), f))?;
+                        }
+                        return Ok(t);
+                    }
+                    let root = crate::lua_predicate::find_repo_root().map_err(LuaError::RuntimeError)?;
+                    if dir.starts_with('/') || dir.split('/').any(|c| c == "..") {
+                        return Err(LuaError::RuntimeError(format!(
+                            "fs.walk: '{dir}' must be repo-relative, without '..'"
+                        )));
+                    }
+                    let suffix: Option<String> = match opts {
+                        Some(o) => o.get("suffix")?,
+                        None => None,
+                    };
+                    let mut found: Vec<String> = Vec::new();
+                    let mut stack = vec![root.join(&dir)];
+                    while let Some(d) = stack.pop() {
+                        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+                        for e in rd.flatten() {
+                            let Ok(ft) = e.file_type() else { continue };
+                            let p = e.path();
+                            if ft.is_dir() {
+                                stack.push(p);
+                            } else if ft.is_file() {
+                                let rel = p.strip_prefix(&root).unwrap_or(&p).to_string_lossy().replace('\\', "/");
+                                if suffix.as_deref().is_none_or(|x| rel.ends_with(x)) {
+                                    found.push(rel);
+                                }
+                            }
+                        }
+                    }
+                    found.sort();
+                    let t = lua.create_table()?;
+                    for (i, f) in found.into_iter().enumerate() {
+                        t.set(i + 1, f)?;
+                    }
+                    Ok(t)
+                })?,
+            )?;
+        }
         let env = lua.create_table()?;
         let declared = header.env.clone();
         env.set(
@@ -426,6 +717,7 @@ fn emit_timing(name: &str, line: &str, code: i32, elapsed: Duration) {
         "verdict": line,
         "exit": code,
         "elapsed_ms": elapsed.as_millis() as u64,
+        "read_roots": READ_ROOTS.lock().map(|r| r.clone()).unwrap_or_default(),
         "ts_ms": std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)

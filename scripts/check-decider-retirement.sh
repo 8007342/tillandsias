@@ -74,12 +74,18 @@ trap 'rm -rf "$WORK"' EXIT
 
 # run_decider <name>: stdout to $WORK/<name>.out, stderr to $WORK/<name>.err.
 # Each decider is driven through its OWN root seam, never by editing it.
+# 1384-ddua: check-bash-dialect is a Lua decider on the one runner.
+_dr_plan="$(cd "$SELF_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _dr_plan=""
+case "$_dr_plan" in ./*) _dr_plan="$SELF_ROOT/${_dr_plan#./}" ;; esac
+
 run_decider() {
     local name="$1" script="$SELF_ROOT/scripts/$1.sh"
+    [ -f "$SELF_ROOT/scripts/lua/$1.lua" ] && script="$SELF_ROOT/scripts/lua/$1.lua"
     [ -f "$script" ] || { echo "could-not-run:decider-retirement:missing-decider:$name" > "$WORK/$name.out"; : > "$WORK/$name.err"; return; }
     case "$name" in
         check-bash-dialect)
-            ( cd "$ROOT" && bash "$script" ) > "$WORK/$name.out" 2> "$WORK/$name.err" ;;
+            if [ -z "$_dr_plan" ]; then echo "could-not-run:decider-retirement:no-script-runner:$name" > "$WORK/$name.out"; : > "$WORK/$name.err"; return; fi
+            ( cd "$ROOT" && TILLANDSIAS_REPO_ROOT="$ROOT" "$_dr_plan" script run "$script" ) > "$WORK/$name.out" 2> "$WORK/$name.err" ;;
         check-jq-callsite-ratchet)
             bash "$script" --root "$ROOT" > "$WORK/$name.out" 2> "$WORK/$name.err" ;;
         check-sigpipe-verdict-pipelines-added)

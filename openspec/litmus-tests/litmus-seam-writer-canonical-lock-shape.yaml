@@ -3,7 +3,7 @@
 name: litmus:seam-writer-canonical-lock-shape
 spec: ci-release
 description: >
-  Pin that scripts/check-seam-writers-canonical.sh can still tell a file that
+  Pin that scripts/lua/check-seam-writers-canonical.lua can still tell a file that
   references the canonical seam lock from one that only mentions it in a
   comment, and that it refuses rather than passing vacuously when the target
   variable has no writers at all.
@@ -20,7 +20,7 @@ size: instant
 phase: pre-build
 
 preconditions:
-  - workspace contains scripts/check-seam-writers-canonical.sh
+  - workspace contains scripts/lua/check-seam-writers-canonical.lua (1384-ddua port of the .sh)
   - workspace contains scripts/test-seam-writers-canonical.sh
 
 critical_path:
@@ -35,8 +35,8 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok:seam-writers-canonical-fixture:7"
 
-  - step: "scripts/check-seam-writers-canonical.sh refuses a crate whose seam var has no writers, rather than reporting ok:0"
-    command: "bash scripts/check-seam-writers-canonical.sh crates/tillandsias-plan TILLANDSIAS_PODMAN_BIN podman_seam_lock 2>&1 | tail -1"
+  - step: "scripts/lua/check-seam-writers-canonical.lua refuses a crate whose seam var has no writers, rather than reporting ok:0"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/check-seam-writers-canonical.lua crates/tillandsias-plan TILLANDSIAS_PODMAN_BIN podman_seam_lock"
     timeout_ms: 30000
     expected_behavior: "refused:seam-var-has-no-writers:TILLANDSIAS_PODMAN_BIN"
 
