@@ -28,7 +28,7 @@ W="$(mktemp -d "$_tmpbase/relay-preflight.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 
 pass=0
-total=7
+total=8
 ok()  { echo "ok:   $1"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $1: $2"; }
 
@@ -340,6 +340,28 @@ if [ "$RC" != 0 ] && [ "$OUT" = "refused:relay-preflight:fixtures:test-zz-b" ]; 
 else
     bad "arm7" "rc=$RC out=[$OUT] (pre-fix shape: rc=0 and an ok: verdict — test-zz-b never ran)"
     printf '%s\n' "$ERR" | grep -E 'fixture:' | sed 's/^/    err: /' | head -10
+fi
+
+# ── arm 8: a ref that DELETES a decider and repoints the tool (1522-ey4h) ──
+# The pre-merge tool kept running its own decider list after the merge and
+# refused at the deleted script ("No such file or directory"). The merged copy
+# of the tool must take over, so the run reaches ok: and says it re-executed.
+CLONE_H="$W/clone-h"
+_clone "$BASE_BARE" "$CLONE_H"
+git -C "$CLONE_H" "${GC[@]}" checkout -qb work/port
+git -C "$CLONE_H" "${GC[@]}" rm -q scripts/check-no-python-scripts.sh
+sed -i.bak -e 's/ check-no-python-scripts / /' -e '/^        check-no-python-scripts) /d' "$CLONE_H/scripts/relay-preflight.sh"
+rm -f "$CLONE_H/scripts/relay-preflight.sh.bak"
+git -C "$CLONE_H" "${GC[@]}" add -A
+git -C "$CLONE_H" "${GC[@]}" commit -qm "port: retire check-no-python-scripts and repoint the tool"
+git -C "$CLONE_H" "${GC[@]}" checkout -q linux-next
+_run "$CLONE_H" work/port --base origin/linux-next
+if [ "$RC" = 0 ] && grep -q '^ok:relay-preflight:' <<<"$OUT" && grep -q '^item: reexec:merged-copy ok' <<<"$ERR" \
+   && ! grep -q 'No such file' <<<"$ERR"; then
+    ok "arm8: a ref deleting a decider passes; the merged copy of the tool re-executed and ran (1522-ey4h)"
+else
+    bad "arm8" "rc=$RC out=[$OUT]"
+    printf '%s\n' "$ERR" | grep -vE '^item: .* ok ' | sed 's/^/    err: /' | head -12
 fi
 
 [ "$pass" = "$total" ] && echo "ok:relay-preflight:$pass/$total" || echo "fail:relay-preflight:$pass/$total"
