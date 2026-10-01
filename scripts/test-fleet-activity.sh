@@ -53,8 +53,25 @@ esac
 
 # ── ARM 2: a shared provider is a BUCKET, never a host row ───────────────────
 # The live repo carries bulloncito@gmail.com, which is at least macbookair.
-out="$(timeout 120 bash "$CHECK" --since 24.hours 2>&1)"
-if printf '%s' "$out" | grep -q 'UNATTRIBUTED BUCKET'; then
+# THE WINDOW IS DERIVED, NEVER FIXED (relay-fix, coordinator 2026-10-01). It
+# was `--since 24.hours`, which held only while a shared-provider host had
+# committed in the last day: with yolanda and macbookair offline overnight,
+# the newest such commit (325f1619a) aged past 24 h and this arm turned
+# EVERY ./build.sh --check red. The window now reaches back to the newest
+# shared-provider commit plus an hour, and an arm with no such commit in
+# all of history is a named skip, not a pass and not a red.
+_shared_ct="$(git -C "$ROOT" log -1 --format=%ct --author='@gmail\.com' 2>/dev/null)"
+case "$_shared_ct" in
+    ''|*[!0-9]*)
+        echo "skip: ARM 2 — no shared-provider (@gmail.com) author anywhere in this checkout's history"
+        out="" ;;
+    *)
+        _win=$(( $(date +%s) - _shared_ct + 3600 ))
+        out="$(timeout 120 bash "$CHECK" --since "${_win}.seconds" 2>&1)" ;;
+esac
+if [ -z "$out" ]; then
+    :   # skipped above, by name
+elif grep -q 'UNATTRIBUTED BUCKET' <<<"$out"; then
     ok "ARM 2: an address naming no host is reported as an unattributed bucket"
 else
     bad "ARM 2: no bucket row in a window known to contain a shared-provider author"
@@ -76,7 +93,7 @@ if printf '%s' "$out" | grep -q 'MacBook-Neo'; then
         ok "ARM 4: a .local host address resolves to a HOST row, not a bucket"
     fi
 else
-    echo "skip: ARM 4 — no .local author in the last 24h on this checkout"
+    echo "skip: ARM 4 — no .local author in the ARM 2 window on this checkout"
 fi
 
 # ── ARM 5: an empty window is SKIPPED, not zero hosts ────────────────────────
