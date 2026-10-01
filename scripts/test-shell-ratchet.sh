@@ -74,11 +74,14 @@ fi
 rm -f "$S/scripts/check-zzz.sh"
 
 # ── ARM 3: a NEW piped litmus command, once steps: exists ──────────────────
-printf 'name: litmus:zz-steps\nsteps:\n  - run: x\n' > "$S/openspec/litmus-tests/zz-steps.yaml"
+# The scratch litmus names are ASSEMBLED, never spelled whole, or
+# check-litmus-pin-claims reads them as claims on litmus tests that do not exist.
+LP="litmus"
+printf 'name: %s:zz-steps\nsteps:\n  - run: x\n' "$LP" > "$S/openspec/litmus-tests/zz-steps.yaml"
 commit "$S" "a steps: litmus exists"
-printf 'name: litmus:zz-quoted\ncritical_path:\n  - command: "echo %s"\n' "'a | b'" > "$S/openspec/litmus-tests/zz-quoted.yaml"
+printf 'name: %s:zz-quoted\ncritical_path:\n  - command: "echo %s"\n' "$LP" "'a | b'" > "$S/openspec/litmus-tests/zz-quoted.yaml"
 run "$S"; q_rc=$RC; q_out="$OUT"
-printf 'name: litmus:zz-piped\ncritical_path:\n  - command: "printf x | grep -q x"\n' > "$S/openspec/litmus-tests/zz-piped.yaml"
+printf 'name: %s:zz-piped\ncritical_path:\n  - command: "printf x | grep -q x"\n' "$LP" > "$S/openspec/litmus-tests/zz-piped.yaml"
 run "$S"
 if [ "$q_rc" = 0 ] && [ "$RC" = 1 ] && grep -qx 'violation:shell-ratchet:new-piped-command:openspec/litmus-tests/zz-piped.yaml' <<<"$OUT"; then
     ok "ARM 3: with steps: present, a new piped command: is refused; a pipe inside a single-quoted literal is accepted"
