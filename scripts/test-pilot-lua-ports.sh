@@ -19,8 +19,8 @@
 #                the declaration succeeds (coordinator ruling, option ii)
 #   4 STALE      a plan binary without `script run` makes the gate's Lua decider
 #                a loud could-not-run (rc 3), never a pass
-#   5 DELETED    both .sh are gone, and scripts/check-*.sh counts two fewer
-#                than the parent commit
+#   5 DELETED    both .sh existed at the pinned baseline and are gone, and
+#                both .lua are present (no count: see the arm)
 #
 # Hermetic: scratch under target/plan-scratch; the live tree is only read.
 set -uo pipefail
@@ -36,7 +36,13 @@ if [ -z "$PLAN" ] || ! grep -qx script <<<"$("$PLAN" capabilities 2>/dev/null)";
     echo "could-not-run:pilot-lua-ports:no-script-runner — build it: cargo build --release -p tillandsias-plan"
     exit 3
 fi
-PARENT="${TILLANDSIAS_PILOT_PARENT:-origin/linux-next}"
+# The baseline is a FIXED historical commit, never a moving ref (relay-fix,
+# coordinator 2026-10-01). This used to default to origin/linux-next, which was
+# right only until the port landed: from land118 on, trunk has no .sh, so
+# ARM 1 and ARM 5 failed by construction on every tree, and ci-release went
+# red for every relay. 5c419a98f is land118's first parent, the last trunk
+# commit that carries both .sh. Override with TILLANDSIAS_PILOT_PARENT.
+PARENT="${TILLANDSIAS_PILOT_PARENT:-5c419a98fd245bbeee63f2cf9c70956cbd5e22c9}"
 mkdir -p target/plan-scratch
 W="$(mktemp -d "$ROOT/target/plan-scratch/pilot-lua.XXXXXX")"; trap 'rm -rf "$W"' EXIT INT TERM
 
@@ -96,14 +102,20 @@ else
 fi
 
 # ── ARM 5: DELETED ─────────────────────────────────────────────────────────
-now="$(git ls-files 'scripts/check-*.sh' | wc -l | tr -d ' ')"
-before="$(git ls-tree --name-only "$PARENT" scripts/ 2>/dev/null | grep -c '^scripts/check-.*\.sh$')"
-if [ ! -e scripts/check-bash-dialect.sh ] && [ ! -e scripts/check-seam-writers-canonical.sh ] \
-   && [ -f scripts/lua/check-bash-dialect.lua ] && [ -f scripts/lua/check-seam-writers-canonical.lua ] \
-   && [ "$now" -eq $((before - 2)) ]; then
-    ok "ARM 5: both .sh deleted, both .lua present, scripts/check-*.sh $before -> $now"
+# Asserts the PORT, not a count. The old arm also wanted scripts/check-*.sh to
+# be exactly two fewer than the parent, which held only on the commit that
+# landed this row: the next .sh added or retired anywhere moves that number
+# (and keeping it from rising is 1384-bxhk's ratchet, not this fixture's job).
+a5_why=""
+for _n in check-bash-dialect check-seam-writers-canonical; do
+    git cat-file -e "$PARENT:scripts/$_n.sh" 2>/dev/null || a5_why="$a5_why $_n.sh absent at the baseline $PARENT (shallow clone, or a wrong pin);"
+    [ ! -e "scripts/$_n.sh" ] || a5_why="$a5_why scripts/$_n.sh is back;"
+    [ -f "scripts/lua/$_n.lua" ] || a5_why="$a5_why scripts/lua/$_n.lua is missing;"
+done
+if [ -z "$a5_why" ]; then
+    ok "ARM 5: both .sh existed at the baseline and are gone, and both .lua are present"
 else
-    bad "ARM 5: check-*.sh $before -> $now (want -2); sh present? $(ls scripts/check-bash-dialect.sh scripts/check-seam-writers-canonical.sh 2>/dev/null | tr '\n' ' ')"
+    bad "ARM 5:$a5_why"
 fi
 
 echo "pilot-lua-ports: $pass passed, $fail failed"
