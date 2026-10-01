@@ -53,8 +53,25 @@ esac
 
 # ── ARM 2: a shared provider is a BUCKET, never a host row ───────────────────
 # The live repo carries bulloncito@gmail.com, which is at least macbookair.
-out="$(timeout 120 bash "$CHECK" --since 24.hours 2>&1)"
-if printf '%s' "$out" | grep -q 'UNATTRIBUTED BUCKET'; then
+# THE WINDOW IS DERIVED, NEVER FIXED (relay-fix, coordinator 2026-10-01). It
+# was `--since 24.hours`, which held only while a shared-provider host had
+# committed in the last day: with yolanda and macbookair offline overnight,
+# the newest such commit (325f1619a) aged past 24 h and this arm turned
+# EVERY ./build.sh --check red. The window now reaches back to the newest
+# shared-provider commit plus an hour, and an arm with no such commit in
+# all of history is a named skip, not a pass and not a red.
+_shared_ct="$(git -C "$ROOT" log -1 --format=%ct --author='@gmail\.com' 2>/dev/null)"
+case "$_shared_ct" in
+    ''|*[!0-9]*)
+        echo "skip: ARM 2 — no shared-provider (@gmail.com) author anywhere in this checkout's history"
+        out="" ;;
+    *)
+        _win=$(( $(date +%s) - _shared_ct + 3600 ))
+        out="$(timeout 120 bash "$CHECK" --since "${_win}.seconds" 2>&1)" ;;
+esac
+if [ -z "$out" ]; then
+    :   # skipped above, by name
+elif grep -q 'UNATTRIBUTED BUCKET' <<<"$out"; then
     ok "ARM 2: an address naming no host is reported as an unattributed bucket"
 else
     bad "ARM 2: no bucket row in a window known to contain a shared-provider author"
@@ -76,7 +93,7 @@ if printf '%s' "$out" | grep -q 'MacBook-Neo'; then
         ok "ARM 4: a .local host address resolves to a HOST row, not a bucket"
     fi
 else
-    echo "skip: ARM 4 — no .local author in the last 24h on this checkout"
+    echo "skip: ARM 4 — no .local author in the ARM 2 window on this checkout"
 fi
 
 # ── ARM 5: an empty window is SKIPPED, not zero hosts ────────────────────────
@@ -116,11 +133,24 @@ done
 # ── ARM 8: it never claims to answer idleness ────────────────────────────────
 # The negative control the row asked for. An instrument that LOOKS like it
 # reports idle hosts is worse than none, because this pass acts on idleness.
-out="$(timeout 120 bash "$CHECK" --since 24.hours 2>&1)"
-if printf '%s' "$out" | grep -qi 'IDLENESS IS ESTABLISHED BY ASKING'; then
-    ok "ARM 8: every run says absence from the window is not idleness"
+# BOTH WINDOWS, AND THE WORDS MAY WRAP (relay-fix, coordinator 2026-10-01). This
+# arm used `--since 24.hours` and a one-line grep. A fleet quiet for a day gives
+# an empty window, whose disclaimer wraps "idleness is / established by
+# asking" across two lines, so the arm would have gone red on every host the
+# first day nobody committed. It now checks a window that ends just past the
+# newest commit (never empty while the repo has history) AND a 1-second window
+# (empty), each with its lines joined before matching.
+_newest_ct="$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null)"
+case "$_newest_ct" in ''|*[!0-9]*) _newest_ct="$(date +%s)" ;; esac
+a8_why=""
+for _w in "$(( $(date +%s) - _newest_ct + 3600 )).seconds" "1.seconds"; do
+    _joined="$(timeout 120 bash "$CHECK" --since "$_w" 2>&1 | tr '\n' ' ' | tr -s ' ')"
+    grep -qi 'IDLENESS IS ESTABLISHED BY ASKING' <<<"$_joined" || a8_why="$a8_why window=$_w;"
+done
+if [ -z "$a8_why" ]; then
+    ok "ARM 8: every run says absence from the window is not idleness (a non-empty and an empty window)"
 else
-    bad "ARM 8: the output does not disclaim idleness; a reader can take absence for idle"
+    bad "ARM 8: the output does not disclaim idleness in:$a8_why a reader can take absence for idle"
 fi
 
 total=$((pass+fail))

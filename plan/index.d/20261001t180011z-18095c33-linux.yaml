@@ -1,0 +1,557 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan expire-claims (order 672-bz7u).
+status:
+  - packet_id: build-bumps-version-then-the-hook-forbids-pushing-it
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: project-detection-resolver-pinning
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: litmus-budgets-are-calibrated-against-a-corpus-that-only-grows-so-five-correct-steps-red-the-release-gate-on-the-busiest-host-first
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: five-litmus-timeouts-were-elevated-to-unblock-a-release-and-must-come-back-down-one-at-a-time-as-the-fold-fix-lands
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-nvidia-cdi-currency-check-keys-on-the-driver-version-while-the-spec-pins-libraries-that-version-independently-so-it-reports-current-about-a-spec-whose-files-no-longer-exist-and-the-gpu-container-lane-dies
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-smoke-forge-lane-has-no-detection-for-its-own-central-failure-mode-opencode-idles-after-an-agent-error-never-writes-opencode-exit-and-every-section-4a-instrument-reports-health
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: litmus-expert-groundtruth-harness-step-22-parses-the-mcp-server-s-json-rpc-responses-by-stdout-line-number-so-one-extra-line-on-a-host-shifts-every-projection-and-reads-as-an-empty-release-query
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-windows-smoke-runbook-destroys-the-build-toolchain-because-its-cache-purge-names-no-path-and-its-rootfs-selector-matches-the-builder-distro
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: a-fixture-that-plants-a-probe-fragment-in-the-live-plan-index-d-leaves-it-behind-when-the-run-is-cut-short-and-the-release-preflight-then-refuses-the-whole-ledger-as-incomplete
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-pre-push-hooks-last-line-claims-build-sh-check-is-current-for-this-tree-unconditionally-after-a-decider-chain-whose-refuse-degraded-to-a-warn-and-returned-so-the-tail-of-a-push-log-reports-a-check-that-no-check-made
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: a-cloud-project-launch-clones-the-host-mirror-and-checks-out-whatever-branch-its-head-names-so-a-forge-starts-on-an-arbitrary-local-work-branch
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: a-packet-whose-code-landed-keeps-its-open-status-because-nothing-compares-landed-commits-to-ledger-status
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: a-linux-host-with-only-zram-swap-is-offered-a-silverblue-safe-disk-swapfile-behind-zram-sized-to-its-tier-and-diagnose-reports-the-swap-shape
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: measure-a-forge-cargo-builds-peak-rss-swap-and-pids-per-jobs-setting-and-a-tmpfs-spill-benchmark-zram-only-vs-zram-plus-disk-so-the-tier-budgets-are-numbers-not-formulas
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: every-installer-ends-with-a-big-pending-actions-banner-on-its-own-terminal-linux-prints-the-one-time-sudo-swap-service-command-windows-prints-restart-required-when-wsl-was-just-enabled-macos-prints-what-is-pending-or-none
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: github-app-mobile-qr-device-login
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-macos-tray-github-login-waits-for-a-token-paste-prompt-the-device-flow-never-prints-so-login-hangs-and-the-qr-is-never-shown
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-macos-one-shot-opencode-lane-ran-three-hours-silent-on-a-cold-host-without-reaching-the-credential-guard-and-the-guest-kept-no-record-of-it
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: salvage-backlog-triage-slice-1-forge-tillandsias-macuahuitl-and-unknown-host-refs-classified-relay-superseded-or-dead
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: windows-tray-provision-console-prints-raw-phase-lines
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: guest-side-install-and-login-output-reaches-the-host-as-raw-bytes-not-structured-progress
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-pre-push-hook-demands-a-green-check-stamp-on-the-local-tree-for-a-push-that-only-deletes-a-remote-ref-which-transfers-no-tree
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: four-litmus-steps-are-red-only-in-the-forge-regime-an-absolute-cargo-target-dir-joined-as-relative-an-env-exported-git-identity-a-forge-exempt-skip-outside-the-grammar-and-no-podman
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: set-field-resolves-an-order-that-exists-only-in-the-archive-prints-ok-and-writes-a-fragment-the-live-fold-drops
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: affordance-slice-check-claims-across-branches-every-blocked-claimed-elsewhere-and-unknown-packet-refusal-says-why-and-what-clears-it
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: check-claims-across-branches-per-packet-mode-answers-ok-with-zero-sibling-branches-folded-the-false-negative-batch-mode-refuses
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: affordance-slice-2-every-refused-land-verdict-of-land-on-platform-branch-says-why-and-what-clears-it
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: macos-vault-store-and-download-cache-are-host-persistent-across-reset
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: land-on-platform-branch-probes-the-branch-discipline-before-it-fetches-or-gates-refuses-the-protected-default-branch-with-the-seeded-message-picks-the-integration-branch-from-the-seed-and-compares-the-mirror-published-digest-to-the-checkouts-seed
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: a-fixture-regime-scope-in-the-policy-engine-refuses-any-write-into-the-real-checkouts-git-dir-or-outside-the-declared-scratch-from-fs-write-and-proc-run-so-a-fixture-cannot-mint-a-green-stamp-as-a-class
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-windows-tray-shows-first-provision-progress-only-as-text-in-the-status-chip-with-no-icon-or-menu-progress-indicator
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-codex-forge-lane-has-been-broken-for-a-while-per-the-operator-and-no-row-tracks-it
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-github-token-in-vault-rotates-itself-before-its-8-hour-expiry-through-a-resident-due-check-so-no-host-needs-an-operator-reseed
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-litmus-runners-podman-preflight-fires-on-the-word-podman-inside-a-quoted-string-so-a-test-that-only-mentions-podman-in-prose-env-fails-on-a-host-without-a-working-podman-and-never-runs
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: run-litmus-test-sh-takes-test-litmus-name-and-runs-exactly-one-bound-test-with-its-specs-preflights-and-regime-refusing-by-name-a-test-no-spec-binds-so-a-floor-tier-host-can-measure-one-test-without-running-a-whole-spec
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-centicolon-graders-over-credit-a-pass-credits-sibling-scenarios-a-pass-without-provenance-a-pass-on-the-wrong-subject-and-a-later-pass-on-another-platform-masks-a-failure
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-new-literal-pin-guard-covers-litmus-steps-but-not-rust-include-str-contains-tests-which-produced-four-of-the-ten-costliest-pins
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: the-on-demand-forge-base-build-exits-127-after-a-complete-pull-and-its-log-names-no-command
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+  - packet_id: a-new-gate-step-prefix-is-chosen-without-seeing-unlanded-work-refs-so-three-collisions-in-one-day-each-cost-a-relaunch
+    field: status
+    value: ready
+    ts: "2026-10-01T18:00:11Z"
+    host: linux
+
+events:
+  - packet_id: build-bumps-version-then-the-hook-forbids-pushing-it
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T21:02:29Z	claimant:yoga (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-25T19:32:14Z	claimant:yoga (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: project-detection-resolver-pinning
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T19:24:23Z	claimant:forge-tillandsias (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: litmus-budgets-are-calibrated-against-a-corpus-that-only-grows-so-five-correct-steps-red-the-release-gate-on-the-busiest-host-first
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-27T15:56:27Z	claimant:yoga (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T15:57:09Z	claimant:tlatoanis-macbook-air (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: five-litmus-timeouts-were-elevated-to-unblock-a-release-and-must-come-back-down-one-at-a-time-as-the-fold-fix-lands
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-27T15:55:57Z	claimant:yoga (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: both-non-timeout-failures-in-a-red-release-tier-run-passed-on-re-run-in-two-regimes-so-the-gates-failure-rate-may-be-dominated-by-non-determinism-that-a-retry-silently-launders
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-26T07:41:39Z	claimant:tlatoanis-macbook-air (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-nvidia-cdi-currency-check-keys-on-the-driver-version-while-the-spec-pins-libraries-that-version-independently-so-it-reports-current-about-a-spec-whose-files-no-longer-exist-and-the-gpu-container-lane-dies
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-23T23:11:37Z	claimant:yoga (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: every-push-guard-including-the-release-freeze-is-enforced-only-by-a-client-side-hook-that-build-sh-installs-so-a-host-with-no-rust-toolchain-runs-with-zero-enforcement-and-nothing-anywhere-reports-it
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-26T12:50:07Z	claimant:yolanda-windows (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-smoke-forge-lane-has-no-detection-for-its-own-central-failure-mode-opencode-idles-after-an-agent-error-never-writes-opencode-exit-and-every-section-4a-instrument-reports-health
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T18:34:54Z	claimant:forge-tillandsias (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: a-merge-that-commits-only-stamp-excluded-plan-paths-moves-the-code-digest-so-every-host-that-must-merge-before-pushing-pays-a-full-gate-for-other-hosts-ledger-traffic
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T17:55:24Z	claimant:forge-tillandsias (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: litmus-expert-groundtruth-harness-step-22-parses-the-mcp-server-s-json-rpc-responses-by-stdout-line-number-so-one-extra-line-on-a-host-shifts-every-projection-and-reads-as-an-empty-release-query
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T17:55:48Z	claimant:forge-tillandsias (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-windows-smoke-runbook-destroys-the-build-toolchain-because-its-cache-purge-names-no-path-and-its-rootfs-selector-matches-the-builder-distro
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-29T00:20:22Z	claimant:yolanda (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: a-fixture-that-plants-a-probe-fragment-in-the-live-plan-index-d-leaves-it-behind-when-the-run-is-cut-short-and-the-release-preflight-then-refuses-the-whole-ledger-as-incomplete
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T18:43:23Z	claimant:forge-tillandsias (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-pre-push-hooks-last-line-claims-build-sh-check-is-current-for-this-tree-unconditionally-after-a-decider-chain-whose-refuse-degraded-to-a-warn-and-returned-so-the-tail-of-a-push-log-reports-a-check-that-no-check-made
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T19:25:26Z	claimant:forge-tillandsias (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: a-cloud-project-launch-clones-the-host-mirror-and-checks-out-whatever-branch-its-head-names-so-a-forge-starts-on-an-arbitrary-local-work-branch
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T18:55:06Z	claimant:forge-tillandsias (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: a-packet-whose-code-landed-keeps-its-open-status-because-nothing-compares-landed-commits-to-ledger-status
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T19:34:04Z	claimant:forge-tillandsias (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: a-linux-host-with-only-zram-swap-is-offered-a-silverblue-safe-disk-swapfile-behind-zram-sized-to-its-tier-and-diagnose-reports-the-swap-shape
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-26T04:22:30Z	claimant:yoga (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: measure-a-forge-cargo-builds-peak-rss-swap-and-pids-per-jobs-setting-and-a-tmpfs-spill-benchmark-zram-only-vs-zram-plus-disk-so-the-tier-budgets-are-numbers-not-formulas
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-26T03:55:11Z	claimant:yoga (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: every-installer-ends-with-a-big-pending-actions-banner-on-its-own-terminal-linux-prints-the-one-time-sudo-swap-service-command-windows-prints-restart-required-when-wsl-was-just-enabled-macos-prints-what-is-pending-or-none
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-26T02:20:01Z	claimant:yolanda-windows (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: github-app-mobile-qr-device-login
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-26T05:11:52Z	claimant:macuahuitl (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-macos-tray-github-login-waits-for-a-token-paste-prompt-the-device-flow-never-prints-so-login-hangs-and-the-qr-is-never-shown
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-26T11:46:23Z	claimant:tlatoanis-macbook-air (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-26T06:34:04Z	claimant:yolanda-windows (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-macos-one-shot-opencode-lane-ran-three-hours-silent-on-a-cold-host-without-reaching-the-credential-guard-and-the-guest-kept-no-record-of-it
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-26T14:45:58Z	claimant:tlatoanis-macbook-air (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: salvage-backlog-triage-slice-1-forge-tillandsias-macuahuitl-and-unknown-host-refs-classified-relay-superseded-or-dead
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-27T02:50:00Z	claimant:macuahuitl-forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: windows-tray-provision-console-prints-raw-phase-lines
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T01:56:22Z	claimant:yolanda (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: guest-side-install-and-login-output-reaches-the-host-as-raw-bytes-not-structured-progress
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-27T16:45:02Z	claimant:tlatoanis-macbook-air (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-pre-push-hook-demands-a-green-check-stamp-on-the-local-tree-for-a-push-that-only-deletes-a-remote-ref-which-transfers-no-tree
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-27T03:27:39Z	claimant:macuahuitl-forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: four-litmus-steps-are-red-only-in-the-forge-regime-an-absolute-cargo-target-dir-joined-as-relative-an-env-exported-git-identity-a-forge-exempt-skip-outside-the-grammar-and-no-podman
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-27T07:06:25Z	claimant:macuahuitl-forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: set-field-resolves-an-order-that-exists-only-in-the-archive-prints-ok-and-writes-a-fragment-the-live-fold-drops
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-27T04:20:37Z	claimant:macuahuitl-forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: affordance-slice-check-claims-across-branches-every-blocked-claimed-elsewhere-and-unknown-packet-refusal-says-why-and-what-clears-it
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-27T06:34:24Z	claimant:macuahuitl-forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: check-claims-across-branches-per-packet-mode-answers-ok-with-zero-sibling-branches-folded-the-false-negative-batch-mode-refuses
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-27T06:43:26Z	claimant:macuahuitl-forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: affordance-slice-2-every-refused-land-verdict-of-land-on-platform-branch-says-why-and-what-clears-it
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-27T06:54:03Z	claimant:macuahuitl-forge (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: macos-vault-store-and-download-cache-are-host-persistent-across-reset
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-29T18:14:46Z	claimant:tlatoanis-macbook-air (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: land-on-platform-branch-probes-the-branch-discipline-before-it-fetches-or-gates-refuses-the-protected-default-branch-with-the-seeded-message-picks-the-integration-branch-from-the-seed-and-compares-the-mirror-published-digest-to-the-checkouts-seed
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T16:48:50Z	claimant:forge-tillandsias (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: a-fixture-regime-scope-in-the-policy-engine-refuses-any-write-into-the-real-checkouts-git-dir-or-outside-the-declared-scratch-from-fs-write-and-proc-run-so-a-fixture-cannot-mint-a-green-stamp-as-a-class
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T17:01:52Z	claimant:forge-tillandsias (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-windows-tray-shows-first-provision-progress-only-as-text-in-the-status-chip-with-no-icon-or-menu-progress-indicator
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T01:56:23Z	claimant:yolanda (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-codex-forge-lane-has-been-broken-for-a-while-per-the-operator-and-no-row-tracks-it
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T21:21:33Z	claimant:macuahuitl (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-github-token-in-vault-rotates-itself-before-its-8-hour-expiry-through-a-resident-due-check-so-no-host-needs-an-operator-reseed
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T17:23:19Z	claimant:yoga-silverblue (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-litmus-runners-podman-preflight-fires-on-the-word-podman-inside-a-quoted-string-so-a-test-that-only-mentions-podman-in-prose-env-fails-on-a-host-without-a-working-podman-and-never-runs
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T18:07:03Z	claimant:forge-tillandsias (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: run-litmus-test-sh-takes-test-litmus-name-and-runs-exactly-one-bound-test-with-its-specs-preflights-and-regime-refusing-by-name-a-test-no-spec-binds-so-a-floor-tier-host-can-measure-one-test-without-running-a-whole-spec
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-28T18:34:05Z	claimant:forge-tillandsias (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-centicolon-graders-over-credit-a-pass-credits-sibling-scenarios-a-pass-without-provenance-a-pass-on-the-wrong-subject-and-a-later-pass-on-another-platform-masks-a-failure
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-29T07:17:54Z	claimant:macuahuitl (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-new-literal-pin-guard-covers-litmus-steps-but-not-rust-include-str-contains-tests-which-produced-four-of-the-ten-costliest-pins
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-29T00:18:56Z	claimant:tlatoanis-macbook-air (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: the-on-demand-forge-base-build-exits-127-after-a-complete-pull-and-its-log-names-no-command
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-29T18:49:39Z	claimant:tlatoanis-macbook-air (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-29T21:23:47Z	claimant:tlatoanis-macbook-air (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
+  - packet_id: a-new-gate-step-prefix-is-chosen-without-seeing-unlanded-work-refs-so-three-collisions-in-one-day-each-cost-a-relaunch
+    event:
+      type: progress
+      ts: "2026-10-01T18:00:11Z"
+      host: linux
+      summary: >
+        Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-09-30T04:26:41Z	claimant:yolanda (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.

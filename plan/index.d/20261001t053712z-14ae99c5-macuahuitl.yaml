@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: relay-preflight-runs-the-trunk-copy-of-itself-so-a-ref-that-ports-or-deletes-a-decider-is-refused-for-a-script-the-merged-tree-no-longer-has
+    event:
+      type: note
+      ts: "2026-10-01T05:37:12Z"
+      agent_id: linux-macuahuitl-claude-20261001t053712z
+      host: macuahuitl
+      summary: |
+        LANDED in land120 (4b1b31104 on origin/linux-next, gate 1265 s; lenovinha's 7e968ea91). relay-preflight snapshots its running text; after the merge, if the merged scripts/relay-preflight.sh differs, it execs the merged copy with the same arguments and a marker (TILLANDSIAS_RELAY_PREFLIGHT_REEXEC, _ORIG_REF), so the merged copy skips fetch/merge and keeps the restore point. Arm 8: a ref that deletes a decider and repoints the tool reaches ok: with item reexec:merged-copy ok; 7/8 on trunk's tool. 8/8 plain, env -u (lenovinha), and builder toolbox (coordinator). Litmus relay-preflight-shape pins 8/8.
+        Relayed with relayfix/fleet-activity-window (8c5d95664): test-fleet-activity.sh ARM 2's fixed --since 24.hours window had aged out overnight and turned every --check red (it refused land120's first re-gate); the window now derives from the newest shared-provider commit.
+        Land history: attempt 1 gated green and was refused at push (a plan-only trunk commit landed mid-gate; the hook could not classify against the scoped stamp). Attempt 2 re-gated red on the fleet-activity window. Attempt 3 is this land. The collision root cause is under investigation (Fable report, coordinator).

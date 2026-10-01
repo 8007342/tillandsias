@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-fix-for-mis-attributing-host-activity-lives-in-prose-so-the-coordinator-retyped-it-wrong-one-pass-after-recording-it
+    event:
+      type: note
+      ts: "2026-10-01T16:33:30Z"
+      agent_id: linux-macuahuitl-claude-20261001t163330z
+      host: macuahuitl
+      summary: |
+        Two time-bomb arms in scripts/test-fleet-activity.sh fixed forward by the coordinator (relay-fixes, 2026-10-01). ARM 2 used `--since 24.hours` on the live repo and went red when the newest @gmail.com commit (325f1619a) aged past 24 h overnight, turning every --check red (it refused land120's re-gate); its window now reaches back to the newest shared-provider commit plus an hour (landed in land120, 4b1b31104). ARM 8 used the same fixed window and a one-line grep; on an empty window the disclaimer wraps across two lines, so it would red the first day the fleet is quiet (old arm FAILS against --since 1.seconds, measured); it now checks a non-empty and an empty window with lines joined (landed in land121, aab04d4a3). 9/9 plain, env -u, toolbox.

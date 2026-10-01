@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# release-preflight-spends-two-minutes-in-one-gh-call-blocked-on-the-host-credential-store-so-release-gates-run-locally-step-1-times-out-on-a-host-whose-preflight-is-green.status was ALREADY 'in_progress', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: release-preflight-spends-two-minutes-in-one-gh-call-blocked-on-the-host-credential-store-so-release-gates-run-locally-step-1-times-out-on-a-host-whose-preflight-is-green
+    event:
+      type: note
+      ts: "2026-10-01T18:00:18Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-10-01: lenovinha is stood down; macuahuitl takes over this lease

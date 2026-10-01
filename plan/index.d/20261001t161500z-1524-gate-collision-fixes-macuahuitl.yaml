@@ -1,0 +1,118 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the coordinator on 2026-10-01 from the Fable investigation of the
+# overnight push collisions (report: plan/issues/gate-collisions-scoped-stamps-2026-10-01.md).
+packets:
+  - packet_id: the-pre-push-hook-reports-a-remote-that-moved-since-fetch-as-a-gate-problem-and-tells-the-pusher-to-re-run-the-full-gate
+    order: 1524-w8ys
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [pre-push, gate-stamp, scoped-tiers, affordance]
+    estimated_hours: 2
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      enforce_stamp_scope runs `git cat-file -e "$remote_sha"` on the remote's ADVERTISED tip, which fails exactly when trunk moved since the last fetch, and refuses "no usable local base to diff against" with remedy ./build.sh --check; the honest refusal is "remote moved since fetch", remedy git fetch origin && git merge
+    context: |
+      MEASURED 2026-10-01 (land120 attempt 1, and reproduced hermetically by
+      the Fable investigation with the real hook, stamp and land tool): a
+      scoped stamp plus one plan-only commit landing on trunk mid-gate gives
+      this refusal; the same tree after `git fetch && git merge` with NO new
+      gate is accepted ("scoped stamp covers every outgoing change class").
+      So the refusal is a lost-race detector reporting itself as a gate
+      problem, and its remedy costs a full gate (1183 s tonight) for nothing.
+    outcome: |
+      A push whose remote sha is not present locally is refused with a token
+      naming the race and a fetch-and-merge remedy; nothing about a gate.
+    exit_criteria:
+      - "A fixture: scoped stamp, origin advanced by one plan-only commit after the last fetch, push. The refusal reads refused:pre-push:remote-moved-since-fetch and its remedy is git fetch origin && git merge (pre-fix: 'no usable local base' and 'Re-run the full gate' — FAILS)."
+      - "After the fetch and merge, the same push is accepted with no new gate (already true; keep it as an arm)."
+    verifiable_closure: |
+      The fixture's arms red/green as above on the pre-fix hook; quote both
+      lines on the closing event. Sweep every consumer of the old refusal
+      text (git grep 'no usable local base') and list each.
+    unscoreable: "pinned-by-its-own-fixture: bind it under ci-release when it lands"
+    next_action: >
+      In enforce_stamp_scope, when the remote sha is not local, refuse with
+      the race token and the fetch-and-merge remedy before any scope logic.
+    notes: |
+      size: S
+      implementer_tier: opus
+      Changes a pre-push refusal: opus is the floor.
+  - packet_id: the-land-tool-classifies-a-refused-push-by-matching-message-text-so-a-hook-refusal-caused-by-a-moved-trunk-reads-not-a-lost-race-and-exits-6
+    order: 1524-7gn7
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [land, relay, push-classification]
+    estimated_hours: 2
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+    title: |
+      land-on-platform-branch.sh decides "lost race" with a regex (non-fast-forward|fetch first|stale info|cannot lock ref) that never matches pre-push hook text, so land120's moved-trunk refusal printed "refused:land:push-failed — retrying THIS PUSH cannot help (not a lost race)" and exited 6 instead of merging and retrying
+    context: |
+      MEASURED 2026-10-01 land120 attempt 1 (log quoted on 1522-ey4h's
+      closing note). The authoritative test is ancestry, not text: after a
+      failed push, fetch; if origin/<branch> is not an ancestor of HEAD, the
+      push lost a race whatever the message said. The mandated-merge remedy
+      it printed applies only when BRANCH is not the trunk.
+    outcome: |
+      A push refused because the branch moved is retried (merge, then the
+      attempt loop), whatever the refusal text; the mandated-merge remedy is
+      printed only for a non-trunk branch.
+    exit_criteria:
+      - "A fixture arm: trunk advances by a plan-only commit during the gate and the hook refuses; the land tool fetches, sees origin/linux-next not an ancestor of HEAD, and lands on attempt 2 (pre-fix: exit 6 'not a lost race' — FAILS)."
+      - "A push refused for a reason that is not a race (a decider refusal on an up-to-date base) still stops with its own message."
+    verifiable_closure: |
+      Fixture arms as above, red/green on the pre-fix tool; quote the
+      attempt lines on the closing event.
+    unscoreable: "pinned-by-its-own-fixture: bind it under ci-release when it lands"
+    next_action: >
+      Replace the regex classification after a failed push with a fetch and
+      an ancestry check; keep the text only for the printed diagnosis.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+  - packet_id: the-land-tool-adopts-a-stamp-only-at-scope-full-so-a-scoped-gate-re-gates-from-scratch-on-any-trunk-move-including-plan-only
+    order: 1524-jnby
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [land, gate-stamp, scoped-tiers, lua]
+    estimated_hours: 4
+    owned_files:
+      - scripts/land-on-platform-branch.sh
+      - scripts/gate-stamp.sh
+    title: |
+      The land tool's stamp adoption (1174-u5wp) requires `gate-stamp.sh scope == full`, and memo-check answers stale:scoped-stamp-cannot-memoize-full-gate, so since 765-xpct's selector began writing scoped stamps every trunk move — a plan-only one included — costs a full re-gate; 1335-2nzf's adopt-on-plan-only logic exists only in land-queue.sh, not in the lane the coordinator uses
+    context: |
+      MEASURED 2026-10-01: tonight's scoped gate ran 1183 s against full gates
+      of 1124-1270 s, so the scoped tier saved nothing and the re-gate cost a
+      whole gate. The hook re-verifies scope coverage seconds later, so the
+      land tool can adopt a scoped stamp whenever its scope covers
+      classify(diff origin/<branch>..HEAD) after the merge.
+    outcome: |
+      One gate per land when trunk moved only by classes the stamp covers
+      (plan-only movement in particular), with the hook's scope check still
+      the final word.
+    exit_criteria:
+      - "A fixture: a scoped stamp, a plan-only commit lands on trunk mid-gate, the land tool merges and pushes with gate-count 1 (pre-fix: 2 — FAILS)."
+      - "A trunk move that touches a class outside the scope still re-gates (the control)."
+    verifiable_closure: |
+      Fixture arms as above with the gate count read from the timing log the
+      fixture writes; quote both on the closing event.
+    unscoreable: "pinned-by-its-own-fixture: bind it under ci-release when it lands"
+    next_action: >
+      After 1524-7gn7: extract land-queue.sh's 1335-2nzf delta classifier into one
+      script both landers call (a good Lua candidate: proc.run plus one
+      verdict line on script run), and use it for adoption in the land tool.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Changes when a land re-gates; an opus review is the floor.
