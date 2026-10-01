@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the coordinator on 2026-10-01 for the Lua migration's batch A.
+packets:
+  - packet_id: four-small-shell-deciders-run-as-lua-on-script-run-with-their-sh-deleted-and-byte-identical-verdicts-batch-a
+    order: 1525-c6jm
+    status: in_progress
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [lua, deciders, migration, parity]
+    estimated_hours: 3
+    depends_on: [tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d]
+    owned_files:
+      - scripts/lua/check-no-base64-script-injection.lua
+      - scripts/lua/check-no-spawn-in-if-not.lua
+      - scripts/lua/check-spec-registry-status.lua
+      - scripts/lua/check-wsl-exe-single-constructor.lua
+    title: |
+      Lua migration batch A: check-no-base64-script-injection, check-no-spawn-in-if-not, check-spec-registry-status and check-wsl-exe-single-constructor run as scripts/lua on `tillandsias-plan script run`, each .sh deleted in the same commit with byte-identical verdicts proven on the live tree, every fixture scenario and a planted violating input
+    context: |
+      Operator direction 2026-10-01: macuahuitl is the sole worker and should
+      advance the high-leverage, low-risk Bash-to-Lua migration. Ported by a
+      sonnet agent on work/1525-c6jm (a8e752174), reviewed by the coordinator,
+      with a relay-fix (19595bc7d): the plan lane reports a plan binary
+      without `script run` as COULD-NOT-RUN, not as a refusal. Left as .sh on
+      purpose: check-macos-only-sources-verified (a wrapper around an unported
+      500-line sibling) and check-tray-process-running-naming (owned by
+      1484-uf29's planned cutover to source-agreements.lua).
+    outcome: |
+      Four fewer shell deciders; the same verdicts on every input.
+    exit_criteria:
+      - "Each .lua prints the .sh's stdout/stderr lines and exit code on the live tree, on every scenario of its fixture, and on a planted violating input (two ports add one stdout verdict line on refusal only, disclosed in their headers; no caller parses it)."
+      - "No scripts/check-<the four>.sh remains, and every live consumer (build.sh, gate step 120-1087-h2z9, the pre-push hook's plan lane, local-ci.sh, litmus if-not-pipeline-guard-shape) runs the .lua."
+    verifiable_closure: |
+      The touched fixtures (test-if-not-pipeline-guard, test-spec-registry-
+      status, test-claims-fleet-visible) green in plain, env -u and toolbox
+      regimes on the landed tree, quoted on the closing event.
+    unscoreable: "pinned-by-its-fixtures: the three fixtures above"
+    next_action: >
+      Land with 1384-bxhk (land123), then close citing the landed commit.
+    notes: |
+      size: M
+      implementer_tier: sonnet
