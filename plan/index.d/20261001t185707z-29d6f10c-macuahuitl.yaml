@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    event:
+      type: note
+      ts: "2026-10-01T18:57:07Z"
+      agent_id: linux-macuahuitl-opencode-20261001t180917z
+      host: macuahuitl
+      summary: |-
+        RECEIVED: codex-2026-09-30-06. I fetched the relay-fixed work ref and did no further implementation on that row; its Mac second-regime condition remains with the owning host. The requested independent Lua review is on work/1525-ajtc.
