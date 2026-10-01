@@ -702,7 +702,24 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         # pre-receive refusals, and then enumerated three race phrasings as
         # though they were all of them. Narrowing a pattern is not the same as
         # enumerating what it must still cover.
+        # ORDER 1524-7gn7 — ANCESTRY DECIDES A RACE, NOT THE WORDING. The four
+        # phrasings below are git's; a PRE-PUSH HOOK that refuses because the
+        # branch moved under it says so in its own words, which match none of
+        # them. On land120 (2026-10-01) one plan-only push from another host
+        # landed mid-gate, the hook refused, and this branch printed "not a
+        # lost race" and exited 6. So before believing the text, ask git: if
+        # origin/$BRANCH now holds commits this HEAD lacks, the push lost a race
+        # whatever it said, and the verdict below re-integrates and retries.
+        _race_by_ancestry=0
         if ! grep -qiE "non-fast-forward|fetch first|stale info|cannot lock ref" "$_plog"; then # sigpipe-ok: safe pipeline
+            git fetch -q origin "$BRANCH" 2>/dev/null
+            if git rev-parse -q --verify "origin/$BRANCH" >/dev/null 2>&1 \
+               && ! git merge-base --is-ancestor "origin/$BRANCH" HEAD 2>/dev/null; then
+                _race_by_ancestry=1
+                echo "land: the push was refused in words that name no race, but origin/$BRANCH moved (it holds commits this HEAD lacks) — a lost race; re-integrating"
+            fi
+        fi
+        if [ "$_race_by_ancestry" = 0 ] && ! grep -qiE "non-fast-forward|fetch first|stale info|cannot lock ref" "$_plog"; then # sigpipe-ok: safe pipeline
             # 1064-r8fv named the LANE but left the sentence absolute. MEASURED
             # on macbookair 2026-09-15: "retrying cannot help" is true of
             # retrying THIS PUSH and false of re-running this script, whose
