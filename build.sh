@@ -2926,12 +2926,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # check but not clippy. The two also share no fingerprints (clippy drives
     # its own compiler), so the removed step was a full second frontend pass.
     # Type errors now surface under the clippy banner.
+    # ALLOW double_must_use (relay-fix, coordinator 2026-10-01). The repo pins
+    # no toolchain, and stable moved to rustc/clippy 1.99.0 (2026-09-28) on
+    # this host mid-session; clippy 1.99 fires double_must_use on the
+    # #[must_use] that async_trait's OWN expansion adds to trait methods whose
+    # return type is already must-use (tillandsias-control-wire GuestTransport,
+    # tillandsias-core image_builder, ...). Nothing in our source asks for it,
+    # and with the lint allowed the workspace is otherwise clippy-clean on
+    # 1.99. Remove this when async-trait stops emitting the attribute, or when
+    # a pinned toolchain makes the choice explicit.
     _step "Running clippy (strict; includes the workspace type-check)..."
-    _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -- -D warnings 2>&1
+    _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -- -D warnings -A clippy::double_must_use 2>&1
     _info "Clippy passed"
 
     _step "Running clippy (strict + listen-vsock)..."
-    _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-headless --features listen-vsock -- -D warnings 2>&1
+    _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-headless --features listen-vsock -- -D warnings -A clippy::double_must_use 2>&1
     _info "Clippy (listen-vsock) passed"
 
     _step "Checking plan ledger integrity (tillandsias-plan check)..."
