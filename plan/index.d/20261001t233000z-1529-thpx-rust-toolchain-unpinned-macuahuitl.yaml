@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by the coordinator on 2026-10-01 (land126); the decision is the operator's.
+packets:
+  - packet_id: the-repo-pins-no-rust-toolchain-so-a-stable-update-on-any-host-reddens-every-gate-there-without-a-commit
+    order: 1529-thpx
+    status: blocked
+    kind: decision
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [toolchain, ci-gate, clippy, fleet]
+    estimated_hours: 1
+    owned_files:
+      - rust-toolchain.toml
+    blocked_by: operator decision — pinning a toolchain makes every host download it and makes each Rust upgrade an explicit, scheduled change
+    title: |
+      No rust-toolchain.toml: on 2026-10-01 macuahuitl's stable moved to rustc/clippy 1.99.0 mid-session and every gate there went red in clippy (double_must_use through async_trait) with no commit to blame; every host meets this the day its own stable updates, each on its own schedule
+    context: |
+      MEASURED 2026-10-01: land125's gate on 1.98 was clean; an hour later
+      land126's gate refused at 15 s in clippy on 1.99 (~/.rustup/toolchains/
+      stable-x86_64-unknown-linux-gnu replaced at 15:45 local). Relay-fix in
+      land126 allows double_must_use in build.sh's two clippy runs, so trunk
+      is green on 1.99. The underlying exposure remains: a toolchain update is
+      an unannounced change to the gate that lands on each host separately,
+      so hosts can disagree about the same tree.
+    outcome: |
+      A Rust toolchain change is a commit: either a pinned rust-toolchain.toml
+      the fleet upgrades deliberately, or an explicit decision to float with
+      a canary that tries the next stable before hosts get it.
+    exit_criteria:
+      - "The operator's ruling is recorded on this row; if pinned, rust-toolchain.toml names the channel and every host's ./build.sh --check uses it (rustc --version in the gate log)."
+    verifiable_closure: |
+      The ruling event, and for a pin, a gate log line showing the pinned rustc.
+    unscoreable: "operator-decision: the closure is a ruling, not a test"
+    next_action: >
+      Operator: pin (which version?) or float. If pin, the coordinator adds
+      rust-toolchain.toml and removes the double_must_use allow once
+      async-trait stops emitting the attribute.
+    notes: |
+      size: S
+      implementer_tier: sonnet

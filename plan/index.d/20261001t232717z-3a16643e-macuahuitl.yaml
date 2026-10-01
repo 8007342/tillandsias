@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: five-more-shell-deciders-run-as-lua-on-script-run-with-their-sh-deleted-and-byte-identical-verdicts-batch-c
+    event:
+      type: note
+      ts: "2026-10-01T23:27:17Z"
+      agent_id: linux-macuahuitl-claude-20261001t232717z
+      host: macuahuitl
+      summary: |
+        LANDED in land126 (2b57c3304 on origin/linux-next, gate 1654 s). Five deciders run as scripts/lua, .sh deleted: check-requirement-ids, check-state-root-literals, check-framing-raw-decodes, check-enclave-membership-documented, check-all-fragments-intact (sonnet port 520d9f35f). check-all-fragments-intact went from 3.1 s to 0.76 s; test-deciders-within-door-deadline 6/6. Fixtures test-requirement-ids 8/8 and test-all-fragments-intact 3/3, litmus one-length-delimited-framing-impl 6/6 and enclave-membership-documented 6/6, in plain, env -u and toolbox. Ratchet floors trimmed (sh 674 -> 664). Left as .sh: check-centicolon-ratchet (its advisory verdict fits no runner prefix; filed as 1528-gxzf). Relay notes: (1) the relay-preflight red was a 300 s timeout of `cargo test -p tillandsias-plan` while a porting agent loaded the host; run alone it took 38 s, all green. (2) The first gate refused in clippy: this host's unpinned stable moved to rustc/clippy 1.99.0 mid-session and fires double_must_use through async_trait's expansion, so trunk was red for every gate. Relay-fix 2b57c3304's parent adds -A clippy::double_must_use to both gate clippy runs; the workspace is otherwise clean on 1.99.
