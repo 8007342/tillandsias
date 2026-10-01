@@ -11,7 +11,7 @@
 #                verdict the .sh printed at the parent commit, and keeps it with
 #                `set -o pipefail` in force in the caller and a 200,000-line
 #                writer file (the two conditions under which the .sh inverted)
-#   2 DIALECT    a file with ONE mapfile line is ONE offender
+#   2 DIALECT    a file with ONE bash-4 builtin line is ONE offender
 #                (blocked:bash4-unguarded:1, 1374-4u6i's double count), and an
 #                empty population is refused, never read as clean
 #   3 SANDBOX    a script reading a path taken from an env var it did NOT
@@ -65,9 +65,9 @@ printf '#!/usr/bin/env bash\nmapfile -t lines < /etc/hostname\n' > "$W/d1/one.sh
 o2="$(TILLANDSIAS_DIALECT_SCAN_DIR="$W/d1" "$PLAN" script run scripts/lua/check-bash-dialect.lua 2>/dev/null)"; r2=$?
 o0="$(TILLANDSIAS_DIALECT_SCAN_DIR="$W/d0" "$PLAN" script run scripts/lua/check-bash-dialect.lua 2>/dev/null)"; r0=$?
 if [ "$o2" = "blocked:bash4-unguarded:1" ] && [ "$r2" = 1 ] && [ "$o0" = "blocked:bash-dialect:scan-empty" ] && [ "$r0" -ne 0 ]; then
-    ok "ARM 2: one mapfile line is ONE offender (blocked:bash4-unguarded:1), and an empty population is refused (scan-empty), never clean"
+    ok "ARM 2: one bash-4 builtin line is ONE offender (blocked:bash4-unguarded:1), and an empty population is refused (scan-empty), never clean"
 else
-    bad "ARM 2: one-mapfile=[$o2] rc=$r2; empty=[$o0] rc=$r0"
+    bad "ARM 2: one-builtin=[$o2] rc=$r2; empty=[$o0] rc=$r0"
 fi
 
 # ── ARM 3: SANDBOX — only a DECLARED env var widens reads ──────────────────
