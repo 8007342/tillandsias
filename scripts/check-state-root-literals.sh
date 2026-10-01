@@ -7,7 +7,7 @@
 #
 # ── WHY THIS IS A NEW GUARD AND NOT A WIDENING ─────────────────────────────
 #
-# scripts/check-ca-path-literals.sh counts the PRE-migration /tmp path (that
+# scripts/lua/check-ca-path-literals.lua counts the PRE-migration /tmp path (that
 # script names the literal; this one deliberately does not restate it, because
 # restating a single-sourced string in prose is the defect both guards exist to
 # stop — and it trips that guard, which is how this line was found).
@@ -52,7 +52,7 @@
 # future edit adds it to the exemption list, that is the signal the change is
 # wrong — not that the list was too short.
 #
-# COUNT OCCURRENCES, NOT LINES, and say which. check-ca-path-literals.sh records
+# COUNT OCCURRENCES, NOT LINES, and say which. scripts/lua/check-ca-path-literals.lua records
 # the scar: its first baseline was a line count (36), it refused on its own first
 # run at 37, and the true occurrence count was 38 — three numbers for one
 # quantity, from choosing the convenient unit.
@@ -77,7 +77,7 @@ BASELINE="${TILLANDSIAS_STATE_ROOT_LITERAL_BASELINE:-0}"
 # Stale prose copies are a real problem and are NOT this guard's job.
 #
 # Occurrences, not lines, and this says which — see the scar in
-# check-ca-path-literals.sh's header.
+# scripts/lua/check-ca-path-literals.lua's header.
 count="$(grep -rn '\.local/state/tillandsias' \
             --include='*.rs' \
             --exclude=ca_path.rs \
