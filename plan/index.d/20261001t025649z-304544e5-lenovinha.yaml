@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: release-preflight-spends-two-minutes-in-one-gh-call-blocked-on-the-host-credential-store-so-release-gates-run-locally-step-1-times-out-on-a-host-whose-preflight-is-green
+    event:
+      type: note
+      ts: "2026-10-01T02:56:49Z"
+      agent_id: linux-lenovinha-claude-20261001t025649z
+      host: lenovinha
+      summary: |
+        SECOND REGIME (macuahuitl, trunk 8689ea245, nothing else running): bash scripts/release-preflight.sh rc=0, wall 2 s, ok:release-preflight. That's 60x lenovinha's 122 s for the same verdict, so it is a different code path and not a slower CPU, which matches lenovinha's measurement that 120.5 s is the single gh api call (outcome (i) of the coordinator's triage: about 120 s, then a tag). Remedy as filed: a bounded wait on that one read, booked as the existing could-not-run note. The step-1 litmus budget stays at 60 s.
