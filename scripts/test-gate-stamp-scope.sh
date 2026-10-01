@@ -239,4 +239,31 @@ grep -q 'changes: docs' <<<"$out" || fail "case 9: refusal did not name the miss
 [ "$before" = "$after" ] || fail "case 9: remote advanced despite the refusal"
 echo "ok: case 9 — the plan-only lane does not carry an out-of-scope class past a fresh scoped stamp"
 
-echo "PASS: gate-stamp-scope (10/10)"
+
+# ── case 10: a remote that MOVED is a race, not a gate problem ───────────────
+# ORDER 1524-w8ys. Another host lands a plan-only commit after our last fetch;
+# git hands the hook the remote's advertised tip, which this checkout has
+# never seen. The refusal must name the race and the fetch-and-merge remedy,
+# not "Re-run the full gate", and after fetch + merge the SAME stamp (no new
+# gate) carries the push. MEASURED on land120 (2026-10-01): the old shared
+# refusal sent the coordinator to a second 20-minute gate for one fragment.
+D="$WORK/c10"; make_repo "$D"
+git clone -q "$D/origin.git" "$D/other" 2>/dev/null
+git -C "$D/other" checkout -q main 2>/dev/null
+mkdir -p "$D/nohooks"; git -C "$D/other" config core.hooksPath "$D/nohooks"   # a global hooksPath would run a real hook here
+(cd "$D/other" && git config user.email o@t && git config user.name o && mkdir -p plan/index.d && printf 'packets: []\n' > plan/index.d/theirs.yaml && git add -A && git commit -qm theirs && git push -q origin main) \
+    || fail "case 10: could not move origin from the second clone"
+out="$(cd "$D/work" && printf 'pub fn more() {}\n' >> crates/demo/lib.rs && git add -A && git commit -qm code >/dev/null 2>&1 && issue_pass_token && bash scripts/gate-stamp.sh write --scope rust --dispatch check >/dev/null && TILLANDSIAS_PLAN_BIN="$LANE_PLAN_BIN" git push origin main 2>&1)"
+rc=$?
+[ "$rc" != 0 ] || fail "case 10: a push against a remote this checkout never fetched was accepted"
+grep -q 'remote-moved-since-fetch' <<<"$out" || fail "case 10: the refusal did not name the race: $out"
+if grep -q 'Re-run the full gate' <<<"$out"; then fail "case 10: a moved remote still sends the pusher to a full gate: $out"; fi
+before="$(remote_head "$D")"
+out="$(cd "$D/work" && git fetch -q origin && git merge -q --no-edit origin/main >/dev/null 2>&1 && TILLANDSIAS_PLAN_BIN="$LANE_PLAN_BIN" git push origin main 2>&1)"
+rc=$?
+after="$(remote_head "$D")"
+[ "$rc" = 0 ] || fail "case 10: after fetch + merge the same stamp did not carry the push: $out"
+[ "$before" != "$after" ] || fail "case 10: accepted after fetch + merge but the remote did not advance"
+echo "ok: case 10 — a moved remote is refused as a race with a fetch-and-merge remedy, and the same stamp carries the push after the merge"
+
+echo "PASS: gate-stamp-scope (11/11)"
