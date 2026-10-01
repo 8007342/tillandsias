@@ -3,7 +3,7 @@
 # bash-dialect: pure-3.2 — no mapfile, no ${var,,} on arrays; the mtime
 # comparison uses the test builtin's -nt against a TZ=UTC touch anchor, so no
 # GNU/BSD stat or date probing is needed. Marker consumed by
-# scripts/check-bash-dialect.sh (761-g36m).
+# scripts/lua/check-bash-dialect.lua (761-g36m).
 #
 # check-resumable-claim-dirt.sh — deterministic detector for the SECOND known
 # dirt class: this host's OWN in-flight claimed work, left uncommitted when a

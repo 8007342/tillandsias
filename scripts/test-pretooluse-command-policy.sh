@@ -181,7 +181,7 @@ fi
 
 # ── 8 ───────────────────────────────────────────────────────────────────────
 n="$(wc -l <"$STUB" | tr -d ' ')"
-dialect="$(TILLANDSIAS_DIALECT_SCAN_DIR="$STUB" bash "$ROOT/scripts/check-bash-dialect.sh" 2>/dev/null)"
+dialect="$(TILLANDSIAS_DIALECT_SCAN_DIR="$STUB" "$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)" script run "$ROOT/scripts/lua/check-bash-dialect.lua" 2>/dev/null)"
 [ "$n" -lt 60 ] && [ "$dialect" = "ok:bash-dialect-clean" ] &&
     ok "arm 8: the stub is $n lines and bash-dialect clean" || bad "arm 8: lines=$n dialect=[$dialect]"
 out="$(printf '{"tool_name":"Bash","tool_input":{"command":"gh auth refresh"}}' |

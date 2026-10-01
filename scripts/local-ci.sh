@@ -1253,8 +1253,17 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # remote_projects.rs today, which is that row's hazard, so gating now
     # would red every host on it. Promote to log_fail_tracked when it closes.
     # Captured, then printed: the verdict is the exit code of one command.
-    seam_writers_out="$(bash "$REPO_ROOT/scripts/check-seam-writers-canonical.sh" 2>&1)"
-    seam_writers_rc=$?
+    # 1384-ddua: the decider is scripts/lua/check-seam-writers-canonical.lua,
+    # run through the one runner; no runner is a could-not-run, never a pass.
+    _sw_bin="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _sw_bin=""
+    case "$_sw_bin" in ./*) _sw_bin="$REPO_ROOT/${_sw_bin#./}" ;; esac
+    if [[ -n "$_sw_bin" ]]; then
+        seam_writers_out="$(cd "$REPO_ROOT" && "$_sw_bin" script run scripts/lua/check-seam-writers-canonical.lua 2>&1)"
+        seam_writers_rc=$?
+    else
+        seam_writers_out="could-not-run:seam-writers-canonical:no-script-runner"
+        seam_writers_rc=3
+    fi
     if [[ "$seam_writers_rc" -eq 0 ]]; then
         log_pass "seam writers all take the canonical lock: $seam_writers_out"
     else
@@ -1295,7 +1304,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # NOT closed by this: a neighbour that REMOVES the seam mid-flight rather
     # than restoring it still races, which is what --test-threads=1 shuts on
     # the headless target. The durable closure is the seam-writer guard
-    # (scripts/check-seam-writers-canonical.sh) going gating once 1250-92ty
+    # (scripts/lua/check-seam-writers-canonical.lua) going gating once 1250-92ty
     # lands; this seat removes the deterministic failure, not the race.
     if run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
         log_pass "All unit tests pass"

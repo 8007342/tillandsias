@@ -152,6 +152,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:script-run-verb
+  - litmus:pilot-lua-ports
   - litmus:pre-push-trailer-states-what-it-saw
   - litmus:land-refusals-carry-affordance
   - litmus:plan-fragments-lane-refusals-carry-affordance
