@@ -4466,6 +4466,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bash dialect gate passed"
 
+    # ORDER 1384-bxhk — the shell ratchet: prints the Lua migration's counts on
+    # every --check, refuses a NEW .sh decider (check-/test-/verify-/guard-), a
+    # new pipe site beyond a file's floor and (once steps: exists) a new piped
+    # litmus command; its floors only descend over their own git history.
+    _step "Checking the shell ratchet (1384-bxhk)..."
+    if ! _run_lua_decider "scripts/lua/check-shell-ratchet.lua" 2>&1; then
+        _error "the shell corpus grew past its floor — see the violation lines above; write it as scripts/lua/<name>.lua on tillandsias-plan script run (1384-bxhk)"
+        exit 1
+    fi
+    _info "Shell ratchet passed"
+
     _step "Checking the litmus step model (901-jtvi)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
         _error "the litmus step model regressed — a producer's failure or its stderr can go missing again (901-jtvi)"

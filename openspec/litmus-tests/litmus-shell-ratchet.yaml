@@ -1,0 +1,34 @@
+# @trace spec:ci-release
+# @trace order:1384-bxhk
+#
+# Order 1384-bxhk: the Lua migration's forcing function and score. An available
+# seam with no forcing function stays at one adopter (902-5bf9). The ratchet
+# counts the shell corpus on every --check and refuses a NEW .sh decider, a new
+# pipe site beyond a file's floor, and (once steps: exists) a new piped litmus
+# command; its per-file floors only descend over their own git history.
+name: litmus:shell-ratchet
+spec: ci-release
+phase: pre-build
+description: >
+  The one-line count grammar, with sh= equal to an independent find; a new
+  check-*.sh refused naming script run; a new piped litmus command refused once
+  steps: exists while a quoted pipe is accepted; a raised floor refused and an
+  honest lowering accepted; an empty population could-not-run; allow_shell_strings
+  counted. Every arm runs in a fresh scratch repo, so no arm encodes a moment.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-shell-ratchet.sh
+  - a runnable tillandsias-plan that knows `script`, or the fixture answers could-not-run
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-shell-ratchet.sh && test -x scripts/test-shell-ratchet.sh && echo 'ok: shell-ratchet-parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: shell-ratchet-parses"
+
+  - step: "the six arms hold"
+    command: "bash scripts/test-shell-ratchet.sh"
+    timeout_ms: 600000
+    expected_behavior: "shell-ratchet: 6 passed, 0 failed"
