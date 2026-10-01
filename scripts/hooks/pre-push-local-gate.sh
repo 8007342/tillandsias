@@ -1609,14 +1609,24 @@ attempt_plan_only_lane() {
 
     # Forbidden-pattern check that applies to any tracked text, fragments
     # included (methodology base64_script_injection_ban).
-    if [[ -f scripts/check-no-base64-script-injection.sh ]]; then
-        if ! out="$(bash scripts/check-no-base64-script-injection.sh 2>&1)"; then
-            echo "plan-only lane: validation FAILED — check-no-base64-script-injection refused (full gate required):" >&2
-            echo "$out" | head -6 | sed 's/^/  /' >&2
+    # PORTED to Lua (1525-c6jm): scripts/lua/check-no-base64-script-injection.lua
+    # through the one runner (`plan_bin`, resolved above). A missing plan
+    # binary is a loud could-not-run — the lane denies the fast path rather
+    # than silently skipping a security gate, unlike the "absent" skip below
+    # (which is for the checker SOURCE being absent, not its runner).
+    if [[ -f scripts/lua/check-no-base64-script-injection.lua ]]; then
+        if [[ -n "$plan_bin" ]]; then
+            if ! out="$("$plan_bin" script run scripts/lua/check-no-base64-script-injection.lua 2>&1)"; then
+                echo "plan-only lane: validation FAILED — check-no-base64-script-injection refused (full gate required):" >&2
+                echo "$out" | head -6 | sed 's/^/  /' >&2
+                return 1
+            fi
+        else
+            echo "plan-only lane: validation FAILED — check-no-base64-script-injection could-not-run: no tillandsias-plan with \`script run\` resolves (full gate required)" >&2
             return 1
         fi
     else
-        LANE_NOTES+=("scripts/check-no-base64-script-injection.sh absent — skipped")
+        LANE_NOTES+=("scripts/lua/check-no-base64-script-injection.lua absent — skipped")
     fi
 
     # ORDER 1261-bn7v. A long-form field whose OUTGOING fold drops a line
