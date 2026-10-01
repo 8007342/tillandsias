@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-groundtruth-regime-invariance-spends-ninety-percent-of-the-five-second-door-deadline-on-the-fastest-host-and-outlives-it-on-lenovinha-so-the-door-skips-it-there
+    field: status
+    value: completed
+    ts: "2026-10-01T00:15:57Z"
+    host: macuahuitl
+
+events:
+  - packet_id: check-groundtruth-regime-invariance-spends-ninety-percent-of-the-five-second-door-deadline-on-the-fastest-host-and-outlives-it-on-lenovinha-so-the-door-skips-it-there
+    event:
+      type: completed
+      ts: "2026-10-01T00:15:57Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 818e29c4d
+  - packet_id: check-groundtruth-regime-invariance-spends-ninety-percent-of-the-five-second-door-deadline-on-the-fastest-host-and-outlives-it-on-lenovinha-so-the-door-skips-it-there
+    event:
+      type: note
+      ts: "2026-10-01T00:15:57Z"
+      host: macuahuitl
+      summary: |-
+        LANDED in land117 (818e29c4d on origin/linux-next, gate 1236 s; lenovinha's 0a7e11c3b) under the coordinator's ruling (a): the decider carries '# preflight: gate-only-decider — <reason>', a token the door honours only for a check-* no pre-push hook runs and only with a reason. Criterion 1 (lenovinha): skip:preflight:check-groundtruth-regime-invariance[--strict]:gate-only — … where it used to deadline-skip. Criterion 2: test-deciders-within-door-deadline 6/6 (5 timed + 1 declared), and removing the declaration gives FAIL '…neither timed nor declared' (lenovinha, measured). Criterion 3, from land117's --check log: ok:groundtruth-regime-invariant:33-cases. Observation: the floor is one live synthesis, plan-current-direction-bootstrap-question, at 3997 ms live and 115 ms dead on lenovinha. Related, not a duplicate: 1511-n4y8 removed the per-citation index re-read earlier today; this row handles the synthesis floor that remained.
