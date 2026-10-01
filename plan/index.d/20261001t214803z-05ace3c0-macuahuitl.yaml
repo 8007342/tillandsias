@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-land-tool-adopts-a-stamp-only-at-scope-full-so-a-scoped-gate-re-gates-from-scratch-on-any-trunk-move-including-plan-only
+    field: status
+    value: in_progress
+    ts: "2026-10-01T21:48:03Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-land-tool-adopts-a-stamp-only-at-scope-full-so-a-scoped-gate-re-gates-from-scratch-on-any-trunk-move-including-plan-only
+    event:
+      type: note
+      ts: "2026-10-01T21:48:03Z"
+      host: macuahuitl
+      summary: |-
+        coordinator implements it (work/1524-jnby)
