@@ -88,11 +88,11 @@ fi
 missing=""; nonliteral=""
 for f in "$ROOT"/scripts/gate-steps.d/*.step; do
     [ -e "$f" ] || continue
-    line="$(grep -m1 '^STEP_SCRIPT=' "$f" || true)"
+    line="$(grep -m1 -E '^STEP_(SCRIPT|LUA)=' "$f" || true)"
     case "$line" in
         *'$'*|*'`'*|'') nonliteral="$nonliteral ${f##*/}" ; continue ;;
     esac
-    p="$(printf '%s' "$line" | sed 's/^STEP_SCRIPT="//; s/"$//')"
+    p="$(printf '%s' "$line" | sed -E 's/^STEP_(SCRIPT|LUA)="//; s/"$//')"
     [ -f "$ROOT/$p" ] || missing="$missing ${f##*/}:$p"
 done
 [ -z "$nonliteral" ] \
@@ -121,7 +121,7 @@ fi
 #      twice, and invisible to `bash -n` because there is no script to parse.
 dupes="$(for f in "$ROOT"/scripts/gate-steps.d/*.step; do
              [ -e "$f" ] || continue
-             grep -m1 '^STEP_SCRIPT=' "$f" | sed 's/^STEP_SCRIPT="//; s/"$//'
+             grep -m1 -E '^STEP_(SCRIPT|LUA)=' "$f" | sed -E 's/^STEP_(SCRIPT|LUA)="//; s/"$//'
          done | sort | uniq -d)"
 [ -z "$dupes" ] \
     && ok "no two .step files name the same script — a duplicated entry cannot hide" \
@@ -136,12 +136,18 @@ dupes="$(for f in "$ROOT"/scripts/gate-steps.d/*.step; do
 incomplete=""
 for f in "$ROOT"/scripts/gate-steps.d/*.step; do
     [ -e "$f" ] || continue
-    for k in STEP_DESC STEP_SCRIPT STEP_ERROR STEP_OK; do
+    for k in STEP_DESC STEP_ERROR STEP_OK; do
         grep -q "^$k=\"..*\"$" "$f" || incomplete="$incomplete ${f##*/}:$k"
     done
+    # A step names EXACTLY ONE runner: STEP_SCRIPT (bash) or STEP_LUA (script
+    # run, 1384-bqhy). Gate step 120-1087-h2z9 was the first STEP_LUA step to
+    # reach trunk (1525-c6jm), and this check, written before STEP_LUA existed,
+    # read it as a step missing its STEP_SCRIPT.
+    _n_runner="$(grep -cE '^STEP_(SCRIPT|LUA)="..*"$' "$f")"
+    [ "$_n_runner" = 1 ] || incomplete="$incomplete ${f##*/}:STEP_SCRIPT-or-STEP_LUA(found $_n_runner)"
 done
 [ -z "$incomplete" ] \
-    && ok "every .step declares all four fields non-empty — a truncated resolution cannot pass" \
+    && ok "every .step declares STEP_DESC, STEP_ERROR, STEP_OK and exactly one of STEP_SCRIPT/STEP_LUA, non-empty — a truncated resolution cannot pass" \
     || bad "a .step is missing or has an empty field:$incomplete"
 
 # ── 6b. AN OPTIONAL STEP_SKIP_EXIT IS A BARE INTEGER AND IS NEVER 0 OR 1.
