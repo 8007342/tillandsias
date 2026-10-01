@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nothing-counts-shell-deciders-or-pipe-sites-so-check-shell-ratchet-prints-the-counts-every-check-refuses-a-new-sh-decider-and-a-new-piped-litmus-command-and-its-floors-only-descend
+    field: status
+    value: completed
+    ts: "2026-10-01T20:40:00Z"
+    host: macuahuitl
+
+events:
+  - packet_id: nothing-counts-shell-deciders-or-pipe-sites-so-check-shell-ratchet-prints-the-counts-every-check-refuses-a-new-sh-decider-and-a-new-piped-litmus-command-and-its-floors-only-descend
+    event:
+      type: completed
+      ts: "2026-10-01T20:40:00Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 58bbd0fe5
+  - packet_id: nothing-counts-shell-deciders-or-pipe-sites-so-check-shell-ratchet-prints-the-counts-every-check-refuses-a-new-sh-decider-and-a-new-piped-litmus-command-and-its-floors-only-descend
+    event:
+      type: note
+      ts: "2026-10-01T20:40:00Z"
+      host: macuahuitl
+      summary: |-
+        LANDED in land123 (58bbd0fe5); evidence in the note event of the same timestamp

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: four-small-shell-deciders-run-as-lua-on-script-run-with-their-sh-deleted-and-byte-identical-verdicts-batch-a
+    event:
+      type: note
+      ts: "2026-10-01T20:40:00Z"
+      agent_id: linux-macuahuitl-claude-20261001t204000z
+      host: macuahuitl
+      summary: |
+        LANDED in land123 (58bbd0fe5, gate 1271 s). Four deciders run as scripts/lua on script run, .sh deleted: check-no-base64-script-injection, check-no-spawn-in-if-not, check-spec-registry-status, check-wsl-exe-single-constructor (sonnet port a8e752174, parity on the live tree, fixture scenarios and a planted violating input). Two coordinator relay-fixes: (1) 19595bc7d — the plan lane reports a plan binary without `script run` as COULD-NOT-RUN with the rebuild remedy, not as "refused"; (2) 3ff7fa786 — test-gate-step-append-no-conflict.sh (1072-b7eq) learned STEP_LUA. Gate step 120-1087-h2z9 was the first STEP_LUA step on trunk, and the fixture refused land123's first gate at 526 s. Every other STEP_SCRIPT reader was swept green on the tree. The first gate also refused because no packet carried 1525-c6jm (the @trace cites); filed in bf7dbbd05. Left as .sh on purpose: check-macos-only-sources-verified (a wrapper over an unported sibling) and check-tray-process-running-naming (owned by 1484-uf29).

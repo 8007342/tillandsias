@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-counts-shell-deciders-or-pipe-sites-so-check-shell-ratchet-prints-the-counts-every-check-refuses-a-new-sh-decider-and-a-new-piped-litmus-command-and-its-floors-only-descend
+    event:
+      type: note
+      ts: "2026-10-01T20:40:00Z"
+      agent_id: linux-macuahuitl-claude-20261001t204000z
+      host: macuahuitl
+      summary: |
+        LANDED in land123 (58bbd0fe5 on origin/linux-next, gate 1271 s; the first land pushed through the host's git-mirror lane). scripts/lua/check-shell-ratchet.lua runs inline in every ./build.sh --check. Coordinator scope (f2b0257a1): it REFUSES a new shell decider (check-/verify-/guard-*.sh outside the floor) and, once the steps: form exists, a new piped litmus command. It COUNTS and warns (warn:shell-ratchet:new-shell-fixture / new-pipes) on a new test-*.sh and a new pipe site in a script, because scripts/lua cannot spawn yet (1384-aixy) and refusing every added pipe would block ordinary bash fixes. The unscoped version scored 2/8 on its own fixture against the merged tree (trunk had drifted to 18 pipes against a floor of 15) and would have reddened every --check. Fixture test-shell-ratchet.sh 8/8 in plain, env -u and toolbox; litmus shell-ratchet pins 8/8. Floors only descend. Relayed with batch A; the relay-preflight red on litmus release-gates-run-locally STEP 20 (test-gate-stamp-memoization) was a flake under load: 15/15 three times standalone on the merged tree.
