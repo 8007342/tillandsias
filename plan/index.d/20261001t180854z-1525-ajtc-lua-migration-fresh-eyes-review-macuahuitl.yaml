@@ -26,6 +26,11 @@ packets:
     verifiable_closure: |
       tillandsias-plan check --strict-fragments; verify that the review file
       exists in the work ref and that its citations resolve in the same tree.
+    unscoreable: |
+      This is a reviewer judgment about multiple independently evolving
+      boundaries. Its artifact is an evidence-backed finding with cited
+      disconfirmation paths, not a new executable behavior a single litmus
+      could assert without mirroring the review itself.
     events:
       - type: filed
         ts: '2026-10-01T18:09:17Z'
