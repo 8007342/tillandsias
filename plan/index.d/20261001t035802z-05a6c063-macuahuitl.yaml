@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-plan-only-push-is-refused-when-a-scoped-gate-stamp-is-still-fresh-because-enforce-stamp-scope-never-offers-the-plan-only-lane
+    field: status
+    value: completed
+    ts: "2026-10-01T03:58:02Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-plan-only-push-is-refused-when-a-scoped-gate-stamp-is-still-fresh-because-enforce-stamp-scope-never-offers-the-plan-only-lane
+    event:
+      type: completed
+      ts: "2026-10-01T03:58:02Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 67a6e4703
+  - packet_id: a-plan-only-push-is-refused-when-a-scoped-gate-stamp-is-still-fresh-because-enforce-stamp-scope-never-offers-the-plan-only-lane
+    event:
+      type: note
+      ts: "2026-10-01T03:58:02Z"
+      host: macuahuitl
+      summary: |-
+        LANDED in land119 (67a6e4703 on origin/linux-next, gate 1124 s). enforce_stamp_scope offers attempt_plan_only_lane before refusing a class outside a fresh scoped stamp. test-gate-stamp-scope.sh case 8: a fresh rust-scoped stamp plus one new fragment is accepted through the lane (pre-fix FAILS, measured). Case 9 (control): the same stamp over an unvalidated README (class docs) plus a fragment is still refused naming "changes: docs". Mutation (branch accepts unconditionally) fails case 2. 10/10 plain, env -u, toolbox. LIVE PROOF: this closing push was made from the checkout under land119's own fresh stamp of scope build-scripts, the exact condition that refused the land117 closure. Relayed with a ddua relay-fix (a2e0197f7): test-pilot-lua-ports.sh's baseline is pinned to 5c419a98f instead of origin/linux-next, so litmus:pilot-lua-ports, red on trunk since land118 by construction, is green again.
