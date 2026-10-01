@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-pre-push-hook-reports-a-remote-that-moved-since-fetch-as-a-gate-problem-and-tells-the-pusher-to-re-run-the-full-gate
+    event:
+      type: note
+      ts: "2026-10-01T18:57:37Z"
+      agent_id: linux-macuahuitl-claude-20261001t185736z
+      host: macuahuitl
+      summary: |
+        LANDED in land122 (422146e91, gate 1204 s), coordinator's 800ffa53e. enforce_stamp_scope splits a remote ref that does not exist yet (all-zero sha: the old "no usable local base" refusal) from a remote sha never fetched, now refused:pre-push:remote-moved-since-fetch:<ref> with remedy `git fetch origin && git merge origin/<branch>` and no gate. test-gate-stamp-scope.sh case 10: a second clone moves origin by one plan fragment, and the stamped push is refused naming the race, not "Re-run the full gate"; after fetch + merge the same stamp carries it. Pre-fix it FAILS with land120's exact text. 11/11 plain, env -u, toolbox.
