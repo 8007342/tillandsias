@@ -88,6 +88,19 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SELF_DIR/.." && pwd)"
 cd "$ROOT" || exit 2
 
+# ORDER 1522-ey4h — RUN THE MERGED COPY OF THIS TOOL, NOT THE PRE-MERGE ONE.
+# The merge below rewrites scripts/relay-preflight.sh on disk, but git replaces
+# the file (a new inode), so this process keeps executing the PRE-merge text:
+# a ref that ports or deletes a decider was refused for a script the merged
+# tree no longer has (land118: check-bash-dialect.sh). Snapshot what is
+# running now; after the merge, if the merged copy differs, exec it with the
+# same arguments. The marker makes the merged copy skip fetch/merge (it is
+# already on the relay branch) and carry the restore point.
+RP_ORIG_ARGS=("$@")
+RP_SNAPSHOT="$(mktemp "${TMPDIR:-/tmp}/relay-preflight-self.XXXXXX")" || RP_SNAPSHOT=""
+[ -n "$RP_SNAPSHOT" ] && cat "${BASH_SOURCE[0]}" > "$RP_SNAPSHOT" 2>/dev/null
+RP_REEXEC="${TILLANDSIAS_RELAY_PREFLIGHT_REEXEC:-}"
+
 # ── affordance + timing, best-effort, never disturb the wrapped rc ─────────
 _afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
 
@@ -158,6 +171,22 @@ if [ -n "$_dirty" ]; then
     exit 1
 fi
 
+if [ -n "$RP_REEXEC" ]; then
+    # Re-executed by the pre-merge copy (1522-ey4h): already merged, on the
+    # relay branch. Take the restore point from it; do not fetch or merge again.
+    RELAY_BRANCH="$RP_REEXEC"
+    ORIG_REF="${TILLANDSIAS_RELAY_PREFLIGHT_ORIG_REF:-}"
+    [ -n "$ORIG_REF" ] || ORIG_REF="$(git rev-parse HEAD)"
+    _item reexec:merged-copy ok 0
+fi
+
+_restore_clean() {
+    git merge --abort >/dev/null 2>&1 || true
+    git checkout -q "$ORIG_REF" >/dev/null 2>&1 || true
+    git branch -D "$RELAY_BRANCH" >/dev/null 2>&1 || true
+}
+
+if [ -z "$RP_REEXEC" ]; then
 ORIG_REF="$(git symbolic-ref --short -q HEAD || true)"
 [ -n "$ORIG_REF" ] || ORIG_REF="$(git rev-parse HEAD)"
 
@@ -192,11 +221,6 @@ if ! git checkout -q -B "$RELAY_BRANCH" "$BASE" >/dev/null 2>&1; then
     exit 1
 fi
 
-_restore_clean() {
-    git merge --abort >/dev/null 2>&1 || true
-    git checkout -q "$ORIG_REF" >/dev/null 2>&1 || true
-    git branch -D "$RELAY_BRANCH" >/dev/null 2>&1 || true
-}
 
 for ref in ${refs[@]+"${refs[@]}"}; do
     if ! git rev-parse --verify -q "$ref^{commit}" >/dev/null 2>&1; then
@@ -220,6 +244,16 @@ for ref in ${refs[@]+"${refs[@]}"}; do
     fi
     _item "merge:$ref" ok "$_t"
 done
+
+# 1522-ey4h: the merged tree carries a different copy of this tool. Run THAT.
+if [ -n "$RP_SNAPSHOT" ] && [ -f "$ROOT/scripts/relay-preflight.sh" ] \
+   && ! cmp -s "$RP_SNAPSHOT" "$ROOT/scripts/relay-preflight.sh"; then
+    rm -f "$RP_SNAPSHOT"
+    export TILLANDSIAS_RELAY_PREFLIGHT_REEXEC="$RELAY_BRANCH" TILLANDSIAS_RELAY_PREFLIGHT_ORIG_REF="$ORIG_REF"
+    exec bash "$ROOT/scripts/relay-preflight.sh" ${RP_ORIG_ARGS[@]+"${RP_ORIG_ARGS[@]}"}
+fi
+fi
+[ -n "$RP_SNAPSHOT" ] && rm -f "$RP_SNAPSHOT"
 
 MERGED_SHA="$(git rev-parse --short HEAD)"
 
