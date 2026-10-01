@@ -49,7 +49,7 @@ case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
 run_decider() {
     local s="$ROOT/scripts/$1.sh"
     case "$1" in
-        check-bash-dialect) ( cd "$2" && "$PLAN" script run "$ROOT/scripts/lua/check-bash-dialect.lua" ) ;;
+        check-bash-dialect) ( cd "$2" && TILLANDSIAS_REPO_ROOT="$2" "$PLAN" script run "$ROOT/scripts/lua/check-bash-dialect.lua" ) ;;
         check-jq-callsite-ratchet) bash "$s" --root "$2" ;;
         check-sigpipe-verdict-pipelines-added) TILLANDSIAS_SIGPIPE_ROOT="$2" bash "$s" ;;
     esac > "$W/$1.out" 2> "$W/$1.err"

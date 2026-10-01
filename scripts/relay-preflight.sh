@@ -290,7 +290,10 @@ _run_decider() { # name -> sets DEC_OUT, returns rc
                 DEC_OUT="could-not-run:check-bash-dialect:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
                 return 3
             fi
-            _cap "$_lb" script run "$SELF_DIR/lua/check-bash-dialect.lua" ;;
+            # The runner finds its repo root from TILLANDSIAS_REPO_ROOT, then
+            # PROJECT_ROOT, then cwd; a caller (the litmus runner) may export
+            # PROJECT_ROOT for another tree, so pin THIS one.
+            _cap env TILLANDSIAS_REPO_ROOT="$ROOT" "$_lb" script run "$SELF_DIR/lua/check-bash-dialect.lua" ;;
         check-sigpipe-verdict-pipelines-added) DEC_OUT="$(TILLANDSIAS_SIGPIPE_BASE="$BASE" bash "$SELF_DIR/check-sigpipe-verdict-pipelines-added.sh" 2>&1)"; return $? ;;
         check-plan-binary-probe-usage) _cap bash "$SELF_DIR/check-plan-binary-probe-usage.sh" ;;
         check-litmus-pin-claims) _cap bash "$SELF_DIR/check-litmus-pin-claims.sh" ;;

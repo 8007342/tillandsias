@@ -85,7 +85,7 @@ run_decider() {
     case "$name" in
         check-bash-dialect)
             if [ -z "$_dr_plan" ]; then echo "could-not-run:decider-retirement:no-script-runner:$name" > "$WORK/$name.out"; : > "$WORK/$name.err"; return; fi
-            ( cd "$ROOT" && "$_dr_plan" script run "$script" ) > "$WORK/$name.out" 2> "$WORK/$name.err" ;;
+            ( cd "$ROOT" && TILLANDSIAS_REPO_ROOT="$ROOT" "$_dr_plan" script run "$script" ) > "$WORK/$name.out" 2> "$WORK/$name.err" ;;
         check-jq-callsite-ratchet)
             bash "$script" --root "$ROOT" > "$WORK/$name.out" 2> "$WORK/$name.err" ;;
         check-sigpipe-verdict-pipelines-added)
