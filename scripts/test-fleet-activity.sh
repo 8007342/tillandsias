@@ -133,11 +133,24 @@ done
 # ── ARM 8: it never claims to answer idleness ────────────────────────────────
 # The negative control the row asked for. An instrument that LOOKS like it
 # reports idle hosts is worse than none, because this pass acts on idleness.
-out="$(timeout 120 bash "$CHECK" --since 24.hours 2>&1)"
-if printf '%s' "$out" | grep -qi 'IDLENESS IS ESTABLISHED BY ASKING'; then
-    ok "ARM 8: every run says absence from the window is not idleness"
+# BOTH WINDOWS, AND THE WORDS MAY WRAP (relay-fix, coordinator 2026-10-01). This
+# arm used `--since 24.hours` and a one-line grep. A fleet quiet for a day gives
+# an empty window, whose disclaimer wraps "idleness is / established by
+# asking" across two lines, so the arm would have gone red on every host the
+# first day nobody committed. It now checks a window that ends just past the
+# newest commit (never empty while the repo has history) AND a 1-second window
+# (empty), each with its lines joined before matching.
+_newest_ct="$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null)"
+case "$_newest_ct" in ''|*[!0-9]*) _newest_ct="$(date +%s)" ;; esac
+a8_why=""
+for _w in "$(( $(date +%s) - _newest_ct + 3600 )).seconds" "1.seconds"; do
+    _joined="$(timeout 120 bash "$CHECK" --since "$_w" 2>&1 | tr '\n' ' ' | tr -s ' ')"
+    grep -qi 'IDLENESS IS ESTABLISHED BY ASKING' <<<"$_joined" || a8_why="$a8_why window=$_w;"
+done
+if [ -z "$a8_why" ]; then
+    ok "ARM 8: every run says absence from the window is not idleness (a non-empty and an empty window)"
 else
-    bad "ARM 8: the output does not disclaim idleness; a reader can take absence for idle"
+    bad "ARM 8: the output does not disclaim idleness in:$a8_why a reader can take absence for idle"
 fi
 
 total=$((pass+fail))
