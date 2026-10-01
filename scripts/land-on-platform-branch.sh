@@ -396,7 +396,17 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             # cannot launder a real failure, which is 1176-fn2p's second
             # negative control, enforced by POSITION here and by the kernel
             # record itself inside the probe.
-            _oom_out="$(bash "$ROOT/scripts/check-oom-postmortem.sh" --since -60min 2>&1)"; _oom_rc=$?
+            # PORTED to Lua (1526-gv3t): scripts/lua/check-oom-postmortem.lua,
+            # run through the one runner; no runner is a could-not-run (the
+            # Lua port's own `*` case below), never a silent pass.
+            _oom_bin="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _oom_bin=""
+            case "$_oom_bin" in ./*) _oom_bin="$ROOT/${_oom_bin#./}" ;; esac
+            if [ -n "$_oom_bin" ] && grep -qx script <<<"$("$_oom_bin" capabilities 2>/dev/null)"; then
+                _oom_out="$("$_oom_bin" script run "$ROOT/scripts/lua/check-oom-postmortem.lua" -- --since -60min 2>&1)"; _oom_rc=$?
+            else
+                _oom_out="could-not-run:oom-postmortem:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+                _oom_rc=3
+            fi
             case "$_oom_rc" in
                 1) echo "refused:land:gate-oom-killed — the gate produced no verdict (exit $_gate_rc) and the kernel records an OOM kill (1176-fn2p)" >&2
                    _afford "the kernel killed the gate for memory, so it never reached a verdict on this tree" \

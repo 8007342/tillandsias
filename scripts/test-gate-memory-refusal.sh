@@ -13,18 +13,33 @@
 # NO ABSOLUTE TIMESTAMP IS ENCODED HERE. The stub journal line carries a date
 # because kernel log lines do; no arm compares it against now, and the probes
 # take their window as a relative --since.
+#
+# PORTED to Lua (1526-gv3t): the OOM post-mortem is
+# scripts/lua/check-oom-postmortem.lua, run through the one runner (`script
+# run`); no runner is a loud skip, never a silent pass. Scratch moved from an
+# outside-the-repo mktemp to target/plan-scratch (1384-ddua's convention)
+# because the guard's fs.read is repo-rooted: a --journal-from fixture file
+# outside the repo and every declared read-env root is refused, not read.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
 FLOOR="$ROOT/scripts/check-gate-memory-floor.sh"
-OOM="$ROOT/scripts/check-oom-postmortem.sh"
-for f in "$FLOOR" "$OOM"; do
-    [ -x "$f" ] || { echo "could-not-run:gate-memory-refusal:missing:$f"; exit 3; }
-done
+[ -x "$FLOOR" ] || { echo "could-not-run:gate-memory-refusal:missing:$FLOOR"; exit 3; }
 
-W="$(mktemp -d "${TMPDIR:-/tmp}/gate-mem-refusal.XXXXXX")" || exit 3
+OOM_LUA="$ROOT/scripts/lua/check-oom-postmortem.lua"
+[ -f "$OOM_LUA" ] || { echo "could-not-run:gate-memory-refusal:missing:$OOM_LUA"; exit 3; }
+PLAN_BIN="$(. scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+case "$PLAN_BIN" in ./*) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev/null)"; then
+    echo "skip:gate-memory-refusal:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+    exit 0
+fi
+OOM() { "$PLAN_BIN" script run "$OOM_LUA" -- "$@"; }
+
+mkdir -p "$ROOT/target/plan-scratch"
+W="$(mktemp -d "$ROOT/target/plan-scratch/gate-mem-refusal.XXXXXX")" || exit 3
 trap 'rm -rf "$W"' EXIT
 
 pass=0; fail=0
@@ -106,7 +121,7 @@ else
 fi
 
 # ── 5. the OOM post-mortem reports a kill the kernel recorded ──────────────
-out="$("$OOM" --journal-from "$W/journal-oom" --victim rustc 2>/dev/null)"; rc=$?
+out="$(OOM --journal-from "$W/journal-oom" --victim rustc 2>/dev/null)"; rc=$?
 if [ "$rc" = "1" ] && case "$out" in *refused:gate:oom-killed*) true ;; *) false ;; esac; then
     ok "a kernel OOM record yields refused:gate:oom-killed"
 else
@@ -117,7 +132,7 @@ fi
 #    An OOM elsewhere on the host is not this gate's OOM. Without the victim
 #    narrowing, any kill in the window would convert an ordinary failure into
 #    refused:gate:oom-killed — which is exactly the laundering 1176-fn2p forbids.
-out="$("$OOM" --journal-from "$W/journal-oom" --victim some-other-process 2>/dev/null)"; rc=$?
+out="$(OOM --journal-from "$W/journal-oom" --victim some-other-process 2>/dev/null)"; rc=$?
 if [ "$rc" = "0" ]; then
     ok "NC2: an OOM naming a different victim is NOT reported as this gate's kill"
 else
@@ -125,10 +140,10 @@ else
 fi
 
 # ── 7. a quiet journal is a clean answer, an unreadable one is not ─────────
-out="$("$OOM" --journal-from "$W/journal-quiet" 2>/dev/null)"; rc=$?
+out="$(OOM --journal-from "$W/journal-quiet" 2>/dev/null)"; rc=$?
 [ "$rc" = "0" ] && ok "a readable, quiet journal answers ok:no-oom-record" \
                 || bad "a quiet journal did not answer cleanly (rc=$rc): $out"
-out="$("$OOM" --journal-from "$W/does-not-exist" 2>/dev/null)"; rc=$?
+out="$(OOM --journal-from "$W/does-not-exist" 2>/dev/null)"; rc=$?
 if [ "$rc" = "3" ]; then
     ok "an unreadable journal is could-not-run — never a confident not-OOM"
 else
@@ -147,12 +162,12 @@ elif [ -n "$_clippy_line" ] && [ "$_floor_line" -lt "$_clippy_line" ]; then
 else
     bad "the memory floor runs at or after the first compile (floor:$_floor_line clippy:$_clippy_line) — too late to prevent the kill"
 fi
-if /usr/bin/grep -q 'check-oom-postmortem.sh' build.sh; then
+if /usr/bin/grep -q 'check-oom-postmortem.lua' build.sh; then
     ok "build.sh consults the OOM record when a child dies on a signal"
 else
     bad "build.sh never consults the OOM record — a SIGKILLed child still stops silently"
 fi
-if /usr/bin/grep -q 'check-oom-postmortem.sh' scripts/land-on-platform-branch.sh; then
+if /usr/bin/grep -q 'check-oom-postmortem.lua' scripts/land-on-platform-branch.sh; then
     ok "the land driver consults the OOM record when the gate produced no verdict"
 else
     bad "the land driver still cannot tell a died gate from a refused one"
@@ -168,7 +183,7 @@ fi
 # anchors on text the change itself moved is measuring its own edit.
 _if_line="$(/usr/bin/grep -n 'if \[ -n "\$_first_fail" \]; then' scripts/land-on-platform-branch.sh | head -1 | cut -d: -f1)"
 _else_line="$(awk -v s="${_if_line:-0}" 'NR>s && /^        else$/ {print NR; exit}' scripts/land-on-platform-branch.sh)"
-_oom_line="$(/usr/bin/grep -n 'check-oom-postmortem.sh' scripts/land-on-platform-branch.sh | head -1 | cut -d: -f1)"
+_oom_line="$(/usr/bin/grep -n 'check-oom-postmortem.lua' scripts/land-on-platform-branch.sh | head -1 | cut -d: -f1)"
 _drv=""
 [ -n "$_if_line" ] && [ -n "$_else_line" ] && [ -n "$_oom_line" ] && _drv="located"
 if [ -z "$_drv" ]; then

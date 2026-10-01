@@ -14,7 +14,7 @@
 # So the path is declared HERE and nowhere else. Rust reads it with include_str!
 # (the manifest travels inside the artifact, the capabilities.txt pattern);
 # shell reads it through scripts/lib-ca-path.sh. A drift test asserts the two
-# agree, and scripts/check-ca-path-literals.sh ratchets the literal count so it
+# agree, and scripts/lua/check-ca-path-literals.lua ratchets the literal count so it
 # cannot grow back.
 #
 # CHANGING THIS VALUE IS NOT A CONSTANT CHANGE. Existing containers bind the OLD
