@@ -62,7 +62,7 @@ pub struct Qcow2Info {
 }
 
 /// ORDER 795-5itp, recorded `keep`. The framing ratchet
-/// (`scripts/check-framing-raw-decodes.sh`) counts `u32::from_be_bytes` and so
+/// (`scripts/lua/check-framing-raw-decodes.lua`) counts `u32::from_be_bytes` and so
 /// counts this line, but this is NOT a wire frame length: it reads a
 /// big-endian field out of a QCOW2 DISK HEADER, whose layout is defined by the
 /// image format and cannot be renegotiated. `LengthDelimitedCodec` has nothing

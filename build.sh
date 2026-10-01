@@ -2910,7 +2910,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "If-not pipeline guard check passed"
     _step "Checking the enclave membership list matches the code (245 P8)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-enclave-membership-documented.sh" 2>&1; then
+    # PORTED to Lua (1527-v7cy): scripts/lua/check-enclave-membership-documented.lua.
+    if ! _run_lua_decider "scripts/lua/check-enclave-membership-documented.lua" 2>&1; then
         _error "an enclave attach site is undocumented, or the spec names one that is gone (245 P8) — see the verdict line above"
         exit 1
     fi
@@ -3035,7 +3036,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Fragment-events could-not-run verdict fixture passed"
 
     _step "Checking every ledger fragment is intact (whole overlay)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-all-fragments-intact.sh" 2>&1; then
+    # PORTED to Lua (1527-v7cy): scripts/lua/check-all-fragments-intact.lua.
+    if ! _run_lua_decider "scripts/lua/check-all-fragments-intact.lua" 2>&1; then
         _error "a ledger fragment is damaged — append-only files are restored, not merged"
         exit 1
     fi
@@ -4606,7 +4608,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # subject, which is how a second root literal landed in 1019-ivia without
     # tripping anything.
     _step "Checking the state root has one declaration (1027-539s)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-state-root-literals.sh" 2>&1; then
+    # PORTED to Lua (1527-v7cy): scripts/lua/check-state-root-literals.lua.
+    if ! _run_lua_decider "scripts/lua/check-state-root-literals.lua" 2>&1; then
         exit 1
     fi
 
@@ -4798,7 +4801,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Cross-branch claim visibility passed"
 
     _step "Checking the raw frame-decode ratchet (795-5itp)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-framing-raw-decodes.sh" 2>&1; then
+    # PORTED to Lua (1527-v7cy): scripts/lua/check-framing-raw-decodes.lua.
+    if ! _run_lua_decider "scripts/lua/check-framing-raw-decodes.lua" 2>&1; then
         _error "the framing ratchet refused (795-5itp) — a new hand-rolled u32-BE frame decode, or a baseline nobody tightened after a migration"
         exit 1
     fi
@@ -5157,7 +5161,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "MO-FULL record-precedes-marker fixture passed"
 
     _step "Checking every spec requirement carries a unique stable id (976-suab)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-requirement-ids.sh" 2>&1; then
+    # PORTED to Lua (1527-v7cy): scripts/lua/check-requirement-ids.lua.
+    if ! _run_lua_decider "scripts/lua/check-requirement-ids.lua" 2>&1; then
         _error "a spec requirement is missing a req-id or shares one (976-suab) — see the verdict line above"
         exit 1
     fi

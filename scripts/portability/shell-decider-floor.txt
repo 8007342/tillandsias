@@ -1,7 +1,6 @@
 # The .sh deciders allowed to exist (1384-bxhk). May only SHRINK.
 scripts/check-added-fragments-parse.sh
 scripts/check-added-test-is-referenced.sh
-scripts/check-all-fragments-intact.sh
 scripts/check-append-vs-origin-fold.sh
 scripts/check-approved-ux-strings.sh
 scripts/check-archive-answerability.sh
@@ -41,7 +40,6 @@ scripts/check-deslop-sweep-health.sh
 scripts/check-dev-embed-model-agreement.sh
 scripts/check-enclave-ca-consistency.sh
 scripts/check-enclave-expect-none-is-fixture-only.sh
-scripts/check-enclave-membership-documented.sh
 scripts/check-enclave-network-internal.sh
 scripts/check-enclave-service-health.sh
 scripts/check-engine-cpu-dispatch.sh
@@ -57,7 +55,6 @@ scripts/check-fragment-events-land.sh
 scripts/check-fragment-keys-are-read.sh
 scripts/check-fragment-status-loss.sh
 scripts/check-fragment-ts-skew.sh
-scripts/check-framing-raw-decodes.sh
 scripts/check-gate-memory-floor.sh
 scripts/check-gate-step-prefix-across-refs.sh
 scripts/check-gate-step-regimes.sh
@@ -121,7 +118,6 @@ scripts/check-refusal-affordance-added.sh
 scripts/check-release-asset-integrity.sh
 scripts/check-release-tier-freshness.sh
 scripts/check-release-uploads-gated.sh
-scripts/check-requirement-ids.sh
 scripts/check-resumable-claim-dirt.sh
 scripts/check-ripgrep-available.sh
 scripts/check-running-image-freshness.sh
@@ -139,7 +135,6 @@ scripts/check-spec-index-resolution-agreement.sh
 scripts/check-spec-registry-status.sh
 scripts/check-spec-script-paths.sh
 scripts/check-stale-ready-rows.sh
-scripts/check-state-root-literals.sh
 scripts/check-stranded-in-progress.sh
 scripts/check-stranded-plan-writes.sh
 scripts/check-terminology.sh

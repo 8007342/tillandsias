@@ -347,7 +347,6 @@ scripts scripts/centicolon-grade.sh 2
 scripts scripts/change-class.sh 3
 scripts scripts/check-added-fragments-parse.sh 3
 scripts scripts/check-added-test-is-referenced.sh 5
-scripts scripts/check-all-fragments-intact.sh 5
 scripts scripts/check-append-vs-origin-fold.sh 15
 scripts scripts/check-approved-ux-strings.sh 5
 scripts scripts/check-archive-answerability.sh 5
@@ -380,7 +379,6 @@ scripts scripts/check-deslop-due.sh 5
 scripts scripts/check-deslop-sweep-health.sh 4
 scripts scripts/check-dev-embed-model-agreement.sh 2
 scripts scripts/check-enclave-expect-none-is-fixture-only.sh 2
-scripts scripts/check-enclave-membership-documented.sh 14
 scripts scripts/check-enclave-network-internal.sh 5
 scripts scripts/check-enclave-service-health.sh 16
 scripts scripts/check-engine-cpu-dispatch.sh 6
@@ -394,7 +392,6 @@ scripts scripts/check-fragment-events-land.sh 1
 scripts scripts/check-fragment-keys-are-read.sh 1
 scripts scripts/check-fragment-status-loss.sh 22
 scripts scripts/check-fragment-ts-skew.sh 4
-scripts scripts/check-framing-raw-decodes.sh 6
 scripts scripts/check-gate-memory-floor.sh 3
 scripts scripts/check-gate-step-prefix-across-refs.sh 4
 scripts scripts/check-gate-step-regimes.sh 1
@@ -451,7 +448,6 @@ scripts scripts/check-refusal-affordance-added.sh 3
 scripts scripts/check-release-asset-integrity.sh 12
 scripts scripts/check-release-tier-freshness.sh 7
 scripts scripts/check-release-uploads-gated.sh 1
-scripts scripts/check-requirement-ids.sh 5
 scripts scripts/check-resumable-claim-dirt.sh 1
 scripts scripts/check-running-image-freshness.sh 6
 scripts scripts/check-rust-source-pin-added.sh 2
@@ -467,7 +463,6 @@ scripts scripts/check-source-slice-bounds.sh 2
 scripts scripts/check-spec-index-resolution-agreement.sh 4
 scripts scripts/check-spec-script-paths.sh 7
 scripts scripts/check-stale-ready-rows.sh 3
-scripts scripts/check-state-root-literals.sh 4
 scripts scripts/check-stranded-in-progress.sh 5
 scripts scripts/check-stranded-plan-writes.sh 3
 scripts scripts/check-terminology.sh 4
