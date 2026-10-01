@@ -1729,11 +1729,25 @@ enforce_stamp_scope() {
     while read -r local_ref local_sha remote_ref remote_sha; do
         [[ -n "$local_ref" ]] || continue
         if [[ "$local_sha" =~ ^0+$ ]]; then continue; fi
-        if [[ "$remote_sha" =~ ^0+$ ]] || ! git cat-file -e "$remote_sha" 2>/dev/null; then
+        if [[ "$remote_sha" =~ ^0+$ ]]; then
             refuse "the gate stamp is scoped to '$scope' but $remote_ref has no usable local base to diff against" \
                    "A scoped stamp can only be honoured when the push can be classified." \
                    "Re-run the full gate:" \
                    "  ./build.sh --check"
+        fi
+        # ORDER 1524-w8ys — A REMOTE THAT MOVED IS A RACE, NOT A GATE PROBLEM.
+        # git hands this hook the remote's ADVERTISED tip, so a sha we do not
+        # have means the branch moved since the last fetch. This used to share
+        # the refusal above and tell the pusher to re-run the full gate, which
+        # cost land120 a whole second gate on 2026-10-01 for one plan-only
+        # commit; fetching and merging is enough, because the merged tree is
+        # classified against the scope on the next push (Fable investigation,
+        # plan/issues/gate-collisions-scoped-stamps-2026-10-01.md).
+        if ! git cat-file -e "$remote_sha" 2>/dev/null; then
+            refuse "refused:pre-push:remote-moved-since-fetch:$remote_ref — origin has $remote_sha, which this checkout has never fetched" \
+                   "The branch moved on origin after your last fetch (another push landed). Nothing is wrong with your gate." \
+                   "Fetch and merge, then push again; no new gate is needed unless the merge brings in a change class your stamp's scope ('$scope') does not cover:" \
+                   "  git fetch origin && git merge origin/${remote_ref#refs/heads/}"
         fi
         while IFS= read -r path; do
             [[ -n "$path" ]] && paths+=("$path")
