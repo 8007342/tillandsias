@@ -16,6 +16,9 @@
 #                the pipe really removed) is accepted
 #   5 EMPTY      an empty scan population is could-not-run (exit 3), never ok
 #   6 STRINGS    an allow_shell_strings=true declaration in scripts/lua is counted
+#   7 FIXTURE    a NEW test-*.sh is counted and warned, not refused (coordinator
+#                scope 2026-10-01: fixtures stay shell until scripts/lua can spawn)
+#   8 PIPES      a NEW pipe site in a script is counted and warned, not refused
 #
 # HERMETIC, AND IT ENCODES NO MOMENT: every arm runs in a FRESH scratch git repo
 # seeded from this tree's scripts/ and litmus files, with TILLANDSIAS_REPO_ROOT
@@ -132,5 +135,27 @@ else
     bad "ARM 6: out=[$OUT]"
 fi
 
+
+# ── ARM 7: a NEW .sh FIXTURE is counted, not refused (coordinator scope) ────
+# The row refuses new shell DECIDERS; a test-*.sh is a fixture, warned and
+# counted while scripts/lua cannot spawn (1384-aixy). Pre-scope: refused.
+S="$W/s7"; seed "$S"
+printf '#!/usr/bin/env bash\necho ok:zzz-fixture\n' > "$S/scripts/test-zzz.sh"
+run "$S"
+if [ "$RC" = 0 ] && grep -q '^ok:shell-ratchet:' <<<"$OUT" && grep -q 'warn:shell-ratchet:new-shell-fixture:scripts/test-zzz.sh' <<<"$ERR"; then
+    ok "ARM 7: a new scripts/test-zzz.sh passes with a warn:shell-ratchet:new-shell-fixture line"
+else
+    bad "ARM 7: rc=$RC out=[$OUT] err=[$(head -c 300 <<<"$ERR")]"
+fi
+
+# ── ARM 8: a NEW pipe site in a script is counted, not refused ─────────────
+S="$W/s8"; seed "$S"
+printf '#!/usr/bin/env bash\necho a | cat\n' > "$S/scripts/zzz-helper.sh"
+run "$S"
+if [ "$RC" = 0 ] && grep -q '^ok:shell-ratchet:' <<<"$OUT" && grep -q 'warn:shell-ratchet:new-pipes:scripts/zzz-helper.sh:1>floor:0' <<<"$ERR"; then
+    ok "ARM 8: a new pipe site passes with a warn:shell-ratchet:new-pipes line"
+else
+    bad "ARM 8: rc=$RC out=[$OUT] err=[$(head -c 300 <<<"$ERR")]"
+fi
 echo "shell-ratchet: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -157,19 +157,32 @@ for k, n in pairs(pfloor) do if k:find("^scripts ") then pfloor_total = pfloor_t
 
 local violations = {}
 local function v(line, detail) violations[#violations + 1] = line; if detail then err(detail) end end
+-- SCOPE (coordinator, 2026-10-01, 1384-bxhk): the row REFUSES a new shell
+-- DECIDER and a new piped litmus command. A new shell FIXTURE (test-*.sh) and a
+-- new pipe site in a script are COUNTED and named on stderr as warn:, not
+-- refused: refusing every new test-*.sh would force every fixture into Lua
+-- while the runtime still runs one process at a time (1384-aixy's proc.spawn
+-- is unlanded), and refusing every added pipe would block ordinary bash fixes
+-- fleet-wide. The decider refusal is the migration's forcing function; the
+-- warn: lines keep the rest visible as a score.
+local n_warn = 0
 for _, f in ipairs(deciders) do
     if not dfloor[f] then
-        v("violation:shell-ratchet:new-decider:" .. f,
-          "  " .. f .. " is a NEW shell decider. Write scripts/lua/" .. base(f):gsub("%.sh$", ".lua") ..
-          " instead; the runner is `tillandsias-plan script run` (1384-bqhy).")
+        if base(f):find("^test%-") then
+            n_warn = n_warn + 1
+            err("warn:shell-ratchet:new-shell-fixture:" .. f .. " — counted, not refused while scripts/lua cannot spawn (1384-aixy); a Lua fixture is preferred")
+        else
+            v("violation:shell-ratchet:new-decider:" .. f,
+              "  " .. f .. " is a NEW shell decider. Write scripts/lua/" .. base(f):gsub("%.sh$", ".lua") ..
+              " instead; the runner is `tillandsias-plan script run` (1384-bqhy).")
+        end
     end
 end
 for f, n in pairs(script_pipes) do
     local fl = pfloor["scripts " .. f] or 0
     if n > fl then
-        v(("violation:shell-ratchet:new-pipes:%s:%d>floor:%d"):format(f, n, fl),
-          "  " .. f .. " carries " .. n .. " pipe site(s) against a floor of " .. fl ..
-          ". Capture, then match (grep -q PAT <<<\"$var\"), or move the logic into scripts/lua.")
+        n_warn = n_warn + 1
+        err(("warn:shell-ratchet:new-pipes:%s:%d>floor:%d — counted, not refused; capture then match (grep -q PAT <<<\"$var\"), or move the logic into scripts/lua"):format(f, n, fl))
     end
 end
 if n_steps > 0 then

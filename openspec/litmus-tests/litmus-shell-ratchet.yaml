@@ -31,4 +31,4 @@ critical_path:
   - step: "the six arms hold"
     command: "bash scripts/test-shell-ratchet.sh"
     timeout_ms: 600000
-    expected_behavior: "shell-ratchet: 6 passed, 0 failed"
+    expected_behavior: "shell-ratchet: 8 passed, 0 failed"
