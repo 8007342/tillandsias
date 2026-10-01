@@ -297,14 +297,43 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         _sv="$(bash scripts/gate-stamp.sh verify 2>/dev/null)"
         if [ "$_sv" = "ok:gate-fresh" ]; then
             _ss="$(bash scripts/gate-stamp.sh scope 2>/dev/null)"
+            # ORDER 1524-jnby — A SCOPED STAMP IS ADOPTED WHEN ITS SCOPE COVERS
+            # EVERY CLASS THIS PUSH CARRIES. The 1174-u5wp worry above ("a narrower
+            # stamp could satisfy the hook for a narrow push while saying nothing
+            # about the gate this tool owes") is exactly the case where the scope
+            # does NOT cover the push; when it does, the gate validated every
+            # class being pushed, and the hook's enforce_stamp_scope re-checks the
+            # same classes seconds later. Measured 2026-10-01: since 765-xpct the
+            # selector writes scoped stamps on most gates, so a plan-only trunk
+            # move during a gate cost a whole second gate (land120: 1183 s, then
+            # again), although the merged tree's code was unchanged. The classes
+            # come from gate-stamp.sh classify, the one taxonomy the hook uses.
+            _scope_why=""
             if [ "$_ss" = "full" ]; then
+                _scope_why="full-scope"
+            else
+                case "$_ss" in
+                    ""|stale:*|*" "*) ;;
+                    *)
+                        _push_cls="$(git diff --name-only --no-renames "origin/$BRANCH" HEAD -- 2>/dev/null | bash scripts/gate-stamp.sh classify 2>/dev/null | sort -u | tr '\n' ' ')"
+                        _uncov=""
+                        for _c in $_push_cls; do
+                            case ",$_ss," in *",$_c,"*) ;; *) _uncov="$_uncov $_c" ;; esac
+                        done
+                        if [ -n "${_push_cls// /}" ] && [ -z "$_uncov" ]; then
+                            _scope_why="scope $_ss covers every class this push carries: ${_push_cls% }"
+                        fi
+                        ;;
+                esac
+            fi
+            if [ -n "$_scope_why" ]; then
                 # NAME THE STAMP, or a reader cannot tell a SKIPPED gate from a
                 # gate that never ran -- the row's third criterion. gate-stamp.sh
                 # exposes no field reader, so the `stamped` line is read from the
                 # file it owns; an unreadable one degrades to a named token
                 # rather than to silence.
                 _adopted="$(sed -n 's/^stamped[[:space:]]\{1,\}//p' "$(git rev-parse --absolute-git-dir)/tillandsias-gate-stamp" 2>/dev/null | head -1)"
-                echo "ok:land-adopts-valid-stamp:${_adopted:-stamped-time-unreadable} — this tree already holds a green full-scope gate stamp; skipping the gate and going straight to the push (1174-u5wp)"
+                echo "ok:land-adopts-valid-stamp:${_adopted:-stamped-time-unreadable} — this tree already holds a green gate stamp ($_scope_why); skipping the gate and going straight to the push (1174-u5wp, 1524-jnby)"
                 echo "land: attempt $attempt — gate ADOPTED, not run. A gate that finished green is worth adopting; the pre-push hook re-verifies this same stamp against this same tree."
             fi
         fi
