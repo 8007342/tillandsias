@@ -9,11 +9,21 @@
 # unconditionally, so a "test" pointed at a copied corpus stamped the LIVE specs
 # instead — measured, on this script's first run. TILLANDSIAS_SPEC_ROOT exists
 # because of that, and this fixture is what would have caught it.
+#
+# PORTED to Lua (1527-v7cy): the validator is scripts/lua/check-requirement-ids.lua,
+# run through the one runner; no runner is a loud skip, never a silent pass.
+# The stamper (scripts/stamp-requirement-ids.sh) is unaffected and unported.
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAMP="$REPO_ROOT/scripts/stamp-requirement-ids.sh"
-CHECK="$REPO_ROOT/scripts/check-requirement-ids.sh"
+PLAN_BIN="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+case "$PLAN_BIN" in ./*) PLAN_BIN="$REPO_ROOT/${PLAN_BIN#./}" ;; esac
+if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev/null)"; then
+    echo "skip:requirement-ids-fixture:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+    exit 0
+fi
+CHECK_LUA="$REPO_ROOT/scripts/lua/check-requirement-ids.lua"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 failures=0
@@ -48,7 +58,7 @@ EOF
 }
 
 run_stamp() { TILLANDSIAS_SPEC_ROOT="$TMP" bash "$STAMP" 2>&1; }
-run_check() { TILLANDSIAS_SPEC_ROOT="$TMP" bash "$CHECK" 2>&1; }
+run_check() { TILLANDSIAS_SPEC_ROOT="$TMP" "$PLAN_BIN" script run "$CHECK_LUA" 2>&1; }
 
 # 1. A fresh corpus fails the validator before it is stamped. The negative
 #    control for the guard itself.

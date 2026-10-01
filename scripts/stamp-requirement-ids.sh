@@ -96,8 +96,8 @@ for f in $SPEC_GLOB; do
             esac
         fi
         # The colon form and the numbered form `### Requirement <n>:` are
-        # both requirements (order 1396-35we); check-requirement-ids.sh matches
-        # the same two.
+        # both requirements (order 1396-35we); scripts/lua/check-requirement-ids.lua
+        # matches the same two.
         case "$line" in
             '### Requirement:'* | '### Requirement '[0-9]*':'*) prev_was_heading=1 ;;
         esac
