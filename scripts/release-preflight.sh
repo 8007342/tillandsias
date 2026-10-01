@@ -290,12 +290,33 @@ fi
 _stable_remote="$(git ls-remote origin 'refs/tags/stable^{}' 2>/dev/null | awk '{print $1}' | head -1)"
 if [[ -z "$_stable_remote" ]]; then
     note "stable-vs-latest: could not read refs/tags/stable from origin — not checked"
-elif ! command -v gh >/dev/null 2>&1; then
-    note "stable-vs-latest: gh absent — not checked"
+elif ! command -v curl >/dev/null 2>&1 || [[ -z "${_plan_bin:-}" ]]; then
+    note "stable-vs-latest: curl or a runnable tillandsias-plan is absent — not checked"
 else
-    _latest_tag="$(gh api 'repos/{owner}/{repo}/releases/latest' --jq .tag_name 2>/dev/null)" || _latest_tag=""
+    # ORDER 1523-rxt6 — AN ANONYMOUS, BOUNDED READ OF A PUBLIC ENDPOINT. This
+    # used `gh api …/releases/latest`, and gh consults the login keyring for
+    # its token: on a host whose keyring is LOCKED it waited ~120 s before
+    # falling back (measured on lenovinha 120,422 ms and on macuahuitl 127 s
+    # vs 2 s unlocked, 2026-10-01), which timed out release-gates-run-locally
+    # STEP 1 (60 s) on whichever host had locked. The latest-release tag is
+    # public, so the read needs no credential: curl, anonymously, bounded twice
+    # (curl's own --max-time, and tillandsias-plan run's deadline as the outer
+    # bound that holds even if curl hangs before its timer starts).
+    _origin_url="$(git remote get-url origin 2>/dev/null)"
+    _origin_url="${_origin_url%.git}"
+    case "$_origin_url" in
+        https://github.com/*) _slug="${_origin_url#https://github.com/}" ;;
+        git@github.com:*)     _slug="${_origin_url#git@github.com:}" ;;
+        *)                    _slug="" ;;
+    esac
+    _latest_tag=""
+    if [[ -n "$_slug" ]]; then
+        _latest_json="$("$_plan_bin" run --timeout-ms 15000 -- curl -fsS --max-time 10 "https://api.github.com/repos/$_slug/releases/latest" 2>/dev/null)" || _latest_json=""
+        [[ -n "$_latest_json" ]] && _latest_tag="$("$_plan_bin" json get -r .tag_name <<<"$_latest_json" 2>/dev/null)" || true
+        [[ "$_latest_tag" == "null" ]] && _latest_tag=""
+    fi
     if [[ -z "$_latest_tag" ]]; then
-        note "stable-vs-latest: /releases/latest unreadable (gh unauthenticated or offline) — NOT a disagreement, the check could not run"
+        note "stable-vs-latest: /releases/latest unreadable (offline, rate-limited, or the bounded read timed out) — NOT a disagreement, the check could not run"
     else
         _latest_commit="$(git ls-remote origin "refs/tags/${_latest_tag}^{}" 2>/dev/null | awk '{print $1}' | head -1)"
         if [[ -z "$_latest_commit" ]]; then
