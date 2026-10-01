@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the coordinator on 2026-10-01 for the Lua migration's batch C.
+packets:
+  - packet_id: five-more-shell-deciders-run-as-lua-on-script-run-with-their-sh-deleted-and-byte-identical-verdicts-batch-c
+    order: 1527-v7cy
+    status: in_progress
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [lua, deciders, migration, parity]
+    estimated_hours: 3
+    depends_on: [five-small-shell-deciders-run-as-lua-on-script-run-with-their-sh-deleted-and-byte-identical-verdicts-batch-b]
+    owned_files:
+      - scripts/lua/check-requirement-ids.lua
+      - scripts/lua/check-state-root-literals.lua
+      - scripts/lua/check-framing-raw-decodes.lua
+      - scripts/lua/check-enclave-membership-documented.lua
+      - scripts/lua/check-all-fragments-intact.lua
+    title: |
+      Lua migration batch C: check-requirement-ids, check-state-root-literals, check-framing-raw-decodes, check-enclave-membership-documented and check-all-fragments-intact run as scripts/lua on `tillandsias-plan script run`, .sh deleted, byte-identical verdicts on the live tree, the fixtures and a planted violating input; the door-timed check-all-fragments-intact drops from 3.1 s to 0.76 s
+    context: |
+      Operator direction 2026-10-01 (sole worker, advance the Bash-to-Lua
+      migration). Ported by a sonnet agent on work/1527-v7cy (520d9f35f). It
+      trimmed the five from scripts/portability/shell-decider-floor.txt and
+      pipe-site-floor.txt (ratchet sh 674 -> 664). Left as .sh:
+      check-centicolon-ratchet, whose advisory verdict line fits none of the
+      runner's six prefixes; that runtime limit is filed separately.
+    outcome: |
+      Five fewer shell deciders, with the same verdicts, and a door decider
+      four times faster.
+    exit_criteria:
+      - "Each .lua matches its .sh's stdout/stderr/rc on the live tree and a planted violation; test-requirement-ids 8/8, test-all-fragments-intact 3/3, litmus one-length-delimited-framing-impl 6/6 and enclave-membership-documented 6/6."
+      - "test-deciders-within-door-deadline.sh 6/6, with check-all-fragments-intact under 1 s on this host."
+    verifiable_closure: |
+      The fixtures above green in plain, env -u and toolbox regimes on the
+      landed tree; quoted on the closing event.
+    unscoreable: "pinned-by-its-fixtures: test-requirement-ids.sh, test-all-fragments-intact.sh and the two litmus tests"
+    next_action: >
+      Relay work/1527-v7cy after land125 (1524-jnby); close citing the landed commit.
+    notes: |
+      size: M
+      implementer_tier: sonnet
