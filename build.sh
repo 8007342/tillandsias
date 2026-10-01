@@ -1802,8 +1802,18 @@ _run() {
     # control): a clippy error exits 101 and never reaches this branch, and even
     # here the verdict comes from the kernel's own record, not from the rc.
     if [ "$_run_rc" -ge 128 ]; then
-        local _oom_out _oom_rc
-        _oom_out="$(bash "$SCRIPT_DIR/scripts/check-oom-postmortem.sh" --since -30min 2>&1)"; _oom_rc=$?
+        local _oom_out _oom_rc _oom_bin
+        # PORTED to Lua (1526-gv3t): scripts/lua/check-oom-postmortem.lua, run
+        # through the one runner; no runner is a could-not-run (the `*` case
+        # below), never a silent pass.
+        _oom_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _oom_bin=""
+        case "$_oom_bin" in ./*) _oom_bin="$SCRIPT_DIR/${_oom_bin#./}" ;; esac
+        if [ -n "$_oom_bin" ] && grep -qx script <<<"$("$_oom_bin" capabilities 2>/dev/null)"; then
+            _oom_out="$("$_oom_bin" script run "$SCRIPT_DIR/scripts/lua/check-oom-postmortem.lua" -- --since -30min 2>&1)"; _oom_rc=$?
+        else
+            _oom_out="could-not-run:oom-postmortem:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+            _oom_rc=3
+        fi
         case "$_oom_rc" in
             1) _afford "the kernel killed a gate child for memory (the OOM record below names it), so the gate proved nothing about the tree" \
                    "free memory (stop other gates, builds or containers on this host) and re-run the gate; the tree itself needs no change"
@@ -2875,7 +2885,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 972-umik: tree-only, sub-second, and it ratchets the number of files
     # deciding whether the control wire is encrypted. Belongs in the fast phase
     # by both of lenovinha's criteria — it reads the tree and it can FAIL.
-    if ! _run bash "$SCRIPT_DIR/scripts/check-secure-wire-single-reader.sh" 2>&1; then
+    # PORTED to Lua (1526-gv3t): scripts/lua/check-secure-wire-single-reader.lua.
+    if ! _run_lua_decider "scripts/lua/check-secure-wire-single-reader.lua" 2>&1; then
         _error "a new reader of TILLANDSIAS_SECURE_CONTROL_WIRE appeared (972-umik) — see the verdict line above"
         exit 1
     fi
@@ -2885,7 +2896,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a fixture naming a nonexistent file AND a nonexistent order passed both
     # the ghost-trace gate and trace-coverage.sh, because those scan `@trace`
     # ANNOTATIONS and frontmatter is a different field.
-    if ! _run bash "$SCRIPT_DIR/scripts/check-cheatsheet-source-anchors.sh" 2>&1; then
+    # PORTED to Lua (1526-gv3t): scripts/lua/check-cheatsheet-source-anchors.lua.
+    if ! _run_lua_decider "scripts/lua/check-cheatsheet-source-anchors.lua" 2>&1; then
         _error "a cheatsheet anchors an order to a file that does not declare it (1053-a7qr) — see the verdict line above"
         exit 1
     fi
@@ -4585,7 +4597,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
 
     _step "Checking the CA path has one declaration (998-3z6g)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-ca-path-literals.sh" 2>&1; then
+    # PORTED to Lua (1526-gv3t): scripts/lua/check-ca-path-literals.lua.
+    if ! _run_lua_decider "scripts/lua/check-ca-path-literals.lua" 2>&1; then
         exit 1
     fi
 
@@ -5119,7 +5132,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Inference pull-failure classifier passed"
 
     _step "Checking backgrounded entrypoint jobs redirect stderr (702-6jza D4)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-backgrounded-jobs-redirect-stderr.sh" 2>&1; then
+    # PORTED to Lua (1526-gv3t): scripts/lua/check-backgrounded-jobs-redirect-stderr.lua.
+    if ! _run_lua_decider "scripts/lua/check-backgrounded-jobs-redirect-stderr.lua" 2>&1; then
         _error "a backgrounded agent-entrypoint job redirects only fd 1 — its stderr lands on a live TUI (702-6jza D4)"
         exit 1
     fi

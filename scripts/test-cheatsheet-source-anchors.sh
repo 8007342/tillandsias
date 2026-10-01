@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @trace order:1053-a7qr
 #
-# Fixture for check-cheatsheet-source-anchors.sh. The guard's whole value is
+# Fixture for check-cheatsheet-source-anchors.lua. The guard's whole value is
 # that it refuses; a guard nobody has watched refuse is a guard nobody knows is
 # wired, and the defect it was written for sat green for a month precisely
 # because NOTHING read cheatsheet `sources:` anchors at all.
@@ -14,10 +14,22 @@
 # Each scenario writes ONE cheatsheet under a unique per-process name and
 # removes it on every exit path. The guard walks cheatsheets/ repo-relative, so
 # the fixture has to be reachable there.
+#
+# PORTED to Lua (1526-gv3t): the guard is
+# scripts/lua/check-cheatsheet-source-anchors.lua, run through the one runner;
+# no runner is a loud skip, never a silent pass.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
+
+PLAN_BIN="$(. scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+case "$PLAN_BIN" in ./*) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev/null)"; then
+    echo "skip:cheatsheet-source-anchors-fixture:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+    exit 0
+fi
+CHECK="$ROOT/scripts/lua/check-cheatsheet-source-anchors.lua"
 
 FIXTURE="cheatsheets/zz-anchor-fixture-$$.md"
 cleanup() { rm -f "$ROOT/$FIXTURE"; }
@@ -35,7 +47,7 @@ _result() { # name expected actual
 }
 
 _guard_exit() {
-    scripts/check-cheatsheet-source-anchors.sh >/dev/null 2>&1
+    "$PLAN_BIN" script run "$CHECK" >/dev/null 2>&1
     echo $?
 }
 

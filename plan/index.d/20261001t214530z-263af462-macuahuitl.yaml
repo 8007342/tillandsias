@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: per-run-consent-tokens-for-destructive-command-classes-minted-by-the-operator-on-the-host-consumed-once-never-grantable-in-a-forge-and-the-smoke-skills-env-authorisation-mapped-to-the-substrate-reset-class-with-its-source-recorded
+    event:
+      type: note
+      ts: "2026-10-01T21:45:30Z"
+      agent_id: linux-macuahuitl-claude-20261001t214528z
+      host: macuahuitl
+      summary: |
+        FINDING routed from Codex's review (1525-ajtc, landed bb57e9621; finding 2): `policy eval` calls evaluate, which calls resolve_consent outside cfg(test) and consent_consume atomically renames or deletes a matching one-use token, although eval never spawns the command. The spec says consent is spent by the FIRST USE of the approved run. Proposed: make eval inspection-only (decide plus an unspent-token availability result), and spend only at the execution door. Pin it with an isolated consent dir: grant one argv, query it twice, then show the first actual run alone spends it.
