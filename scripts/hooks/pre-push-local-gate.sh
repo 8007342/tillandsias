@@ -1615,7 +1615,11 @@ attempt_plan_only_lane() {
     # than silently skipping a security gate, unlike the "absent" skip below
     # (which is for the checker SOURCE being absent, not its runner).
     if [[ -f scripts/lua/check-no-base64-script-injection.lua ]]; then
-        if [[ -n "$plan_bin" ]]; then
+        if [[ -n "$plan_bin" ]] && ! grep -qx script <<<"$("$plan_bin" capabilities 2>/dev/null)"; then
+            echo "plan-only lane: validation COULD-NOT-RUN — check-no-base64-script-injection: $plan_bin predates \`script run\`, so the check was not asked (full gate required)" >&2
+            echo "  remedy: cargo build --release -p tillandsias-plan (or scripts/cycle-preflight.sh), then push again" >&2
+            return 1
+        elif [[ -n "$plan_bin" ]]; then
             if ! out="$("$plan_bin" script run scripts/lua/check-no-base64-script-injection.lua 2>&1)"; then
                 echo "plan-only lane: validation FAILED — check-no-base64-script-injection refused (full gate required):" >&2
                 echo "$out" | head -6 | sed 's/^/  /' >&2
