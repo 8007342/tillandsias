@@ -38,11 +38,15 @@ if [ ! -s "$W/block.sh" ]; then
     exit 3
 fi
 
-# _drive <union-debt:0|1> <verify-verdict> <scope-verdict>
+# _drive <union-debt:0|1> <verify-verdict> <scope-verdict> [pushed paths, one per line]
+# The stub git answers `rev-parse` (the stamp path) and `diff` (the paths this
+# push carries, 1524-jnby); the stub gate-stamp.sh `classify` maps a path to its
+# class with the same prefixes the real taxonomy uses for these arms.
 _drive() {
     local d; d="$(mktemp -d "$W/c.XXXXXX")"
     mkdir -p "$d/scripts" "$d/gitdir"
-    printf '#!/usr/bin/env bash\ncase "$1" in\n  verify) echo "%s" ;;\n  scope)  echo "%s" ;;\nesac\n' "$2" "$3" \
+    printf '%s\n' "${4:-}" > "$d/paths"
+    printf '#!/usr/bin/env bash\ncase "$1" in\n  verify) echo "%s" ;;\n  scope)  echo "%s" ;;\n  classify) while IFS= read -r p; do case "$p" in "") ;; crates/*) echo rust ;; scripts/*) echo build-scripts ;; plan/*) echo plan-ledger ;; *) echo other ;; esac; done ;;\nesac\n' "$2" "$3" \
         > "$d/scripts/gate-stamp.sh"
     chmod +x "$d/scripts/gate-stamp.sh"
     printf 'version 2\ndigest deadbeef\nscope full\nstamped 2026-01-01T00:00:00Z\n' > "$d/gitdir/tillandsias-gate-stamp"
@@ -50,10 +54,10 @@ _drive() {
     [ "$1" = "1" ] && printf 'a union record\n' > "$d/um"
     # `git rev-parse --absolute-git-dir` is what the block calls for the stamp
     # path; a stub on PATH keeps the arm hermetic and out of any real repo.
-    printf '#!/usr/bin/env bash\nif [ "$1" = "rev-parse" ]; then echo "%s"; exit 0; fi\nexit 0\n' "$d/gitdir" > "$d/scripts/git"
+    printf '#!/usr/bin/env bash\nif [ "$1" = "rev-parse" ]; then echo "%s"; exit 0; fi\nif [ "$1" = "diff" ]; then cat "%s"; exit 0; fi\nexit 0\n' "$d/gitdir" "$d/paths" > "$d/scripts/git"
     chmod +x "$d/scripts/git"
     ( cd "$d" && PATH="$d/scripts:$PATH" \
-        bash -c 'set -uo pipefail; attempt=1; _um="'"$d"'/um"; . "'"$W"'/block.sh"; printf "ADOPTED=[%s]\n" "${_adopted:-}"' 2>&1 )
+        bash -c 'set -uo pipefail; attempt=1; BRANCH=linux-next; _um="'"$d"'/um"; . "'"$W"'/block.sh"; printf "ADOPTED=[%s]\n" "${_adopted:-}"' 2>&1 )
 }
 
 # ── 1. the case the row exists for: green, full-scope, no union debt ────────
@@ -76,13 +80,15 @@ case "$out" in
     *) bad "NC: a stale stamp was adopted, which would push an un-gated tree: $out" ;;
 esac
 
-# ── 3. NEGATIVE CONTROL: a narrower scope is not a full gate ───────────────
+# ── 3. NEGATIVE CONTROL: a narrower scope that does NOT cover the push ──────
 #    The hook enforces scope separately, and a scoped stamp can satisfy it for a
-#    narrow push while saying nothing about the gate this tool owes.
-out="$(_drive 0 ok:gate-fresh scripts,plan)"
+#    narrow push while saying nothing about the gate this tool owes. Since
+#    1524-jnby a scoped stamp is adopted only when it covers every class the
+#    push carries; this push carries rust, which scripts,plan does not cover.
+out="$(_drive 0 ok:gate-fresh build-scripts,plan-ledger "$(printf 'scripts/x.sh\ncrates/demo/lib.rs')")"
 case "$out" in
-    *"ADOPTED=[]"*) ok "NC: a narrower-scope stamp is NOT adopted" ;;
-    *) bad "NC: a partial-scope stamp was adopted as if it were a full gate: $out" ;;
+    *"ADOPTED=[]"*) ok "NC: a scoped stamp that does not cover a pushed class (rust) is NOT adopted" ;;
+    *) bad "NC: a partial-scope stamp was adopted for a push it did not validate: $out" ;;
 esac
 
 # ── 4. NEGATIVE CONTROL: the union debt VETOES adoption ────────────────────
@@ -117,6 +123,26 @@ else
     bad "the gate-failure branch can fire on an adopted attempt"
 fi
 
+
+# ── 7. a scoped stamp that COVERS every pushed class is adopted (1524-jnby) ─
+#    The land120 case: the gate wrote scope build-scripts,plan-ledger, trunk
+#    moved by one plan fragment mid-gate, the merge left the code unchanged,
+#    and the tool ran a second full gate. Pre-fix: NOT adopted (scope != full).
+out="$(_drive 0 ok:gate-fresh build-scripts,plan-ledger "$(printf 'scripts/x.sh\nplan/index.d/a.yaml')")"
+case "$out" in
+    *"ok:land-adopts-valid-stamp:"*"covers every class this push carries: build-scripts plan-ledger"*"ADOPTED=[2026-01-01T00:00:00Z]"*)
+        ok "a scoped stamp covering every pushed class is adopted, and the verdict names the scope and the classes" ;;
+    *) bad "a covering scoped stamp was not adopted: $out" ;;
+esac
+
+# ── 8. NEGATIVE CONTROL: an empty or unreadable push diff is never "covered" ─
+#    `for c in <nothing>` would leave nothing uncovered; adoption must require
+#    at least one classified path, or a failed diff would read as a free pass.
+out="$(_drive 0 ok:gate-fresh build-scripts,plan-ledger "")"
+case "$out" in
+    *"ADOPTED=[]"*) ok "NC: a scoped stamp with an empty push diff is NOT adopted" ;;
+    *) bad "NC: an empty push diff counted as covered: $out" ;;
+esac
 total=$((pass+fail))
 if [ "$fail" -eq 0 ]; then
     echo "PASS: land adopts a valid stamp $pass/$total (1174-u5wp)"
