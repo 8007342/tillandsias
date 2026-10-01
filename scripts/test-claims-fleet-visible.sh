@@ -92,7 +92,7 @@ cd "$W/wc" || exit 2
 git remote add origin "$W/bare.git"
 git config core.hooksPath .git/hooks
 git config core.autocrlf false
-mkdir -p scripts/hooks plan/index.d plan/loop_status.d
+mkdir -p scripts/hooks scripts/lua plan/index.d plan/loop_status.d
 cp "$GUARD" scripts/hooks/pre-push-local-gate.sh
 cp "$HELPER" scripts/push-plan-fragments-to-trunk.sh
 # EVERY CHECKER THE LANE CALLS MUST BE HERE, or the scratch lane runs SHORT and
@@ -116,7 +116,7 @@ cp "$HELPER" scripts/push-plan-fragments-to-trunk.sh
 # short and only the downstream arm noticed — by reporting nothing.
 for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh \
          check-fragment-status-loss.sh check-added-fragments-parse.sh check-fragment-ts-skew.sh \
-         check-scorable-obligation-added.sh check-no-base64-script-injection.sh \
+         check-scorable-obligation-added.sh \
          check-append-vs-origin-fold.sh agent-identity.sh; do
     cp "$ROOT/scripts/$f" "scripts/$f" 2>/dev/null || true
     # ASSERT THE COPY LANDED. Without this the list is a wish: a renamed or
@@ -124,6 +124,14 @@ for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-conve
     # checkout that does not exist. That is exactly how this bug reached a
     # release-blocking litmus without any land noticing.
     [ -f "scripts/$f" ] || { echo "FAIL: fixture scratch is missing scripts/$f (source: $ROOT/scripts/$f)"; exit 2; }
+done
+# PORTED to Lua (1525-c6jm): the base64-injection checker the lane calls is
+# scripts/lua/check-no-base64-script-injection.lua, run through the one
+# runner; the .sh is gone, so it joins this list by its own path rather than
+# the bare-name loop above.
+for f in scripts/lua/check-no-base64-script-injection.lua; do
+    cp "$ROOT/$f" "$f" 2>/dev/null || true
+    [ -f "$f" ] || { echo "FAIL: fixture scratch is missing $f (source: $ROOT/$f)"; exit 2; }
 done
 chmod +x scripts/*.sh scripts/hooks/*.sh 2>/dev/null || true
 cat > plan/index.yaml <<'EOF'
@@ -141,6 +149,15 @@ EOF
 printf 'base\n' > README.md
 printf 'fn main() {}\n' > src_placeholder.rs
 printf '# loop status\n' > plan/loop_status.d/README.md
+# PORTED to Lua (1525-c6jm): the base64 checker now runs through proc.run,
+# whose command-policy gate appends a per-host audit line to
+# .cache/metrics/command-policy-audit.jsonl on every decision (order
+# 1443-w9hf) — gitignored in the real checkout (.gitignore:151), so it is
+# invisible to `git status` there. This scratch repo is a bare `git init`
+# with no .gitignore, so without this line the new file reads as "local state
+# moved" (ARM 1's byte-identical-worktree check) though nothing the push
+# touches changed.
+printf '.cache/\n' > .gitignore
 G add -A >/dev/null; G commit -q -m base
 # The hook is installed the way git runs it, so every push below is gated
 # exactly as a host's push is. The seeding pushes happen BEFORE it exists.

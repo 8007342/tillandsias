@@ -154,6 +154,7 @@ specs:
   - litmus:script-run-verb
   - litmus:release-preflight-latest-read-bounded
   - litmus:pilot-lua-ports
+  - litmus:shell-ratchet
   - litmus:pre-push-trailer-states-what-it-saw
   - litmus:land-refusals-carry-affordance
   - litmus:plan-fragments-lane-refusals-carry-affordance

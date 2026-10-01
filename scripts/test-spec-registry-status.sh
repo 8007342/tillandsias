@@ -9,9 +9,20 @@
 # name. Plus: agreement passes, an annotated status line is not a mismatch
 # (secrets-management's "obsolete (removed in v0.3 …)"), and an UNDECIDED pair
 # is printed and counted apart, never hidden.
+#
+# PORTED to Lua (1525-c6jm): the guard is
+# scripts/lua/check-spec-registry-status.lua, run through the one runner; no
+# runner is a loud skip, never a silent pass.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-CHECK="$PWD/scripts/check-spec-registry-status.sh"
+
+PLAN_BIN="$(. scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+case "$PLAN_BIN" in ./*) PLAN_BIN="$PWD/${PLAN_BIN#./}" ;; esac
+if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev/null)"; then
+    echo "skip:spec-registry-status-fixture:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+    exit 0
+fi
+CHECK="$PWD/scripts/lua/check-spec-registry-status.lua"
 W="$(mktemp -d "${TMPDIR:-/tmp}/spec-reg.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
 pass=0; fail=0
@@ -25,7 +36,7 @@ build() {  # a registry with alpha(active) beta(obsolete) gamma(active)
     printf '# beta\n\n## Status\n\nobsolete (removed in v0.3 — see x)\n' > "$W/t/openspec/specs/beta/spec.md"
     printf '# gamma\n\n## Status\n\nstatus: active\n' > "$W/t/openspec/specs/gamma/spec.md"
 }
-run() { TILLANDSIAS_SPEC_ROOT="$W/t" TILLANDSIAS_SPEC_UNDECIDED="${1:-}" bash "$CHECK"; }
+run() { TILLANDSIAS_SPEC_ROOT="$W/t" TILLANDSIAS_SPEC_UNDECIDED="${1:-}" "$PLAN_BIN" script run "$CHECK"; }
 
 build
 o="$(run)"; rc=$?

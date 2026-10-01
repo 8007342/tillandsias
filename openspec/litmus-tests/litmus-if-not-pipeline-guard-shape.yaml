@@ -7,7 +7,7 @@ severity: high
 size: instant
 
 preconditions:
-  - scripts/check-no-spawn-in-if-not.sh is present and executable
+  - workspace contains scripts/lua/check-no-spawn-in-if-not.lua (1525-c6jm port of the .sh)
   - scripts/test-if-not-pipeline-guard.sh is present and executable
 
 critical_path:
@@ -17,11 +17,11 @@ critical_path:
     expected_behavior: "ok:if-not-pipeline-guard-shape:3"
 
   - step: "the gate runs green on the whole scripts/ tree"
-    command: "bash scripts/check-no-spawn-in-if-not.sh >/dev/null && echo 'ok: clean tree'"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/check-no-spawn-in-if-not.lua >/dev/null && echo 'ok: clean tree'"
     timeout_ms: 30000
     expected_behavior: "ok: clean tree"
 
   - step: "the gate is wired into the build suite"
-    command: "grep -q 'check-no-spawn-in-if-not.sh' build.sh && echo 'ok: wired'"
+    command: "grep -q 'check-no-spawn-in-if-not.lua' build.sh && echo 'ok: wired'"
     timeout_ms: 3000
     expected_behavior: "ok: wired"

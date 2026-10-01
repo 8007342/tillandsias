@@ -1920,17 +1920,27 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # Sub-check 8b: Base64 script injection ban
-    if [[ -f "scripts/check-no-base64-script-injection.sh" ]]; then
-        if bash scripts/check-no-base64-script-injection.sh 2>&1 | tee /tmp/no-base64-script-injection.log; then
-            log_pass "No base64 script injection detected"
-            archive_check_log "no-base64-script-injection" "pass" /tmp/no-base64-script-injection.log
+    # PORTED to Lua (1525-c6jm): scripts/lua/check-no-base64-script-injection.lua
+    # through the one runner; no runner is a could-not-run, never a pass.
+    if [[ -f "scripts/lua/check-no-base64-script-injection.lua" ]]; then
+        _b64_bin="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _b64_bin=""
+        case "$_b64_bin" in ./*) _b64_bin="$REPO_ROOT/${_b64_bin#./}" ;; esac
+        if [[ -n "$_b64_bin" ]]; then
+            if (cd "$REPO_ROOT" && "$_b64_bin" script run scripts/lua/check-no-base64-script-injection.lua) 2>&1 | tee /tmp/no-base64-script-injection.log; then
+                log_pass "No base64 script injection detected"
+                archive_check_log "no-base64-script-injection" "pass" /tmp/no-base64-script-injection.log
+            else
+                log_fail_tracked "no-base64-script-injection" "Base64 script injection detected (see /tmp/no-base64-script-injection.log)"
+                [[ "$VERBOSE" == "1" ]] && cat /tmp/no-base64-script-injection.log >&2
+                archive_check_log "no-base64-script-injection" "fail" /tmp/no-base64-script-injection.log
+            fi
         else
-            log_fail_tracked "no-base64-script-injection" "Base64 script injection detected (see /tmp/no-base64-script-injection.log)"
-            [[ "$VERBOSE" == "1" ]] && cat /tmp/no-base64-script-injection.log >&2
+            echo "could-not-run:no-base64-script-injection:no-script-runner" | tee /tmp/no-base64-script-injection.log >&2
+            log_fail_tracked "no-base64-script-injection" "no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
             archive_check_log "no-base64-script-injection" "fail" /tmp/no-base64-script-injection.log
         fi
     else
-        log_fail_missing_guard "no-base64-script-injection" "scripts/check-no-base64-script-injection.sh"
+        log_fail_missing_guard "no-base64-script-injection" "scripts/lua/check-no-base64-script-injection.lua"
         archive_check_log "no-base64-script-injection" "skipped"
     fi
 fi

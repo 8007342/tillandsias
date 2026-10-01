@@ -2812,6 +2812,14 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    # NOT ported (1525-c6jm): scripts/check-tray-process-running-naming.sh is
+    # owned_files on ready packet 1484-uf29, which plans to retire it together
+    # with three sibling guards in ONE atomic cutover to the already-built,
+    # parity-tested scripts/lua/source-agreements.lua evaluator (1475-j9kv) —
+    # not a fresh standalone decider. Porting it here would duplicate that
+    # work and break the shadow-pilot parity tests in
+    # crates/tillandsias-plan/tests/lua_source_agreements.rs, which read and
+    # run this live .sh for comparison.
     if ! _run bash "$SCRIPT_DIR/scripts/check-tray-process-running-naming.sh" 2>&1; then
         _error "the --diagnose field that observes a PROCESS is named for a VM again (980-ja2m) — see the verdict line above"
         exit 1
@@ -2883,7 +2891,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
 
     _step "Checking for if-not pipeline verdict guards (795-imz3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-no-spawn-in-if-not.sh" 2>&1; then
+    # PORTED to Lua (1525-c6jm): scripts/lua/check-no-spawn-in-if-not.lua.
+    if ! _run_lua_decider "scripts/lua/check-no-spawn-in-if-not.lua" 2>&1; then
         _error "a script uses 'if ! <pipeline>' as a verdict — pipefail + SIGPIPE can invert the guard; capture the exit into a variable first or mark '# sigpipe-ok: <reason>' (795-imz3)"
         exit 1
     fi
@@ -4466,6 +4475,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bash dialect gate passed"
 
+    # ORDER 1384-bxhk — the shell ratchet: prints the Lua migration's counts on
+    # every --check, refuses a NEW .sh decider (check-/test-/verify-/guard-), a
+    # new pipe site beyond a file's floor and (once steps: exists) a new piped
+    # litmus command; its floors only descend over their own git history.
+    _step "Checking the shell ratchet (1384-bxhk)..."
+    if ! _run_lua_decider "scripts/lua/check-shell-ratchet.lua" 2>&1; then
+        _error "the shell corpus grew past its floor — see the violation lines above; write it as scripts/lua/<name>.lua on tillandsias-plan script run (1384-bxhk)"
+        exit 1
+    fi
+    _info "Shell ratchet passed"
+
     _step "Checking the litmus step model (901-jtvi)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
         _error "the litmus step model regressed — a producer's failure or its stderr can go missing again (901-jtvi)"
@@ -4702,7 +4722,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # corrupting the denominator. A spec and its registry entry must now agree;
     # a pair that could not be decided from evidence is NAMED on every run.
     _step "Checking every spec and its registry entry agree on status (1397-eppt)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-spec-registry-status.sh" 2>&1; then
+    # PORTED to Lua (1525-c6jm): scripts/lua/check-spec-registry-status.lua.
+    if ! _run_lua_decider "scripts/lua/check-spec-registry-status.lua" 2>&1; then
         _error "a spec's ## Status disagrees with openspec/litmus-bindings.yaml (1397-eppt) — reconcile the pair with a recorded reason"
         exit 1
     fi
@@ -5332,7 +5353,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # bytes out of UTF-16LE output, indistinguishable by grep from the
     # legitimate scrubs on hcsdiag.exe and CIM output.
     _step "Checking wsl.exe has a single constructor (795-jjw3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-wsl-exe-single-constructor.sh" 2>&1; then
+    # PORTED to Lua (1525-c6jm): scripts/lua/check-wsl-exe-single-constructor.lua.
+    if ! _run_lua_decider "scripts/lua/check-wsl-exe-single-constructor.lua" 2>&1; then
         _error "a second wsl.exe constructor appeared (795-jjw3) — see the violation lines above"
         exit 1
     fi
