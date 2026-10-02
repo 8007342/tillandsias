@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Independent verification only: reuse the original acknowledged fixture bytes.
+set -euo pipefail
+binary="$1"
+baseline=/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd
+scratch=$(mktemp -d /tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.XXXXXX)
+mkdir -p "$scratch/repo/.git" "$scratch/repo/plan"
+cp "$baseline/reproduce.py" "$scratch/reproduce.py"
+cp "$baseline/repo/producer.py" "$scratch/repo/producer.py"
+cp "$baseline/repo/probe.lua" "$scratch/repo/probe.lua"
+cp "$baseline/repo/plan/index.yaml" "$scratch/repo/plan/index.yaml"
+cp "$binary" "$scratch/plan"
+chmod 700 "$scratch/plan"
+python3 - "$binary" "$scratch" <<'PY'
+import hashlib, json, pathlib, sys
+source, scratch = sys.argv[1], pathlib.Path(sys.argv[2])
+(scratch/'copy-provenance.json').write_text(json.dumps({
+    'copied_from': source,
+    'snapshot': str(scratch/'plan'),
+    'sha256': hashlib.sha256((scratch/'plan').read_bytes()).hexdigest(),
+    'fixture_provenance': 'Exact reproduce.py, producer.py and probe.lua bytes copied from the retained 2026-10-02 acknowledged pre-fix deadline control. External diagnostic only; no repository Python entrypoint.'
+}, indent=2)+'\n')
+PY
+python3 "$scratch/reproduce.py" >"$scratch/summary.json"
+python3 - "$scratch" <<'PY'
+import json, pathlib, sys
+scratch=pathlib.Path(sys.argv[1])
+r=json.loads((scratch/'receipts.json').read_text())
+a,b=r['trials']
+summary={'scratch':str(scratch),'build_id':r['build_id'],
+         'short':{'exit':a.get('exit'), 'wall_ms':a.get('wall_ms'),
+                  'ack_ms':a.get('ack_after_start_ms'),
+                  'tasks_at_runner_exit':a.get('after_outer_exit'),
+                  'delayed_markers':a.get('delayed_markers'),
+                  'forced_cleanup':a.get('forced_cleanup')},
+         'positive':{'exit':b.get('exit'),'markers':b.get('markers_at_outer_exit')},
+         'all_owned_tasks_gone':all(t.get('all_owned_tasks_gone') for t in [a,b])}
+print(json.dumps(summary,indent=2))
+assert not a.get('error') and not b.get('error'), 'invalid experiment'
+assert a['exit']==124 and a['ack_after_start_ms']<600
+assert not any(v['running'] for v in a['after_outer_exit'].values()), 'owned process survived runner'
+assert not any(a['delayed_markers'].values()), 'owned process wrote post-deadline marker'
+assert not a['forced_cleanup'], 'fixture needed to kill a surviving runtime-owned process'
+assert b['exit']==0 and all(b['markers_at_outer_exit'].values())
+assert summary['all_owned_tasks_gone']
+PY
