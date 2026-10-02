@@ -1853,6 +1853,7 @@ dependencies = [
  "bstr",
  "either",
  "erased-serde",
+ "futures-util",
  "mlua-sys",
  "num-traits",
  "parking_lot",

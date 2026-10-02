@@ -40,6 +40,298 @@ fn lua_path(p: &std::path::Path) -> String {
     p.display().to_string().replace('\\', "/")
 }
 
+// @trace order:1534-puyz
+struct ScriptFixture {
+    dir: tempfile::TempDir,
+}
+
+impl ScriptFixture {
+    fn new() -> Self {
+        let dir = tempfile::Builder::new()
+            .prefix("sol-1534-")
+            .tempdir_in("/tmp/opencode")
+            .unwrap();
+        std::fs::create_dir(dir.path().join(".git")).unwrap();
+        Self { dir }
+    }
+    fn write(&self, name: &str, body: &str) -> String {
+        let path = self.dir.path().join(name);
+        std::fs::write(&path, body).unwrap();
+        lua_path(&path)
+    }
+    fn run(&self, body: &str, timeout: &str) -> std::process::Output {
+        let script = self.write("probe.lua", body);
+        std::process::Command::new(env!("CARGO_BIN_EXE_tillandsias-plan"))
+            .args(["script", "run", &script, "--timeout", timeout])
+            .env("TILLANDSIAS_REPO_ROOT", self.dir.path())
+            .env_remove("TILLANDSIAS_POLICY_SEED")
+            .env_remove("TILLANDSIAS_CONSENT_TOKEN")
+            .current_dir(self.dir.path())
+            .output()
+            .unwrap()
+    }
+}
+
+#[test]
+fn live_spawn_delivers_10000_ordered_lines_per_fd_before_wait_and_preserves_cr() {
+    let f = ScriptFixture::new();
+    let producer = f.write("producer.py", "import os\nfor i in range(10000):\n os.write(1, ('%d\\r\\n'%i).encode()); os.write(2, ('E%d\\r\\n'%i).encode())\nos.write(1,b'last')\n");
+    let out = f.run(
+        &format!(
+            r#"
+        local p = proc.spawn{{argv={{"python3", "{producer}"}}, capture_bytes=17}}
+        local n, e, last = 0, 0, false
+        p:on_line("stdout", function(line)
+            if n == 10000 then assert(line == "last"); last=true
+            else assert(line == tostring(n).."\r"); n=n+1 end
+        end)
+        p:on_line("stderr", function(line) assert(line == "E"..tostring(e).."\r"); e=e+1 end)
+        local c = p:wait()
+        assert(n == 10000 and e == 10000 and last)
+        assert(c.status == "exited" and c.code == 0 and c.truncated and not c.ok)
+        assert(#c.stdout == 17 and #c.stderr == 17 and c.dropped > 0)
+        verdict.ok("ordered", n, e)
+    "#
+        ),
+        "10s",
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "ok:ordered:10000:10000\n"
+    );
+}
+
+#[test]
+fn live_callback_acknowledgement_and_two_producers_prove_scope_wide_dispatch() {
+    let f = ScriptFixture::new();
+    let producer = f.write(
+        "live.py",
+        r#"import os,sys,time
+n=sys.argv[1]
+open('started-'+n,'w').write('started')
+os.write(1,('READY'+n+'\n').encode())
+end=time.monotonic()+3
+while not os.path.exists('ack-'+n):
+ if time.monotonic()>end: sys.exit(9)
+ time.sleep(.005)
+os.write(1,('DONE'+n+'\n').encode())
+"#,
+    );
+    let out = f.run(
+        &format!(
+            r#"
+        local a = proc.spawn{{argv={{"python3", "{producer}", "1"}}}}
+        local b = proc.spawn{{argv={{"python3", "{producer}", "2"}}}}
+        local ready, done = 0, 0
+        local function line(s)
+            local n = s:match("^READY([12])$")
+            if n then
+                assert(fs.exists("started-1") and fs.exists("started-2"))
+                fs.write("ack-"..n, "ack"); ready=ready+1
+            else assert(s:match("^DONE[12]$")); done=done+1 end
+        end
+        a:on_line("stdout", line); b:on_line("stdout", line)
+        assert(a:wait().ok); assert(b:wait().ok)
+        assert(ready == 2 and done == 2)
+        verdict.ok("live-overlap")
+    "#
+        ),
+        "6s",
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "ok:live-overlap\n");
+}
+
+// This producer acknowledges BOTH processes before the outer timer fires.
+// Its long-deadline control proves delayed markers would appear without cleanup.
+const OWNED_PRODUCER: &str = r#"import os,sys,time,subprocess,json
+def identity():
+ return {'pid':os.getpid(),'pgid':os.getpgrp(),'start':open('/proc/self/stat').read().split()[21]}
+if len(sys.argv)>1:
+ open('grandchild-ack','w').write(json.dumps(identity()))
+ time.sleep(1.1); open('grandchild-marker','w').write('survived')
+ sys.exit(0)
+p=subprocess.Popen([sys.executable,__file__,'grandchild'])
+while not os.path.exists('grandchild-ack'): time.sleep(.005)
+open('child-ack','w').write(json.dumps(identity()))
+os.write(1,b'READY\n')
+time.sleep(1.1); open('child-marker','w').write('survived')
+p.wait()
+"#;
+
+fn assert_acknowledged_tasks_stopped(f: &ScriptFixture) {
+    for name in ["child", "grandchild"] {
+        let ack: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(f.dir.path().join(format!("{name}-ack")))
+                .expect("producer must acknowledge before cancellation"),
+        )
+        .unwrap();
+        let pid = ack["pid"].as_u64().unwrap();
+        if let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+            let fields: Vec<_> = stat.split_whitespace().collect();
+            assert!(
+                fields[21] != ack["start"].as_str().unwrap() || fields[2] == "Z",
+                "{name} still running: {stat}"
+            );
+        }
+    }
+    std::thread::sleep(Duration::from_millis(1200));
+    for name in ["child-marker", "grandchild-marker"] {
+        assert!(!f.dir.path().join(name).exists(), "delayed {name}");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn outer_deadline_cancels_acknowledged_legacy_and_streaming_groups_with_positive_control() {
+    for door in ["proc.run", "sh.run", "expert.shell", "proc.spawn"] {
+        let f = ScriptFixture::new();
+        let producer = f.write("owned.py", OWNED_PRODUCER);
+        let call = if door == "sh.run" || door == "expert.shell" {
+            format!(r#"{door}{{"python3", "{producer}", timeout_ms=4000}}"#)
+        } else {
+            format!(r#"{door}{{argv={{"python3", "{producer}"}},timeout_ms=4000}}"#)
+        };
+        let script = if door == "proc.spawn" {
+            format!("local p={call}; p:wait(); verdict.ok('survived')")
+        } else {
+            format!("{call}; verdict.ok('survived')")
+        };
+        let t0 = Instant::now();
+        let out = f.run(&script, "700ms");
+        assert_eq!(
+            out.status.code(),
+            Some(124),
+            "door={door}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(t0.elapsed() < Duration::from_secs(2), "door={door}");
+        assert_acknowledged_tasks_stopped(&f);
+    }
+    let f = ScriptFixture::new();
+    let producer = f.write("owned.py", OWNED_PRODUCER);
+    let out = f.run(&format!(r#"assert(proc.run{{argv={{"python3","{producer}"}},timeout_ms=4000}}.ok); verdict.ok("control")"#), "3500ms");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(f.dir.path().join("child-marker").exists());
+    assert!(f.dir.path().join("grandchild-marker").exists());
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn script_lifetime_cancels_cpu_loop_error_verdict_and_dropped_handles() {
+    for ending in [
+        "while true do end",
+        "error('script-broke')",
+        "verdict.ok('early')",
+        "p=nil; collectgarbage(); verdict.ok('dropped')",
+        "pcall(verdict.ok,'caught'); while true do end",
+    ] {
+        let f = ScriptFixture::new();
+        let producer = f.write("owned.py", OWNED_PRODUCER);
+        let script = format!(
+            r#"
+            local p=proc.spawn{{argv={{"python3","{producer}"}}}}
+            p:on_line("stdout", function(s) assert(s=="READY"); error("ack-stop") end)
+            -- An acknowledged start without consuming the callback: legacy run
+            -- blocks only Lua, while independent supervisors keep moving.
+            proc.run{{argv={{"python3","-c","import os,time;\nwhile not os.path.exists('child-ack'): time.sleep(.005)"}}}}
+            {ending}
+        "#
+        );
+        let out = f.run(&script, "700ms");
+        if ending == "while true do end" {
+            assert_eq!(out.status.code(), Some(124));
+        } else if ending.contains("error(") {
+            assert_eq!(out.status.code(), Some(1));
+        } else {
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
+        assert_acknowledged_tasks_stopped(&f);
+    }
+}
+
+#[test]
+fn caught_callback_error_and_reentrant_wait_latch_scope_closure() {
+    for action in [
+        "error('callback-broke')",
+        "p:wait()",
+        "verdict.ok('callback-verdict')",
+    ] {
+        let f = ScriptFixture::new();
+        let producer = f.write(
+            "callback.py",
+            "import os,time\nos.write(1,b'READY\\n')\ntime.sleep(30)\n",
+        );
+        let out = f.run(
+            &format!(
+                r#"
+            local p=proc.spawn{{argv={{"python3","{producer}"}}}}
+            p:on_line("stdout", function(s) {action} end)
+            pcall(function() p:wait() end)
+            -- Closure must survive catching the callback's raised error.
+            proc.spawn{{argv={{"python3","-c","open('escaped','w').write('bad')"}}}}
+            verdict.ok("wrong")
+        "#
+            ),
+            "2s",
+        );
+        assert!(!f.dir.path().join("escaped").exists());
+        if action.contains("verdict") {
+            assert!(out.status.success());
+            assert_eq!(
+                String::from_utf8_lossy(&out.stdout),
+                "ok:callback-verdict\n"
+            );
+        } else {
+            assert_eq!(out.status.code(), Some(1));
+        }
+    }
+}
+
+#[test]
+fn spawn_validation_missing_program_kill_and_line_limit_are_explicit() {
+    let f = ScriptFixture::new();
+    let out = f.run(
+        r#"
+        assert(not pcall(function() proc.spawn{argv={"true"}, group=false} end))
+        assert(not pcall(function() proc.spawn{argv={"true"}, timeout=1} end))
+        assert(proc.spawn{argv={"/definitely-no-such-program-1534"}}.status=="spawn_failed")
+        local p=proc.spawn{argv={"sleep","30"}}
+        assert(not pcall(function() p:on_line("merged",function() end) end))
+        assert(not pcall(function() p:on_line("stdout",42) end))
+        local c=p:kill(); assert(not c.ok and c.status=="signaled")
+        verdict.ok("validation")
+    "#,
+        "3s",
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let producer = f.write("huge.py", "import os\nos.write(1,b'x'*1048577)\n");
+    let out = f.run(&format!(r#"local p=proc.spawn{{argv={{"python3","{producer}"}}}}; p:wait(); verdict.ok('wrong')"#), "3s");
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("proc-line-too-long"));
+}
+
 /// ARM 1: a non-zero exit is DATA, not a Lua error; and argv is argv.
 #[test]
 fn arm1_a_failing_program_is_a_value_and_argv_is_not_reparsed() {

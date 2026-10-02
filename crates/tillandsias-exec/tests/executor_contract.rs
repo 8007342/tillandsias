@@ -6,6 +6,104 @@
 use std::time::Duration;
 use tillandsias_exec::{Command, Completion};
 
+// @trace order:1534-puyz
+#[tokio::test]
+async fn managed_stream_is_live_ordered_byte_exact_and_capture_bounded() {
+    use tillandsias_exec::managed::{Event, Scope};
+    let (scope, mut events) = Scope::new(Some(std::time::Instant::now() + Duration::from_secs(10)));
+    let process = scope.spawn(Command::new(["sh", "-c", "i=0; while [ $i -lt 10000 ]; do printf '%s\\r\\n' $i; printf 'E%s\\r\\n' $i >&2; i=$((i+1)); done; printf last"])
+        .group(true).capture_bytes(17), true).unwrap();
+    let (mut stdout, mut stderr) = (0, 0);
+    let mut final_line = false;
+    loop {
+        match tokio::time::timeout(Duration::from_secs(10), events.recv())
+            .await
+            .unwrap()
+            .unwrap()
+        {
+            Event::Line {
+                process: id,
+                fd,
+                bytes,
+            } => {
+                assert_eq!(id, process.id);
+                if fd == "stdout" {
+                    if stdout == 10000 {
+                        assert_eq!(bytes, b"last");
+                        final_line = true;
+                    } else {
+                        assert_eq!(bytes, format!("{stdout}\r").as_bytes());
+                        stdout += 1;
+                    }
+                } else {
+                    assert_eq!(bytes, format!("E{stderr}\r").as_bytes());
+                    stderr += 1;
+                }
+            }
+            Event::Finished(id) => {
+                assert_eq!(id, process.id);
+                break;
+            }
+        }
+    }
+    assert_eq!((stdout, stderr, final_line), (10000, 10000, true));
+    let out = loop {
+        if let Some(result) = process.result() {
+            break result.unwrap();
+        }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    };
+    assert_eq!(out.stdout, b"0\r\n1\r\n2\r\n3\r\n4\r\n5\r");
+    assert_eq!(out.stderr.len(), 17);
+    assert!(out.truncated && out.dropped > 0 && out.completion.is_success());
+    scope.cleanup().unwrap();
+}
+
+// Cancellation must not require the consumer to free a full delivery queue.
+#[test]
+fn managed_cancel_reaps_when_delivery_or_stdin_is_blocked() {
+    use tillandsias_exec::managed::Scope;
+    for stdin in [false, true] {
+        let (scope, _events) = Scope::new(None);
+        let mut command = Command::new(["sh", "-c", "while :; do printf 'x\\n'; done"]).group(true);
+        if stdin {
+            command = command.stdin_bytes(vec![0; 1024 * 1024]);
+        }
+        let process = scope.spawn(command, true).unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+        let t0 = std::time::Instant::now();
+        scope.cleanup().unwrap();
+        assert!(t0.elapsed() < Duration::from_secs(2));
+        assert!(process.result().is_some());
+        assert!(scope.spawn(Command::new(["true"]), false).is_err());
+    }
+}
+
+#[tokio::test]
+async fn managed_unterminated_line_has_an_explicit_bound() {
+    use tillandsias_exec::managed::{MAX_LINE_BYTES, Scope};
+    let (scope, mut events) = Scope::new(None);
+    let process = scope
+        .spawn(
+            Command::new(["sh", "-c", "head -c 1048577 /dev/zero"]).group(true),
+            true,
+        )
+        .unwrap();
+    assert!(matches!(
+        events.recv().await,
+        Some(tillandsias_exec::managed::Event::Finished(_))
+    ));
+    let failure = loop {
+        if let Some(result) = process.result() {
+            break result.unwrap_err();
+        }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    };
+    assert_eq!(MAX_LINE_BYTES, 1048576);
+    assert!(failure.contains("proc-line-too-long"), "{failure}");
+    scope.cleanup().unwrap();
+}
+
 /// CRITERION 1. stdout and stderr are SEPARATE values, and stderr survives when
 /// a caller reads only stdout.
 /// PRE-FIX: FAILS — run-litmus-test.sh redirects every step `2>&1`, so no
