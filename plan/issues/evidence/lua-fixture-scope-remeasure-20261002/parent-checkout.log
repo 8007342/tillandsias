@@ -1,0 +1,13 @@
+ok:   arm 1: fs.write into the git dir is refused:policy:fixture-writes-outside-scope (why, remedy) and nothing is written
+ok:   arm 1: a write outside the declared scope is refused too
+ok:   arm 1: fs.mkdir under the git dir is refused
+ok:   arm 2: proc.run of gate-stamp.sh write against the real repo is policy_denied, rule fixture-gate-stamp-write
+ok:   arm 2: git update-ref against the real repo is policy_denied
+ok:   arm 4: the same fs.write inside the scope succeeds
+ok:   arm 4: gate-stamp.sh write in a scratch repo INSIDE the scope is not policy-denied (exited	-)
+ok:   arm 4: regime=gate is unaffected (exited	-)
+ok:   arm 3: a litmus step minting its checkout's stamp goes RED naming the rule, and the new file is removed
+ok:   arm 3: a pre-existing stamp the step overwrote is restored to its old bytes
+ok:   arm 4: a step writing only scratch files (a stamp in its OWN scratch repo) passes, and sees TILLANDSIAS_POLICY_REGIME=fixture
+ok:   arm 0: the real checkout's gate files are byte-identical at exit
+PASS: fixture-git-dir-scope 12/12 (1443-fpck)

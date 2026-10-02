@@ -46,10 +46,11 @@ retirement, Lua land rewrite or draft-spec activation is implied.
       `refs/tillandsias/discipline/<level>/<enforcement>/<derived>/<digest>/<epoch>`;
       probe namespace DROPPED (ruling 5). L / opus. Depends on 1443-w79y,
       1429-4y9f.
-- [ ] 2.2 `1443-fpck` fixture filesystem scope in the engine; the litmus
+- [x] 2.2 `1443-fpck` fixture filesystem scope in the engine; the litmus
       runner exports the regime. M / opus.
-      <!-- Landed 2b1446057; folded status ready after claim expiry.
-           Reconcile landed closure evidence before checking. -->
+      (Landed 2b1446057; parent remeasured 12/12 on 2026-10-02,
+      including actual checkout gate-file byte preservation. This is policy
+      scope and post-step litmus stamp restoration, not OS confinement.)
 - [x] 2.3 `1443-9f5w` per-run consent tokens; re-scoped (ruling 3): SOFT
       reset pre-authorised in forges always and by the smoke skills' env on
       bare metal; HARD reset a per-run token every time, no env, never in a
