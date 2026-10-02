@@ -290,6 +290,100 @@ p.wait()
     }
 
     #[test]
+    fn caught_advisory_prevents_new_proc_run_and_spawn() {
+        for door in ["proc.run", "proc.spawn"] {
+            let f = ScriptFixture::new();
+            let out = f.run(
+                &format!(
+                    r#"
+                pcall(verdict.advisory, "scope-probe (advisory)")
+                local p={door}{{argv={{"touch","escaped"}}}}
+                if p.wait then p:wait() end
+                verdict.ok("wrong")
+            "#
+                ),
+                "2s",
+            );
+            assert_eq!(out.status.code(), Some(0));
+            assert_eq!(out.stdout, b"scope-probe (advisory)\n");
+            assert!(
+                !f.dir.path().join("escaped").exists(),
+                "{door} escaped advisory closure"
+            );
+        }
+    }
+
+    #[test]
+    fn caught_advisory_cpu_loop_preserves_bytes_and_cleans_acknowledged_groups_promptly() {
+        let f = ScriptFixture::new();
+        let producer = f.write("owned.py", OWNED_PRODUCER);
+        let t0 = Instant::now();
+        let out = f.run(&format!(r#"
+            local p=proc.spawn{{argv={{"python3","{producer}"}}}}
+            proc.run{{argv={{"python3","-c","import os,time;\nwhile not os.path.exists('child-ack'): time.sleep(.005)"}}}}
+            pcall(verdict.advisory,"scope-probe (advisory)")
+            while true do end
+        "#), "2s");
+        let elapsed = t0.elapsed();
+        assert_acknowledged_tasks_stopped(&f);
+        assert_eq!(out.status.code(), Some(0));
+        assert_eq!(out.stdout, b"scope-probe (advisory)\n");
+        assert!(
+            elapsed < Duration::from_millis(1000),
+            "advisory waited for outer deadline: {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn caught_callback_advisory_cancels_acknowledged_groups_and_preserves_bytes() {
+        let f = ScriptFixture::new();
+        let producer = f.write("owned.py", OWNED_PRODUCER);
+        let t0 = Instant::now();
+        let out = f.run(
+            &format!(
+                r#"
+            local p=proc.spawn{{argv={{"python3","{producer}"}}}}
+            p:on_line("stdout",function(s)
+                assert(s=="READY")
+                pcall(verdict.advisory,"callback scope-probe (advisory)")
+                while true do end
+            end)
+            pcall(function() p:wait() end)
+            proc.run{{argv={{"touch","escaped"}}}}
+            verdict.ok("wrong")
+        "#
+            ),
+            "2s",
+        );
+        let elapsed = t0.elapsed();
+        assert_acknowledged_tasks_stopped(&f);
+        assert_eq!(out.status.code(), Some(0));
+        assert_eq!(out.stdout, b"callback scope-probe (advisory)\n");
+        assert!(!f.dir.path().join("escaped").exists());
+        assert!(
+            elapsed < Duration::from_millis(1000),
+            "callback advisory waited for deadline: {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn invalid_advisory_does_not_close_scope_or_publish_terminal_verdict() {
+        let f = ScriptFixture::new();
+        let out = f.run(r#"
+            for _,line in ipairs({'not advisory','injected\nline (advisory)','injected\rline (advisory)'}) do
+                assert(not pcall(verdict.advisory,line))
+            end
+            assert(proc.run{argv={'touch','valid-run'}}.ok)
+            assert(proc.spawn{argv={'touch','valid-spawn'}}:wait().ok)
+            verdict.ok('validation-before-close')
+        "#, "2s");
+        assert_eq!(out.status.code(), Some(0));
+        assert_eq!(out.stdout, b"ok:validation-before-close\n");
+        assert!(f.dir.path().join("valid-run").exists());
+        assert!(f.dir.path().join("valid-spawn").exists());
+    }
+
+    #[test]
     fn caught_callback_error_and_reentrant_wait_latch_scope_closure() {
         for action in [
             "error('callback-broke')",

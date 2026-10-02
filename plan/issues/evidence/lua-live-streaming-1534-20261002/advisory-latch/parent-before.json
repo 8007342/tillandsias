@@ -1,0 +1,7 @@
+{
+  "scope": "parent independent caught advisory execution control",
+  "scratch": "/tmp/opencode/parent-advisory-scope.hqdvAa",
+  "stdout": "scope-probe (advisory)\n",
+  "stderr": "",
+  "escaped_after_advisory": true
+}

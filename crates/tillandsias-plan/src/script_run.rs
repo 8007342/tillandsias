@@ -287,6 +287,7 @@ fn register(
     // house-prefix verdict. Keep it verbatim: consumers grep this line.
     {
         let slot = slot.clone();
+        let scope = host.scope.clone();
         verdict.set(
             "advisory",
             lua.create_function(move |_, line: String| {
@@ -306,6 +307,7 @@ fn register(
                     detail: None,
                     code: 0,
                 });
+                scope.close();
                 Err::<(), _>(LuaError::RuntimeError(VERDICT_EXIT.to_string()))
             })?,
         )?;
