@@ -1274,7 +1274,7 @@ if [ -f "$(dirname "$0")/lua/check-centicolon-ratchet.lua" ]; then
     . "$(dirname "$0")/plan-binary-probe.sh"
     if _cc_plan="$(resolve_plan_binary 2>/dev/null)"; then
         case "$_cc_plan" in ./*) _cc_plan="$ROOT/${_cc_plan#./}" ;; esac
-        { "$_cc_plan" script run "$(dirname "$0")/lua/check-centicolon-ratchet.lua" -- --no-snapshot 2>/dev/null | grep '^centicolon:'; } || true
+        { TILLANDSIAS_REPO_ROOT="$ROOT" "$_cc_plan" script run "$(dirname "$0")/lua/check-centicolon-ratchet.lua" -- --no-snapshot 2>/dev/null | grep '^centicolon:'; } || true
     fi
 fi
 

@@ -106,9 +106,9 @@ fn runner_not_found(text: &str) -> bool {
 /// deadline only when the guard said neither.
 pub fn classify(rc: i32, status: Option<&str>, text: &str) -> Kind {
     // Advisory lines are deliberately verbatim legacy interfaces rather than a
-    // new prefix. They must win over their zero exit so doors and gates can
-    // account for a report without mistaking it for a clean `ok:` verdict.
-    if text.lines().any(|l| l.ends_with(" (advisory)")) {
+    // new prefix. Only a successful, non-timeout run may report one: otherwise
+    // an advisory-looking diagnostic could mask the established failure order.
+    if rc == 0 && status != Some("timed_out") && text.lines().any(|l| l.ends_with(" (advisory)")) {
         return Kind::Advisory;
     }
     if rc == 0 && status != Some("timed_out") {
@@ -290,6 +290,12 @@ fn register(
                 if !line.ends_with(" (advisory)") {
                     return Err(LuaError::RuntimeError(
                         "verdict.advisory: line must end with ' (advisory)'".into(),
+                    ));
+                }
+                if line.contains(['\n', '\r']) {
+                    return Err(LuaError::RuntimeError(
+                        "verdict.advisory: line must not contain a newline or carriage return"
+                            .into(),
                     ));
                 }
                 slot.lock().unwrap().get_or_insert(Verdict {
@@ -895,6 +901,27 @@ mod tests {
         assert_eq!(
             classify(0, None, "centicolon: R=1 regime=baseline (advisory)"),
             Kind::Advisory
+        );
+        // An advisory-shaped diagnostic cannot hide a failure or timeout.
+        assert_eq!(
+            classify(1, None, "centicolon: R=1 regime=baseline (advisory)"),
+            Kind::Refused
+        );
+        assert_eq!(
+            classify(124, None, "centicolon: R=1 regime=baseline (advisory)"),
+            Kind::TimedOut
+        );
+        assert_eq!(
+            classify(127, None, "centicolon: R=1 regime=baseline (advisory)"),
+            Kind::CannotStart
+        );
+        assert_eq!(
+            classify(
+                0,
+                Some("timed_out"),
+                "centicolon: R=1 regime=baseline (advisory)"
+            ),
+            Kind::TimedOut
         );
         assert_eq!(classify(1, None, "skip:x:y\ncould-not-run:x"), Kind::Skip);
         assert_eq!(

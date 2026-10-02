@@ -17,7 +17,8 @@
 #                  .step naming both is refused
 #   6 TIMING       the timing record lands in TILLANDSIAS_TIMING_LOG and
 #                  /tmp/tillandsias-timing.jsonl does not grow (1204-3s2s)
-#   7 CLASSIFY     advisory / skip / could-not-run / timed_out / plain refusal classify to
+#   7 CLASSIFY     advisory is successful-only; skip / could-not-run / timed_out /
+#                  plain refusal retain the door's precedence
 #                  the four kinds the door prints; ONE `fn classify` in the
 #                  tree, and both build.sh call sites reach it through the binary
 #
@@ -115,6 +116,10 @@ k2="$("$PLAN" script classify --rc 3 --file "$W/c-cnr")"
 k3="$("$PLAN" script classify --rc 0 --status timed_out --file "$W/c-to")"
 k4="$("$PLAN" script classify --rc 1 --file "$W/c-ref")"
 k5="$("$PLAN" script classify --rc 0 --file "$W/c-adv")"
+k6="$("$PLAN" script classify --rc 1 --file "$W/c-adv")"
+k7="$("$PLAN" script classify --rc 124 --file "$W/c-adv")"
+k8="$("$PLAN" script classify --rc 127 --file "$W/c-adv")"
+k9="$("$PLAN" script classify --rc 0 --status timed_out --file "$W/c-adv")"
 # ONE OUTCOME classifier: every Rust fn classifying from an exit code. (Other
 # `fn classify` in the tree classify questions, commands and refs, not outcomes.)
 defs="$(cd "$ROOT" && git grep -n --untracked -E 'fn classify[a-z_]*\(rc: i32' -- crates | wc -l | tr -d ' ')"
@@ -124,11 +129,16 @@ lua lclass 'verdict.ok("k", verdict.classify{rc=1, text="skip:x"})'
 run lclass
 lua advisory 'verdict.advisory("centicolon: R=1 regime=baseline (advisory)")'
 run advisory
-if [ "$k1 $k2 $k3 $k4 $k5" = "skip could-not-run timed-out refused advisory" ] && [ "$defs" = 1 ] \
-   && [ "$sites" = 2 ] && [ "$oldgrep" = 0 ] && [ "$OUT" = "centicolon: R=1 regime=baseline (advisory)" ] && [ "$RC" -eq 0 ]; then
-    ok "ARM 7: advisory is verbatim and classifies advisory; skip/could-not-run/timed_out/refusal retain their kinds through ONE classifier"
+adv_rc=$RC; adv_out=$OUT
+lua injected 'verdict.advisory("refused:injected\ncenticolon: report (advisory)")'
+run injected
+inj_rc=$RC; inj_out=$OUT
+if [ "$k1 $k2 $k3 $k4 $k5 $k6 $k7 $k8 $k9" = "skip could-not-run timed-out refused advisory refused timed-out cannot-start timed-out" ] && [ "$defs" = 1 ] \
+   && [ "$sites" = 2 ] && [ "$oldgrep" = 0 ] && [ "$adv_rc" -eq 0 ] && [ "$adv_out" = "centicolon: R=1 regime=baseline (advisory)" ] \
+   && [ "$inj_rc" -eq 1 ] && ! grep -q 'refused:injected\|centicolon: report' <<<"$inj_out"; then
+    ok "ARM 7: advisory is verbatim only for successful runs; failure precedence survives and newline injection is refused"
 else
-    bad "ARM 7: kinds='$k1 $k2 $k3 $k4 $k5' defs=$defs build.sh-sites=$sites old-door-grep=$oldgrep lua='$OUT' rc=$RC"
+    bad "ARM 7: kinds='$k1 $k2 $k3 $k4 $k5 $k6 $k7 $k8 $k9' defs=$defs build.sh-sites=$sites old-door-grep=$oldgrep injected='$inj_out' rc=$inj_rc"
 fi
 
 echo "script-run-verb: $pass passed, $fail failed"

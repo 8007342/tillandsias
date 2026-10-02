@@ -2,11 +2,15 @@
 -- @env TILLANDSIAS_REPO_ROOT TILLANDSIAS_CENTICOLON_DIR
 --
 -- check-centicolon-ratchet.lua — the advisory CentiColon R line, ported from
--- check-centicolon-ratchet.sh without changing its stdout, stderr, or status.
+-- check-centicolon-ratchet.sh without changing its protocol stdout or status.
 -- It deliberately delegates grading to the existing grade pipeline, then owns
 -- the host-local snapshot comparison that makes the R line a ratchet.
+--
+-- The production callers pass both an absolute script path and
+-- TILLANDSIAS_REPO_ROOT. A standalone relative invocation from another
+-- checkout is unsupported: it cannot safely distinguish the port's scripts
+-- from the graded root without widening the runner's rooted filesystem API.
 
-local ROOT = env.get("TILLANDSIAS_REPO_ROOT")
 local OUT = env.get("TILLANDSIAS_CENTICOLON_DIR") or "target/centicolon"
 local snapshot = arg[1] ~= "--no-snapshot"
 
@@ -16,33 +20,42 @@ local function lines(s)
     return out
 end
 
-local function grep_prefix(s, prefix)
-    for _, l in ipairs(lines(s)) do if l:sub(1, #prefix) == prefix then return l end end
+local function grade_verdict(s)
+    for _, l in ipairs(lines(s)) do
+        if l:sub(1, 20) == "ok:centicolon-grade:" or l:sub(1, 25) == "blocked:centicolon-grade:" then
+            return l
+        end
+    end
     return ""
 end
 
--- This is the same `2>&1` stream the shell captured. The grade pipeline owns
--- its own binary resolution and honors TILLANDSIAS_REPO_ROOT.
+-- centicolon-grade's protocol (warn and its one ok:/blocked: verdict) is
+-- stdout by contract. proc.run exposes fds separately, so do not pretend it
+-- can reproduce arbitrary shell `2>&1` interleaving; diagnostics on stderr
+-- remain the grade pipeline's diagnostics, not ratchet protocol lines.
 local SCRIPTS = (arg[0] or "scripts/lua/check-centicolon-ratchet.lua"):gsub("/lua/[^/]+$", "")
 local grade = proc.run({ argv = { "bash", SCRIPTS .. "/centicolon-grade.sh" } })
-local result = (grade.stdout or "") .. (grade.stderr or "")
-for _, l in ipairs(lines(result)) do
+local protocol = grade.stdout or ""
+for _, l in ipairs(lines(protocol)) do
     if l:sub(1, 5) == "warn:" then out.line(l) end
 end
-local grade_verdict = grep_prefix(result, "ok:centicolon-grade:")
-if grade_verdict == "" or not fs.exists(OUT .. "/grade.json") then
-    local why = grade_verdict:gsub("^blocked:centicolon%-grade:", "")
+local grade_line = grade_verdict(protocol)
+local grade_ok, grade_json = pcall(fs.read, OUT .. "/grade.json")
+if grade_line:sub(1, 3) ~= "ok:" or not grade_ok or grade_json == "" then
+    -- Preserve the shell's parameter expansion: an empty grade artifact after
+    -- an ok verdict reports that full ok line as the blocked reason.
+    local why = grade_line:gsub("^blocked:centicolon%-grade:", "")
     verdict.advisory("centicolon: blocked:" .. why .. " (advisory)")
 end
 
 local function kv(key)
-    return tonumber(grade_verdict:match(key .. "=(%d+)")) or 0
+    return tonumber(grade_line:match(key .. "=(%d+)")) or 0
 end
 local R, sat, den = kv("R"), kv("satisfied"), kv("denominator")
 local dec, tra, pt = kv("declared"), kv("traced"), kv("positively_tested")
-local grade_json = json.parse(fs.read(OUT .. "/grade.json"))
+local decoded_grade = json.parse(grade_json)
 local now = {}
-for _, row in ipairs(grade_json.snapshot or {}) do now[#now + 1] = row end
+for _, row in ipairs(decoded_grade.snapshot or {}) do now[#now + 1] = row:gsub("\r", "") end
 table.sort(now)
 
 local function contains_file(root, needle)
@@ -75,12 +88,13 @@ local added, retired, vanished, down, first = 0, 0, 0, 0, ""
 local previous_ok, previous = pcall(fs.read, OUT .. "/last.txt")
 if previous_ok and previous ~= "" then
     local prev, cur = {}, {}
-    for _, row in ipairs(lines(previous)) do
-        local id, state, spec, req = row:match("^(%S+) (%S+) (%S+) (%S+)$")
+    for _, row in ipairs(lines(previous:gsub("\r", ""))) do
+        -- awk's default FS splits leading and repeated arbitrary whitespace.
+        local id, state, spec, req = row:match("^%s*(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
         if id then prev[id] = { state = state, spec = spec, req = req } end
     end
     for _, row in ipairs(now) do
-        local id, state = row:match("^(%S+) (%S+)")
+        local id, state = row:match("^%s*(%S+)%s+(%S+)")
         if id then cur[id] = state; if not prev[id] then added = added + 1 end end
     end
     local rank = { declared = 0, traced = 1, positively_tested = 2 }

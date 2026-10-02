@@ -4080,7 +4080,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # (2026-09-26): it warns on a lost satisfaction and never refuses, so the
     # Lua advisory always exits 0; a non-zero exit here means it could not run.
     _step "Reporting the CentiColon R line (1395-ue3i, advisory)..."
-    if ! _run_lua_decider "scripts/lua/check-centicolon-ratchet.lua" 2>&1; then
+    if ! TILLANDSIAS_REPO_ROOT="$SCRIPT_DIR" _run_lua_decider "scripts/lua/check-centicolon-ratchet.lua" 2>&1; then
         _error "the CentiColon advisory could not run — that is a broken checkout, not a score"
         exit 1
     fi
