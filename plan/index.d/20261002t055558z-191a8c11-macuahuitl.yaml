@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: atomically-cut-over-the-four-source-agreement-shell-files-to-the-typed-lua-runner
+    field: status
+    value: in_progress
+    ts: "2026-10-02T05:55:58Z"
+    host: macuahuitl
+
+events:
+  - packet_id: atomically-cut-over-the-four-source-agreement-shell-files-to-the-typed-lua-runner
+    event:
+      type: falsified
+      ts: "2026-10-02T05:55:58Z"
+      host: macuahuitl
+      summary: |-
+        falsified 'completed' claim; evidence: 25b290e62 — status set to 'in_progress', new attempt epoch
+  - packet_id: atomically-cut-over-the-four-source-agreement-shell-files-to-the-typed-lua-runner
+    event:
+      type: note
+      ts: "2026-10-02T05:55:58Z"
+      host: macuahuitl
+      summary: |-
+        corrected premature delegate closure: parent full integration gate and review still pending; linux-macuahuitl-opencode-20261002t053211z
