@@ -17,7 +17,7 @@
 #                  .step naming both is refused
 #   6 TIMING       the timing record lands in TILLANDSIAS_TIMING_LOG and
 #                  /tmp/tillandsias-timing.jsonl does not grow (1204-3s2s)
-#   7 CLASSIFY     skip / could-not-run / timed_out / plain refusal classify to
+#   7 CLASSIFY     advisory / skip / could-not-run / timed_out / plain refusal classify to
 #                  the four kinds the door prints; ONE `fn classify` in the
 #                  tree, and both build.sh call sites reach it through the binary
 #
@@ -106,13 +106,15 @@ else
     bad "ARM 6: log='$(cat "$TILLANDSIAS_TIMING_LOG")' shared $shared_before->$shared_after"
 fi
 
-# ── ARM 7: one classifier, reached by both call sites ──────────────────────
+# ── ARM 7: advisory and one classifier, reached by both call sites ─────────
 printf 'skip:x:not-here\n' > "$W/c-skip"; printf 'could-not-run:x:no-meminfo\n' > "$W/c-cnr"
 printf 'partial\n' > "$W/c-to"; printf 'violation: the tree is wrong\n' > "$W/c-ref"
+printf 'centicolon: R=1 regime=baseline (advisory)\n' > "$W/c-adv"
 k1="$("$PLAN" script classify --rc 1 --file "$W/c-skip")"
 k2="$("$PLAN" script classify --rc 3 --file "$W/c-cnr")"
 k3="$("$PLAN" script classify --rc 0 --status timed_out --file "$W/c-to")"
 k4="$("$PLAN" script classify --rc 1 --file "$W/c-ref")"
+k5="$("$PLAN" script classify --rc 0 --file "$W/c-adv")"
 # ONE OUTCOME classifier: every Rust fn classifying from an exit code. (Other
 # `fn classify` in the tree classify questions, commands and refs, not outcomes.)
 defs="$(cd "$ROOT" && git grep -n --untracked -E 'fn classify[a-z_]*\(rc: i32' -- crates | wc -l | tr -d ' ')"
@@ -120,11 +122,13 @@ sites="$(grep -c 'script classify --rc' "$ROOT/build.sh")"
 oldgrep="$(grep -c "grep -qE '^skip:' \"\$_pf_tmp\"" "$ROOT/build.sh")"
 lua lclass 'verdict.ok("k", verdict.classify{rc=1, text="skip:x"})'
 run lclass
-if [ "$k1 $k2 $k3 $k4" = "skip could-not-run timed-out refused" ] && [ "$defs" = 1 ] \
-   && [ "$sites" = 2 ] && [ "$oldgrep" = 0 ] && [ "$OUT" = "ok:k:skip" ]; then
-    ok "ARM 7: skip/could-not-run/timed_out/refusal classify as the door's four kinds; ONE fn classify, reached from build.sh ($sites sites) and from Lua"
+lua advisory 'verdict.advisory("centicolon: R=1 regime=baseline (advisory)")'
+run advisory
+if [ "$k1 $k2 $k3 $k4 $k5" = "skip could-not-run timed-out refused advisory" ] && [ "$defs" = 1 ] \
+   && [ "$sites" = 2 ] && [ "$oldgrep" = 0 ] && [ "$OUT" = "centicolon: R=1 regime=baseline (advisory)" ] && [ "$RC" -eq 0 ]; then
+    ok "ARM 7: advisory is verbatim and classifies advisory; skip/could-not-run/timed_out/refusal retain their kinds through ONE classifier"
 else
-    bad "ARM 7: kinds='$k1 $k2 $k3 $k4' defs=$defs build.sh-sites=$sites old-door-grep=$oldgrep lua='$OUT'"
+    bad "ARM 7: kinds='$k1 $k2 $k3 $k4 $k5' defs=$defs build.sh-sites=$sites old-door-grep=$oldgrep lua='$OUT' rc=$RC"
 fi
 
 echo "script-run-verb: $pass passed, $fail failed"

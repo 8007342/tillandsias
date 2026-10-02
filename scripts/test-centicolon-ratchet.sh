@@ -29,7 +29,7 @@
 
 set -uo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-RATCHET="$ROOT/scripts/check-centicolon-ratchet.sh"
+RATCHET="$ROOT/scripts/lua/check-centicolon-ratchet.lua"
 [ -f "$RATCHET" ] || { echo "fail:centicolon-ratchet:no-script:$RATCHET"; exit 1; }
 
 cd "$ROOT" || exit 1
@@ -66,7 +66,7 @@ green() {
     printf '{"ts":"2026-09-26T01:00:00Z","host":"fixture","step":"%s:a-file","status":"pass","digest":"%s"}\n' "$LP" \
         "$("${SHA[@]}" <"$H/openspec/litmus-tests/litmus-a.yaml" | cut -c1-64)" >"$WORK/log.jsonl"
 }
-run() { OUT="$(TILLANDSIAS_REPO_ROOT="$H" TILLANDSIAS_TIMING_LOG="$WORK/log.jsonl" bash "$RATCHET" "$@" 2>&1)"; RC=$?; LINE="$(grep '^centicolon:' <<<"$OUT")"; }
+run() { OUT="$(TILLANDSIAS_REPO_ROOT="$H" TILLANDSIAS_TIMING_LOG="$WORK/log.jsonl" "$PLAN" script run "$RATCHET" -- "$@" 2>&1)"; RC=$?; LINE="$(grep '^centicolon:' <<<"$OUT")"; }
 ID_A="cc:aaaa000a:$(printf 'Scenario a' | "${SHA[@]}" | cut -c1-8)"
 
 warns() { grep '^warn:centicolon-ratchet:' <<<"$OUT"; }
