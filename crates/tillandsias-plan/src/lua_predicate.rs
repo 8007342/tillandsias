@@ -517,7 +517,7 @@ fn strip_verbatim(p: PathBuf) -> PathBuf {
 /// under a temp dir (`/var/folders/…`) was refused as "outside the repository
 /// root" and `lua_std::the_archiver_sweeps_in_the_default_sandbox` failed on
 /// every Mac, 3/3. Linux `/tmp` is not a symlink, so Linux was green.
-fn containment_path(normalized: &Path) -> Option<PathBuf> {
+pub(crate) fn containment_path(normalized: &Path) -> Option<PathBuf> {
     let mut probe = normalized.to_path_buf();
     let mut tail: Vec<std::ffi::OsString> = Vec::new();
     // symlink_metadata: a dangling link EXISTS here, so it becomes the probe
@@ -934,45 +934,113 @@ pub fn build_environment(class: PredicateClass) -> Result<Lua, LuaError> {
 pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result<Lua, LuaError> {
     let lua = Lua::new();
 
-    // Same stdlib removals as lua_runtime::new. Repeated rather than shared
-    // because this environment must not silently inherit a future widening of
-    // that one — the two have different purposes and a common helper would make
-    // a change there change the trust boundary here.
+    // @trace order:1532-u9en
+    // Both sandboxed classes use a capability allow-list. Being uncached does
+    // not authorize Observing to bypass rooted fs verbs with io.lines,
+    // os.remove, or package.loadlib. In particular, do not retain package:
+    // package.loaded aliases the original stdlib tables and its searchers can
+    // load files/native code even if the corresponding globals are removed.
+    // There is no debug/registry access or loader alias in the reachable set.
+    // This is not a filesystem sandbox for children spawned by proc/sh.
     {
         let globals = lua.globals();
-        if let Ok(os_table) = globals.get::<LuaTable>("os") {
-            let _ = os_table.set("execute", LuaValue::Nil);
-            let _ = os_table.set("exit", LuaValue::Nil);
-            let _ = os_table.set("getenv", LuaValue::Nil);
+        let observing = matches!(class, PredicateClass::Observing);
+        if observing {
+            // Fresh tables expose only clock helpers and fixed-stream logging,
+            // never file handles, filename readers, or filesystem verbs.
+            for (name, members) in [
+                ("os", &["clock", "date", "difftime", "time"][..]),
+                ("io", &["write", "flush"][..]),
+            ] {
+                let original: LuaTable = globals
+                    .get(name)
+                    .map_err(|e| LuaError::VmError(format!("{name}: {e}")))?;
+                let restricted = lua
+                    .create_table()
+                    .map_err(|e| LuaError::VmError(format!("{name}: {e}")))?;
+                for member in members {
+                    let value: LuaValue = original
+                        .get(*member)
+                        .map_err(|e| LuaError::VmError(format!("{name}.{member}: {e}")))?;
+                    restricted
+                        .set(*member, value)
+                        .map_err(|e| LuaError::VmError(format!("{name}.{member}: {e}")))?;
+                }
+                if name == "io" {
+                    // The push hook consumes Git's supplied stdin with
+                    // io.lines(). Its filename form is a different capability
+                    // and must not reach the native reader. No input/output
+                    // setter exists, so the streams cannot be redirected.
+                    let lines: LuaFunction = original
+                        .get("lines")
+                        .map_err(|e| LuaError::VmError(format!("io.lines: {e}")))?;
+                    let stdin_lines = lua
+                        .create_function(move |_, args: LuaMultiValue| {
+                            if !args.is_empty() {
+                                return Err(mlua::Error::RuntimeError(
+                                    "io.lines: refused — filenames are unmanaged; use fs.read (io.lines() is stdin-only)".into(),
+                                ));
+                            }
+                            lines.call::<LuaMultiValue>(())
+                        })
+                        .map_err(|e| LuaError::VmError(format!("io.lines: {e}")))?;
+                    restricted
+                        .set("lines", stdin_lines)
+                        .map_err(|e| LuaError::VmError(format!("io.lines: {e}")))?;
+                    // Do not return native file userdata from write, or expose
+                    // its metatable. A private closure owns each fixed stream.
+                    let proxy: LuaFunction = lua
+                        .load("return function(stream) return {write = function(_, ...) stream:write(...) end, flush = function(_) return stream:flush() end} end")
+                        .eval()
+                        .map_err(|e| LuaError::VmError(format!("io streams: {e}")))?;
+                    for stream in ["stdout", "stderr"] {
+                        let handle: LuaValue = original
+                            .get(stream)
+                            .map_err(|e| LuaError::VmError(format!("io.{stream}: {e}")))?;
+                        let table: LuaTable = proxy
+                            .call(handle)
+                            .map_err(|e| LuaError::VmError(format!("io.{stream}: {e}")))?;
+                        restricted
+                            .set(stream, table)
+                            .map_err(|e| LuaError::VmError(format!("io.{stream}: {e}")))?;
+                    }
+                    let write: LuaFunction = original
+                        .get("write")
+                        .map_err(|e| LuaError::VmError(format!("io.write: {e}")))?;
+                    restricted
+                        .set(
+                            "write",
+                            lua.create_function(move |_, args: LuaMultiValue| {
+                                write.call::<LuaMultiValue>(args)?;
+                                Ok(())
+                            })
+                            .map_err(|e| LuaError::VmError(format!("io.write: {e}")))?,
+                        )
+                        .map_err(|e| LuaError::VmError(format!("io.write: {e}")))?;
+                }
+                globals
+                    .set(name, restricted)
+                    .map_err(|e| LuaError::VmError(format!("{name}: {e}")))?;
+            }
         }
-        if let Ok(io_table) = globals.get::<LuaTable>("io") {
-            let _ = io_table.set("open", LuaValue::Nil);
-            let _ = io_table.set("popen", LuaValue::Nil);
-            let _ = io_table.set("close", LuaValue::Nil);
-            let _ = io_table.set("output", LuaValue::Nil);
-            let _ = io_table.set("input", LuaValue::Nil);
-        }
-        let _ = globals.set("debug", LuaValue::Nil);
-        let _ = globals.set("loadfile", LuaValue::Nil);
-        let _ = globals.set("dofile", LuaValue::Nil);
-        let _ = globals.set("require", LuaValue::Nil);
-    }
-
-    // ORDER 1367-upz6. The removals above are a DENY-list, and a deny-list
-    // left os.time, os.clock, io.lines, os.remove and math.random reachable,
-    // so a cacheable predicate could read the clock or the disk and have that
-    // verdict replayed from cache. The cacheable class is therefore cut down
-    // to an ALLOW-list: every global not named below is removed, and math
-    // loses its non-deterministic half. The observing class keeps the wider
-    // set; it is never cached and already holds the shell verb.
-    if matches!(class, PredicateClass::Cacheable) {
-        let globals = lua.globals();
         let mut drop: Vec<String> = Vec::new();
         for pair in globals.clone().pairs::<LuaValue, LuaValue>() {
             let (k, _) = pair.map_err(|e| LuaError::VmError(format!("globals: {e}")))?;
             if let LuaValue::String(name) = k {
                 let name = name.to_string_lossy().to_string();
-                if !CACHEABLE_STDLIB_GLOBALS.contains(&name.as_str()) {
+                if !CACHEABLE_STDLIB_GLOBALS.contains(&name.as_str())
+                    && !(observing
+                        && [
+                            "os",
+                            "io",
+                            "print",
+                            "warn",
+                            "load",
+                            "collectgarbage",
+                            "coroutine",
+                        ]
+                        .contains(&name.as_str()))
+                {
                     drop.push(name);
                 }
             }
@@ -982,9 +1050,11 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                 .set(name.as_str(), LuaValue::Nil)
                 .map_err(|e| LuaError::VmError(format!("remove {name}: {e}")))?;
         }
-        if let Ok(math) = globals.get::<LuaTable>("math") {
-            let _ = math.set("random", LuaValue::Nil);
-            let _ = math.set("randomseed", LuaValue::Nil);
+        if !observing && let Ok(math) = globals.get::<LuaTable>("math") {
+            math.set("random", LuaValue::Nil)
+                .map_err(|e| LuaError::VmError(format!("math.random: {e}")))?;
+            math.set("randomseed", LuaValue::Nil)
+                .map_err(|e| LuaError::VmError(format!("math.randomseed: {e}")))?;
         }
     }
 

@@ -634,12 +634,25 @@ fn register(
                             "fs.walk: '{dir}' must be repo-relative, without '..'"
                         )));
                     }
+                    // @trace order:1532-u9en
+                    // read_dir follows the START path (including intermediate
+                    // symlinks), unlike DirEntry::file_type below. Check its
+                    // resolved containment before enumerating names. Keep the
+                    // caller's spelling for presentation and do not follow
+                    // descendant links. This does not claim TOCTOU protection.
+                    let start = root.join(&dir);
+                    let resolved = crate::lua_predicate::containment_path(&start);
+                    if !resolved.is_some_and(|p| p.starts_with(&root)) {
+                        return Err(LuaError::RuntimeError(format!(
+                            "fs.walk: '{dir}' resolves outside the repository root or cannot be resolved"
+                        )));
+                    }
                     let suffix: Option<String> = match opts {
                         Some(o) => o.get("suffix")?,
                         None => None,
                     };
                     let mut found: Vec<String> = Vec::new();
-                    let mut stack = vec![root.join(&dir)];
+                    let mut stack = vec![start];
                     while let Some(d) = stack.pop() {
                         let Ok(rd) = std::fs::read_dir(&d) else { continue };
                         for e in rd.flatten() {
