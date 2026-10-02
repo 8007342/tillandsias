@@ -1,0 +1,54 @@
+packets:
+  - packet_id: lua-live-proc-spawn-streams-with-script-owned-cancellation-and-reaping
+    order: 1534-puyz
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [lua, rust, async, exec, tests]
+    estimated_hours: 6
+    depends_on:
+      - lua-policy-doors-refuse-invalid-seeds-and-inspection-never-spends-consent
+      - observing-lua-stdlib-cannot-bypass-rooted-filesystem-capabilities
+    owned_files:
+      - crates/tillandsias-exec/src/lib.rs
+      - crates/tillandsias-exec/tests/executor_contract.rs
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/src/script_run.rs
+      - crates/tillandsias-plan/tests/lua_proc.rs
+      - crates/tillandsias-plan/Cargo.toml
+      - Cargo.lock
+    title: "Bounded 1384-aixy slice: live proc.spawn callbacks and script-owned cancel-and-reap"
+    context: |
+      Astra read-only audit of 7cbc38c1b: lua_proc already covers original
+      1384-aixy arms 1,2,3,5,6,7. Arm 4 (streaming) remains. Existing executor
+      spawn inherits stdio and is not a supervised streaming backend. Outer
+      script timeout exits without cancelling/joining the Lua worker, a
+      source-derived Unix descendant-leak hypothesis to reproduce. This child
+      implements one useful slice, not full chain/select/all or native closure.
+    outcome: |
+      proc.spawn exposes live per-fd line callbacks, wait and kill on the
+      managed executor, and the script lifetime owns cleanup even when Lua
+      drops a handle or exits by verdict/error/outer timeout.
+    exit_criteria:
+      - "A 10,000-line producer delivers each stdout callback exactly once in order, keeps stderr separate and preserves CR bytes; wait completes only after the final callback."
+      - "A producer waiting for callback acknowledgement proves delivery is live, not captured output replay; two producers start before either finishes. Capture limits remain bounded."
+      - "Outer timeout shorter than the process timeout terminates an acknowledged-running child and grandchild promptly with exit 124 and no delayed marker; include startup acknowledgement and a survival positive control."
+      - "Callback errors, script errors, a CPU-bound loop and verdict exit with outstanding children stop new spawns and cancel/reap owned process groups; use bounded explicit cleanup and an instruction hook where necessary."
+      - "The new door reuses hardened policy authorization, validates programmer errors and preserves fixed environment/result semantics; denied or unresolved-consent calls spawn nothing."
+      - "Existing executor/Lua tests and integrated full gate pass on Linux; record Mac/Windows validation as unmeasured and leave the parent open for any remaining APIs or platform criteria."
+    verifiable_closure: |
+      cargo test -p tillandsias-exec --test executor_contract;
+      cargo test -p tillandsias-plan --test lua_proc -- --test-threads=1;
+      bash scripts/test-script-run-verb.sh. Named live-delivery and outer-deadline
+      regressions must fail before implementation, then pass with positive controls.
+    unscoreable: "pinned-by-its-own-fixture: new named lua_proc and executor_contract regression arms"
+    next_action: "Sol implements after 1531-ae4a and 1532-u9en land, coordinating script_run.rs with the completed advisory port; parent gates and lands a PR, recording only measured slice closure."
+    notes: |
+      size: L
+      implementer_tier: opus
+      No captured-output replay masquerading as streaming; no default-deny flip.
+      Deliberately group-escaping descendants remain outside the existing containment contract.
+    provenance: "Operator-approved 12-hour plan; Astra bounded audit on 2026-10-02; parent 1384-aixy contract."
