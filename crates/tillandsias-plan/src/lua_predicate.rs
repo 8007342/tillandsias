@@ -946,8 +946,8 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
         let globals = lua.globals();
         let observing = matches!(class, PredicateClass::Observing);
         if observing {
-            // Fresh tables expose only clock helpers and fixed-output logging,
-            // never file handles, default-input readers, or filesystem verbs.
+            // Fresh tables expose only clock helpers and fixed-stream logging,
+            // never file handles, filename readers, or filesystem verbs.
             for (name, members) in [
                 ("os", &["clock", "date", "difftime", "time"][..]),
                 ("io", &["write", "flush"][..]),
@@ -965,6 +965,58 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                     restricted
                         .set(*member, value)
                         .map_err(|e| LuaError::VmError(format!("{name}.{member}: {e}")))?;
+                }
+                if name == "io" {
+                    // The push hook consumes Git's supplied stdin with
+                    // io.lines(). Its filename form is a different capability
+                    // and must not reach the native reader. No input/output
+                    // setter exists, so the streams cannot be redirected.
+                    let lines: LuaFunction = original
+                        .get("lines")
+                        .map_err(|e| LuaError::VmError(format!("io.lines: {e}")))?;
+                    let stdin_lines = lua
+                        .create_function(move |_, args: LuaMultiValue| {
+                            if !args.is_empty() {
+                                return Err(mlua::Error::RuntimeError(
+                                    "io.lines: refused — filenames are unmanaged; use fs.read (io.lines() is stdin-only)".into(),
+                                ));
+                            }
+                            lines.call::<LuaMultiValue>(())
+                        })
+                        .map_err(|e| LuaError::VmError(format!("io.lines: {e}")))?;
+                    restricted
+                        .set("lines", stdin_lines)
+                        .map_err(|e| LuaError::VmError(format!("io.lines: {e}")))?;
+                    // Do not return native file userdata from write, or expose
+                    // its metatable. A private closure owns each fixed stream.
+                    let proxy: LuaFunction = lua
+                        .load("return function(stream) return {write = function(_, ...) stream:write(...) end, flush = function(_) return stream:flush() end} end")
+                        .eval()
+                        .map_err(|e| LuaError::VmError(format!("io streams: {e}")))?;
+                    for stream in ["stdout", "stderr"] {
+                        let handle: LuaValue = original
+                            .get(stream)
+                            .map_err(|e| LuaError::VmError(format!("io.{stream}: {e}")))?;
+                        let table: LuaTable = proxy
+                            .call(handle)
+                            .map_err(|e| LuaError::VmError(format!("io.{stream}: {e}")))?;
+                        restricted
+                            .set(stream, table)
+                            .map_err(|e| LuaError::VmError(format!("io.{stream}: {e}")))?;
+                    }
+                    let write: LuaFunction = original
+                        .get("write")
+                        .map_err(|e| LuaError::VmError(format!("io.write: {e}")))?;
+                    restricted
+                        .set(
+                            "write",
+                            lua.create_function(move |_, args: LuaMultiValue| {
+                                write.call::<LuaMultiValue>(args)?;
+                                Ok(())
+                            })
+                            .map_err(|e| LuaError::VmError(format!("io.write: {e}")))?,
+                        )
+                        .map_err(|e| LuaError::VmError(format!("io.write: {e}")))?;
                 }
                 globals
                     .set(name, restricted)

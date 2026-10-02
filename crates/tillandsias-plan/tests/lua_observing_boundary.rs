@@ -2,8 +2,9 @@
 // Scratch-only controls. No process-wide cwd/env mutation; each CLI/worker is
 // isolated. These tests do not claim filesystem confinement for spawned children.
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use tillandsias_plan::lua_predicate::{PredicateClass, build_environment};
 
 fn scratch() -> tempfile::TempDir {
@@ -97,8 +98,12 @@ fn sandboxed_classes_withhold_unmanaged_io_and_every_loader_alias() {
                 assert(_G[name] == nil, name)
             end
             if io then
-                for k in pairs(io) do assert(k == 'write' or k == 'flush', 'io.' .. k) end
-                assert(io.lines == nil and io.tmpfile == nil and io.stdin == nil)
+                for k in pairs(io) do
+                    assert(k == 'write' or k == 'flush' or k == 'lines' or k == 'stdout' or k == 'stderr', 'io.' .. k)
+                end
+                assert(io.tmpfile == nil and io.stdin == nil)
+                assert(type(io.stderr) == 'table' and io.stderr.read == nil and io.stderr.close == nil)
+                assert(not pcall(function() io.lines('outside.txt') end))
             end
             if os then
                 for k in pairs(os) do
@@ -111,6 +116,44 @@ fn sandboxed_classes_withhold_unmanaged_io_and_every_loader_alias() {
             expert.log_info('boundary helpers preserved')
         "#).exec().unwrap();
     }
+}
+
+#[test]
+fn observing_fixed_stream_io_preserves_hook_input_and_logging_without_file_handles() {
+    let d = setup();
+    let root = d.path().join("repo");
+    let mut c = command(&root);
+    let mut child = c
+        .args([
+            "lua",
+            "-e",
+            r#"
+        local lines = {}
+        for line in io.lines() do lines[#lines + 1] = line end
+        assert(table.concat(lines, ':') == 'one:two')
+        assert(io.write('stdout-control') == nil)
+        assert(io.stderr:write('stderr-control') == nil)
+        assert(io.stdout:write('-proxy') == nil)
+        assert(io.stderr.close == nil and io.stdout.read == nil)
+        assert(not pcall(function() io.lines(nil, '*a') end))
+        assert(not pcall(function() package.loaded.io.lines('file') end))
+    "#,
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"one\ntwo\n")
+        .unwrap();
+    let o = child.wait_with_output().unwrap();
+    assert!(o.status.success(), "{}", detail(&o));
+    assert_eq!(String::from_utf8_lossy(&o.stdout), "stdout-control-proxy");
+    assert_eq!(String::from_utf8_lossy(&o.stderr), "stderr-control");
 }
 
 // Worker permits direct Cacheable/Observing filesystem tests without shared env.
