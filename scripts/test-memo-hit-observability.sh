@@ -83,14 +83,42 @@ i=0; while [ "$i" -lt 5 ]; do
     i=$((i + 1))
 done
 skip_line() { TILLANDSIAS_TIMING_LOG="$L" bash "$1" 2>/dev/null | grep '^skippable:'; }
-case "$(skip_line "$METRICS")" in
-    "skippable: window=7d "*) ok "ARM 3: skippable: states its window (default 7d)" ;;
-    *) bad "ARM 3: skippable: prints no window token: $(skip_line "$METRICS")" ;;
+# The production caller is allowed to be started outside the repository. Its
+# own SCRIPT_DIR/REPO_ROOT must still resolve the Lua runner, and reporting the
+# advisory must not stop the later recurrence metrics.
+report7="$(cd "$W" && TILLANDSIAS_TIMING_LOG="$L" bash "$METRICS" 2>&1)"; report7_rc=$?
+case "$(grep '^skippable:' <<<"$report7")" in
+    "skippable: window=7d "*)
+        if [ "$report7_rc" -eq 0 ] && grep -q '^centicolon:' <<<"$report7"; then
+            ok "ARM 3: non-repo cwd completes the report with CentiColon and skippable default window=7d"
+        else
+            bad "ARM 3: non-repo cwd report incomplete (rc=$report7_rc)"
+        fi ;;
+    *) bad "ARM 3: skippable: prints no window token: $(grep '^skippable:' <<<"$report7")" ;;
 esac
-case "$(TILLANDSIAS_TIMING_LOG="$L" TILLANDSIAS_RECUR_WINDOW_DAYS=10 bash "$METRICS" 2>/dev/null | grep '^skippable:')" in
-    "skippable: window=10d "*) ok "ARM 3: the token TRACKS the window flag, it is not hardcoded" ;;
+report10="$(cd "$W" && TILLANDSIAS_TIMING_LOG="$L" TILLANDSIAS_RECUR_WINDOW_DAYS=10 bash "$METRICS" 2>&1)"; report10_rc=$?
+case "$(grep '^skippable:' <<<"$report10")" in
+    "skippable: window=10d "*)
+        if [ "$report10_rc" -eq 0 ] && grep -q '^centicolon:' <<<"$report10"; then
+            ok "ARM 3: non-repo cwd keeps CentiColon and tracks window=10d"
+        else
+            bad "ARM 3: window=10d report incomplete (rc=$report10_rc)"
+        fi ;;
     *) bad "ARM 3: the window token does not follow --recur-window-days" ;;
 esac
+absent_report="$(cd "$W" && TILLANDSIAS_TIMING_LOG="$L" TILLANDSIAS_PLAN_BIN="$W/no-plan" bash "$METRICS" 2>&1)"; absent_rc=$?
+if [ "$absent_rc" -eq 0 ] && grep -q '^skippable: window=7d ' <<<"$absent_report" && grep -q '^verdict:' <<<"$absent_report"; then
+    ok "ARM 3: absent runner leaves the complete recurrence report intact"
+else
+    bad "ARM 3: absent runner stopped reporting (rc=$absent_rc)"
+fi
+printf '#!/usr/bin/env bash\nexit 1\n' >"$W/refusing-plan"; chmod +x "$W/refusing-plan"
+refused_report="$(cd "$W" && TILLANDSIAS_TIMING_LOG="$L" TILLANDSIAS_PLAN_BIN="$W/refusing-plan" bash "$METRICS" 2>&1)"; refused_rc=$?
+if [ "$refused_rc" -eq 0 ] && grep -q '^skippable: window=7d ' <<<"$refused_report" && grep -q '^verdict:' <<<"$refused_report"; then
+    ok "ARM 3: refusing runner leaves the complete recurrence report intact"
+else
+    bad "ARM 3: refusing runner stopped reporting (rc=$refused_rc)"
+fi
 sed 's/^printf .skippable: window=%sd %s source=%s\\n. "\$RECUR_WINDOW_DAYS" \\/printf '"'"'skippable: %s source=%s\\n'"'"' \\/' \
     "$METRICS" > "$W/metrics-prefix.sh"
 if grep -q "skippable: window=%sd" "$W/metrics-prefix.sh"; then
