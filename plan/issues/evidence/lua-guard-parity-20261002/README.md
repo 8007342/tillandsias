@@ -22,7 +22,7 @@ false-green result is separately retained under
 `plan/issues/evidence/lua-guard-parent-review-20261002/` after integration.
 No core fixture diagnostic contract changed.
 
-Final receipt SHA-256:
+Final measurement-time receipt SHA-256 (before diagnostic provenance notes):
 `2c3d6f8ad058768de76e02fcbec2896ca9a89ca975362d258a57a75c685f4a0d`.
 The JSON records binary/source/harness identities and both raw byte streams
 (base64 plus readable text), statuses and input hashes. Version 1 reproduces
@@ -54,7 +54,20 @@ only the explicit starting argument; it does not follow interior symlinks.
 `root-link-fixed-parity.json` reruns the original 23 case pairs at that
 candidate: 15/15 core tuples and 7/8 supplementary tuples match exactly;
 the same intentional spoof-signature diagnostic difference remains.
-Receipt SHA-256:
+Measurement-time receipt SHA-256 (before diagnostic provenance notes):
 `406891051c546c4a62d99c880e4d9fda4601334e07f10fb8dba6d86cc5fb5eb0`.
 Parent independently reran published fixtures: guest 3/3, tray 10/10,
 Podman 11/11. Full integration gate and remote landing remain required.
+
+## Captured line-number provenance
+
+The first full integration gate classified measured stderr `file.rs:line`
+output as newly added prose source citations. Commit `27199b358` uses the
+guard's existing reasoned `cite-ok` exception narrowly on those physical JSON
+lines: `_cite_ok` states that their numbers are captured diagnostic output,
+not claims about source locations. Every JSON file parses. Removing only
+`_cite_ok` leaves all six original receipt objects identical; raw stderr
+strings, base64 streams, statuses and input identities are unchanged.
+
+The SHA-256 values above identify the original measurement-time JSON bytes,
+preserved in commit `21f20a258`, not the subsequently annotated files.
