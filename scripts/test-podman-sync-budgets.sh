@@ -10,15 +10,16 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GATE="$ROOT/scripts/check-podman-sync-budgets.sh"
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)"
+LUA="$ROOT/scripts/lua/check-podman-sync-budgets.lua"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
-[ -f "$GATE" ] || fail "gate not found: $GATE"
+[ -f "$LUA" ] || fail "gate not found: $LUA"
 
 # --- case 1: the live tree is bounded ----------------------------------------
-out="$(bash "$GATE")" || fail "case 1: live tree must pass, got '$out'"
+out="$("$PLAN" script run "$LUA")" || fail "case 1: live tree must pass, got '$out'"
 case "$out" in
     ok:podman-sync-bounded:*) ;;
     *) fail "case 1: unexpected verdict '$out'" ;;
@@ -33,7 +34,7 @@ fn probe() {
     let _ = cmd.arg("ps").output();
 }
 RS
-out="$(cd "$WORK" && PODMAN_SYNC_SEARCH_ROOT=crates bash "$GATE" 2>/dev/null)"
+out="$(TILLANDSIAS_REPO_ROOT="$WORK" PODMAN_SYNC_SEARCH_ROOT=crates "$PLAN" script run "$LUA" 2>/dev/null)"
 rc=$?
 [ "$rc" -ne 0 ] || fail "case 2: a direct podman Command must be refused"
 case "$out" in
@@ -48,7 +49,7 @@ cat > "$WORK/crates/fixture/src/hatch.rs" <<'RS'
 fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }
 fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }
 RS
-out="$(cd "$WORK" && PODMAN_SYNC_SEARCH_ROOT=crates PODMAN_SYNC_ESCAPE_HATCHES=1 bash "$GATE" 2>/dev/null)"
+out="$(TILLANDSIAS_REPO_ROOT="$WORK" PODMAN_SYNC_SEARCH_ROOT=crates PODMAN_SYNC_ESCAPE_HATCHES=1 "$PLAN" script run "$LUA" 2>/dev/null)"
 rc=$?
 [ "$rc" -ne 0 ] || fail "case 3: a second caller-owned spawn must be refused"
 case "$out" in
@@ -58,7 +59,7 @@ esac
 echo "ok: case 3 — escape hatch counted, not merely allowed"
 
 # --- case 4: the reviewed count is what makes case 3 a decision --------------
-out="$(cd "$WORK" && PODMAN_SYNC_SEARCH_ROOT=crates PODMAN_SYNC_ESCAPE_HATCHES=2 bash "$GATE")" \
+out="$(TILLANDSIAS_REPO_ROOT="$WORK" PODMAN_SYNC_SEARCH_ROOT=crates PODMAN_SYNC_ESCAPE_HATCHES=2 "$PLAN" script run "$LUA")" \
     || fail "case 4: raising the reviewed count must allow it, got '$out'"
 [ "$out" = "ok:podman-sync-bounded:2" ] || fail "case 4: unexpected verdict '$out'"
 echo "ok: case 4 — raising the reviewed count is the sanctioned path"
@@ -74,7 +75,7 @@ fn probe(mut pipe: std::process::ChildStdout) {
     let _ = pipe.read_to_end(&mut buf);
 }
 RS
-out="$(cd "$WORK" && PODMAN_SYNC_SEARCH_ROOT=crates bash "$GATE" 2>/dev/null)"
+out="$(TILLANDSIAS_REPO_ROOT="$WORK" PODMAN_SYNC_SEARCH_ROOT=crates "$PLAN" script run "$LUA" 2>/dev/null)"
 rc=$?
 [ "$rc" -ne 0 ] || fail "case 5: an unbounded child-pipe capture must be refused"
 case "$out" in
@@ -104,7 +105,7 @@ fn test_only_wait(mut child: std::process::Child) {
     }
 }
 RS
-out="$(cd "$WORK" && PODMAN_SYNC_SEARCH_ROOT=crates bash "$GATE" 2>/dev/null)"
+out="$(TILLANDSIAS_REPO_ROOT="$WORK" PODMAN_SYNC_SEARCH_ROOT=crates "$PLAN" script run "$LUA" 2>/dev/null)"
 rc=$?
 [ "$rc" -ne 0 ] || fail "case 6: a sleeping child-wait poll must be refused"
 case "$out" in

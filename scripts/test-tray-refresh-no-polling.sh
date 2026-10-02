@@ -16,7 +16,8 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GUARD="$ROOT/scripts/check-tray-refresh-no-polling.sh"
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)"
+LUA="$ROOT/scripts/lua/check-tray-refresh-no-polling.lua"
 SRC="$ROOT/crates/tillandsias-windows-tray/src/notify_icon.rs"
 fail=0; pass=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
@@ -26,7 +27,7 @@ bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/tray-nopoll.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
-_rc() { bash "$GUARD" "$1" >/dev/null 2>&1; echo $?; }
+_rc() { TILLANDSIAS_TRAY_REFRESH_SOURCE="$1" "$PLAN" script run "$LUA" >/dev/null 2>&1; echo $?; }
 
 # ── 0. The real source passes, or every mutation arm is meaningless ────────
 [ "$(_rc "$SRC")" = "0" ] && ok "the real tray source passes the guard" \

@@ -16,7 +16,8 @@
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CHECKER="$ROOT/scripts/check-guest-unit-hardening.sh"
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)"
+LUA="$ROOT/scripts/lua/check-guest-unit-hardening.lua"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/guest-unit-hardening.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 fails=0
@@ -28,7 +29,7 @@ expect() {
     # would silently re-measure the live tree — which is exactly how the
     # first run of this fixture "passed" two scenarios it should have failed.
     local name="$1" want="$2" want_rc="$3" dir="$4" got rc
-    got="$(cd "$dir" && bash "$dir/scripts/check-guest-unit-hardening.sh" 2>/dev/null)"
+    got="$(TILLANDSIAS_GUEST_UNIT_ROOT="$dir" "$PLAN" script run "$LUA" 2>/dev/null)"
     rc=$?
     case "$got" in
         "$want"*) ;;
@@ -52,10 +53,6 @@ seed_tree() {
        "$dest/crates/tillandsias-vm-layer/src/vz.rs"
     cp "$ROOT/crates/tillandsias-vm-layer/src/wsl.rs" \
        "$dest/crates/tillandsias-vm-layer/src/wsl.rs"
-    # The checker resolves ROOT from its own location, so it must live in the
-    # copied tree too.
-    mkdir -p "$dest/scripts"
-    cp "$CHECKER" "$dest/scripts/"
 }
 
 # 1. Live tree: unconfined today.

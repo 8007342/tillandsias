@@ -396,7 +396,6 @@ scripts scripts/check-gate-step-prefix-across-refs.sh 4
 scripts scripts/check-gate-step-regimes.sh 1
 scripts scripts/check-groundtruth-mutable-status-pins.sh 4
 scripts scripts/check-groundtruth-regime-invariance.sh 3
-scripts scripts/check-guest-unit-hardening.sh 5
 scripts scripts/check-host-tools.sh 105
 scripts scripts/check-inference-container-name-agreement.sh 4
 scripts scripts/check-issue-citation-convention.sh 8
@@ -438,7 +437,6 @@ scripts scripts/check-pickup-role-grammar.sh 3
 scripts scripts/check-plan-binary-current.sh 5
 scripts scripts/check-plan-binary-probe-usage.sh 8
 scripts scripts/check-plan-schema-divergence.sh 2
-scripts scripts/check-podman-sync-budgets.sh 20
 scripts scripts/check-portability-idioms.sh 41
 scripts scripts/check-proxy-permissive-port-routing.sh 2
 scripts scripts/check-purge-clears-vault-credentials.sh 1
@@ -468,7 +466,6 @@ scripts scripts/check-terminology.sh 4
 scripts scripts/check-test-baseline.sh 8
 scripts scripts/check-tracked-files-unwritten.sh 4
 scripts scripts/check-tray-import-surface.sh 25
-scripts scripts/check-tray-refresh-no-polling.sh 2
 scripts scripts/check-tray-string-corpus-drift.sh 2
 scripts scripts/check-unique-bin-names.sh 1
 scripts scripts/check-unrunnable-platform-arms.sh 5

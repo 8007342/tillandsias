@@ -28,7 +28,7 @@ preconditions:
 
 critical_path:
   - step: "the tray's status refreshes are single-shot over a persistent client"
-    command: "scripts/check-tray-refresh-no-polling.sh"
+    command: "$(. scripts/plan-binary-probe.sh && resolve_plan_binary) script run scripts/lua/check-tray-refresh-no-polling.lua"
     timeout_ms: 20000
     expected_behavior: "ok:tray-refresh-no-polling"
 
