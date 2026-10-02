@@ -1,0 +1,50 @@
+{
+  "delta": {
+    "healthy_count": 508,
+    "fault_count": 507,
+    "healthy_only": [
+      "openspec/litmus-tests/litmus-podman-idiomatic-launch-routing.yaml"
+    ],
+    "fault_only": [],
+    "note": "controlled helper failure, NOT claimed to reconstruct historical gate cause"
+  },
+  "exits": {
+    "candidate-validate": 0,
+    "candidate-live": 0,
+    "candidate-neutral": 0,
+    "candidate-live-helper-fault": 1,
+    "candidate-neutral-helper-fault": 1,
+    "live-corpus-helper-fault": 1,
+    "binary-build-id": 0,
+    "clean-validate": 0,
+    "clean-live": 0,
+    "clean-neutral": 0,
+    "dup-assert-validate": 1,
+    "dup-assert-live": 1,
+    "dup-assert-neutral": 0,
+    "dup-timeout-validate": 1,
+    "dup-timeout-live": 1,
+    "dup-timeout-neutral": 0,
+    "dup-command-validate": 1,
+    "dup-command-live": 1,
+    "dup-command-neutral": 0
+  },
+  "all_inputs_still_match_snapshot": true,
+  "plan_sha256": "eb1e4226e5c208c936588139df17e72c8073bf3aa117ad81d42645cf93483dfe",
+  "rust_helper_sha256": "1208e235efa7afe32f2d851c0214193baf924d5459532432d2f2fbfe9e5e57d9",
+  "effective_environment": {
+    "PATH": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-parse-mismatch-rqdlru8u/no-build-bin:/home/tlatoani/.local/bin:/usr/bin:/bin",
+    "HOME": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-parse-mismatch-rqdlru8u/home",
+    "TMPDIR": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-parse-mismatch-rqdlru8u",
+    "LC_ALL": "C",
+    "LANG": "C",
+    "TZ": "UTC",
+    "XDG_RUNTIME_DIR": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-parse-mismatch-rqdlru8u/xdg",
+    "TILLANDSIAS_PLAN_BIN": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-parse-mismatch-rqdlru8u/plan",
+    "LITMUS_PODMAN_MODE": "fake",
+    "TILLANDSIAS_REPO_ROOT": "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002",
+    "TILLANDSIAS_LITMUS_RUNTIME_DIR": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-parse-mismatch-rqdlru8u/runtime",
+    "TILLANDSIAS_TIMING_LOG": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-parse-mismatch-rqdlru8u/timing.jsonl",
+    "LITMUS_STEP_TIMING_LOG": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-parse-mismatch-rqdlru8u/step-timing.jsonl"
+  }
+}
