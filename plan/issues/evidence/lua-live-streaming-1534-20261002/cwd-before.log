@@ -1,0 +1,27 @@
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+   Compiling tillandsias-plan v0.1.0 (/home/tlatoani/codex/tillandsias-lua-work/1534-puyz/crates/tillandsias-plan)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.11s
+     Running tests/lua_proc.rs (target/debug/deps/lua_proc-462beb25b4361464)
+
+running 1 test
+test managed_script::scoped_spawn_preserves_fixed_environment_stdin_and_cacheable_process_absence ... FAILED
+
+failures:
+
+---- managed_script::scoped_spawn_preserves_fixed_environment_stdin_and_cacheable_process_absence stdout ----
+
+thread 'managed_script::scoped_spawn_preserves_fixed_environment_stdin_and_cacheable_process_absence' (1505365) panicked at crates/tillandsias-plan/tests/lua_proc.rs:506:9:
+runtime error: [string "/tmp/opencode/sol-1534-dqnuHL/probe.lua"]:9: cwd snapshot drift
+stack traceback:
+	[C]: in function 'assert'
+	[string "/tmp/opencode/sol-1534-dqnuHL/probe.lua"]:9: in main chunk
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    managed_script::scoped_spawn_preserves_fixed_environment_stdin_and_cacheable_process_absence
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 21 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p tillandsias-plan --test lua_proc`
