@@ -1514,8 +1514,14 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "cheatsheet-frontmatter" "skipped"
     fi
 
-    if [[ -f "scripts/check-dev-embed-model-agreement.sh" ]]; then
-        if bash scripts/check-dev-embed-model-agreement.sh 2>&1 | tee /tmp/dev-embed-model-agreement.log; then
+    if [[ -f "scripts/lua/source-agreements.lua" ]]; then
+        _sa_plan="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _sa_plan=""
+        case "$_sa_plan" in ./*) _sa_plan="$REPO_ROOT/${_sa_plan#./}" ;; esac
+        if [[ -z "$_sa_plan" ]] || ! grep -qx script <<<"$("$_sa_plan" capabilities 2>/dev/null)"; then
+            echo "could-not-run:dev-embed-model-agreement:no-script-runner — rebuild tillandsias-plan with script run" > /tmp/dev-embed-model-agreement.log
+            log_fail_tracked "dev-embed-model-agreement" "No typed Lua runner (see /tmp/dev-embed-model-agreement.log)"
+            archive_check_log "dev-embed-model-agreement" "fail" /tmp/dev-embed-model-agreement.log
+        elif (cd "$REPO_ROOT" && "$_sa_plan" script run scripts/lua/source-agreements.lua -- dev_embed_model_agreement images/default/config-overlay/mcp/lib-dev-env.sh scripts/dev-inference-ensure.sh) 2>&1 | tee /tmp/dev-embed-model-agreement.log; then
             log_pass "Dev embed model agrees across surfaces"
             archive_check_log "dev-embed-model-agreement" "pass" /tmp/dev-embed-model-agreement.log
         else
@@ -1523,7 +1529,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "dev-embed-model-agreement" "fail" /tmp/dev-embed-model-agreement.log
         fi
     else
-        log_fail_missing_guard "dev-embed-model-agreement" "scripts/check-dev-embed-model-agreement.sh"
+        log_fail_missing_guard "dev-embed-model-agreement" "scripts/lua/source-agreements.lua"
         archive_check_log "dev-embed-model-agreement" "skipped"
     fi
 

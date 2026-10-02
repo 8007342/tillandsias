@@ -377,7 +377,6 @@ scripts scripts/check-decider-retirement.sh 3
 scripts scripts/check-declared-closures-added.sh 2
 scripts scripts/check-deslop-due.sh 5
 scripts scripts/check-deslop-sweep-health.sh 4
-scripts scripts/check-dev-embed-model-agreement.sh 2
 scripts scripts/check-enclave-expect-none-is-fixture-only.sh 2
 scripts scripts/check-enclave-network-internal.sh 5
 scripts scripts/check-enclave-service-health.sh 16
@@ -399,7 +398,6 @@ scripts scripts/check-groundtruth-mutable-status-pins.sh 4
 scripts scripts/check-groundtruth-regime-invariance.sh 3
 scripts scripts/check-guest-unit-hardening.sh 5
 scripts scripts/check-host-tools.sh 105
-scripts scripts/check-inference-container-name-agreement.sh 4
 scripts scripts/check-issue-citation-convention.sh 8
 scripts scripts/check-jq-callsite-ratchet.sh 17
 scripts scripts/check-jq-multiline-capture-strips-cr.sh 11
@@ -744,7 +742,6 @@ scripts scripts/test-hook-phase-instrumentation.sh 5
 scripts scripts/test-host-tools.sh 30
 scripts scripts/test-image-build-convergence.sh 2
 scripts scripts/test-image-usability-check.sh 1
-scripts scripts/test-inference-container-name-agreement.sh 3
 scripts scripts/test-inference-pull-failure-classification.sh 4
 scripts scripts/test-inference.sh 2
 scripts scripts/test-install-hooks-refuses-global-hookspath.sh 2

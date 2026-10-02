@@ -37,7 +37,6 @@ scripts/check-decider-retirement.sh
 scripts/check-declared-closures-added.sh
 scripts/check-deslop-due.sh
 scripts/check-deslop-sweep-health.sh
-scripts/check-dev-embed-model-agreement.sh
 scripts/check-enclave-ca-consistency.sh
 scripts/check-enclave-expect-none-is-fixture-only.sh
 scripts/check-enclave-network-internal.sh
@@ -62,7 +61,6 @@ scripts/check-groundtruth-mutable-status-pins.sh
 scripts/check-groundtruth-regime-invariance.sh
 scripts/check-guest-unit-hardening.sh
 scripts/check-host-tools.sh
-scripts/check-inference-container-name-agreement.sh
 scripts/check-installer-channel.sh
 scripts/check-issue-citation-convention.sh
 scripts/check-jq-callsite-ratchet.sh
@@ -141,7 +139,6 @@ scripts/check-terminology.sh
 scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
 scripts/check-tray-import-surface.sh
-scripts/check-tray-process-running-naming.sh
 scripts/check-tray-refresh-no-polling.sh
 scripts/check-tray-string-corpus-drift.sh
 scripts/check-unique-bin-names.sh
@@ -379,7 +376,6 @@ scripts/test-host-tools.sh
 scripts/test-if-not-pipeline-guard.sh
 scripts/test-image-build-convergence.sh
 scripts/test-image-usability-check.sh
-scripts/test-inference-container-name-agreement.sh
 scripts/test-inference-engine-pinned-and-npu-honest.sh
 scripts/test-inference-mkdir-fatal-1183-j9dk.sh
 scripts/test-inference-pull-failure-classification.sh
