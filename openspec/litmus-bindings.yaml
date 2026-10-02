@@ -155,6 +155,7 @@ specs:
   - litmus:release-preflight-latest-read-bounded
   - litmus:pilot-lua-ports
   - litmus:shell-ratchet
+  - litmus:source-agreement-lua-cutover
   - litmus:pre-push-trailer-states-what-it-saw
   - litmus:land-refusals-carry-affordance
   - litmus:plan-fragments-lane-refusals-carry-affordance

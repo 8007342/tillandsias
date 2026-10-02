@@ -1,23 +1,17 @@
 // @trace order:1475-j9kv
 //
-// Shadow-pilot evidence for three existing Bash agreement guards.  Production
-// callers still use those guards; this target compares their outcomes with a
-// fresh, cacheable Lua environment and deliberately keeps the comparison
-// harness (which may spawn Bash) separate from the evaluator (which cannot).
+// Production evidence for the three retired Bash agreement guards. The pure
+// evaluator is checked independently, then the real `script run` CLI is driven
+// over every fixed live/adversarial input and compared byte-for-byte with the
+// captured pre-cutover contract.
 
 use mlua::{Function, Table};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-#[cfg(unix)] // ORDER 1506-ezv3: only the cfg(unix) legacy runner spawns.
 use std::process::Command;
 use std::sync::Mutex;
-// ORDER 1506-ezv3: unix-only, like the two cfg(unix) tests that are its only
-// users. Ungated, the Windows-target clippy refused this file as dead code,
-// a red Linux clippy cannot see.
-#[cfg(unix)]
-use std::time::{Duration, Instant};
 use tillandsias_plan::lua_predicate::{PredicateClass, build_environment};
 
 static REPO_ROOT_ENV: Mutex<()> = Mutex::new(());
@@ -27,10 +21,7 @@ struct Manifest {
     cases: Vec<ManifestCase>,
 }
 
-// ORDER 1506-ezv3: every field is deserialized on all targets, but only the
-// cfg(unix) legacy comparison reads operation/source/hook/ensure/script/probe.
 #[derive(Debug, Deserialize)]
-#[cfg_attr(not(unix), allow(dead_code))]
 struct ManifestCase {
     id: String,
     operation: String,
@@ -46,6 +37,7 @@ struct ManifestCase {
 struct Expected {
     exit: i64,
     verdict: String,
+    stderr: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -53,7 +45,7 @@ struct Outcome {
     id: String,
     exit: i64,
     verdict: String,
-    diagnostic: String,
+    diagnostic: Option<String>,
 }
 
 struct RestoreRepoRoot(Option<OsString>);
@@ -145,11 +137,20 @@ fn outcomes() -> Vec<Outcome> {
     outcomes
 }
 
-fn expected_by_id() -> BTreeMap<String, (i64, String)> {
+fn expected_by_id() -> BTreeMap<String, (i64, String, Option<String>)> {
     manifest()
         .cases
         .into_iter()
-        .map(|case| (case.id, (case.expected.exit, case.expected.verdict)))
+        .map(|case| {
+            (
+                case.id,
+                (
+                    case.expected.exit,
+                    case.expected.verdict,
+                    case.expected.stderr,
+                ),
+            )
+        })
         .collect()
 }
 
@@ -167,16 +168,12 @@ fn explicit_manifest_cases_match_their_expected_guard_verdicts() {
         "every named case must execute once"
     );
     for outcome in actual {
-        let Some((exit, verdict)) = expected.get(&outcome.id) else {
+        let Some((exit, verdict, stderr)) = expected.get(&outcome.id) else {
             panic!("evaluator returned undeclared case {}", outcome.id);
         };
         assert_eq!(&outcome.exit, exit, "{} exit", outcome.id);
         assert_eq!(&outcome.verdict, verdict, "{} verdict", outcome.id);
-        assert_eq!(
-            outcome.diagnostic, outcome.verdict,
-            "{} stable payload",
-            outcome.id
-        );
+        assert_eq!(&outcome.diagnostic, stderr, "{} stderr payload", outcome.id);
     }
 
     // Each mutation is a real failure.  An evaluator changed to always accept
@@ -196,131 +193,6 @@ fn explicit_manifest_cases_match_their_expected_guard_verdicts() {
             .find(|outcome| outcome.id == id)
             .unwrap();
         assert_ne!(outcome.exit, 0, "{id} must remain a negative control");
-    }
-}
-
-#[cfg(unix)]
-fn copy_to(root: &Path, destination: &str, bytes: Vec<u8>) {
-    let target = root.join(destination);
-    std::fs::create_dir_all(target.parent().expect("target parent")).expect("mkdir fixture parent");
-    std::fs::write(target, bytes).expect("write fixture source");
-}
-
-#[cfg(unix)]
-fn legacy_outcome(case: &ManifestCase) -> (i64, String) {
-    let root = repo_root();
-    let temp = tempfile::tempdir().expect("temporary legacy root");
-    let temp_root = temp.path();
-    let guard = match case.operation.as_str() {
-        "tray_process_naming" => {
-            copy_to(
-                temp_root,
-                "scripts/check-tray-process-running-naming.sh",
-                std::fs::read(root.join("scripts/check-tray-process-running-naming.sh"))
-                    .expect("read guard"),
-            );
-            let source = case.source.as_ref().expect("tray source");
-            let mut bytes = std::fs::read(root.join(source)).unwrap_or_default();
-            if case.id == "tray-crlf-space-path" {
-                bytes = String::from_utf8(bytes)
-                    .expect("UTF-8 fixture")
-                    .replace('\n', "\r\n")
-                    .into_bytes();
-            }
-            copy_to(
-                temp_root,
-                "crates/tillandsias-macos-tray/src/diagnose.rs",
-                bytes,
-            );
-            temp_root.join("scripts/check-tray-process-running-naming.sh")
-        }
-        "dev_embed_model_agreement" => {
-            copy_to(
-                temp_root,
-                "scripts/check-dev-embed-model-agreement.sh",
-                std::fs::read(root.join("scripts/check-dev-embed-model-agreement.sh"))
-                    .expect("read guard"),
-            );
-            copy_to(
-                temp_root,
-                "images/default/config-overlay/mcp/lib-dev-env.sh",
-                std::fs::read(root.join(case.hook.as_ref().expect("hook"))).unwrap_or_default(),
-            );
-            copy_to(
-                temp_root,
-                "scripts/dev-inference-ensure.sh",
-                std::fs::read(root.join(case.ensure.as_ref().expect("ensure"))).unwrap_or_default(),
-            );
-            temp_root.join("scripts/check-dev-embed-model-agreement.sh")
-        }
-        "inference_container_name_agreement" => {
-            copy_to(
-                temp_root,
-                "scripts/check-inference-container-name-agreement.sh",
-                std::fs::read(root.join("scripts/check-inference-container-name-agreement.sh"))
-                    .expect("read guard"),
-            );
-            let script = case.script.as_ref().expect("script");
-            let probe = case.probe.as_ref().expect("probe");
-            let script_target = temp_root.join(script);
-            let probe_target = temp_root.join(probe);
-            if let Some(parent) = script_target.parent() {
-                std::fs::create_dir_all(parent).expect("mkdir script parent");
-            }
-            if let Some(parent) = probe_target.parent() {
-                std::fs::create_dir_all(parent).expect("mkdir probe parent");
-            }
-            if root.join(script).is_file() {
-                std::fs::copy(root.join(script), &script_target).expect("copy script");
-            }
-            std::fs::copy(root.join(probe), &probe_target).expect("copy probe");
-            let output = Command::new("bash")
-                .arg(temp_root.join("scripts/check-inference-container-name-agreement.sh"))
-                .current_dir(temp_root)
-                .env("TILLANDSIAS_DEV_INFERENCE_SCRIPT", script)
-                .env("TILLANDSIAS_ACCEL_PROBE_SRC", probe)
-                .output()
-                .expect("run inference legacy guard");
-            return (
-                output.status.code().expect("legacy exit code") as i64,
-                String::from_utf8(output.stdout)
-                    .expect("legacy stdout")
-                    .trim_end()
-                    .to_string(),
-            );
-        }
-        other => panic!("unknown operation {other}"),
-    };
-    let output = Command::new("bash")
-        .arg(guard)
-        .current_dir(temp_root)
-        .output()
-        .expect("run legacy guard");
-    (
-        output.status.code().expect("legacy exit code") as i64,
-        String::from_utf8(output.stdout)
-            .expect("legacy stdout")
-            .trim_end()
-            .to_string(),
-    )
-}
-
-#[cfg(unix)]
-#[test]
-fn legacy_bash_and_lua_agree_on_live_and_adversarial_cases() {
-    let actual: BTreeMap<_, _> = outcomes()
-        .into_iter()
-        .map(|outcome| (outcome.id.clone(), outcome))
-        .collect();
-    for case in manifest().cases {
-        let lua = actual.get(&case.id).expect("Lua case outcome");
-        let (exit, stdout) = legacy_outcome(&case);
-        assert_eq!(lua.exit, exit, "{} exit parity", case.id);
-        // The only intentionally path-specific diagnostic is an unreadable
-        // temporary inference script; its exit class is the parity contract.
-        if case.id != "inference-missing-file" {
-            assert_eq!(lua.verdict, stdout, "{} stdout payload parity", case.id);
-        }
     }
 }
 
@@ -400,101 +272,120 @@ fn build_check_names_and_runs_this_nonempty_target() {
     let build = std::fs::read_to_string(repo_root().join("build.sh")).expect("read build.sh");
     assert!(
         build.contains("cargo test -p tillandsias-plan --test lua_source_agreements"),
-        "build.sh --check must run the named shadow-parity target"
+        "build.sh --check must run the named production integration target"
     );
 }
 
-#[cfg(unix)]
-fn percentile(mut values: Vec<Duration>, numerator: usize, denominator: usize) -> Duration {
-    values.sort_unstable();
-    values[(values.len() - 1) * numerator / denominator]
-}
-
-#[cfg(unix)]
-fn declared_input_bytes_per_run(cases: &[ManifestCase]) -> u64 {
-    let mut total = std::fs::metadata(manifest_path())
-        .expect("manifest metadata")
-        .len();
-    let root = repo_root();
-    for case in cases {
-        for path in [
-            case.source.as_deref(),
-            case.hook.as_deref(),
-            case.ensure.as_deref(),
-            case.script.as_deref(),
-            case.probe.as_deref(),
-        ]
-        .into_iter()
-        .flatten()
-        {
-            // Missing explicit paths contribute zero bytes; the evaluator still
-            // attempts the read and returns its named blocked verdict.
-            if let Ok(metadata) = std::fs::metadata(root.join(path)) {
-                total += metadata.len();
-            }
-        }
-    }
-    total
-}
-
-#[cfg(unix)]
 #[test]
-fn thirty_warm_paired_runs_report_case_and_process_evidence() {
-    let cases = manifest().cases;
-    let input_bytes = declared_input_bytes_per_run(&cases);
-    let _ = outcomes(); // uncounted warmup of the real module and manifest.
-    let mut old = Vec::new();
-    let mut new = Vec::new();
-    for round in 0..30 {
-        let run_new = || {
-            let started = Instant::now();
-            let got = outcomes();
-            assert_eq!(got.len(), cases.len(), "new evaluator case denominator");
-            started.elapsed()
-        };
-        let run_old = || {
-            let started = Instant::now();
-            for case in &cases {
-                let (exit, _) = legacy_outcome(case);
-                assert_eq!(exit, case.expected.exit, "legacy case {}", case.id);
-            }
-            started.elapsed()
-        };
-        if round % 2 == 0 {
-            old.push(run_old());
-            new.push(run_new());
-        } else {
-            new.push(run_new());
-            old.push(run_old());
-        }
+fn cutover_callers_name_inputs_and_leave_no_bash_fallback() {
+    let root = repo_root();
+    for retired in [
+        "scripts/check-tray-process-running-naming.sh",
+        "scripts/check-dev-embed-model-agreement.sh",
+        "scripts/check-inference-container-name-agreement.sh",
+        "scripts/test-inference-container-name-agreement.sh",
+    ] {
+        assert!(
+            !root.join(retired).exists(),
+            "the atomic cutover must retire {retired}"
+        );
     }
-
-    let cold_source =
-        std::fs::read_to_string(module_path()).expect("module for cold CLI measurement");
-    let cold_started = Instant::now();
-    let cold = Command::new(env!("CARGO_BIN_EXE_tillandsias-plan"))
-        .current_dir(repo_root())
-        .env("TILLANDSIAS_REPO_ROOT", repo_root())
-        .args([
-            "lua",
-            "--class",
-            "cacheable",
-            "-e",
-            &(cold_source + "\nlocal r = source_agreements('scripts/fixtures/source-agreements.yaml'); return r.ok"),
-        ])
-        .output()
-        .expect("cold plan binary launch");
-    assert!(cold.status.success(), "cold evaluator launch: {cold:?}");
-
-    eprintln!(
-        "MEASURE:1475-j9kv linux warm_runs=30 cases_per_run={} declared_input_bytes_per_run={} old_ms_p50={} old_ms_p95={} lua_ms_p50={} lua_ms_p95={} evaluator_child_processes=0 comparison_guard_invocations={} cold_plan_binary_ms={}",
-        cases.len(),
-        input_bytes,
-        percentile(old.clone(), 50, 100).as_millis(),
-        percentile(old, 95, 100).as_millis(),
-        percentile(new.clone(), 50, 100).as_millis(),
-        percentile(new, 95, 100).as_millis(),
-        30 * cases.len(),
-        cold_started.elapsed().as_millis(),
+    let build = std::fs::read_to_string(root.join("build.sh")).expect("read build caller");
+    let local_ci =
+        std::fs::read_to_string(root.join("scripts/local-ci.sh")).expect("read local-ci caller");
+    for named_input in [
+        "tray_process_naming crates/tillandsias-macos-tray/src/diagnose.rs",
+        "dev_embed_model_agreement images/default/config-overlay/mcp/lib-dev-env.sh",
+        "scripts/dev-inference-ensure.sh 2>&1",
+        "inference_container_name_agreement scripts/dev-inference-ensure.sh",
+        "crates/tillandsias-headless/src/accel_probe.rs 2>&1",
+    ] {
+        assert!(
+            build.contains(named_input),
+            "build caller names {named_input}"
+        );
+    }
+    assert!(
+        local_ci
+            .contains("script run scripts/lua/source-agreements.lua -- dev_embed_model_agreement"),
+        "local-ci reaches the same typed production runner"
     );
+    for legacy in [
+        "check-tray-process-running-naming.sh",
+        "check-dev-embed-model-agreement.sh",
+        "check-inference-container-name-agreement.sh",
+        "test-inference-container-name-agreement.sh",
+    ] {
+        assert!(
+            !build.contains(legacy),
+            "build has no Bash fallback {legacy}"
+        );
+        assert!(
+            !local_ci.contains(legacy),
+            "local-ci has no Bash fallback {legacy}"
+        );
+    }
+}
+
+fn runner_args(case: &ManifestCase) -> Vec<&str> {
+    let mut args = vec![case.operation.as_str()];
+    match case.operation.as_str() {
+        "tray_process_naming" => args.push(case.source.as_deref().expect("tray source")),
+        "dev_embed_model_agreement" => {
+            args.push(case.hook.as_deref().expect("dev hook"));
+            args.push(case.ensure.as_deref().expect("dev ensure"));
+        }
+        "inference_container_name_agreement" => {
+            args.push(case.script.as_deref().expect("inference script"));
+            args.push(case.probe.as_deref().expect("inference probe"));
+        }
+        other => panic!("unknown operation {other}"),
+    }
+    args
+}
+
+#[test]
+fn production_script_run_preserves_pinned_exit_stdout_and_stderr_bytes() {
+    let root = repo_root();
+    let binary = env!("CARGO_BIN_EXE_tillandsias-plan");
+    let cases = manifest().cases;
+    assert!(
+        !cases.is_empty(),
+        "the selected production suite must be nonempty"
+    );
+
+    for case in cases {
+        let args = runner_args(&case);
+        let output = Command::new(binary)
+            .current_dir(&root)
+            .env("TILLANDSIAS_REPO_ROOT", &root)
+            .args(["script", "run", "scripts/lua/source-agreements.lua", "--"])
+            .args(args)
+            .output()
+            .expect("run the production Lua decider");
+        assert_eq!(
+            output.status.code(),
+            Some(case.expected.exit as i32),
+            "{} exit",
+            case.id
+        );
+        assert_eq!(
+            output.stdout,
+            format!("{}\n", case.expected.verdict).as_bytes(),
+            "{} stdout bytes",
+            case.id
+        );
+        let expected_stderr = case
+            .expected
+            .stderr
+            .as_deref()
+            .map(|s| format!("{s}\n"))
+            .unwrap_or_default();
+        assert_eq!(
+            output.stderr,
+            expected_stderr.as_bytes(),
+            "{} stderr bytes",
+            case.id
+        );
+    }
 }

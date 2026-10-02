@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written on the work-ref; the integration parent supplies the full gate.
+status:
+  - packet_id: atomically-cut-over-the-four-source-agreement-shell-files-to-the-typed-lua-runner
+    field: status
+    value: completed
+    ts: "2026-10-02T05:50:00Z"
+    host: macuahuitl
+
+events:
+  - packet_id: atomically-cut-over-the-four-source-agreement-shell-files-to-the-typed-lua-runner
+    event:
+      type: completed
+      ts: "2026-10-02T05:50:00Z"
+      host: macuahuitl
+      summary: |-
+        READY for integration at e6e5e0e64. One reversible implementation commit deletes the four named Bash files, retires 115-1087-h2z9, routes build.sh and local-ci through the cacheable typed source-agreements.lua script-run entrypoint with named operation/path inputs, lowers both shell floors, and binds litmus:source-agreement-lua-cutover. The dedicated unfiltered cargo target runs 7 tests, including production CLI byte assertions across all 13 manifest cases (three dev-model cases and the six inference fixture obligations, including caller reachability). Linux-only validation: cargo target 7/7; shell ratchet 8/8; gate-step fixture 9/9; script-run fixture 7/7; litmus bindings/pins green. Paired warm 30-run timing over the three production decisions, 670342 declared bytes/round: shell p50/p95 10.719/12.195 ms; Lua p50/p95 15.715/16.197 ms; cold shell/Lua 12.511/16.163 ms; evaluator children 0 (three runner launches/round versus 17 shell/process launches). Lua p95 is 132.8% of baseline, so no speedup claim. macOS and native-Windows were not run; no fleet-wide native claim.

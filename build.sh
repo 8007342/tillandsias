@@ -1966,17 +1966,19 @@ fi
 # binary on a Mac must never wave a bash-4 idiom through by reading as a pass.
 # The literal `_run_lua_decider "scripts/lua/…"` form is what the preflight
 # door's roster scans for (source 5), so a Lua decider cannot drop out of it.
-_run_lua_decider() {  # $1 = scripts/lua/<name>.lua, relative to the checkout
+_run_lua_decider() {  # $1 = scripts/lua/<name>.lua, remaining args are explicit inputs
+    local _ld_script="$1"
+    shift
     local _ld_bin=""
     _ld_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _ld_bin=""
     case "$_ld_bin" in ./*) _ld_bin="$SCRIPT_DIR/${_ld_bin#./}" ;; esac
     if [ -z "$_ld_bin" ] || ! grep -qx script <<<"$("$_ld_bin" capabilities 2>/dev/null)"; then
-        echo "could-not-run:lua-decider:${1##*/}:no-script-runner"
-        _afford "no tillandsias-plan with \`script run\` resolves, so ${1##*/} was not run and says nothing about this tree" \
+        echo "could-not-run:lua-decider:${_ld_script##*/}:no-script-runner"
+        _afford "no tillandsias-plan with \`script run\` resolves, so ${_ld_script##*/} was not run and says nothing about this tree" \
             "cargo build --release -p tillandsias-plan (or refresh the installed copy), then re-run"
         return 3
     fi
-    _run "$_ld_bin" script run "$SCRIPT_DIR/$1"
+    _run "$_ld_bin" script run "$SCRIPT_DIR/$_ld_script" -- "$@"
 }
 
 _run_litmus_phase() {
@@ -2822,16 +2824,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
-    # NOT ported (1525-c6jm): scripts/check-tray-process-running-naming.sh is
-    # owned_files on ready packet 1484-uf29, which plans to retire it together
-    # with three sibling guards in ONE atomic cutover to the already-built,
-    # parity-tested scripts/lua/source-agreements.lua evaluator (1475-j9kv) —
-    # not a fresh standalone decider. Porting it here would duplicate that
-    # work and break the shadow-pilot parity tests in
-    # crates/tillandsias-plan/tests/lua_source_agreements.rs, which read and
-    # run this live .sh for comparison.
-    if ! _run bash "$SCRIPT_DIR/scripts/check-tray-process-running-naming.sh" 2>&1; then
+    # ORDER 1484-uf29. The typed Lua runner is the decision path. Every input
+    # is named here rather than discovered by the evaluator or a manifest.
+    if ! _run_lua_decider "scripts/lua/source-agreements.lua" \
+        tray_process_naming crates/tillandsias-macos-tray/src/diagnose.rs 2>&1; then
         _error "the --diagnose field that observes a PROCESS is named for a VM again (980-ja2m) — see the verdict line above"
+        exit 1
+    fi
+
+    # STEP_LUA deliberately takes no arguments. Keep this one explicit inline
+    # invocation rather than widening the gate-step data API for named inputs.
+    if ! _run_lua_decider "scripts/lua/source-agreements.lua" \
+        dev_embed_model_agreement images/default/config-overlay/mcp/lib-dev-env.sh \
+        scripts/dev-inference-ensure.sh 2>&1; then
+        _error "the dev embedding model disagrees between callers (1087-h2z9) — see the verdict line above"
         exit 1
     fi
 
@@ -3775,18 +3781,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     #       not drift". Same cause as the tray-contract pin fixed at ae85ee471
     #       (1022-y7kc cause 1) — one change, two stale pins, and this one sat
     #       in a target no gate ran.
-    # ORDER 1475-j9kv. Shadow-only source-agreement parity must execute as its
-    # own target: the workspace suite would compile it, but a named target and
-    # its nonzero test count make an unwired migration visible. The legacy Bash
-    # guards remain the production decision; this is evidence for a later
-    # typed-runner cutover, not a replacement.
-    _step "Running Lua source-agreement shadow parity (1475-j9kv)..."
+    # ORDER 1484-uf29. This dedicated, uncached integration target invokes the
+    # production `script run` CLI for every retained case. Keep it unfiltered:
+    # a selected count of zero would otherwise certify no production decision.
+    _step "Running Lua source-agreement production integration (1484-uf29)..."
     if ! _run cargo test -p tillandsias-plan --test lua_source_agreements \
         --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1; then
-        _error "the Lua source-agreement shadow parity target failed (1475-j9kv)"
+        _error "the Lua source-agreement production integration target failed (1484-uf29)"
         exit 1
     fi
-    _info "Lua source-agreement shadow parity passed"
+    _info "Lua source-agreement production integration passed"
 
     # ORDER 1118-pifa: THIS STEP IS LOAD-BEARING. Do not skip or memoise it on
     # its run count. It tops `skippable:` on two hosts at ~95s with fail_pct=0,
@@ -4622,12 +4626,12 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
-    # 967-6ax6 criterion 1. Ratchets the container NAME the accel-proof
-    # producers look for against the name dev-inference-ensure.sh creates. It
-    # reads source only; the one `podman exec` in the file is prose describing
-    # the 2026-09-02 defect, not a call, so this does not need a live enclave.
+    # 967-6ax6 criterion 1, ported by 1484-uf29. The creator and consumer are
+    # explicit cacheable reads; no Bash compatibility branch remains.
     _step "Checking the inference container name agrees across producers (967-6ax6)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-inference-container-name-agreement.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/source-agreements.lua" \
+        inference_container_name_agreement scripts/dev-inference-ensure.sh \
+        crates/tillandsias-headless/src/accel_probe.rs 2>&1; then
         exit 1
     fi
 
@@ -4788,12 +4792,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus kill-time adjudicator check passed"
 
-    _step "Checking the accel-proof and dev-inference lanes agree on the container name (967-6ax6)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-inference-container-name-agreement.sh" 2>&1; then
-        _error "the accel-proof producers and dev-inference-ensure.sh name different containers (967-6ax6) — the rung silently reads the bottom of the scale on a working host"
+    # The six live/adversarial inference arms run through the dedicated Rust
+    # production-CLI target above; a shell fixture would be a second authority.
+    _step "Checking source-agreement production fixtures ran (1484-uf29)..."
+    if ! _run cargo test -p tillandsias-plan --test lua_source_agreements \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" production_script_run_preserves_pinned_exit_stdout_and_stderr_bytes -- --exact --test-threads=1 2>&1; then
+        _error "the source-agreement production fixture matrix failed (1484-uf29)"
         exit 1
     fi
-    _info "Inference-container name agreement passed"
+    _info "Source-agreement production fixture matrix passed"
 
     _step "Checking this host has the tools the gate needs (989-ykks)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-host-tools.sh" 2>&1; then
