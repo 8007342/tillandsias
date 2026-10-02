@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: atomically-cut-over-the-four-source-agreement-shell-files-to-the-typed-lua-runner
+    field: next_action
+    value: |-
+      Wait for 1384-bqhy's typed runner contract to land. Then verify its folded status and sibling claims, claim this packet, run the current shadow parity suite against all named callers, and perform the complete caller+deletion cutover as one reversible commit.
+
+
+      [2026-10-02T05:57:06Z macuahuitl] 2026-10-02 correction: linux-macuahuitl-opencode-20261002t053211z reviews and integrates work/1484-uf29, addresses the runtime-environment blocker for parent gate #201 as appropriate, and runs the full integration gate before terminal closure.
+    ts: "2026-10-02T05:57:06Z"
+    host: macuahuitl
+
+events:
+  - packet_id: atomically-cut-over-the-four-source-agreement-shell-files-to-the-typed-lua-runner
+    event:
+      type: note
+      ts: "2026-10-02T05:57:06Z"
+      host: macuahuitl
+      summary: |-
+        delegate correction: parent integration gate and review remain pending
