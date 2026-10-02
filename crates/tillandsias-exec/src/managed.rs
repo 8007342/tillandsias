@@ -535,10 +535,9 @@ async fn supervise(
             source,
         }),
         None => {
-            let (stdout, stderr, dropped) = if timed_out || drained.is_none() {
-                (Vec::new(), Vec::new(), 0)
-            } else {
-                drained.unwrap()
+            let (stdout, stderr, dropped) = match (timed_out, drained) {
+                (false, Some(capture)) => capture,
+                _ => (Vec::new(), Vec::new(), 0),
             };
             Ok(Output {
                 completion: if timed_out {

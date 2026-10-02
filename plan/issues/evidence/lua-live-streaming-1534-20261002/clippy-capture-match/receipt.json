@@ -1,0 +1,24 @@
+{
+  "utc": "2026-10-02T18:02:01.251441+00:00",
+  "base": "28c7636e6baf9f4d19b9ddeab3bea6f950134a48",
+  "scope": "Behavior-preserving managed output capture match; no waiver or assertion changes.",
+  "executor_tests": 28,
+  "lua_proc_tests": 26,
+  "fmt_exit": 0,
+  "strict_executor_clippy_exit": 0,
+  "strict_combined_clippy_exit": 101,
+  "combined_blocker": {
+    "crate": "tillandsias-core",
+    "file": "crates/tillandsias-core/src/image_builder.rs",
+    "lint": "clippy::double_must_use",
+    "context": "async_trait ImageBuilder::build; unrelated and left untouched"
+  },
+  "semantics": "Only (false, Some(capture)) returns capture. Timed-out or undrained execution returns empty stdout/stderr and zero dropped, unchanged.",
+  "commands": [
+    "cargo clippy -p tillandsias-exec -p tillandsias-plan --all-targets -- -D warnings",
+    "cargo clippy -p tillandsias-exec --all-targets -- -D warnings",
+    "cargo test -p tillandsias-exec",
+    "cargo test -p tillandsias-plan --test lua_proc -- --test-threads=1",
+    "cargo fmt -p tillandsias-exec --check"
+  ]
+}
