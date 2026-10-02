@@ -42,3 +42,19 @@ direct command; candidate `bc33176e` returns a false-green empty scan. The
 candidate is not ready until the typed listing follows only the explicit
 starting symlink and the regression is measured. The reproduced source data
 is retained as `review-root-symlink.py.source.txt`.
+
+## Starting-root fix independently verified
+
+`4c21f133` adds typed `test -e` and `find -H` for an absolute starting path.
+`absolute-root-symlink-after.json` proves that the exact output/status tuple
+now matches Bash, including the space-bearing symlink diagnostic path.
+The broken-start negative and existing fixture arms pass. `find -H` follows
+only the explicit starting argument; it does not follow interior symlinks.
+
+`root-link-fixed-parity.json` reruns the original 23 case pairs at that
+candidate: 15/15 core tuples and 7/8 supplementary tuples match exactly;
+the same intentional spoof-signature diagnostic difference remains.
+Receipt SHA-256:
+`406891051c546c4a62d99c880e4d9fda4601334e07f10fb8dba6d86cc5fb5eb0`.
+Parent independently reran published fixtures: guest 3/3, tray 10/10,
+Podman 11/11. Full integration gate and remote landing remain required.
