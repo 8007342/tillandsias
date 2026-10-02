@@ -1,0 +1,22 @@
+{
+  "live": {
+    "code": 0,
+    "stdout": "ok:tray-refresh-no-polling:5 checked\n",
+    "stderr": ""
+  },
+  "polling": {
+    "code": 1,
+    "stdout": "violation:tray-refresh-polling:1\n",
+    "stderr": "  async fn refresh_vm_status contains a loop or a sleep; it must be single-shot (order 147):\n    2:    loop { break; }\n"
+  },
+  "fake_signature_comment_before_polling": {
+    "code": 0,
+    "stdout": "ok:tray-refresh-no-polling:5 checked\n",
+    "stderr": ""
+  },
+  "raw_brace_literal": {
+    "code": 0,
+    "stdout": "ok:tray-refresh-no-polling:5 checked\n",
+    "stderr": ""
+  }
+}

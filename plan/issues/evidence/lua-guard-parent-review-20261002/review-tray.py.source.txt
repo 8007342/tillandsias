@@ -1,0 +1,29 @@
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+
+root = Path('/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002')
+work = Path(tempfile.mkdtemp(prefix='parent-1533-tray-', dir='/tmp/opencode'))
+lua = work / 'tray.lua'
+lua.write_bytes(subprocess.check_output(['git', 'show', '0f2ae8d9:scripts/lua/check-tray-refresh-no-polling.lua'], cwd=root))
+source = subprocess.check_output(['git', 'show', '8c7af3886:crates/tillandsias-windows-tray/src/notify_icon.rs'], cwd=root).decode()
+sig = 'async fn refresh_vm_status'
+begin = source.index('{', source.index(sig)) + 1
+polling = source[:begin] + '\n    loop { break; }\n' + source[begin:]
+raw = source[:begin] + '\n    let _ = r#"}"#;\n' + source[begin:]
+cases = {'live': source, 'polling': polling,
+         'fake_signature_comment_before_polling': '// async fn refresh_vm_status() { return; }\n' + polling,
+         'raw_brace_literal': raw}
+records = {}
+for name, text in cases.items():
+    path = work / (name + '.rs')
+    path.write_text(text)
+    env = dict(os.environ, TILLANDSIAS_TRAY_REFRESH_SOURCE=str(path))
+    r = subprocess.run([str(root / 'target/release/tillandsias-plan'), 'script', 'run', str(lua)],
+                       cwd=root, env=env, capture_output=True, text=True, timeout=15)
+    records[name] = {'code': r.returncode, 'stdout': r.stdout, 'stderr': r.stderr}
+(work / 'receipts.json').write_text(json.dumps(records, indent=2) + '\n')
+print(json.dumps({'scratch': str(work), 'results': records}, indent=2))
+assert records['live']['code'] == 0 and records['polling']['code'] != 0
