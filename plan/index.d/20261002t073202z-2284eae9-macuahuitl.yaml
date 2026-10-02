@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lua-policy-doors-refuse-invalid-seeds-and-inspection-never-spends-consent
+    field: status
+    value: completed
+    ts: "2026-10-02T07:32:02Z"
+    host: macuahuitl
+
+events:
+  - packet_id: lua-policy-doors-refuse-invalid-seeds-and-inspection-never-spends-consent
+    event:
+      type: completed
+      ts: "2026-10-02T07:32:02Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 427b59b495d1a4a3376a1118ab7dead863400141 + forced ./build.sh --check PASS, PR #201 MERGED; command_policy_doors 6/6 parent-verified, policy23/23 and lua_proc11/11 delegate-verified
+  - packet_id: lua-policy-doors-refuse-invalid-seeds-and-inspection-never-spends-consent
+    event:
+      type: note
+      ts: "2026-10-02T07:32:02Z"
+      host: macuahuitl
+      summary: |-
+        Invalid/unreadable seeds refuse at all doors; inspection never spends consent. Parent independently reviewed and tested, full gate passed and remote ancestry verified; native coverage unmeasured.
