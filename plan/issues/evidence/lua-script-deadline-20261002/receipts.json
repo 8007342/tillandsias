@@ -1,0 +1,307 @@
+{
+  "utc": "2026-10-02T06:54:54.118564+00:00",
+  "copy": {
+    "copied_from": "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+    "snapshot": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd/plan",
+    "sha256": "eb1e4226e5c208c936588139df17e72c8073bf3aa117ad81d42645cf93483dfe"
+  },
+  "build_id": "0.1.0+321c64fa5c76a652",
+  "plan_sha256": "eb1e4226e5c208c936588139df17e72c8073bf3aa117ad81d42645cf93483dfe",
+  "fixture_hashes": {
+    "repo/producer.py": "227d17843062737ffea57490d14db52ea899684ace709f2f047cfd7127226644",
+    "repo/probe.lua": "fa90f81a99ba6e6ad7c1302ad2dc6be9cf7bb5a745d998d9636a683dca4025ac",
+    "reproduce.py": "5c199a47d585d55ae39254c0deb4267b98143c72d77bd2c348d5e560245bae61"
+  },
+  "subreaper": true,
+  "timing_note": "outer timer begins at script start; ACK is verified before deadline fires, not a separately armed timer",
+  "trials": [
+    {
+      "label": "short-outer",
+      "argv": [
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd/plan",
+        "script",
+        "run",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd/repo/probe.lua",
+        "--timeout",
+        "700ms",
+        "--",
+        "/usr/bin/python3",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd/repo/producer.py",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd/runs/short-outer"
+      ],
+      "environment": {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd",
+        "TMPDIR": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd",
+        "LC_ALL": "C",
+        "LANG": "C",
+        "TZ": "UTC",
+        "TILLANDSIAS_REPO_ROOT": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd/repo"
+      },
+      "outer_timeout": "700ms",
+      "process_timeout_ms": 4000,
+      "plan_pid": 1424098,
+      "ack": {
+        "child": {
+          "pid": 1424100,
+          "start_ticks": 623503,
+          "pgid": 1424100,
+          "ppid": 1424098
+        },
+        "grandchild": {
+          "pid": 1424101,
+          "start_ticks": 623505,
+          "pgid": 1424100,
+          "ppid": 1424100
+        },
+        "monotonic_ns": 6235068092470
+      },
+      "ack_after_start_ms": 34.566563,
+      "at_ack": {
+        "child": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1424098,
+          "pgid": 1424100,
+          "start_ticks": 623503
+        },
+        "grandchild": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1424100,
+          "pgid": 1424100,
+          "start_ticks": 623505
+        }
+      },
+      "exit": 124,
+      "wall_ms": 701.936811,
+      "stdout": "status=timed_out\nrefused:timed-out:probe\n",
+      "stderr": "  why: /tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd/repo/probe.lua did not reach a verdict within 700ms\n  remedy: find what it waits on (run it with --trace), or raise --timeout if the work is genuinely that long\n",
+      "stdout_sha256": "9b037f424106184b8b207871ddcbfd0bc154c2c4accde39a53e2aac846ba840d",
+      "stderr_sha256": "631d9f1305739349fa03aa716adb2f995755b9425789eedbb76e357ddf2cc752",
+      "after_outer_exit": {
+        "child": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1424096,
+          "pgid": 1424100,
+          "start_ticks": 623503
+        },
+        "grandchild": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1424100,
+          "pgid": 1424100,
+          "start_ticks": 623505
+        }
+      },
+      "markers_at_outer_exit": {
+        "child": false,
+        "grandchild": false
+      },
+      "delayed_markers": {
+        "child": {
+          "pid": 1424100,
+          "start_ticks": 623503,
+          "pgid": 1424100,
+          "ppid": 1424098,
+          "monotonic_ns": 6236268391190
+        },
+        "grandchild": {
+          "pid": 1424101,
+          "start_ticks": 623505,
+          "pgid": 1424100,
+          "ppid": 1424100,
+          "monotonic_ns": 6236269152549
+        }
+      },
+      "reaped_by_harness": [
+        {
+          "pid": 1424100,
+          "start_ticks": 623503,
+          "exit": 0
+        }
+      ],
+      "forced_cleanup": [],
+      "final_tasks": [
+        {
+          "identity": {
+            "pid": 1424100,
+            "start_ticks": 623503,
+            "pgid": 1424100,
+            "ppid": 1424098
+          },
+          "observed": {
+            "exists": false,
+            "same_identity": false,
+            "running": false
+          }
+        },
+        {
+          "identity": {
+            "pid": 1424101,
+            "start_ticks": 623505,
+            "pgid": 1424100,
+            "ppid": 1424100
+          },
+          "observed": {
+            "exists": false,
+            "same_identity": false,
+            "running": false
+          }
+        }
+      ],
+      "all_owned_tasks_gone": true,
+      "grandchild_reaped_by_producer": {
+        "pid": 1424101,
+        "start_ticks": 623505,
+        "exit": 0
+      }
+    },
+    {
+      "label": "positive-long-outer",
+      "argv": [
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd/plan",
+        "script",
+        "run",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd/repo/probe.lua",
+        "--timeout",
+        "3500ms",
+        "--",
+        "/usr/bin/python3",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd/repo/producer.py",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd/runs/positive-long-outer"
+      ],
+      "environment": {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd",
+        "TMPDIR": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd",
+        "LC_ALL": "C",
+        "LANG": "C",
+        "TZ": "UTC",
+        "TILLANDSIAS_REPO_ROOT": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd/repo"
+      },
+      "outer_timeout": "3500ms",
+      "process_timeout_ms": 4000,
+      "plan_pid": 1424128,
+      "ack": {
+        "child": {
+          "pid": 1424130,
+          "start_ticks": 623689,
+          "pgid": 1424130,
+          "ppid": 1424128
+        },
+        "grandchild": {
+          "pid": 1424131,
+          "start_ticks": 623691,
+          "pgid": 1424130,
+          "ppid": 1424130
+        },
+        "monotonic_ns": 6236927604245
+      },
+      "ack_after_start_ms": 35.254453,
+      "at_ack": {
+        "child": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1424128,
+          "pgid": 1424130,
+          "start_ticks": 623689
+        },
+        "grandchild": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1424130,
+          "pgid": 1424130,
+          "start_ticks": 623691
+        }
+      },
+      "exit": 0,
+      "wall_ms": 1857.748174,
+      "stdout": "proc-stdout:child-ack-both-running\ngrandchild-running\n\nok:producer:exited:0\n",
+      "stderr": "proc-stderr:child-stderr\ngrandchild-stderr\n\n",
+      "stdout_sha256": "23053686f46bafa9b28aecbc5415ca7e8bd071037d13676b6d18f638b2e8e5ed",
+      "stderr_sha256": "9cd761a8eeee498ebaa11e9f85c7f79c7f1f63127d0a9fd12ea9e481a22ae572",
+      "after_outer_exit": {
+        "child": {
+          "exists": false,
+          "same_identity": false,
+          "running": false
+        },
+        "grandchild": {
+          "exists": false,
+          "same_identity": false,
+          "running": false
+        }
+      },
+      "markers_at_outer_exit": {
+        "child": true,
+        "grandchild": true
+      },
+      "delayed_markers": {
+        "child": {
+          "pid": 1424130,
+          "start_ticks": 623689,
+          "pgid": 1424130,
+          "ppid": 1424128,
+          "monotonic_ns": 6238127953274
+        },
+        "grandchild": {
+          "pid": 1424131,
+          "start_ticks": 623691,
+          "pgid": 1424130,
+          "ppid": 1424130,
+          "monotonic_ns": 6238128694251
+        }
+      },
+      "reaped_by_harness": [],
+      "forced_cleanup": [],
+      "final_tasks": [
+        {
+          "identity": {
+            "pid": 1424130,
+            "start_ticks": 623689,
+            "pgid": 1424130,
+            "ppid": 1424128
+          },
+          "observed": {
+            "exists": false,
+            "same_identity": false,
+            "running": false
+          }
+        },
+        {
+          "identity": {
+            "pid": 1424131,
+            "start_ticks": 623691,
+            "pgid": 1424130,
+            "ppid": 1424130
+          },
+          "observed": {
+            "exists": false,
+            "same_identity": false,
+            "running": false
+          }
+        }
+      ],
+      "all_owned_tasks_gone": true,
+      "grandchild_reaped_by_producer": {
+        "pid": 1424131,
+        "start_ticks": 623691,
+        "exit": 0
+      }
+    }
+  ]
+}
