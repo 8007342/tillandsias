@@ -723,7 +723,7 @@
           "stdout_b64": "dmlvbGF0aW9uOmRpcmVjdC1jb21tYW5kOjEK",
           "stderr_b64": "Y3JhdGVzL2ZpeHR1cmUvc3JjL2JhZC5yczoyOiAgICBsZXQgbXV0IGNtZCA9IHN0ZDo6cHJvY2Vzczo6Q29tbWFuZDo6bmV3KCJwb2RtYW4iKTsK",
           "stdout": "violation:direct-command:1\n",
-          "stderr": "crates/fixture/src/bad.rs:2:    let mut cmd = std::process::Command::new(\"podman\");\n"
+          "stderr": "crates/fixture/src/bad.rs:2:    let mut cmd = std::process::Command::new(\"podman\");\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
         },
         "lua": {
           "argv": [
@@ -737,7 +737,7 @@
           "stdout_b64": "dmlvbGF0aW9uOmRpcmVjdC1jb21tYW5kOjEK",
           "stderr_b64": "Y3JhdGVzL2ZpeHR1cmUvc3JjL2JhZC5yczoyOiAgICBsZXQgbXV0IGNtZCA9IHN0ZDo6cHJvY2Vzczo6Q29tbWFuZDo6bmV3KCJwb2RtYW4iKTsK",
           "stdout": "violation:direct-command:1\n",
-          "stderr": "crates/fixture/src/bad.rs:2:    let mut cmd = std::process::Command::new(\"podman\");\n"
+          "stderr": "crates/fixture/src/bad.rs:2:    let mut cmd = std::process::Command::new(\"podman\");\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
         }
       }
     },
@@ -759,7 +759,7 @@
           "stdout_b64": "dmlvbGF0aW9uOmVzY2FwZS1oYXRjaC1ncmV3OjIK",
           "stderr_b64": "ZXhwZWN0ZWQgYXQgbW9zdCAxIGNhbGxlci1vd25lZCBzcGF3bihzKTsgZm91bmQgMjoKY3JhdGVzL2ZpeHR1cmUvc3JjL2hhdGNoLnJzOjE6Zm4gYSgpIHsgbGV0IF8gPSBjbWQuc3Bhd25fY2FsbGVyX293bmVkX2xpZmV0aW1lKCk7IH0KY3JhdGVzL2ZpeHR1cmUvc3JjL2hhdGNoLnJzOjI6Zm4gYigpIHsgbGV0IF8gPSBjbWQuc3Bhd25fY2FsbGVyX293bmVkX2xpZmV0aW1lKCk7IH0K",
           "stdout": "violation:escape-hatch-grew:2\n",
-          "stderr": "expected at most 1 caller-owned spawn(s); found 2:\ncrates/fixture/src/hatch.rs:1:fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\ncrates/fixture/src/hatch.rs:2:fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\n"
+          "stderr": "expected at most 1 caller-owned spawn(s); found 2:\ncrates/fixture/src/hatch.rs:1:fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\ncrates/fixture/src/hatch.rs:2:fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
         },
         "lua": {
           "argv": [
@@ -773,7 +773,7 @@
           "stdout_b64": "dmlvbGF0aW9uOmVzY2FwZS1oYXRjaC1ncmV3OjIK",
           "stderr_b64": "ZXhwZWN0ZWQgYXQgbW9zdCAxIGNhbGxlci1vd25lZCBzcGF3bihzKTsgZm91bmQgMjoKY3JhdGVzL2ZpeHR1cmUvc3JjL2hhdGNoLnJzOjE6Zm4gYSgpIHsgbGV0IF8gPSBjbWQuc3Bhd25fY2FsbGVyX293bmVkX2xpZmV0aW1lKCk7IH0KY3JhdGVzL2ZpeHR1cmUvc3JjL2hhdGNoLnJzOjI6Zm4gYigpIHsgbGV0IF8gPSBjbWQuc3Bhd25fY2FsbGVyX293bmVkX2xpZmV0aW1lKCk7IH0K",
           "stdout": "violation:escape-hatch-grew:2\n",
-          "stderr": "expected at most 1 caller-owned spawn(s); found 2:\ncrates/fixture/src/hatch.rs:1:fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\ncrates/fixture/src/hatch.rs:2:fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\n"
+          "stderr": "expected at most 1 caller-owned spawn(s); found 2:\ncrates/fixture/src/hatch.rs:1:fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\ncrates/fixture/src/hatch.rs:2:fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
         }
       }
     },
@@ -831,7 +831,7 @@
           "stdout_b64": "dmlvbGF0aW9uOnVuYm91bmRlZC1jYXB0dXJlOjEK",
           "stderr_b64": "Y3JhdGVzL3RpbGxhbmRzaWFzLXBvZG1hbi9zcmMvYmFkX2NhcHR1cmUucnM6MzogICAgbGV0IF8gPSBwaXBlLnJlYWRfdG9fZW5kKCZtdXQgYnVmKTsK",
           "stdout": "violation:unbounded-capture:1\n",
-          "stderr": "crates/tillandsias-podman/src/bad_capture.rs:3:    let _ = pipe.read_to_end(&mut buf);\n"
+          "stderr": "crates/tillandsias-podman/src/bad_capture.rs:3:    let _ = pipe.read_to_end(&mut buf);\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
         },
         "lua": {
           "argv": [
@@ -845,7 +845,7 @@
           "stdout_b64": "dmlvbGF0aW9uOnVuYm91bmRlZC1jYXB0dXJlOjEK",
           "stderr_b64": "Y3JhdGVzL3RpbGxhbmRzaWFzLXBvZG1hbi9zcmMvYmFkX2NhcHR1cmUucnM6MzogICAgbGV0IF8gPSBwaXBlLnJlYWRfdG9fZW5kKCZtdXQgYnVmKTsK",
           "stdout": "violation:unbounded-capture:1\n",
-          "stderr": "crates/tillandsias-podman/src/bad_capture.rs:3:    let _ = pipe.read_to_end(&mut buf);\n"
+          "stderr": "crates/tillandsias-podman/src/bad_capture.rs:3:    let _ = pipe.read_to_end(&mut buf);\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
         }
       }
     },
@@ -868,7 +868,7 @@
           "stdout_b64": "dmlvbGF0aW9uOnNsZWVwLXBvbGw6MQo=",
           "stderr_b64": "Y3JhdGVzL3RpbGxhbmRzaWFzLXBvZG1hbi9zcmMvYnVzeV93YWl0LnJzOjc6ICAgICAgICBzdGQ6OnRocmVhZDo6c2xlZXAoc3RkOjp0aW1lOjpEdXJhdGlvbjo6ZnJvbV9taWxsaXMoMjApKTsK",
           "stdout": "violation:sleep-poll:1\n",
-          "stderr": "crates/tillandsias-podman/src/busy_wait.rs:7:        std::thread::sleep(std::time::Duration::from_millis(20));\n"
+          "stderr": "crates/tillandsias-podman/src/busy_wait.rs:7:        std::thread::sleep(std::time::Duration::from_millis(20));\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
         },
         "lua": {
           "argv": [
@@ -882,7 +882,7 @@
           "stdout_b64": "dmlvbGF0aW9uOnNsZWVwLXBvbGw6MQo=",
           "stderr_b64": "Y3JhdGVzL3RpbGxhbmRzaWFzLXBvZG1hbi9zcmMvYnVzeV93YWl0LnJzOjc6ICAgICAgICBzdGQ6OnRocmVhZDo6c2xlZXAoc3RkOjp0aW1lOjpEdXJhdGlvbjo6ZnJvbV9taWxsaXMoMjApKTsK",
           "stdout": "violation:sleep-poll:1\n",
-          "stderr": "crates/tillandsias-podman/src/busy_wait.rs:7:        std::thread::sleep(std::time::Duration::from_millis(20));\n"
+          "stderr": "crates/tillandsias-podman/src/busy_wait.rs:7:        std::thread::sleep(std::time::Duration::from_millis(20));\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
         }
       }
     },
@@ -1086,7 +1086,7 @@
           "stdout_b64": "dmlvbGF0aW9uOmVzY2FwZS1oYXRjaC1ncmV3OjIK",
           "stderr_b64": "ZXhwZWN0ZWQgYXQgbW9zdCAxIGNhbGxlci1vd25lZCBzcGF3bihzKTsgZm91bmQgMjoKY3JhdGVzL2ZpeHR1cmUvc3JjL2hhdGNoLnJzOjE6Zm4gYSgpIHsgbGV0IF8gPSBjbWQuc3Bhd25fY2FsbGVyX293bmVkX2xpZmV0aW1lKCk7IH0NCmNyYXRlcy9maXh0dXJlL3NyYy9oYXRjaC5yczoyOmZuIGIoKSB7IGxldCBfID0gY21kLnNwYXduX2NhbGxlcl9vd25lZF9saWZldGltZSgpOyB9DQo=",
           "stdout": "violation:escape-hatch-grew:2\n",
-          "stderr": "expected at most 1 caller-owned spawn(s); found 2:\ncrates/fixture/src/hatch.rs:1:fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\ncrates/fixture/src/hatch.rs:2:fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\n"
+          "stderr": "expected at most 1 caller-owned spawn(s); found 2:\ncrates/fixture/src/hatch.rs:1:fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\ncrates/fixture/src/hatch.rs:2:fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
         },
         "lua": {
           "argv": [
@@ -1100,7 +1100,7 @@
           "stdout_b64": "dmlvbGF0aW9uOmVzY2FwZS1oYXRjaC1ncmV3OjIK",
           "stderr_b64": "ZXhwZWN0ZWQgYXQgbW9zdCAxIGNhbGxlci1vd25lZCBzcGF3bihzKTsgZm91bmQgMjoKY3JhdGVzL2ZpeHR1cmUvc3JjL2hhdGNoLnJzOjE6Zm4gYSgpIHsgbGV0IF8gPSBjbWQuc3Bhd25fY2FsbGVyX293bmVkX2xpZmV0aW1lKCk7IH0NCmNyYXRlcy9maXh0dXJlL3NyYy9oYXRjaC5yczoyOmZuIGIoKSB7IGxldCBfID0gY21kLnNwYXduX2NhbGxlcl9vd25lZF9saWZldGltZSgpOyB9DQo=",
           "stdout": "violation:escape-hatch-grew:2\n",
-          "stderr": "expected at most 1 caller-owned spawn(s); found 2:\ncrates/fixture/src/hatch.rs:1:fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\ncrates/fixture/src/hatch.rs:2:fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\n"
+          "stderr": "expected at most 1 caller-owned spawn(s); found 2:\ncrates/fixture/src/hatch.rs:1:fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\ncrates/fixture/src/hatch.rs:2:fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
         }
       }
     },
@@ -1122,7 +1122,7 @@
           "stdout_b64": "dmlvbGF0aW9uOmRpcmVjdC1jb21tYW5kOjEK",
           "stderr_b64": "L3RtcC9vcGVuY29kZS9wYXJlbnQtMTUzMy1wYXJpdHktdGVyYWJycHYvY2FzZSByb290cyB3aXRoIHNwYWNlcy9wb2RtYW4tYWJzb2x1dGUtc3BhY2Utcm9vdC9jcmF0ZXMvZml4dHVyZS9zcmMvYmFkLnJzOjI6ICAgIGxldCBtdXQgY21kID0gc3RkOjpwcm9jZXNzOjpDb21tYW5kOjpuZXcoInBvZG1hbiIpOwo=",
           "stdout": "violation:direct-command:1\n",
-          "stderr": "/tmp/opencode/parent-1533-parity-terabrpv/case roots with spaces/podman-absolute-space-root/crates/fixture/src/bad.rs:2:    let mut cmd = std::process::Command::new(\"podman\");\n"
+          "stderr": "/tmp/opencode/parent-1533-parity-terabrpv/case roots with spaces/podman-absolute-space-root/crates/fixture/src/bad.rs:2:    let mut cmd = std::process::Command::new(\"podman\");\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
         },
         "lua": {
           "argv": [
@@ -1136,7 +1136,7 @@
           "stdout_b64": "dmlvbGF0aW9uOmRpcmVjdC1jb21tYW5kOjEK",
           "stderr_b64": "L3RtcC9vcGVuY29kZS9wYXJlbnQtMTUzMy1wYXJpdHktdGVyYWJycHYvY2FzZSByb290cyB3aXRoIHNwYWNlcy9wb2RtYW4tYWJzb2x1dGUtc3BhY2Utcm9vdC9jcmF0ZXMvZml4dHVyZS9zcmMvYmFkLnJzOjI6ICAgIGxldCBtdXQgY21kID0gc3RkOjpwcm9jZXNzOjpDb21tYW5kOjpuZXcoInBvZG1hbiIpOwo=",
           "stdout": "violation:direct-command:1\n",
-          "stderr": "/tmp/opencode/parent-1533-parity-terabrpv/case roots with spaces/podman-absolute-space-root/crates/fixture/src/bad.rs:2:    let mut cmd = std::process::Command::new(\"podman\");\n"
+          "stderr": "/tmp/opencode/parent-1533-parity-terabrpv/case roots with spaces/podman-absolute-space-root/crates/fixture/src/bad.rs:2:    let mut cmd = std::process::Command::new(\"podman\");\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
         }
       }
     },
