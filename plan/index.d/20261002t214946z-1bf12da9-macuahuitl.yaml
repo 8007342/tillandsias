@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-bumps-version-then-the-hook-forbids-pushing-it
+    field: next_action
+    value: 'LANDED on linux-next at 06be874c7 (PR #208, full gate green on macuahuitl 2026-10-02, fixture scripts/test-pre-push-version-guard.sh in the gate). What is LEFT: a second host verifies the guard end to end (a real bump-version.sh bump committed alone pushes to a non-main branch; the same push to main is refused; a lower or mixed-content bump is refused) and flips this row to verified citing its run; then close 862-zhr2 against the operator''s 2026-09-17 ruling or say why not.'
+    ts: "2026-10-02T21:49:46Z"
+    host: macuahuitl
+    replaces_sha256: "affd8943dfe095493b6fce29785a38cbf70c958fcc328515270b826e5c4d1c77"
+
+events:
+  - packet_id: build-bumps-version-then-the-hook-forbids-pushing-it
+    event:
+      type: note
+      ts: "2026-10-02T21:49:46Z"
+      host: macuahuitl
+      summary: |-
+        landed; say what is left
