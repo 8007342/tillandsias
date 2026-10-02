@@ -1270,11 +1270,11 @@ printf 'timing: steps=%s build_check_ms_avg=%s%s litmus_ms_avg=%s slowest=%s sou
 # here must never advance the snapshot and swallow the next --check's
 # lost-satisfaction warning. Best-effort: a pipeline that cannot run prints
 # `centicolon: blocked:…`, and a missing runner prints nothing.
-if [ -f "$(dirname "$0")/lua/check-centicolon-ratchet.lua" ]; then
-    . "$(dirname "$0")/plan-binary-probe.sh"
-    if _cc_plan="$(resolve_plan_binary 2>/dev/null)"; then
-        case "$_cc_plan" in ./*) _cc_plan="$ROOT/${_cc_plan#./}" ;; esac
-        { TILLANDSIAS_REPO_ROOT="$ROOT" "$_cc_plan" script run "$(dirname "$0")/lua/check-centicolon-ratchet.lua" -- --no-snapshot 2>/dev/null | grep '^centicolon:'; } || true
+if [ -f "$SCRIPT_DIR/lua/check-centicolon-ratchet.lua" ]; then
+    . "$SCRIPT_DIR/plan-binary-probe.sh"
+    if _cc_plan="$(cd "$REPO_ROOT" && resolve_plan_binary 2>/dev/null)"; then
+        case "$_cc_plan" in ./*) _cc_plan="$REPO_ROOT/${_cc_plan#./}" ;; esac
+        { TILLANDSIAS_REPO_ROOT="$REPO_ROOT" "$_cc_plan" script run "$SCRIPT_DIR/lua/check-centicolon-ratchet.lua" -- --no-snapshot 2>/dev/null | grep '^centicolon:'; } || true
     fi
 fi
 
