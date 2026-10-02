@@ -1,0 +1,1108 @@
+{
+  "utc": "2026-10-02T16:07:05.760208+00:00",
+  "baseline": "8c7af38867886b7144a0c27a33eec2de4451ba46",
+  "candidate": "bc33176efec7a2c02c7b009c958c16faa2ba0a9a",
+  "scope": "Retrospective actual immutable Bash-v-production Lua comparison, not a pre-deletion historical measurement. Same case root/path spellings, no output normalization; Linux only.",
+  "binary": {
+    "path": "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+    "sha256": "3db7c1d2f8dd3c0682f10283d6c06ccf9d3eb03feb73ef73178773e19c937d8b",
+    "build_id": "0.1.0+39c75bcfcb354b62"
+  },
+  "guard_sources": {
+    "guest": {
+      "bash_sha256": "a61b407355298284207e4bd79e6cf27fac7e6c3758c1faee32afb4ebf3b0b108",
+      "lua_sha256": "2e91ea3d849a5832162485f3d066ab85bc321a4f0114fed2d47988c036ea6b0c"
+    },
+    "tray": {
+      "bash_sha256": "88348e4fe41b0c27096742de61d0de413029717abb8fcd38d3e29e95474edc9e",
+      "lua_sha256": "c3cbd19762ca389c8df950bd0f1956edc5f2132dca8b09589b70e722d9da5340"
+    },
+    "podman": {
+      "bash_sha256": "3e2a77f1feed4fde3fdda73c6ec70791e9730f25180e6aec70ce19341a518ec2",
+      "lua_sha256": "4cd662bd4aa7ea84239b7c9f4e3190b5cec91bcc81349d216490c12278ec193d"
+    }
+  },
+  "harness_sha256": "c8429dd8f957983bad19edd01a7ed8e846600c14c501d630c4ff2e692114957f",
+  "scratch": "/tmp/opencode/parent-1533-parity-fsb_0y35",
+  "core": {
+    "total": 15,
+    "byte_equal": 15,
+    "mismatches": []
+  },
+  "supplemental_mismatches": [
+    "tray-spoof-signature-polling"
+  ],
+  "cases": [
+    {
+      "name": "guest-live",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/tillandsias-vm-layer/src/vz.rs": "bbb12f2a47645eda21a4238170e57334209fc09815ae56b25b8d119bd47a9be1",
+        "crates/tillandsias-vm-layer/src/wsl.rs": "cee82483cd7acd65a9546b6925c32c0bd7cb2c663ea63ed13405977aae73d6e9"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/guest-live/scripts/check-guest-unit-hardening.sh"
+          ],
+          "code": 0,
+          "stdout_b64": "b2s6Z3Vlc3QtdW5pdC11bmNvbmZpbmVkCg==",
+          "stderr_b64": "",
+          "stdout": "ok:guest-unit-unconfined\n",
+          "stderr": ""
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/guest-live/lua/check-guest-unit-hardening.lua",
+            "--"
+          ],
+          "code": 0,
+          "stdout_b64": "b2s6Z3Vlc3QtdW5pdC11bmNvbmZpbmVkCg==",
+          "stderr_b64": "",
+          "stdout": "ok:guest-unit-unconfined\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "name": "guest-308-directives",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/tillandsias-vm-layer/src/vz.rs": "976cc29b009c552be8deb64db0402524d17fe298cbea966403c7060e867d84c1",
+        "crates/tillandsias-vm-layer/src/wsl.rs": "cee82483cd7acd65a9546b6925c32c0bd7cb2c663ea63ed13405977aae73d6e9"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/guest-308-directives/scripts/check-guest-unit-hardening.sh"
+          ],
+          "code": 1,
+          "stdout_b64": "YmxvY2tlZDpndWVzdC11bml0LWhhcmRlbmVkOjEK",
+          "stderr_b64": "W2NoZWNrLWd1ZXN0LXVuaXQtaGFyZGVuaW5nXSBjcmF0ZXMvdGlsbGFuZHNpYXMtdm0tbGF5ZXIvc3JjL3Z6LnJzIOKAlCB0aGUgZ3Vlc3QgaGVhZGxlc3MgdW5pdCBmb3JrcyBwb2RtYW4gYW5kIG11c3Qgbm90IGJlIGNvbmZpbmVkOgoxOTpOb05ld1ByaXZpbGVnZXM9eWVzCjIwOkNhcGFiaWxpdHlCb3VuZGluZ1NldD1DQVBfTkVUX0JJTkRfU0VSVklDRQpbY2hlY2stZ3Vlc3QtdW5pdC1oYXJkZW5pbmddIE9yZGVyIDMwOCBzaGlwcGVkIGV4YWN0bHkgdGhpcyBhbmQgd2VkZ2VkIGV2ZXJ5IHBvZG1hbiBlbnN1cmU6IGEgY2FwLXN0cmlwcGVkIHVpZC0wIHBvZG1hbiBzZWxlY3RzIFJPT1RMRVNTIG1vZGUuIENvbmZpbmVtZW50IHJlcXVpcmVzIHRoZSBsaXN0ZW5lci9vcmNoZXN0cmF0b3Igc3BsaXQgZmlyc3Qg4oCUIHNlZSBwbGFuL2lzc3Vlcy9oZWFkbGVzcy1sZWFzdC1wcml2aWxlZ2Utc3BsaXQtZGVzaWduLTIwMjYtMDgtMTcubWQgKG9yZGVyIDMwOSkuIElmIHRoZSBzcGxpdCBIQVMgbGFuZGVkLCByZS1haW0gdGhpcyBndWFyZCBhdCB0aGUgb3JjaGVzdHJhdG9yIHVuaXQgcmF0aGVyIHRoYW4gZGVsZXRpbmcgaXQuCg==",
+          "stdout": "blocked:guest-unit-hardened:1\n",
+          "stderr": "[check-guest-unit-hardening] crates/tillandsias-vm-layer/src/vz.rs \u2014 the guest headless unit forks podman and must not be confined:\n19:NoNewPrivileges=yes\n20:CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n[check-guest-unit-hardening] Order 308 shipped exactly this and wedged every podman ensure: a cap-stripped uid-0 podman selects ROOTLESS mode. Confinement requires the listener/orchestrator split first \u2014 see plan/issues/headless-least-privilege-split-design-2026-08-17.md (order 309). If the split HAS landed, re-aim this guard at the orchestrator unit rather than deleting it.\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/guest-308-directives/lua/check-guest-unit-hardening.lua",
+            "--"
+          ],
+          "code": 1,
+          "stdout_b64": "YmxvY2tlZDpndWVzdC11bml0LWhhcmRlbmVkOjEK",
+          "stderr_b64": "W2NoZWNrLWd1ZXN0LXVuaXQtaGFyZGVuaW5nXSBjcmF0ZXMvdGlsbGFuZHNpYXMtdm0tbGF5ZXIvc3JjL3Z6LnJzIOKAlCB0aGUgZ3Vlc3QgaGVhZGxlc3MgdW5pdCBmb3JrcyBwb2RtYW4gYW5kIG11c3Qgbm90IGJlIGNvbmZpbmVkOgoxOTpOb05ld1ByaXZpbGVnZXM9eWVzCjIwOkNhcGFiaWxpdHlCb3VuZGluZ1NldD1DQVBfTkVUX0JJTkRfU0VSVklDRQpbY2hlY2stZ3Vlc3QtdW5pdC1oYXJkZW5pbmddIE9yZGVyIDMwOCBzaGlwcGVkIGV4YWN0bHkgdGhpcyBhbmQgd2VkZ2VkIGV2ZXJ5IHBvZG1hbiBlbnN1cmU6IGEgY2FwLXN0cmlwcGVkIHVpZC0wIHBvZG1hbiBzZWxlY3RzIFJPT1RMRVNTIG1vZGUuIENvbmZpbmVtZW50IHJlcXVpcmVzIHRoZSBsaXN0ZW5lci9vcmNoZXN0cmF0b3Igc3BsaXQgZmlyc3Qg4oCUIHNlZSBwbGFuL2lzc3Vlcy9oZWFkbGVzcy1sZWFzdC1wcml2aWxlZ2Utc3BsaXQtZGVzaWduLTIwMjYtMDgtMTcubWQgKG9yZGVyIDMwOSkuIElmIHRoZSBzcGxpdCBIQVMgbGFuZGVkLCByZS1haW0gdGhpcyBndWFyZCBhdCB0aGUgb3JjaGVzdHJhdG9yIHVuaXQgcmF0aGVyIHRoYW4gZGVsZXRpbmcgaXQuCg==",
+          "stdout": "blocked:guest-unit-hardened:1\n",
+          "stderr": "[check-guest-unit-hardening] crates/tillandsias-vm-layer/src/vz.rs \u2014 the guest headless unit forks podman and must not be confined:\n19:NoNewPrivileges=yes\n20:CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n[check-guest-unit-hardening] Order 308 shipped exactly this and wedged every podman ensure: a cap-stripped uid-0 podman selects ROOTLESS mode. Confinement requires the listener/orchestrator split first \u2014 see plan/issues/headless-least-privilege-split-design-2026-08-17.md (order 309). If the split HAS landed, re-aim this guard at the orchestrator unit rather than deleting it.\n"
+        }
+      }
+    },
+    {
+      "name": "guest-marker-drift",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/tillandsias-vm-layer/src/vz.rs": "fa822110906da8deae5f5e564869327592c4a59bdcadd63aa53cfa4bd6909e21",
+        "crates/tillandsias-vm-layer/src/wsl.rs": "2dfcefe78b5fd16805f52ab981ad37deb28c431c801102c1a6d9d0c051d7d0b1"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/guest-marker-drift/scripts/check-guest-unit-hardening.sh"
+          ],
+          "code": 1,
+          "stdout_b64": "YmxvY2tlZDpndWVzdC11bml0LW5vdC1mb3VuZAo=",
+          "stderr_b64": "W2NoZWNrLWd1ZXN0LXVuaXQtaGFyZGVuaW5nXSBjb3VsZCBub3QgbG9jYXRlIGFueSBndWVzdCBoZWFkbGVzcyB1bml0IHRleHQ7IHRoZSBtYXJrZXJzIGhhdmUgZHJpZnRlZCBhbmQgdGhpcyBndWFyZCBpcyBpbmVydAo=",
+          "stdout": "blocked:guest-unit-not-found\n",
+          "stderr": "[check-guest-unit-hardening] could not locate any guest headless unit text; the markers have drifted and this guard is inert\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/guest-marker-drift/lua/check-guest-unit-hardening.lua",
+            "--"
+          ],
+          "code": 1,
+          "stdout_b64": "YmxvY2tlZDpndWVzdC11bml0LW5vdC1mb3VuZAo=",
+          "stderr_b64": "W2NoZWNrLWd1ZXN0LXVuaXQtaGFyZGVuaW5nXSBjb3VsZCBub3QgbG9jYXRlIGFueSBndWVzdCBoZWFkbGVzcyB1bml0IHRleHQ7IHRoZSBtYXJrZXJzIGhhdmUgZHJpZnRlZCBhbmQgdGhpcyBndWFyZCBpcyBpbmVydAo=",
+          "stdout": "blocked:guest-unit-not-found\n",
+          "stderr": "[check-guest-unit-hardening] could not locate any guest headless unit text; the markers have drifted and this guard is inert\n"
+        }
+      }
+    },
+    {
+      "name": "tray-live",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/tillandsias-windows-tray/src/notify_icon.rs": "f9f903df012e6981e15ab2a9f76f993191a192b1cc9ac65a73f3645b72700c18"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-live/scripts/check-tray-refresh-no-polling.sh",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-live/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 0,
+          "stdout_b64": "b2s6dHJheS1yZWZyZXNoLW5vLXBvbGxpbmc6NSBjaGVja2VkCg==",
+          "stderr_b64": "",
+          "stdout": "ok:tray-refresh-no-polling:5 checked\n",
+          "stderr": ""
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-live/lua/check-tray-refresh-no-polling.lua",
+            "--",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-live/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 0,
+          "stdout_b64": "b2s6dHJheS1yZWZyZXNoLW5vLXBvbGxpbmc6NSBjaGVja2VkCg==",
+          "stderr_b64": "",
+          "stdout": "ok:tray-refresh-no-polling:5 checked\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "name": "tray-static-renamed",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/tillandsias-windows-tray/src/notify_icon.rs": "defc7a55110da81ecd9f9f8890d6eff0d50a0d780df84218ad0e1ad7bbb7610a"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-static-renamed/scripts/check-tray-refresh-no-polling.sh",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-static-renamed/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnRyYXktcmVmcmVzaC1wb2xsaW5nOjEK",
+          "stderr_b64": "ICB0aGUgbGl2ZSBjbGllbnQgaXMgbm8gbG9uZ2VyIGEgc3RhdGljOiBhIHBlci1jYWxsIGNsaWVudCByZWNvbm5lY3RzIG9uIGV2ZXJ5IHJlZnJlc2gsCiAgd2hpY2ggaXMgdGhlIHJlY29ubmVjdC1wZXItdGljayBzaGFwZSBvcmRlciAxNDcgYXVkaXRzIChpdCBsb29rcyBsaWtlIGEgdHJhbnNwb3J0IGZhdWx0KS4K",
+          "stdout": "violation:tray-refresh-polling:1\n",
+          "stderr": "  the live client is no longer a static: a per-call client reconnects on every refresh,\n  which is the reconnect-per-tick shape order 147 audits (it looks like a transport fault).\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-static-renamed/lua/check-tray-refresh-no-polling.lua",
+            "--",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-static-renamed/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnRyYXktcmVmcmVzaC1wb2xsaW5nOjEK",
+          "stderr_b64": "ICB0aGUgbGl2ZSBjbGllbnQgaXMgbm8gbG9uZ2VyIGEgc3RhdGljOiBhIHBlci1jYWxsIGNsaWVudCByZWNvbm5lY3RzIG9uIGV2ZXJ5IHJlZnJlc2gsCiAgd2hpY2ggaXMgdGhlIHJlY29ubmVjdC1wZXItdGljayBzaGFwZSBvcmRlciAxNDcgYXVkaXRzIChpdCBsb29rcyBsaWtlIGEgdHJhbnNwb3J0IGZhdWx0KS4K",
+          "stdout": "violation:tray-refresh-polling:1\n",
+          "stderr": "  the live client is no longer a static: a per-call client reconnects on every refresh,\n  which is the reconnect-per-tick shape order 147 audits (it looks like a transport fault).\n"
+        }
+      }
+    },
+    {
+      "name": "tray-accessor-not-static",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/tillandsias-windows-tray/src/notify_icon.rs": "11dfbd75597f82c491aa878147419dcd2f57b9a81c90f0c01a97dff64592fdbb"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-accessor-not-static/scripts/check-tray-refresh-no-polling.sh",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-accessor-not-static/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnRyYXktcmVmcmVzaC1wb2xsaW5nOjEK",
+          "stderr_b64": "ICBsaXZlX2NsaWVudF9tdXRleCgpIG5vIGxvbmdlciByZXR1cm5zIHRoZSBMSVZFX0NMSUVOVCBzdGF0aWMg4oCUIHRoZSBhY2Nlc3NvcgogIGlzIHRoZXJlIGJ1dCBpdCBpcyBub3QgYmFja2VkIGJ5IGEgcGVyc2lzdGVudCBjbGllbnQuCg==",
+          "stdout": "violation:tray-refresh-polling:1\n",
+          "stderr": "  live_client_mutex() no longer returns the LIVE_CLIENT static \u2014 the accessor\n  is there but it is not backed by a persistent client.\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-accessor-not-static/lua/check-tray-refresh-no-polling.lua",
+            "--",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-accessor-not-static/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnRyYXktcmVmcmVzaC1wb2xsaW5nOjEK",
+          "stderr_b64": "ICBsaXZlX2NsaWVudF9tdXRleCgpIG5vIGxvbmdlciByZXR1cm5zIHRoZSBMSVZFX0NMSUVOVCBzdGF0aWMg4oCUIHRoZSBhY2Nlc3NvcgogIGlzIHRoZXJlIGJ1dCBpdCBpcyBub3QgYmFja2VkIGJ5IGEgcGVyc2lzdGVudCBjbGllbnQuCg==",
+          "stdout": "violation:tray-refresh-polling:1\n",
+          "stderr": "  live_client_mutex() no longer returns the LIVE_CLIENT static \u2014 the accessor\n  is there but it is not backed by a persistent client.\n"
+        }
+      }
+    },
+    {
+      "name": "tray-retry-loop",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/tillandsias-windows-tray/src/notify_icon.rs": "a12dbab6215f321d45cf81c0211cf465664ed10bb4366b3ff6479fb7794c4cf0"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-retry-loop/scripts/check-tray-refresh-no-polling.sh",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-retry-loop/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnRyYXktcmVmcmVzaC1wb2xsaW5nOjEK",
+          "stderr_b64": "ICBhc3luYyBmbiByZWZyZXNoX3ZtX3N0YXR1cyBjb250YWlucyBhIGxvb3Agb3IgYSBzbGVlcDsgaXQgbXVzdCBiZSBzaW5nbGUtc2hvdCAob3JkZXIgMTQ3KToKICAgIDI6ICAgIGxvb3AgeyBicmVhazsgfQo=",
+          "stdout": "violation:tray-refresh-polling:1\n",
+          "stderr": "  async fn refresh_vm_status contains a loop or a sleep; it must be single-shot (order 147):\n    2:    loop { break; }\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-retry-loop/lua/check-tray-refresh-no-polling.lua",
+            "--",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-retry-loop/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnRyYXktcmVmcmVzaC1wb2xsaW5nOjEK",
+          "stderr_b64": "ICBhc3luYyBmbiByZWZyZXNoX3ZtX3N0YXR1cyBjb250YWlucyBhIGxvb3Agb3IgYSBzbGVlcDsgaXQgbXVzdCBiZSBzaW5nbGUtc2hvdCAob3JkZXIgMTQ3KToKICAgIDI6ICAgIGxvb3AgeyBicmVhazsgfQo=",
+          "stdout": "violation:tray-refresh-polling:1\n",
+          "stderr": "  async fn refresh_vm_status contains a loop or a sleep; it must be single-shot (order 147):\n    2:    loop { break; }\n"
+        }
+      }
+    },
+    {
+      "name": "tray-sleep",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/tillandsias-windows-tray/src/notify_icon.rs": "a386d17da320a8515ba264ca5863b9a6342cdaf1dba63ac20b0686529afa410b"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-sleep/scripts/check-tray-refresh-no-polling.sh",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-sleep/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnRyYXktcmVmcmVzaC1wb2xsaW5nOjEK",
+          "stderr_b64": "ICBhc3luYyBmbiByZWZyZXNoX2dpdGh1Yl9sb2dpbiBjb250YWlucyBhIGxvb3Agb3IgYSBzbGVlcDsgaXQgbXVzdCBiZSBzaW5nbGUtc2hvdCAob3JkZXIgMTQ3KToKICAgIDI6ICAgIHRva2lvOjp0aW1lOjpzbGVlcChzdGQ6OnRpbWU6OkR1cmF0aW9uOjpmcm9tX3NlY3MoMSkpLmF3YWl0Owo=",
+          "stdout": "violation:tray-refresh-polling:1\n",
+          "stderr": "  async fn refresh_github_login contains a loop or a sleep; it must be single-shot (order 147):\n    2:    tokio::time::sleep(std::time::Duration::from_secs(1)).await;\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-sleep/lua/check-tray-refresh-no-polling.lua",
+            "--",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-sleep/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnRyYXktcmVmcmVzaC1wb2xsaW5nOjEK",
+          "stderr_b64": "ICBhc3luYyBmbiByZWZyZXNoX2dpdGh1Yl9sb2dpbiBjb250YWlucyBhIGxvb3Agb3IgYSBzbGVlcDsgaXQgbXVzdCBiZSBzaW5nbGUtc2hvdCAob3JkZXIgMTQ3KToKICAgIDI6ICAgIHRva2lvOjp0aW1lOjpzbGVlcChzdGQ6OnRpbWU6OkR1cmF0aW9uOjpmcm9tX3NlY3MoMSkpLmF3YWl0Owo=",
+          "stdout": "violation:tray-refresh-polling:1\n",
+          "stderr": "  async fn refresh_github_login contains a loop or a sleep; it must be single-shot (order 147):\n    2:    tokio::time::sleep(std::time::Duration::from_secs(1)).await;\n"
+        }
+      }
+    },
+    {
+      "name": "tray-comment-is-not-action",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/tillandsias-windows-tray/src/notify_icon.rs": "c7f5ae28d8fe3db23da71c26e96153530f57ad4d55c67431cc70eb4b79b2fed0"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-comment-is-not-action/scripts/check-tray-refresh-no-polling.sh",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-comment-is-not-action/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 0,
+          "stdout_b64": "b2s6dHJheS1yZWZyZXNoLW5vLXBvbGxpbmc6NSBjaGVja2VkCg==",
+          "stderr_b64": "",
+          "stdout": "ok:tray-refresh-no-polling:5 checked\n",
+          "stderr": ""
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-comment-is-not-action/lua/check-tray-refresh-no-polling.lua",
+            "--",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-comment-is-not-action/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 0,
+          "stdout_b64": "b2s6dHJheS1yZWZyZXNoLW5vLXBvbGxpbmc6NSBjaGVja2VkCg==",
+          "stderr_b64": "",
+          "stdout": "ok:tray-refresh-no-polling:5 checked\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "name": "podman-live",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/tillandsias-browser-mcp/build.rs": "5d4620fde0e95481b4cce3c8e29bbea41c33a35339486118140fb81c23139912",
+        "crates/tillandsias-browser-mcp/src/allowlist.rs": "54ae3fdb514a3aba617639b55793e2d45bda36f2be0a11385541252d0e50c470",
+        "crates/tillandsias-browser-mcp/src/cdp_client.rs": "93e59792390e1d84e18bc29818bebd872f6ec14a61c5adcf412ad07a4a79c9ff",
+        "crates/tillandsias-browser-mcp/src/framing.rs": "0d0f9d02a7086ced9be40d157edce2e6d459c354ab4d318bc36ee99d1adcb45b",
+        "crates/tillandsias-browser-mcp/src/launcher.rs": "f1249df225c8d0171cbb3ae3c0e15873478ce9eb1529d6723a783d3849b3dc76",
+        "crates/tillandsias-browser-mcp/src/lib.rs": "b044f2a005e0a108914e195b32dfc56f6294babd53d2d1f68d99e46626729552",
+        "crates/tillandsias-browser-mcp/src/server.rs": "ac4d7d64ce2c4983eaf23d72d6279619420f1643b67892480c81f4d823cec2a3",
+        "crates/tillandsias-browser-mcp/src/window_registry.rs": "4ac95ea3eaecc8db44cb8b72f00224a08f8308d99b6330ef3ca38a1bd0a3351a",
+        "crates/tillandsias-browser-mcp/tests/allowlist_enforcement_integration.rs": "e65079bbb898b31b7c143da9f408306dca8533820410cf0922176c5b020e8af7",
+        "crates/tillandsias-browser-mcp/tests/window_timeout_enforcement.rs": "15341dd039e39c032df6eab7923b57e5b52141a644eca40e5af3f130756be3aa",
+        "crates/tillandsias-control-wire/src/auth_flow.rs": "6f0eb2713ab93fcd475f7baaf0d9b0f7d23d5e8fdfa0da0ff89a1231c9f31a9a",
+        "crates/tillandsias-control-wire/src/flow_event.rs": "0e90f157ee932eb2703c2d2662d341c7a9e728b5999238f046e8719dd7812e47",
+        "crates/tillandsias-control-wire/src/guest_transport.rs": "417705725f569439cf86c512ec918e443df454cb940d398bba14bcf85d70de52",
+        "crates/tillandsias-control-wire/src/lib.rs": "1b05b8a010c515589f405ade559f948dd84ce6e68599aca4442c7f134efb884b",
+        "crates/tillandsias-control-wire/src/progress.rs": "a60a65a6e54f3e453e250d59041d0e48b5dfef02c9992dcfdb975c00fc4ff234",
+        "crates/tillandsias-control-wire/src/secure_wire_mode.rs": "fd1329635187ec78f7074d83fc7b978f95f5e670a163a62a5f135b6e3fa65a2b",
+        "crates/tillandsias-control-wire/src/transport.rs": "72a622cf60fb2e8dd883da8c7fe81ff58463cb5ddd8a819d5231d7356ebb3a83",
+        "crates/tillandsias-core/build.rs": "06579e419a570a8f71fb77a2144e4d9ca28f73a7cbbe4003bf9e7b183c1cf88a",
+        "crates/tillandsias-core/src/bin/build-image.rs": "49c13528791ba36b9bf136434cf2b4c498e6535a059a1bfd6d01cbd255ed95c0",
+        "crates/tillandsias-core/src/ca_path.rs": "663e9506b91040bb9196e1cb2c6b490f517925a87559bc30996d41d429ab88de",
+        "crates/tillandsias-core/src/cache_root.rs": "2d552bf563af2672423389d29ab334554660f15f46e0a2c1800c3930a3fbf1fa",
+        "crates/tillandsias-core/src/cache_validation.rs": "a327c8de30622117644d0873fdc1c471ee8a9f0ab1a3ee53fa81aea1ceabedd1",
+        "crates/tillandsias-core/src/config.rs": "d0365378ff340fba052932e904934c751b86b53e189107c4f3723128480c44e8",
+        "crates/tillandsias-core/src/container_profile.rs": "0df2924ec8fd697df0bcb71f2b5490baed723bbf27615ec472eccc8cfe3c9ff0",
+        "crates/tillandsias-core/src/event.rs": "c08d34a1eb7e7320920d4e657c6284a76c0a5cd48c1123210e6c818dbd7e7fe0",
+        "crates/tillandsias-core/src/forge_budget.rs": "c913e4075d73ea6ed44ae2f93d337a0277c947de6b721c044c9f4d696ff613ac",
+        "crates/tillandsias-core/src/format.rs": "0564ec8491d15a83fb5cceefc37d4424453f9cc641e997e97e8990e07abb2ce5",
+        "crates/tillandsias-core/src/genus.rs": "fd7bde7874470e28abea665ff06d4c66cc802b78d354cb81a96ec6ed410dae42",
+        "crates/tillandsias-core/src/guest_bin_path.rs": "7cf742e977c85f30b110040d0c93e3057bcdebee421d457b21f48535f8f5101c",
+        "crates/tillandsias-core/src/icons.rs": "1a081a54baba1d645aa01cb668ba2c2264abb6b8b2584413c7dc0398c1369e02",
+        "crates/tillandsias-core/src/image_builder.rs": "e319b18a24cb72704ceb686bcd9732188c66522776216375ee1140372e99c929",
+        "crates/tillandsias-core/src/lib.rs": "ee43d5934ab9745a1bec6aa7d74a0928edfd9512c362358492b6f49aea859a5a",
+        "crates/tillandsias-core/src/preflight.rs": "a13d7d16be2f921c06dde42bba2ca568f3f128ec80bb38cd634c0863ad1f37cd",
+        "crates/tillandsias-core/src/project.rs": "39390222f51eee1be31bb0c68fd34842738c95447998d6a3d855980435154a6a",
+        "crates/tillandsias-core/src/reset_state.rs": "ff6580ca81fce33263f73e5fde028cb647650518673ab1459c2a6841759af2f8",
+        "crates/tillandsias-core/src/secrets.rs": "a88f64fdb49bbe1e96fea537ed9e80d5082c7f84f7c8a4eda3dbbe9eb643f6dd",
+        "crates/tillandsias-core/src/singleton.rs": "2523692fbe5e7d0d064e17a7217de1cbdcfab0dadaa56df083f88d8ade4e4d8a",
+        "crates/tillandsias-core/src/state.rs": "2de9b74968b438a97628bccdadc29519c05e503db88756cc04b7d48eecef7a65",
+        "crates/tillandsias-core/src/tools.rs": "bb80bbb11f7d1cd736493bc7ed5d31b625c0ce22486cee44fccc5a424ff0d5bc",
+        "crates/tillandsias-core/src/version_guard.rs": "49a0ccd9423d615df492df401553873f7608d77737ac5cfdb40014dfc99264ea",
+        "crates/tillandsias-core/src/wsl.rs": "9bd8884c81e6e427cdbd02a074231e2f1a109f30e68499ed28ef49888444e2b4",
+        "crates/tillandsias-core/tests/cache_corruption_recovery.rs": "86bbb6141dd0e88e58dc45295feca81388c6f74dbc4f0e22ec7fa06e9559dbf6",
+        "crates/tillandsias-core/tests/credential_probe_never_erases.rs": "d87d6549a4701dffa54172ac2736af79950dafdf75881d097c35833e75034d64",
+        "crates/tillandsias-core/tests/forge_shell_tools.rs": "4fbcaee168126391ae55cc751c1a8d969f55e50a5d50921900385143708427f3",
+        "crates/tillandsias-core/tests/gh_auth_deploy_key.rs": "c7dbaa0bba236f1b9c206e9aa9c1119e23b446e8b9a829ec3a065c640d448ee4",
+        "crates/tillandsias-core/tests/project_discovery.rs": "7914329d5d101f4cd50047bb11ca90d31ddb20899eb24432dff0def94d22266c",
+        "crates/tillandsias-exec/src/lib.rs": "79ba375f96b54d71154bbb2260569a8a70966fa002732804a6b8cc42bf31dc6c",
+        "crates/tillandsias-exec/tests/capture_bound.rs": "e269ef9a2a83eebbd4a50ec77490044ded698fb4c6f17727f980d4d6cfcd7616",
+        "crates/tillandsias-exec/tests/executor_contract.rs": "d05cd385c6c8d6052484f2314288a0176e5e32e8285a82c7fc826af6d71596ee",
+        "crates/tillandsias-exec/tests/group_exit.rs": "27700503ecb3a08b726f4c9d447dbc4ed6464f1a8d14ecb565891eebeff3ee48",
+        "crates/tillandsias-exec/tests/group_kill.rs": "f65948ec6289d6e8867008a456663ca920cc19383c93992665836e780c38bc19",
+        "crates/tillandsias-exec/tests/verbs.rs": "7b6d7f67dd938eb4895ef88e6e9432ac35218848b383d640ea2865063dbe5c19",
+        "crates/tillandsias-headless/build.rs": "2243ee1878cafc4ec359db1ba51e37ca2061626e90728dc2482b03459e494bbc",
+        "crates/tillandsias-headless/src/accel_probe.rs": "62ff78c2bbcfcf3dff084c945531124d66bc1eb04a42305e507f36b3f2de461e",
+        "crates/tillandsias-headless/src/agent_result.rs": "e170c7ff700cf4bd9f0f4dc3cec45e37fd453c9fc8e1289c6d15b80cd90ed9cf",
+        "crates/tillandsias-headless/src/auth.rs": "1e3cb640b2621fac81de2b73b38d6395acfa153e452af218cb09fe63aa13e221",
+        "crates/tillandsias-headless/src/bin/tillandsias-fake-cloudflare.rs": "c76c9f2da8e6557a69bf6c2af50959d0a8f25f6b7b112648277b6ac8591895db",
+        "crates/tillandsias-headless/src/bringup_progress.rs": "03f7a9de510399d779e0cb7d73e753863887f914342ae0f73513648d3904a807",
+        "crates/tillandsias-headless/src/catalog.rs": "c42f56b16fa48efd8ae8f301b584143624951d0f70c1f3c1f32e5783b692b985",
+        "crates/tillandsias-headless/src/clock_sync.rs": "d3863a7cb6dca1a582e483dedbe22955e88ca46e2dd0a1ee931a90e18965df1c",
+        "crates/tillandsias-headless/src/cloud_projects.rs": "e6c39399b2cec4899abea2d7b7a7ae35135fa73c33393a85f7dada8109414c82",
+        "crates/tillandsias-headless/src/cloudflare_login.rs": "0af9feb0e1bdcaef07b5c590e3a89a8b4ab6a54d5e4c1b71a1ccfdf71a69f497",
+        "crates/tillandsias-headless/src/cloudflare_names.rs": "909e94c0731e656d72a8d21383e9ab6b3986a2e4aed0642915cbb93746f13d4c",
+        "crates/tillandsias-headless/src/cloudflare_oauth.rs": "757fbd944c0c96c91c6cc3039c4b58e66cd6b124e810d7ed3b3dccaee59b35e1",
+        "crates/tillandsias-headless/src/container_deps.rs": "1f8b40f70d98cc412843abd82641a8a5aabed10ab5daf9df1d758451b67435cb",
+        "crates/tillandsias-headless/src/control_dispatch.rs": "38ca2d56f0debb769326cbcc4f80d1821f6b1a7890f395fbdd18c8a2595bbb35",
+        "crates/tillandsias-headless/src/device_poll_view.rs": "eb7e755d6706beb06dc532228f8c7cf3583d3f2592e3095de680abf09c6ad50f",
+        "crates/tillandsias-headless/src/engine_slots.rs": "64863a8015a9d36986d6e52560d48af6c5a4afa4af85f288484c886eb6b96c41",
+        "crates/tillandsias-headless/src/event_pusher.rs": "06a30942dfcf4747cada3fdc42d0787ac3cd269379ec982dde6892700adb9636",
+        "crates/tillandsias-headless/src/exec_allowlist.rs": "11782848967985580e693636ca0327c8282d52e56f68ed94cf7092632486b21d",
+        "crates/tillandsias-headless/src/flow_sink.rs": "db441eb272ff6d17d57971592c32a5a3ceb96b67d34e798680f8e9c2788ca6ca",
+        "crates/tillandsias-headless/src/forge_swap.rs": "4bcd533acbc92bd045ed7056e6cf5e1d42012fd7ad6679f6bc65fbdd0d2dd9c2",
+        "crates/tillandsias-headless/src/image_build_progress.rs": "0339b0e525f030064f354515cca902c2896fb6f0640e2019d7527df2e79fb191",
+        "crates/tillandsias-headless/src/local_projects.rs": "b7093a0d6458947c110f723079ab29154e46f9f84241ac32d2b8561cb7283159",
+        "crates/tillandsias-headless/src/main.rs": "15e92c902833a3547910d734e325ce0958a661ae26fe48249aac7f50b25ea471",
+        "crates/tillandsias-headless/src/metrics_server.rs": "2fdfb75e0eec54cf07fa0de8454af47c690db4a55b4dc64948187bd07156dd11",
+        "crates/tillandsias-headless/src/msg_serve.rs": "da4b674b3d790314fa3f80a8d04a1f5781eb4275d930cc8338bae93825f2e8c7",
+        "crates/tillandsias-headless/src/policy_router.rs": "6e3cf5872ae001f3cc3e2272100436bc93a851ac21e1df02f61e1659a0be7656",
+        "crates/tillandsias-headless/src/progress_sink.rs": "0d0fc2dfbb7b9abbf1f5027fc5877b89f3e8cf957dd5d6bf9d775ceb1abc7374",
+        "crates/tillandsias-headless/src/pty_handler.rs": "f236335e0d10ef80776a8baaa405b1f9e627caa5902ff11905ff7aeebba1ba46",
+        "crates/tillandsias-headless/src/pty_input_probe.rs": "a3b123208167c461504fd0e0aeea8dafea3d0e2195562acf281926032b127947",
+        "crates/tillandsias-headless/src/remote_projects.rs": "eb74f0a36e5c717808e42498513fb1d7a31363ad522d5319d3b261c3760d8738",
+        "crates/tillandsias-headless/src/resource_lock.rs": "768d8ab3f0e5018a2e351bf0244df0f83a0a7a2ec9ec47e4514b1b9957bdf3d7",
+        "crates/tillandsias-headless/src/runtime_assets.rs": "0c022fad3c7a7e686e12b9dc7ef4bb11f56eac6dad26d8e64bc3ab4fe258d95b",
+        "crates/tillandsias-headless/src/runtime_phase.rs": "538eaa6b06215aa9c41863345852a85a1338e28467a622916abb4377d188f531",
+        "crates/tillandsias-headless/src/swap_cmd.rs": "43db623c07f42aba737ad89d424652046710473c582bc9d373f8285fb0ae9a91",
+        "crates/tillandsias-headless/src/test_support.rs": "01271441d209445585a5ff351209b776f8ae4399c74e3525455b0f92cb7be515",
+        "crates/tillandsias-headless/src/tray/cloud.rs": "05ea54479c31993ca77f7fac8dd24d5fb264d42c5f5ca78f2911366b8a71d890",
+        "crates/tillandsias-headless/src/tray/mod.rs": "6dd585119568c39b397f5e5a5e04d1aa5c29e99033637cd18111fb3c1ca97020",
+        "crates/tillandsias-headless/src/unified_deps.rs": "2579521be2f32261a7938ce80ba2e1fa2d59402d78ddde8a955725c578dad4e2",
+        "crates/tillandsias-headless/src/vault_bootstrap.rs": "e05977cdd4db0a6ec7aa485cba5964f5446343353f9273dd37e31a2c105755da",
+        "crates/tillandsias-headless/src/vsock_server.rs": "70ab27c5a1b6e24323cceb41351f250fe71c570785679b20375a123f4a258970",
+        "crates/tillandsias-headless/tests/cache_peer_routing.rs": "1591e693459ddfeb9b1e9d1f8be48aa5673d95968aa4cd3f7f53800c82e26df6",
+        "crates/tillandsias-headless/tests/common/mod.rs": "50a3fe978945e7e46c0e0d1b0589d1c6c284a31a94c339fcf843fcbf9b4af829",
+        "crates/tillandsias-headless/tests/e2e_user_flow.rs": "d60c680b5529e14bf4ea7769e8d9bffb7eaff21ad191f8c6a0784b08c2c276eb",
+        "crates/tillandsias-headless/tests/error_recovery.rs": "4760ac752486a6d53dd2366c3068741e91da44583d80bd113ab0aa5393ccaf54",
+        "crates/tillandsias-headless/tests/hold_window.rs": "cba2e1f9614efdb9d2875b5fb713ffefcc4b664a49c1b5b70264c8271324b451",
+        "crates/tillandsias-headless/tests/network_validation.rs": "e3d72a7926e3fd7a0f07917fb701fec6fbb91985c4c3d549ef975e3e78afef60",
+        "crates/tillandsias-headless/tests/proxy_cache_policy.rs": "c7d23005d8389cfe5fb894aa2b06a57ebd45c27336870bbd9631a5fab9277996",
+        "crates/tillandsias-headless/tests/rapid_project_switch.rs": "1602695194d030f5315851ecb999c0bb6bb7dfc0d143e20cffe47ec30c7b206a",
+        "crates/tillandsias-headless/tests/rapid_project_switch_v2.rs": "0870143afbe14d2ecdae592edabb79edc7e8b84e136f061a5ed0eebc2ce0067f",
+        "crates/tillandsias-headless/tests/signal_handling.rs": "5bec572e48541e41f68a97ecd0adba3406dc3a6aefc4b89f0d50871b128fe781",
+        "crates/tillandsias-headless/tests/singleton_coexistence.rs": "aca63551e2e551282afb77e6275159c691da608455d32b0888916b756df07a09",
+        "crates/tillandsias-headless/tests/stress_concurrent_operations.rs": "d9e6b35cf3a836db384e3734dd5250eaba9796869118542d22824c6ff7a4888f",
+        "crates/tillandsias-headless/tests/vault_approle_provisioning.rs": "9b549ffa116c3d73f4663e01c3a1d26d6b6d6534d78e360cabc1239b8b496650",
+        "crates/tillandsias-headless/tests/vsock_listener_e2e.rs": "30d4d54649f52204e84daec25c9543fee927c438ae3a9774cd2b7096b459e341",
+        "crates/tillandsias-host-shell/build.rs": "ba63ca81dc238e570ce4cbd0a3d3c2444ced799fd284d24de55984c0368df832",
+        "crates/tillandsias-host-shell/src/lib.rs": "f23bb036e923d93b44fc9cfb601eab0321b248721695b423272f1edfd90260ca",
+        "crates/tillandsias-host-shell/src/lifecycle.rs": "9c5b81339835cbbd56493c4e83855c225e7a90d4bc821cef02a772da5843867b",
+        "crates/tillandsias-host-shell/src/menu_action.rs": "7e77610b48dabbb97e5dfcf07263a3e2526333f3ba79fc1bf550fa454fa5f470",
+        "crates/tillandsias-host-shell/src/menu_state.rs": "9ce761c7680a2be8de7cc27868e4a9b135f92c1ed4922af53d53cce084bbc1c2",
+        "crates/tillandsias-host-shell/src/provisioning.rs": "c70464658c82a23dc9c68fb989186d0df6062c3c8e22501c26b663b632e7f2f1",
+        "crates/tillandsias-host-shell/src/pty/attach_client.rs": "45c9d848147ca22d9d8d9b32a7d8a174590584e60f267d8ea3682340545babc4",
+        "crates/tillandsias-host-shell/src/pty/mod.rs": "2256a131211a5fc88326c22721c95bc3a32d0f471db0f18620ed093c5c381ebe",
+        "crates/tillandsias-host-shell/src/pty/unix.rs": "2a7e459d2b4e1db23d92c0b210d40b9713d2a097e151b37403ea2ce6d23c2826",
+        "crates/tillandsias-host-shell/src/pty/windows.rs": "5d851f8a4340feb87467604071f27abf01a8861bb9ecf21f7c89e9f9e0d7f922",
+        "crates/tillandsias-host-shell/src/scanner.rs": "083e2955355573b26a26d1b85d03d48ebf45ac151aef0249458d21428102372f",
+        "crates/tillandsias-host-shell/src/subscription_health.rs": "68265793166acb5f8f26f07619540622700fc198db91bfbe27b2d3006afc9eee",
+        "crates/tillandsias-host-shell/src/vsock_client.rs": "996212f8919e45d13b8c802e75fcc35eb640b71342e9963e1615986ab77c1027",
+        "crates/tillandsias-litmus-rust/src/bash_hazards.rs": "1caa8b53fb53e51801f5a9e839d6ec8d45b92e4a5412064d454c4c4f1cd652bd",
+        "crates/tillandsias-litmus-rust/src/lib.rs": "641ab42624b4af0bff831f0efc249afe985bd5fe82e3eddea614357b5918d1b9",
+        "crates/tillandsias-litmus-rust/src/main.rs": "55b4839e72d79e77b2fbc13298da83def24e5d3117d3d489ba119518f16ea4ff",
+        "crates/tillandsias-logging/src/aggregator.rs": "0eb46be8846b031e976243a067ab9ec1010a3f6e907dc25f29c793b18a0f39ee",
+        "crates/tillandsias-logging/src/budget_enforcer.rs": "8ed88298f2554da67b180a41ee9fa4dd2dbec58709ccd5c7d5a5bb9adbd25aa7",
+        "crates/tillandsias-logging/src/cardinality.rs": "5e28018ccdd68965b881b662381b39bc047605c77df1d4165e7a4e5f74a004ba",
+        "crates/tillandsias-logging/src/config.rs": "878b3306cbb5fa32ceb14a70eb009cb1a9d64f77c323318a14e21f4ac8c497af",
+        "crates/tillandsias-logging/src/error.rs": "83bfeeef87f247d0608aebe00adfbb959f4165ddf5a0c23349f3dcf339d65a3f",
+        "crates/tillandsias-logging/src/event_collector.rs": "99ecf12de6a0df84fc37a71f1c99dd276f34e0e09e2a0ce44fdfffa4cf3ff147",
+        "crates/tillandsias-logging/src/formatter.rs": "f2edf081894a061b113f6e362cf476af9d470ae5f071e594418756c60fa541b4",
+        "crates/tillandsias-logging/src/lib.rs": "3aa706727a12beb29e35b00ee336c0f8024fc28d02a460d9512cfb13f8feedf9",
+        "crates/tillandsias-logging/src/log_entry.rs": "d02f177f3eb832bffccc768f5663aa3a8e9f36ff187c99378cda72c1356cb7ba",
+        "crates/tillandsias-logging/src/logger.rs": "f1717bb2136aa97e0f2c597ef13bd1446280886e0bb52ea8c9a13b2b570d5474",
+        "crates/tillandsias-logging/src/query.rs": "dee4ffc6dda00d0ad1a5d4cedad9f8a3a5e30d36bfc05dc3aaee58e9911a9bad",
+        "crates/tillandsias-logging/src/rotation.rs": "863e3bfad07fc3bf6f64d86f80eadd36b55ad4cfa34661b80fee098d81ef4285",
+        "crates/tillandsias-logging/src/sampler.rs": "531c556aaa79a450ab3ef4f6b1eeba790e44ae22247d061e8900f07f4255da34",
+        "crates/tillandsias-logging/src/schema_validation.rs": "6a66dd42f85ef65b3897e8e21ac9dfe143157330c6aa91cf4136b3a2db22c090",
+        "crates/tillandsias-logging/src/span_context.rs": "d74f68f974b73e93ce5e9ab22d0fa179cf66b496015ff41c18210b3cb0cc6fe4",
+        "crates/tillandsias-logging/src/surface.rs": "f1a8add580518a33ad2268c166141dc4bf059b85cdb001454f401efacef4e223",
+        "crates/tillandsias-logging/tests/event_coverage.rs": "e0e389a70b58bce864d21a9a26ab51dd84b9a70500a20e142bcabe40a317089e",
+        "crates/tillandsias-logging/tests/schema_version_integration.rs": "7e250035692f965769e732ae2ddcc1f001eb75229b5d7245e998c82f3d60573f",
+        "crates/tillandsias-macos-tray/build.rs": "769ae8d32d8c1d15fa7c7704a930d1e945cd5b276929db3e1f70b7411e849d67",
+        "crates/tillandsias-macos-tray/src/action_host.rs": "29fefcb6c15ab1fc57fe43de36935b6cab89be5a3f636f20e58c4d9e2dbdf8bb",
+        "crates/tillandsias-macos-tray/src/app_delegate.rs": "81c8acc8d447c5a6d10ea0474ea739f9a2db8248c19256eaf78c1f9c0568701a",
+        "crates/tillandsias-macos-tray/src/diagnose.rs": "58115c344e58af14d77790bda93f25c9caf449e8c0195153b814f2974dd39f49",
+        "crates/tillandsias-macos-tray/src/guest_binary.rs": "468e6c459a5b67fff261693bdd46d9d7d65fc1d957cb0e1517335bc497226ad1",
+        "crates/tillandsias-macos-tray/src/installation_uuid.rs": "e30fb00b39517b92210c1dda07aae827c89c8ffeb976fd313119cd7ac64d39f3",
+        "crates/tillandsias-macos-tray/src/main.rs": "7c67787ca15690ce21c26a7c5e845962d1542e63c714496a7681562b94a045e7",
+        "crates/tillandsias-macos-tray/src/main_thread.rs": "0fa59dc0bd81d33fbfc61ba950b124ff2cfc8474585c5900528f2d7daa818c9d",
+        "crates/tillandsias-macos-tray/src/menu_disabled_v2.rs": "a6f671a71dfc38878ec5cdabeaa8eeace30ba0796f902079a08a6259f213d354",
+        "crates/tillandsias-macos-tray/src/provision_error.rs": "785fdc1ab77dbc4741a6f2ac308f3bda28e5d013cf4fe077aa8508640ddd5374",
+        "crates/tillandsias-macos-tray/src/provision_progress.rs": "3014db7fcf44c29a783c9de1c38be63bc3d4e2e2a1fa2b8027bb02f63545869d",
+        "crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs": "529c1f162fef7e94d45b841c0f3245336095c486f46aa6e4ac5c3caba5af0abb",
+        "crates/tillandsias-macos-tray/src/reset_state.rs": "ce3808a9974e7db0e8bbf9696ee154669d1ac49018e452e4deaa6cba41a15866",
+        "crates/tillandsias-macos-tray/src/status_item.rs": "fcdbe08f6add8fd5556b2670ffda6f2f2596248ed7c683029c5972eb9a7ecfcf",
+        "crates/tillandsias-macos-tray/src/terminal_attach.rs": "f609dcd794c9e59ada6b72a89075d349d3111fc5a84f0d96790f3f68a2e6aef8",
+        "crates/tillandsias-macos-tray/src/tray_log.rs": "f3191593d96f587b61217b5a2d3962505e649323c8312dddfe766b739b172669",
+        "crates/tillandsias-macos-tray/tests/cli_unknown_flags.rs": "0b5fbbc72bde741400ee298c7ddf7e82525c18c14241f22d44f99fef9ffbf6f1",
+        "crates/tillandsias-macos-tray/tests/exec_guest_stdin.rs": "6613ef1eb13a6f9e5e6d188bc66776f50206d131e311a49e1309971db0129803",
+        "crates/tillandsias-macos-tray/tests/github_login_expect_order.rs": "83fdfc927ebf041ae294085884e48e4c58a7f5b6bcee5aace5288e6516d65eb8",
+        "crates/tillandsias-metrics/src/container.rs": "6b27b59a5dd240a9414fb464d838f676d7f9958844c1a8aba230c005aa7327d2",
+        "crates/tillandsias-metrics/src/dashboard.rs": "a6dec3c2ab6866134bdb97ebd06081e381b11aeba9aa0db7f985afd31bf0611e",
+        "crates/tillandsias-metrics/src/error.rs": "0615f7c135c142163a2f22a498aac2d3a0c3259f18f490f4989661cf12144ece",
+        "crates/tillandsias-metrics/src/lib.rs": "50dc9d76cbda42dfe027219408666cc0567dec4c0ba0e30592ca91578ceb6654",
+        "crates/tillandsias-metrics/src/models.rs": "3de3ccff8e098c40daeed91af0e46e57c3c7d067519941247b5fced08af00da5",
+        "crates/tillandsias-metrics/src/mount_io.rs": "a9b47565072c1dbae26839cff5331d487090db316120ab1e5d3b421c6ebe03dc",
+        "crates/tillandsias-metrics/src/prometheus_exporter.rs": "ec93768dd4250b93e3ba05dad4946403970c328018502ce2e99b37722b76fbf9",
+        "crates/tillandsias-metrics/src/sampler.rs": "f1d3a744b3a7aec61fc58a06755650d84c75b8757e3ce494285a61c4e55bc0bc",
+        "crates/tillandsias-metrics/tests/integration_tests.rs": "97651ef2c8ed20469195b4e9df216680f3106dd1dcbe5f1ea7f5785693bbc816",
+        "crates/tillandsias-msg/src/lanefs.rs": "fcb2794b9f4af21614683783de2eac93d9ce5193bdceefbc6c21fc4632091243",
+        "crates/tillandsias-msg/src/lib.rs": "524a7fd753fa3bb86d5d5c41bcda1594e13dd9741bbe51c161adcb7744460ca0",
+        "crates/tillandsias-msg/src/shape.rs": "eee5e2ef12e3d06fee91a08e2261da5ad7590416730005715b5e74a72a88292d",
+        "crates/tillandsias-msg/src/store.rs": "bf636d53749a69976a6bf17d9d8d83a349c50f5b3dc93e293d49ad14fd47db79",
+        "crates/tillandsias-otp/src/lib.rs": "867ec602002dbdb0331156c128f69304f3e2b2cf4cb3e620dd55bd0812c02043",
+        "crates/tillandsias-plan/build.rs": "48c15c60976aa5b30676931fa172bcedde943621393de9052441d6c8a5a20f0a",
+        "crates/tillandsias-plan/examples/openai-stub.rs": "17841b09c51ddd89374ed29115d46776066cbc2cfe0da339285b3f8551fe483b",
+        "crates/tillandsias-plan/src/answer.rs": "d6ab7987d6b2946444b5f89df1dacaeb5fc889d5db4d6c94a101d526279456bb",
+        "crates/tillandsias-plan/src/bash_policy.rs": "6043ff299d31d20a5032921aadc3326548bfa5925497b73043a0b27e0e6c810a",
+        "crates/tillandsias-plan/src/branch_discipline.rs": "cf45c53cd3fdecc380a19851fbf3428477a4d93a7242266055a1f49fceb67fd4",
+        "crates/tillandsias-plan/src/command_policy.rs": "c25dc58f216fc27379abb15a2ecb8611573f1970b91e0629fa0b42dd20c5773b",
+        "crates/tillandsias-plan/src/discipline_hooks.rs": "6ace88d43c70c13041af129254ae90e20b2b42e79bd5f6a4e0b5306ac571d93b",
+        "crates/tillandsias-plan/src/expert_serve.rs": "0f1636a5d0ebb26755483c7d2155d8617d6d7bb160868d0da4e370855a635073",
+        "crates/tillandsias-plan/src/experts_probe.rs": "1f7e93929b24ac0de5e5851312e5f6542517693d94180cb4856f852659d015aa",
+        "crates/tillandsias-plan/src/forgotten.rs": "b9f60390c2d1d66f42026877ba43cf3dfdf6f8e3de91984619fedcee47728dce",
+        "crates/tillandsias-plan/src/fragments.rs": "f3c64eafb238854e970cc9aeb046c73f62d0f601163c33b0ca6321c0dfeee040",
+        "crates/tillandsias-plan/src/gitref.rs": "40e160169e14d9b93fd0274a2e406eed14ea74fc859743e9a856aacecaa6afcc",
+        "crates/tillandsias-plan/src/groundtruth.rs": "21a05000c825497de60a0bbecd26f75d74cd1524b173d493da2a7d62e3dbbc6b",
+        "crates/tillandsias-plan/src/host_verbs.rs": "28ce999e709baa05c7c954da8ff781af25feaf41901cc3c9928fc3c7d32b7e15",
+        "crates/tillandsias-plan/src/json_query.rs": "8133c922f4dcc31a4295155e93b7fa1e3ad987397709b7c34c8e157e936cdcb8",
+        "crates/tillandsias-plan/src/ledger_cache.rs": "30cffbd3e7b5cb432127deb5fe161107f4d88cb98c4aa3106594d321580c96af",
+        "crates/tillandsias-plan/src/lib.rs": "997f9426fdff6b3c1c09e51057a3b9b2117edb99e2fcdb66d31e19b5e4801f2c",
+        "crates/tillandsias-plan/src/loop_status.rs": "8658c0735c53c1de764fde903e88cc54eda05b87d162a959872d6fb1d0f93e4f",
+        "crates/tillandsias-plan/src/lua_predicate.rs": "7dd2bef578d27a8a2246598071bbc6e546c34078fa61217d91b48e89e7ff0d7f",
+        "crates/tillandsias-plan/src/lua_runtime.rs": "666151ef8278c788b8c21ed74e0360ff294eb117fe59787b8b2677f783fbaa0e",
+        "crates/tillandsias-plan/src/lua_std.rs": "6155c269a769b4cdac46a0463ed3d6e215caacf7e6ea14835a8a4675e925a4a7",
+        "crates/tillandsias-plan/src/main.rs": "88ad68df49176e69fdccde5cc3a2b25e19e847e2f9902737bd32b3c4cac8f5ca",
+        "crates/tillandsias-plan/src/methodology.rs": "3f613232029898f5531b849789d95214b07c8938fdcd11b7867512304c4892ee",
+        "crates/tillandsias-plan/src/msg_store.rs": "409b837b129ea72242b9916767471b5cd091e8d87ba532c44c1fe5e31bf61317",
+        "crates/tillandsias-plan/src/obligation.rs": "dcb05b5c4dd03ae18b8f83459e101f5a1b3ac3ff827eccfca940859100bd9976",
+        "crates/tillandsias-plan/src/obligation_props.rs": "e42ecd7c4fb2dd2c14eda4abcc6132a437d6d902b8950dd0f98993dd8eda71b9",
+        "crates/tillandsias-plan/src/pipeline.rs": "2103d720c3b4b38186a3aa9be9853fea55fc1631988c1c2cb47efce7d929a807",
+        "crates/tillandsias-plan/src/run_verb.rs": "488d38bba0846932fbcc5748ddb37e9db22bce478cd4bc84b33739ce64ac0516",
+        "crates/tillandsias-plan/src/script_run.rs": "dcd069cd168f988cd60affc41d96ea11890aff6810827b435d0c014d7371bf0b",
+        "crates/tillandsias-plan/src/semantic_expert.rs": "c9e364a7b3f4d8f19eb79383245ef10edbfb8381a6b31d6711f2e93e3ebcca1e",
+        "crates/tillandsias-plan/src/session_tokens.rs": "035e0abb085073908413bb1caa4dae2c96d9dfc788b3e3e5bd9aa4358f7e87ff",
+        "crates/tillandsias-plan/src/source_revision.rs": "7b978743af7aa2cba55db69d68a5f6901ce48727e5b3dc317457ba50046875cd",
+        "crates/tillandsias-plan/src/spec.rs": "2769b2d41927a08662ff94ccb3d6c6c723df6f0031311afda2dce83573c33081",
+        "crates/tillandsias-plan/src/spec_index.rs": "1b9be5100d8719efca47e829f6976a8c9dbf37c153c2f593fbccd697e839e677",
+        "crates/tillandsias-plan/src/validator_surface.rs": "b790471b0de4ed75fbd3252da725664aac049496ee6330a969ee83a58587efff",
+        "crates/tillandsias-plan/tests/command_policy_doors.rs": "139b1da4d459a1c8560c7531210396d8fd33d18a77d6e564b50d434af12efd0d",
+        "crates/tillandsias-plan/tests/lua_observing_boundary.rs": "30fb36ece184292cb66dc8110bae96e6256faf9946490843257d06b04f23ec2a",
+        "crates/tillandsias-plan/tests/lua_predicate_classes.rs": "0a3f856b50877a34a70493017911af61d4d3e964ed187231112afafbb04fe2d9",
+        "crates/tillandsias-plan/tests/lua_proc.rs": "b92d7fe8acb1a7b258054016183eabaad73f3484690f52ae4454fd385ddacd3f",
+        "crates/tillandsias-plan/tests/lua_source_agreements.rs": "d52ae0dbf34333c0e7b58ac22be83f173a9b75b3a6c684f68c721f682f6db0be",
+        "crates/tillandsias-plan/tests/lua_std.rs": "e540e9e98ef556ae0cd7190b002260e9235f9b7dadc766f3174582643fc62f7c",
+        "crates/tillandsias-plan/tests/set_field_archive.rs": "c017a08071ad5032680bdd0b4564b75adb2c9c87391221e0001cc979ccc21062",
+        "crates/tillandsias-podman-cli/src/lib.rs": "f535fa1153e08f06ee427bec52a61fb537949f20393b8cf1cb533261daa13979",
+        "crates/tillandsias-podman-cli/src/main.rs": "1c8c4cfd9e16f772816ae6ba9554b97c962ad9a6db8d7005c91c35b1883b24a8",
+        "crates/tillandsias-podman/src/backend.rs": "bc8b3c6d7b3170cfbd80e7ff4957977a775c08b662167f8a45acb69dc49eb583",
+        "crates/tillandsias-podman/src/cache_semantics.rs": "377ac486f75208160f2e2df21528251f0f0238c9c24f5dc982e1e1fce3e7f5e9",
+        "crates/tillandsias-podman/src/client.rs": "8a17c47dcbade2ae150a20a4deb91fe05835a3a3c53293400fa335d09f9d14a3",
+        "crates/tillandsias-podman/src/container_spec.rs": "e15229cf855e15a2da8e476a3885fb4b53fb8037b6dd65bf465acacf33b7d0a1",
+        "crates/tillandsias-podman/src/diagnostic_event_emitter.rs": "5011a714ffa2ff9975d7e1291f01dda05f39e5e47a4b105f06ee56f134f234ed",
+        "crates/tillandsias-podman/src/diagnostics.rs": "948e993d5aa0ba8b210d87fe04013a5d5e483cbe0126a5293e136503de990f6f",
+        "crates/tillandsias-podman/src/diagnostics_filter.rs": "3a8d5450a830ea56929bf0c1f347eaf3b1d20a075fba4b3bc717026117786f2a",
+        "crates/tillandsias-podman/src/diagnostics_stream.rs": "296fda2c9379e2c19c28e6c54ff612409299bfa8dec44404accb8acada656cfc",
+        "crates/tillandsias-podman/src/events.rs": "2e5f7d282dbc2fb598002178f0bd381bf98d99a3e552b07bba246541070f84a2",
+        "crates/tillandsias-podman/src/gpu.rs": "07a37ae6117c960c62e4c33ac72f777f49f1c2b51bf6a2132c579d6826138b48",
+        "crates/tillandsias-podman/src/launch.rs": "c646c895f46c7f47951115d0e483edc1b0f1761fc02f797014e76bb1e84e244c",
+        "crates/tillandsias-podman/src/lib.rs": "00a4c8623bb3e9fa740e1b6df9970f7e20172acc4c1d81ee432e110de7649eaf",
+        "crates/tillandsias-podman/src/peer_table.rs": "791a85acdc64ee45a8ab59cbe114f155b0ca4248b65f823da95785f3492af891",
+        "crates/tillandsias-podman/src/policy.rs": "6ee4eb286ca14429db10323f2f433cc429f4a253b6f846756bec309bbfe74e5f",
+        "crates/tillandsias-podman/src/runtime.rs": "c7490b87ebb58fa95f4b879beaea38755e2ffa4e17f0c1060d91b5bdbeaa382e",
+        "crates/tillandsias-podman/tests/podman_integration.rs": "3225bba5f92dc940cf8725acf16a4388de15335e752dc2faeca5e8bad40978b4",
+        "crates/tillandsias-policy/src/main.rs": "c51fbee9ebee67349402c74a2777d33844e457ce0c3d0e8b62c38279de445d3c",
+        "crates/tillandsias-progress-tty/src/lib.rs": "cdb0360b71ebec04fa10540f94ad1ba960e274f98dfdea2e11dbc95fc8b04553",
+        "crates/tillandsias-progress-tty/tests/golden.rs": "98ad355add86d8cd005da9870400cd696c1f04fb000a9f3e567ce5ca71f3187d",
+        "crates/tillandsias-repeat-graph/src/bin/tillandsias-repeat-loop.rs": "449743b14a8a99799760e9342ed215246cecf71ab2a2a2a2fe0abcb52a6c0cfb",
+        "crates/tillandsias-repeat-graph/src/main.rs": "197a8df2c36dd6f21cfcdf0b81982c369eafcd4b09ca6dc3ca0b9f674b0851bf",
+        "crates/tillandsias-router-sidecar/src/http.rs": "3847872a0b584048bbc2e4b51fdb0efa16c200f211f9f4192fba43b98da99ab8",
+        "crates/tillandsias-router-sidecar/src/main.rs": "0baa3fe330cfe30abf117bbe6ab29d6c7343a0babc314adf6384b12187626887",
+        "crates/tillandsias-router-sidecar/tests/caddy_reload_integration.rs": "bae7cef24551ffe7e731cb59fe258c35d2e56d84f8840dfe03cf221bcf2e68af",
+        "crates/tillandsias-router-sidecar/tests/connect_loop.rs": "465b32a62e6fe9cbde474fcdec9295622c36ad83c8be0fcb050da017a9b0592b",
+        "crates/tillandsias-router-sidecar/tests/router_e2e_test.rs": "7e43dc7688d4e57e2c85cff7288751f0c3db302e34b17bea3dddf8adf54f869d",
+        "crates/tillandsias-scanner/src/detect.rs": "de901a783f9cbbab6293efbdf4b727be0577699b8c883aeb911a2bc686dd785b",
+        "crates/tillandsias-scanner/src/lib.rs": "fa4b450a5cf31b4f89d773a8531e77291cd242e417b7f4f056389b62b3d20f27",
+        "crates/tillandsias-scanner/src/watcher.rs": "7b3cc7ba2bd472349032337c54dcf8d7389b5c90ffe847c7056fac7ceee9a115",
+        "crates/tillandsias-secure-channel/src/lib.rs": "8031a7921206625489bbe451b1d532a03d7e92665b4d779686b56faf633868d3",
+        "crates/tillandsias-secure-channel/src/secure_stream.rs": "7e491115991bd7b82d7b26bdb05acba52a49fbed47df61ece7e8eb61ea117ff7",
+        "crates/tillandsias-static-server/src/main.rs": "d9368bf0234adf3ef1ed9aa94b22e88a1093461b72c01111de5785f08429c141",
+        "crates/tillandsias-vault-client/src/auto_unseal.rs": "94ecabd508271b16ed9f5738ba41e3433655e5e9af99bb575e144e554cda9d97",
+        "crates/tillandsias-vault-client/src/error.rs": "f33cc2097f9c6262d44350c5b9809eeb4bf8996950a6758d96d8e96ac747037a",
+        "crates/tillandsias-vault-client/src/lib.rs": "b8d6cc541ea1b03909675f31d51d42b4faf0997f0d7328ac43d3bd2ac6904bda",
+        "crates/tillandsias-vault-client/src/policy.rs": "22089f6339876d8b40b565fa49def8b9afa1dd5715aaf99d75e506c936a231f9",
+        "crates/tillandsias-vault-client/tests/http_roundtrip.rs": "806b4d6055bf1171c2935f3294ff58a7830a78b58ee1eb084d2c4cde3a211b8a",
+        "crates/tillandsias-vm-layer/examples/materialize-cli.rs": "87d9e3c3254cc3ff674ec239ced074f3427cf3ca441f6c16531da0b98d055f5c",
+        "crates/tillandsias-vm-layer/examples/qcow2-expand.rs": "29dabf481230b73d26db97c71dc3ab3014253ec2c70cb320289d7479e9653977",
+        "crates/tillandsias-vm-layer/examples/vz-spike.rs": "38545202356e344971dd43cfa9306ec4e163150137d21a5281a4b3509135a74b",
+        "crates/tillandsias-vm-layer/src/bin/materialize-cli.rs": "ce59016835a36e4e815d0a2c25b246d6b4fe67df8af5fe7a2ee98ed6c7ade12a",
+        "crates/tillandsias-vm-layer/src/fake.rs": "c7e80aee4e39377a937ffbeed7007a03333000466bc47258706736c525651385",
+        "crates/tillandsias-vm-layer/src/fetch.rs": "25661434801d90679ea1ecdc2301df2c5a47028432bae63e89d4dadb7669de74",
+        "crates/tillandsias-vm-layer/src/host_vsock_forward.rs": "f021f0344a0aa66735c1e9c81cd67485108c49ea145f3a6282930e3081a12482",
+        "crates/tillandsias-vm-layer/src/lib.rs": "124ed64fc6fe734be33bf8231f2822826344120a5b3fd071c4d6c568b16f5aa5",
+        "crates/tillandsias-vm-layer/src/materialize/cache.rs": "50c0f5d21faf5df057354985a92aa63a659f978bf7bfcc9cffea272deafe8f5b",
+        "crates/tillandsias-vm-layer/src/materialize/exec.rs": "e7039dc137a678f7c7d568e817356377d30e3cd402611daed418f2a0803b3283",
+        "crates/tillandsias-vm-layer/src/materialize/layer_key.rs": "2be072b418bb875925c4f4bc23aa985ae6e66978340bb523d76ad03eaabbde5b",
+        "crates/tillandsias-vm-layer/src/materialize/macos.rs": "963777de32ebaff18e27a5060d4fd09f47d2100a9c8b51cf1837f908bd685602",
+        "crates/tillandsias-vm-layer/src/materialize/mod.rs": "6464c168ec81c1a8389b02a4f43db64c3a18cde5a7db66f485b920f910b4998c",
+        "crates/tillandsias-vm-layer/src/materialize/oci.rs": "3140713652260875b8aec9672c4e1c7043ff9c62ee1aaaea90fca49d52ee4346",
+        "crates/tillandsias-vm-layer/src/materialize/trace.rs": "a8090cc0263b3792092dca742b24fd5b97d6c18bd9bf2247c71df3fbeda2d3fd",
+        "crates/tillandsias-vm-layer/src/materialize/wsl.rs": "bbd7888808dca4186d7c11113070347289cba06c03f27ce988d82c25d1f07cea",
+        "crates/tillandsias-vm-layer/src/qcow2.rs": "4d01d9909783f41476b10a83eccc93f2bc6fc1a5dc45fae08ea8233aaa021f75",
+        "crates/tillandsias-vm-layer/src/readiness.rs": "33ab61fddaec71155de231cce8c7a7c357459fb46982796be9d42c69eedd9439",
+        "crates/tillandsias-vm-layer/src/recipe/mod.rs": "bb6650fc8424754757c931e455f8adaaff1204f501aba5a8dc40a54c6f5c200a",
+        "crates/tillandsias-vm-layer/src/transport_conformance.rs": "5be1f88c86828c1f8c1ced7fc216d95c582c9c6f8f7e6789a2f183f67f4fb87d",
+        "crates/tillandsias-vm-layer/src/transport_macos.rs": "c4918eb62990b570a308ab5ca96faee260e23f077731322c8cbec960d6c439e3",
+        "crates/tillandsias-vm-layer/src/transport_windows.rs": "2601f57e8b3a8228430559872125f80a2fa80fa8c6be06e3043946a6257e043f",
+        "crates/tillandsias-vm-layer/src/vsock_exec.rs": "889add3b017fd60396b0aba19183d2e9d5a05f7f0457d269bbb54e67596cbdf7",
+        "crates/tillandsias-vm-layer/src/vz.rs": "bbb12f2a47645eda21a4238170e57334209fc09815ae56b25b8d119bd47a9be1",
+        "crates/tillandsias-vm-layer/src/wsl.rs": "cee82483cd7acd65a9546b6925c32c0bd7cb2c663ea63ed13405977aae73d6e9",
+        "crates/tillandsias-vm-layer/tests/qcow2_expand.rs": "4543b0239cb2ca9981f82ea969238573d1231d3ba1223cb78f9f43a6baea8d8b",
+        "crates/tillandsias-vm-layer/tests/support/qcow2_fixture.rs": "d7c7068f37ac934ea97600d94cebb4e4bed514ea087e8fbde5e9cc62f8050fb2",
+        "crates/tillandsias-vm-layer/tests/wsl_stdio_bridge_eof_enrichment.rs": "f450b018b9e3373b1e0b8c55e6c8335eb8ea4f5ce408255937b389b024f56566",
+        "crates/tillandsias-windows-tray/build.rs": "0f6e5a7f4f0fe654f1763ee9085bd07a0b20fdd6c0ef7cd0b74adb31d86c89cf",
+        "crates/tillandsias-windows-tray/src/eventlog.rs": "655000d28ee4ed3e63edef762d33a85ceff656acaddc173983105b4062ef2793",
+        "crates/tillandsias-windows-tray/src/hvsocket.rs": "27e716f57ec02f012c4fa8f1e692e481e0f7adf7744ac4fd1fbad2bc00fdcabb",
+        "crates/tillandsias-windows-tray/src/installation_uuid.rs": "9fb82be1e8d1d6df0764d6e80230c8861591800f14f152239fb27faa44275e0a",
+        "crates/tillandsias-windows-tray/src/main.rs": "91d7e176be35406f2f7fadced46014ce2ac5f97559a7107134a67ba745854bd9",
+        "crates/tillandsias-windows-tray/src/notify_icon.rs": "f9f903df012e6981e15ab2a9f76f993191a192b1cc9ac65a73f3645b72700c18",
+        "crates/tillandsias-windows-tray/src/provision_console.rs": "e273d8a4a1907862016e9899ff346ece18c5653764ec8830b0dff0ea9c238162",
+        "crates/tillandsias-windows-tray/src/stubs/installation_uuid.rs": "e313634c30c8bf460e0c0dfe2946148a848ed689f4cd1b2b30706de4e820a5dd",
+        "crates/tillandsias-windows-tray/src/stubs/notify_icon.rs": "b20001a5475b3cd54c0c0c4f9bc468430aa0ab4c7b1b53b0a97961dac07b0c1f",
+        "crates/tillandsias-windows-tray/src/stubs/wsl_lifecycle.rs": "a4300818b8b9433f714fbbe6e9a55b20c6054c17dc2ce444f8e387e6cec84cd4",
+        "crates/tillandsias-windows-tray/src/tray_phase_icon.rs": "820ee8ab8963cd4b7a593c7b499819c2c4575af5cce5713ca8e5825840e317fd",
+        "crates/tillandsias-windows-tray/src/tray_registry.rs": "265b5634f4553387935bb43ced405aa65556a4f0fd83f9268620630ce08b6430",
+        "crates/tillandsias-windows-tray/src/wsl_lifecycle.rs": "6f3bdc2ea94d02611d602267178d0b26ce12bfbafb8bc11b54646d93c5478673",
+        "crates/tillandsias-windows-tray/src/wsl_probe_policy.rs": "c51ba28e597b15bbcbf0a8589d7b6219c2e32d164ee18315e4a1395e485303e8",
+        "crates/tillandsias-windows-tray/tests/cli_integration.rs": "a3fd77075fe604046bc8f7a021d03f603548f4dc7dce021b09738f4e3eba4ce6",
+        "crates/tillandsias-windows-tray/tests/portable_smoke.rs": "6f4d32bd816501291f3c20495fa1abb295eacb1a1cdd70c3226aa5c7070ca441"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-live/scripts/check-podman-sync-budgets.sh"
+          ],
+          "code": 0,
+          "stdout_b64": "b2s6cG9kbWFuLXN5bmMtYm91bmRlZDoxCg==",
+          "stderr_b64": "",
+          "stdout": "ok:podman-sync-bounded:1\n",
+          "stderr": ""
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-live/lua/check-podman-sync-budgets.lua",
+            "--"
+          ],
+          "code": 0,
+          "stdout_b64": "b2s6cG9kbWFuLXN5bmMtYm91bmRlZDoxCg==",
+          "stderr_b64": "",
+          "stdout": "ok:podman-sync-bounded:1\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "name": "podman-direct-command",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/fixture/src/bad.rs": "dbc6c9f943b463bc57113827ffcfcddba1beb1ff93150f6e49f2dce2c9334c47"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-direct-command/scripts/check-podman-sync-budgets.sh"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOmRpcmVjdC1jb21tYW5kOjEK",
+          "stderr_b64": "Y3JhdGVzL2ZpeHR1cmUvc3JjL2JhZC5yczoyOiAgICBsZXQgbXV0IGNtZCA9IHN0ZDo6cHJvY2Vzczo6Q29tbWFuZDo6bmV3KCJwb2RtYW4iKTsK",
+          "stdout": "violation:direct-command:1\n",
+          "stderr": "crates/fixture/src/bad.rs:2:    let mut cmd = std::process::Command::new(\"podman\");\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-direct-command/lua/check-podman-sync-budgets.lua",
+            "--"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOmRpcmVjdC1jb21tYW5kOjEK",
+          "stderr_b64": "Y3JhdGVzL2ZpeHR1cmUvc3JjL2JhZC5yczoyOiAgICBsZXQgbXV0IGNtZCA9IHN0ZDo6cHJvY2Vzczo6Q29tbWFuZDo6bmV3KCJwb2RtYW4iKTsK",
+          "stdout": "violation:direct-command:1\n",
+          "stderr": "crates/fixture/src/bad.rs:2:    let mut cmd = std::process::Command::new(\"podman\");\n"
+        }
+      }
+    },
+    {
+      "name": "podman-hatch-growth",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/fixture/src/hatch.rs": "f177e5af480918fadb9bce278edc68b43c84f59ac02e6ceb2f94c32cf87961c7"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-hatch-growth/scripts/check-podman-sync-budgets.sh"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOmVzY2FwZS1oYXRjaC1ncmV3OjIK",
+          "stderr_b64": "ZXhwZWN0ZWQgYXQgbW9zdCAxIGNhbGxlci1vd25lZCBzcGF3bihzKTsgZm91bmQgMjoKY3JhdGVzL2ZpeHR1cmUvc3JjL2hhdGNoLnJzOjE6Zm4gYSgpIHsgbGV0IF8gPSBjbWQuc3Bhd25fY2FsbGVyX293bmVkX2xpZmV0aW1lKCk7IH0KY3JhdGVzL2ZpeHR1cmUvc3JjL2hhdGNoLnJzOjI6Zm4gYigpIHsgbGV0IF8gPSBjbWQuc3Bhd25fY2FsbGVyX293bmVkX2xpZmV0aW1lKCk7IH0K",
+          "stdout": "violation:escape-hatch-grew:2\n",
+          "stderr": "expected at most 1 caller-owned spawn(s); found 2:\ncrates/fixture/src/hatch.rs:1:fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\ncrates/fixture/src/hatch.rs:2:fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-hatch-growth/lua/check-podman-sync-budgets.lua",
+            "--"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOmVzY2FwZS1oYXRjaC1ncmV3OjIK",
+          "stderr_b64": "ZXhwZWN0ZWQgYXQgbW9zdCAxIGNhbGxlci1vd25lZCBzcGF3bihzKTsgZm91bmQgMjoKY3JhdGVzL2ZpeHR1cmUvc3JjL2hhdGNoLnJzOjE6Zm4gYSgpIHsgbGV0IF8gPSBjbWQuc3Bhd25fY2FsbGVyX293bmVkX2xpZmV0aW1lKCk7IH0KY3JhdGVzL2ZpeHR1cmUvc3JjL2hhdGNoLnJzOjI6Zm4gYigpIHsgbGV0IF8gPSBjbWQuc3Bhd25fY2FsbGVyX293bmVkX2xpZmV0aW1lKCk7IH0K",
+          "stdout": "violation:escape-hatch-grew:2\n",
+          "stderr": "expected at most 1 caller-owned spawn(s); found 2:\ncrates/fixture/src/hatch.rs:1:fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\ncrates/fixture/src/hatch.rs:2:fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\n"
+        }
+      }
+    },
+    {
+      "name": "podman-reviewed-budget",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/fixture/src/hatch.rs": "f177e5af480918fadb9bce278edc68b43c84f59ac02e6ceb2f94c32cf87961c7"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-reviewed-budget/scripts/check-podman-sync-budgets.sh"
+          ],
+          "code": 0,
+          "stdout_b64": "b2s6cG9kbWFuLXN5bmMtYm91bmRlZDoyCg==",
+          "stderr_b64": "",
+          "stdout": "ok:podman-sync-bounded:2\n",
+          "stderr": ""
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-reviewed-budget/lua/check-podman-sync-budgets.lua",
+            "--"
+          ],
+          "code": 0,
+          "stdout_b64": "b2s6cG9kbWFuLXN5bmMtYm91bmRlZDoyCg==",
+          "stderr_b64": "",
+          "stdout": "ok:podman-sync-bounded:2\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "name": "podman-unbounded-capture",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/tillandsias-podman/src/bad_capture.rs": "70eadeae00edee32892b9767bd61723f7333da728cc557454e76d41ff33539c0"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-unbounded-capture/scripts/check-podman-sync-budgets.sh"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnVuYm91bmRlZC1jYXB0dXJlOjEK",
+          "stderr_b64": "Y3JhdGVzL3RpbGxhbmRzaWFzLXBvZG1hbi9zcmMvYmFkX2NhcHR1cmUucnM6MzogICAgbGV0IF8gPSBwaXBlLnJlYWRfdG9fZW5kKCZtdXQgYnVmKTsK",
+          "stdout": "violation:unbounded-capture:1\n",
+          "stderr": "crates/tillandsias-podman/src/bad_capture.rs:3:    let _ = pipe.read_to_end(&mut buf);\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-unbounded-capture/lua/check-podman-sync-budgets.lua",
+            "--"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnVuYm91bmRlZC1jYXB0dXJlOjEK",
+          "stderr_b64": "Y3JhdGVzL3RpbGxhbmRzaWFzLXBvZG1hbi9zcmMvYmFkX2NhcHR1cmUucnM6MzogICAgbGV0IF8gPSBwaXBlLnJlYWRfdG9fZW5kKCZtdXQgYnVmKTsK",
+          "stdout": "violation:unbounded-capture:1\n",
+          "stderr": "crates/tillandsias-podman/src/bad_capture.rs:3:    let _ = pipe.read_to_end(&mut buf);\n"
+        }
+      }
+    },
+    {
+      "name": "podman-sleep-poll",
+      "core": true,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/tillandsias-podman/src/busy_wait.rs": "08ec751f11f894daad1241bea2bb7f16e00bf27fa50d2b932bd3804a61db6413",
+        "crates/tillandsias-podman/tests/allowed_poll.rs": "09188863ab2ae96175abc3b944ec2abcc2a0c511f5932efffdf4c16fe4300099"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-sleep-poll/scripts/check-podman-sync-budgets.sh"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnNsZWVwLXBvbGw6MQo=",
+          "stderr_b64": "Y3JhdGVzL3RpbGxhbmRzaWFzLXBvZG1hbi9zcmMvYnVzeV93YWl0LnJzOjc6ICAgICAgICBzdGQ6OnRocmVhZDo6c2xlZXAoc3RkOjp0aW1lOjpEdXJhdGlvbjo6ZnJvbV9taWxsaXMoMjApKTsK",
+          "stdout": "violation:sleep-poll:1\n",
+          "stderr": "crates/tillandsias-podman/src/busy_wait.rs:7:        std::thread::sleep(std::time::Duration::from_millis(20));\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-sleep-poll/lua/check-podman-sync-budgets.lua",
+            "--"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnNsZWVwLXBvbGw6MQo=",
+          "stderr_b64": "Y3JhdGVzL3RpbGxhbmRzaWFzLXBvZG1hbi9zcmMvYnVzeV93YWl0LnJzOjc6ICAgICAgICBzdGQ6OnRocmVhZDo6c2xlZXAoc3RkOjp0aW1lOjpEdXJhdGlvbjo6ZnJvbV9taWxsaXMoMjApKTsK",
+          "stdout": "violation:sleep-poll:1\n",
+          "stderr": "crates/tillandsias-podman/src/busy_wait.rs:7:        std::thread::sleep(std::time::Duration::from_millis(20));\n"
+        }
+      }
+    },
+    {
+      "name": "guest-no-source",
+      "core": false,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {},
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/guest-no-source/scripts/check-guest-unit-hardening.sh"
+          ],
+          "code": 1,
+          "stdout_b64": "YmxvY2tlZDpndWVzdC11bml0LW5vdC1mb3VuZAo=",
+          "stderr_b64": "W2NoZWNrLWd1ZXN0LXVuaXQtaGFyZGVuaW5nXSBjb3VsZCBub3QgbG9jYXRlIGFueSBndWVzdCBoZWFkbGVzcyB1bml0IHRleHQ7IHRoZSBtYXJrZXJzIGhhdmUgZHJpZnRlZCBhbmQgdGhpcyBndWFyZCBpcyBpbmVydAo=",
+          "stdout": "blocked:guest-unit-not-found\n",
+          "stderr": "[check-guest-unit-hardening] could not locate any guest headless unit text; the markers have drifted and this guard is inert\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/guest-no-source/lua/check-guest-unit-hardening.lua",
+            "--"
+          ],
+          "code": 1,
+          "stdout_b64": "YmxvY2tlZDpndWVzdC11bml0LW5vdC1mb3VuZAo=",
+          "stderr_b64": "W2NoZWNrLWd1ZXN0LXVuaXQtaGFyZGVuaW5nXSBjb3VsZCBub3QgbG9jYXRlIGFueSBndWVzdCBoZWFkbGVzcyB1bml0IHRleHQ7IHRoZSBtYXJrZXJzIGhhdmUgZHJpZnRlZCBhbmQgdGhpcyBndWFyZCBpcyBpbmVydAo=",
+          "stdout": "blocked:guest-unit-not-found\n",
+          "stderr": "[check-guest-unit-hardening] could not locate any guest headless unit text; the markers have drifted and this guard is inert\n"
+        }
+      }
+    },
+    {
+      "name": "tray-unreadable",
+      "core": false,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {},
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-unreadable/scripts/check-tray-refresh-no-polling.sh",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-unreadable/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 2,
+          "stdout_b64": "YmxvY2tlZDp0cmF5LXJlZnJlc2gtbm8tcG9sbGluZzp1bnJlYWRhYmxlOi90bXAvb3BlbmNvZGUvcGFyZW50LTE1MzMtcGFyaXR5LWZzYl8weTM1L2Nhc2Ugcm9vdHMgd2l0aCBzcGFjZXMvdHJheS11bnJlYWRhYmxlL2NyYXRlcy90aWxsYW5kc2lhcy13aW5kb3dzLXRyYXkvc3JjL25vdGlmeV9pY29uLnJzCg==",
+          "stderr_b64": "",
+          "stdout": "blocked:tray-refresh-no-polling:unreadable:/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-unreadable/crates/tillandsias-windows-tray/src/notify_icon.rs\n",
+          "stderr": ""
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-unreadable/lua/check-tray-refresh-no-polling.lua",
+            "--",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-unreadable/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 2,
+          "stdout_b64": "YmxvY2tlZDp0cmF5LXJlZnJlc2gtbm8tcG9sbGluZzp1bnJlYWRhYmxlOi90bXAvb3BlbmNvZGUvcGFyZW50LTE1MzMtcGFyaXR5LWZzYl8weTM1L2Nhc2Ugcm9vdHMgd2l0aCBzcGFjZXMvdHJheS11bnJlYWRhYmxlL2NyYXRlcy90aWxsYW5kc2lhcy13aW5kb3dzLXRyYXkvc3JjL25vdGlmeV9pY29uLnJzCg==",
+          "stderr_b64": "",
+          "stdout": "blocked:tray-refresh-no-polling:unreadable:/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-unreadable/crates/tillandsias-windows-tray/src/notify_icon.rs\n",
+          "stderr": ""
+        }
+      }
+    },
+    {
+      "name": "tray-crlf-polling-space-path",
+      "core": false,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/tillandsias-windows-tray/src/notify_icon.rs": "cf03445b0295650d51614569842f5f8d01b7a4316c018979f40502233e32c335"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-crlf-polling-space-path/scripts/check-tray-refresh-no-polling.sh",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-crlf-polling-space-path/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnRyYXktcmVmcmVzaC1wb2xsaW5nOjEK",
+          "stderr_b64": "ICBhc3luYyBmbiByZWZyZXNoX3ZtX3N0YXR1cyBjb250YWlucyBhIGxvb3Agb3IgYSBzbGVlcDsgaXQgbXVzdCBiZSBzaW5nbGUtc2hvdCAob3JkZXIgMTQ3KToKICAgIDI6ICAgIGxvb3AgeyBicmVhazsgfQ0K",
+          "stdout": "violation:tray-refresh-polling:1\n",
+          "stderr": "  async fn refresh_vm_status contains a loop or a sleep; it must be single-shot (order 147):\n    2:    loop { break; }\r\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-crlf-polling-space-path/lua/check-tray-refresh-no-polling.lua",
+            "--",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-crlf-polling-space-path/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnRyYXktcmVmcmVzaC1wb2xsaW5nOjEK",
+          "stderr_b64": "ICBhc3luYyBmbiByZWZyZXNoX3ZtX3N0YXR1cyBjb250YWlucyBhIGxvb3Agb3IgYSBzbGVlcDsgaXQgbXVzdCBiZSBzaW5nbGUtc2hvdCAob3JkZXIgMTQ3KToKICAgIDI6ICAgIGxvb3AgeyBicmVhazsgfQ0K",
+          "stdout": "violation:tray-refresh-polling:1\n",
+          "stderr": "  async fn refresh_vm_status contains a loop or a sleep; it must be single-shot (order 147):\n    2:    loop { break; }\r\n"
+        }
+      }
+    },
+    {
+      "name": "podman-crlf-space-path",
+      "core": false,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/fixture/src/hatch.rs": "68daf379f00ace03c97260ab6e6373448ec2a1b18be70c07df456ddda6d9323a"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-crlf-space-path/scripts/check-podman-sync-budgets.sh"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOmVzY2FwZS1oYXRjaC1ncmV3OjIK",
+          "stderr_b64": "ZXhwZWN0ZWQgYXQgbW9zdCAxIGNhbGxlci1vd25lZCBzcGF3bihzKTsgZm91bmQgMjoKY3JhdGVzL2ZpeHR1cmUvc3JjL2hhdGNoLnJzOjE6Zm4gYSgpIHsgbGV0IF8gPSBjbWQuc3Bhd25fY2FsbGVyX293bmVkX2xpZmV0aW1lKCk7IH0NCmNyYXRlcy9maXh0dXJlL3NyYy9oYXRjaC5yczoyOmZuIGIoKSB7IGxldCBfID0gY21kLnNwYXduX2NhbGxlcl9vd25lZF9saWZldGltZSgpOyB9DQo=",
+          "stdout": "violation:escape-hatch-grew:2\n",
+          "stderr": "expected at most 1 caller-owned spawn(s); found 2:\ncrates/fixture/src/hatch.rs:1:fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\ncrates/fixture/src/hatch.rs:2:fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-crlf-space-path/lua/check-podman-sync-budgets.lua",
+            "--"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOmVzY2FwZS1oYXRjaC1ncmV3OjIK",
+          "stderr_b64": "ZXhwZWN0ZWQgYXQgbW9zdCAxIGNhbGxlci1vd25lZCBzcGF3bihzKTsgZm91bmQgMjoKY3JhdGVzL2ZpeHR1cmUvc3JjL2hhdGNoLnJzOjE6Zm4gYSgpIHsgbGV0IF8gPSBjbWQuc3Bhd25fY2FsbGVyX293bmVkX2xpZmV0aW1lKCk7IH0NCmNyYXRlcy9maXh0dXJlL3NyYy9oYXRjaC5yczoyOmZuIGIoKSB7IGxldCBfID0gY21kLnNwYXduX2NhbGxlcl9vd25lZF9saWZldGltZSgpOyB9DQo=",
+          "stdout": "violation:escape-hatch-grew:2\n",
+          "stderr": "expected at most 1 caller-owned spawn(s); found 2:\ncrates/fixture/src/hatch.rs:1:fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\ncrates/fixture/src/hatch.rs:2:fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\n"
+        }
+      }
+    },
+    {
+      "name": "podman-absolute-space-root",
+      "core": false,
+      "note": "",
+      "byte_equal": true,
+      "inputs": {
+        "crates/fixture/src/bad.rs": "dbc6c9f943b463bc57113827ffcfcddba1beb1ff93150f6e49f2dce2c9334c47"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-absolute-space-root/scripts/check-podman-sync-budgets.sh"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOmRpcmVjdC1jb21tYW5kOjEK",
+          "stderr_b64": "L3RtcC9vcGVuY29kZS9wYXJlbnQtMTUzMy1wYXJpdHktZnNiXzB5MzUvY2FzZSByb290cyB3aXRoIHNwYWNlcy9wb2RtYW4tYWJzb2x1dGUtc3BhY2Utcm9vdC9jcmF0ZXMvZml4dHVyZS9zcmMvYmFkLnJzOjI6ICAgIGxldCBtdXQgY21kID0gc3RkOjpwcm9jZXNzOjpDb21tYW5kOjpuZXcoInBvZG1hbiIpOwo=",
+          "stdout": "violation:direct-command:1\n",
+          "stderr": "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-absolute-space-root/crates/fixture/src/bad.rs:2:    let mut cmd = std::process::Command::new(\"podman\");\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-absolute-space-root/lua/check-podman-sync-budgets.lua",
+            "--"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOmRpcmVjdC1jb21tYW5kOjEK",
+          "stderr_b64": "L3RtcC9vcGVuY29kZS9wYXJlbnQtMTUzMy1wYXJpdHktZnNiXzB5MzUvY2FzZSByb290cyB3aXRoIHNwYWNlcy9wb2RtYW4tYWJzb2x1dGUtc3BhY2Utcm9vdC9jcmF0ZXMvZml4dHVyZS9zcmMvYmFkLnJzOjI6ICAgIGxldCBtdXQgY21kID0gc3RkOjpwcm9jZXNzOjpDb21tYW5kOjpuZXcoInBvZG1hbiIpOwo=",
+          "stdout": "violation:direct-command:1\n",
+          "stderr": "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/podman-absolute-space-root/crates/fixture/src/bad.rs:2:    let mut cmd = std::process::Command::new(\"podman\");\n"
+        }
+      }
+    },
+    {
+      "name": "tray-spoof-signature-polling",
+      "core": false,
+      "note": "Safety control: baseline may be false-green; repaired lexer must refuse. This is an intentional improvement, not parity credit.",
+      "byte_equal": false,
+      "inputs": {
+        "crates/tillandsias-windows-tray/src/notify_icon.rs": "f322f9ea355d9df58b3fb64e1aac288bfa2c6ef93f62a47b2e6d813ba74d2549"
+      },
+      "results": {
+        "bash": {
+          "argv": [
+            "bash",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-spoof-signature-polling/scripts/check-tray-refresh-no-polling.sh",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-spoof-signature-polling/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnRyYXktcmVmcmVzaC1wb2xsaW5nOjEK",
+          "stderr_b64": "ICBhc3luYyBmbiByZWZyZXNoX3ZtX3N0YXR1cyBub3QgZm91bmQgaW4gL3RtcC9vcGVuY29kZS9wYXJlbnQtMTUzMy1wYXJpdHktZnNiXzB5MzUvY2FzZSByb290cyB3aXRoIHNwYWNlcy90cmF5LXNwb29mLXNpZ25hdHVyZS1wb2xsaW5nL2NyYXRlcy90aWxsYW5kc2lhcy13aW5kb3dzLXRyYXkvc3JjL25vdGlmeV9pY29uLnJzIOKAlCB0aGUgZ3VhcmQgY2Fubm90IHNlZSB0aGUgZnVuY3Rpb24gaXQgcGlucy4K",
+          "stdout": "violation:tray-refresh-polling:1\n",
+          "stderr": "  async fn refresh_vm_status not found in /tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-spoof-signature-polling/crates/tillandsias-windows-tray/src/notify_icon.rs \u2014 the guard cannot see the function it pins.\n"
+        },
+        "lua": {
+          "argv": [
+            "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+            "script",
+            "run",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-spoof-signature-polling/lua/check-tray-refresh-no-polling.lua",
+            "--",
+            "/tmp/opencode/parent-1533-parity-fsb_0y35/case roots with spaces/tray-spoof-signature-polling/crates/tillandsias-windows-tray/src/notify_icon.rs"
+          ],
+          "code": 1,
+          "stdout_b64": "dmlvbGF0aW9uOnRyYXktcmVmcmVzaC1wb2xsaW5nOjEK",
+          "stderr_b64": "ICBhc3luYyBmbiByZWZyZXNoX3ZtX3N0YXR1cyBjb250YWlucyBhIGxvb3Agb3IgYSBzbGVlcDsgaXQgbXVzdCBiZSBzaW5nbGUtc2hvdCAob3JkZXIgMTQ3KToKICAgIDI6ICAgIGxvb3AgeyBicmVhazsgfQo=",
+          "stdout": "violation:tray-refresh-polling:1\n",
+          "stderr": "  async fn refresh_vm_status contains a loop or a sleep; it must be single-shot (order 147):\n    2:    loop { break; }\n"
+        }
+      }
+    }
+  ]
+}
