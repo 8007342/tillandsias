@@ -1,0 +1,939 @@
+{
+  "scope": "Five alternating pairs of three live decisions with own copied executables, guard/module and input files advised DONTNEED and residency probed with mincore immediately before each bundle. Not globally OS-cold: shared libraries, metadata, system utilities and kernel caches remain warm. Parent full gate may run concurrently. Only files created by this harness are advised; no global cache mutation.",
+  "source_ref": "e6e5e0e640819e888387661b81ef6d4162035bd4",
+  "release_snapshot_source": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/plan-release",
+  "scratch": "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5",
+  "filesystem": "btrfs",
+  "page_size": 4096,
+  "identities": {
+    "bin/plan-release": {
+      "bytes": 7560504,
+      "sha256": "a20e33003876675bd530c7406d624334e3ddf4e8835dff373934c8b2f85d044e"
+    },
+    "bin/bash": {
+      "bytes": 1551104,
+      "sha256": "379c1bfc53d08815975c647ad7da5d19d8e8a8566ce8097c50231c8b116e5e7b"
+    },
+    "scripts/source-agreements.lua": {
+      "bytes": 9822,
+      "sha256": "0683e63f537a70e3cfe5d32442675dab8ddae83c2ed21b18ce5a0badccf26899"
+    },
+    "crates/tillandsias-macos-tray/src/diagnose.rs": {
+      "bytes": 194841,
+      "sha256": "58115c344e58af14d77790bda93f25c9caf449e8c0195153b814f2974dd39f49"
+    },
+    "images/default/config-overlay/mcp/lib-dev-env.sh": {
+      "bytes": 9263,
+      "sha256": "0da895c97ed4618f13a3a6a94072ae4fb0246a09a6d4d310b55674ae5bda6058"
+    },
+    "scripts/dev-inference-ensure.sh": {
+      "bytes": 21795,
+      "sha256": "aeee9938dcd26996f1c5a0acef94e4e62019a942c0077120378af2773a9feeae"
+    },
+    "crates/tillandsias-headless/src/accel_probe.rs": {
+      "bytes": 422648,
+      "sha256": "62ff78c2bbcfcf3dff084c945531124d66bc1eb04a42305e507f36b3f2de461e"
+    },
+    "scripts/check-tray-process-running-naming.sh": {
+      "bytes": 2876,
+      "sha256": "b8e41a04ffc9bd2f4630b7271bcac9f2228f7494d9ac419a145d958e708edb64"
+    },
+    "scripts/check-dev-embed-model-agreement.sh": {
+      "bytes": 3459,
+      "sha256": "a8897221aea5f66a941ec23ccf24654cb739f112d4f902e0fb091f7c10e42926"
+    },
+    "scripts/check-inference-container-name-agreement.sh": {
+      "bytes": 3971,
+      "sha256": "20606a430c275bedc8332fae6e33dfaf06a48aec5a62ec2b42e2a200d1aa1c82"
+    }
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "parity": true,
+      "bundles": {
+        "bash": {
+          "wall_ns": 33052761,
+          "before_residency": {
+            "bin/plan-release": {
+              "pages": 1846,
+              "resident": 0
+            },
+            "bin/bash": {
+              "pages": 379,
+              "resident": 0
+            },
+            "scripts/source-agreements.lua": {
+              "pages": 3,
+              "resident": 0
+            },
+            "crates/tillandsias-macos-tray/src/diagnose.rs": {
+              "pages": 48,
+              "resident": 0
+            },
+            "images/default/config-overlay/mcp/lib-dev-env.sh": {
+              "pages": 3,
+              "resident": 0
+            },
+            "scripts/dev-inference-ensure.sh": {
+              "pages": 6,
+              "resident": 0
+            },
+            "crates/tillandsias-headless/src/accel_probe.rs": {
+              "pages": 104,
+              "resident": 0
+            },
+            "scripts/check-tray-process-running-naming.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-dev-embed-model-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-inference-container-name-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            }
+          },
+          "runs": [
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-tray-process-running-naming.sh"
+              ],
+              "code": 0,
+              "wall_ns": 20547515,
+              "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-dev-embed-model-agreement.sh"
+              ],
+              "code": 0,
+              "wall_ns": 6790952,
+              "stdout_b64": "b2s6ZGV2LWVtYmVkLW1vZGVsLWFncmVlbWVudDpub21pYy1lbWJlZC10ZXh0Cg==",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-inference-container-name-agreement.sh"
+              ],
+              "code": 0,
+              "wall_ns": 5666134,
+              "stdout_b64": "b2s6aW5mZXJlbmNlLWNvbnRhaW5lci1uYW1lLWFncmVlbWVudDp0aWxsYW5kc2lhcy1kZXYtaW5mZXJlbmNlCg==",
+              "stderr_b64": ""
+            }
+          ]
+        },
+        "lua": {
+          "wall_ns": 23303798,
+          "before_residency": {
+            "bin/plan-release": {
+              "pages": 1846,
+              "resident": 0
+            },
+            "bin/bash": {
+              "pages": 379,
+              "resident": 0
+            },
+            "scripts/source-agreements.lua": {
+              "pages": 3,
+              "resident": 0
+            },
+            "crates/tillandsias-macos-tray/src/diagnose.rs": {
+              "pages": 48,
+              "resident": 0
+            },
+            "images/default/config-overlay/mcp/lib-dev-env.sh": {
+              "pages": 3,
+              "resident": 0
+            },
+            "scripts/dev-inference-ensure.sh": {
+              "pages": 6,
+              "resident": 0
+            },
+            "crates/tillandsias-headless/src/accel_probe.rs": {
+              "pages": 104,
+              "resident": 0
+            },
+            "scripts/check-tray-process-running-naming.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-dev-embed-model-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-inference-container-name-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            }
+          },
+          "runs": [
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "tray_process_naming",
+                "crates/tillandsias-macos-tray/src/diagnose.rs"
+              ],
+              "code": 0,
+              "wall_ns": 17910283,
+              "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "dev_embed_model_agreement",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/images/default/config-overlay/mcp/lib-dev-env.sh",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/dev-inference-ensure.sh"
+              ],
+              "code": 0,
+              "wall_ns": 2334355,
+              "stdout_b64": "b2s6ZGV2LWVtYmVkLW1vZGVsLWFncmVlbWVudDpub21pYy1lbWJlZC10ZXh0Cg==",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "inference_container_name_agreement",
+                "scripts/dev-inference-ensure.sh",
+                "crates/tillandsias-headless/src/accel_probe.rs"
+              ],
+              "code": 0,
+              "wall_ns": 3028158,
+              "stdout_b64": "b2s6aW5mZXJlbmNlLWNvbnRhaW5lci1uYW1lLWFncmVlbWVudDp0aWxsYW5kc2lhcy1kZXYtaW5mZXJlbmNlCg==",
+              "stderr_b64": ""
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 2,
+      "parity": true,
+      "bundles": {
+        "lua": {
+          "wall_ns": 37929615,
+          "before_residency": {
+            "bin/plan-release": {
+              "pages": 1846,
+              "resident": 0
+            },
+            "bin/bash": {
+              "pages": 379,
+              "resident": 0
+            },
+            "scripts/source-agreements.lua": {
+              "pages": 3,
+              "resident": 0
+            },
+            "crates/tillandsias-macos-tray/src/diagnose.rs": {
+              "pages": 48,
+              "resident": 0
+            },
+            "images/default/config-overlay/mcp/lib-dev-env.sh": {
+              "pages": 3,
+              "resident": 0
+            },
+            "scripts/dev-inference-ensure.sh": {
+              "pages": 6,
+              "resident": 0
+            },
+            "crates/tillandsias-headless/src/accel_probe.rs": {
+              "pages": 104,
+              "resident": 0
+            },
+            "scripts/check-tray-process-running-naming.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-dev-embed-model-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-inference-container-name-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            }
+          },
+          "runs": [
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "tray_process_naming",
+                "crates/tillandsias-macos-tray/src/diagnose.rs"
+              ],
+              "code": 0,
+              "wall_ns": 29014848,
+              "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "dev_embed_model_agreement",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/images/default/config-overlay/mcp/lib-dev-env.sh",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/dev-inference-ensure.sh"
+              ],
+              "code": 0,
+              "wall_ns": 3722073,
+              "stdout_b64": "b2s6ZGV2LWVtYmVkLW1vZGVsLWFncmVlbWVudDpub21pYy1lbWJlZC10ZXh0Cg==",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "inference_container_name_agreement",
+                "scripts/dev-inference-ensure.sh",
+                "crates/tillandsias-headless/src/accel_probe.rs"
+              ],
+              "code": 0,
+              "wall_ns": 5145428,
+              "stdout_b64": "b2s6aW5mZXJlbmNlLWNvbnRhaW5lci1uYW1lLWFncmVlbWVudDp0aWxsYW5kc2lhcy1kZXYtaW5mZXJlbmNlCg==",
+              "stderr_b64": ""
+            }
+          ]
+        },
+        "bash": {
+          "wall_ns": 19880936,
+          "before_residency": {
+            "bin/plan-release": {
+              "pages": 1846,
+              "resident": 0
+            },
+            "bin/bash": {
+              "pages": 379,
+              "resident": 0
+            },
+            "scripts/source-agreements.lua": {
+              "pages": 3,
+              "resident": 0
+            },
+            "crates/tillandsias-macos-tray/src/diagnose.rs": {
+              "pages": 48,
+              "resident": 0
+            },
+            "images/default/config-overlay/mcp/lib-dev-env.sh": {
+              "pages": 3,
+              "resident": 0
+            },
+            "scripts/dev-inference-ensure.sh": {
+              "pages": 6,
+              "resident": 0
+            },
+            "crates/tillandsias-headless/src/accel_probe.rs": {
+              "pages": 104,
+              "resident": 0
+            },
+            "scripts/check-tray-process-running-naming.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-dev-embed-model-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-inference-container-name-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            }
+          },
+          "runs": [
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-tray-process-running-naming.sh"
+              ],
+              "code": 0,
+              "wall_ns": 7577013,
+              "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-dev-embed-model-agreement.sh"
+              ],
+              "code": 0,
+              "wall_ns": 5710241,
+              "stdout_b64": "b2s6ZGV2LWVtYmVkLW1vZGVsLWFncmVlbWVudDpub21pYy1lbWJlZC10ZXh0Cg==",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-inference-container-name-agreement.sh"
+              ],
+              "code": 0,
+              "wall_ns": 6556946,
+              "stdout_b64": "b2s6aW5mZXJlbmNlLWNvbnRhaW5lci1uYW1lLWFncmVlbWVudDp0aWxsYW5kc2lhcy1kZXYtaW5mZXJlbmNlCg==",
+              "stderr_b64": ""
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 3,
+      "parity": true,
+      "bundles": {
+        "bash": {
+          "wall_ns": 27625377,
+          "before_residency": {
+            "bin/plan-release": {
+              "pages": 1846,
+              "resident": 0
+            },
+            "bin/bash": {
+              "pages": 379,
+              "resident": 0
+            },
+            "scripts/source-agreements.lua": {
+              "pages": 3,
+              "resident": 0
+            },
+            "crates/tillandsias-macos-tray/src/diagnose.rs": {
+              "pages": 48,
+              "resident": 0
+            },
+            "images/default/config-overlay/mcp/lib-dev-env.sh": {
+              "pages": 3,
+              "resident": 0
+            },
+            "scripts/dev-inference-ensure.sh": {
+              "pages": 6,
+              "resident": 0
+            },
+            "crates/tillandsias-headless/src/accel_probe.rs": {
+              "pages": 104,
+              "resident": 0
+            },
+            "scripts/check-tray-process-running-naming.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-dev-embed-model-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-inference-container-name-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            }
+          },
+          "runs": [
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-tray-process-running-naming.sh"
+              ],
+              "code": 0,
+              "wall_ns": 8330777,
+              "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-dev-embed-model-agreement.sh"
+              ],
+              "code": 0,
+              "wall_ns": 11049198,
+              "stdout_b64": "b2s6ZGV2LWVtYmVkLW1vZGVsLWFncmVlbWVudDpub21pYy1lbWJlZC10ZXh0Cg==",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-inference-container-name-agreement.sh"
+              ],
+              "code": 0,
+              "wall_ns": 8219058,
+              "stdout_b64": "b2s6aW5mZXJlbmNlLWNvbnRhaW5lci1uYW1lLWFncmVlbWVudDp0aWxsYW5kc2lhcy1kZXYtaW5mZXJlbmNlCg==",
+              "stderr_b64": ""
+            }
+          ]
+        },
+        "lua": {
+          "wall_ns": 32917664,
+          "before_residency": {
+            "bin/plan-release": {
+              "pages": 1846,
+              "resident": 0
+            },
+            "bin/bash": {
+              "pages": 379,
+              "resident": 0
+            },
+            "scripts/source-agreements.lua": {
+              "pages": 3,
+              "resident": 0
+            },
+            "crates/tillandsias-macos-tray/src/diagnose.rs": {
+              "pages": 48,
+              "resident": 0
+            },
+            "images/default/config-overlay/mcp/lib-dev-env.sh": {
+              "pages": 3,
+              "resident": 0
+            },
+            "scripts/dev-inference-ensure.sh": {
+              "pages": 6,
+              "resident": 0
+            },
+            "crates/tillandsias-headless/src/accel_probe.rs": {
+              "pages": 104,
+              "resident": 0
+            },
+            "scripts/check-tray-process-running-naming.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-dev-embed-model-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-inference-container-name-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            }
+          },
+          "runs": [
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "tray_process_naming",
+                "crates/tillandsias-macos-tray/src/diagnose.rs"
+              ],
+              "code": 0,
+              "wall_ns": 10984486,
+              "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "dev_embed_model_agreement",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/images/default/config-overlay/mcp/lib-dev-env.sh",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/dev-inference-ensure.sh"
+              ],
+              "code": 0,
+              "wall_ns": 11878249,
+              "stdout_b64": "b2s6ZGV2LWVtYmVkLW1vZGVsLWFncmVlbWVudDpub21pYy1lbWJlZC10ZXh0Cg==",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "inference_container_name_agreement",
+                "scripts/dev-inference-ensure.sh",
+                "crates/tillandsias-headless/src/accel_probe.rs"
+              ],
+              "code": 0,
+              "wall_ns": 10014020,
+              "stdout_b64": "b2s6aW5mZXJlbmNlLWNvbnRhaW5lci1uYW1lLWFncmVlbWVudDp0aWxsYW5kc2lhcy1kZXYtaW5mZXJlbmNlCg==",
+              "stderr_b64": ""
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 4,
+      "parity": true,
+      "bundles": {
+        "lua": {
+          "wall_ns": 22669056,
+          "before_residency": {
+            "bin/plan-release": {
+              "pages": 1846,
+              "resident": 0
+            },
+            "bin/bash": {
+              "pages": 379,
+              "resident": 0
+            },
+            "scripts/source-agreements.lua": {
+              "pages": 3,
+              "resident": 0
+            },
+            "crates/tillandsias-macos-tray/src/diagnose.rs": {
+              "pages": 48,
+              "resident": 0
+            },
+            "images/default/config-overlay/mcp/lib-dev-env.sh": {
+              "pages": 3,
+              "resident": 0
+            },
+            "scripts/dev-inference-ensure.sh": {
+              "pages": 6,
+              "resident": 0
+            },
+            "crates/tillandsias-headless/src/accel_probe.rs": {
+              "pages": 104,
+              "resident": 0
+            },
+            "scripts/check-tray-process-running-naming.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-dev-embed-model-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-inference-container-name-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            }
+          },
+          "runs": [
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "tray_process_naming",
+                "crates/tillandsias-macos-tray/src/diagnose.rs"
+              ],
+              "code": 0,
+              "wall_ns": 15672717,
+              "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "dev_embed_model_agreement",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/images/default/config-overlay/mcp/lib-dev-env.sh",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/dev-inference-ensure.sh"
+              ],
+              "code": 0,
+              "wall_ns": 3451637,
+              "stdout_b64": "b2s6ZGV2LWVtYmVkLW1vZGVsLWFncmVlbWVudDpub21pYy1lbWJlZC10ZXh0Cg==",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "inference_container_name_agreement",
+                "scripts/dev-inference-ensure.sh",
+                "crates/tillandsias-headless/src/accel_probe.rs"
+              ],
+              "code": 0,
+              "wall_ns": 3511833,
+              "stdout_b64": "b2s6aW5mZXJlbmNlLWNvbnRhaW5lci1uYW1lLWFncmVlbWVudDp0aWxsYW5kc2lhcy1kZXYtaW5mZXJlbmNlCg==",
+              "stderr_b64": ""
+            }
+          ]
+        },
+        "bash": {
+          "wall_ns": 24749952,
+          "before_residency": {
+            "bin/plan-release": {
+              "pages": 1846,
+              "resident": 0
+            },
+            "bin/bash": {
+              "pages": 379,
+              "resident": 0
+            },
+            "scripts/source-agreements.lua": {
+              "pages": 3,
+              "resident": 0
+            },
+            "crates/tillandsias-macos-tray/src/diagnose.rs": {
+              "pages": 48,
+              "resident": 0
+            },
+            "images/default/config-overlay/mcp/lib-dev-env.sh": {
+              "pages": 3,
+              "resident": 0
+            },
+            "scripts/dev-inference-ensure.sh": {
+              "pages": 6,
+              "resident": 0
+            },
+            "crates/tillandsias-headless/src/accel_probe.rs": {
+              "pages": 104,
+              "resident": 0
+            },
+            "scripts/check-tray-process-running-naming.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-dev-embed-model-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-inference-container-name-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            }
+          },
+          "runs": [
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-tray-process-running-naming.sh"
+              ],
+              "code": 0,
+              "wall_ns": 12896273,
+              "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-dev-embed-model-agreement.sh"
+              ],
+              "code": 0,
+              "wall_ns": 5545274,
+              "stdout_b64": "b2s6ZGV2LWVtYmVkLW1vZGVsLWFncmVlbWVudDpub21pYy1lbWJlZC10ZXh0Cg==",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-inference-container-name-agreement.sh"
+              ],
+              "code": 0,
+              "wall_ns": 6266311,
+              "stdout_b64": "b2s6aW5mZXJlbmNlLWNvbnRhaW5lci1uYW1lLWFncmVlbWVudDp0aWxsYW5kc2lhcy1kZXYtaW5mZXJlbmNlCg==",
+              "stderr_b64": ""
+            }
+          ]
+        }
+      }
+    },
+    {
+      "round": 5,
+      "parity": true,
+      "bundles": {
+        "bash": {
+          "wall_ns": 27569991,
+          "before_residency": {
+            "bin/plan-release": {
+              "pages": 1846,
+              "resident": 0
+            },
+            "bin/bash": {
+              "pages": 379,
+              "resident": 0
+            },
+            "scripts/source-agreements.lua": {
+              "pages": 3,
+              "resident": 0
+            },
+            "crates/tillandsias-macos-tray/src/diagnose.rs": {
+              "pages": 48,
+              "resident": 0
+            },
+            "images/default/config-overlay/mcp/lib-dev-env.sh": {
+              "pages": 3,
+              "resident": 0
+            },
+            "scripts/dev-inference-ensure.sh": {
+              "pages": 6,
+              "resident": 0
+            },
+            "crates/tillandsias-headless/src/accel_probe.rs": {
+              "pages": 104,
+              "resident": 0
+            },
+            "scripts/check-tray-process-running-naming.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-dev-embed-model-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-inference-container-name-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            }
+          },
+          "runs": [
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-tray-process-running-naming.sh"
+              ],
+              "code": 0,
+              "wall_ns": 15591831,
+              "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-dev-embed-model-agreement.sh"
+              ],
+              "code": 0,
+              "wall_ns": 5122745,
+              "stdout_b64": "b2s6ZGV2LWVtYmVkLW1vZGVsLWFncmVlbWVudDpub21pYy1lbWJlZC10ZXh0Cg==",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/bash",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/check-inference-container-name-agreement.sh"
+              ],
+              "code": 0,
+              "wall_ns": 6819257,
+              "stdout_b64": "b2s6aW5mZXJlbmNlLWNvbnRhaW5lci1uYW1lLWFncmVlbWVudDp0aWxsYW5kc2lhcy1kZXYtaW5mZXJlbmNlCg==",
+              "stderr_b64": ""
+            }
+          ]
+        },
+        "lua": {
+          "wall_ns": 25193793,
+          "before_residency": {
+            "bin/plan-release": {
+              "pages": 1846,
+              "resident": 0
+            },
+            "bin/bash": {
+              "pages": 379,
+              "resident": 0
+            },
+            "scripts/source-agreements.lua": {
+              "pages": 3,
+              "resident": 0
+            },
+            "crates/tillandsias-macos-tray/src/diagnose.rs": {
+              "pages": 48,
+              "resident": 0
+            },
+            "images/default/config-overlay/mcp/lib-dev-env.sh": {
+              "pages": 3,
+              "resident": 0
+            },
+            "scripts/dev-inference-ensure.sh": {
+              "pages": 6,
+              "resident": 0
+            },
+            "crates/tillandsias-headless/src/accel_probe.rs": {
+              "pages": 104,
+              "resident": 0
+            },
+            "scripts/check-tray-process-running-naming.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-dev-embed-model-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            },
+            "scripts/check-inference-container-name-agreement.sh": {
+              "pages": 1,
+              "resident": 0
+            }
+          },
+          "runs": [
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "tray_process_naming",
+                "crates/tillandsias-macos-tray/src/diagnose.rs"
+              ],
+              "code": 0,
+              "wall_ns": 19559480,
+              "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "dev_embed_model_agreement",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/images/default/config-overlay/mcp/lib-dev-env.sh",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/dev-inference-ensure.sh"
+              ],
+              "code": 0,
+              "wall_ns": 2491468,
+              "stdout_b64": "b2s6ZGV2LWVtYmVkLW1vZGVsLWFncmVlbWVudDpub21pYy1lbWJlZC10ZXh0Cg==",
+              "stderr_b64": ""
+            },
+            {
+              "argv": [
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/bin/plan-release",
+                "script",
+                "run",
+                "/home/tlatoani/codex/tillandsias-lua-work/1484-uf29/target/parent-cold-source-5655p3j5/scripts/source-agreements.lua",
+                "--",
+                "inference_container_name_agreement",
+                "scripts/dev-inference-ensure.sh",
+                "crates/tillandsias-headless/src/accel_probe.rs"
+              ],
+              "code": 0,
+              "wall_ns": 3114508,
+              "stdout_b64": "b2s6aW5mZXJlbmNlLWNvbnRhaW5lci1uYW1lLWFncmVlbWVudDp0aWxsYW5kc2lhcy1kZXYtaW5mZXJlbmNlCg==",
+              "stderr_b64": ""
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "all_byte_parity": true,
+  "all_owned_files_nonresident_before_every_bundle": true
+}
