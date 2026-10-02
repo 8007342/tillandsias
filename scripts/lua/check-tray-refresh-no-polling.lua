@@ -7,6 +7,14 @@
 local src = arg[1] or env.get("TILLANDSIAS_TRAY_REFRESH_SOURCE") or "crates/tillandsias-windows-tray/src/notify_icon.rs"
 local ok, source = pcall(fs.read, src)
 if not ok then verdict.emit("blocked:tray-refresh-no-polling:unreadable:" .. src, 2) end
+-- Rust's `str::lines()` intentionally drops CR.  Scan masks may normalize, but
+-- diagnostics are a byte contract with the legacy grep output, so retain it.
+local function raw_lines(s)
+    local out = {}
+    for line in (s .. "\n"):gmatch("(.-)\n") do out[#out + 1] = line end
+    if s:sub(-1) == "\n" then out[#out] = nil end
+    return out
+end
 local function mask_rust(source)
     local i, state, block_depth, raw_hashes, out = 1, "code", 0, 0, {}
     while i <= #source do
@@ -100,7 +108,7 @@ for _, fn in ipairs({ "async fn refresh_vm_status", "async fn refresh_github_log
         violations = violations + 1
     else
         local bad, n = {}, 0
-        local original_lines = text.lines(original)
+        local original_lines = raw_lines(original)
         for line_no, line in ipairs(text.lines(body)) do
             if text.is_match(line, "\\b(loop|while)\\b|sleep\\(") then
                 n = n + 1; if n <= 3 then bad[#bad + 1] = line_no .. ":" .. original_lines[line_no] end

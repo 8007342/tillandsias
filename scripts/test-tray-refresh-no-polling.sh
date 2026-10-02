@@ -103,5 +103,15 @@ awk -v fn='async fn refresh_vm_status' -v ins='    loop { break; }' '
 [ "$(_rc "$W/m8.rs")" != "0" ] && ok "a real loop is caught after comment and raw-string spoofing" \
     || bad "the guard accepted a real loop after spoof material"
 
+# ── 9. CRLF source keeps the legacy diagnostic bytes ───────────────────────
+awk '{ printf "%s\r\n", $0 }' "$W/m3.rs" > "$W/m9-crlf.rs"
+if raw="$(TILLANDSIAS_TRAY_REFRESH_SOURCE="$W/m9-crlf.rs" "$PLAN" script run "$LUA" 2>&1)"; then
+    bad "CRLF polling source unexpectedly passed"
+elif printf '%s' "$raw" | grep -q "$(printf '\r')"; then
+    ok "CRLF polling diagnostic retains the matched source CR byte"
+else
+    bad "CRLF polling diagnostic normalized the matched source line"
+fi
+
 echo "tray-refresh-no-polling: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

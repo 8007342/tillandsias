@@ -24,15 +24,22 @@ if root:sub(1, 1) == "/" then
 else
     files = fs.walk(root, { suffix = ".rs" })
 end
+local function raw_lines(s)
+    local out = {}
+    for line in (s .. "\n"):gmatch("(.-)\n") do out[#out + 1] = line end
+    if s:sub(-1) == "\n" then out[#out] = nil end
+    return out
+end
 local function lines_matching(pattern, filter, include_tests)
     local matches = {}
     for _, file in ipairs(files) do
         if include_tests or not text.is_match(file, [[/tests?/]]) then
             local ok, source = pcall(fs.read, file)
             if ok then
-                for n, line in ipairs(text.lines(source)) do
+                local normalized, raw = text.lines(source), raw_lines(source)
+                for n, line in ipairs(normalized) do
                     if text.is_match(line, pattern) and (not filter or filter(file, line)) then
-                        matches[#matches + 1] = file .. ":" .. n .. ":" .. line
+                        matches[#matches + 1] = file .. ":" .. n .. ":" .. raw[n]
                     end
                 end
             end

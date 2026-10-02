@@ -10,12 +10,18 @@ local units = {
     { "crates/tillandsias-vm-layer/src/wsl.rs", "cat > /etc/systemd/system/tillandsias-headless.service", "systemctl enable tillandsias-headless.service" },
 }
 local pat = "NoNewPrivileges|CapabilityBoundingSet|AmbientCapabilities|ProtectSystem|ProtectHome|PrivateTmp|PrivateDevices|PrivateUsers|RestrictNamespaces|SystemCallFilter|ReadOnlyPaths|ProtectKernelModules|ProtectKernelTunables|LockPersonality|MemoryDenyWriteExecute|RestrictSUIDSGID"
+local function raw_lines(s)
+    local out = {}
+    for line in (s .. "\n"):gmatch("(.-)\n") do out[#out + 1] = line end
+    if s:sub(-1) == "\n" then out[#out] = nil end
+    return out
+end
 local hits, found = 0, false
 for _, unit in ipairs(units) do
     local ok, source = pcall(fs.read, path(unit[1]))
     if ok then
         local body, inside = {}, false
-        for _, line in ipairs(text.lines(source)) do
+        for _, line in ipairs(raw_lines(source)) do
             if line:find(unit[2], 1, true) then inside = true end
             if inside then body[#body + 1] = line end
             if inside and line:find(unit[3], 1, true) and not line:find(unit[2], 1, true) then break end
