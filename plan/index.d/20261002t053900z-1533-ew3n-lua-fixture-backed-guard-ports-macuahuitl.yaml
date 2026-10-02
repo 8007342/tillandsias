@@ -1,0 +1,48 @@
+packets:
+  - packet_id: lua-port-guest-hardening-tray-refresh-and-podman-budget-deciders
+    order: 1533-ew3n
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [lua, migration, tests, gate]
+    estimated_hours: 5
+    owned_files:
+      - scripts/check-guest-unit-hardening.sh
+      - scripts/check-tray-refresh-no-polling.sh
+      - scripts/check-podman-sync-budgets.sh
+      - scripts/lua/check-guest-unit-hardening.lua
+      - scripts/lua/check-tray-refresh-no-polling.lua
+      - scripts/lua/check-podman-sync-budgets.lua
+      - scripts/test-guest-unit-hardening.sh
+      - scripts/test-tray-refresh-no-polling.sh
+      - scripts/test-podman-sync-budgets.sh
+    title: "Retire three fixture-backed Bash source deciders through the typed Lua runner"
+    context: |
+      Astra's bounded candidates in the agreed 12-hour plan: guest unit hardening,
+      tray refresh no-polling, then Podman synchronous budgets if time permits.
+      MEASURED baseline on 2026-10-02 at 7cbc38c1b: guest fixture 3/3, tray
+      fixture 6/6, Podman budgets 6/6 pass. These are source scans, not evidence
+      of native Windows tray or guest runtime behavior. Preserve static scan
+      boundaries, comments exclusions, reviewed escape-hatch budget and missing
+      input behavior. Do not rewrite the guarded production code to fit a port.
+    outcome: "The three production decisions are Lua-authoritative, with the existing fixtures and diagnostic interfaces preserved."
+    exit_criteria:
+      - "Port and delete the three named Bash deciders; update every live caller, step, litmus binding and shell/pipe floor for each removal, with no silent Bash fallback."
+      - "The guest 3, tray 6 and Podman 6 baseline fixture arms all exercise the production Lua decision and preserve their tested diagnostics/exit behavior."
+      - "Compare baseline and Lua stdout/stderr/status on live and mutated scratch cases, including absent input, comments, accessor boundaries, brace scoping and source-filter exclusions. Document intentional pre-existing nondeterministic enumeration rather than inventing parity."
+      - "Targeted tests and the integrated full build gate pass; count only actual shell removals and declare native-platform evidence unmeasured."
+    verifiable_closure: |
+      bash scripts/test-guest-unit-hardening.sh; bash scripts/test-tray-refresh-no-polling.sh;
+      bash scripts/test-podman-sync-budgets.sh; Lua/Bash parity fixtures and shell
+      ratchet checks, followed by a full PR integration gate.
+    unscoreable: "pinned-by-its-own-fixture: the three existing named fixture runners"
+    next_action: "After 1484-uf29 integration, assign Terra the guest/tray ports first, then Podman budgets; checkpoint independently and record any unfinished port honestly."
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Shared build/local-ci and binding files may receive only caller updates.
+      A partial slice may land fewer guards with a remaining-work event; do not close early.
+    provenance: "Operator-approved 12-hour plan and Astra research; baseline fixtures measured by parent 2026-10-02."
