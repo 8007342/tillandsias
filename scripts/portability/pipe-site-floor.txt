@@ -359,7 +359,6 @@ scripts scripts/check-build-cache-sweep.sh 3
 scripts scripts/check-ca-path-literals.sh 2
 scripts scripts/check-capability-row.sh 17
 scripts scripts/check-carry-forward.sh 6
-scripts scripts/check-centicolon-ratchet.sh 1
 scripts scripts/check-cheatsheet-frontmatter.sh 1
 scripts scripts/check-cheatsheet-source-anchors.sh 2
 scripts scripts/check-claim-confirmed.sh 6

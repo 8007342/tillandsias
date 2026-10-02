@@ -14,7 +14,6 @@ scripts/check-ca-bind-migration.sh
 scripts/check-ca-path-literals.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
-scripts/check-centicolon-ratchet.sh
 scripts/check-cheatsheet-frontmatter.sh
 scripts/check-cheatsheet-refs.sh
 scripts/check-cheatsheet-source-anchors.sh

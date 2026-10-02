@@ -10,6 +10,7 @@
 //
 //   verdict.ok(name, ...)             stdout `ok:<name>[:<arg>...]`            exit 0
 //   verdict.skip(name, ...)           stdout `skip:<name>[:<arg>...]`          exit 0
+//   verdict.advisory(line)             stdout `<line> (advisory)`               exit 0
 //   verdict.refused(name, detail?)    stdout `refused:<name>`, detail on stderr exit 1
 //   verdict.blocked(name, detail?)    stdout `blocked:<name>`, detail on stderr exit 2
 //   verdict.could_not_run(name, d?)   stdout `could-not-run:<name>`, d on stderr exit 3
@@ -39,6 +40,8 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Ok,
+    /// the guard reported an advisory outcome (`… (advisory)`), never a failure
+    Advisory,
     /// the guard ran and named its own skip (`skip:` line) — never a failure
     Skip,
     /// the guard ran and said it could not ask (`could-not-run:` line)
@@ -57,6 +60,7 @@ impl Kind {
     pub fn token(self) -> &'static str {
         match self {
             Kind::Ok => "ok",
+            Kind::Advisory => "advisory",
             Kind::Skip => "skip",
             Kind::CouldNotRun => "could-not-run",
             Kind::TimedOut => "timed-out",
@@ -101,6 +105,12 @@ fn runner_not_found(text: &str) -> bool {
 /// both and RAN); the guard's own words win over the runner's rc; rc 124 is a
 /// deadline only when the guard said neither.
 pub fn classify(rc: i32, status: Option<&str>, text: &str) -> Kind {
+    // Advisory lines are deliberately verbatim legacy interfaces rather than a
+    // new prefix. Only a successful, non-timeout run may report one: otherwise
+    // an advisory-looking diagnostic could mask the established failure order.
+    if rc == 0 && status != Some("timed_out") && text.lines().any(|l| l.ends_with(" (advisory)")) {
+        return Kind::Advisory;
+    }
     if rc == 0 && status != Some("timed_out") {
         return Kind::Ok;
     }
@@ -265,6 +275,33 @@ fn register(
                     line: parts.join(":"),
                     detail: None,
                     code,
+                });
+                Err::<(), _>(LuaError::RuntimeError(VERDICT_EXIT.to_string()))
+            })?,
+        )?;
+    }
+    // An advisory is a successful report whose established output is not a
+    // house-prefix verdict. Keep it verbatim: consumers grep this line.
+    {
+        let slot = slot.clone();
+        verdict.set(
+            "advisory",
+            lua.create_function(move |_, line: String| {
+                if !line.ends_with(" (advisory)") {
+                    return Err(LuaError::RuntimeError(
+                        "verdict.advisory: line must end with ' (advisory)'".into(),
+                    ));
+                }
+                if line.contains(['\n', '\r']) {
+                    return Err(LuaError::RuntimeError(
+                        "verdict.advisory: line must not contain a newline or carriage return"
+                            .into(),
+                    ));
+                }
+                slot.lock().unwrap().get_or_insert(Verdict {
+                    line,
+                    detail: None,
+                    code: 0,
                 });
                 Err::<(), _>(LuaError::RuntimeError(VERDICT_EXIT.to_string()))
             })?,
@@ -693,7 +730,7 @@ fn run_to_verdict(path: &str, src: &str, args: &[String]) -> (String, Option<Str
             format!("refused:no-verdict:{name}"),
             Some(format!(
                 "{path} ended without calling verdict.ok/skip/refused/blocked/could_not_run — \
-                 a decider that says nothing cannot be read as green (1384-bqhy)"
+                  a decider that says nothing cannot be read as green (1384-bqhy)"
             )),
             1,
         ),
@@ -861,6 +898,31 @@ mod tests {
     #[test]
     fn classify_follows_the_doors_precedence() {
         assert_eq!(classify(0, None, ""), Kind::Ok);
+        assert_eq!(
+            classify(0, None, "centicolon: R=1 regime=baseline (advisory)"),
+            Kind::Advisory
+        );
+        // An advisory-shaped diagnostic cannot hide a failure or timeout.
+        assert_eq!(
+            classify(1, None, "centicolon: R=1 regime=baseline (advisory)"),
+            Kind::Refused
+        );
+        assert_eq!(
+            classify(124, None, "centicolon: R=1 regime=baseline (advisory)"),
+            Kind::TimedOut
+        );
+        assert_eq!(
+            classify(127, None, "centicolon: R=1 regime=baseline (advisory)"),
+            Kind::CannotStart
+        );
+        assert_eq!(
+            classify(
+                0,
+                Some("timed_out"),
+                "centicolon: R=1 regime=baseline (advisory)"
+            ),
+            Kind::TimedOut
+        );
         assert_eq!(classify(1, None, "skip:x:y\ncould-not-run:x"), Kind::Skip);
         assert_eq!(
             classify(3, None, "could-not-run:gate-memory:no-meminfo"),
