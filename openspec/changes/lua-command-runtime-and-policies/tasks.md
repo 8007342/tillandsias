@@ -95,6 +95,11 @@ retirement, Lua land rewrite or draft-spec activation is implied.
       902-5bf9 litmus `steps:`; 1384-j3cv build.sh launcher.
       <!-- Runner/ratchet/narrowed pilot landed; split preflight 1520-z95v,
            litmus steps and build.sh launcher remain open. -->
+      (Streaming/lifetime child `1534-puyz` subsequently landed in PR #207
+      after independent parent controls and a forced integration gate.
+      Runtime parent `1384-aixy` remains open for composition `1538-pwdr`,
+      trace `1539-dt84` and unmet native-platform evidence; its preflight
+      dependent `1520-z95v` is not prematurely unblocked.)
 - [ ] 4.3 Retire the PreToolUse hook when its printed condition holds
       (1443-8pur and 1443-r4cj closed on every locus; zero deny/ask from
       `caller=pretooluse` for fourteen fleet days; operator flips the Bash

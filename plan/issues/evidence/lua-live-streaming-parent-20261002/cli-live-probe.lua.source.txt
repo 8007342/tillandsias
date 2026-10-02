@@ -1,0 +1,14 @@
+-- @class observing
+local seen, errs = {}, {}
+local p = proc.spawn{argv={"sh", arg[1], arg[2]},timeout_ms=4000}
+p:on_line("stdout",function(line)
+    seen[#seen+1]=line
+    if line=="ready\r" then fs.write("ack", "callback-before-child-exit\n") end
+end)
+p:on_line("stderr",function(line) errs[#errs+1]=line end)
+local r=p:wait()
+assert(r.ok and r.status=="exited" and r.code==0)
+assert(#seen==2 and seen[1]=="ready\r" and seen[2]=="released-by-live-callback")
+assert(#errs==1 and errs[1]=="stderr-only")
+assert(r.stdout=="ready\r\nreleased-by-live-callback\n" and r.stderr=="stderr-only\n")
+verdict.ok("parent-cli-live-ack",#seen,#errs)

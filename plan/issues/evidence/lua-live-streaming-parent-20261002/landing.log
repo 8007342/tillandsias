@@ -1,0 +1,27 @@
+From https://github.com/8007342/tillandsias
+ * branch                linux-next -> FETCH_HEAD
+Already up to date.
+Already up to date.
+land: attempt 1/3 — fetch + integrate onto origin/linux-next
+land: attempt 1 — unpushed set has 2 merge commit(s); MERGING (rebase would replay them)
+land: attempt 1 — ok:native-lint:not-in-scope
+land: attempt 1 — gate (./build.sh --check, log: /home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/.git/tillandsias-land-gate-attempt-1.log)
+ok:unrunnable-platform-arms:0 of 64 changed paths
+land: NOTICE — 5 litmus spec(s) assert on the files you are pushing, and ./build.sh --check ran NONE of them (748-tkjx, 1201-9it2):
+         spec:ci-release  test:litmus:fragment-status-loss-attribution-shape  binding:bound
+         spec:forge-environment-discoverability  test:litmus:capability-manifest-guard  binding:bound
+         spec:forge-environment-discoverability  test:litmus:expert-groundtruth-harness  binding:bound
+         spec:forge-environment-discoverability  test:litmus:expert-refresh-cargo-target-shape  binding:bound
+         spec:forge-environment-discoverability  test:litmus:methodology-path-query-citability  binding:bound
+         spec:forge-environment-discoverability  test:litmus:plan-answer-envelope-citability  binding:bound
+         spec:git-mirror-service  test:litmus:ssh-lane-sidecar-shape  binding:bound
+         spec:methodology-accountability  test:litmus:order-id-collision-free  binding:bound
+         spec:methodology-accountability  test:litmus:plan-only-lane-structural  binding:bound
+         spec:observability-metrics  test:litmus:guest-container-metrics-wire-shape  binding:bound
+         Advisory, refusing nothing. To run them: scripts/run-litmus-test.sh <spec> --phase pre-build
+         The release tier runs them; this gate does not, and that is deliberate.
+land: attempt 1 — push
+ok:land:7b829b205:attempt-1
+From https://github.com/8007342/tillandsias
+ * branch                linux-next -> FETCH_HEAD
+{"mergeCommit":null,"mergedAt":null,"state":"OPEN","url":"https://github.com/8007342/tillandsias/pull/207"}

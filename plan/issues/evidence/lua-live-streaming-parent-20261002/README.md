@@ -2,10 +2,24 @@
 
 @trace order:1534-puyz
 
+## Verified landing
+
+PR #207 is merged, and remote `linux-next` at
+`7b829b20583130067432069ecf0bc0586af4ce86` contains the reviewed advisory
+repair and behavior-preserving strict supervisor lint repair. The serialized
+forced integration gate exited 0 in 1038.469 s. `landing-status.json`,
+`landing.log` and `merge-confirmation.json` retain that result and subsequent
+merge confirmation. The driver observed GitHub's asynchronous merge state
+as OPEN immediately after its push; the later confirmation proves MERGED.
+The bounded 1534 packet is closed, not the larger 1384 runtime parent.
+
+## Targeted independent controls
+
 The parent reran the final candidate's Lua/policy targets with default
 parallelism: 83/83, executor targets 28/28, script-run unit tests 3/3 and
-script-run shell checks 7/7. These are targeted results, not a full gate or
-native macOS/Windows attestation.
+script-run shell checks 7/7. These 114 Rust tests and seven shell checks are
+targeted results, distinct from the full gate and not a native macOS/Windows
+attestation.
 
 `advisory-before.json` and `advisory-after.json` use the same Lua source:
 a caught valid advisory followed by a process launch. The original candidate
@@ -27,6 +41,23 @@ no child started. The corrected attempt copies the original scratch index
 and creates a `.git` stub before execution. Do not count the setup failure as
 a runtime failure or as cleanup evidence.
 
-Full forced parent integration and confirmed remote ancestry remain required
-before this packet closes. Composition, per-process trace and changed native
-platform evidence remain separate open obligations.
+`cli-live-ack.json` independently verifies the command-line binary with an
+external bounded shell producer. That producer cannot finish successfully
+until the live stdout callback creates ACK, so capture replay cannot make
+this probe green. The Lua source separately asserts CR-preserving stdout,
+stderr callbacks and full captured result bytes. It passes with exact
+`ok:parent-cli-live-ack:2:1` output and no stderr. Sources are archived as
+non-executable `cli-live-producer.sh.source.txt` and
+`cli-live-probe.lua.source.txt`.
+
+An extra attempt to invoke the older packet's `scripts/test-plan-run-verb.sh`
+did not run: that path is absent in this checkout. It is not counted as a
+passing test or evidence for closing 1375-amye; that packet remains open.
+
+## Remaining boundaries
+
+The gate's reported litmus closures were not exercised by `--check`.
+Composition, per-process trace, deliberate process-group escape containment
+and changed native-platform evidence remain separate open obligations.
+The active ledger schedule is in
+`plan/issues/remaining-composition-and-trace-handoff-2026-10-02.md`.
