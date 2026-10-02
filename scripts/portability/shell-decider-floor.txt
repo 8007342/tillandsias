@@ -58,7 +58,6 @@ scripts/check-gate-step-prefix-across-refs.sh
 scripts/check-gate-step-regimes.sh
 scripts/check-groundtruth-mutable-status-pins.sh
 scripts/check-groundtruth-regime-invariance.sh
-scripts/check-guest-unit-hardening.sh
 scripts/check-host-tools.sh
 scripts/check-installer-channel.sh
 scripts/check-issue-citation-convention.sh
@@ -106,7 +105,6 @@ scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
 scripts/check-plan-ledger-readers.sh
 scripts/check-plan-schema-divergence.sh
-scripts/check-podman-sync-budgets.sh
 scripts/check-portability-idioms.sh
 scripts/check-proxy-permissive-port-routing.sh
 scripts/check-purge-clears-vault-credentials.sh
@@ -138,7 +136,6 @@ scripts/check-terminology.sh
 scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
 scripts/check-tray-import-surface.sh
-scripts/check-tray-refresh-no-polling.sh
 scripts/check-tray-string-corpus-drift.sh
 scripts/check-unique-bin-names.sh
 scripts/check-unrunnable-platform-arms.sh

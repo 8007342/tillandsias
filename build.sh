@@ -4489,7 +4489,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # that outage, so the absence of those directives is now enforced rather
     # than merely true.
     _step "Checking guest headless unit hardening (309)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-guest-unit-hardening.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-guest-unit-hardening.lua" 2>&1; then
         _error "the guest headless unit carries confinement directives that wedge podman — see the verdict above (309)"
         exit 1
     fi
@@ -4703,7 +4703,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # around the type — building a podman std::process::Command directly, and
     # growing the caller-owned-spawn escape hatch past its reviewed count.
     _step "Checking the synchronous podman surface stays bounded (714-4r6w)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-podman-sync-budgets.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-podman-sync-budgets.lua" 2>&1; then
         _error "a synchronous podman call can wait forever — route it through podman_cmd_sync()'s bounded methods (714-4r6w)"
         exit 1
     fi
