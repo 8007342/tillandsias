@@ -1,0 +1,119 @@
+{
+  "purpose": "supplemental actual CRLF input, not timing; original 13-case run remains unchanged",
+  "source": "e6e5e0e64:scripts/fixtures/source agreements/tray-crlf.rs",
+  "transform": "replace each LF byte with CRLF; same transformed input given to old and new",
+  "original_bytes": 110,
+  "original_crlf_count": 0,
+  "input_bytes": 112,
+  "input_crlf_count": 2,
+  "input_sha256": "8ac74491982bd709cc22ae842948a25218bb21a53e473b3ab60a52eab77efea3",
+  "harness_sha256": "69d2aec107460be1748c76b7b96d1b8209c610dc4e9e9ad4c2c5989fc072fe9a",
+  "old": {
+    "case": "actual-crlf-canonical",
+    "profile": "old",
+    "argv": [
+      "/usr/bin/bash",
+      "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/actual CRLF case root/scripts/check-tray-process-running-naming.sh"
+    ],
+    "cwd": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/actual CRLF case root",
+    "elapsed_ns": 3723077,
+    "exit": 0,
+    "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+    "stderr_b64": "",
+    "stdout_sha256": "51b9160a09bdd8d58c303a6f486b2de7a921fe043a53994fc39413cc9aa23028",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "new": {
+    "debug": {
+      "case": "actual-crlf-canonical",
+      "profile": "debug",
+      "argv": [
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/plan-debug",
+        "script",
+        "run",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/source-agreements.lua",
+        "--",
+        "tray_process_naming",
+        "crates/tillandsias-macos-tray/src/diagnose.rs"
+      ],
+      "cwd": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/actual CRLF case root",
+      "elapsed_ns": 1732142,
+      "exit": 0,
+      "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+      "stderr_b64": "",
+      "stdout_sha256": "51b9160a09bdd8d58c303a6f486b2de7a921fe043a53994fc39413cc9aa23028",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "release": {
+      "case": "actual-crlf-canonical",
+      "profile": "release",
+      "argv": [
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/plan-release",
+        "script",
+        "run",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/source-agreements.lua",
+        "--",
+        "tray_process_naming",
+        "crates/tillandsias-macos-tray/src/diagnose.rs"
+      ],
+      "cwd": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/actual CRLF case root",
+      "elapsed_ns": 1198595,
+      "exit": 0,
+      "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+      "stderr_b64": "",
+      "stdout_sha256": "51b9160a09bdd8d58c303a6f486b2de7a921fe043a53994fc39413cc9aa23028",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "equal": {
+    "debug": true,
+    "release": true
+  },
+  "space_argument_new": {
+    "debug": {
+      "case": "actual-crlf-space-bearing-argument",
+      "profile": "debug",
+      "argv": [
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/plan-debug",
+        "script",
+        "run",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/source-agreements.lua",
+        "--",
+        "tray_process_naming",
+        "space bearing source/tray source.rs"
+      ],
+      "cwd": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/actual CRLF case root",
+      "elapsed_ns": 1363153,
+      "exit": 0,
+      "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+      "stderr_b64": "",
+      "stdout_sha256": "51b9160a09bdd8d58c303a6f486b2de7a921fe043a53994fc39413cc9aa23028",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "release": {
+      "case": "actual-crlf-space-bearing-argument",
+      "profile": "release",
+      "argv": [
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/plan-release",
+        "script",
+        "run",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/source-agreements.lua",
+        "--",
+        "tray_process_naming",
+        "space bearing source/tray source.rs"
+      ],
+      "cwd": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/actual CRLF case root",
+      "elapsed_ns": 1006473,
+      "exit": 0,
+      "stdout_b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+      "stderr_b64": "",
+      "stdout_sha256": "51b9160a09bdd8d58c303a6f486b2de7a921fe043a53994fc39413cc9aa23028",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "space_argument_equal": {
+    "debug": true,
+    "release": true
+  },
+  "space_argument_note": "supplemental success-output comparison; primary old/new named spelling is identical canonical path, while this arm exercises a literal spaced Lua argument"
+}
