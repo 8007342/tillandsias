@@ -9,3 +9,7 @@ To reproduce externally, copy the two files into a fresh scratch fixture and
 materialize them under their original names (`reproduce.py` and
 `repo/producer.py`) before invoking Python there. No repository runtime path
 references a `.py` filename.
+
+Captured test logs keep immutable base64 originals in
+`../diagnostic-log-originals.json`; their SHA-256 values describe the
+measurement-time blobs before displayed copies gain citation annotations.

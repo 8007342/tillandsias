@@ -10,7 +10,7 @@ failures:
 
 ---- managed_script::scoped_spawn_preserves_fixed_environment_stdin_and_cacheable_process_absence stdout ----
 
-thread 'managed_script::scoped_spawn_preserves_fixed_environment_stdin_and_cacheable_process_absence' (1505365) panicked at crates/tillandsias-plan/tests/lua_proc.rs:506:9:
+thread 'managed_script::scoped_spawn_preserves_fixed_environment_stdin_and_cacheable_process_absence' (1505365) panicked at crates/tillandsias-plan/tests/lua_proc.rs:506:9: <!-- cite-ok: captured test diagnostic location, not source citation -->
 runtime error: [string "/tmp/opencode/sol-1534-dqnuHL/probe.lua"]:9: cwd snapshot drift
 stack traceback:
 	[C]: in function 'assert'

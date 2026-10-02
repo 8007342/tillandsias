@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: lua-live-streaming-callbacks-and-managed-process-lifecycle
+    event:
+      type: progress
+      ts: "2026-10-02T17:45:00Z"
+      agent_id: linux-macuahuitl-opencode-20261002t053211z
+      host: macuahuitl
+      summary: |
+        Evidence-only metadata repair: three captured Rust test diagnostic locations in the displayed pre-fix logs carry cite-ok annotations, while diagnostic-log-originals.json retains base64 original measurement-time blobs and SHA-256 identities. No Rust, test, Cargo, final-summary count, or gate-policy change.
