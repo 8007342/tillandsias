@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: collaborative-work-scheduling-research
+    field: status
+    value: in_progress
+    ts: "2026-10-02T01:58:22Z"
+    host: macuahuitl
+
+events:
+  - packet_id: collaborative-work-scheduling-research
+    event:
+      type: note
+      ts: "2026-10-02T01:58:22Z"
+      host: macuahuitl
+      summary: |-
+        claimed by linux-macuahuitl-opencode-20261002t015812z for provenance survey and current-state reconciliation
