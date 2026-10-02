@@ -1,0 +1,44 @@
+packets:
+  - packet_id: forge-lane-mailbox-fixture-locks-process-environment-read
+    order: 1537-75tv
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [rust, tests, gate, concurrency]
+    estimated_hours: 0.3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: "Forge lane mailbox fixture takes the shared environment lock before reading the instance"
+    context: |
+      MEASURED on 70849badd909f104cd361c54a688eee3b5d1e212: the advisory
+      closure pre-push check stopped in the default parallel workspace tests,
+      757 passed, one failed, 20 ignored. The failing
+      forge_container_spec_mounts_only_per_lane_mcp_dir expected a
+      testproj-default mailbox but received testproj-web-scope-gate.
+      delegated_result_format_web_lane_stays_outside_the_contract sets
+      TILLANDSIAS_FORGE_INSTANCE=web-scope-gate while holding env_lock and
+      restores it. The mailbox fixture reads the same global without a lock.
+      Adjacent opencode_lane_builder_mounts_only_per_lane_mcp_dir already
+      takes the canonical lock. This is a fixture isolation repair, not a
+      production lane-selection change or a weakened gate assertion.
+      Parent work is salvaged at
+      salvage/macuahuitl/20261002-lua-advisory-closure-gate-env-race, HEAD70849badd.
+    outcome: "The mailbox fixture is isolated from concurrent instance mutations and still asserts exact default-lane confinement."
+    exit_criteria:
+      - "The failing reader uses the canonical env_lock before building argv; isolate and restore any inherited instance if needed, with no new mutex or production change."
+      - "Exact mailbox/MCP confinement assertions remain intact; the mutating web-result fixture remains unchanged and green."
+      - "The named tests and a default parallel headless test run pass, followed by the parent integration gate; retain the observed pre-fix mismatch rather than claiming a deterministic race reproduction."
+    verifiable_closure: |
+      cargo test -p tillandsias-headless --bin tillandsias,
+      default parallel execution; original failure is recorded above and in
+      the parent gate receipt. Parent full integration check before landing.
+    unscoreable: "pinned-by-its-own-fixture: forge_container_spec_mounts_only_per_lane_mcp_dir"
+    next_action: "Terra applies the minimal test-only lock/restore repair on work/1537-75tv; parent verifies and integrates its PR before retrying filesystem gate."
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      No test-threads=1 mitigation, ignored test, assertion weakening, UX or production edit.
+    provenance: "Observed parent checkpoint gate refusal during the operator-approved Bash-to-Lua migration on 2026-10-02."

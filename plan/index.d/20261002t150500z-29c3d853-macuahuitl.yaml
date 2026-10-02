@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    event:
+      type: progress
+      ts: "2026-10-02T15:05:00Z"
+      agent_id: linux-macuahuitl-opencode-20261002t053211z
+      host: macuahuitl
+      summary: |
+        Parent audited remaining 1384-aixy obligations with Astra read-only research and verified source citations. Existing synchronous proc.run arms do not prove live streaming or outer script cleanup. A committed Linux receipt acknowledges startup at 34.6 ms, observes outer exit124 at701.9 ms, and shows contained child/grandchild survival (plan/issues/evidence/lua-script-deadline-20261002/receipts.json). Sol's read-only design proposes independently driven managed supervisors, script-owned cancellation/reaping, bounded per-fd queues/capture and same-thread Lua callbacks; implementation is held until 1532-u9en lands and 1534-puyz is claimed. Preserve existing 8MiB prefix capture/result semantics rather than silently asserting original1MiB-tail behavior. Chain/select/all, per-process trace, coroutine-host contract, original allow_shell_strings diagnostic drift and native Mac/changed Windows measurements remain OPEN; do not close1384-aixy after the bounded streaming child alone. Source cutover PR203 and filesystem PR204 are ready work, not landed at this observation. Three guards in1533-ew3n remain shell; native source/runtime assertions are unmeasured. MCP read tools and OpenSpec CLI are unavailable; local plan CLI/files are the named fallback. Checklist reconciliation remains pending because the CLI root/apply flow cannot be run. Next_action: land PR203 and PR204 with independent serialized gates, claim1533-ew3n once source lands, then claim1534-puyz once filesystem dependency closes; shape remaining conformance/trace slice and retain native-platform gaps.
