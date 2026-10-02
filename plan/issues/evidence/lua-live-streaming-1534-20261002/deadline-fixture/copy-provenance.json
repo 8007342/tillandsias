@@ -1,0 +1,9 @@
+{
+  "copied_from": "/home/tlatoani/codex/tillandsias-lua-work/1534-puyz/target/debug/tillandsias-plan",
+  "snapshot": "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-final/plan",
+  "sha256": "aa5b1acf434ff39eb8b9a5c5ac12d1c0eecb57e3e3055d4124e5277166eeda0d",
+  "source_head": "dae38028e8c853f463fb0fdbef78735031cb6d61",
+  "source_status": "",
+  "baseline_receipt": "plan/issues/evidence/lua-script-deadline-20261002/receipts.json",
+  "fixture_note": "Byte-for-byte copied original source deadline harness, Lua/Python fixtures and minimal plan index; only binary and fresh scratch paths change."
+}

@@ -298,10 +298,29 @@ pub(crate) fn prepare_proc(
             "argv must be a sequence with no holes and no named keys".into(),
         ));
     }
-    // Resolve cwd first: the policy measures a destroy against it.
+    // Snapshot cwd ONCE. Lua __index may return a different value on every
+    // lookup; authorization must measure the exact cwd execution will use.
     let cwd_path: Option<PathBuf> = match spec.get::<LuaValue>("cwd")? {
-        LuaValue::String(s) => Some(PathBuf::from(s.to_str()?.to_string())),
-        _ => None,
+        LuaValue::Nil => None,
+        LuaValue::String(s) => {
+            let p = PathBuf::from(s.to_str()?.to_string());
+            if s.as_bytes().contains(&0) {
+                return Err(err("cwd must not contain NUL".into()));
+            }
+            if !p.is_absolute() {
+                return Err(err(format!(
+                    "cwd '{}' is relative; pass an absolute path",
+                    p.display()
+                )));
+            }
+            Some(p)
+        }
+        other => {
+            return Err(err(format!(
+                "cwd must be a string, not a {}",
+                other.type_name()
+            )));
+        }
     };
     let mut cmd = tillandsias_exec::Command::new(argv.clone()).env_clear();
     for key in PROC_RUN_BASE_ENV_PASSTHROUGH {
@@ -318,31 +337,10 @@ pub(crate) fn prepare_proc(
         cmd = cmd.env(k, v);
     }
 
-    match spec.get::<LuaValue>("cwd")? {
-        LuaValue::Nil => {
-            if let Ok(root) = find_repo_root() {
-                cmd = cmd.current_dir(root);
-            }
-        }
-        LuaValue::String(s) => {
-            let p = PathBuf::from(s.to_str()?.to_string());
-            if s.as_bytes().contains(&0) {
-                return Err(err("cwd must not contain NUL".into()));
-            }
-            if !p.is_absolute() {
-                return Err(err(format!(
-                    "cwd '{}' is relative; pass an absolute path",
-                    p.display()
-                )));
-            }
-            cmd = cmd.current_dir(p);
-        }
-        other => {
-            return Err(err(format!(
-                "cwd must be a string, not a {}",
-                other.type_name()
-            )));
-        }
+    if let Some(p) = &cwd_path {
+        cmd = cmd.current_dir(p);
+    } else if let Ok(root) = find_repo_root() {
+        cmd = cmd.current_dir(root);
     }
 
     match spec.get::<LuaValue>("env")? {

@@ -490,6 +490,24 @@ p.wait()
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
+        let root = lua_path(f.dir.path());
+        let out=f.run(&format!(r#"
+            for _,door in ipairs({{proc.run,proc.spawn}}) do
+                local reads=0
+                local spec=setmetatable({{argv={{'python3','-c','import os; print(os.getcwd())'}}}},{{__index=function(_,key)
+                    if key=='cwd' then reads=reads+1; if reads==1 then return '{root}' else return '{root}/.git' end end
+                end}})
+                local p=door(spec)
+                local c=p.wait and p:wait() or p
+                assert(reads==1 and c.ok and c.stdout=='{root}\n', 'cwd snapshot drift')
+            end
+            verdict.ok('cwd-snapshot')
+        "#), "3s");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
         let out=f.run("-- @class cacheable\nassert(proc==nil and sh==nil and expert.shell==nil); verdict.ok('pure')", "3s");
         assert!(
             out.status.success(),
