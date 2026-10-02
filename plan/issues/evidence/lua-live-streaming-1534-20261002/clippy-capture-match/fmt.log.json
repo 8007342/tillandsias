@@ -1,0 +1,4 @@
+{
+  "capture_note": "Verbatim tool diagnostics, not authored source-location prose.",
+  "raw_output": "/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory\n"
+}

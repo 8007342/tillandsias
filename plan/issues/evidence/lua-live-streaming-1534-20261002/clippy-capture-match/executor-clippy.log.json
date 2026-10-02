@@ -1,0 +1,4 @@
+{
+  "capture_note": "Verbatim tool diagnostics, not authored source-location prose.",
+  "raw_output": "/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory\n    Checking libc v0.2.186\n    Checking linux-raw-sys v0.12.1\n    Checking once_cell v1.21.4\n    Checking lock_api v0.4.14\n    Checking serde_core v1.0.228\n    Checking thiserror v2.0.18\n    Checking rustix v1.1.4\n    Checking getrandom v0.4.2\n    Checking parking_lot_core v0.9.12\n    Checking errno v0.3.14\n    Checking socket2 v0.6.3\n    Checking mio v1.2.0\n    Checking signal-hook-registry v1.4.8\n    Checking parking_lot v0.12.5\n    Checking tokio v1.52.2\n    Checking tempfile v3.27.0\n    Checking uuid v1.23.1\n    Checking tillandsias-exec v0.1.0 (/home/tlatoani/codex/tillandsias-lua-work/1534-puyz/crates/tillandsias-exec)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.00s\n"
+}
