@@ -10,9 +10,14 @@ use std::process::{Command, Output};
 use tillandsias_plan::command_policy as cp;
 
 fn scratch() -> tempfile::TempDir {
+    let base = if Path::new("/tmp/opencode").is_dir() {
+        std::path::PathBuf::from("/tmp/opencode")
+    } else {
+        std::env::temp_dir()
+    };
     let dir = tempfile::Builder::new()
         .prefix("policy-doors-")
-        .tempdir_in("/tmp/opencode")
+        .tempdir_in(base)
         .unwrap();
     fs::create_dir(dir.path().join(".git")).unwrap();
     fs::create_dir(dir.path().join(".tillandsias")).unwrap();
