@@ -193,7 +193,7 @@ pub fn policy_gate(
     let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let root = find_repo_root().unwrap_or_else(|_| here.clone());
     let protected = cp::protected_refs(&root);
-    let (seed, _) = cp::load_seed(&root, None, &protected);
+    let (seed, load) = cp::load_seed(&root, None, &protected);
     let regime = std::env::var("TILLANDSIAS_POLICY_REGIME")
         .ok()
         .filter(|r| cp::REGIMES.contains(&r.as_str()))
@@ -206,7 +206,14 @@ pub fn policy_gate(
         regime,
         caller: caller.to_string(),
     };
-    let d = cp::evaluate(&req, seed.as_ref(), &protected);
+    let d = cp::decide_execution(
+        &req,
+        seed.as_ref(),
+        &load,
+        &protected,
+        &cp::ConsentCtx::from_env(&root),
+    );
+    cp::audit_decision(&req, &d, None);
     (d.strictness != cp::Strictness::Allow).then_some(d)
 }
 

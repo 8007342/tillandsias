@@ -4931,7 +4931,7 @@ fn run_policy(args: &[String]) -> ! {
         // The argv must be of this class HERE, so a token cannot be minted for
         // something the floor would not ask about.
         let protected = cp::protected_refs(&root);
-        let (loaded, _) = cp::load_seed(&root, None, &protected);
+        let (loaded, load) = cp::load_seed(&root, None, &protected);
         let req = cp::Request {
             argv: argv.clone(),
             cwd: here,
@@ -4940,7 +4940,7 @@ fn run_policy(args: &[String]) -> ! {
             regime: "interactive".into(),
             caller: "consent-grant".into(),
         };
-        let d = cp::decide(&req, loaded.as_ref(), &protected);
+        let d = cp::decide_loaded(&req, loaded.as_ref(), &load, &protected);
         if d.strictness != cp::Strictness::Consent || d.rule_id != class {
             println!("refused:consent:argv-not-in-class:{class}");
             eprintln!("  this argv answers {} here, not consent:{class}", d.token);
@@ -5057,7 +5057,8 @@ fn run_policy(args: &[String]) -> ! {
                 regime,
                 caller,
             };
-            let d = cp::evaluate(&req, loaded.as_ref(), &protected);
+            let d = cp::decide_loaded(&req, loaded.as_ref(), &load, &protected);
+            cp::audit_decision(&req, &d, None);
             println!("{}", d.token);
             if let Some(w) = &d.why {
                 eprintln!("  why: {w}");
