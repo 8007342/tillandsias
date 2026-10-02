@@ -8,10 +8,10 @@ if root:sub(1, 1) == "/" or root:find("..", 1, true) then
     verdict.emit("blocked:podman-sync-bounded:invalid-search-root", 2)
 end
 local files = fs.walk(root, { suffix = ".rs" })
-local function lines_matching(pattern, filter)
+local function lines_matching(pattern, filter, include_tests)
     local matches = {}
     for _, file in ipairs(files) do
-        if not text.is_match(file, [[/tests?/]]) then
+        if include_tests or not text.is_match(file, [[/tests?/]]) then
             local ok, source = pcall(fs.read, file)
             if ok then
                 for n, line in ipairs(text.lines(source)) do
@@ -34,7 +34,7 @@ if #direct > 0 then
 end
 local hatches = lines_matching([=[spawn_caller_owned_lifetime\(\)]=], function(_, line)
     return not line:find("pub fn spawn_caller_owned_lifetime", 1, true)
-end)
+end, true)
 if #hatches > allowed then
     log.raw("expected at most " .. allowed .. " caller-owned spawn(s); found " .. #hatches .. ":")
     for _, line in ipairs(hatches) do log.raw(line) end
