@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-lane-mailbox-fixture-locks-process-environment-read
+    field: status
+    value: completed
+    ts: "2026-10-02T15:38:23Z"
+    host: macuahuitl
+
+events:
+  - packet_id: forge-lane-mailbox-fixture-locks-process-environment-read
+    event:
+      type: completed
+      ts: "2026-10-02T15:38:23Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: d0437d2f686f48ba02ac5111f8f7328459fef946 + forced ./build.sh --check PASS; PR #205 MERGED; parent exact reader1/1 with inherited instance negative control, mutator1/1 and default parallel headless758/0/20 in integration gate
+  - packet_id: forge-lane-mailbox-fixture-locks-process-environment-read
+    event:
+      type: note
+      ts: "2026-10-02T15:38:23Z"
+      host: macuahuitl
+      summary: |-
+        Closed by linux-macuahuitl-opencode-20261002t053211z after test-only shared-lock/restore review and remote ancestry. Original testproj-web-scope-gate mismatch retained; exact mailbox assertions and production behavior unchanged. No deterministic race reproduction or native validation claim.

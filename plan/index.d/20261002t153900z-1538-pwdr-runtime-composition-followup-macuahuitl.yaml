@@ -1,0 +1,50 @@
+packets:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    order: 1538-pwdr
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [lua, rust, async, exec, tests]
+    estimated_hours: 2
+    depends_on:
+      - lua-live-proc-spawn-streams-with-script-owned-cancellation-and-reaping
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/src/script_run.rs
+      - crates/tillandsias-plan/tests/lua_proc.rs
+    title: "Remaining 1384-aixy process composition: select/all, in-memory chain and exit callback conformance"
+    context: |
+      The 2026-10-02 source audit established that synchronous proc.run is
+      landed but the original parent also requires proc.chain/select/all,
+      same-thread asynchronous callback dispatch and on_exit. Streaming
+      child1534-puyz deliberately does not close these APIs. The canonical
+      original contract is plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md
+      sections4.2/4.3 and packet1384-aixy. This is a dependent bounded child,
+      not a claim that the pending streaming implementation is already landed.
+    outcome: |
+      The managed runtime composes typed process results without an OS pipe:
+      completion-order selection, stable argument-order aggregation,
+      sequential byte-passing chains and exactly-once exit callbacks.
+    exit_criteria:
+      - "proc.select{p1,p2,timeout_ms=...} selects the first completed handle; acknowledged overlapping producers with inverted argument/completion order prove selection is not an argument-order blocking wait. Document and test its deadline outcome without inventing a child exit code."
+      - "proc.all{...} returns every full result in argument order, with callbacks pumped scope-wide and no Lua callback concurrency or abandoned child. Empty, duplicate/foreign handles and malformed lists have documented validated behavior."
+      - "proc.chain{{argv=...},...} runs stages in order, passes preceding stdout bytes as stdin in memory, returns every typed stage plus c.ok and first_failure, and retains nonzero/signal/timeout/truncation/policy failures rather than silently substituting the last stage's success. Validate programmer errors before stage execution and authorize each actual execution through the hardened door."
+      - "p:on_exit(fn) runs exactly once on the Lua thread after all preceding per-fd line callbacks and before completion is observed by wait/select/all; caught callback errors cannot reopen a cancelled script scope. Preserve any behavior already delivered by1534 rather than duplicating it."
+      - "Existing streaming/live-acknowledgement and script-owned cleanup arms stay green. No shell-string or OS-pipe interface, no default-deny activation, no widened filesystem capability and no concurrent native-platform claim."
+    verifiable_closure: |
+      Named nonempty lua_proc conformance tests for completion-order select,
+      argument-order all, chain preserving every result and exact stdin bytes,
+      same-thread exit-callback barriers, policy/consent and cleanup negatives;
+      existing executor/runtime suites and parent forced integration gate on Linux.
+    unscoreable: "pinned-by-its-own-fixture: new named lua_proc composition conformance tests"
+    next_action: "After1534-puyz lands, Sol audits delivered APIs, implements only remaining conformance gaps on work/1538-pwdr, pushes frequent checkpoints and opens a PR; parent independently verifies and gates before closure. Parent1384-aixy remains open for per-process trace and unmet platform evidence."
+    notes: |
+      size: L
+      implementer_tier: opus
+      Existing8MiB per-fd prefix capture/result semantics stay authoritative;
+      original1MiB-tail prose is a recorded contract drift, not permission to change capture.
+      Native Mac/changed Windows paths remain unmeasured until native receipts exist.
+    provenance: "Scheduled from the operator-approved Bash-to-Lua migration and read-only remaining-contract audit on2026-10-02."
