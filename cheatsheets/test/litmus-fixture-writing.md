@@ -2,7 +2,7 @@
 tags: [litmus, testing, fixtures, fail-loud, yaml, negative-control, falsifiability]
 languages: [bash, yaml]
 since: 2026-08-29
-last_verified: 2026-08-29
+last_verified: 2026-09-28
 sources:
   - plan/archive/packets-2026-08.yaml order:748-tkjx
   - plan/archive/packets-2026-08.yaml order:921-vtf4
@@ -10,6 +10,7 @@ sources:
   - plan/archive/packets-2026-08.yaml order:721-77yu
   - plan/archive/packets-2026-08.yaml order:677-33be
   - plan/archive/packets-2026-08.yaml order:776-cm74
+  - plan/index.d/20260927t175831z-1443-6r3q-lua-bash-replacement-and-policies-macuahuitl.yaml order:1443-z3vb
 authority: high
 status: current
 tier: bundled
@@ -826,3 +827,28 @@ as a fact about the watched; (3) `$!` names the first exec of a wrapper
 chain, never the worker — take the worker pid from `pgrep -f` after launch.
 Same disease as confirmation-scrutiny: the finding you expected (957-bcsk's
 silent killer) is the one you check least.
+
+## A tool that pushes is tested only in a scratch clone against a scratch origin — an override does not sever a remote (2026-09-28)
+
+Order 1443-z3vb. To check a land tool's no-argument default "in this
+repository", a forge ran the REAL tool in its own work tree and "severed"
+origin with `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.url
+GIT_CONFIG_VALUE_0=/nonexistent`. `remote.<name>.url` is MULTI-VALUED: the
+override ADDED a second url, and fetch kept using the first, the real one.
+The tool fetched the real origin, rebased the unpushed work ref and started
+`./build.sh --check`. The only thing between it and a push to trunk was a
+`timeout 60` that happened to fire inside the gate (the coordinator verified
+trunk clean afterwards). Rules:
+
+1. Anything that can PUSH is exercised only in a scratch clone whose origin
+   is a scratch bare repo (`git init --bare "$W/origin.git"`), never in the
+   real checkout, whatever the override. test-land-discipline-probe.sh
+   builds exactly that, and it fabricates `refs/remotes/origin/*` with
+   `update-ref` when the tool must OBSERVE a remote it never contacts.
+2. No config override "disables" a multi-valued key: `remote.<n>.url`,
+   `remote.<n>.fetch` and `remote.<n>.push` (and every other multi-valued
+   key) append. Removing a remote means `git remote remove` in a clone you own,
+   or a scratch clone.
+3. A bound (`timeout`) is a ceiling, not a guard: it limits how long the
+   mistake runs, not which step it reaches. Judge a "safe" invocation by the
+   FIRST side-effecting step it can reach, not by the bound around it.
