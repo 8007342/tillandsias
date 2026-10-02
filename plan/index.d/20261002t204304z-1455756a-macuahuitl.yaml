@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-enforcement-census-counts-an-assert-in-a-litmus-nothing-runs-beside-one-that-can-actually-go-red-so-a-closure-expressed-as-an-enforced-count-overstates-by-a-quarter
+    event:
+      type: note
+      ts: "2026-10-02T20:43:04Z"
+      agent_id: linux-macuahuitl-claude-20261002t204304z
+      host: macuahuitl
+      summary: |
+        STILL CONFLICTING (coordinator macuahuitl, 2026-10-02): work/1334-57at @ 3042222bc is 3176 commits behind linux-next 927a0737b and git merge-tree still reports a content conflict in openspec/litmus-bindings.yaml, so draft PR #128 cannot enter the landing queue. What is left, for esme or any host: merge origin/linux-next into work/1334-57at, resolve the bindings conflict by adding the new litmus:census-enforced-reachability-split binding under ci-release beside whatever trunk added, re-run scripts/test-census-enforced-reachability-split.sh and scripts/check-litmus-bindings.sh, push the ref, write READY: work/1334-57at @ <sha> here, and mark PR #128 ready.
