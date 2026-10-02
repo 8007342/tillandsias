@@ -89,7 +89,9 @@ impl Host {
                         });
                     if let Some(callback) = callback {
                         self.callback.store(true, Ordering::Release);
-                        let result = callback.call::<()>(lua.create_string(&bytes)?);
+                        let result = lua
+                            .create_string(&bytes)
+                            .and_then(|line| callback.call::<()>(line));
                         self.callback.store(false, Ordering::Release);
                         if let Err(e) = result {
                             // Even pcall around wait cannot resurrect this scope.
@@ -125,22 +127,20 @@ impl Host {
                 .handlers
                 .get(&process.id)
                 .is_some_and(|h| h.delivered);
-            if delivered {
-                if let Some(result) = process.result() {
-                    let out = match result {
-                        Ok(out) => out,
-                        Err(e) => {
-                            self.scope.close();
-                            return Err(error(e));
-                        }
-                    };
-                    return proc_result_to_lua(
-                        &lua,
-                        &argv,
-                        Ok(out),
-                        started.elapsed().as_millis() as u64,
-                    );
-                }
+            if delivered && let Some(result) = process.result() {
+                let out = match result {
+                    Ok(out) => out,
+                    Err(e) => {
+                        self.scope.close();
+                        return Err(error(e));
+                    }
+                };
+                return proc_result_to_lua(
+                    &lua,
+                    &argv,
+                    Ok(out),
+                    started.elapsed().as_millis() as u64,
+                );
             }
             // Yield fairly across every managed process, not only the waited id.
             tokio::time::sleep(std::time::Duration::from_millis(1)).await;
@@ -212,6 +212,11 @@ impl Host {
         }
         Ok(table)
     }
+    pub fn release_callbacks(&self) {
+        // Break host/VM registry cycles when a script drops its handles.
+        self.dispatch.lock().unwrap().handlers.clear();
+    }
+
     pub fn install(&self, lua: &Lua) -> LuaResult<()> {
         // Cacheable environments have neither table; never widen them here.
         let Ok(proc_table) = lua.globals().get::<LuaTable>("proc") else {

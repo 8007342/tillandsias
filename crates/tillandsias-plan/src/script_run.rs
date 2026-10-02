@@ -26,9 +26,9 @@
 // door passing what the gate refuses. `classify` is the one function both reach
 // (through `script classify` from build.sh, through `verdict.classify` from Lua).
 //
-// OUT OF SCOPE here, by the coordinator's ruling of 2026-09-30: proc.spawn,
-// line callbacks and mlua-async (1384-aixy's later slices). A decider needs
-// verdict, fs, env, text and at most proc.run, which slice 1 provides.
+// ORDER 1534-puyz adds script-owned proc.spawn and line callbacks using mlua
+// async. Composition/on_exit and original 1384-aixy's remaining closure stay
+// with followup 1538; this runner does not claim native platform measurement.
 
 use crate::lua_predicate::PredicateClass;
 use mlua::prelude::*;
@@ -802,6 +802,7 @@ fn run_to_verdict(
     };
     host.scope.close();
     let cleanup = host.scope.cleanup();
+    host.release_callbacks();
     rt.shutdown_background();
     if let Err(e) = cleanup {
         return (format!("refused:cleanup-incomplete:{name}"), Some(e), 1);

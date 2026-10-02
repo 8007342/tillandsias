@@ -23,6 +23,7 @@ pub enum Event {
 pub const MAX_LINE_BYTES: usize = 1024 * 1024;
 pub const MAX_ACTIVE_PROCESSES: usize = 64;
 pub const CLEANUP_BOUND: Duration = Duration::from_secs(2);
+pub const SPAWN_SETUP_BOUND: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Copy, PartialEq)]
 enum Stop {
@@ -33,6 +34,7 @@ enum Stop {
 
 struct State {
     finished: AtomicBool,
+    reaped: AtomicBool,
     result: Mutex<Option<Result<Output, ExecError>>>,
     done: Condvar,
 }
@@ -46,7 +48,14 @@ pub struct Process {
 
 impl Process {
     pub fn kill(&self) {
-        let _ = self.cancel.send(Stop::Kill);
+        self.cancel.send_if_modified(|stop| {
+            if *stop == Stop::Running {
+                *stop = Stop::Kill;
+                true
+            } else {
+                false
+            }
+        });
     }
     pub fn result(&self) -> Option<Result<Output, String>> {
         self.state
@@ -54,7 +63,7 @@ impl Process {
             .lock()
             .unwrap()
             .as_ref()
-            .map(|r| r.as_ref().map(Clone::clone).map_err(ToString::to_string))
+            .map(|r| r.as_ref().cloned().map_err(ToString::to_string))
     }
     fn wait(&self) -> Result<Output, ExecError> {
         let mut result = self.state.result.lock().unwrap();
@@ -95,14 +104,16 @@ impl Scope {
         self.0.closed.load(Ordering::Acquire)
             || self.0.deadline.is_some_and(|d| Instant::now() >= d)
     }
-    /// Linearizes shutdown against spawn AND registration. The supervisor owns
+    /// Linearizes shutdown against launch acceptance AND registration. The supervisor owns
     /// a successfully spawned child before the caller can obtain its handle.
     pub fn spawn(&self, command: Command, stream: bool) -> Result<Process, ExecError> {
         let mut processes = self.0.processes.lock().unwrap();
         if self.stopped() {
             return Err(scope_error(&command, "script-scope-closed"));
         }
-        processes.retain(|p| !p.state.finished.load(Ordering::Acquire));
+        processes.retain(|p| {
+            !p.state.finished.load(Ordering::Acquire) || !p.state.reaped.load(Ordering::Acquire)
+        });
         if processes.len() >= MAX_ACTIVE_PROCESSES {
             return Err(scope_error(&command, "script-process-limit"));
         }
@@ -110,6 +121,7 @@ impl Scope {
         let (cancel, rx) = watch::channel(Stop::Running);
         let state = Arc::new(State {
             finished: AtomicBool::new(false),
+            reaped: AtomicBool::new(false),
             result: Mutex::new(None),
             done: Condvar::new(),
         });
@@ -123,7 +135,11 @@ impl Scope {
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let argv = command.argv.clone();
         let thread_argv = argv.clone();
-        std::thread::Builder::new()
+        // Register BEFORE setup. A late setup result remains owned even when
+        // the caller's bounded handshake expires or the scope closes meanwhile.
+        processes.push(process.clone());
+        let worker_state = state.clone();
+        let spawned = std::thread::Builder::new()
             .name(format!("proc-{id}"))
             .spawn(move || {
                 let result = match tokio::runtime::Builder::new_current_thread()
@@ -131,8 +147,15 @@ impl Scope {
                     .build()
                 {
                     Ok(rt) => {
-                        let result =
-                            rt.block_on(supervise(command, id, rx, deadline, events, ready_tx));
+                        let result = rt.block_on(supervise(
+                            command,
+                            id,
+                            rx,
+                            deadline,
+                            events,
+                            ready_tx,
+                            &worker_state.reaped,
+                        ));
                         // Windows pipe helper threads must not turn shutdown into an
                         // unbounded runtime drop (legacy group=false is still limited).
                         rt.shutdown_background();
@@ -143,23 +166,37 @@ impl Scope {
                             argv: argv.clone(),
                             source,
                         }));
-                        return;
+                        worker_state.reaped.store(true, Ordering::Release);
+                        Err(ExecError::Io {
+                            argv: argv.clone(),
+                            source: std::io::Error::other("supervisor-runtime-failed"),
+                        })
                     }
                 };
-                *state.result.lock().unwrap() = Some(result);
-                state.finished.store(true, Ordering::Release);
-                state.done.notify_all();
-            })
-            .map_err(|source| ExecError::Io {
+                let mut slot = worker_state.result.lock().unwrap();
+                *slot = Some(result);
+                worker_state.finished.store(true, Ordering::Release);
+                drop(slot);
+                worker_state.done.notify_all();
+            });
+        if let Err(source) = spawned {
+            processes.pop(); // Still holding the launch/close gate; no worker exists.
+            return Err(ExecError::Io {
                 argv: thread_argv,
                 source,
-            })?;
-        // No await holds this lock. Setup cannot invoke Lua or await a pipe.
-        ready_rx.recv().map_err(|e| ExecError::Io {
-            argv: Vec::new(),
-            source: std::io::Error::other(e.to_string()),
+            });
+        }
+        drop(processes);
+        let setup_bound = deadline
+            .map(|d| SPAWN_SETUP_BOUND.min(d.saturating_duration_since(Instant::now())))
+            .unwrap_or(SPAWN_SETUP_BOUND);
+        ready_rx.recv_timeout(setup_bound).map_err(|e| {
+            let _ = process.cancel.send(Stop::Close);
+            ExecError::Io {
+                argv: thread_argv,
+                source: std::io::Error::other(e.to_string()),
+            }
         })??;
-        processes.push(process.clone());
         Ok(process)
     }
     pub fn run(&self, command: Command) -> Result<Output, ExecError> {
@@ -185,6 +222,9 @@ impl Scope {
                     return Err("script-cleanup-incomplete".into());
                 }
                 r = p.state.done.wait_timeout(r, left).unwrap().0;
+            }
+            if !p.state.reaped.load(Ordering::Acquire) {
+                return Err("script-cleanup-incomplete:direct-child-reap".into());
             }
         }
         Ok(())
@@ -277,16 +317,16 @@ async fn read_stream<R: tokio::io::AsyncRead + Unpin>(
             break;
         }
     }
-    if let Some(tx) = &events {
-        if !pending.is_empty() {
-            tx.send(Event::Line {
-                process: id,
-                fd,
-                bytes: pending,
-            })
-            .await
-            .map_err(|_| std::io::Error::other("script-stream-closed"))?;
-        }
+    if let Some(tx) = &events
+        && !pending.is_empty()
+    {
+        tx.send(Event::Line {
+            process: id,
+            fd,
+            bytes: pending,
+        })
+        .await
+        .map_err(|_| std::io::Error::other("script-stream-closed"))?;
     }
     Ok((kept, dropped))
 }
@@ -298,12 +338,15 @@ async fn supervise(
     deadline: Option<Instant>,
     events: Option<mpsc::Sender<Event>>,
     ready: std::sync::mpsc::Sender<Result<(), ExecError>>,
+    reaped: &AtomicBool,
 ) -> Result<Output, ExecError> {
-    if deadline.is_some_and(|d| Instant::now() >= d) {
+    if *cancel.borrow() != Stop::Running || deadline.is_some_and(|d| Instant::now() >= d) {
+        reaped.store(true, Ordering::Release); // No child was spawned.
         let _ = ready.send(Err(scope_error(&command, "script-scope-closed")));
         return Err(scope_error(&command, "script-scope-closed"));
     }
     let Some((program, rest)) = command.argv.split_first() else {
+        reaped.store(true, Ordering::Release);
         let _ = ready.send(Err(ExecError::EmptyArgv));
         return Err(ExecError::EmptyArgv);
     };
@@ -334,6 +377,7 @@ async fn supervise(
     let mut child = match cmd.spawn() {
         Ok(child) => child,
         Err(source) => {
+            reaped.store(true, Ordering::Release);
             let _ = ready.send(Err(ExecError::Spawn {
                 argv: command.argv.clone(),
                 source,
@@ -342,14 +386,23 @@ async fn supervise(
         }
     };
     #[cfg(unix)]
-    let pgid = command.group.then(|| child.id()).flatten();
+    let pgid = if command.group { child.id() } else { None };
     #[cfg(windows)]
     let job = if command.group {
         match win_job::JobObject::assign(&child) {
             Ok(job) => Some(job),
             Err(source) => {
                 let _ = child.start_kill();
-                let _ = child.wait().await;
+                match tokio::time::timeout(Duration::from_secs(1), child.wait()).await {
+                    Ok(Ok(_)) => reaped.store(true, Ordering::Release),
+                    _ => {
+                        let _ = ready.send(Err(scope_error(
+                            &command,
+                            "direct-child-reap-failed:job-setup",
+                        )));
+                        return Err(scope_error(&command, "direct-child-reap-failed:job-setup"));
+                    }
+                }
                 let _ = ready.send(Err(ExecError::Io {
                     argv: command.argv.clone(),
                     source,
@@ -380,12 +433,11 @@ async fn supervise(
     let io = async {
         use tokio::io::AsyncWriteExt;
         let feed = async {
-            if let (Some(mut input), Some(bytes)) = (input, &command.stdin) {
-                if let Err(e) = input.write_all(bytes).await {
-                    if e.kind() != std::io::ErrorKind::BrokenPipe {
-                        return Err(e);
-                    }
-                }
+            if let (Some(mut input), Some(bytes)) = (input, &command.stdin)
+                && let Err(e) = input.write_all(bytes).await
+                && e.kind() != std::io::ErrorKind::BrokenPipe
+            {
+                return Err(e);
             }
             Ok::<(), std::io::Error>(())
         };
@@ -416,6 +468,7 @@ async fn supervise(
     let mut status = None;
     let mut timed_out = false;
     let mut failure = None;
+    let mut group_cleaned = false;
     loop {
         tokio::select! {
             biased;
@@ -430,6 +483,7 @@ async fn supervise(
                 if let Some(pgid) = pgid { reap_group(pgid as libc::pid_t).await; }
                 #[cfg(windows)]
                 if let Some(job) = &job { job.terminate(); }
+                group_cleaned = true;
                 // Only grouped commands guarantee descendant EOF. Legacy
                 // group=false retains its explicitly limited semantics.
                 if command.group { let _ = leader_tx.send(true); }
@@ -441,13 +495,15 @@ async fn supervise(
     }
     // Always close the group even on reader errors, blocked stdin or cancellation.
     #[cfg(unix)]
-    if let Some(pgid) = pgid {
+    if let Some(pgid) = pgid.filter(|_| !group_cleaned) {
         unsafe {
             libc::killpg(pgid as libc::pid_t, libc::SIGKILL);
         }
     }
     #[cfg(windows)]
-    if let Some(job) = &job {
+    if let Some(job) = &job
+        && !group_cleaned
+    {
         job.terminate();
     }
     if status.is_none() {
@@ -456,12 +512,11 @@ async fn supervise(
             tokio::time::timeout(Duration::from_secs(1), child.wait())
                 .await
                 .map_err(|_| scope_error(&command, "direct-child-reap-timeout"))?
-                .map_err(|source| ExecError::Io {
-                    argv: command.argv.clone(),
-                    source,
-                })?,
+                .map_err(|e| scope_error(&command, &format!("direct-child-reap-failed:{e}")))?,
         );
     }
+    // This receipt is about Child::wait of our direct child ONLY.
+    reaped.store(true, Ordering::Release);
     let result = match failure {
         Some(source) => Err(ExecError::Io {
             argv: command.argv.clone(),

@@ -41,44 +41,63 @@ fn lua_path(p: &std::path::Path) -> String {
 }
 
 // @trace order:1534-puyz
-struct ScriptFixture {
-    dir: tempfile::TempDir,
-}
+// Linux-only slice evidence. Native Mac/Windows measurement remains open.
+#[cfg(target_os = "linux")]
+mod managed_script {
+    use super::*;
+    struct ScriptFixture {
+        dir: tempfile::TempDir,
+    }
 
-impl ScriptFixture {
-    fn new() -> Self {
-        let dir = tempfile::Builder::new()
-            .prefix("sol-1534-")
-            .tempdir_in("/tmp/opencode")
-            .unwrap();
-        std::fs::create_dir(dir.path().join(".git")).unwrap();
-        Self { dir }
+    impl ScriptFixture {
+        fn new() -> Self {
+            let base = if std::path::Path::new("/tmp/opencode").is_dir() {
+                PathBuf::from("/tmp/opencode")
+            } else {
+                std::env::temp_dir()
+            };
+            let dir = tempfile::Builder::new()
+                .prefix("sol-1534-")
+                .tempdir_in(base)
+                .unwrap();
+            std::fs::create_dir(dir.path().join(".git")).unwrap();
+            std::fs::create_dir(dir.path().join(".tillandsias")).unwrap();
+            Self { dir }
+        }
+        fn write(&self, name: &str, body: &str) -> String {
+            let path = self.dir.path().join(name);
+            std::fs::write(&path, body).unwrap();
+            lua_path(&path)
+        }
+        fn run(&self, body: &str, timeout: &str) -> std::process::Output {
+            let script = self.write("probe.lua", body);
+            // Read-only red/green evidence can exercise the identical regression
+            // against the pre-fix binary snapshot without rebuilding old source.
+            let binary = std::env::var_os("TILLANDSIAS_LUA_PROC_TEST_BIN")
+                .unwrap_or_else(|| env!("CARGO_BIN_EXE_tillandsias-plan").into());
+            std::process::Command::new(binary)
+                .args(["script", "run", &script, "--timeout", timeout])
+                .env("TILLANDSIAS_REPO_ROOT", self.dir.path())
+                .env_remove("TILLANDSIAS_POLICY_SEED")
+                .env_remove("TILLANDSIAS_CONSENT_TOKEN")
+                .env_remove("CI")
+                .env_remove("TILLANDSIAS_SKILL")
+                .env_remove("TILLANDSIAS_DESTRUCTIVE_RESET_OK")
+                .env("TILLANDSIAS_POLICY_REGIME", "interactive")
+                .env("TILLANDSIAS_CONSENT_DIR", self.dir.path().join("consent"))
+                .current_dir(self.dir.path())
+                .output()
+                .unwrap()
+        }
     }
-    fn write(&self, name: &str, body: &str) -> String {
-        let path = self.dir.path().join(name);
-        std::fs::write(&path, body).unwrap();
-        lua_path(&path)
-    }
-    fn run(&self, body: &str, timeout: &str) -> std::process::Output {
-        let script = self.write("probe.lua", body);
-        std::process::Command::new(env!("CARGO_BIN_EXE_tillandsias-plan"))
-            .args(["script", "run", &script, "--timeout", timeout])
-            .env("TILLANDSIAS_REPO_ROOT", self.dir.path())
-            .env_remove("TILLANDSIAS_POLICY_SEED")
-            .env_remove("TILLANDSIAS_CONSENT_TOKEN")
-            .current_dir(self.dir.path())
-            .output()
-            .unwrap()
-    }
-}
 
-#[test]
-fn live_spawn_delivers_10000_ordered_lines_per_fd_before_wait_and_preserves_cr() {
-    let f = ScriptFixture::new();
-    let producer = f.write("producer.py", "import os\nfor i in range(10000):\n os.write(1, ('%d\\r\\n'%i).encode()); os.write(2, ('E%d\\r\\n'%i).encode())\nos.write(1,b'last')\n");
-    let out = f.run(
-        &format!(
-            r#"
+    #[test]
+    fn live_spawn_delivers_10000_ordered_lines_per_fd_before_wait_and_preserves_cr() {
+        let f = ScriptFixture::new();
+        let producer = f.write("producer.py", "import os\nfor i in range(10000):\n os.write(1, ('%d\\r\\n'%i).encode()); os.write(2, ('E%d\\r\\n'%i).encode())\nos.write(1,b'last')\n");
+        let out = f.run(
+            &format!(
+                r#"
         local p = proc.spawn{{argv={{"python3", "{producer}"}}, capture_bytes=17}}
         local n, e, last = 0, 0, false
         p:on_line("stdout", function(line)
@@ -92,39 +111,42 @@ fn live_spawn_delivers_10000_ordered_lines_per_fd_before_wait_and_preserves_cr()
         assert(#c.stdout == 17 and #c.stderr == 17 and c.dropped > 0)
         verdict.ok("ordered", n, e)
     "#
-        ),
-        "10s",
-    );
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&out.stdout),
-        "ok:ordered:10000:10000\n"
-    );
-}
+            ),
+            "10s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout),
+            "ok:ordered:10000:10000\n"
+        );
+    }
 
-#[test]
-fn live_callback_acknowledgement_and_two_producers_prove_scope_wide_dispatch() {
-    let f = ScriptFixture::new();
-    let producer = f.write(
-        "live.py",
-        r#"import os,sys,time
+    #[test]
+    fn live_callback_acknowledgement_and_two_producers_prove_scope_wide_dispatch() {
+        let f = ScriptFixture::new();
+        let producer = f.write(
+            "live.py",
+            r#"import os,sys,time
 n=sys.argv[1]
 open('started-'+n,'w').write('started')
-os.write(1,('READY'+n+'\n').encode())
 end=time.monotonic()+3
+while not (os.path.exists('started-1') and os.path.exists('started-2')):
+ if time.monotonic()>end: sys.exit(8)
+ time.sleep(.005)
+os.write(1,('READY'+n+'\n').encode())
 while not os.path.exists('ack-'+n):
  if time.monotonic()>end: sys.exit(9)
  time.sleep(.005)
 os.write(1,('DONE'+n+'\n').encode())
 "#,
-    );
-    let out = f.run(
-        &format!(
-            r#"
+        );
+        let out = f.run(
+            &format!(
+                r#"
         local a = proc.spawn{{argv={{"python3", "{producer}", "1"}}}}
         local b = proc.spawn{{argv={{"python3", "{producer}", "2"}}}}
         local ready, done = 0, 0
@@ -140,20 +162,20 @@ os.write(1,('DONE'+n+'\n').encode())
         assert(ready == 2 and done == 2)
         verdict.ok("live-overlap")
     "#
-        ),
-        "6s",
-    );
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert_eq!(String::from_utf8_lossy(&out.stdout), "ok:live-overlap\n");
-}
+            ),
+            "6s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "ok:live-overlap\n");
+    }
 
-// This producer acknowledges BOTH processes before the outer timer fires.
-// Its long-deadline control proves delayed markers would appear without cleanup.
-const OWNED_PRODUCER: &str = r#"import os,sys,time,subprocess,json
+    // This producer acknowledges BOTH processes before the outer timer fires.
+    // Its long-deadline control proves delayed markers would appear without cleanup.
+    const OWNED_PRODUCER: &str = r#"import os,sys,time,subprocess,json
 def identity():
  return {'pid':os.getpid(),'pgid':os.getpgrp(),'start':open('/proc/self/stat').read().split()[21]}
 if len(sys.argv)>1:
@@ -168,81 +190,81 @@ time.sleep(1.1); open('child-marker','w').write('survived')
 p.wait()
 "#;
 
-fn assert_acknowledged_tasks_stopped(f: &ScriptFixture) {
-    for name in ["child", "grandchild"] {
-        let ack: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(f.dir.path().join(format!("{name}-ack")))
-                .expect("producer must acknowledge before cancellation"),
-        )
-        .unwrap();
-        let pid = ack["pid"].as_u64().unwrap();
-        if let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) {
-            let fields: Vec<_> = stat.split_whitespace().collect();
-            assert!(
-                fields[21] != ack["start"].as_str().unwrap() || fields[2] == "Z",
-                "{name} still running: {stat}"
-            );
+    fn assert_acknowledged_tasks_stopped(f: &ScriptFixture) {
+        for name in ["child", "grandchild"] {
+            let ack: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(f.dir.path().join(format!("{name}-ack")))
+                    .expect("producer must acknowledge before cancellation"),
+            )
+            .unwrap();
+            let pid = ack["pid"].as_u64().unwrap();
+            if let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+                let fields: Vec<_> = stat.split_whitespace().collect();
+                assert!(
+                    fields[21] != ack["start"].as_str().unwrap() || fields[2] == "Z",
+                    "{name} still running: {stat}"
+                );
+            }
+        }
+        std::thread::sleep(Duration::from_millis(1200));
+        for name in ["child-marker", "grandchild-marker"] {
+            assert!(!f.dir.path().join(name).exists(), "delayed {name}");
         }
     }
-    std::thread::sleep(Duration::from_millis(1200));
-    for name in ["child-marker", "grandchild-marker"] {
-        assert!(!f.dir.path().join(name).exists(), "delayed {name}");
-    }
-}
 
-#[test]
-#[cfg(target_os = "linux")]
-fn outer_deadline_cancels_acknowledged_legacy_and_streaming_groups_with_positive_control() {
-    for door in ["proc.run", "sh.run", "expert.shell", "proc.spawn"] {
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn outer_deadline_cancels_acknowledged_legacy_and_streaming_groups_with_positive_control() {
+        for door in ["proc.run", "sh.run", "expert.shell", "proc.spawn"] {
+            let f = ScriptFixture::new();
+            let producer = f.write("owned.py", OWNED_PRODUCER);
+            let call = if door == "sh.run" || door == "expert.shell" {
+                format!(r#"{door}{{"python3", "{producer}", timeout_ms=4000}}"#)
+            } else {
+                format!(r#"{door}{{argv={{"python3", "{producer}"}},timeout_ms=4000}}"#)
+            };
+            let script = if door == "proc.spawn" {
+                format!("local p={call}; p:wait(); verdict.ok('survived')")
+            } else {
+                format!("{call}; verdict.ok('survived')")
+            };
+            let t0 = Instant::now();
+            let out = f.run(&script, "700ms");
+            assert_eq!(
+                out.status.code(),
+                Some(124),
+                "door={door}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            assert!(t0.elapsed() < Duration::from_secs(2), "door={door}");
+            assert_acknowledged_tasks_stopped(&f);
+        }
         let f = ScriptFixture::new();
         let producer = f.write("owned.py", OWNED_PRODUCER);
-        let call = if door == "sh.run" || door == "expert.shell" {
-            format!(r#"{door}{{"python3", "{producer}", timeout_ms=4000}}"#)
-        } else {
-            format!(r#"{door}{{argv={{"python3", "{producer}"}},timeout_ms=4000}}"#)
-        };
-        let script = if door == "proc.spawn" {
-            format!("local p={call}; p:wait(); verdict.ok('survived')")
-        } else {
-            format!("{call}; verdict.ok('survived')")
-        };
-        let t0 = Instant::now();
-        let out = f.run(&script, "700ms");
-        assert_eq!(
-            out.status.code(),
-            Some(124),
-            "door={door}: {}",
+        let out = f.run(&format!(r#"assert(proc.run{{argv={{"python3","{producer}"}},timeout_ms=4000}}.ok); verdict.ok("control")"#), "3500ms");
+        assert!(
+            out.status.success(),
+            "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        assert!(t0.elapsed() < Duration::from_secs(2), "door={door}");
-        assert_acknowledged_tasks_stopped(&f);
+        assert!(f.dir.path().join("child-marker").exists());
+        assert!(f.dir.path().join("grandchild-marker").exists());
     }
-    let f = ScriptFixture::new();
-    let producer = f.write("owned.py", OWNED_PRODUCER);
-    let out = f.run(&format!(r#"assert(proc.run{{argv={{"python3","{producer}"}},timeout_ms=4000}}.ok); verdict.ok("control")"#), "3500ms");
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert!(f.dir.path().join("child-marker").exists());
-    assert!(f.dir.path().join("grandchild-marker").exists());
-}
 
-#[test]
-#[cfg(target_os = "linux")]
-fn script_lifetime_cancels_cpu_loop_error_verdict_and_dropped_handles() {
-    for ending in [
-        "while true do end",
-        "error('script-broke')",
-        "verdict.ok('early')",
-        "p=nil; collectgarbage(); verdict.ok('dropped')",
-        "pcall(verdict.ok,'caught'); while true do end",
-    ] {
-        let f = ScriptFixture::new();
-        let producer = f.write("owned.py", OWNED_PRODUCER);
-        let script = format!(
-            r#"
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn script_lifetime_cancels_cpu_loop_error_verdict_and_dropped_handles() {
+        for ending in [
+            "while true do end",
+            "error('script-broke')",
+            "verdict.ok('early')",
+            "p=nil; collectgarbage(); verdict.ok('dropped')",
+            "pcall(verdict.ok,'caught'); while true do end",
+        ] {
+            let f = ScriptFixture::new();
+            let producer = f.write("owned.py", OWNED_PRODUCER);
+            let script = format!(
+                r#"
             local p=proc.spawn{{argv={{"python3","{producer}"}}}}
             p:on_line("stdout", function(s) assert(s=="READY"); error("ack-stop") end)
             -- An acknowledged start without consuming the callback: legacy run
@@ -250,38 +272,38 @@ fn script_lifetime_cancels_cpu_loop_error_verdict_and_dropped_handles() {
             proc.run{{argv={{"python3","-c","import os,time;\nwhile not os.path.exists('child-ack'): time.sleep(.005)"}}}}
             {ending}
         "#
-        );
-        let out = f.run(&script, "700ms");
-        if ending == "while true do end" {
-            assert_eq!(out.status.code(), Some(124));
-        } else if ending.contains("error(") {
-            assert_eq!(out.status.code(), Some(1));
-        } else {
-            assert!(
-                out.status.success(),
-                "{}",
-                String::from_utf8_lossy(&out.stderr)
             );
+            let out = f.run(&script, "700ms");
+            if ending == "while true do end" {
+                assert_eq!(out.status.code(), Some(124));
+            } else if ending.contains("error(") {
+                assert_eq!(out.status.code(), Some(1));
+            } else {
+                assert!(
+                    out.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&out.stderr)
+                );
+            }
+            assert_acknowledged_tasks_stopped(&f);
         }
-        assert_acknowledged_tasks_stopped(&f);
     }
-}
 
-#[test]
-fn caught_callback_error_and_reentrant_wait_latch_scope_closure() {
-    for action in [
-        "error('callback-broke')",
-        "p:wait()",
-        "verdict.ok('callback-verdict')",
-    ] {
-        let f = ScriptFixture::new();
-        let producer = f.write(
-            "callback.py",
-            "import os,time\nos.write(1,b'READY\\n')\ntime.sleep(30)\n",
-        );
-        let out = f.run(
-            &format!(
-                r#"
+    #[test]
+    fn caught_callback_error_and_reentrant_wait_latch_scope_closure() {
+        for action in [
+            "error('callback-broke')",
+            "p:wait()",
+            "verdict.ok('callback-verdict')",
+        ] {
+            let f = ScriptFixture::new();
+            let producer = f.write(
+                "callback.py",
+                "import os,time\nos.write(1,b'READY\\n')\ntime.sleep(30)\n",
+            );
+            let out = f.run(
+                &format!(
+                    r#"
             local p=proc.spawn{{argv={{"python3","{producer}"}}}}
             p:on_line("stdout", function(s) {action} end)
             pcall(function() p:wait() end)
@@ -289,27 +311,27 @@ fn caught_callback_error_and_reentrant_wait_latch_scope_closure() {
             proc.spawn{{argv={{"python3","-c","open('escaped','w').write('bad')"}}}}
             verdict.ok("wrong")
         "#
-            ),
-            "2s",
-        );
-        assert!(!f.dir.path().join("escaped").exists());
-        if action.contains("verdict") {
-            assert!(out.status.success());
-            assert_eq!(
-                String::from_utf8_lossy(&out.stdout),
-                "ok:callback-verdict\n"
+                ),
+                "2s",
             );
-        } else {
-            assert_eq!(out.status.code(), Some(1));
+            assert!(!f.dir.path().join("escaped").exists());
+            if action.contains("verdict") {
+                assert!(out.status.success());
+                assert_eq!(
+                    String::from_utf8_lossy(&out.stdout),
+                    "ok:callback-verdict\n"
+                );
+            } else {
+                assert_eq!(out.status.code(), Some(1));
+            }
         }
     }
-}
 
-#[test]
-fn spawn_validation_missing_program_kill_and_line_limit_are_explicit() {
-    let f = ScriptFixture::new();
-    let out = f.run(
-        r#"
+    #[test]
+    fn spawn_validation_missing_program_kill_and_line_limit_are_explicit() {
+        let f = ScriptFixture::new();
+        let out = f.run(
+            r#"
         assert(not pcall(function() proc.spawn{argv={"true"}, group=false} end))
         assert(not pcall(function() proc.spawn{argv={"true"}, timeout=1} end))
         assert(proc.spawn{argv={"/definitely-no-such-program-1534"}}.status=="spawn_failed")
@@ -319,17 +341,251 @@ fn spawn_validation_missing_program_kill_and_line_limit_are_explicit() {
         local c=p:kill(); assert(not c.ok and c.status=="signaled")
         verdict.ok("validation")
     "#,
-        "3s",
-    );
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let producer = f.write("huge.py", "import os\nos.write(1,b'x'*1048577)\n");
-    let out = f.run(&format!(r#"local p=proc.spawn{{argv={{"python3","{producer}"}}}}; p:wait(); verdict.ok('wrong')"#), "3s");
-    assert_eq!(out.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("proc-line-too-long"));
+            "3s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let producer = f.write("huge.py", "import os\nos.write(1,b'x'*1048577)\n");
+        let out = f.run(&format!(r#"local p=proc.spawn{{argv={{"python3","{producer}"}}}}; p:wait(); verdict.ok('wrong')"#), "3s");
+        assert_eq!(out.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&out.stderr).contains("proc-line-too-long"));
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn callbacks_cancel_owned_groups_even_when_caught_or_cpu_bound() {
+        for action in [
+            "error('callback-broke')",
+            "p:wait()",
+            "p:kill()",
+            "proc.run{argv={'true'}}",
+            "proc.spawn{argv={'true'}}",
+            "verdict.ok('callback-verdict')",
+            "while true do end",
+        ] {
+            let f = ScriptFixture::new();
+            let producer = f.write("owned.py", OWNED_PRODUCER);
+            let out = f.run(
+                &format!(
+                    r#"
+            local p=proc.spawn{{argv={{"python3","{producer}"}}}}
+            p:on_line("stdout",function(s) assert(s=='READY'); {action} end)
+            pcall(function() p:wait() end)
+            while true do end
+        "#
+                ),
+                "700ms",
+            );
+            if action == "while true do end" {
+                assert_eq!(out.status.code(), Some(124));
+            } else if action.contains("verdict") {
+                assert!(out.status.success());
+            } else {
+                assert_eq!(
+                    out.status.code(),
+                    Some(1),
+                    "{action}: {}",
+                    String::from_utf8_lossy(&out.stderr)
+                );
+            }
+            assert_acknowledged_tasks_stopped(&f);
+        }
+    }
+
+    #[test]
+    fn streaming_keeps_default_8mib_prefix_and_byte_exact_empty_binary_lines() {
+        let f = ScriptFixture::new();
+        let producer = f.write(
+            "bytes.py",
+            "import os\nos.write(1,b'\\n\\r\\nA\\x00\\xff\\r\\nlast')\nos.write(2,b'E\\n')\n",
+        );
+        let out = f.run(
+            &format!(
+                r#"
+        local p=proc.spawn{{argv={{"python3","{producer}"}}}}
+        local expected={{"", "\r", "A"..string.char(0,255).."\r", "last"}}
+        local i=0
+        p:on_line('stdout',function(s) i=i+1; assert(s==expected[i]) end)
+        assert(p:wait().ok and i==4)
+        verdict.ok('bytes')
+    "#
+            ),
+            "3s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let producer = f.write(
+            "cap.py",
+            "import os\nfor i in range(9216): os.write(1,b'X'*1023+b'\\n')\n",
+        );
+        let out = f.run(
+            &format!(
+                r#"
+        local p=proc.spawn{{argv={{"python3","{producer}"}}}}
+        local n=0
+        p:on_line('stdout',function(s) assert(#s==1023); n=n+1 end)
+        local c=p:wait()
+        assert(n==9216 and #c.stdout==8*1024*1024 and c.dropped==1024*1024)
+        assert(c.stdout:sub(1,1024)==string.rep('X',1023)..'\n')
+        assert(c.truncated and not c.ok and c.code==0)
+        verdict.ok('bounded-prefix')
+    "#
+            ),
+            "10s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    fn scoped_spawn_preserves_fixed_environment_stdin_and_cacheable_process_absence() {
+        let f = ScriptFixture::new();
+        let producer = f.write("env.py", "import os,sys\nassert os.environ['LC_ALL']=='C' and os.environ['LANG']=='C' and os.environ['TZ']=='UTC'\nassert os.environ['GIT_TERMINAL_PROMPT']=='0' and os.environ['EXPLICIT']=='yes'\nos.write(1,sys.stdin.buffer.read())\n");
+        let out = f.run(
+            &format!(
+                r#"
+        local bytes='stdin'..string.char(0,255)..'\r\n'
+        local p=proc.spawn{{argv={{'python3','{producer}'}},env={{EXPLICIT='yes'}},stdin=bytes}}
+        assert(p:wait().stdout==bytes)
+        verdict.ok('env-stdin')
+    "#
+            ),
+            "3s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let out=f.run("-- @class cacheable\nassert(proc==nil and sh==nil and expert.shell==nil); verdict.ok('pure')", "3s");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn spawn_policy_seed_consent_and_programmer_validation_share_hardened_gate() {
+        use std::os::unix::fs::PermissionsExt;
+        use tillandsias_plan::command_policy as cp;
+        let f = ScriptFixture::new();
+        // Harmless marker executable named rm; NEVER the system rm.
+        let program = f.write("rm", "#!/bin/sh\nprintf ran >> marker\n");
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let argv = vec![
+            program,
+            "-rf".into(),
+            lua_path(&f.dir.path().with_extension("outside-unused")),
+        ];
+        let args = argv
+            .iter()
+            .map(|s| format!("{s:?}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let chunk = format!(
+            r#"assert(proc.spawn{{argv={{{args}}}}}.status=='policy_consent_required'); verdict.ok('consent-required')"#
+        );
+        assert!(f.run(&chunk, "3s").status.success());
+        assert!(!f.dir.path().join("marker").exists());
+        let ctx = cp::ConsentCtx {
+            dir: f.dir.path().join("consent"),
+            host: cp::this_host(),
+            now: chrono::Utc::now(),
+            evidence: cp::HostKind::BareMetal,
+            skill: None,
+            reset_ok: None,
+        };
+        let (token, _) = cp::consent_grant(&ctx, "workspace-destroy", &argv, 1800).unwrap();
+        let original = std::fs::read(&token).unwrap();
+        for invalid in [
+            "group=false",
+            "timeout_ms='typo'",
+            "capture_bytes=0",
+            "env={X=42}",
+            "cwd='relative'",
+            "unknown=true",
+            "env={X='a'..string.char(0)}",
+        ] {
+            let chunk = format!(
+                r#"assert(not pcall(function() proc.spawn{{argv={{{args}}},{invalid}}} end)); verdict.ok('invalid')"#
+            );
+            let out = f.run(&chunk, "3s");
+            assert!(
+                out.status.success(),
+                "{invalid}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            assert_eq!(
+                std::fs::read(&token).unwrap(),
+                original,
+                "{invalid} consumed consent"
+            );
+            assert!(!f.dir.path().join("marker").exists());
+        }
+        let seed_path = f.dir.path().join(cp::SEED_RELATIVE_PATH);
+        for bad in [
+            "version: [",
+            "version: 1\ndefault: allow\nrules:\n  - id: deny-rm\n    program: rm\n    decision: deny\n",
+        ] {
+            std::fs::write(&seed_path, bad).unwrap();
+            let out=f.run(&format!(r#"assert(proc.spawn{{argv={{{args}}}}}.status=='policy_denied'); verdict.ok('denied')"#), "3s");
+            assert!(
+                out.status.success(),
+                "seed={bad}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            assert_eq!(std::fs::read(&token).unwrap(), original);
+            assert!(!f.dir.path().join("marker").exists());
+        }
+        // A default applies to UNMATCHED commands, not a classified floor rule.
+        // Preserve that existing distinction rather than flipping policy semantics.
+        let harmless = f.write("harmless", "#!/bin/sh\nprintf bad >> denied-marker\n");
+        std::fs::set_permissions(&harmless, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(&seed_path, "version: 1\ndefault: deny\nrules: []\n").unwrap();
+        let out=f.run(&format!(r#"assert(proc.spawn{{argv={{{harmless:?}}}}}.status=='policy_denied'); verdict.ok('default-denied')"#), "3s");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(!f.dir.path().join("denied-marker").exists());
+        assert_eq!(std::fs::read(&token).unwrap(), original);
+        std::fs::remove_file(seed_path).unwrap();
+        let out=f.run(&format!(r#"local p=proc.spawn{{argv={{{args}}}}}; assert(p:wait().ok); verdict.ok('approved')"#), "3s");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(!token.exists());
+        assert_eq!(
+            std::fs::read_to_string(f.dir.path().join("marker")).unwrap(),
+            "ran"
+        );
+        assert!(f.run(&chunk, "3s").status.success());
+        assert_eq!(
+            std::fs::read_to_string(f.dir.path().join("marker")).unwrap(),
+            "ran"
+        );
+        assert_eq!(
+            std::fs::read_to_string(f.dir.path().join("consent/consumed.jsonl"))
+                .unwrap()
+                .lines()
+                .count(),
+            1
+        );
+    }
 }
 
 /// ARM 1: a non-zero exit is DATA, not a Lua error; and argv is argv.

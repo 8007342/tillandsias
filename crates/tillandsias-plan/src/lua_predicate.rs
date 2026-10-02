@@ -224,8 +224,8 @@ pub fn policy_gate(
 /// `proc.run{argv=..., cwd, env, stdin, timeout_ms, group}` (order 1384-aixy,
 /// design section 4.1): one process, run to completion, returned as a VALUE.
 /// A non-zero exit, a signal and a timeout are all DATA; only programmer
-/// errors raise. This first slice is synchronous: `proc.spawn`, line
-/// callbacks, `proc.chain`, `proc.select` and `proc.all` come in later slices.
+/// errors raise. proc.run remains synchronous; the scoped script runner adds
+/// async proc.spawn/line delivery (1534-puyz), not chain/select/all.
 pub(crate) enum PreparedProc {
     Refused(LuaTable),
     Command {
@@ -290,6 +290,9 @@ pub(crate) fn prepare_proc(
     if argv.is_empty() {
         return Err(err("argv is empty".into()));
     }
+    if argv.iter().any(|arg| arg.contains('\0')) {
+        return Err(err("argv strings must not contain NUL".into()));
+    }
     if argv_t.pairs::<LuaValue, LuaValue>().count() != argv.len() {
         return Err(err(
             "argv must be a sequence with no holes and no named keys".into(),
@@ -323,6 +326,9 @@ pub(crate) fn prepare_proc(
         }
         LuaValue::String(s) => {
             let p = PathBuf::from(s.to_str()?.to_string());
+            if s.as_bytes().contains(&0) {
+                return Err(err("cwd must not contain NUL".into()));
+            }
             if !p.is_absolute() {
                 return Err(err(format!(
                     "cwd '{}' is relative; pass an absolute path",
@@ -342,8 +348,16 @@ pub(crate) fn prepare_proc(
     match spec.get::<LuaValue>("env")? {
         LuaValue::Nil => {}
         LuaValue::Table(t) => {
-            for pair in t.pairs::<String, String>() {
-                let (k, v) = pair.map_err(|_| err("env must map strings to strings".into()))?;
+            for pair in t.pairs::<LuaValue, LuaValue>() {
+                let (LuaValue::String(k), LuaValue::String(v)) = pair? else {
+                    return Err(err("env must map strings to strings".into()));
+                };
+                let (k, v) = (k.to_str()?.to_string(), v.to_str()?.to_string());
+                if k.is_empty() || k.contains(['\0', '=']) || v.contains('\0') {
+                    return Err(err(
+                        "env names must be nonempty without NUL or '=', values without NUL".into(),
+                    ));
+                }
                 cmd = cmd.env(k, v);
             }
         }
