@@ -138,6 +138,7 @@ impl Scope {
         // Register BEFORE setup. A late setup result remains owned even when
         // the caller's bounded handshake expires or the scope closes meanwhile.
         processes.push(process.clone());
+        drop(processes); // No OS thread/process setup holds the close gate.
         let worker_state = state.clone();
         let spawned = std::thread::Builder::new()
             .name(format!("proc-{id}"))
@@ -180,13 +181,21 @@ impl Scope {
                 worker_state.done.notify_all();
             });
         if let Err(source) = spawned {
-            processes.pop(); // Still holding the launch/close gate; no worker exists.
+            let mut slot = state.result.lock().unwrap();
+            *slot = Some(Err(ExecError::Io {
+                argv: thread_argv.clone(),
+                source: std::io::Error::other("supervisor-thread-failed"),
+            }));
+            state.reaped.store(true, Ordering::Release); // No worker or child exists.
+            state.finished.store(true, Ordering::Release);
+            drop(slot);
+            state.done.notify_all();
+            self.0.processes.lock().unwrap().retain(|p| p.id != id);
             return Err(ExecError::Io {
                 argv: thread_argv,
                 source,
             });
         }
-        drop(processes);
         let setup_bound = deadline
             .map(|d| SPAWN_SETUP_BOUND.min(d.saturating_duration_since(Instant::now())))
             .unwrap_or(SPAWN_SETUP_BOUND);
@@ -194,7 +203,7 @@ impl Scope {
             let _ = process.cancel.send(Stop::Close);
             ExecError::Io {
                 argv: thread_argv,
-                source: std::io::Error::other(e.to_string()),
+                source: std::io::Error::other(format!("proc-spawn-setup-failed:{e}")),
             }
         })??;
         Ok(process)
@@ -462,7 +471,7 @@ async fn supervise(
         )?;
         Ok::<_, std::io::Error>((a.0, b.0, a.1 + b.1))
     };
-    tokio::pin!(io);
+    let mut io = Box::pin(io);
     tokio::pin!(timer);
     let mut drained = None;
     let mut status = None;
@@ -493,6 +502,9 @@ async fn supervise(
             break;
         }
     }
+    // Cancelled readers may own queued mpsc permits. Drop them BEFORE enqueueing
+    // Finished, otherwise completion could wait behind an unpolled sender.
+    drop(io);
     // Always close the group even on reader errors, blocked stdin or cancellation.
     #[cfg(unix)]
     if let Some(pgid) = pgid.filter(|_| !group_cleaned) {

@@ -11,7 +11,7 @@ use tillandsias_exec::managed::{Event, Process, Scope};
 struct Handler {
     stdout: Option<LuaFunction>,
     stderr: Option<LuaFunction>,
-    delivered: bool,
+    delivered: Arc<AtomicBool>,
 }
 struct Dispatch {
     events: tokio::sync::mpsc::Receiver<Event>,
@@ -102,8 +102,8 @@ impl Host {
                     }
                 }
                 Event::Finished(id) => {
-                    if let Some(h) = self.dispatch.lock().unwrap().handlers.get_mut(&id) {
-                        h.delivered = true;
+                    if let Some(h) = self.dispatch.lock().unwrap().handlers.remove(&id) {
+                        h.delivered.store(true, Ordering::Release);
                     }
                 }
             }
@@ -114,20 +114,16 @@ impl Host {
         &self,
         lua: Lua,
         process: Process,
+        delivered: Arc<AtomicBool>,
         argv: Vec<String>,
         started: Instant,
     ) -> LuaResult<LuaTable> {
         self.outside_callback()?;
         loop {
             self.pump(&lua)?;
-            let delivered = self
-                .dispatch
-                .lock()
-                .unwrap()
-                .handlers
-                .get(&process.id)
-                .is_some_and(|h| h.delivered);
-            if delivered && let Some(result) = process.result() {
+            if delivered.load(Ordering::Acquire)
+                && let Some(result) = process.result()
+            {
                 let out = match result {
                     Ok(out) => out,
                     Err(e) => {
@@ -153,12 +149,13 @@ impl Host {
         argv: Vec<String>,
         started: Instant,
     ) -> LuaResult<LuaTable> {
+        let delivered = Arc::new(AtomicBool::new(false));
         self.dispatch.lock().unwrap().handlers.insert(
             process.id,
             Handler {
                 stdout: None,
                 stderr: None,
-                delivered: false,
+                delivered: delivered.clone(),
             },
         );
         let table = lua.create_table()?;
@@ -176,7 +173,7 @@ impl Host {
                     let handler = dispatch
                         .handlers
                         .get_mut(&id)
-                        .ok_or_else(|| error("proc.on_line: unknown handle"))?;
+                        .ok_or_else(|| error("proc.on_line: stream already finished"))?;
                     if fd == "stdout" {
                         handler.stdout = Some(callback);
                     } else {
@@ -189,17 +186,19 @@ impl Host {
         for (name, kill) in [("wait", false), ("kill", true)] {
             let host = self.clone();
             let process = process.clone();
+            let delivered = delivered.clone();
             let argv = argv.clone();
             let method = lua.create_async_function(move |lua, _: LuaTable| {
                 let host = host.clone();
                 let process = process.clone();
+                let delivered = delivered.clone();
                 let argv = argv.clone();
                 async move {
                     host.outside_callback()?;
                     if kill {
                         process.kill();
                     }
-                    host.wait(lua, process, argv, started).await
+                    host.wait(lua, process, delivered, argv, started).await
                 }
             })?;
             // Check synchronously, BEFORE an async method can yield from a

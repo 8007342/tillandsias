@@ -104,6 +104,38 @@ async fn managed_unterminated_line_has_an_explicit_bound() {
     scope.cleanup().unwrap();
 }
 
+#[test]
+fn managed_launch_close_race_keeps_every_accepted_child_owned() {
+    use tillandsias_exec::managed::Scope;
+    let mut accepted = 0;
+    for i in 0..20 {
+        let (scope, _events) = Scope::new(None);
+        let worker_scope = scope.clone();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let worker_barrier = barrier.clone();
+        let worker = std::thread::spawn(move || {
+            worker_barrier.wait();
+            worker_scope.spawn(Command::new(["sleep", "30"]).group(true), false)
+        });
+        barrier.wait();
+        if i % 2 == 0 {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        scope.cleanup().unwrap();
+        if let Ok(process) = worker.join().unwrap() {
+            accepted += 1;
+            // An accepted launch may finish setup after close, but it is already
+            // registered and must be reaped before cleanup reports success.
+            assert!(process.result().is_some());
+        }
+        assert!(scope.spawn(Command::new(["true"]), false).is_err());
+    }
+    assert!(
+        accepted > 0,
+        "positive control: at least one child actually launched"
+    );
+}
+
 /// CRITERION 1. stdout and stderr are SEPARATE values, and stderr survives when
 /// a caller reads only stdout.
 /// PRE-FIX: FAILS — run-litmus-test.sh redirects every step `2>&1`, so no

@@ -348,6 +348,28 @@ p.wait()
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
+        let producer = f.write(
+            "busy.py",
+            "import os\nwhile True: os.write(1,b'x\\n'*8192)\n",
+        );
+        let out = f.run(
+            &format!(
+                r#"
+            local p=proc.spawn{{argv={{'python3','{producer}'}}}}
+            -- Fill the delivery queue while Lua is synchronously elsewhere.
+            proc.run{{argv={{'sleep','0.1'}}}}
+            local n=0; p:on_line('stdout',function(s) assert(s=='x'); n=n+1 end)
+            local c=p:kill(); assert(not c.ok and n>0)
+            verdict.ok('kill-backpressure')
+        "#
+            ),
+            "3s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
         let producer = f.write("huge.py", "import os\nos.write(1,b'x'*1048577)\n");
         let out = f.run(&format!(r#"local p=proc.spawn{{argv={{"python3","{producer}"}}}}; p:wait(); verdict.ok('wrong')"#), "3s");
         assert_eq!(out.status.code(), Some(1));
@@ -364,6 +386,7 @@ p.wait()
             "proc.run{argv={'true'}}",
             "proc.spawn{argv={'true'}}",
             "verdict.ok('callback-verdict')",
+            "pcall(verdict.ok,'callback-verdict'); while true do end",
             "while true do end",
         ] {
             let f = ScriptFixture::new();
@@ -455,7 +478,8 @@ p.wait()
                 r#"
         local bytes='stdin'..string.char(0,255)..'\r\n'
         local p=proc.spawn{{argv={{'python3','{producer}'}},env={{EXPLICIT='yes'}},stdin=bytes}}
-        assert(p:wait().stdout==bytes)
+        local c=p:wait(); assert(c.ok and c.stdout==bytes)
+        assert(p:wait().run_id==c.run_id)
         verdict.ok('env-stdin')
     "#
             ),
@@ -467,6 +491,33 @@ p.wait()
             String::from_utf8_lossy(&out.stderr)
         );
         let out=f.run("-- @class cacheable\nassert(proc==nil and sh==nil and expert.shell==nil); verdict.ok('pure')", "3s");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    fn finished_stream_releases_callback_captures_after_dropped_handle() {
+        let f = ScriptFixture::new();
+        let out = f.run(
+            r#"
+            local weak=setmetatable({}, {__mode='v'})
+            do
+                local marker={}; weak[1]=marker
+                local p=proc.spawn{argv={'printf','line\n'}}
+                p:on_line('stdout',function(s) assert(marker and s=='line') end)
+                assert(p:wait().ok)
+                assert(not pcall(function() p:on_line('stdout',function() end) end))
+                p=nil
+            end
+            collectgarbage('collect'); collectgarbage('collect')
+            assert(weak[1]==nil, 'host retained a finished callback')
+            verdict.ok('callback-released')
+        "#,
+            "3s",
+        );
         assert!(
             out.status.success(),
             "{}",
