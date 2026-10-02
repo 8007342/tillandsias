@@ -1,0 +1,9 @@
+events:
+  - packet_id: lua-live-proc-spawn-streams-with-script-owned-cancellation-and-reaping
+    event:
+      type: progress
+      ts: "2026-10-02T16:44:02Z"
+      agent_id: linux-macuahuitl-opencode-20261002t053211z
+      host: macuahuitl
+      summary: |
+        Sol final implementation checkpoint before clean-source evidence: OS thread/process setup no longer holds the close gate; accepted launches are registered before setup and late setup stays owned. A launch/close race fixture includes actual-launch controls. Cancelled IO futures are explicitly dropped before Finished delivery so their pending channel permits cannot obstruct completion; kill under delivery backpressure is covered. Finished delivery releases callback registry captures rather than retaining them until script exit; a weak-reference GC fixture passes, repeat wait retains the same run identity, and late on_line after stream completion is explicitly refused. Caught verdict followed by a CPU loop inside a callback passes, verifying the callback hook as well as the script-coroutine hook. Executor package now 28/28 green (executor_contract12); last full targeted Lua/policy suite was 78/78 before the added callback-release fixture, whose focused run passed; final clean-source suite pending. Exact original deadline harness on previous checkpoint ff3c27cce measured ACK36.339ms, outer700ms exit124 at704.232ms, direct child absent and grandchild killed/Z at exit; grandchild was reaped by the harness, not the runner, no delayed markers, no forced cleanup. Long control exit0 at1857.716ms with both markers. Re-measure against final clean source before READY. Two named live regressions FAIL on preserved pre-fix binary (spawn nil); baseline outer leak receipt remains canonical. No full gate/preflight/clippy/native closure/landing/completed status claimed; operator assigns serialized gates to parent.

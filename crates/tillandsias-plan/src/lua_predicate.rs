@@ -67,6 +67,10 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+// @trace order:1534-puyz
+#[path = "lua_process.rs"]
+pub(crate) mod script_process;
+
 /// Which capabilities a predicate is given, and therefore whether its result may
 /// be cached. The class is what the environment is built FROM, not a label
 /// attached to it afterwards.
@@ -101,7 +105,7 @@ impl PredicateClass {
 /// What `expert.shell{...}` returns to Lua, mirroring tillandsias_exec::Output.
 /// Three SEPARATE values plus the run identity — a predicate can tell stdout
 /// from stderr, and a stale artifact from a fresh one.
-fn shell_result_to_lua(lua: &Lua, out: tillandsias_exec::Output) -> LuaResult<LuaTable> {
+pub(crate) fn shell_result_to_lua(lua: &Lua, out: tillandsias_exec::Output) -> LuaResult<LuaTable> {
     let t = lua.create_table()?;
     t.set("stdout", String::from_utf8_lossy(&out.stdout).to_string())?;
     t.set("stderr", String::from_utf8_lossy(&out.stderr).to_string())?;
@@ -220,10 +224,25 @@ pub fn policy_gate(
 /// `proc.run{argv=..., cwd, env, stdin, timeout_ms, group}` (order 1384-aixy,
 /// design section 4.1): one process, run to completion, returned as a VALUE.
 /// A non-zero exit, a signal and a timeout are all DATA; only programmer
-/// errors raise. This first slice is synchronous: `proc.spawn`, line
-/// callbacks, `proc.chain`, `proc.select` and `proc.all` come in later slices.
-fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
-    let err = |m: String| mlua::Error::RuntimeError(format!("proc.run: {m}"));
+/// errors raise. proc.run remains synchronous; the scoped script runner adds
+/// async proc.spawn/line delivery (1534-puyz), not chain/select/all.
+pub(crate) enum PreparedProc {
+    Refused(LuaTable),
+    Command {
+        argv: Vec<String>,
+        command: tillandsias_exec::Command,
+    },
+}
+
+// @trace order:1534-puyz
+// Validate the WHOLE call before the execution gate can consume consent.
+pub(crate) fn prepare_proc(
+    lua: &Lua,
+    spec: LuaTable,
+    caller: &str,
+    managed_group: bool,
+) -> LuaResult<PreparedProc> {
+    let err = |m: String| mlua::Error::RuntimeError(format!("{caller}: {m}"));
 
     for pair in spec.clone().pairs::<LuaValue, LuaValue>() {
         let (k, _) = pair?;
@@ -271,45 +290,38 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
     if argv.is_empty() {
         return Err(err("argv is empty".into()));
     }
+    if argv.iter().any(|arg| arg.contains('\0')) {
+        return Err(err("argv strings must not contain NUL".into()));
+    }
     if argv_t.pairs::<LuaValue, LuaValue>().count() != argv.len() {
         return Err(err(
             "argv must be a sequence with no holes and no named keys".into(),
         ));
     }
-    // Resolve cwd first: the policy measures a destroy against it.
+    // Snapshot cwd ONCE. Lua __index may return a different value on every
+    // lookup; authorization must measure the exact cwd execution will use.
     let cwd_path: Option<PathBuf> = match spec.get::<LuaValue>("cwd")? {
-        LuaValue::String(s) => Some(PathBuf::from(s.to_str()?.to_string())),
-        _ => None,
-    };
-    if let Some(d) = policy_gate(
-        &argv,
-        cwd_path.as_deref().filter(|p| p.is_absolute()),
-        "proc.run",
-    ) {
-        // A refusal is a VALUE, like every other outcome of proc.run, and NO
-        // process is spawned (1443-isrk arm 5).
-        let t = lua.create_table()?;
-        let echo = lua.create_table()?;
-        for (i, a) in argv.iter().enumerate() {
-            echo.set(i + 1, crate::command_policy::redact(a))?;
+        LuaValue::Nil => None,
+        LuaValue::String(s) => {
+            let p = PathBuf::from(s.to_str()?.to_string());
+            if s.as_bytes().contains(&0) {
+                return Err(err("cwd must not contain NUL".into()));
+            }
+            if !p.is_absolute() {
+                return Err(err(format!(
+                    "cwd '{}' is relative; pass an absolute path",
+                    p.display()
+                )));
+            }
+            Some(p)
         }
-        t.set("argv", echo)?;
-        t.set(
-            "status",
-            if d.strictness == crate::command_policy::Strictness::Deny {
-                "policy_denied"
-            } else {
-                "policy_consent_required"
-            },
-        )?;
-        t.set("ok", false)?;
-        t.set("rule_id", d.rule_id.as_str())?;
-        t.set("decision", d.token.as_str())?;
-        t.set("why", d.why.unwrap_or_default())?;
-        t.set("remedy", d.remedy.unwrap_or_default())?;
-        return Ok(t);
-    }
-
+        other => {
+            return Err(err(format!(
+                "cwd must be a string, not a {}",
+                other.type_name()
+            )));
+        }
+    };
     let mut cmd = tillandsias_exec::Command::new(argv.clone()).env_clear();
     for key in PROC_RUN_BASE_ENV_PASSTHROUGH {
         if let Some(v) = std::env::var_os(key) {
@@ -325,35 +337,25 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
         cmd = cmd.env(k, v);
     }
 
-    match spec.get::<LuaValue>("cwd")? {
-        LuaValue::Nil => {
-            if let Ok(root) = find_repo_root() {
-                cmd = cmd.current_dir(root);
-            }
-        }
-        LuaValue::String(s) => {
-            let p = PathBuf::from(s.to_str()?.to_string());
-            if !p.is_absolute() {
-                return Err(err(format!(
-                    "cwd '{}' is relative; pass an absolute path",
-                    p.display()
-                )));
-            }
-            cmd = cmd.current_dir(p);
-        }
-        other => {
-            return Err(err(format!(
-                "cwd must be a string, not a {}",
-                other.type_name()
-            )));
-        }
+    if let Some(p) = &cwd_path {
+        cmd = cmd.current_dir(p);
+    } else if let Ok(root) = find_repo_root() {
+        cmd = cmd.current_dir(root);
     }
 
     match spec.get::<LuaValue>("env")? {
         LuaValue::Nil => {}
         LuaValue::Table(t) => {
-            for pair in t.pairs::<String, String>() {
-                let (k, v) = pair.map_err(|_| err("env must map strings to strings".into()))?;
+            for pair in t.pairs::<LuaValue, LuaValue>() {
+                let (LuaValue::String(k), LuaValue::String(v)) = pair? else {
+                    return Err(err("env must map strings to strings".into()));
+                };
+                let (k, v) = (k.to_str()?.to_string(), v.to_str()?.to_string());
+                if k.is_empty() || k.contains(['\0', '=']) || v.contains('\0') {
+                    return Err(err(
+                        "env names must be nonempty without NUL or '=', values without NUL".into(),
+                    ));
+                }
                 cmd = cmd.env(k, v);
             }
         }
@@ -400,6 +402,11 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
         }
     };
     cmd = cmd.group(group);
+    if managed_group && !group {
+        return Err(err(
+            "group=false is not supported by script-owned proc.spawn".into(),
+        ));
+    }
 
     // Per-fd capture cap (order 1443-esm5). Unset keeps the executor's default
     // (tillandsias_exec::DEFAULT_CAPTURE_BYTES); a clipped capture comes back
@@ -414,6 +421,37 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
         }
     }
 
+    if let Some(d) = policy_gate(&argv, cwd_path.as_deref(), caller) {
+        let t = lua.create_table()?;
+        let echo = lua.create_table()?;
+        for (i, a) in argv.iter().enumerate() {
+            echo.set(i + 1, crate::command_policy::redact(a))?;
+        }
+        t.set("argv", echo)?;
+        t.set(
+            "status",
+            if d.strictness == crate::command_policy::Strictness::Deny {
+                "policy_denied"
+            } else {
+                "policy_consent_required"
+            },
+        )?;
+        t.set("ok", false)?;
+        t.set("rule_id", d.rule_id.as_str())?;
+        t.set("decision", d.token.as_str())?;
+        t.set("why", d.why.unwrap_or_default())?;
+        t.set("remedy", d.remedy.unwrap_or_default())?;
+        return Ok(PreparedProc::Refused(t));
+    }
+    Ok(PreparedProc::Command { argv, command: cmd })
+}
+
+fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
+    let (argv, cmd) = match prepare_proc(lua, spec, "proc.run", false)? {
+        PreparedProc::Refused(t) => return Ok(t),
+        PreparedProc::Command { argv, command } => (argv, command),
+    };
+    let err = |m: String| mlua::Error::RuntimeError(format!("proc.run: {m}"));
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -428,6 +466,17 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
     // Windows, proc.run reported wall_ms=544 and returned to Lua 30.2 s later.
     // shutdown_background returns now and lets those threads end on their own.
     rt.shutdown_background();
+
+    proc_result_to_lua(lua, &argv, result, wall_ms)
+}
+
+pub(crate) fn proc_result_to_lua(
+    lua: &Lua,
+    argv: &[String],
+    result: Result<tillandsias_exec::Output, tillandsias_exec::ExecError>,
+    wall_ms: u64,
+) -> LuaResult<LuaTable> {
+    let err = |m: String| mlua::Error::RuntimeError(format!("proc.run: {m}"));
 
     let t = lua.create_table()?;
     let echo = lua.create_table()?;

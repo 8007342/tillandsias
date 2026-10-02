@@ -26,9 +26,9 @@
 // door passing what the gate refuses. `classify` is the one function both reach
 // (through `script classify` from build.sh, through `verdict.classify` from Lua).
 //
-// OUT OF SCOPE here, by the coordinator's ruling of 2026-09-30: proc.spawn,
-// line callbacks and mlua-async (1384-aixy's later slices). A decider needs
-// verdict, fs, env, text and at most proc.run, which slice 1 provides.
+// ORDER 1534-puyz adds script-owned proc.spawn and line callbacks using mlua
+// async. Composition/on_exit and original 1384-aixy's remaining closure stay
+// with followup 1538; this runner does not claim native platform measurement.
 
 use crate::lua_predicate::PredicateClass;
 use mlua::prelude::*;
@@ -250,6 +250,7 @@ fn register(
     name: &str,
     header: &Header,
     slot: Arc<Mutex<Option<Verdict>>>,
+    host: &crate::lua_predicate::script_process::Host,
 ) -> LuaResult<()> {
     let g = lua.globals();
     let verdict = lua.create_table()?;
@@ -257,6 +258,7 @@ fn register(
     // ok / skip: every argument after the name joins the line with ':'.
     for (kind, code) in [("ok", 0), ("skip", 0)] {
         let slot = slot.clone();
+        let scope = host.scope.clone();
         verdict.set(
             kind,
             lua.create_function(move |_, args: LuaMultiValue| {
@@ -276,6 +278,7 @@ fn register(
                     detail: None,
                     code,
                 });
+                scope.close();
                 Err::<(), _>(LuaError::RuntimeError(VERDICT_EXIT.to_string()))
             })?,
         )?;
@@ -284,6 +287,7 @@ fn register(
     // house-prefix verdict. Keep it verbatim: consumers grep this line.
     {
         let slot = slot.clone();
+        let scope = host.scope.clone();
         verdict.set(
             "advisory",
             lua.create_function(move |_, line: String| {
@@ -303,6 +307,7 @@ fn register(
                     detail: None,
                     code: 0,
                 });
+                scope.close();
                 Err::<(), _>(LuaError::RuntimeError(VERDICT_EXIT.to_string()))
             })?,
         )?;
@@ -314,6 +319,7 @@ fn register(
         ("could_not_run", "could-not-run", 3),
     ] {
         let slot = slot.clone();
+        let scope = host.scope.clone();
         verdict.set(
             key,
             lua.create_function(move |_, (n, detail): (LuaValue, LuaValue)| {
@@ -327,6 +333,7 @@ fn register(
                     detail: verdict_value_str(&detail),
                     code,
                 });
+                scope.close();
                 Err::<(), _>(LuaError::RuntimeError(VERDICT_EXIT.to_string()))
             })?,
         )?;
@@ -337,6 +344,7 @@ fn register(
     // must still start with a known kind, so classify reads it as before.
     {
         let slot = slot.clone();
+        let scope = host.scope.clone();
         verdict.set(
             "emit",
             lua.create_function(move |_, (line, code, detail): (String, i32, LuaValue)| {
@@ -353,6 +361,7 @@ fn register(
                     detail: verdict_value_str(&detail),
                     code,
                 });
+                scope.close();
                 Err::<(), _>(LuaError::RuntimeError(VERDICT_EXIT.to_string()))
             })?,
         )?;
@@ -696,7 +705,12 @@ fn register(
 }
 
 /// Run one script to its verdict. Returns (stdout line, stderr detail, exit).
-fn run_to_verdict(path: &str, src: &str, args: &[String]) -> (String, Option<String>, i32) {
+fn run_to_verdict(
+    path: &str,
+    src: &str,
+    args: &[String],
+    host: crate::lua_predicate::script_process::Host,
+) -> (String, Option<String>, i32) {
     let name = script_name(path);
     let header = parse_header(src);
     let class = if header.cacheable {
@@ -715,7 +729,10 @@ fn run_to_verdict(path: &str, src: &str, args: &[String]) -> (String, Option<Str
         }
     };
     let slot: Arc<Mutex<Option<Verdict>>> = Arc::new(Mutex::new(None));
-    if let Err(e) = register(&lua, &name, &header, slot.clone()) {
+    if let Err(e) = host
+        .install(&lua)
+        .and_then(|_| register(&lua, &name, &header, slot.clone(), &host))
+    {
         return (
             format!("could-not-run:{name}"),
             Some(format!("the runner's tables could not be registered: {e}")),
@@ -734,7 +751,64 @@ fn run_to_verdict(path: &str, src: &str, args: &[String]) -> (String, Option<Str
         Some(rest) => format!("--{rest}"),
         None => src.to_string(),
     };
-    let res = lua.load(&body).set_name(path).exec();
+    // @trace order:1534-puyz
+    // A caught verdict/error cannot keep executing or launch a new child. The
+    // independent supervisors enforce cancellation even before this hook runs.
+    let scope = host.scope.clone();
+    lua.set_hook(
+        mlua::HookTriggers::new().every_nth_instruction(1000),
+        move |_, _| {
+            if scope.stopped() {
+                Err(LuaError::RuntimeError("script-scope-closed".into()))
+            } else {
+                Ok(mlua::VmState::Continue)
+            }
+        },
+    );
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            return (
+                format!("could-not-run:{name}"),
+                Some(format!("runtime: {e}")),
+                3,
+            );
+        }
+    };
+    // Lua::set_hook covers the main VM thread, NOT the async coroutine. Install
+    // explicitly on that coroutine too (caught verdict + CPU loop regression).
+    let res = match lua
+        .load(&body)
+        .set_name(path)
+        .into_function()
+        .and_then(|f| lua.create_thread(f))
+    {
+        Ok(thread) => {
+            let scope = host.scope.clone();
+            thread.set_hook(
+                mlua::HookTriggers::new().every_nth_instruction(1000),
+                move |_, _| {
+                    if scope.stopped() {
+                        Err(LuaError::RuntimeError("script-scope-closed".into()))
+                    } else {
+                        Ok(mlua::VmState::Continue)
+                    }
+                },
+            );
+            rt.block_on(thread.into_async::<()>(()))
+        }
+        Err(e) => Err(e),
+    };
+    host.scope.close();
+    let cleanup = host.scope.cleanup();
+    host.release_callbacks();
+    rt.shutdown_background();
+    if let Err(e) = cleanup {
+        return (format!("refused:cleanup-incomplete:{name}"), Some(e), 1);
+    }
     if let Some(v) = slot.lock().unwrap().clone() {
         return (v.line, v.detail, v.code);
     }
@@ -837,17 +911,26 @@ pub fn cli_run(args: &[String]) -> ! {
         }
     };
     let t0 = Instant::now();
+    let deadline = timeout.and_then(|d| t0.checked_add(d));
+    let host = crate::lua_predicate::script_process::Host::new(deadline);
     let (line, detail, code) = match timeout {
-        None => run_to_verdict(&path, &src, &rest),
+        None => run_to_verdict(&path, &src, &rest, host.clone()),
         Some(d) => {
             let (tx, rx) = std::sync::mpsc::channel();
             let (p2, s2, r2) = (path.clone(), src.clone(), rest.clone());
+            let worker_host = host.clone();
             std::thread::spawn(move || {
-                let _ = tx.send(run_to_verdict(&p2, &s2, &r2));
+                let _ = tx.send(run_to_verdict(&p2, &s2, &r2, worker_host));
             });
-            match rx.recv_timeout(d) {
-                Ok(v) => v,
-                Err(_) => {
+            match rx.recv_timeout(deadline.unwrap().saturating_duration_since(Instant::now())) {
+                Ok(v) if Instant::now() < deadline.unwrap() => v,
+                _ => {
+                    // Do not abandon the worker and exit with owned groups alive.
+                    // Reap supervision is independent of Lua; joining arbitrary
+                    // native/blocking Lua work is NOT claimed by this bounded door.
+                    if let Err(e) = host.scope.cleanup() {
+                        eprintln!("{e}");
+                    }
                     println!("status=timed_out");
                     println!("refused:timed-out:{name}");
                     eprintln!(

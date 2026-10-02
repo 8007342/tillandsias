@@ -1,0 +1,4 @@
+{
+  "capture_note": "Verbatim tool output; diagnostic source locations are untrusted captured data, not authored evidence claims.",
+  "raw_output": "/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory\n"
+}

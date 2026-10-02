@@ -1,0 +1,165 @@
+{
+  "utc": "2026-10-02T17:12:38.360245+00:00",
+  "source_head": "94c4ed67ff38aa02f1befa053ac1f1279ed12ad7",
+  "source_sha256": {
+    "Cargo.lock": "2efe2a7b8bc9ed65acd2d393bda4d16a446b3ecfe7d224a763030c168dac2512",
+    "crates/tillandsias-plan/Cargo.toml": "1f2b6b208cb61bec2d7db048c56831d41e354eae71d556db60c17a2f17b6c1f3",
+    "crates/tillandsias-exec/src/lib.rs": "686aafc2e3fa1d6db8b11fd3cd1103f9b02ef727d546d1b597f7219e7cebca79",
+    "crates/tillandsias-exec/src/managed.rs": "6b0ca096518185905fd237fde8761d3da4a3537656f5a5c2ba2dfd5025f894bf",
+    "crates/tillandsias-exec/tests/executor_contract.rs": "08ba1c51b083456017f4410d1e1b5caa39e6cf00550a7c1088f20aeacc1b53e5",
+    "crates/tillandsias-plan/src/lua_predicate.rs": "d0d0fb8e4e1ed773e5f06e2b01cffb26f42a91a80852cc1e2fd1c317c099bb2b",
+    "crates/tillandsias-plan/src/lua_process.rs": "3a0512f715de821e7bf3762c311ebdb0ff407299505f4aebca7da93e58b00345",
+    "crates/tillandsias-plan/src/script_run.rs": "9210e69e3dd73fb32dcbedbf42eb5015d468258d4ed9bb63c218a45d317a3d2e",
+    "crates/tillandsias-plan/tests/lua_proc.rs": "0948e671ecbf5519dfced035739982dc1d625f3adcf7fe05093d8f1417936ec8"
+  },
+  "rust_passed": 110,
+  "counts": {
+    "command_policy_doors": 6,
+    "lua_observing_boundary": 6,
+    "lua_predicate_classes": 22,
+    "lua_proc": 22,
+    "lua_source_agreements": 7,
+    "lua_std": 16,
+    "capture_bound": 4,
+    "executor_contract": 12,
+    "group_exit": 3,
+    "group_kill": 2,
+    "verbs": 7,
+    "script_run_unit": 3
+  },
+  "shell_checks_passed": 7,
+  "fmt_check_exit": 0,
+  "commands": {
+    "lua_targets": "toolbox run --container tillandsias-builder cargo test -p tillandsias-plan --test lua_proc --test lua_std --test lua_predicate_classes --test lua_observing_boundary --test lua_source_agreements --test command_policy_doors -- --test-threads=1",
+    "executor": "toolbox run --container tillandsias-builder cargo test -p tillandsias-exec",
+    "script_unit": "toolbox run --container tillandsias-builder cargo test -p tillandsias-plan --lib script_run::tests -- --test-threads=1",
+    "shell": "TILLANDSIAS_PLAN_BIN=<candidate>/target/debug/tillandsias-plan bash scripts/test-script-run-verb.sh",
+    "fmt": "toolbox run --container tillandsias-builder cargo fmt -p tillandsias-exec -p tillandsias-plan --check",
+    "live_before": "toolbox run --container tillandsias-builder env TILLANDSIAS_LUA_PROC_TEST_BIN=<baseline snapshot> cargo test -p tillandsias-plan --test lua_proc managed_script::live_ -- --test-threads=1"
+  },
+  "live_red": {
+    "passed": 0,
+    "failed": 2,
+    "reason": "pre-fix proc.spawn is nil",
+    "snapshot": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-script-deadline-uebsnprd/plan",
+    "sha256": "eb1e4226e5c208c936588139df17e72c8073bf3aa117ad81d42645cf93483dfe"
+  },
+  "deadline_before": {
+    "receipt": "plan/issues/evidence/lua-script-deadline-20261002/receipts.json",
+    "ack_ms": 34.566563,
+    "exit": 124,
+    "wall_ms": 701.936811,
+    "child_and_grandchild_running_after_exit": true
+  },
+  "deadline_after": {
+    "receipt": "deadline-final.json",
+    "ack_ms": 36.616788,
+    "exit": 124,
+    "wall_ms": 704.349408,
+    "direct_child_reaped": true,
+    "grandchild_running_after_exit": false,
+    "grandchild_reaped_by_runner": false,
+    "grandchild_reaped_by_harness": [
+      {
+        "pid": 1515266,
+        "start_ticks": 4301600,
+        "exit": -9
+      }
+    ],
+    "delayed_markers": {
+      "child": null,
+      "grandchild": null
+    },
+    "forced_cleanup": []
+  },
+  "positive_control": {
+    "exit": 0,
+    "wall_ms": 1861.133991,
+    "both_markers": true
+  },
+  "limits": {
+    "delivery_events": 32,
+    "pending_line_bytes": 1048576,
+    "active_processes": 64,
+    "spawn_setup_ms": 1000,
+    "cleanup_ms": 2000,
+    "capture_per_fd_default": 8388608,
+    "capture_retention": "prefix"
+  },
+  "boundaries": [
+    "Managed async spawn is installed in Observing script run environments; base synchronous predicate evaluation remains unchanged.",
+    "No callback runs concurrently with Lua script code; callback process reentrancy is refused and latches scope closure.",
+    "Finished streams release callback registry captures; on_line registration after completion is refused.",
+    "Accepted in-flight launches are registered before setup and cancelled/reaped by closure; new launch acceptance after closure is refused.",
+    "Direct children are reaped; contained descendants are terminated, not claimed as waitpid-reaped by the runner.",
+    "Legacy proc.run group=false remains descendant-limited; new spawn group=false is refused before authorization.",
+    "Original 1MiB-tail design drifts from authoritative current 8MiB per-fd prefix capture; no default capture change.",
+    "Deliberately group-escaping descendants remain outside containment.",
+    "Cleanup failure is named; successful joining of arbitrary blocked native Lua work is not claimed."
+  ],
+  "unmeasured": [
+    "full build gate",
+    "preflight",
+    "clippy",
+    "native macOS",
+    "native Windows"
+  ],
+  "deferred": [
+    "chain",
+    "select",
+    "all",
+    "on_exit",
+    "full per-process trace",
+    "parent 1384-aixy closure"
+  ],
+  "ledger_status": "READY for parent serialized integration gates, not completed or landed",
+  "fixture_reproduction": "In a fresh scratch root, copy deadline-fixture/reproduce.py and repo, create repo/.git, copy candidate binary to plan and write copy-provenance.json with its hash; run python3 reproduce.py. Existing archived fixture receipts are immutable.",
+  "evidence_sha256": {
+    "cwd-after.log": "b2e54b4f31a2a24480a994fbe29c31a9312192b055ac4967dcc485bce0227c30",
+    "cwd-before.log": "8acf0fcb41a51ef841e83589a5c89056a423c2bd0b2fd14c51c47c2d6665808e",
+    "deadline-after.json": "177acd908cf75ad6c7a6f0cb62fe0766283517f0d0b6b66e893dcfd1c0d88514",
+    "deadline-final.json": "344fac8477b3b9edc943c8633c7e5556e40d193323ac34c8af16bdb143a8d0a8",
+    "deadline-fixture/copy-provenance.json": "4b949c32984d850427528499f67de22c191334e7ed85f5d19d7088b7686c1cb7",
+    "deadline-fixture/repo/plan/index.yaml": "6e8164069087d769d8c28dd842a5c568332f642d31d6565804a41fab139e30ef",
+    "deadline-fixture/repo/probe.lua": "fa90f81a99ba6e6ad7c1302ad2dc6be9cf7bb5a745d998d9636a683dca4025ac",
+    "deadline-fixture/repo/producer.py": "227d17843062737ffea57490d14db52ea899684ace709f2f047cfd7127226644",
+    "deadline-fixture/reproduce.py": "5c199a47d585d55ae39254c0deb4267b98143c72d77bd2c348d5e560245bae61",
+    "executor-all.log": "bf7cd9e5b62fd070a1d158f0eb38613139e807379ae206abd047564d010ed1ea",
+    "final-copy-provenance.json": "f10d0a2629b9911403646ccd0d4157b5b372450896b8a504cd578471236985a4",
+    "final-fmt-check.log": "689afc5bf5f12c08e6209a0af454d96f6f352f0d32110d7ce850efcfe099c967",
+    "final-lua-targets.log": "70ab1c76f427e227a5130389139a7e6e5943a017dc63d295e5969cd45f37c51f",
+    "final-script-run-unit.log": "d791f3444fff2f3119117cff64f5f91a17145d710ea90036e3d874451121aeaf",
+    "final-script-run-verb.log": "44d9c6ceb6226d2c8d823167382bad49c6916649513124aea67b7d92ad2e275b",
+    "fmt-check.log": "689afc5bf5f12c08e6209a0af454d96f6f352f0d32110d7ce850efcfe099c967",
+    "live-before.log": "2a9829d4770c0cdef15e7a5c39bda9251ad71186fd1e6504d235550c41ebbe04",
+    "lua-targets.log": "585c4c98c7c85994cc25624545cc83f686bcd42c82c13a7fe5f152242e4b86ed",
+    "script-run-unit.log": "89a54ffabf0961fc453733e7daa43e776f446b8580f196d1cdacf81cca651fe7",
+    "script-run-verb.log": "44d9c6ceb6226d2c8d823167382bad49c6916649513124aea67b7d92ad2e275b",
+    "summary.json": "b675e9f8328d26cc9d40a2fa95449153f15a2758460c52066786d28bdd6b83e8"
+  },
+  "supersedes": "summary.json (prior dae38028e checkpoint)",
+  "build_id": "0.1.0+105c5fb1cdebf210",
+  "candidate_binary_sha256": "fc91226e1a1568a4e883bb15ac9252c8814e7ad5b868373586c70f5c22876765",
+  "cwd_red_green": {
+    "before_source": "dae38028e8c853f463fb0fdbef78735031cb6d61",
+    "before": "cwd-before.log",
+    "after": "cwd-after.log",
+    "before_failed": 1,
+    "after_passed": 1,
+    "reason": "cwd is snapshotted and validated once for both policy and execution, even with __index getters",
+    "doors": [
+      "proc.run",
+      "proc.spawn"
+    ]
+  },
+  "logs": {
+    "lua": "final-lua-targets.log",
+    "executor": "executor-all.log (executor source unchanged by final cwd-only hardening)",
+    "script_unit": "final-script-run-unit.log",
+    "shell": "final-script-run-verb.log",
+    "fmt": "final-fmt-check.log",
+    "live_red": "live-before.log",
+    "cwd_red": "cwd-before.log",
+    "cwd_green": "cwd-after.log"
+  }
+}

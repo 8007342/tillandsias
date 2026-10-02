@@ -1,0 +1,37 @@
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s
+     Running tests/lua_proc.rs (target/debug/deps/lua_proc-462beb25b4361464)
+
+running 2 tests
+test managed_script::live_callback_acknowledgement_and_two_producers_prove_scope_wide_dispatch ... FAILED
+test managed_script::live_spawn_delivers_10000_ordered_lines_per_fd_before_wait_and_preserves_cr ... FAILED
+
+failures:
+
+---- managed_script::live_callback_acknowledgement_and_two_producers_prove_scope_wide_dispatch stdout ----
+
+thread 'managed_script::live_callback_acknowledgement_and_two_producers_prove_scope_wide_dispatch' (1374176) panicked at crates/tillandsias-plan/tests/lua_proc.rs:168:9: <!-- cite-ok: captured test diagnostic location, not source citation -->
+runtime error: [string "/tmp/opencode/sol-1534-ONfJfK/probe.lua"]:2: attempt to call a nil value (field 'spawn')
+stack traceback:
+	[C]: in field 'spawn'
+	[string "/tmp/opencode/sol-1534-ONfJfK/probe.lua"]:2: in main chunk
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- managed_script::live_spawn_delivers_10000_ordered_lines_per_fd_before_wait_and_preserves_cr stdout ----
+
+thread 'managed_script::live_spawn_delivers_10000_ordered_lines_per_fd_before_wait_and_preserves_cr' (1374179) panicked at crates/tillandsias-plan/tests/lua_proc.rs:117:9: <!-- cite-ok: captured test diagnostic location, not source citation -->
+runtime error: [string "/tmp/opencode/sol-1534-DWjEn2/probe.lua"]:2: attempt to call a nil value (field 'spawn')
+stack traceback:
+	[C]: in field 'spawn'
+	[string "/tmp/opencode/sol-1534-DWjEn2/probe.lua"]:2: in main chunk
+
+
+
+failures:
+    managed_script::live_callback_acknowledgement_and_two_producers_prove_scope_wide_dispatch
+    managed_script::live_spawn_delivers_10000_ordered_lines_per_fd_before_wait_and_preserves_cr
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p tillandsias-plan --test lua_proc`
