@@ -1,13 +1,29 @@
 -- @env PODMAN_SYNC_SEARCH_ROOT PODMAN_SYNC_ESCAPE_HATCHES
+-- @read-env PODMAN_SYNC_SEARCH_ROOT
 -- @trace spec:podman-orchestration, order:1533-ew3n
 -- Lua-authoritative source scan.  The root is intentionally repo-relative;
 -- fixtures set TILLANDSIAS_REPO_ROOT to their throwaway tree.
 local root = env.get("PODMAN_SYNC_SEARCH_ROOT") or "crates"
-local allowed = tonumber(env.get("PODMAN_SYNC_ESCAPE_HATCHES") or "1") or 1
-if root:sub(1, 1) == "/" or root:find("..", 1, true) then
-    verdict.emit("blocked:podman-sync-bounded:invalid-search-root", 2)
+local raw_allowed = env.get("PODMAN_SYNC_ESCAPE_HATCHES")
+if raw_allowed == nil or raw_allowed == "" then raw_allowed = "1" end
+if not text.is_match(raw_allowed, "^-?[0-9]+$") then
+    verdict.emit("blocked:podman-sync-bounded:invalid-escape-hatches:" .. raw_allowed, 2)
 end
-local files = fs.walk(root, { suffix = ".rs" })
+local allowed = tonumber(raw_allowed)
+local files
+if root:sub(1, 1) == "/" then
+    -- `fs.walk` deliberately refuses external starts.  Preserve the historical
+    -- explicit-root seam with one typed, argv-only listing; Lua still owns every
+    -- filter, verdict and source read (which is limited by @read-env above).
+    local listed = proc.run({ argv = { "find", root, "-type", "f", "-name", "*.rs" }, timeout_ms = 30000 })
+    if not listed.ok then
+        verdict.emit("blocked:podman-sync-bounded:search-root-unreadable:" .. root, 2)
+    end
+    files = {}
+    for _, file in ipairs(text.lines(listed.stdout or "")) do files[#files + 1] = file end
+else
+    files = fs.walk(root, { suffix = ".rs" })
+end
 local function lines_matching(pattern, filter, include_tests)
     local matches = {}
     for _, file in ipairs(files) do

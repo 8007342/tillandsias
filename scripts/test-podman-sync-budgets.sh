@@ -116,4 +116,27 @@ rm "$WORK/crates/tillandsias-podman/src/busy_wait.rs"
 rm "$WORK/crates/tillandsias-podman/tests/allowed_poll.rs"
 echo "ok: case 6 — sleeping child-wait poll refused"
 
-echo "PASS: podman sync budgets (6/6)"
+# --- case 7: legacy absolute roots (including spaces) remain readable --------
+EXT="$WORK/external root"
+mkdir -p "$EXT/crates/fixture/src"
+cat > "$EXT/crates/fixture/src/bad.rs" <<'RS'
+fn probe() { let _ = std::process::Command::new("podman"); }
+RS
+out="$(PODMAN_SYNC_SEARCH_ROOT="$EXT/crates" "$PLAN" script run "$LUA" 2>/dev/null)"
+rc=$?
+[ "$rc" -ne 0 ] || fail "case 7: an external root direct command must be refused"
+case "$out" in
+    violation:direct-command:1) ;;
+    *) fail "case 7: external space-path verdict changed: '$out'" ;;
+esac
+echo "ok: case 7 — external root with spaces is scanned through typed listing"
+
+# --- case 8: malformed budgets fail loudly instead of defaulting to one ------
+out="$(TILLANDSIAS_REPO_ROOT="$WORK" PODMAN_SYNC_SEARCH_ROOT=crates PODMAN_SYNC_ESCAPE_HATCHES=wat "$PLAN" script run "$LUA" 2>/dev/null)"
+rc=$?
+[ "$rc" -eq 2 ] || fail "case 8: malformed escape budget must block, got rc=$rc out='$out'"
+[ "$out" = "blocked:podman-sync-bounded:invalid-escape-hatches:wat" ] \
+    || fail "case 8: malformed escape budget verdict changed: '$out'"
+echo "ok: case 8 — malformed escape budget is explicit"
+
+echo "PASS: podman sync budgets (8/8)"

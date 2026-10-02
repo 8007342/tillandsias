@@ -85,5 +85,23 @@ awk -v fn='async fn refresh_vm_status' -v ins='    // this used to loop and slee
 [ "$(_rc "$W/m5.rs")" = "0" ] && ok "a COMMENT naming a loop and a sleep does not trip the guard" \
     || bad "the guard counts mentions rather than actions"
 
+# ── 6. A comment cannot impersonate the named function ────────────────────
+{ printf '// async fn refresh_vm_status() { loop { break; } }\n'; cat "$SRC"; } > "$W/m6.rs"
+[ "$(_rc "$W/m6.rs")" = "0" ] && ok "a commented fake refresh function cannot hide the real body" \
+    || bad "the guard found a function signature inside a comment"
+
+# ── 7. Strings, nested comments, and raw braces are not Rust blocks ───────
+{ printf '/* outer /* async fn refresh_vm_status() { loop { break; } } */ */\nconst SPOOF: &str = r#"async fn refresh_vm_status() { loop { break; } }"#;\n'; cat "$SRC"; } > "$W/m7.rs"
+[ "$(_rc "$W/m7.rs")" = "0" ] && ok "nested comments and raw-string braces do not alter body scope" \
+    || bad "the guard treated comment or raw-string braces as Rust code"
+
+# ── 8. A real loop after spoof material is still refused ───────────────────
+awk -v fn='async fn refresh_vm_status' -v ins='    loop { break; }' '
+    { print }
+    !done && $0 ~ /^[[:space:]]*async fn refresh_vm_status/ && index($0, "{") { print ins; done = 1 }
+' "$W/m7.rs" > "$W/m8.rs"
+[ "$(_rc "$W/m8.rs")" != "0" ] && ok "a real loop is caught after comment and raw-string spoofing" \
+    || bad "the guard accepted a real loop after spoof material"
+
 echo "tray-refresh-no-polling: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
