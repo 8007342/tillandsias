@@ -145,7 +145,7 @@ printf 'fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\nfn b() { let _ 
     > "$WORK/crlf/crates/fixture/src/hatch.rs"
 if raw="$(TILLANDSIAS_REPO_ROOT="$WORK/crlf" PODMAN_SYNC_SEARCH_ROOT=crates PODMAN_SYNC_ESCAPE_HATCHES=1 "$PLAN" script run "$LUA" 2>&1)"; then
     fail "case 9: CRLF escape hatch growth must be refused"
-elif printf '%s' "$raw" | grep -q "$(printf '\r')"; then
+elif grep -q "$(printf '\r')" <<<"$raw"; then
     echo "ok: case 9 — CRLF hatch diagnostic retains matched source CR byte"
 else
     fail "case 9: CRLF hatch diagnostic normalized the matched source line"

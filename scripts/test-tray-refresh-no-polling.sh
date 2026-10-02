@@ -107,7 +107,7 @@ awk -v fn='async fn refresh_vm_status' -v ins='    loop { break; }' '
 awk '{ printf "%s\r\n", $0 }' "$W/m3.rs" > "$W/m9-crlf.rs"
 if raw="$(TILLANDSIAS_TRAY_REFRESH_SOURCE="$W/m9-crlf.rs" "$PLAN" script run "$LUA" 2>&1)"; then
     bad "CRLF polling source unexpectedly passed"
-elif printf '%s' "$raw" | grep -q "$(printf '\r')"; then
+elif grep -q "$(printf '\r')" <<<"$raw"; then
     ok "CRLF polling diagnostic retains the matched source CR byte"
 else
     bad "CRLF polling diagnostic normalized the matched source line"
