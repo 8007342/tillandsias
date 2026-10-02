@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-lua-runner-has-no-advisory-verdict-so-a-decider-that-reports-without-refusing-cannot-be-ported
+    field: status
+    value: completed
+    ts: "2026-10-02T15:04:58Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-lua-runner-has-no-advisory-verdict-so-a-decider-that-reports-without-refusing-cannot-be-ported
+    event:
+      type: completed
+      ts: "2026-10-02T15:04:58Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: b4ac1bd207c89daee4a291a8587f43ec2f2527b9 + forced ./build.sh --check PASS; PR #202 MERGED; parent script-run-verb 7/7, centicolon12/12, memo14/14, recurrence39/39; live stdout/stderr/status Bash-Lua byte parity1/1 in plan/issues/evidence/lua-advisory-20261002/live-parity.json
+  - packet_id: the-lua-runner-has-no-advisory-verdict-so-a-decider-that-reports-without-refusing-cannot-be-ported
+    event:
+      type: note
+      ts: "2026-10-02T15:04:58Z"
+      host: macuahuitl
+      summary: |-
+        Closed by linux-macuahuitl-opencode-20261002t053211z after independent classifier/injection review, metrics-root repair, forced integration gate and remote ancestry. The parity run uses the live corpus with an empty fixed results stream and no snapshot advancement; existing blocked/warn output is preserved. Gate notice lists24 unexercised litmus specs; no all-release or native validation claim.
