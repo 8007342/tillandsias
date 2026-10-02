@@ -32495,6 +32495,10 @@ esac
     /// @trace spec:mcp-tool-socket
     #[test]
     fn forge_container_spec_mounts_only_per_lane_mcp_dir() {
+        // @trace order1537-75tv: this reader derives its lane from process env.
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_FORGE_INSTANCE"]);
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
         let args = build_forge_agent_run_args_with_vault(
             &PathBuf::from("/tmp/project"),
             // 1119-w2rj: a real on-disk checkout in this test.
