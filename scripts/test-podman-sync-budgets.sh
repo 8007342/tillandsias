@@ -151,4 +151,26 @@ else
     fail "case 9: CRLF hatch diagnostic normalized the matched source line"
 fi
 
-echo "PASS: podman sync budgets (9/9)"
+# --- case 10: follow an absolute starting symlink, but not interior links ----
+ln -s "$EXT/crates" "$EXT/scan alias"
+out="$(PODMAN_SYNC_SEARCH_ROOT="$EXT/scan alias" "$PLAN" script run "$LUA" 2>/dev/null)"
+rc=$?
+[ "$rc" -ne 0 ] || fail "case 10: starting symlink must not hide a direct podman Command"
+case "$out" in
+    violation:direct-command:1) ;;
+    *) fail "case 10: starting symlink verdict changed: '$out'" ;;
+esac
+echo "ok: case 10 — absolute starting symlink is followed"
+
+# --- case 11: a broken external start cannot become a green empty scan --------
+ln -s "$EXT/missing" "$EXT/broken scan"
+out="$(PODMAN_SYNC_SEARCH_ROOT="$EXT/broken scan" "$PLAN" script run "$LUA" 2>/dev/null)"
+rc=$?
+[ "$rc" -eq 2 ] || fail "case 11: broken external root must block, got rc=$rc out='$out'"
+case "$out" in
+    blocked:podman-sync-bounded:search-root-unreadable:*) ;;
+    *) fail "case 11: broken external root verdict changed: '$out'" ;;
+esac
+echo "ok: case 11 — broken external root cannot report green"
+
+echo "PASS: podman sync budgets (11/11)"

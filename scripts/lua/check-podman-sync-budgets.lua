@@ -15,10 +15,14 @@ if root:sub(1, 1) == "/" then
     -- `fs.walk` deliberately refuses external starts.  Preserve the historical
     -- explicit-root seam with one typed, argv-only listing; Lua still owns every
     -- filter, verdict and source read (which is limited by @read-env above).
-    local listed = proc.run({ argv = { "find", root, "-type", "f", "-name", "*.rs" }, timeout_ms = 30000 })
-    if not listed.ok then
+    -- `-H` follows only the supplied start path, matching legacy grep -r.
+    -- Do not use `-L`: interior symlinks remain outside this scan's contract.
+    local present = proc.run({ argv = { "test", "-e", root }, timeout_ms = 30000 })
+    if not present.ok then
         verdict.emit("blocked:podman-sync-bounded:search-root-unreadable:" .. root, 2)
     end
+    local listed = proc.run({ argv = { "find", "-H", root, "-type", "f", "-name", "*.rs" }, timeout_ms = 30000 })
+    if not listed.ok then verdict.emit("blocked:podman-sync-bounded:search-root-unreadable:" .. root, 2) end
     files = {}
     for _, file in ipairs(text.lines(listed.stdout or "")) do files[#files + 1] = file end
 else
