@@ -135,8 +135,15 @@ branch_versioning_discipline:
   rules:
     - name: main_only_bumps
       rule: >
-        Only commits to the main branch modify VERSION. Feature/ephemeral branches
-        (created from main or linux-next) NEVER modify VERSION.
+        Only commits to the main branch make RELEASE bumps to VERSION.
+        AMENDED 2026-09-28 (order 643-64bx, operator ruling 2026-09-17): the
+        LOCAL BUILD COUNTER is a monotonic YEAR_FROM_EPOCH.MONTH.DAY.BUILD
+        counter that increments freely on any branch ("+1 whichever is the
+        largest, monotonic increments always"), so a build-counter bump may
+        travel on a non-main branch when it is well-formed, strictly greater
+        than every reference the push sees (target, linux-next, main, newest
+        reachable tag), and committed ALONE (VERSION + Cargo files, 702-eusw).
+        See monotonic_build_bump below; everything else stays main-only.
       enforcement: Pre-commit/pre-push hook (blocks VERSION edits on non-main branches)
       rationale: >
         Allowing multiple branches to edit VERSION creates merge conflicts that require
@@ -166,6 +173,25 @@ branch_versioning_discipline:
       exemptions: >
         Release tags may include VERSION commits in their history.
         Feature->main merges use main's VERSION as source of truth.
+        Catch-ups to main's, linux-next's or a reachable release tag's VERSION
+        are allowed on any branch. A monotonic build bump (next rule) is allowed.
+
+    - name: monotonic_build_bump
+      rule: >
+        Order 643-64bx (operator ruling 2026-09-17). The pre-push VERSION guard
+        (scripts/hooks/pre-push-version-guard.sh, exception 5) accepts a
+        non-main push that changes VERSION when ALL hold: the value is
+        well-formed epoch-CalVer (month 1-12, day 1-31, build >= 1); it is
+        strictly greater than the target ref's previous VERSION, origin/linux-next,
+        origin/main and the newest reachable v* tag; and every non-merge commit
+        in the pushed range that changes VERSION changes only VERSION,
+        Cargo.toml, Cargo.lock and crates/*/Cargo.toml. A lower, non-monotonic,
+        malformed or mixed-content bump stays refused.
+      rationale: >
+        ./build.sh bumps the counter on every build-producing run; before this
+        rule the bump was either reverted by hand or pushed with --no-verify,
+        and reverting made every installed binary claim the same version.
+      enforcement: scripts/test-pre-push-version-guard.sh (9 cases), litmus:versioning-shape
 
     - name: release_gating_enforces_main_source
       rule: >
