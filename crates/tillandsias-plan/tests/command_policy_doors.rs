@@ -115,6 +115,54 @@ fn refused_seed_never_relaxes_default_deny_or_spawns_at_any_door() {
     fs::remove_file(root.join(cp::SEED_RELATIVE_PATH)).unwrap();
     fs::create_dir(root.join(cp::SEED_RELATIVE_PATH)).unwrap();
     assert_refused(root, &program);
+    fs::remove_dir(root.join(cp::SEED_RELATIVE_PATH)).unwrap();
+    std::os::unix::fs::symlink("missing-policy", root.join(cp::SEED_RELATIVE_PATH)).unwrap();
+    assert_refused(root, &program);
+    fs::remove_file(root.join(cp::SEED_RELATIVE_PATH)).unwrap();
+    fs::write(root.join(cp::SEED_RELATIVE_PATH), [0xff]).unwrap();
+    assert_refused(root, &program);
+}
+
+#[test]
+fn only_absent_default_seed_preserves_existing_floor() {
+    let d = scratch();
+    let root = d.path();
+    let program = marker_program(root, "harmless");
+    assert!(matches!(
+        cp::load_seed(root, None, &[]).1,
+        cp::SeedLoad::Absent
+    ));
+    let o = command(root)
+        .args(["policy", "eval", "--", &program])
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}", text(&o));
+    let o = command(root)
+        .args(["policy", "eval", "--", "bash", "-c", "echo unused"])
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(1));
+    assert!(
+        text(&o).contains("refused:policy:no-shell-strings"),
+        "{}",
+        text(&o)
+    );
+    let missing = root.join("explicit-missing");
+    for verb in ["eval", "show"] {
+        let mut c = command(root);
+        c.args(["policy", verb, "--seed"]).arg(&missing);
+        if verb == "eval" {
+            c.args(["--", &program]);
+        }
+        let o = c.output().unwrap();
+        assert_eq!(o.status.code(), Some(1));
+        assert!(
+            text(&o).contains("refused:policy-seed:unreadable"),
+            "{}",
+            text(&o)
+        );
+    }
+    assert!(!root.join("marker").exists());
 }
 
 fn assert_refused(root: &Path, program: &str) {
@@ -154,6 +202,20 @@ fn assert_refused(root: &Path, program: &str) {
 
 #[test]
 fn inspection_preserves_one_use_consent_for_first_actual_harmless_execution() {
+    consent_lifecycle("cli");
+}
+
+#[test]
+fn proc_execution_alone_consumes_one_use_consent() {
+    consent_lifecycle("proc");
+}
+
+#[test]
+fn sh_execution_alone_consumes_one_use_consent() {
+    consent_lifecycle("sh");
+}
+
+fn consent_lifecycle(door: &str) {
     let d = scratch();
     let root = d.path();
     let argv = vec![
@@ -193,19 +255,75 @@ fn inspection_preserves_one_use_consent_for_first_actual_harmless_execution() {
         assert!(!root.join("consent/consumed.jsonl").exists());
         assert!(!root.join("marker").exists());
     }
-    let first = command(root)
-        .args(["run", "--"])
-        .args(&argv)
-        .output()
-        .unwrap();
-    assert!(first.status.success(), "{}", text(&first));
+    // Even an execution request must not spend approval while its seed is refused.
+    seed(root, "version: [");
+    execute(root, &argv, door, false, true);
+    assert_eq!(fs::read(&token).unwrap(), original);
+    assert!(!root.join("marker").exists());
+    fs::remove_file(root.join(cp::SEED_RELATIVE_PATH)).unwrap();
+    execute(root, &argv, door, true, false);
     assert!(!token.exists());
     assert_eq!(fs::read_to_string(root.join("marker")).unwrap(), "ran");
-    let second = command(root)
-        .args(["run", "--"])
-        .args(&argv)
-        .output()
-        .unwrap();
-    assert_eq!(second.status.code(), Some(4), "{}", text(&second));
+    execute(root, &argv, door, false, false);
     assert_eq!(fs::read_to_string(root.join("marker")).unwrap(), "ran");
+    assert_eq!(
+        fs::read_to_string(root.join("consent/consumed.jsonl"))
+            .unwrap()
+            .lines()
+            .count(),
+        1
+    );
+}
+
+fn execute(root: &Path, argv: &[String], door: &str, allowed: bool, seed_refused: bool) {
+    if door == "cli" {
+        let o = command(root)
+            .args(["run", "--"])
+            .args(argv)
+            .output()
+            .unwrap();
+        assert_eq!(
+            o.status.code(),
+            Some(if allowed {
+                0
+            } else if seed_refused {
+                1
+            } else {
+                4
+            }),
+            "{}",
+            text(&o)
+        );
+        return;
+    }
+    let args = argv
+        .iter()
+        .map(|a| format!("{a:?}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let chunk = if door == "proc" {
+        let status = if allowed {
+            "exited"
+        } else if seed_refused {
+            "policy_denied"
+        } else {
+            "policy_consent_required"
+        };
+        format!("local r = proc.run{{argv={{{args}}}}}; assert(r.status == '{status}', r.status)")
+    } else {
+        let token = if seed_refused {
+            "refused:policy%-seed:"
+        } else {
+            "consent:policy:workspace%-destroy"
+        };
+        if allowed {
+            format!("sh.run{{{args}}}")
+        } else {
+            format!(
+                "local ok, e = pcall(function() sh.run{{{args}}} end); assert(not ok and tostring(e):find('{token}'), tostring(e))"
+            )
+        }
+    };
+    let o = lua(root, &chunk);
+    assert!(o.status.success(), "{door}: {}", text(&o));
 }
