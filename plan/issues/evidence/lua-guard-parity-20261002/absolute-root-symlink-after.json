@@ -6,7 +6,7 @@
     ],
     "code": 1,
     "stdout": "violation:direct-command:1\n",
-    "stderr": "/tmp/opencode/parent-1533-root-link-fhf26tw8/scan alias/fixture/src/bad.rs:1:fn probe() { let _ = std::process::Command::new(\"podman\"); }\n"
+    "stderr": "/tmp/opencode/parent-1533-root-link-fhf26tw8/scan alias/fixture/src/bad.rs:1:fn probe() { let _ = std::process::Command::new(\"podman\"); }\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
   },
   "lua": {
     "argv": [
@@ -17,6 +17,6 @@
     ],
     "code": 1,
     "stdout": "violation:direct-command:1\n",
-    "stderr": "/tmp/opencode/parent-1533-root-link-fhf26tw8/scan alias/fixture/src/bad.rs:1:fn probe() { let _ = std::process::Command::new(\"podman\"); }\n"
+    "stderr": "/tmp/opencode/parent-1533-root-link-fhf26tw8/scan alias/fixture/src/bad.rs:1:fn probe() { let _ = std::process::Command::new(\"podman\"); }\n", "_cite_ok": "<!-- cite-ok: measured stderr path:line, not prose citation -->"
   }
 }
