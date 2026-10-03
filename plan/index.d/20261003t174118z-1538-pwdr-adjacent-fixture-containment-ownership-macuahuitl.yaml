@@ -1,0 +1,37 @@
+fields:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    field: owned_files
+    value:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/src/lua_process.rs
+      - crates/tillandsias-plan/src/script_run.rs
+      - crates/tillandsias-plan/tests/lua_proc.rs
+      - crates/tillandsias-plan/tests/lua_predicate_classes.rs
+      - crates/tillandsias-exec/src/managed.rs
+      - scripts/test-gate-memory-refusal.sh
+      - scripts/test-if-not-pipeline-guard.sh
+      - scripts/test-pilot-lua-ports.sh
+    ts: "2026-10-03T17:41:18Z"
+    host: macuahuitl
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: progress
+      ts: "2026-10-03T17:41:18Z"
+      host: macuahuitl
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      summary: |
+        Parent audited adjacent target/plan-scratch users while the frozen
+        candidate gate ran, without modifying its source or polling it.
+        Independent typed controls also refuted if-not-pipeline-guard (exited1:
+        failed to refuse pipeline) and pilot-lua-ports (exited1:4 passed,1
+        failed; its seam-writers200k fixture read is outside the repository).
+        Parent extends only fixture ownership for the same repository-local
+        unique scratch correction. Preserve all pipeline/bare/case and pilot
+        byte-agreement, large-writer, env-read-root, stale-runner and retirement
+        assertions. Production Lua guards and read roots remain untouched.
+        Never edit the source while its forced gate is running; apply after
+        completion, measure before/after and then force the integrated retry.
+        The separate pipeline guard's pcall(fs.read) silently skipping selected
+        unreadable files is queued as1547-ynn5, not repaired or declared closed
+        by moving the fixture. No additional delegate beyond the8-cycle limit.
