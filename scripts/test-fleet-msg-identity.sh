@@ -33,7 +33,13 @@
 # removed; the arm must then FAIL):
 #   NEG-LATE      TILLANDSIAS_MSG_LOOKUP_AFTER_READ=1 moves the directory
 #                 lookup after the first envelope read: gamma is still refused
-#                 but envelope_bytes_read > 0, so arm 2's predicate FAILS
+#                 but envelope_bytes_read > 0, so arm 2's predicate FAILS.
+#                 The seam is compiled ONLY under cfg(debug_assertions): a
+#                 release binary ignores it (pinned by the unit test
+#                 lookup_after_read_is_compiled_out_of_release), so this
+#                 control also proves the fixture drives the DEBUG build —
+#                 TILLANDSIAS_MSG_SERVE_BIN pointed at a release binary fails
+#                 it by design
 #   NEG-POLICY    a copy of the policy dir whose forge.hcl gains
 #                 path "secret/data/fleet/*" makes arm 5's predicate FAIL,
 #                 naming forge.hcl
@@ -175,7 +181,7 @@ ACC_ENV=()
 if ! unknown_zero && has "refused:msg:unknown-peer:$FG" "$ACC" && ! has "envelope_bytes_read=0" "$ACC"; then
     echo "ok:   NEG-LATE: with the lookup after the first envelope read gamma is still refused but bytes were read (arm 2 fails)"
     controls=$((controls+1))
-else echo "FAIL: NEG-LATE: [$ACC] — the count did not see a late lookup, or the seam did not reach"; fi
+else echo "FAIL: NEG-LATE: [$ACC] — the count did not see a late lookup, or the seam did not reach (a RELEASE binary ignores it by design: drive the debug build)"; fi
 rm -f "$PEERS/gamma.yaml"
 
 # ── arm 3: an unknown proto major is refused naming it ───────────────────────

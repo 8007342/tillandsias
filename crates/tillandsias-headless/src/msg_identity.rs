@@ -34,18 +34,40 @@
 // reads `noise_fp` (the schema owner's name, and unambiguous beside
 // announce_pub); the mDNS TXT key stays `fp=` as the design names it.
 //
-// FIXTURE SEAMS — honoured ONLY with an explicit TILLANDSIAS_MSG_ROOT, like
-// msg_serve's, so they can never weaken a real host:
-//   TILLANDSIAS_MSG_KEY_FILE=<path>     the static key lives in a 0600 JSON
-//                                       file instead of Vault (no fixture
-//                                       ever touches a real Vault);
-//   TILLANDSIAS_MSG_PROTO=<maj.min>     the dialer's hello claims this proto
-//                                       (the proto-major arm);
+// FIXTURE SEAMS. An explicit TILLANDSIAS_MSG_ROOT is a LEGITIMATE production
+// setting (the store-root override), so "explicit root" does not separate a
+// fixture from a real host; each seam is therefore judged on what it can do
+// in a shipped binary:
+//   TILLANDSIAS_MSG_KEY_FILE=<path>     (explicit root required) the static
+//                                       key lives in a 0600 JSON file instead
+//                                       of Vault, so no fixture touches a real
+//                                       Vault. Acceptable in release: it is
+//                                       opt-in by the host's own operator,
+//                                       chooses only where THIS host's own
+//                                       key is kept, prints `store:file:<p>`
+//                                       on --mint, and cannot admit a peer —
+//                                       every remote key still goes through
+//                                       the directory lookup.
+//   TILLANDSIAS_MSG_PROTO=<maj.min>     (explicit root required) the dialer's
+//                                       hello claims this proto (the
+//                                       proto-major arm). Acceptable in
+//                                       release: it changes only what this
+//                                       host CLAIMS after both ends are
+//                                       authenticated, and the acceptor
+//                                       refuses an unknown major.
 //   TILLANDSIAS_MSG_LOOKUP_AFTER_READ=1 the acceptor admits any static, reads
 //                                       the hello and the first envelope,
-//                                       THEN looks the key up — the
-//                                       mutation control that must turn the
-//                                       zero-bytes arm red.
+//                                       THEN looks the key up — the mutation
+//                                       control that must turn the zero-bytes
+//                                       arm red. It weakens authentication,
+//                                       so it is COMPILED ONLY under
+//                                       cfg(debug_assertions): the release
+//                                       profile build.sh ships (`--release`)
+//                                       has neither the code path nor the
+//                                       env read, and
+//                                       `lookup_after_read_is_compiled_out_of_release`
+//                                       pins which build honours it. The
+//                                       fixture drives the debug build.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -451,7 +473,9 @@ pub fn hello_major(frame: &[u8]) -> Result<u64, String> {
 pub struct SessionSeams {
     /// TILLANDSIAS_MSG_PROTO: the proto string the dialer's hello claims.
     pub proto: String,
-    /// TILLANDSIAS_MSG_LOOKUP_AFTER_READ: the mutation control.
+    /// TILLANDSIAS_MSG_LOOKUP_AFTER_READ: the mutation control. The FIELD
+    /// does not exist in a release build, so nothing can set it there.
+    #[cfg(debug_assertions)]
     pub lookup_after_read: bool,
 }
 
@@ -459,10 +483,29 @@ impl Default for SessionSeams {
     fn default() -> Self {
         Self {
             proto: PROTO.to_string(),
+            #[cfg(debug_assertions)]
             lookup_after_read: false,
         }
     }
 }
+
+impl SessionSeams {
+    /// Whether the acceptor runs the lookup-after-read MUTATION. The literal
+    /// `false` in a release build: the authentication off-switch is not in
+    /// any binary build.sh ships.
+    #[cfg(debug_assertions)]
+    fn late_lookup(&self) -> bool {
+        self.lookup_after_read
+    }
+    #[cfg(not(debug_assertions))]
+    fn late_lookup(&self) -> bool {
+        false
+    }
+}
+
+/// Whether this build honours TILLANDSIAS_MSG_LOOKUP_AFTER_READ at all
+/// (debug builds only). Pinned by a test in both profiles.
+pub const LOOKUP_AFTER_READ_COMPILED: bool = cfg!(debug_assertions);
 
 /// What one accepted session ended as. `envelope_bytes_read` counts EVERY
 /// plaintext byte read from the tunnel (hello included) — zero for any peer
@@ -510,7 +553,8 @@ where
 {
     let mut read = 0usize;
     let mut admitted: Option<Peer> = None;
-    let hs = if seams.lookup_after_read {
+    let late = seams.late_lookup();
+    let hs = if late {
         // MUTATION CONTROL: admit anything now, look it up after reading.
         server_handshake_xx(stream, local, |_: &[u8; 32]| Ok(())).await
     } else {
@@ -578,7 +622,7 @@ where
         return refuse("refused:msg:hello-reply-failed".into(), read, proto);
     }
     let envelope = read_frame(&mut st, &mut read).await;
-    if seams.lookup_after_read {
+    if late {
         let Some(remote) = st.remote_static() else {
             return refuse("refused:msg:no-remote-static".into(), read, proto);
         };
@@ -704,13 +748,22 @@ fn open_key_store(debug: bool) -> Result<Box<dyn MsgStaticKeyStore>, String> {
 }
 
 fn seams() -> SessionSeams {
-    let explicit_root = env_var("TILLANDSIAS_MSG_ROOT").is_some();
+    seams_from(env_var)
+}
+
+/// The session seams from an environment lookup. A release build never even
+/// READS TILLANDSIAS_MSG_LOOKUP_AFTER_READ.
+fn seams_from(get: impl Fn(&str) -> Option<String>) -> SessionSeams {
+    let explicit_root = get("TILLANDSIAS_MSG_ROOT").is_some();
     let mut s = SessionSeams::default();
     if explicit_root {
-        if let Some(p) = env_var("TILLANDSIAS_MSG_PROTO") {
+        if let Some(p) = get("TILLANDSIAS_MSG_PROTO") {
             s.proto = p;
         }
-        s.lookup_after_read = env_var("TILLANDSIAS_MSG_LOOKUP_AFTER_READ").as_deref() == Some("1");
+        #[cfg(debug_assertions)]
+        {
+            s.lookup_after_read = get("TILLANDSIAS_MSG_LOOKUP_AFTER_READ").as_deref() == Some("1");
+        }
     }
     s
 }
@@ -1105,18 +1158,24 @@ mod tests {
     /// THE ORDERING PROPERTY: an unknown key is refused and the acceptor has
     /// read zero tunnel bytes. The same arm under the LOOKUP_AFTER_READ
     /// mutation must read bytes (and still refuse) — proving the count can
-    /// see a late lookup.
+    /// see a late lookup. Seams come from the env-reading path, so a release
+    /// test build (`cargo test --release`) runs the same arm and must read
+    /// ZERO bytes with the variable set: there it has no effect.
     #[tokio::test]
     async fn an_unknown_key_is_refused_before_any_envelope_byte_is_read() {
         let p = pair();
         let stranger = StaticKeypair::generate().unwrap();
         let fp = static_fingerprint(stranger.public());
-        for late in [false, true] {
+        for asked in [false, true] {
             let (c, s) = tokio::io::duplex(64 * 1024);
-            let seams = SessionSeams {
-                lookup_after_read: late,
-                ..SessionSeams::default()
-            };
+            let seams = seams_from(fake_env(&[
+                ("TILLANDSIAS_MSG_ROOT", "/fixture-root"),
+                (
+                    "TILLANDSIAS_MSG_LOOKUP_AFTER_READ",
+                    if asked { "1" } else { "0" },
+                ),
+            ]));
+            let late = asked && LOOKUP_AFTER_READ_COMPILED;
             let (_dial, acc) = tokio::join!(
                 dial_session(c, &stranger, &p.dir, &seams, b"envelope"),
                 accept_session(s, &p.b.keypair, &p.dir, &seams)
@@ -1131,6 +1190,39 @@ mod tests {
                 assert_eq!(acc.envelope_bytes_read, 0, "{acc:?}");
             }
         }
+    }
+
+    fn fake_env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        let pairs: Vec<(String, String)> = pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        move |k: &str| pairs.iter().find(|(pk, _)| pk == k).map(|(_, v)| v.clone())
+    }
+
+    /// 1506-32k5 review: the authentication off-switch exists ONLY in debug
+    /// builds. Under the release profile (what build.sh ships) the variable
+    /// is not read and the session runs the in-handshake lookup even with an
+    /// explicit store root — a legitimate production setting — set. Under the
+    /// debug profile (what the fixture drives) it is honoured, but only with
+    /// that explicit root. Run both: `cargo test` and `cargo test --release`.
+    #[test]
+    fn lookup_after_read_is_compiled_out_of_release() {
+        let set = fake_env(&[
+            ("TILLANDSIAS_MSG_ROOT", "/var/lib/real-store"),
+            ("TILLANDSIAS_MSG_LOOKUP_AFTER_READ", "1"),
+        ]);
+        assert_eq!(seams_from(&set).late_lookup(), cfg!(debug_assertions));
+        assert_eq!(LOOKUP_AFTER_READ_COMPILED, cfg!(debug_assertions));
+        let no_root = fake_env(&[("TILLANDSIAS_MSG_LOOKUP_AFTER_READ", "1")]);
+        assert!(!seams_from(&no_root).late_lookup());
+        // PROTO and KEY_FILE stay available in release (they cannot admit a
+        // peer); PROTO is honoured with an explicit root in both profiles.
+        let proto = fake_env(&[
+            ("TILLANDSIAS_MSG_ROOT", "/r"),
+            ("TILLANDSIAS_MSG_PROTO", "2.0"),
+        ]);
+        assert_eq!(seams_from(&proto).proto, "2.0");
     }
 
     #[tokio::test]
