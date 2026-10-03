@@ -1,0 +1,127 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Amendment notes from milestone 1548-9n28 (fleet WAN rendezvous, operator
+# rulings 2026-10-03, design note plan/issues/fleet-wan-rendezvous-design-2026-10-03.md).
+# Notes only: no title, status or exit criterion of an existing row is
+# changed here. Each note points a reader who starts at an existing row to
+# the decision that now governs it.
+events:
+  - packet_id: every-tillandsias-instance-signed-in-with-the-same-cloudflare-account-joins-one-private-network-tillandsias-vpn-and-a-hub-serves-its-local-experts-to-the-fleet-as-fleet-experts
+    event:
+      type: note
+      ts: "2026-10-03T18:39:41Z"
+      agent_id: claude-opus-yoga-20261003t183941z
+      host: yoga
+      summary: |-
+        AMENDED BY 1548-9n28 (operator rulings 2026-10-03): the control plane
+        is a Cloudflare Worker + Durable Object rendezvous on tlatoani.net
+        (discovery, per-service leases, DNS, status page); Mesh stays the v1
+        off-LAN DATA rung for host-to-host traffic only; the "hub" is the
+        holder of the local-experts lease (macuahuitl preferred); the relay
+        domain question is answered: https://rendezvous.tlatoani.net. Read
+        plan/issues/fleet-wan-rendezvous-design-2026-10-03.md before
+        draining a 1505 child.
+  - packet_id: tillandsias-fleet-vpn-init-idempotently-ensures-the-tillandsias-vpn-virtual-network-masque-profile-split-tunnel-gateway-policy-and-a-per-host-service-token-and-refuses-with-the-dashboard-step-when-the-zero-trust-org-is-absent
+    event:
+      type: note
+      ts: "2026-10-03T18:39:41Z"
+      agent_id: claude-opus-yoga-20261003t183941z
+      host: yoga
+      summary: |-
+        IN SCOPE, ON THE CRITICAL PATH (operator ruling 12, 2026-10-03): off-LAN
+        hosts use Cloudflare Mesh for all host-to-host traffic in v1, so this
+        init is required for the off-LAN rung of milestone 1548-9n28. Its
+        per-host service token enrolls Mesh only; the rendezvous does NOT use
+        it (hosts sign heartbeats with their Ed25519 announce key, design
+        note §1). Mesh service-token devices share one identity, so every
+        service above Mesh authenticates by pinned per-host CA certificates.
+  - packet_id: expert-serve-binds-the-mesh-only-behind-a-bearer-and-tillandsias-fleet-experts-serve-runs-it-on-the-hub-mesh-ip-advertising-fleet-experts-tillandsias-vpn-internal
+    event:
+      type: note
+      ts: "2026-10-03T18:39:41Z"
+      agent_id: claude-opus-yoga-20261003t183941z
+      host: yoga
+      summary: |-
+        AMENDED (operator ruling 14, 2026-10-03): the shared per-fleet bearer
+        (secret/fleet/experts) is REPLACED by certificates from each host's
+        own Vault CA, pinned in plan/fleet/peers and the rendezvous roster
+        (mTLS, or an SSH-forwarded port with a fleet user certificate); the
+        logins gate enrollment only and a lapsed token must not break the
+        experts. The hub is the holder of the local-experts lease, not a
+        static host. The bind plumbing of this row remains useful; the
+        bearer check is superseded by 1548-q2fr, which depends on this row.
+        The title keeps the old words because titles are immutable.
+  - packet_id: every-forge-gets-a-tillandsias-fleet-experts-provider-beside-the-local-one-and-tillandsias-fleet-experts-status-resolves-the-route-and-prints-reachable-or-unreachable-with-a-reason
+    event:
+      type: note
+      ts: "2026-10-03T18:39:41Z"
+      agent_id: claude-opus-yoga-20261003t183941z
+      host: yoga
+      summary: |-
+        AMENDED BY 1548-9n28: the route resolves through tillandsias fleet
+        resolve local-experts (LAN first, Mesh off-LAN, via: printed) and the
+        provider authenticates with the host's fleet certificate (1548-q2fr);
+        unreachable falls back to the local experts with
+        fallback:local-experts:<reason>.
+  - packet_id: research-run-the-cloudflare-one-client-in-warp-mode-as-a-rootless-sidecar-container-sharing-the-router-network-namespace-with-net-admin-and-dev-net-tun-and-record-one-of-five-named-outcomes
+    event:
+      type: note
+      ts: "2026-10-03T18:39:41Z"
+      agent_id: claude-opus-yoga-20261003t183941z
+      host: yoga
+      summary: |-
+        ON THE CRITICAL PATH (operator ruling 12, 2026-10-03): this sidecar is
+        the v1 off-LAN data rung of milestone 1548-9n28 for git mirror,
+        experts and SSH; downloads and images never use it. Its outcome also
+        decides whether host services are reachable from the Mesh through the
+        router namespace, measured by 1548-h7qh.
+  - packet_id: fleet-vpn-join-leave-status-launches-the-warp-sidecar-beside-the-router-from-secret-cloudflare-mesh-on-linux-and-inside-the-macos-and-windows-guests-so-no-host-os-ever-runs-a-cloudflare-daemon
+    event:
+      type: note
+      ts: "2026-10-03T18:39:41Z"
+      agent_id: claude-opus-yoga-20261003t183941z
+      host: yoga
+      summary: |-
+        ON THE CRITICAL PATH (operator ruling 12, 2026-10-03): required for the
+        off-LAN rung of milestone 1548-9n28; 1548-h7qh and 1548-pg32 depend on
+        it. The Mesh IP it yields is reported in the host's rendezvous
+        heartbeat and published as <host>.mesh.fleet.tlatoani.net.
+  - packet_id: mesh-identity-plane-research
+    event:
+      type: note
+      ts: "2026-10-03T18:39:41Z"
+      agent_id: claude-opus-yoga-20261003t183941z
+      host: yoga
+      summary: |-
+        ANSWER PENDING SIGNATURE: plan/issues/fleet-wan-rendezvous-design-2026-10-03.md
+        §3 answers this row's exit criteria (per-host CAs pinned by the tree,
+        connection-time trust never a live login, TTLs, revocation by record
+        removal, compromise containment = one host). 1548-ym32 turns it into
+        the Tlatoani-signable decision record; the authorization model for
+        til:compute:* principals remains the explicit remainder. Status is
+        unchanged until the operator signs.
+  - packet_id: node-discovery-and-uptime-affinity
+    event:
+      type: note
+      ts: "2026-10-03T18:39:41Z"
+      agent_id: claude-opus-yoga-20261003t183941z
+      host: yoga
+      summary: |-
+        ANSWER PENDING SIGNATURE: the design note §4 answers this row
+        (signed announcements to a Worker rendezvous; discovery never confers
+        trust; uptime measured by the rendezvous over 672 fifteen-minute
+        slots; mid-serve disappearance = lease expiry within 75 min and loud
+        local fallback). Decision record: 1548-ym32.
+  - packet_id: fleet-enrollment-one-tillandsia-per-node-research
+    event:
+      type: note
+      ts: "2026-10-03T18:39:41Z"
+      agent_id: claude-opus-yoga-20261003t183941z
+      host: yoga
+      summary: |-
+        ENROLLMENT HALF ANSWERED, PENDING SIGNATURE: enrollment is the
+        operator's --github-login plus --cloudflare-login on the new host,
+        matched against owner pins in plan/fleet/owner.yaml, then a landed
+        peer record (design note §3; 1548-ciq2); no node holds the operator's
+        long-lived credential beyond its own refreshable bundles, and trust
+        never depends on them after enrollment. Pi enrollment is goal
+        1548-y56i. Decision record: 1548-ym32.
