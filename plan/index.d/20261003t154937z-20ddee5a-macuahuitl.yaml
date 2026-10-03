@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    field: status
+    value: in_progress
+    ts: "2026-10-03T15:49:37Z"
+    host: macuahuitl
+
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: note
+      ts: "2026-10-03T15:49:37Z"
+      host: macuahuitl
+      summary: |-
+        claimed for operator-approved 24h Lua composition then trace pass by linux-macuahuitl-opencode-20261003t154937z; no sole-builder override
