@@ -26,7 +26,7 @@ each isolated by a one-flag differential:
    `container_use_devices` is `off`): `--device /dev/net/tun` passes the node
    but `open()` is EACCES. `--security-opt label=disable` clears it — the
    router itself already runs with `label=disable`
-   (`crates/tillandsias-headless/src/main.rs:6264`).
+   (`crates/tillandsias-headless/src/main.rs` `build_router_run_args`).
 2. **User-namespace ownership of the shared netns**: `--userns=keep-id`
    gives the sidecar its OWN user namespace (same mapping, different
    namespace), so its NET_ADMIN does not cover the owner's network
@@ -141,8 +141,8 @@ client (inside image): warp-cli 2026.7.1377.0
 
 9. **The real router namespace has no route to Cloudflare.** The router
    launches only on `tillandsias-enclave`
-   (`crates/tillandsias-headless/src/main.rs:6260-6261`,
-   `ENCLAVE_NET` = `"tillandsias-enclave"` at :1921), and
+   (`crates/tillandsias-headless/src/main.rs` `build_router_run_args`,
+   `ENCLAVE_NET` = `"tillandsias-enclave"`), and
    `podman network inspect tillandsias-enclave --format '... internal={{.Internal}}'`
    → `internal=true` (rc=0). A throwaway owner of that shape:
    `arm:edge-tcp-from-netns rc=1` → `connect: Network is unreachable` to
@@ -233,11 +233,11 @@ Enrollment-time questions this run cannot answer:
 ## Consequences for 1506-t97c and Decision 6 (not decided here)
 
 - `--userns=container:tillandsias-router` is refused by today's policy:
-  `crates/tillandsias-podman/src/policy.rs:191` rejects any `--userns` value
+  `crates/tillandsias-podman/src/policy.rs` `weakening_hardening_flag` rejects any `--userns` value
   other than `keep-id`. The warp profile needs a named exception (joining a
   keep-id owner's namespace is the same mapping, not a weakening) or the
   join is impossible. `label=disable` is already admitted
-  (`policy.rs:218-219`) and the router already uses it.
+  (`policy.rs` `is_weakening_security_opt`) and the router already uses it.
 - The router netns is internal-only (fact 9). Either the WARP sidecar's
   netns owner gains egress (dual-home the router onto `tillandsias-egress`,
   which changes the router's exposure), or the sidecar owns its own

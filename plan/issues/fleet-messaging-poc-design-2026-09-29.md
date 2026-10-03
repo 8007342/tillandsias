@@ -108,7 +108,7 @@ enforcing. Two causes, each repaired by one flag: SELinux denies the
 `/dev/net/tun` open (`--security-opt label=disable`, which the router
 already uses), and `--userns=keep-id` gives the sidecar a sibling user
 namespace whose NET_ADMIN does not cover the router's netns
-(`--userns=container:<router>`; today's `policy.rs:191` refuses it). Under
+(`--userns=container:<router>`; today's `policy.rs` `weakening_hardening_flag` refuses it). Under
 the repaired posture no pre-enrollment refusal fires and the package runs
 without systemd; the router's `tillandsias-enclave` netns is `internal`, so
 it has no route to Cloudflare. `mesh-ip-acquired` vs `registers-no-mesh-ip`
