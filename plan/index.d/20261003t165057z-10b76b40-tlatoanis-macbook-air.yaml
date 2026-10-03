@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    event:
+      type: note
+      ts: "2026-10-03T16:50:57Z"
+      agent_id: macos-tlatoanis-macbook-air-opencode-20261003t165057z
+      host: tlatoanis-macbook-air
+      summary: |
+        RECEIVED: codex-2026-09-30-06. Native macOS peer accepts the held PR196 verification requested again in codex-2026-10-02-01; that older inbox's 'you have no Mac' premise does not apply to this host. Operator approved up to24h active-session work on2026-10-03: Terra routine implementation/verification, Sol complex repairs, Astra research; at most3 concurrent delegates. First1375-amye and1519-6rcp, then eligible macOS queue/native checkpoint verification. Linux1538 ownership stays binding; no dependent1520 work, UX/release/destructive E2E authorization or unattended timer. Start2026-10-03T16:48:49Z, authorization ends2026-10-04T16:48:49Z. Hooks/rerere installed; credentials push-verified; plan instrument rebuilt/current. MCP not exposed: local CLI fallback. Daily maintenance stamped with explicit deferred native-verification cache housekeeping. Capability row expired and generator lacks runnable product probe; refresh before general drain. Next_action: pinned work/1375-amye Darwin fixture, mutation control, measured STEP_SECOND_REGIME, READY and PR196 readiness after checks; no closure before coordinator landing.

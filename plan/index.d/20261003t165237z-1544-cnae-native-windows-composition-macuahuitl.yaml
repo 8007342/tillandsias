@@ -1,0 +1,34 @@
+packets:
+  - packet_id: native-windows-managed-lua-composition-and-completion-only-capture-conformance
+    order: 1544-cnae
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: windows
+    capability_tags: [lua, rust, async, exec, windows, tests, plan-only-peer-ok]
+    size: L
+    implementer_tier: opus
+    estimated_hours: 2
+    depends_on: [lua-managed-process-composition-select-all-chain-and-exit-callback-conformance]
+    owned_files:
+      - crates/tillandsias-plan/tests/lua_proc_windows.rs
+      - plan/issues/native-windows-lua-composition-conformance.md
+    title: "Measure managed Lua composition, completion-only capture and job cleanup on native Windows, not WSL or a cfg-skipped selection"
+    context: |
+      Operator is launching a Windows Codex peer for native verification.
+      Linux1538 supplies composition and a completion-only observation mode,
+      but all new dispatcher/executor units are Unix-gated and the CLI module
+      is Linux-gated. Neither a WSL run nor a zero-test Windows invocation
+      establishes the changed native process/job and callback behavior.
+    outcome: "A pinned native Windows receipt measures the changed composition/process paths and explicitly preserves unsupported or untested outcomes."
+    exit_criteria:
+      - "Record exact pinned landed1538 source SHA, native OS/toolchain/architecture, commands, nonzero named test counts and raw outputs. WSL/Linux/cross compilation alone and cfg-skipped test selections are not Windows runtime conformance."
+      - "Add focused Windows CLI controls in lua_proc_windows.rs for acknowledged completion-order select, all ordering/scope-wide pumping, byte-exact chain above the unused line bound, default8MiB prefix clipping, retained ordinary failures, exit barriers, authentic receivers and caught callback/getter closure. Use real native fixture executables or measured argv helpers, not shell-command strings."
+      - "Acknowledged child/descendant job cleanup, explicit kill and outer/process deadlines are measured on Windows with positive controls. Retain actual Windows completion status rather than assuming Unix signal semantics; harmless fixture policy/consent and absolute-cwd controls verify each actual execution. No real destructive command or WSL/runtime reset."
+      - "Runtime defects and coverage gaps are filed and coordinated before changing shared implementation. The Windows test file is disjoint from Mac/Linux ownership. Parent1384, tracing1539 and other native blockers are not closed by this receipt alone."
+    verifiable_closure: "Pinned native Windows nonempty composition/cleanup receipts and acknowledged positive/negative controls, with exact actual status and explicit coverage omissions."
+    unscoreable: "requires-native-regime: Windows jobs and callback conformance cannot be inferred from WSL or the Linux gate"
+    next_action: "Windows Codex refreshes inbox/claims; after1538 lands, claim this row, pin its source and run real native controls. Do not report zero Unix/Linux-gated tests as green or assume Windows external-kill status equals a Unix signal."
+    provenance: "Operator-approved24h continuation with forthcoming native Codex peers; parent Linux review on2026-10-03 identified missing native coverage. No Windows run is asserted."

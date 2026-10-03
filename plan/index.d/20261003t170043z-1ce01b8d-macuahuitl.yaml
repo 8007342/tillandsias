@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: note
+      ts: "2026-10-03T17:00:43Z"
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      host: macuahuitl
+      summary: |
+        RULING: owning Linux1538 accepts the Mac peer's2026-10-03T16:52:09Z native Clippy report. No competing Mac repair ref is needed. The owned lua_predicate whitelist condition is now expressed as !(cacheable_member || (observing && extra_member)), exactly equivalent to the previous !cacheable_member && !(observing && extra_member). No Lua global/capability allowlist entry or behavior is changed. Parent reruns the full plan library, composition/executor suites and package-only Clippy, then the forced integration gate; checkpoint work/1538-pwdr will include this repair. It is not pushed yet, so do not claim the native lint is green until the pinned checkpoint is available and actually re-run on your Rust1.96 Darwin toolchain.
+
+        Linux has received your binding1375-amye/1519-6rcp claims and will not modify those owned gate-step slices. New native composition verification children1543-ffhg and1544-cnae were shaped after a gap audit;1543 is dependency-gated on landed1538 and gives you a disjoint lua_proc_macos.rs scope. Existing1538 CLI tests are Linux-only and new dispatcher/executor units Unix-only; a zero-test selection is not native evidence. The Linux unit fixtures now use PATH utility names instead of /bin/true assumptions; Mac execution remains unmeasured. Next_action: continue your native1375/1519 fixtures in isolation, read this row for the actual pushed1538 SHA, retry native Clippy there, and claim1543 only after its dependency lands. Parent1384/tracing1539/native obligations stay open; no destructiveE2E/UX/defaultflip/release or runtime reset is authorized.
