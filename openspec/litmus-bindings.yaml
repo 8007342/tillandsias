@@ -650,6 +650,7 @@ specs:
   - litmus:init-command-shape
   - litmus:image-build-convergence-shape
   - litmus:windows-host-lane-refusal
+  - litmus:ipv6-probe-per-router-shape
   coverage_ratio: 75
   last_verified: '2026-06-02'
 - spec_id: init-incremental-builds

@@ -8743,21 +8743,144 @@ fn detect_and_recover_cache_corruption(debug: bool) -> Result<bool, String> {
     }
 }
 
+/// Probe targets for IPv6 egress. Socket addresses MUST be bracketed
+/// (`[addr]:port`); the unbracketed form never parses as a `SocketAddr`, which
+/// made the probe fail on every host (order 1548-mhyk).
 #[cfg(target_os = "linux")]
-fn is_ipv6_functional() -> bool {
-    let addresses = [
-        "2001:4860:4860::8888:53", // Google DNS
-        "2606:4700:4700::1111:53", // Cloudflare DNS
-    ];
-    for addr_str in &addresses {
-        if let Ok(addr) = addr_str.parse::<std::net::SocketAddr>()
-            && std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(800))
-                .is_ok()
-        {
-            return true;
+const IPV6_PROBE_ADDRESSES: [&str; 2] = [
+    "[2001:4860:4860::8888]:53", // Google DNS
+    "[2606:4700:4700::1111]:53", // Cloudflare DNS
+];
+
+/// Distinct source ports tried while looking for a flow that the kernel's
+/// multipath hash sends through each default router.
+#[cfg(target_os = "linux")]
+const IPV6_PROBE_SOURCE_PORTS: std::ops::Range<u16> = 40100..40132;
+
+/// Extract the distinct default-router gateways (`via <addr>`) from the text of
+/// `ip -6 route show default`, covering both single-route and ECMP `nexthop`
+/// forms. Order is first-seen; duplicates are dropped.
+#[cfg(target_os = "linux")]
+fn parse_default_routers(route_table: &str) -> Vec<String> {
+    let mut routers: Vec<String> = Vec::new();
+    for line in route_table.lines() {
+        let mut words = line.split_whitespace();
+        while let Some(word) = words.next() {
+            if word == "via"
+                && let Some(gw) = words.next()
+                && !routers.iter().any(|r| r == gw)
+            {
+                routers.push(gw.to_string());
+            }
+        }
+    }
+    routers
+}
+
+/// Probe egress through every default router. Returns `(ok, routers)`. A router
+/// the probe cannot exercise counts as NOT ok, so a half-black-holed LAN is never
+/// declared functional by whichever router the kernel happened to pick.
+#[cfg(target_os = "linux")]
+fn ipv6_egress_report(
+    route_table: &str,
+    mut probe_via: impl FnMut(&str) -> bool,
+) -> (usize, usize) {
+    let routers = parse_default_routers(route_table);
+    let ok = routers.iter().filter(|r| probe_via(r)).count();
+    (ok, routers.len())
+}
+
+/// IPv6 is functional only when at least one router exists and every router
+/// carries traffic.
+#[cfg(target_os = "linux")]
+fn ipv6_egress_functional(ok: usize, routers: usize) -> bool {
+    routers > 0 && ok == routers
+}
+
+/// TCP connect from a fixed local port with an 800 ms connect timeout.
+#[cfg(target_os = "linux")]
+fn connect_v6_from_port(addr: std::net::SocketAddr, port: u16) -> bool {
+    let std::net::SocketAddr::V6(remote) = addr else {
+        return false;
+    };
+    let sockaddr = |ip: std::net::Ipv6Addr, port: u16| libc::sockaddr_in6 {
+        sin6_family: libc::AF_INET6 as libc::sa_family_t,
+        sin6_port: port.to_be(),
+        sin6_flowinfo: 0,
+        sin6_addr: libc::in6_addr {
+            s6_addr: ip.octets(),
+        },
+        sin6_scope_id: 0,
+    };
+    let size = std::mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t;
+    // SAFETY: plain libc socket calls on a descriptor owned here and closed
+    // before returning; the sockaddr structs outlive the calls that borrow them.
+    unsafe {
+        let fd = libc::socket(libc::AF_INET6, libc::SOCK_STREAM, 0);
+        if fd < 0 {
+            return false;
+        }
+        let timeout = libc::timeval {
+            tv_sec: 0,
+            tv_usec: 800_000,
+        };
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_SNDTIMEO,
+            &timeout as *const libc::timeval as *const libc::c_void,
+            std::mem::size_of::<libc::timeval>() as libc::socklen_t,
+        );
+        let local = sockaddr(std::net::Ipv6Addr::UNSPECIFIED, port);
+        let peer = sockaddr(*remote.ip(), remote.port());
+        let ok = libc::bind(fd, &local as *const _ as *const libc::sockaddr, size) == 0
+            && libc::connect(fd, &peer as *const _ as *const libc::sockaddr, size) == 0;
+        libc::close(fd);
+        ok
+    }
+}
+
+/// Real per-router probe: find a source port whose 5-tuple the kernel routes via
+/// `router` (`ip -6 route get ... sport P`), then connect from that port.
+#[cfg(target_os = "linux")]
+fn probe_ipv6_via_router(router: &str) -> bool {
+    for addr_str in &IPV6_PROBE_ADDRESSES {
+        let Ok(addr) = addr_str.parse::<std::net::SocketAddr>() else {
+            continue;
+        };
+        for port in IPV6_PROBE_SOURCE_PORTS {
+            let Ok(out) = std::process::Command::new("ip")
+                .args(["-6", "route", "get", &addr.ip().to_string()])
+                .args(["ipproto", "tcp", "sport", &port.to_string(), "dport", "53"])
+                .output()
+            else {
+                return false;
+            };
+            let chosen = parse_default_routers(&String::from_utf8_lossy(&out.stdout));
+            if chosen.first().map(String::as_str) != Some(router) {
+                continue;
+            }
+            if connect_v6_from_port(addr, port) {
+                return true;
+            }
+            break; // router exercised and failed for this address
         }
     }
     false
+}
+
+#[cfg(target_os = "linux")]
+fn is_ipv6_functional(debug: bool) -> bool {
+    let table = std::process::Command::new("ip")
+        .args(["-6", "route", "show", "default"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    let (ok, routers) = ipv6_egress_report(&table, probe_ipv6_via_router);
+    if debug {
+        eprintln!("[tillandsias] init: ipv6 egress={ok}/{routers}");
+    }
+    ipv6_egress_functional(ok, routers)
 }
 
 #[cfg(target_os = "linux")]
@@ -9102,7 +9225,7 @@ fn ensure_containers_conf_no_proxy_env(path: &std::path::Path) -> Result<bool, S
 #[cfg(target_os = "linux")]
 fn auto_detect_and_configure_ipv6_workaround(debug: bool) {
     if let Some(conf_path) = get_user_containers_conf() {
-        if !is_ipv6_functional() {
+        if !is_ipv6_functional(debug) {
             if debug {
                 eprintln!(
                     "[tillandsias] init: IPv6 connectivity check failed. Injecting pasta_options = [\"--ipv4-only\"] to prevent rootless Podman timeouts."
@@ -23231,6 +23354,52 @@ mod tests {
         let content = std::fs::read_to_string(&conf_path).unwrap();
         assert!(content.contains("pasta_options = [\"--something-else\"]"));
         assert!(!content.contains("pasta_options = [\"--ipv4-only\"]"));
+    }
+
+    // @trace order:1548-mhyk
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn ipv6_probe_addresses_parse() {
+        for a in IPV6_PROBE_ADDRESSES {
+            assert!(a.parse::<std::net::SocketAddr>().is_ok(), "{a} must parse");
+        }
+        // The pre-fix unbracketed spelling can never parse: the defect.
+        assert!(
+            "2001:4860:4860::8888:53"
+                .parse::<std::net::SocketAddr>()
+                .is_err()
+        );
+    }
+
+    const TWO_ROUTERS: &str = "default proto ra metric 20600 pref medium\n\
+        \tnexthop via fe80::1 dev wlp3s0 weight 1\n\
+        \tnexthop via fe80::2 dev wlp3s0 weight 1\n";
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn ipv6_egress_one_blackholing_router_is_not_functional() {
+        assert_eq!(parse_default_routers(TWO_ROUTERS), ["fe80::1", "fe80::2"]);
+        let (ok, n) = ipv6_egress_report(TWO_ROUTERS, |r| r == "fe80::1");
+        assert_eq!((ok, n), (1, 2));
+        assert!(!ipv6_egress_functional(ok, n));
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn ipv6_egress_all_routers_working_is_functional() {
+        let (ok, n) = ipv6_egress_report(TWO_ROUTERS, |_| true);
+        assert_eq!((ok, n), (2, 2));
+        assert!(ipv6_egress_functional(ok, n));
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn ipv6_egress_no_default_router_is_not_functional() {
+        let (ok, n) = ipv6_egress_report("", |_| true);
+        assert_eq!((ok, n), (0, 0));
+        assert!(!ipv6_egress_functional(ok, n));
+        let single = "default via fe80::9 dev eth0 proto ra\n";
+        assert_eq!(parse_default_routers(single), ["fe80::9"]);
     }
 
     fn has_arg(args: &[String], needle: &str) -> bool {
