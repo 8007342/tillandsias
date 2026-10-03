@@ -6,6 +6,7 @@ members = [
     "crates/tillandsias-headless",
     "crates/tillandsias-host-shell",
     "crates/tillandsias-exec",
+    "crates/tillandsias-fleet-core",
     "crates/tillandsias-litmus-rust",
     "crates/tillandsias-logging",
     "crates/tillandsias-macos-tray",
