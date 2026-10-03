@@ -1,0 +1,37 @@
+fields:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    field: owned_files
+    value:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/src/lua_process.rs
+      - crates/tillandsias-plan/src/script_run.rs
+      - crates/tillandsias-plan/tests/lua_proc.rs
+      - crates/tillandsias-plan/tests/lua_predicate_classes.rs
+      - crates/tillandsias-exec/src/managed.rs
+    ts: "2026-10-03T17:11:47Z"
+    host: macuahuitl
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: progress
+      ts: "2026-10-03T17:11:47Z"
+      host: macuahuitl
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      summary: |
+        The forced gate reached the workspace suite:2891 ran,new-red2,
+        tolerated0,stale0. Its only failed target was lua_predicate_classes;
+        a_cacheable_verdict_is_re_evaluated_when_a_file_it_read_changes and
+        fs_list_returns_regular_file_names_in_byte_order_and_never_a_symlink
+        create inputs under target/, which in this worktree is an external
+        warm-cache symlink. Production fs.read/fs.list correctly refuse them.
+        The broader library had the same fixture assumption and is now427/427
+        after repository-local cleaned inputs. New composition remains44/44,
+        executor32/32. The gate is RED, not green; no code push or READY yet.
+        Parent explicitly adds the existing predicate-class test file to1538
+        ownership for this narrow fixture-only repair. Preserve all memo,
+        byte-order, symlink-exclusion and outside-root negative assertions;
+        never widen filesystem capability, remove the cache link or accept
+        known-red tests. Terra repairs the two fixture locations; parent
+        independently verifies the complete22-test target, then retries the
+        forced gate. Raw diagnostics remain losslessly archived with hashes,
+        without a citation waiver. Native claims/obligations remain separate.
