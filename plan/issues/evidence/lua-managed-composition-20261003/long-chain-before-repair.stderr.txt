@@ -1,0 +1,7 @@
+runtime error: io while draining ["cat"]: proc-line-too-long
+stack traceback:
+	[C]: in local 'poll'
+	[string "?"]:4: in main chunk
+	(...tail calls...)
+	[string "/tmp/opencode/lua-composition-parent-20261003..."]:4: in main chunk
+

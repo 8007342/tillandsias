@@ -1116,8 +1116,8 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
             let (k, _) = pair.map_err(|e| LuaError::VmError(format!("globals: {e}")))?;
             if let LuaValue::String(name) = k {
                 let name = name.to_string_lossy().to_string();
-                if !CACHEABLE_STDLIB_GLOBALS.contains(&name.as_str())
-                    && !(observing
+                if !(CACHEABLE_STDLIB_GLOBALS.contains(&name.as_str())
+                    || (observing
                         && [
                             "os",
                             "io",
@@ -1127,7 +1127,7 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                             "collectgarbage",
                             "coroutine",
                         ]
-                        .contains(&name.as_str()))
+                        .contains(&name.as_str())))
                 {
                     drop.push(name);
                 }
@@ -1600,10 +1600,14 @@ mod tests {
     #[test]
     fn re_registering_a_predicate_invalidates_its_memo() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let rel = format!("target/lua-source-replace-{}.txt", std::process::id());
-        let file = root.join(&rel);
-        std::fs::create_dir_all(file.parent().expect("parent")).expect("mkdir target");
-        std::fs::write(&file, "same").expect("write unchanged input");
+        // target/ may be a warm-cache symlink outside this checkout. The real
+        // repository-bound read must remain inside it; never relax containment.
+        let fixture = tempfile::Builder::new()
+            .prefix("lua-source-replace-")
+            .tempfile_in(&root)
+            .expect("create repository-local input");
+        let rel = fixture.path().file_name().unwrap().to_str().unwrap();
+        std::fs::write(fixture.path(), "same").expect("write unchanged input");
 
         let mut reg = PredicateRegistry::new();
         reg.register(
@@ -1612,8 +1616,8 @@ mod tests {
             "function changed(p) return fs.read(p) == 'same' end",
         )
         .expect("register first source");
-        assert!(reg.eval("changed", &rel).expect("first evaluation"));
-        assert!(reg.eval("changed", &rel).expect("cached evaluation"));
+        assert!(reg.eval("changed", rel).expect("first evaluation"));
+        assert!(reg.eval("changed", rel).expect("cached evaluation"));
         assert_eq!(reg.cache_hits, 1);
 
         reg.register(
@@ -1622,9 +1626,8 @@ mod tests {
             "function changed(p) return fs.read(p) == 'different' end",
         )
         .expect("register replacement source");
-        assert!(!reg.eval("changed", &rel).expect("replacement evaluation"));
+        assert!(!reg.eval("changed", rel).expect("replacement evaluation"));
         assert_eq!(reg.cache_hits, 1, "replacement may not be a cache hit");
-        std::fs::remove_file(file).expect("remove probe");
     }
 
     /// The read log captures observed bytes before a later file replacement.
@@ -1632,10 +1635,12 @@ mod tests {
     #[test]
     fn read_log_authenticates_bytes_returned_to_lua() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let rel = format!("target/lua-read-log-{}.txt", std::process::id());
-        let file = root.join(&rel);
-        std::fs::create_dir_all(file.parent().expect("parent")).expect("mkdir target");
-        std::fs::write(&file, "before").expect("write first version");
+        let fixture = tempfile::Builder::new()
+            .prefix("lua-read-log-")
+            .tempfile_in(&root)
+            .expect("create repository-local input");
+        let rel = fixture.path().file_name().unwrap().to_str().unwrap();
+        std::fs::write(fixture.path(), "before").expect("write first version");
 
         let reads = ReadLog::default();
         let lua = build_environment_logged(PredicateClass::Cacheable, reads.clone())
@@ -1645,7 +1650,7 @@ mod tests {
             .eval()
             .expect("read from Lua");
         assert_eq!(observed, "before");
-        std::fs::write(&file, "after").expect("replace after read");
+        std::fs::write(fixture.path(), "after").expect("replace after read");
 
         let inputs = reads.lock().expect("read log").clone();
         assert_eq!(inputs.len(), 1, "one read must be recorded");
@@ -1659,7 +1664,6 @@ mod tests {
             .still_valid(),
             "a verdict over old bytes cannot validate against new bytes"
         );
-        std::fs::remove_file(file).expect("remove probe");
     }
 
     /// Review of 1367-q9yc (b): the filesystem root is never a repository root,

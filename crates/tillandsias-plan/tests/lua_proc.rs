@@ -1,4 +1,4 @@
-// @trace order:1384-aixy, spec:ci-release
+// @trace order:1384-aixy, order:1534-puyz, order:1538-pwdr, spec:ci-release
 //
 // proc.run{argv=...} — the synchronous first slice of 1384-aixy (design
 // plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md section 4.1).
@@ -6,7 +6,8 @@
 // arms 1, 2, 3, 5, 6 and 7. Arm 4 (proc.spawn with line callbacks) belongs to
 // the next slice. Each arm names what it FAILED on before this slice: there
 // was no `proc` global at all, only the synchronous `sh.run`, whose deadline
-// killed the child alone.
+// killed the child alone. The managed_script module adds the landed streaming
+// lifetime controls and 1538-pwdr composition conformance.
 //
 // These tests run real processes. They need bash (Linux, macOS, and Git for
 // Windows all ship it) and SKIP BY NAME where it is absent.
@@ -986,6 +987,92 @@ printf '%s' "$id"
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
+    }
+
+    #[test]
+    fn composition_chain_capture_does_not_inherit_the_unused_stream_line_limit() {
+        let f = ScriptFixture::new();
+        let out = f.run(
+            r#"
+            local bytes=string.rep(string.char(0,255),512*1024+1)
+            local direct=proc.run{argv={'cat'},stdin=bytes}
+            assert(direct.ok and direct.stdout==bytes)
+            local long=proc.chain{{argv={'cat'},stdin=bytes},{argv={'cat'}}}
+            assert(long.ok and long.stages[1].stdout==bytes and long.stages[2].stdout==bytes,
+              'byte-only chain incorrectly applied a line-callback bound')
+            local cap=8*1024*1024
+            local clipped=proc.chain{{argv={'cat'},stdin=string.rep('x',cap+17)},{argv={'cat'}}}
+            assert(not clipped.ok and clipped.first_failure==1 and #clipped.stages==2)
+            assert(clipped.stages[1].status=='exited' and clipped.stages[1].code==0
+              and clipped.stages[1].truncated and clipped.stages[1].dropped==17)
+            assert(clipped.stages[1].stdout==string.rep('x',cap))
+            assert(clipped.stages[2].ok and not clipped.stages[2].truncated
+              and clipped.stages[2].stdout==clipped.stages[1].stdout)
+            verdict.ok('chain-capture-bound')
+        "#,
+            "10s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"ok:chain-capture-bound\n");
+    }
+
+    #[test]
+    fn composition_chain_exit_callback_terminal_verdict_preserves_bytes_and_reaps_owned_groups() {
+        for (ending, expected, code) in [
+            (
+                "pcall(verdict.advisory,'composition scope (advisory)')",
+                "composition scope (advisory)\n",
+                0,
+            ),
+            (
+                "pcall(verdict.emit,'refused:composition:terminal',1)",
+                "refused:composition:terminal\n",
+                1,
+            ),
+        ] {
+            let f = ScriptFixture::new();
+            let producer = f.write("chain-owned.py", OWNED_PRODUCER);
+            let gate = f.write(
+                "chain-terminal-gate.sh",
+                "#!/bin/sh\nwhile [ ! -f child-ack ]; do sleep .01; done\n",
+            );
+            let started = Instant::now();
+            let out = f.run(
+                &format!(
+                    r#"
+                assert(type(proc.chain)=='function')
+                local p=proc.spawn{{argv={{'python3','{producer}'}}}}
+                local gate=proc.spawn{{argv={{'sh','{gate}'}}}}
+                gate:on_exit(function()
+                  fs.write('terminal-callback-entered','yes')
+                  {ending}
+                  while true do end
+                end)
+                pcall(function() proc.chain{{
+                  {{argv={{'sleep','30'}}}},
+                  {{argv={{'touch','later-stage'}}}},
+                }} end)
+                proc.spawn{{argv={{'touch','escaped'}}}}
+                verdict.ok('wrong')
+            "#
+                ),
+                "3s",
+            );
+            assert_eq!(out.status.code(), Some(code));
+            assert_eq!(out.stdout, expected.as_bytes());
+            assert!(f.dir.path().join("terminal-callback-entered").exists());
+            assert!(!f.dir.path().join("later-stage").exists());
+            assert!(!f.dir.path().join("escaped").exists());
+            assert!(
+                started.elapsed() < Duration::from_secs(2),
+                "terminal verdict waited for the outer deadline"
+            );
+            assert_acknowledged_tasks_stopped(&f);
+        }
     }
 
     #[test]

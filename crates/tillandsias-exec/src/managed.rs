@@ -1,4 +1,4 @@
-// @trace order:1534-puyz, spec:command-runtime
+// @trace order:1534-puyz, order:1538-pwdr, spec:command-runtime
 //! Script-owned supervision. No Lua value or callback crosses this boundary.
 //! Supervisors run independently of the Lua thread, including during a CPU loop.
 
@@ -30,6 +30,18 @@ enum Stop {
     Running,
     Kill,
     Close,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum ObservationMode {
+    Silent,
+    Completion,
+    Lines,
+}
+
+struct Observation {
+    events: mpsc::Sender<Event>,
+    lines: bool,
 }
 
 struct State {
@@ -106,7 +118,30 @@ impl Scope {
     }
     /// Linearizes shutdown against launch acceptance AND registration. The supervisor owns
     /// a successfully spawned child before the caller can obtain its handle.
+    /// `stream=true` emits bounded lines followed by Finished; `false` emits
+    /// no events (the legacy blocking run path). Capture bounds are independent.
     pub fn spawn(&self, command: Command, stream: bool) -> Result<Process, ExecError> {
+        self.spawn_observed(
+            command,
+            if stream {
+                ObservationMode::Lines
+            } else {
+                ObservationMode::Silent
+            },
+        )
+    }
+    /// Capture bytes without line buffering or line events, but emit the same
+    /// Finished receipt after fd draining and direct-child reaping. Script-owned
+    /// chain stages use this mode; public streaming still enforces MAX_LINE_BYTES.
+    /// Ownership, deadlines, capture defaults and result publication are unchanged.
+    pub fn spawn_completion(&self, command: Command) -> Result<Process, ExecError> {
+        self.spawn_observed(command, ObservationMode::Completion)
+    }
+    fn spawn_observed(
+        &self,
+        command: Command,
+        mode: ObservationMode,
+    ) -> Result<Process, ExecError> {
         let mut processes = self.0.processes.lock().unwrap();
         if self.stopped() {
             return Err(scope_error(&command, "script-scope-closed"));
@@ -130,7 +165,10 @@ impl Scope {
             state: state.clone(),
             cancel,
         };
-        let events = stream.then(|| self.0.events.clone());
+        let observation = (mode != ObservationMode::Silent).then(|| Observation {
+            events: self.0.events.clone(),
+            lines: mode == ObservationMode::Lines,
+        });
         let deadline = self.0.deadline;
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let argv = command.argv.clone();
@@ -153,7 +191,7 @@ impl Scope {
                             id,
                             rx,
                             deadline,
-                            events,
+                            observation,
                             ready_tx,
                             &worker_state.reaped,
                         ));
@@ -345,7 +383,7 @@ async fn supervise(
     id: u64,
     mut cancel: watch::Receiver<Stop>,
     deadline: Option<Instant>,
-    events: Option<mpsc::Sender<Event>>,
+    observation: Option<Observation>,
     ready: std::sync::mpsc::Sender<Result<(), ExecError>>,
     reaped: &AtomicBool,
 ) -> Result<Output, ExecError> {
@@ -439,6 +477,12 @@ async fn supervise(
             None => std::future::pending().await,
         }
     };
+    // Completion-only observers never enter read_stream's line assembly path;
+    // both fds still drain and retain the ordinary bounded byte-prefix capture.
+    let line_events = observation
+        .as_ref()
+        .filter(|observer| observer.lines)
+        .map(|observer| observer.events.clone());
     let io = async {
         use tokio::io::AsyncWriteExt;
         let feed = async {
@@ -456,7 +500,7 @@ async fn supervise(
                 command.capture_bytes,
                 id,
                 "stdout",
-                events.clone(),
+                line_events.clone(),
                 leader_rx.clone()
             ),
             read_stream(
@@ -464,7 +508,7 @@ async fn supervise(
                 command.capture_bytes,
                 id,
                 "stderr",
-                events.clone(),
+                line_events.clone(),
                 leader_rx
             ),
             feed
@@ -557,12 +601,107 @@ async fn supervise(
         }
     };
     // Completion delivery is also cancellable: cleanup never needs Lua to drain.
-    if let Some(tx) = &events {
+    if let Some(observer) = &observation {
         tokio::select! {
             biased;
             _ = scope_cancelled(&mut cancel) => {},
-            _ = tx.send(Event::Finished(id)) => {},
+            _ = observer.events.send(Event::Finished(id)) => {},
         }
     }
     result
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    fn cat(bytes: Vec<u8>) -> Command {
+        Command::new(["/bin/cat"])
+            .stdin_bytes(bytes)
+            .group(true)
+            .timeout(Duration::from_secs(2))
+    }
+
+    async fn published(process: &Process) -> Result<Output, String> {
+        tokio::time::timeout(Duration::from_secs(4), async {
+            loop {
+                if let Some(result) = process.result() {
+                    return result;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("managed result was not published")
+    }
+
+    fn only_finished(events: &mut mpsc::Receiver<Event>, id: u64) {
+        assert!(matches!(events.try_recv(), Ok(Event::Finished(actual)) if actual == id));
+        assert!(matches!(
+            events.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+    }
+
+    #[tokio::test]
+    async fn completion_only_accepts_newline_free_payload_beyond_stream_line_bound() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_secs(5)));
+        let bytes = vec![b'x'; MAX_LINE_BYTES + 1];
+        let process = scope.spawn_completion(cat(bytes.clone())).unwrap();
+        let output = published(&process).await.unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert_eq!(output.stdout, bytes);
+        assert!(output.stderr.is_empty());
+        assert!(!output.truncated);
+        assert_eq!(output.dropped, 0);
+        only_finished(&mut events, process.id);
+        scope.cleanup().unwrap();
+    }
+
+    #[tokio::test]
+    async fn completion_only_capture_is_bounded_without_line_queue_backpressure() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_secs(5)));
+        let bytes = b"line\0\xff\n".repeat(MAX_LINE_BYTES / 7 + 1);
+        let cap = 257;
+        let process = scope
+            .spawn_completion(cat(bytes.clone()).capture_bytes(cap))
+            .unwrap();
+        // Deliberately do not poll events until publication. Full line streaming
+        // would fill the 32-slot queue and fail to drain this producer in time.
+        let output = published(&process).await.unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert_eq!(output.stdout, bytes[..cap]);
+        assert!(output.stderr.is_empty());
+        assert!(output.truncated);
+        assert_eq!(output.dropped, (bytes.len() - cap) as u64);
+        only_finished(&mut events, process.id);
+        scope.cleanup().unwrap();
+    }
+
+    #[tokio::test]
+    async fn full_streaming_keeps_unterminated_line_limit() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_secs(5)));
+        let process = scope
+            .spawn(cat(vec![b'x'; MAX_LINE_BYTES + 1]), true)
+            .unwrap();
+        let failure = published(&process).await.unwrap_err();
+        assert!(failure.contains("proc-line-too-long"), "{failure}");
+        only_finished(&mut events, process.id);
+        scope.cleanup().unwrap();
+    }
+
+    #[tokio::test]
+    async fn silent_spawn_keeps_no_event_legacy_semantics() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_secs(5)));
+        let bytes = vec![b'x'; MAX_LINE_BYTES + 1];
+        let process = scope.spawn(cat(bytes.clone()), false).unwrap();
+        let output = published(&process).await.unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert_eq!(output.stdout, bytes);
+        assert!(matches!(
+            events.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+        scope.cleanup().unwrap();
+    }
 }

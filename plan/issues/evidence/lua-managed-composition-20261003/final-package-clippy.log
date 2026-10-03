@@ -1,0 +1,6 @@
+ok:no-competing-gate
+[tillandsias-builder] Re-execing inside 'tillandsias-builder' toolbox...
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+   Compiling tillandsias-plan v0.1.0 (/home/tlatoani/codex/tillandsias-lua-work/1538-pwdr/crates/tillandsias-plan)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.10s

@@ -79,10 +79,7 @@ mod tests {
         // Process. Only publication timing/events are synthetic in these tests.
         let process = host
             .scope
-            .spawn(
-                tillandsias_exec::Command::new(["/bin/true"]).group(true),
-                false,
-            )
+            .spawn(tillandsias_exec::Command::new(["true"]).group(true), false)
             .unwrap();
         let end = Instant::now() + Duration::from_secs(2);
         let output = loop {
@@ -93,7 +90,7 @@ mod tests {
             std::thread::yield_now();
         };
         let handle = host
-            .handle(lua, process, vec!["/bin/true".into()], Instant::now())
+            .handle(lua, process, vec!["true".into()], Instant::now())
             .unwrap();
         let state = host.identity(&handle).unwrap();
         *state.publication_override.lock().unwrap() = Some(None);
@@ -172,7 +169,7 @@ mod tests {
             assert(proc.select{a,b,timeout_ms=0} == a)
             assert(not pcall(function() a:on_exit(function() end) end))
             local r = a:wait()
-            assert(r.code == 0 and r.stdout == 'original\0\255' and r.argv[1] == '/bin/true')
+            assert(r.code == 0 and r.stdout == 'original\0\255' and r.argv[1] == 'true')
             local wall = r.wall_ms
             r.code = 77; r.stdout = 'again'
             local all = proc.all{b,a}
@@ -272,7 +269,7 @@ mod tests {
         f.lua
             .load(
                 r#"
-            local spec = {argv={'/bin/true'}}
+            local spec = {argv={'true'}}
             for _, call in ipairs({
                 function() proc.spawn(spec) end,
                 function() proc.select{a} end,
@@ -297,17 +294,17 @@ mod tests {
         f.eval(
             r#"
             local entered = false
-            local stage = setmetatable({argv={'/bin/true'}}, {__index=function(_, key)
+            local stage = setmetatable({argv={'true'}}, {__index=function(_, key)
                 if key == 'cwd' then
                     entered = true
-                    local ok, e = pcall(proc.spawn, {argv={'/bin/true'}})
+                    local ok, e = pcall(proc.spawn, {argv={'true'}})
                     assert(not ok and tostring(e):find('proc%-callback%-reentrancy'))
                 end
                 return nil
             end})
-            assert(not pcall(proc.chain, {stage, {argv={'/bin/true'}}}))
+            assert(not pcall(proc.chain, {stage, {argv={'true'}}}))
             assert(entered)
-            local ok, e = pcall(proc.spawn, {argv={'/bin/true'}})
+            local ok, e = pcall(proc.spawn, {argv={'true'}})
             assert(not ok and tostring(e):find('script%-scope%-closed'))
         "#,
         );
@@ -347,13 +344,13 @@ mod tests {
             r#"
             local cwd_reads, mutations = 0, 0
             local bytes = 'first\0\255\nsecond'
-            local second = setmetatable({argv={'/bin/cat'}, env={COMPOSITION_PIN='original'}}, {
+            local second = setmetatable({argv={'cat'}, env={COMPOSITION_PIN='original'}}, {
                 __index=function(_, key)
                     if key == 'cwd' then cwd_reads=cwd_reads+1; return cwd end
                     return nil
                 end
             })
-            local p = proc.spawn{argv={'/usr/bin/printf','READY\n'}}
+            local p = proc.spawn{argv={'printf','READY\n'}}
             p:on_line('stdout', function(s)
                 assert(s == 'READY')
                 mutations=mutations+1
@@ -361,11 +358,11 @@ mod tests {
                 second.env.COMPOSITION_PIN={}
                 second.cwd='relative'; second.stdin='poison'; second.timeout_ms=-1
             end)
-            local result = proc.chain{{argv={'/bin/cat'}, stdin=bytes}, second}
+            local result = proc.chain{{argv={'cat'}, stdin=bytes}, second}
             assert(mutations == 1 and cwd_reads == 1)
             assert(result.ok and result.first_failure == nil and #result.stages == 2)
             assert(result.stages[1].stdout == bytes and result.stages[2].stdout == bytes)
-            assert(result.stages[2].argv[1] == '/bin/cat')
+            assert(result.stages[2].argv[1] == 'cat')
             assert(proc.all{p}[1].ok)
         "#,
         );
@@ -378,25 +375,25 @@ mod tests {
         f.eval(
             r#"
             local r = proc.chain{
-                {argv={'/bin/false'}},
-                {argv={'/bin/cat'}},
+                {argv={'false'}},
+                {argv={'cat'}},
                 {argv={'/missing/composition-test-program'}},
-                {argv={'/usr/bin/printf','%s','later'}},
-                {argv={'/bin/cat'}},
+                {argv={'printf','%s','later'}},
+                {argv={'cat'}},
             }
             assert(not r.ok and r.first_failure == 1 and #r.stages == 5)
             assert(r.stages[1].status == 'exited' and r.stages[1].code ~= 0)
             assert(r.stages[2].ok and r.stages[2].stdout == '')
             assert(r.stages[3].status == 'spawn_failed' and not r.stages[3].ok)
             assert(r.stages[4].ok and r.stages[5].ok and r.stages[5].stdout == 'later')
-            local denied = proc.chain{{argv={'bash','-c','printf forbidden'}}, {argv={'/bin/true'}}}
+            local denied = proc.chain{{argv={'bash','-c','printf forbidden'}}, {argv={'true'}}}
             assert(not denied.ok and denied.first_failure == 1 and #denied.stages == 2)
             assert(denied.stages[1].status == 'policy_denied' and denied.stages[2].ok)
             local clipped = proc.chain{
-                {argv={'/usr/bin/printf','%s','abcd'}, capture_bytes=2},
-                {argv={'/bin/cat'}},
-                {argv={'/bin/sleep','1'}, timeout_ms=20},
-                {argv={'/bin/cat'}},
+                {argv={'printf','%s','abcd'}, capture_bytes=2},
+                {argv={'cat'}},
+                {argv={'sleep','1'}, timeout_ms=20},
+                {argv={'cat'}},
             }
             assert(not clipped.ok and clipped.first_failure == 1 and #clipped.stages == 4)
             assert(clipped.stages[1].truncated and not clipped.stages[1].ok)
@@ -414,15 +411,15 @@ mod tests {
         f.eval(
             r#"
             assert(not pcall(proc.chain, {}))
-            assert(not pcall(proc.chain, {[1]={argv={'/bin/true'}},[3]={argv={'/bin/true'}}}))
+            assert(not pcall(proc.chain, {[1]={argv={'true'}},[3]={argv={'true'}}}))
             for _, later in ipairs({
-                {argv={}}, {argv={'/bin/true'},env={BAD={}}},
-                {argv={'/bin/true'},cwd='relative'}, {argv={'/bin/true'},timeout_ms=-1},
-                {argv={'/bin/true'},group=false}, {argv={'/bin/true'},capture_bytes=0},
-                {argv={'/bin/true'},stdin=''}, {argv={'/bin/true'},unexpected=true},
-                {argv={[1]='/bin/true',[3]='hole'}},
+                {argv={}}, {argv={'true'},env={BAD={}}},
+                {argv={'true'},cwd='relative'}, {argv={'true'},timeout_ms=-1},
+                {argv={'true'},group=false}, {argv={'true'},capture_bytes=0},
+                {argv={'true'},stdin=''}, {argv={'true'},unexpected=true},
+                {argv={[1]='true',[3]='hole'}},
             }) do
-                assert(not pcall(proc.chain, {{argv={'/bin/true'}},later}))
+                assert(not pcall(proc.chain, {{argv={'true'}},later}))
             end
         "#,
         );
@@ -1025,7 +1022,10 @@ impl Host {
                         PreparedProc::Command { argv, command } => {
                             host.outside_callback()?;
                             let started = Instant::now();
-                            match host.scope.spawn(command, true) {
+                            // Private stages have no line callbacks: retain real
+                            // completion receipts without imposing stream framing
+                            // or its separate unterminated-line bound on bytes.
+                            match host.scope.spawn_completion(command) {
                                 Ok(process) => {
                                     let state = host.track(process, argv, started);
                                     host.wait(lua.clone(), state).await?
