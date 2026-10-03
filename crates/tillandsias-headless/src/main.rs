@@ -8752,11 +8752,6 @@ const IPV6_PROBE_ADDRESSES: [&str; 2] = [
     "[2606:4700:4700::1111]:53", // Cloudflare DNS
 ];
 
-/// Distinct source ports tried while looking for a flow that the kernel's
-/// multipath hash sends through each default router.
-#[cfg(target_os = "linux")]
-const IPV6_PROBE_SOURCE_PORTS: std::ops::Range<u16> = 40100..40132;
-
 /// Extract the distinct default-router gateways (`via <addr>`) from the text of
 /// `ip -6 route show default`, covering both single-route and ECMP `nexthop`
 /// forms. Order is first-seen; duplicates are dropped.
@@ -8777,17 +8772,38 @@ fn parse_default_routers(route_table: &str) -> Vec<String> {
     routers
 }
 
-/// Probe egress through every default router. Returns `(ok, routers)`. A router
-/// the probe cannot exercise counts as NOT ok, so a half-black-holed LAN is never
-/// declared functional by whichever router the kernel happened to pick.
+/// Result of exercising one default router.
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RouterProbe {
+    /// Traffic steered through the router got a reply.
+    Ok,
+    /// Traffic steered through the router got no reply (black hole).
+    Blackhole,
+    /// The probe could not run (no `ping`, EPERM, no flow label selects the
+    /// router). Distinct from a black hole; still counts as not functional.
+    CouldNotMeasure,
+}
+
+/// Probe egress through every default router. Returns `(ok, routers,
+/// unmeasured)`. A router the probe cannot exercise counts as NOT ok, so a
+/// half-black-holed LAN is never declared functional by whichever router the
+/// kernel happened to pick.
 #[cfg(target_os = "linux")]
 fn ipv6_egress_report(
     route_table: &str,
-    mut probe_via: impl FnMut(&str) -> bool,
-) -> (usize, usize) {
+    mut probe_via: impl FnMut(&str) -> RouterProbe,
+) -> (usize, usize, usize) {
     let routers = parse_default_routers(route_table);
-    let ok = routers.iter().filter(|r| probe_via(r)).count();
-    (ok, routers.len())
+    let (mut ok, mut unmeasured) = (0, 0);
+    for r in &routers {
+        match probe_via(r) {
+            RouterProbe::Ok => ok += 1,
+            RouterProbe::Blackhole => {}
+            RouterProbe::CouldNotMeasure => unmeasured += 1,
+        }
+    }
+    (ok, routers.len(), unmeasured)
 }
 
 /// IPv6 is functional only when at least one router exists and every router
@@ -8797,76 +8813,56 @@ fn ipv6_egress_functional(ok: usize, routers: usize) -> bool {
     routers > 0 && ok == routers
 }
 
-/// TCP connect from a fixed local port with an 800 ms connect timeout.
+/// Flow labels tried when looking for one the kernel's multipath hash sends
+/// through a given router (hash policy 0 hashes L3 only, so ports cannot steer).
 #[cfg(target_os = "linux")]
-fn connect_v6_from_port(addr: std::net::SocketAddr, port: u16) -> bool {
-    let std::net::SocketAddr::V6(remote) = addr else {
-        return false;
-    };
-    let sockaddr = |ip: std::net::Ipv6Addr, port: u16| libc::sockaddr_in6 {
-        sin6_family: libc::AF_INET6 as libc::sa_family_t,
-        sin6_port: port.to_be(),
-        sin6_flowinfo: 0,
-        sin6_addr: libc::in6_addr {
-            s6_addr: ip.octets(),
-        },
-        sin6_scope_id: 0,
-    };
-    let size = std::mem::size_of::<libc::sockaddr_in6>() as libc::socklen_t;
-    // SAFETY: plain libc socket calls on a descriptor owned here and closed
-    // before returning; the sockaddr structs outlive the calls that borrow them.
-    unsafe {
-        let fd = libc::socket(libc::AF_INET6, libc::SOCK_STREAM, 0);
-        if fd < 0 {
-            return false;
-        }
-        let timeout = libc::timeval {
-            tv_sec: 0,
-            tv_usec: 800_000,
-        };
-        libc::setsockopt(
-            fd,
-            libc::SOL_SOCKET,
-            libc::SO_SNDTIMEO,
-            &timeout as *const libc::timeval as *const libc::c_void,
-            std::mem::size_of::<libc::timeval>() as libc::socklen_t,
-        );
-        let local = sockaddr(std::net::Ipv6Addr::UNSPECIFIED, port);
-        let peer = sockaddr(*remote.ip(), remote.port());
-        let ok = libc::bind(fd, &local as *const _ as *const libc::sockaddr, size) == 0
-            && libc::connect(fd, &peer as *const _ as *const libc::sockaddr, size) == 0;
-        libc::close(fd);
-        ok
-    }
+const IPV6_PROBE_FLOW_LABELS: std::ops::RangeInclusive<u32> = 1..=64;
+
+/// First flow label whose `ip -6 route get` output selects `router`.
+#[cfg(target_os = "linux")]
+fn select_flowlabel_for_router(
+    router: &str,
+    mut route_get: impl FnMut(u32) -> String,
+) -> Option<u32> {
+    IPV6_PROBE_FLOW_LABELS.clone().find(|&label| {
+        parse_default_routers(&route_get(label))
+            .first()
+            .map(String::as_str)
+            == Some(router)
+    })
 }
 
-/// Real per-router probe: find a source port whose 5-tuple the kernel routes via
-/// `router` (`ip -6 route get ... sport P`), then connect from that port.
+/// Real per-router probe: pick a flow label that routes via `router`, then
+/// `ping -6 -F <label>` the target (ping manages the flow-label lease).
 #[cfg(target_os = "linux")]
-fn probe_ipv6_via_router(router: &str) -> bool {
-    for addr_str in &IPV6_PROBE_ADDRESSES {
-        let Ok(addr) = addr_str.parse::<std::net::SocketAddr>() else {
-            continue;
-        };
-        for port in IPV6_PROBE_SOURCE_PORTS {
-            let Ok(out) = std::process::Command::new("ip")
-                .args(["-6", "route", "get", &addr.ip().to_string()])
-                .args(["ipproto", "tcp", "sport", &port.to_string(), "dport", "53"])
-                .output()
-            else {
-                return false;
-            };
-            let chosen = parse_default_routers(&String::from_utf8_lossy(&out.stdout));
-            if chosen.first().map(String::as_str) != Some(router) {
-                continue;
-            }
-            if connect_v6_from_port(addr, port) {
-                return true;
-            }
-            break; // router exercised and failed for this address
-        }
+fn probe_ipv6_via_router(router: &str) -> RouterProbe {
+    let Some(host) = IPV6_PROBE_ADDRESSES
+        .first()
+        .and_then(|a| a.parse::<std::net::SocketAddr>().ok())
+        .map(|a| a.ip().to_string())
+    else {
+        return RouterProbe::CouldNotMeasure;
+    };
+    let label = select_flowlabel_for_router(router, |l| {
+        std::process::Command::new("ip")
+            .args(["-6", "route", "get", &host, "flowlabel"])
+            .args([format!("{l:#x}"), "ipproto".into(), "ipv6-icmp".into()])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default()
+    });
+    let Some(label) = label else {
+        return RouterProbe::CouldNotMeasure;
+    };
+    match std::process::Command::new("ping")
+        .args(["-6", "-F", &label.to_string(), "-c", "2", "-W", "2", &host])
+        .output()
+    {
+        Ok(o) if o.status.success() => RouterProbe::Ok,
+        // iputils ping: 1 = sent but no reply; 2 = could not run (EPERM etc.).
+        Ok(o) if o.status.code() == Some(1) => RouterProbe::Blackhole,
+        _ => RouterProbe::CouldNotMeasure,
     }
-    false
 }
 
 #[cfg(target_os = "linux")]
@@ -8876,9 +8872,9 @@ fn is_ipv6_functional(debug: bool) -> bool {
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
         .unwrap_or_default();
-    let (ok, routers) = ipv6_egress_report(&table, probe_ipv6_via_router);
+    let (ok, routers, unmeasured) = ipv6_egress_report(&table, probe_ipv6_via_router);
     if debug {
-        eprintln!("[tillandsias] init: ipv6 egress={ok}/{routers}");
+        eprintln!("[tillandsias] init: ipv6 egress={ok}/{routers} unmeasured={unmeasured}");
     }
     ipv6_egress_functional(ok, routers)
 }
@@ -23379,7 +23375,14 @@ mod tests {
     #[cfg(target_os = "linux")]
     fn ipv6_egress_one_blackholing_router_is_not_functional() {
         assert_eq!(parse_default_routers(TWO_ROUTERS), ["fe80::1", "fe80::2"]);
-        let (ok, n) = ipv6_egress_report(TWO_ROUTERS, |r| r == "fe80::1");
+        let (ok, n, u) = ipv6_egress_report(TWO_ROUTERS, |r| {
+            if r == "fe80::1" {
+                RouterProbe::Ok
+            } else {
+                RouterProbe::Blackhole
+            }
+        });
+        assert_eq!(u, 0);
         assert_eq!((ok, n), (1, 2));
         assert!(!ipv6_egress_functional(ok, n));
     }
@@ -23387,7 +23390,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn ipv6_egress_all_routers_working_is_functional() {
-        let (ok, n) = ipv6_egress_report(TWO_ROUTERS, |_| true);
+        let (ok, n, _) = ipv6_egress_report(TWO_ROUTERS, |_| RouterProbe::Ok);
         assert_eq!((ok, n), (2, 2));
         assert!(ipv6_egress_functional(ok, n));
     }
@@ -23395,11 +23398,48 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn ipv6_egress_no_default_router_is_not_functional() {
-        let (ok, n) = ipv6_egress_report("", |_| true);
+        let (ok, n, _) = ipv6_egress_report("", |_| RouterProbe::Ok);
         assert_eq!((ok, n), (0, 0));
         assert!(!ipv6_egress_functional(ok, n));
         let single = "default via fe80::9 dev eth0 proto ra\n";
         assert_eq!(parse_default_routers(single), ["fe80::9"]);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn ipv6_flowlabel_selects_the_router_from_route_get_output() {
+        // `ip -6 route get` output shape; odd labels hash to the Pi, even to the other.
+        let get = |label: u32| {
+            let gw = if label % 2 == 1 {
+                "fe80::pi"
+            } else {
+                "fe80::mot"
+            };
+            format!(
+                "2001:4860:4860::8888 from :: via {gw} dev wlp3s0 src 2001:db8::1 metric 20600 pref medium\n"
+            )
+        };
+        assert_eq!(select_flowlabel_for_router("fe80::pi", get), Some(1));
+        assert_eq!(select_flowlabel_for_router("fe80::mot", get), Some(2));
+        // A router no label selects (policy that ignores flow labels) yields None.
+        assert_eq!(select_flowlabel_for_router("fe80::other", get), None);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn ipv6_could_not_measure_is_distinct_from_blackhole() {
+        let (ok, n, u) = ipv6_egress_report(TWO_ROUTERS, |_| RouterProbe::CouldNotMeasure);
+        assert_eq!((ok, n, u), (0, 2, 2));
+        assert!(!ipv6_egress_functional(ok, n));
+    }
+
+    /// Live measurement; run explicitly. Reads only the route table and pings.
+    #[test]
+    #[ignore]
+    #[cfg(target_os = "linux")]
+    fn ipv6_live_probe_prints_egress_line() {
+        let functional = is_ipv6_functional(true);
+        eprintln!("functional={functional}");
     }
 
     fn has_arg(args: &[String], needle: &str) -> bool {

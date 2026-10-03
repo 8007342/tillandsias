@@ -39,6 +39,8 @@ arm parse        tests::ipv6_probe_addresses_parse
 arm one-blackhole tests::ipv6_egress_one_blackholing_router_is_not_functional
 arm both-ok      tests::ipv6_egress_all_routers_working_is_functional
 arm no-router    tests::ipv6_egress_no_default_router_is_not_functional
+arm flowlabel    tests::ipv6_flowlabel_selects_the_router_from_route_get_output
+arm unmeasured   tests::ipv6_could_not_measure_is_distinct_from_blackhole
 
 echo "ipv6-probe: $pass passed, $fail failed"
 [ "$fail" = 0 ]

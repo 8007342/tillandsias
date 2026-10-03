@@ -29,7 +29,7 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: fixture-defined"
 
-  - step: "all four named arms pass (parse, one-blackhole, both-ok, no-router)"
+  - step: "all six named arms pass (parse, one-blackhole, both-ok, no-router, flowlabel, unmeasured)"
     command: "scripts/test-ipv6-probe.sh >/dev/null 2>&1 && echo 'ok: ipv6-probe-arms-pass' || { scripts/test-ipv6-probe.sh; exit 1; }"
     timeout_ms: 600000
     expected_behavior: "ok: ipv6-probe-arms-pass"
