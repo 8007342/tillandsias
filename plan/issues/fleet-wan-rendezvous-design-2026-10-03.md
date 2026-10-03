@@ -535,6 +535,20 @@ needs"), updated so the relay is hosted on `tlatoani.net`:
    - the team name;
    - the chosen `workers.dev` subdomain.
 
+### 5a. Review item added by the coordinator at landing (not a blocker)
+
+Per-host public DNS. As drafted, the DO publishes `<host>.fleet.tlatoani.net` AAAA (the host's
+observed global address) and `<host>.mesh.fleet.tlatoani.net` A in PUBLIC DNS. For an off-LAN
+laptop that discloses its current network (and so its approximate location) to anyone who
+queries the name, and it lets anyone enumerate the fleet's home addresses. `fleet resolve` reads
+the signed roster, and ssh/git use it as a `ProxyCommand`, so nothing on the data path requires a
+public per-host record.
+
+Recommended default (operator to confirm or overrule): publish only `<service>` names publicly,
+and keep per-host addresses in the signed roster only. Until the operator rules, 1548-pg32 must
+not write per-host records for hosts whose `class_declared` is transient. Service records follow
+the holder, which by affinity is macuahuitl, already reachable as the home file server's network.
+
 ## 6. Bookkeeping findings filed with this note
 
 - **1548-8ii6.**

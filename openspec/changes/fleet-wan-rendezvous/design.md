@@ -107,9 +107,13 @@ Constants (operator ruling 4): `HEARTBEAT = 900 s`, `LEASE_TTL = 3600 s`,
 - Token: zone-scoped `Zone > DNS > Edit` on `tlatoani.net`, stored as Worker
   secret `CF_DNS_TOKEN`; no host holds a DNS token.
 - Records: `<host>.fleet.tlatoani.net` AAAA = the host's observed global
-  address (written on change only); `<service>.fleet.tlatoani.net` AAAA =
-  the holder's address, plus TXT `epoch=<n> holder=<host>`; all
-  `proxied: false`, TTL 60. Batch endpoint when more than one record changes.
+  address (written on change only); `<host>.mesh.fleet.tlatoani.net` A =
+  the reported Mesh IP; `<service>.fleet.tlatoani.net` and
+  `<service>.mesh.fleet.tlatoani.net` CNAME to the holder's two names, plus
+  TXT `epoch=<n> holder=<host>` (as the fleet-rendezvous spec delta states);
+  all `proxied: false`, TTL 60. Batch endpoint when more than one record
+  changes. Per-host public records are under operator review (design note
+  §5a): until ruled, none are written for transient hosts.
 - On vacancy the service record is NOT deleted; its TXT gains `stale=<ts>`
   so clients fall back without a resolution failure.
 
