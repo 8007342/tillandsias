@@ -1,0 +1,29 @@
+ok:no-competing-gate
+[tillandsias-builder] Re-execing inside 'tillandsias-builder' toolbox...
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running tests/lua_proc.rs (target/debug/deps/lua_proc-462beb25b4361464)
+
+running 1 test
+
+thread 'managed_script::composition_chain_capture_does_not_inherit_the_unused_stream_line_limit' (3172932) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1015:9:
+runtime error: io while draining ["cat"]: proc-line-too-long
+stack traceback:
+	[C]: in local 'poll'
+	[string "?"]:4: in main chunk
+	(...tail calls...)
+	[string "/tmp/opencode/sol-1534-T6GKS2/probe.lua"]:5: in main chunk
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test managed_script::composition_chain_capture_does_not_inherit_the_unused_stream_line_limit ... FAILED
+
+failures:
+
+failures:
+    managed_script::composition_chain_capture_does_not_inherit_the_unused_stream_line_limit
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 43 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p tillandsias-plan --test lua_proc`

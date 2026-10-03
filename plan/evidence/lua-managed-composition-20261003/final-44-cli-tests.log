@@ -1,0 +1,55 @@
+ok:no-competing-gate
+[tillandsias-builder] Re-execing inside 'tillandsias-builder' toolbox...
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+     Running tests/lua_proc.rs (target/debug/deps/lua_proc-462beb25b4361464)
+
+running 44 tests
+test arm7_cacheable_has_no_proc ... ok
+test managed_script::caught_advisory_prevents_new_proc_run_and_spawn ... ok
+test arm2_both_fds_drain_concurrently_in_full ... ok
+test managed_script::composition_chain_retains_policy_and_signal_failures_before_later_success ... ok
+test managed_script::composition_chain_validates_all_stages_before_earlier_execution ... ok
+test managed_script::composition_chain_passes_binary_stdin_in_memory_and_retains_first_failure ... ok
+test managed_script::composition_chain_validation_getter_reentrant_door_closes_scope_before_launch ... ok
+test arm1_a_failing_program_is_a_value_and_argv_is_not_reparsed ... ok
+test managed_script::composition_chain_validates_before_consent_and_consumes_one_token_per_execution ... ok
+test arm6_stdin_from_a_variable_has_no_pipe_to_invert ... ok
+test capture_bytes_a_clipped_capture_is_not_ok ... ok
+test arm5_a_shell_string_is_refused ... ok
+test managed_script::composition_all_pumps_nonmember_and_observes_member_exit_callbacks_before_return ... ok
+test managed_script::composition_rejects_empty_select_and_invalid_handle_lists_before_waiting ... ok
+test managed_script::finished_stream_releases_callback_captures_after_dropped_handle ... ok
+test managed_script::invalid_advisory_does_not_close_scope_or_publish_terminal_verdict ... ok
+test managed_script::composition_exit_callback_error_closes_scope_even_when_caught ... ok
+test managed_script::composition_chain_retains_spawn_timeout_and_clipped_failures_before_success ... ok
+test managed_script::composition_on_exit_follows_lines_precedes_wait_and_result_tables_are_fresh ... ok
+test managed_script::composition_chain_snapshots_all_stage_fields_before_callback_mutation ... ok
+test managed_script::caught_callback_error_and_reentrant_wait_latch_scope_closure ... ok
+test managed_script::composition_select_timeout_is_nil_timed_out_and_does_not_cancel_child ... ok
+test managed_script::composition_select_is_completion_ordered_non_consuming_and_pumps_every_producer ... ok
+test managed_script::live_callback_acknowledgement_and_two_producers_prove_scope_wide_dispatch ... ok
+test programmer_errors_raise_and_operational_failures_do_not ... ok
+test the_child_environment_is_the_base_set ... ok
+test managed_script::spawn_policy_seed_consent_and_programmer_validation_share_hardened_gate ... ok
+test managed_script::composition_exit_callback_reentrant_select_all_and_chain_close_scope ... ok
+test managed_script::scoped_spawn_preserves_fixed_environment_stdin_and_cacheable_process_absence ... ok
+test managed_script::composition_chain_capture_does_not_inherit_the_unused_stream_line_limit ... ok
+test a_grandchild_neither_times_out_nor_outlives_proc_run ... ok
+test managed_script::composition_all_is_argument_ordered_and_empty_is_vacuous ... ok
+test managed_script::spawn_validation_missing_program_kill_and_line_limit_are_explicit ... ok
+test a_piped_caller_is_not_held_by_a_leaked_grandchild ... ok
+test managed_script::streaming_keeps_default_8mib_prefix_and_byte_exact_empty_binary_lines ... ok
+test managed_script::live_spawn_delivers_10000_ordered_lines_per_fd_before_wait_and_preserves_cr ... ok
+test managed_script::caught_callback_advisory_cancels_acknowledged_groups_and_preserves_bytes ... ok
+test managed_script::caught_advisory_cpu_loop_preserves_bytes_and_cleans_acknowledged_groups_promptly ... ok
+test managed_script::composition_select_zero_has_no_own_deadline_and_outer_deadline_stops_owned_child ... ok
+test managed_script::composition_chain_exit_callback_terminal_verdict_preserves_bytes_and_reaps_owned_groups ... ok
+test managed_script::script_lifetime_cancels_cpu_loop_error_verdict_and_dropped_handles ... ok
+test managed_script::outer_deadline_cancels_acknowledged_legacy_and_streaming_groups_with_positive_control ... ok
+test managed_script::callbacks_cancel_owned_groups_even_when_caught_or_cpu_bound ... ok
+test arm3_a_deadline_kills_the_whole_group ... ok
+
+test result: ok. 44 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.03s
+

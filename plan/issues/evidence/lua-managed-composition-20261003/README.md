@@ -2,11 +2,13 @@
 
 @trace order:1538-pwdr
 
-The raw Rust logs are losslessly archived as `.log.gz`; decompression returns
-the exact captured bytes. `archive.sha256` records hashes of the uncompressed
-streams under their original names. No diagnostic was rewritten or annotated
-to waive the source-citation guard. For inspection, decompress a named archive
-to a scratch file and compare its SHA-256 with the manifest.
+The raw Rust logs live as byte-exact plain text in
+`plan/evidence/lua-managed-composition-20261003/`; `archive.sha256` records
+their hashes. Runtime source-line diagnostics are raw evidence, not durable
+prose citations. Keeping them outside the prose-audit area also preserves
+the repository's no-tracked-binary rule. No diagnostic was rewritten or
+annotated and neither guard was changed or waived. An earlier gzip packaging
+attempt was refused by that binary guard; its real failure receipt is kept.
 
 The initial targeted green was refuted by the long-byte probe. The pre-gate
 library failure was caused by repository-bound fixtures writing through an

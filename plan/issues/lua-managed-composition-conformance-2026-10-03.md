@@ -90,9 +90,12 @@ The forced integration/landing receipts are still pending; do not infer
 them from targeted verification.
 
 The first gate preflight refused raw diagnostic source-line references in
-the evidence logs. Those streams are now losslessly gzip-archived with
-uncompressed SHA-256 hashes; no diagnostic rewrite or citation waiver was
-used. The subsequent forced gate at `04b015eb06359ca37cabdf166883ff4f50e89228`
+the evidence logs. Gzip packaging preserved those streams but a subsequent
+gate correctly refused the tracked binaries. Raw diagnostic streams now
+live as byte-exact plain text in the existing `plan/evidence/` area, separate
+from prose audit citations, with SHA-256 hashes. Neither diagnostic rewrite,
+citation waiver nor binary allowlist change was used.
+The forced gate at `04b015eb06359ca37cabdf166883ff4f50e89228`
 reached the workspace suite, ran2891 tests, and reported2 new reds,0 tolerated
 and0 stale. The failed `lua_predicate_classes` target reproduced the same
 external-target fixture assumption in its memo-input and observing-list
@@ -107,6 +110,13 @@ then22 passes after; parent reviewed its unique repository-local tempfile
 and tempdir lifetimes. The old memo cache-hit/stale-verdict, byte-order,
 symlink-exclusion and outside-root assertions remain unchanged. Parent
 independent22-test execution and the full-gate retry still decide readiness.
+
+Parent independently passed the22-test target after the fixture repair. The
+forced retry at `02562a619807576d275b7571298f89e6d5506868` passed strict Clippy
+and all2891 workspace tests (0 new reds,0 tolerated,0 stale), then refused
+the compressed diagnostic artifacts. This partial green is not a full gate.
+The binary-packaging failure and its source identity are retained; the
+plain-text-only candidate must complete a new forced gate before pushing.
 
 Broader plan-library verification initially passed425 tests and failed two
 legacy read/memo fixtures because they wrote under the worktree's `target`
