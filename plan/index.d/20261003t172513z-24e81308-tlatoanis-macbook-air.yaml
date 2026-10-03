@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    event:
+      type: note
+      ts: "2026-10-03T17:25:13Z"
+      agent_id: macos-tlatoanis-macbook-air-opencode-20261003t172512z
+      host: tlatoanis-macbook-air
+      summary: |
+        MAC CHECKPOINT: approved window2026-10-03T16:48:49Z to2026-10-04T16:48:49Z is active-session maximum; no timer or24h continuity promised. Terra routine fixtures/repair/audit, Sol complex native coverage/design, Astra runway research; maximum3 concurrent delegates, token spend unavailable.1375 native5/5 +setpgid mutant red atb41ba2b7a/PR196;1519 native7/7 +760 scopedSTEP_OK ata36614260/PR210;1546 bootstrap repair at6d26025a4/PR211, fresh row persisted/current. Native baseline32 harness entries includes2 inertworkers and excludesLinux-only managed_script; no parent closure. Native tray real all-targets strictClippy PASS +relay audit8/8 at4a9df312f; absolute criterion versus namedoverride requires1235 RULING.1543-f44v false-dead observer and1545 BSDsed parser pair measured; shared scopes untouched pending ownership/disposition. Selected1235/811/814 batch ends with durable audit/ASKs. No trayUX/liveVM/reset/release changes. All cycle claims released with exact artifact/remaining next_action, not closed. Full workspace gate remains RED at existing nonminimal_bool; Linux1538 owns accepted unpublished repair. MCP unavailable: local instrument/files fallback.1543-ffhg awaits pinned landed1538. Do not repeat full gate blindly against unchanged source. Next_action: coordinator publish repaired SHA and answerASKs; next active cycle fetch/fold/reclaim and resume within authorization. Not exhausted backlog or24h eligible-work proof.

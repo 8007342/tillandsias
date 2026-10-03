@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: capability-row-generator-calls-a-current-native-probe-stale-after-grep-q-breaks-its-output-pipe
+    field: status
+    value: ready
+    ts: "2026-10-03T17:18:07Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: capability-row-generator-calls-a-current-native-probe-stale-after-grep-q-breaks-its-output-pipe
+    event:
+      type: note
+      ts: "2026-10-03T17:18:07Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        released unfinished landing obligation after published tested slice and durable PR211 handoff; not completed until actual integration proof
