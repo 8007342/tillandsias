@@ -749,6 +749,676 @@ p.wait()
             1
         );
     }
+
+    // 1538-pwdr: these are CLI-level composition contracts.  They deliberately
+    // use acknowledged producers instead of sleeps to make scheduler progress
+    // (rather than a fortunate process race) observable.
+    #[test]
+    fn composition_select_is_completion_ordered_non_consuming_and_pumps_every_producer() {
+        let f = ScriptFixture::new();
+        let producer = f.write(
+            "select-producer.sh",
+            r#"#!/bin/sh
+ id=$1
+ printf 'READY%s\n' "$id"
+ while [ ! -f "ack-$id" ]; do sleep .01; done
+ if [ "$id" = a ]; then
+   while [ ! -f release-a ]; do sleep .01; done
+ fi
+ if [ "$id" = b ]; then
+   while [ ! -f ack-x ]; do sleep .01; done
+ fi
+ printf '%s' "$id"
+"#,
+        );
+        let out = f.run(
+            &format!(
+                r#"
+            local a=proc.spawn{{argv={{'sh','{producer}','a'}}}}
+            local b=proc.spawn{{argv={{'sh','{producer}','b'}}}}
+            local other=proc.spawn{{argv={{'sh','{producer}','x'}}}}
+            local exits={{a=false,b=false}}
+            a:on_exit(function() exits.a=true end)
+            b:on_exit(function() exits.b=true end)
+            for _,p in ipairs({{a,b,other}}) do p:on_line('stdout',function(s)
+                local id=s:match('^READY(.)$'); if id then fs.write('ack-'..id,'yes') end
+            end) end
+            local first=proc.select{{a,b}}
+            assert(exits.b and not exits.a, 'select returned before the selected exit callback')
+            assert(first==b and first:wait().stdout=='READYb\nb')
+            assert(fs.exists('ack-x'), 'select did not pump non-member producer')
+            fs.write('release-a','yes')
+            assert(proc.select{{a,b}}==b, 'select must be non-consuming')
+            local both=proc.all{{a,b}}
+            assert(both[1].stdout=='READYa\na' and both[2].stdout=='READYb\nb')
+            assert(other:wait().stdout=='READYx\nx', 'non-member producer was not pumped')
+            verdict.ok('select-order')
+        "#
+            ),
+            "4s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.stdout, b"ok:select-order\n");
+    }
+
+    #[test]
+    fn composition_select_timeout_is_nil_timed_out_and_does_not_cancel_child() {
+        let f = ScriptFixture::new();
+        let producer = f.write("slow-select.sh", "#!/bin/sh\nprintf 'READY\\n'\nwhile [ ! -f release-after-expiry ]; do sleep .01; done\nprintf done\n");
+        let gate = f.write(
+            "ack-gate.sh",
+            "#!/bin/sh\nwhile [ ! -f ack ]; do sleep .01; done\nprintf gate\n",
+        );
+        let out = f.run(
+            &format!(
+                r#"
+            local p=proc.spawn{{argv={{'sh','{producer}'}}}}
+            p:on_line('stdout',function(s) if s=='READY' then fs.write('ack','yes') end end)
+            local gate=proc.spawn{{argv={{'sh','{gate}'}}}}
+            assert(gate:wait().stdout=='gate', 'gate wait must pump p READY callback')
+            assert(fs.exists('ack'))
+            local chosen,why=proc.select{{p,timeout_ms=10}}
+            assert(chosen==nil and why=='timed_out')
+            fs.write('release-after-expiry','yes')
+            local c=p:wait(); assert(c.ok and c.stdout=='READY\ndone')
+            assert(proc.select{{p}}==p, 'an omitted timeout uses the default and observes completion')
+            verdict.ok('select-expiry')
+        "#
+            ),
+            "3s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    fn composition_all_is_argument_ordered_and_empty_is_vacuous() {
+        let f = ScriptFixture::new();
+        let slow = f.write("slow-all.sh", "#!/bin/sh\nsleep .08\nprintf slow\n");
+        let out = f.run(
+            &format!(
+                r#"
+            local slow=proc.spawn{{argv={{'sh','{slow}'}}}}
+            local fast=proc.spawn{{argv={{'printf','fast'}}}}
+            local r=proc.all{{slow,fast}}
+            assert(#r==2 and r[1].stdout=='slow' and r[2].stdout=='fast')
+            assert(#proc.all{{}}==0)
+            verdict.ok('all-order')
+        "#
+            ),
+            "3s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    fn composition_all_pumps_nonmember_and_observes_member_exit_callbacks_before_return() {
+        let f = ScriptFixture::new();
+        let producer = f.write(
+            "all-producer.sh",
+            r#"#!/bin/sh
+id=$1
+printf 'READY%s\n' "$id"
+while [ ! -f "all-ack-$id" ]; do sleep .01; done
+if [ "$id" = a ]; then while [ ! -f all-release-a ]; do sleep .01; done; fi
+printf '%s' "$id"
+"#,
+        );
+        let out = f.run(
+            &format!(
+                r#"
+            local a=proc.spawn{{argv={{'sh','{producer}','a'}}}}
+            local b=proc.spawn{{argv={{'sh','{producer}','b'}}}}
+            local x=proc.spawn{{argv={{'sh','{producer}','x'}}}}
+            local exits={{a=false,b=false}}
+            for _,p in ipairs({{a,b,x}}) do p:on_line('stdout',function(s)
+              local id=s:match('^READY(.)$'); if id then
+                fs.write('all-ack-'..id,'yes')
+                if id=='x' then fs.write('all-release-a','yes') end
+              end
+            end) end
+            a:on_exit(function() exits.a=true end); b:on_exit(function() exits.b=true end)
+            local r=proc.all{{a,b}}
+            assert(r[1].stdout=='READYa\na' and r[2].stdout=='READYb\nb')
+            assert(exits.a and exits.b, 'all returned before member exit callbacks')
+            assert(x:wait().stdout=='READYx\nx')
+            verdict.ok('all-scope-wide')
+        "#
+            ),
+            "4s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    fn composition_select_zero_has_no_own_deadline_and_outer_deadline_stops_owned_child() {
+        let f = ScriptFixture::new();
+        let producer = f.write("select-zero-owned.py", OWNED_PRODUCER);
+        let out = f.run(
+            &format!(
+                r#"
+            local p=proc.spawn{{argv={{'python3','{producer}'}}}}
+            p:on_line('stdout',function(s) assert(s=='READY'); fs.write('zero-ack','yes') end)
+            proc.select{{p,timeout_ms=0}}
+            verdict.ok('wrong')
+        "#
+            ),
+            "700ms",
+        );
+        assert_eq!(
+            out.status.code(),
+            Some(124),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(f.dir.path().join("zero-ack").exists());
+        assert_acknowledged_tasks_stopped(&f);
+    }
+
+    #[test]
+    fn composition_rejects_empty_select_and_invalid_handle_lists_before_waiting() {
+        let f = ScriptFixture::new();
+        let out = f.run(
+            r#"
+            local p=proc.spawn{argv={'printf','p'}}
+            local q=proc.spawn{argv={'printf','q'}}
+            assert(type(proc.select)=='function' and type(proc.all)=='function')
+            assert(not pcall(function() proc.select{} end))
+            assert(not pcall(function() proc.select{p,p} end))
+            assert(not pcall(function() proc.all{[1]=p,[3]=q} end))
+            assert(not pcall(function() proc.all{p,{}} end))
+            assert(not pcall(function() proc.all{p,unexpected=q} end))
+            local wait=p.wait
+            assert(not pcall(function() wait({}) end), 'copied method accepts forged receiver')
+            assert(p:wait().ok)
+            assert(#proc.all{q}==1, 'a valid one-handle list remains valid')
+            verdict.ok('list-validation')
+        "#,
+            "3s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    fn composition_chain_passes_binary_stdin_in_memory_and_retains_first_failure() {
+        let f = ScriptFixture::new();
+        let emit = f.write("emit.sh", "#!/bin/sh\nprintf 'A\\000\\377\\r\\n'\n");
+        let fail = f.write("fail-seven.sh", "#!/bin/sh\ncat\nexit 7\n");
+        let out = f.run(
+            &format!(
+                r#"
+            local c=proc.chain{{
+              {{argv={{'sh','{emit}'}}}},
+              {{argv={{'cat'}}}},
+              {{argv={{'sh','{fail}'}}}},
+              {{argv={{'cat'}}}},
+            }}
+            assert(#c.stages==4 and not c.ok and c.first_failure==3)
+            assert(c.stages[1].ok and c.stages[2].stdout=='A'..string.char(0,255)..'\r\n')
+            assert(c.stages[3].status=='exited' and c.stages[3].code==7)
+            assert(c.stages[4].stdout=='A'..string.char(0,255)..'\r\n')
+            verdict.ok('chain-bytes')
+        "#
+            ),
+            "3s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    fn composition_chain_validates_all_stages_before_earlier_execution() {
+        let f = ScriptFixture::new();
+        let marker = f.write("marker.sh", "#!/bin/sh\nprintf ran > earlier-ran\n");
+        let out = f.run(
+            &format!(
+                r#"
+            assert(type(proc.chain)=='function')
+            assert(not pcall(function() proc.chain{{
+              {{argv={{'sh','{marker}'}}}},
+              {{argv={{'cat'}},stdin='illegal-later-stdin'}},
+            }} end))
+            assert(not fs.exists('earlier-ran'), 'invalid later stage started an earlier stage')
+            assert(not pcall(function() proc.chain{{}} end))
+            verdict.ok('chain-prevalidate')
+        "#
+            ),
+            "3s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    fn composition_chain_retains_spawn_timeout_and_clipped_failures_before_success() {
+        let f = ScriptFixture::new();
+        let out = f.run(
+            r#"
+            local c=proc.chain{
+              {argv={'tillandsias-composition-missing-program'}},
+              {argv={'sleep','1'},timeout_ms=20},
+              {argv={'head','-c','100','/dev/zero'},capture_bytes=10},
+              {argv={'printf','last'}},
+            }
+            assert(#c.stages==4 and not c.ok and c.first_failure==1)
+            assert(c.stages[1].status=='spawn_failed')
+            assert(c.stages[2].status=='timed_out')
+            assert(c.stages[3].status=='exited' and c.stages[3].code==0
+              and c.stages[3].truncated and not c.stages[3].ok
+              and #c.stages[3].stdout==10 and c.stages[3].dropped==90)
+            assert(c.stages[4].ok and c.stages[4].stdout=='last')
+            verdict.ok('chain-retained-failures')
+        "#,
+            "4s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    fn composition_chain_retains_policy_and_signal_failures_before_later_success() {
+        let f = ScriptFixture::new();
+        let signal = f.write("signal.sh", "#!/bin/sh\nkill -TERM $$\n");
+        let out = f.run(
+            &format!(
+                r#"
+            local policy=proc.chain{{
+              {{argv={{'bash','-c','printf forbidden > shell-policy-marker'}}}},
+              {{argv={{'printf','after-policy'}}}},
+            }}
+            assert(not policy.ok and policy.first_failure==1 and policy.stages[1].status=='policy_denied')
+            assert(policy.stages[2].ok and policy.stages[2].stdout=='after-policy')
+            local signal=proc.chain{{
+              {{argv={{'sh','{signal}'}}}},
+              {{argv={{'printf','after-signal'}}}},
+            }}
+            assert(not signal.ok and signal.first_failure==1 and signal.stages[1].status=='signaled')
+            assert(signal.stages[2].ok and signal.stages[2].stdout=='after-signal')
+            verdict.ok('chain-policy-signal')
+        "#
+            ),
+            "3s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(!f.dir.path().join("shell-policy-marker").exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn composition_chain_validates_before_consent_and_consumes_one_token_per_execution() {
+        use std::os::unix::fs::PermissionsExt;
+        use tillandsias_plan::command_policy as cp;
+
+        let f = ScriptFixture::new();
+        // This is an inert workspace-local executable merely named rm; it is
+        // never the host rm and only records a successful authorized launch.
+        let program = f.write("rm", "#!/bin/sh\nprintf ran >> marker\n");
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let argv = vec![
+            program,
+            "-rf".into(),
+            lua_path(&f.dir.path().with_extension("outside-unused")),
+        ];
+        let args = argv
+            .iter()
+            .map(|s| format!("{s:?}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let ctx = cp::ConsentCtx {
+            dir: f.dir.path().join("consent"),
+            host: cp::this_host(),
+            now: chrono::Utc::now(),
+            evidence: cp::HostKind::BareMetal,
+            skill: None,
+            reset_ok: None,
+        };
+        let (token, _) = cp::consent_grant(&ctx, "workspace-destroy", &argv, 1800).unwrap();
+        let original = std::fs::read(&token).unwrap();
+        let invalid = f.run(
+            &format!(
+                r#"
+            assert(type(proc.chain)=='function')
+            assert(not pcall(function() proc.chain{{
+              {{argv={{{args}}}}},
+              {{argv={{'printf','later'}},timeout='invalid'}},
+            }} end))
+            verdict.ok('chain-invalid-before-consent')
+        "#
+            ),
+            "3s",
+        );
+        assert!(
+            invalid.status.success(),
+            "{}",
+            String::from_utf8_lossy(&invalid.stderr)
+        );
+        assert_eq!(std::fs::read(&token).unwrap(), original);
+        assert!(!f.dir.path().join("marker").exists());
+
+        let valid = f.run(
+            &format!(
+                r#"
+            local c=proc.chain{{
+              {{argv={{{args}}}}},
+              {{argv={{{args}}}}},
+            }}
+            assert(#c.stages==2 and not c.ok and c.first_failure==2)
+            assert(c.stages[1].status=='exited' and c.stages[1].code==0 and c.stages[1].ok)
+            assert(c.stages[2].status=='policy_consent_required'
+              and c.stages[2].code==nil and c.stages[2].run_id==nil)
+            verdict.ok('chain-consent-once')
+        "#
+            ),
+            "3s",
+        );
+        assert!(
+            valid.status.success(),
+            "{}",
+            String::from_utf8_lossy(&valid.stderr)
+        );
+        assert!(!token.exists());
+        assert_eq!(
+            std::fs::read_to_string(f.dir.path().join("marker")).unwrap(),
+            "ran"
+        );
+        assert_eq!(
+            std::fs::read_to_string(f.dir.path().join("consent/consumed.jsonl"))
+                .unwrap()
+                .lines()
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn composition_chain_snapshots_all_stage_fields_before_callback_mutation() {
+        let f = ScriptFixture::new();
+        let old_dir = f.dir.path().join("old-cwd");
+        let new_dir = f.dir.path().join("new-cwd");
+        std::fs::create_dir(&old_dir).unwrap();
+        std::fs::create_dir(&new_dir).unwrap();
+        let first = f.write(
+            "chain-first.sh",
+            "#!/bin/sh\nprintf started > first-started\nprintf 'first-started\\n'\nwhile [ ! -f release-first ]; do sleep .01; done\ncat\n",
+        );
+        let mutator = f.write(
+            "chain-mutator.sh",
+            "#!/bin/sh\nwhile [ ! -f first-started ]; do sleep .01; done\nprintf 'MUTATE\\n'\n",
+        );
+        let second = f.write(
+            "chain-second.sh",
+            "#!/bin/sh\nprintf '%s|%s|%s\\n' \"$1\" \"$EXTRA\" \"$PWD\"\ncat\n",
+        );
+        let old_dir = lua_path(&old_dir);
+        let new_dir = lua_path(&new_dir);
+        let out = f.run(
+            &format!(
+                r#"
+            local x=proc.spawn{{argv={{'sh','{mutator}'}}}}
+            local first={{argv={{'sh','{first}'}},stdin='old-stdin'}}
+            local second={{argv={{'sh','{second}','old-argv'}},env={{EXTRA='old-env'}},cwd='{old_dir}'}}
+            x:on_line('stdout',function(s)
+              assert(s=='MUTATE')
+              first.stdin='new-stdin'
+              second.argv={{'sh','{second}','new-argv'}}
+              second.env={{EXTRA='new-env'}}
+              second.cwd='{new_dir}'
+              second.stdin='new-illegal-after-validation'
+              fs.write('release-first','yes')
+            end)
+            local c=proc.chain{{first,second}}
+            assert(x:wait().ok and #c.stages==2 and c.ok)
+            assert(c.stages[1].stdout=='first-started\nold-stdin')
+            assert(c.stages[2].stdout=='old-argv|old-env|{old_dir}\nfirst-started\nold-stdin')
+            verdict.ok('chain-snapshot')
+        "#
+            ),
+            "4s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    fn composition_chain_validation_getter_reentrant_door_closes_scope_before_launch() {
+        let f = ScriptFixture::new();
+        let first = f.write(
+            "getter-first.sh",
+            "#!/bin/sh\nprintf first > first-launch\n",
+        );
+        let nested = f.write(
+            "getter-nested.sh",
+            "#!/bin/sh\nprintf nested > nested-launch\n",
+        );
+        let escape = f.write(
+            "getter-escape.sh",
+            "#!/bin/sh\nprintf escape > escape-launch\n",
+        );
+        let out = f.run(
+            &format!(
+                r#"
+            assert(type(proc.chain)=='function')
+            local second=setmetatable({{argv={{'printf','second'}}}},{{__index=function(_,key)
+              if key=='cwd' then
+                fs.write('getter-entered','yes')
+                local ok,err=pcall(function() proc.run{{argv={{'sh','{nested}'}}}} end)
+                assert(not ok and tostring(err):match('proc.*reentrancy') and not tostring(err):match('yield'))
+                fs.write('getter-refused','yes')
+              end
+              return nil
+            end}})
+            local ok,err=pcall(function() proc.chain{{
+              {{argv={{'sh','{first}'}}}}, second
+            }} end)
+            assert(not ok and fs.exists('getter-entered') and fs.exists('getter-refused'))
+            local escaped=pcall(function() proc.spawn{{argv={{'sh','{escape}'}}}} end)
+            assert(not escaped, 'caught getter reentrancy reopened the scope')
+            error(tostring(err))
+        "#
+            ),
+            "3s",
+        );
+        assert!(f.dir.path().join("getter-entered").exists());
+        assert!(f.dir.path().join("getter-refused").exists());
+        for marker in ["first-launch", "nested-launch", "escape-launch"] {
+            assert!(!f.dir.path().join(marker).exists(), "{marker} launched");
+        }
+        assert_eq!(out.status.code(), Some(1));
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("reentrancy") || stderr.contains("scope"),
+            "{stderr}"
+        );
+        assert!(!stderr.contains("yield"), "{stderr}");
+    }
+
+    #[test]
+    fn composition_exit_callback_reentrant_select_all_and_chain_close_scope() {
+        for (name, attempt) in [
+            ("select", "proc.select{p,timeout_ms=1}"),
+            ("all", "proc.all{p}"),
+            ("chain", "proc.chain{{argv={'sh','NESTED'}}}"),
+        ] {
+            let f = ScriptFixture::new();
+            let producer = f.write(
+                "callback-reentrant.sh",
+                "#!/bin/sh\nprintf 'READY\\n'\nwhile [ ! -f callback-go ]; do sleep .01; done\n",
+            );
+            let nested = f.write("nested.sh", "#!/bin/sh\nprintf nested > nested-launch\n");
+            let escape = f.write("escape.sh", "#!/bin/sh\nprintf escape > escape-launch\n");
+            let attempt = attempt.replace("NESTED", &nested);
+            let out = f.run(
+                &format!(
+                    r#"
+                local p=proc.spawn{{argv={{'sh','{producer}'}}}}
+                p:on_line('stdout',function(s) assert(s=='READY'); fs.write('callback-go','yes') end)
+                p:on_exit(function()
+                  fs.write('callback-entry','{name}')
+                  local ok,err=pcall(function() {attempt} end)
+                  assert(not ok and tostring(err):match('proc%-callback%-reentrancy')
+                    and not tostring(err):match('yield'))
+                  fs.write('callback-refused','{name}')
+                end)
+                pcall(function() p:wait() end)
+                local escaped=pcall(function() proc.spawn{{argv={{'sh','{escape}'}}}} end)
+                assert(not escaped, 'caught callback reentrancy reopened the scope')
+                error('callback scope closed after {name}')
+            "#
+                ),
+                "3s",
+            );
+            assert_eq!(
+                std::fs::read_to_string(f.dir.path().join("callback-entry")).unwrap(),
+                name
+            );
+            assert_eq!(
+                std::fs::read_to_string(f.dir.path().join("callback-refused")).unwrap(),
+                name
+            );
+            assert!(
+                !f.dir.path().join("nested-launch").exists(),
+                "{name} nested launch"
+            );
+            assert!(
+                !f.dir.path().join("escape-launch").exists(),
+                "{name} escaped launch"
+            );
+            assert_eq!(
+                out.status.code(),
+                Some(1),
+                "{name}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                stderr.contains("scope") || stderr.contains("reentrancy"),
+                "{name}: {stderr}"
+            );
+            assert!(!stderr.contains("yield"), "{name}: {stderr}");
+        }
+    }
+
+    #[test]
+    fn composition_on_exit_follows_lines_precedes_wait_and_result_tables_are_fresh() {
+        let f = ScriptFixture::new();
+        let producer = f.write(
+            "exit-barrier.sh",
+            "#!/bin/sh\nprintf 'line\\n'\nprintf 'err\\n' >&2\nwhile [ ! -f exit-ack ]; do sleep .01; done\n",
+        );
+        let out = f.run(
+            &format!(
+                r#"
+            local p=proc.spawn{{argv={{'sh','{producer}'}}}}
+            local order={{}}
+            local lines=0
+            local exit_count=0
+            local exit_wall_ms
+            p:on_line('stdout',function(s)
+              assert(s=='line'); lines=lines+1; table.insert(order,'stdout'); fs.write('exit-ack','yes')
+            end)
+            p:on_line('stderr',function(s) assert(s=='err'); lines=lines+1; table.insert(order,'stderr') end)
+            p:on_exit(function() error('replaced exit slot ran') end)
+            p:on_exit(function(r)
+              exit_count=exit_count+1; exit_wall_ms=r.wall_ms
+              assert(lines==2, 'exit preceded final line delivery')
+              table.insert(order,'exit'); assert(r.stdout=='line\n' and r.stderr=='err\n')
+              local keep_status,keep_code,keep_id=r.status,r.code,r.run_id
+              r.stdout='corrupt'; r.status='corrupt'; r.code=99; r.run_id='corrupt'
+              fs.write('exit-observed',keep_status..':'..tostring(keep_code)..':'..keep_id)
+            end)
+            local r=p:wait(); table.insert(order,'wait')
+            assert(lines==2 and order[#order-1]=='exit' and order[#order]=='wait')
+            assert(r.status=='exited' and r.code==0 and r.stdout=='line\n' and r.stderr=='err\n')
+            local repeated=p:wait(); local all=proc.all{{p}}
+            assert(repeated.run_id==r.run_id and proc.select{{p}}==p and all[1].run_id==r.run_id)
+            assert(exit_count==1, 'repeated observations dispatched exit more than once')
+            assert(exit_wall_ms==r.wall_ms and repeated.wall_ms==r.wall_ms and all[1].wall_ms==r.wall_ms,
+              'terminal duration changed on later observation')
+            assert(fs.exists('exit-observed'))
+            assert(not pcall(function() p:on_exit(function() end) end))
+            verdict.ok('exit-barrier')
+        "#
+            ),
+            "3s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    #[test]
+    fn composition_exit_callback_error_closes_scope_even_when_caught() {
+        let f = ScriptFixture::new();
+        let escape = f.write("escape.sh", "#!/bin/sh\nprintf bad > escaped\n");
+        let producer = f.write(
+            "exit-error.sh",
+            "#!/bin/sh\nprintf 'READY\\n'\nwhile [ ! -f callback-go ]; do sleep .01; done\n",
+        );
+        let out = f.run(
+            &format!(
+                r#"
+            local p=proc.spawn{{argv={{'sh','{producer}'}}}}
+            assert(type(p.on_exit)=='function')
+            p:on_line('stdout',function(s) assert(s=='READY'); fs.write('callback-go','yes') end)
+            p:on_exit(function() fs.write('exit-callback-ran','yes'); error('exit-callback-broke') end)
+            assert(not pcall(function() p:wait() end))
+            proc.spawn{{argv={{'sh','{escape}'}}}}
+            verdict.ok('wrong')
+        "#
+            ),
+            "3s",
+        );
+        assert!(f.dir.path().join("exit-callback-ran").exists());
+        assert!(!f.dir.path().join("escaped").exists());
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("exit-callback-broke") || stderr.contains("scope"),
+            "{stderr}"
+        );
+        assert_eq!(
+            out.status.code(),
+            Some(1),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
 }
 
 /// ARM 1: a non-zero exit is DATA, not a Lua error; and argv is argv.
