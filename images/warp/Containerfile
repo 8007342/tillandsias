@@ -1,0 +1,50 @@
+# @trace order:1506-euvq (change fleet-messaging-poc, Decision 6)
+# Tillandsias WARP sidecar — the Cloudflare One Client (cloudflare-warp,
+# vendor package from pkg.cloudflareclient.com) with warp-svc as PID 1 and
+# no systemd, so no host OS ever runs a Cloudflare daemon. Measured on yoga
+# 2026-10-03 (plan/issues/warp-rootless-sidecar-measurement-2026-10-03-yoga.md):
+# the launch that gets a TUN in a shared netns rootless is
+#   --network container:<owner> --userns=container:<owner> --user 0
+#   --security-opt label=disable --cap-drop=ALL --cap-add=NET_ADMIN
+#   --device /dev/net/tun --sysctl net.ipv4.conf.all.src_valid_mark=1
+#   --read-only --tmpfs /run --tmpfs /var/log/cloudflare-warp --tmpfs /tmp
+#   --volume <named>:/var/lib/cloudflare-warp
+# (--userns=keep-id instead is denied the TUN, the nft rule and the sysctl).
+#
+# Pinning: the vendor apt index lists ONLY the newest build (measured
+# 2026-10-03 on bookworm, trixie and noble: one Version line each), so an
+# `apt-get install cloudflare-warp=<v>` pin breaks the build the day the
+# vendor publishes the next release. The pin is therefore checked AFTER the
+# install and the build refuses a different version instead of silently
+# taking it; bump WARP_VERSION deliberately when that refusal fires.
+FROM docker.io/library/debian:bookworm-slim
+
+ARG WARP_VERSION=2026.7.1377.0
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates curl gnupg; \
+    curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg \
+      | gpg --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg; \
+    echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ bookworm main" \
+      > /etc/apt/sources.list.d/cloudflare-client.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends cloudflare-warp; \
+    rm -rf /var/lib/apt/lists/*; \
+    installed="$(dpkg-query -W -f='${Version}' cloudflare-warp)"; \
+    if [ "$installed" != "$WARP_VERSION" ]; then \
+      echo "refused:warp-image:version-drift:pinned=$WARP_VERSION:repo=$installed" >&2; \
+      exit 1; \
+    fi; \
+    test -x /usr/bin/warp-svc; \
+    test -x /usr/bin/warp-cli
+# No `apt-get purge gnupg` cleanup: cloudflare-warp Depends on gnupg2, so
+# purging gnupg + autoremove silently removes cloudflare-warp itself (the
+# first probe build did exactly that and still exited 0 because its version
+# check ran before the purge). The assertions above are the build's last act.
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 0755 /usr/local/bin/entrypoint.sh
+
+VOLUME ["/var/lib/cloudflare-warp"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -101,6 +101,21 @@ capabilities. Whether `warp-svc` accepts that root, whether its firewall
 step survives, and whether the package installs without systemd are the
 UNVERIFIED items 1506-euvq measures with five named outcomes.
 
+**Measured 2026-10-03 on yoga (1506-euvq, pre-enrollment):
+`outcome:tun-denied-rootless` for the posture above** — regime: client
+2026.7.1377.0, podman 5.8.7, kernel 7.2.8-200.fc44.x86_64, SELinux
+enforcing. Two causes, each repaired by one flag: SELinux denies the
+`/dev/net/tun` open (`--security-opt label=disable`, which the router
+already uses), and `--userns=keep-id` gives the sidecar a sibling user
+namespace whose NET_ADMIN does not cover the router's netns
+(`--userns=container:<router>`; today's `policy.rs:191` refuses it). Under
+the repaired posture no pre-enrollment refusal fires and the package runs
+without systemd; the router's `tillandsias-enclave` netns is `internal`, so
+it has no route to Cloudflare. `mesh-ip-acquired` vs `registers-no-mesh-ip`
+needs an operator-minted service token. Details, commands and rcs:
+`plan/issues/warp-rootless-sidecar-measurement-2026-10-03-yoga.md`;
+instrument: `scripts/research-warp-sidecar-rootless.sh`.
+
 Project constraints the packet must respect (read in the tree):
 `build_router_run_args` launches the router with `--cap-drop=ALL`,
 `--security-opt=no-new-privileges`, `--userns=keep-id`, `--read-only`, a
