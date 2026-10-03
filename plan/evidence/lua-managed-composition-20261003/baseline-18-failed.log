@@ -7,125 +7,125 @@ ok:no-competing-gate
 
 running 18 tests
 
-thread 'managed_script::composition_chain_validates_all_stages_before_earlier_execution' (3170657) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1097:9:
-runtime error: [string "/tmp/opencode/sol-1534-DtUg63/probe.lua"]:2: assertion failed!
+thread 'managed_script::composition_chain_passes_binary_stdin_in_memory_and_retains_first_failure' (3517331) panicked at crates/tillandsias-plan/tests/lua_proc.rs:985:9:
+runtime error: [string "/tmp/opencode/sol-1534-9HUAmL/probe.lua"]:2: attempt to call a nil value (field 'chain')
 stack traceback:
-	[C]: in function 'assert'
-	[string "/tmp/opencode/sol-1534-DtUg63/probe.lua"]:2: in main chunk
+	[string "/tmp/opencode/sol-1534-9HUAmL/probe.lua"]:2: in main chunk
 
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test managed_script::composition_chain_passes_binary_stdin_in_memory_and_retains_first_failure ... FAILED
 
-thread 'managed_script::composition_chain_retains_spawn_timeout_and_clipped_failures_before_success' (3170653) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1126:9:
-runtime error: [string "/tmp/opencode/sol-1534-U39RoT/probe.lua"]:2: attempt to call a nil value (field 'chain')
+thread 'managed_script::composition_chain_validates_all_stages_before_earlier_execution' (3517335) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1097:9:
+runtime error: [string "/tmp/opencode/sol-1534-udyjla/probe.lua"]:2: assertion failed!
 stack traceback:
-	[string "/tmp/opencode/sol-1534-U39RoT/probe.lua"]:2: in main chunk
+	[C]: in function 'assert'
+	[string "/tmp/opencode/sol-1534-udyjla/probe.lua"]:2: in main chunk
+
+test managed_script::composition_chain_validates_all_stages_before_earlier_execution ... FAILED
+
+thread 'managed_script::composition_chain_retains_policy_and_signal_failures_before_later_success' (3517332) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1157:9:
+runtime error: [string "/tmp/opencode/sol-1534-O93hed/probe.lua"]:2: attempt to call a nil value (field 'chain')
+stack traceback:
+	[string "/tmp/opencode/sol-1534-O93hed/probe.lua"]:2: in main chunk
 
 
-thread 'managed_script::composition_chain_exit_callback_terminal_verdict_preserves_bytes_and_reaps_owned_groups' (3170650) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1065:13:
+thread 'managed_script::composition_chain_exit_callback_terminal_verdict_preserves_bytes_and_reaps_owned_groups' (3517330) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1065:13:
 assertion `left == right` failed
   left: Some(1)
  right: Some(0)
-test managed_script::composition_chain_retains_spawn_timeout_and_clipped_failures_before_success ... FAILED
-test managed_script::composition_chain_validates_all_stages_before_earlier_execution ... FAILED
-test managed_script::composition_chain_exit_callback_terminal_verdict_preserves_bytes_and_reaps_owned_groups ... FAILED
-
-thread 'managed_script::composition_chain_validation_getter_reentrant_door_closes_scope_before_launch' (3170663) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1343:9:
-assertion failed: f.dir.path().join("getter-entered").exists()
-test managed_script::composition_chain_validation_getter_reentrant_door_closes_scope_before_launch ... FAILED
-
-thread 'managed_script::composition_chain_passes_binary_stdin_in_memory_and_retains_first_failure' (3170651) panicked at crates/tillandsias-plan/tests/lua_proc.rs:985:9:
-runtime error: [string "/tmp/opencode/sol-1534-98Bg0V/probe.lua"]:2: attempt to call a nil value (field 'chain')
-stack traceback:
-	[string "/tmp/opencode/sol-1534-98Bg0V/probe.lua"]:2: in main chunk
-
-test managed_script::composition_chain_passes_binary_stdin_in_memory_and_retains_first_failure ... FAILED
-
-thread 'managed_script::composition_chain_snapshots_all_stage_fields_before_callback_mutation' (3170655) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1297:9:
-runtime error: [string "/tmp/opencode/sol-1534-FAlxTq/probe.lua"]:14: attempt to call a nil value (field 'chain')
-stack traceback:
-	[string "/tmp/opencode/sol-1534-FAlxTq/probe.lua"]:14: in main chunk
-
-
-thread 'managed_script::composition_chain_retains_policy_and_signal_failures_before_later_success' (3170652) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1157:9:
-runtime error: [string "/tmp/opencode/sol-1534-a4b0Nu/probe.lua"]:2: attempt to call a nil value (field 'chain')
-stack traceback:
-	[string "/tmp/opencode/sol-1534-a4b0Nu/probe.lua"]:2: in main chunk
-
 test managed_script::composition_chain_retains_policy_and_signal_failures_before_later_success ... FAILED
-test managed_script::composition_chain_snapshots_all_stage_fields_before_callback_mutation ... FAILED
+test managed_script::composition_chain_exit_callback_terminal_verdict_preserves_bytes_and_reaps_owned_groups ... FAILED
+test managed_script::composition_chain_retains_spawn_timeout_and_clipped_failures_before_success ... FAILED
 
-thread 'managed_script::composition_exit_callback_reentrant_select_all_and_chain_close_scope' (3170669) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1393:78:
+thread 'managed_script::composition_chain_retains_spawn_timeout_and_clipped_failures_before_success' (3517333) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1126:9:
+runtime error: [string "/tmp/opencode/sol-1534-Y7E3HC/probe.lua"]:2: attempt to call a nil value (field 'chain')
+stack traceback:
+	[string "/tmp/opencode/sol-1534-Y7E3HC/probe.lua"]:2: in main chunk
+
+
+thread 'managed_script::composition_chain_snapshots_all_stage_fields_before_callback_mutation' (3517334) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1297:9:
+runtime error: [string "/tmp/opencode/sol-1534-yHlNyy/probe.lua"]:14: attempt to call a nil value (field 'chain')
+stack traceback:
+	[string "/tmp/opencode/sol-1534-yHlNyy/probe.lua"]:14: in main chunk
+
+
+thread 'managed_script::composition_exit_callback_reentrant_select_all_and_chain_close_scope' (3517345) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1393:78:
 called `Result::unwrap()` on an `Err` value: Os { code: 2, kind: NotFound, message: "No such file or directory" }
 
-thread 'managed_script::composition_select_zero_has_no_own_deadline_and_outer_deadline_stops_owned_child' (3170674) panicked at crates/tillandsias-plan/tests/lua_proc.rs:924:9:
-assertion `left == right` failed: runtime error: [string "/tmp/opencode/sol-1534-Y4UJVr/probe.lua"]:4: attempt to call a nil value (field 'select')
+thread 'managed_script::composition_chain_validation_getter_reentrant_door_closes_scope_before_launch' (3517341) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1343:9:
+assertion failed: f.dir.path().join("getter-entered").exists()
+test managed_script::composition_chain_snapshots_all_stage_fields_before_callback_mutation ... FAILED
+test managed_script::composition_exit_callback_reentrant_select_all_and_chain_close_scope ... FAILED
+test managed_script::composition_chain_validation_getter_reentrant_door_closes_scope_before_launch ... FAILED
+
+thread 'managed_script::composition_on_exit_follows_lines_precedes_wait_and_result_tables_are_fresh' (3517346) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1466:9:
+runtime error: [string "/tmp/opencode/sol-1534-2j8G23/probe.lua"]:11: attempt to call a nil value (method 'on_exit')
 stack traceback:
-	[string "/tmp/opencode/sol-1534-Y4UJVr/probe.lua"]:4: in main chunk
+	[string "/tmp/opencode/sol-1534-2j8G23/probe.lua"]:11: in main chunk
+
+test managed_script::composition_on_exit_follows_lines_precedes_wait_and_result_tables_are_fresh ... FAILED
+
+thread 'managed_script::composition_chain_validates_before_consent_and_consumes_one_token_per_execution' (3517337) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1209:9:
+runtime error: [string "/tmp/opencode/sol-1534-Nzj4wn/probe.lua"]:2: assertion failed!
+stack traceback:
+	[C]: in function 'assert'
+	[string "/tmp/opencode/sol-1534-Nzj4wn/probe.lua"]:2: in main chunk
+
+test managed_script::composition_chain_validates_before_consent_and_consumes_one_token_per_execution ... FAILED
+
+thread 'managed_script::composition_exit_callback_error_closes_scope_even_when_caught' (3517343) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1495:9:
+assertion failed: f.dir.path().join("exit-callback-ran").exists()
+test managed_script::composition_exit_callback_error_closes_scope_even_when_caught ... FAILED
+
+thread 'managed_script::composition_select_zero_has_no_own_deadline_and_outer_deadline_stops_owned_child' (3517352) panicked at crates/tillandsias-plan/tests/lua_proc.rs:924:9:
+assertion `left == right` failed: runtime error: [string "/tmp/opencode/sol-1534-NFqmZR/probe.lua"]:4: attempt to call a nil value (field 'select')
+stack traceback:
+	[string "/tmp/opencode/sol-1534-NFqmZR/probe.lua"]:4: in main chunk
 
   left: Some(1)
  right: Some(124)
-test managed_script::composition_exit_callback_reentrant_select_all_and_chain_close_scope ... FAILED
-
-thread 'managed_script::composition_rejects_empty_select_and_invalid_handle_lists_before_waiting' (3170671) panicked at crates/tillandsias-plan/tests/lua_proc.rs:955:9:
-runtime error: [string "/tmp/opencode/sol-1534-TpfNxQ/probe.lua"]:4: assertion failed!
-stack traceback:
-	[C]: in function 'assert'
-	[string "/tmp/opencode/sol-1534-TpfNxQ/probe.lua"]:4: in main chunk
-
-test managed_script::composition_rejects_empty_select_and_invalid_handle_lists_before_waiting ... FAILED
 test managed_script::composition_select_zero_has_no_own_deadline_and_outer_deadline_stops_owned_child ... FAILED
 
-thread 'managed_script::composition_chain_validates_before_consent_and_consumes_one_token_per_execution' (3170658) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1209:9:
-runtime error: [string "/tmp/opencode/sol-1534-9RN3Du/probe.lua"]:2: assertion failed!
+thread 'managed_script::composition_rejects_empty_select_and_invalid_handle_lists_before_waiting' (3517347) panicked at crates/tillandsias-plan/tests/lua_proc.rs:955:9:
+runtime error: [string "/tmp/opencode/sol-1534-SUV85y/probe.lua"]:4: assertion failed!
 stack traceback:
 	[C]: in function 'assert'
-	[string "/tmp/opencode/sol-1534-9RN3Du/probe.lua"]:2: in main chunk
+	[string "/tmp/opencode/sol-1534-SUV85y/probe.lua"]:4: in main chunk
 
+test managed_script::composition_rejects_empty_select_and_invalid_handle_lists_before_waiting ... FAILED
 
-thread 'managed_script::composition_on_exit_follows_lines_precedes_wait_and_result_tables_are_fresh' (3170670) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1466:9:
-runtime error: [string "/tmp/opencode/sol-1534-WMiAVX/probe.lua"]:11: attempt to call a nil value (method 'on_exit')
+thread 'managed_script::composition_all_is_argument_ordered_and_empty_is_vacuous' (3517327) panicked at crates/tillandsias-plan/tests/lua_proc.rs:859:9:
+runtime error: [string "/tmp/opencode/sol-1534-KEGF8I/probe.lua"]:4: attempt to call a nil value (field 'all')
 stack traceback:
-	[string "/tmp/opencode/sol-1534-WMiAVX/probe.lua"]:11: in main chunk
+	[string "/tmp/opencode/sol-1534-KEGF8I/probe.lua"]:4: in main chunk
 
-test managed_script::composition_chain_validates_before_consent_and_consumes_one_token_per_execution ... FAILED
-test managed_script::composition_on_exit_follows_lines_precedes_wait_and_result_tables_are_fresh ... FAILED
-
-thread 'managed_script::composition_all_pumps_nonmember_and_observes_member_exit_callbacks_before_return' (3170648) panicked at crates/tillandsias-plan/tests/lua_proc.rs:902:9:
-runtime error: [string "/tmp/opencode/sol-1534-9lXked/probe.lua"]:12: attempt to call a nil value (method 'on_exit')
-stack traceback:
-	[string "/tmp/opencode/sol-1534-9lXked/probe.lua"]:12: in main chunk
-
-test managed_script::composition_all_pumps_nonmember_and_observes_member_exit_callbacks_before_return ... FAILED
-
-thread 'managed_script::composition_exit_callback_error_closes_scope_even_when_caught' (3170666) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1495:9:
-assertion failed: f.dir.path().join("exit-callback-ran").exists()
-test managed_script::composition_exit_callback_error_closes_scope_even_when_caught ... FAILED
 test managed_script::composition_all_is_argument_ordered_and_empty_is_vacuous ... FAILED
 
-thread 'managed_script::composition_all_is_argument_ordered_and_empty_is_vacuous' (3170647) panicked at crates/tillandsias-plan/tests/lua_proc.rs:859:9:
-runtime error: [string "/tmp/opencode/sol-1534-ner4Mu/probe.lua"]:4: attempt to call a nil value (field 'all')
+thread 'managed_script::composition_select_is_completion_ordered_non_consuming_and_pumps_every_producer' (3517348) panicked at crates/tillandsias-plan/tests/lua_proc.rs:801:9:
+runtime error: [string "/tmp/opencode/sol-1534-dtD2ux/probe.lua"]:6: attempt to call a nil value (method 'on_exit')
 stack traceback:
-	[string "/tmp/opencode/sol-1534-ner4Mu/probe.lua"]:4: in main chunk
-
-
-thread 'managed_script::composition_chain_capture_does_not_inherit_the_unused_stream_line_limit' (3170649) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1015:9:
-runtime error: [string "/tmp/opencode/sol-1534-XFjnQr/probe.lua"]:5: attempt to call a nil value (field 'chain')
-stack traceback:
-	[string "/tmp/opencode/sol-1534-XFjnQr/probe.lua"]:5: in main chunk
-
-test managed_script::composition_chain_capture_does_not_inherit_the_unused_stream_line_limit ... FAILED
-
-thread 'managed_script::composition_select_is_completion_ordered_non_consuming_and_pumps_every_producer' (3170672) panicked at crates/tillandsias-plan/tests/lua_proc.rs:801:9:
-runtime error: [string "/tmp/opencode/sol-1534-7oQWlW/probe.lua"]:6: attempt to call a nil value (method 'on_exit')
-stack traceback:
-	[string "/tmp/opencode/sol-1534-7oQWlW/probe.lua"]:6: in main chunk
+	[string "/tmp/opencode/sol-1534-dtD2ux/probe.lua"]:6: in main chunk
 
 test managed_script::composition_select_is_completion_ordered_non_consuming_and_pumps_every_producer ... FAILED
 
-thread 'managed_script::composition_select_timeout_is_nil_timed_out_and_does_not_cancel_child' (3170673) panicked at crates/tillandsias-plan/tests/lua_proc.rs:835:9:
-runtime error: [string "/tmp/opencode/sol-1534-anuwVA/probe.lua"]:7: attempt to call a nil value (field 'select')
+thread 'managed_script::composition_all_pumps_nonmember_and_observes_member_exit_callbacks_before_return' (3517328) panicked at crates/tillandsias-plan/tests/lua_proc.rs:902:9:
+runtime error: [string "/tmp/opencode/sol-1534-JMqdOs/probe.lua"]:12: attempt to call a nil value (method 'on_exit')
 stack traceback:
-	[string "/tmp/opencode/sol-1534-anuwVA/probe.lua"]:7: in main chunk
+	[string "/tmp/opencode/sol-1534-JMqdOs/probe.lua"]:12: in main chunk
+
+test managed_script::composition_all_pumps_nonmember_and_observes_member_exit_callbacks_before_return ... FAILED
+
+thread 'managed_script::composition_chain_capture_does_not_inherit_the_unused_stream_line_limit' (3517329) panicked at crates/tillandsias-plan/tests/lua_proc.rs:1015:9:
+runtime error: [string "/tmp/opencode/sol-1534-sJaAYQ/probe.lua"]:5: attempt to call a nil value (field 'chain')
+stack traceback:
+	[string "/tmp/opencode/sol-1534-sJaAYQ/probe.lua"]:5: in main chunk
+
+test managed_script::composition_chain_capture_does_not_inherit_the_unused_stream_line_limit ... FAILED
+
+thread 'managed_script::composition_select_timeout_is_nil_timed_out_and_does_not_cancel_child' (3517349) panicked at crates/tillandsias-plan/tests/lua_proc.rs:835:9:
+runtime error: [string "/tmp/opencode/sol-1534-S6HCGI/probe.lua"]:7: attempt to call a nil value (field 'select')
+stack traceback:
+	[string "/tmp/opencode/sol-1534-S6HCGI/probe.lua"]:7: in main chunk
 
 test managed_script::composition_select_timeout_is_nil_timed_out_and_does_not_cancel_child ... FAILED
 

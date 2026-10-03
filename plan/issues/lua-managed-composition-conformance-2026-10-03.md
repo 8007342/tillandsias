@@ -118,6 +118,19 @@ the compressed diagnostic artifacts. This partial green is not a full gate.
 The binary-packaging failure and its source identity are retained; the
 plain-text-only candidate must complete a new forced gate before pushing.
 
+The next forced gate at `7dfb53f511cfed85c304ddd989af9043137195a9` passed
+workspace and evidence checks, then reproduced11/14 in the existing OOM
+postmortem fixture. Its three journal reads also used the external target
+link and were correctly refused as unreadable seams. Ownership correction
+`612b16410` permits only a repository-local unique scratch directory for
+that fixture. Parent independent typed controls measured11/14 before and
+14/14 after; related OOM, unrelated victim, quiet journal, unreadable input,
+actual memory refusal and wiring assertions all remain unchanged. No memory,
+OOM, read-env-root, gate-step or landing policy was altered. Eight delegates
+were already invoked; this mechanical integration correction stayed with
+the parent rather than creating a ninth worker. Native execution of the
+fixture-location correction and a complete forced retry remain unmeasured.
+
 Broader plan-library verification initially passed425 tests and failed two
 legacy read/memo fixtures because they wrote under the worktree's `target`
 symlink, outside its repository root. The filesystem refusal was correct.
