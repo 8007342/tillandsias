@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-proc-grandchild-liveness-test-treats-missing-linux-proc-as-dead-on-darwin
+    event:
+      type: note
+      ts: "2026-10-03T16:57:34Z"
+      agent_id: macos-tlatoanis-macbook-air-opencode-20261003t165734z
+      host: tlatoanis-macbook-air
+      summary: |
+        PRE-FIX OBSERVATION CONTROL MEASURED on Darwin: parent Python launched its own sleep30 child, ps -o pid=,stat= reported42511 S, Popen.poll was null (alive), /proc/42511/stat read raised FileNotFoundError, and the existing Lua test's read-error-to-false rule reported alive=false. Raw result: {"child_poll":null,"native_ps":"42511 S","old_lua_test_alive":false,"owned_child_pid":42511,"platform":"Darwin","proc_read_error":"FileNotFoundError","verdict":"FAIL-old-liveness-observation"}. This falsifies the observer, not production cleanup. The owned child was terminated through its Popen handle and waited successfully; no broad process match or guest access. No fix/post-fix PASS yet. Next_action: coordinate lua_proc.rs ownership with1538, make the native observer reject unavailable proof, and demonstrate a cleanup mutant FAIL followed by healthy PASS.
