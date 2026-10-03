@@ -1,0 +1,23 @@
+   Compiling serde_core v1.0.228
+   Compiling lock_api v0.4.14
+   Compiling once_cell v1.21.4
+   Compiling syn v2.0.117
+   Compiling tempfile v3.27.0
+   Compiling parking_lot v0.12.5
+   Compiling tokio-macros v2.7.0
+   Compiling thiserror-impl v2.0.18
+   Compiling uuid v1.23.1
+   Compiling tokio v1.52.2
+   Compiling thiserror v2.0.18
+   Compiling tillandsias-exec v0.1.0 (/Users/tlatoani/opencode/tillandsias/crates/tillandsias-exec)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.49s
+     Running tests/executor_contract.rs (target/debug/deps/executor_contract-cac3c059ed7e80db)
+
+running 4 tests
+test managed_cancel_reaps_when_delivery_or_stdin_is_blocked ... ok
+test managed_launch_close_race_keeps_every_accepted_child_owned ... ok
+test managed_stream_is_live_ordered_byte_exact_and_capture_bounded ... ok
+test managed_unterminated_line_has_an_explicit_bound ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.41s
+

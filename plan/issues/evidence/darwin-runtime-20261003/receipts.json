@@ -1,0 +1,99 @@
+[
+  {
+    "argv": [
+      "cargo",
+      "test",
+      "-p",
+      "tillandsias-plan",
+      "--test",
+      "command_policy_doors",
+      "--",
+      "--test-threads=1",
+      "--nocapture"
+    ],
+    "status": "exited",
+    "code": 0,
+    "raw_log": "/Users/tlatoani/opencode/tillandsias/plan/issues/evidence/darwin-runtime-20261003/command_policy_doors.raw.log"
+  },
+  {
+    "argv": [
+      "cargo",
+      "test",
+      "-p",
+      "tillandsias-plan",
+      "--test",
+      "lua_observing_boundary",
+      "--",
+      "--test-threads=1",
+      "--nocapture"
+    ],
+    "status": "exited",
+    "code": 0,
+    "raw_log": "/Users/tlatoani/opencode/tillandsias/plan/issues/evidence/darwin-runtime-20261003/lua_observing_boundary.raw.log"
+  },
+  {
+    "argv": [
+      "cargo",
+      "test",
+      "-p",
+      "tillandsias-plan",
+      "--test",
+      "lua_proc",
+      "--",
+      "--test-threads=1",
+      "--nocapture"
+    ],
+    "status": "exited",
+    "code": 0,
+    "raw_log": "/Users/tlatoani/opencode/tillandsias/plan/issues/evidence/darwin-runtime-20261003/lua_proc.raw.log"
+  },
+  {
+    "argv": [
+      "cargo",
+      "test",
+      "-p",
+      "tillandsias-exec",
+      "--test",
+      "executor_contract",
+      "managed_",
+      "--",
+      "--test-threads=1",
+      "--nocapture"
+    ],
+    "status": "exited",
+    "code": 0,
+    "raw_log": "/Users/tlatoani/opencode/tillandsias/plan/issues/evidence/darwin-runtime-20261003/executor_contract.raw.log"
+  },
+  {
+    "argv": [
+      "cargo",
+      "test",
+      "-p",
+      "tillandsias-exec",
+      "--test",
+      "group_kill",
+      "--",
+      "--test-threads=1",
+      "--nocapture"
+    ],
+    "status": "exited",
+    "code": 0,
+    "raw_log": "/Users/tlatoani/opencode/tillandsias/plan/issues/evidence/darwin-runtime-20261003/group_kill.raw.log"
+  },
+  {
+    "argv": [
+      "cargo",
+      "test",
+      "-p",
+      "tillandsias-exec",
+      "--test",
+      "group_exit",
+      "--",
+      "--test-threads=1",
+      "--nocapture"
+    ],
+    "status": "exited",
+    "code": 0,
+    "raw_log": "/Users/tlatoani/opencode/tillandsias/plan/issues/evidence/darwin-runtime-20261003/group_exit.raw.log"
+  }
+]

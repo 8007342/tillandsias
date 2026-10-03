@@ -1,0 +1,19 @@
+   Compiling tillandsias-plan v0.1.0 (/Users/tlatoani/opencode/tillandsias/crates/tillandsias-plan)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.98s
+     Running tests/lua_proc.rs (target/debug/deps/lua_proc-e19e198979a3be8c)
+
+running 11 tests
+test a_grandchild_neither_times_out_nor_outlives_proc_run ... ok
+test a_piped_caller_is_not_held_by_a_leaked_grandchild ... ok
+test arm1_a_failing_program_is_a_value_and_argv_is_not_reparsed ... ok
+test arm2_both_fds_drain_concurrently_in_full ... ok
+test arm3_a_deadline_kills_the_whole_group ... ok
+test arm5_a_shell_string_is_refused ... ok
+test arm6_stdin_from_a_variable_has_no_pipe_to_invert ... ok
+test arm7_cacheable_has_no_proc ... ok
+test capture_bytes_a_clipped_capture_is_not_ok ... ok
+test programmer_errors_raise_and_operational_failures_do_not ... ok
+test the_child_environment_is_the_base_set ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.96s
+

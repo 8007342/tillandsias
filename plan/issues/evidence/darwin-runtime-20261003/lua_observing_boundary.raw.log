@@ -1,0 +1,16 @@
+   Compiling tillandsias-plan v0.1.0 (/Users/tlatoani/opencode/tillandsias/crates/tillandsias-plan)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.89s
+     Running tests/lua_observing_boundary.rs (target/debug/deps/lua_observing_boundary-1f690d8c9e89e92c)
+
+running 6 tests
+test boundary_worker ... ok
+test observing_fixed_stream_io_preserves_hook_input_and_logging_without_file_handles ... ok
+test sandboxed_classes_withhold_unmanaged_io_and_every_loader_alias ... [lua-predicate] boundary helpers preserved
+[lua-predicate] boundary helpers preserved
+ok
+test scratch_read_write_rename_delete_fail_but_rooted_read_works_in_both_classes ... ok
+test script_rooted_writes_keep_fixture_scope_and_declared_env_controls ... ok
+test script_walk_refuses_start_and_intermediate_escape_without_following_descendants ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+

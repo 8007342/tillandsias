@@ -1,0 +1,12 @@
+    Blocking waiting for file lock on build directory
+   Compiling tillandsias-exec v0.1.0 (/Users/tlatoani/opencode/tillandsias/crates/tillandsias-exec)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.63s
+     Running tests/group_exit.rs (target/debug/deps/group_exit-9d28f738212dfffb)
+
+running 3 tests
+test a_detached_grandchild_does_not_outlive_the_run ... ok
+test a_grandchild_holding_stdout_does_not_turn_success_into_a_timeout ... ok
+test the_leaders_status_is_reported_after_the_reap ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+

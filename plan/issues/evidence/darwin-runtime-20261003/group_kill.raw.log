@@ -1,0 +1,10 @@
+   Compiling tillandsias-exec v0.1.0 (/Users/tlatoani/opencode/tillandsias/crates/tillandsias-exec)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.54s
+     Running tests/group_kill.rs (target/debug/deps/group_kill-454bd776919d1264)
+
+running 2 tests
+test a_grouped_deadline_kills_the_grandchild ... ok
+test control_an_ungrouped_deadline_leaves_the_grandchild_running ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.02s
+
