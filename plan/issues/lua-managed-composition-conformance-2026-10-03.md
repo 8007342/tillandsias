@@ -155,6 +155,56 @@ selected violating file. Its directly measured false-green receipt and
 exact outside fixture are retained; `1547-ynn5` awaits contract review.
 Moving the fixture does not repair that guard behavior or close its packet.
 
+## Landing observer refutation and bounded test correction
+
+The first serialized landing attempt gated merged candidate
+`21eb9f88c5cf13cdc3d5f9de252c8c4473f099e5` at base `c78493e4a`, then evicted
+PR212 on one existing callback-cleanup control: workspace2891/new-red1/
+tolerated0/stale0. The queue wrapper exited0 because it completed its queue,
+not because composition landed. PR212 returned to DRAFT, READY was withdrawn,
+and no status closure or test ownership release followed. The queue deletes
+its temporary full gate log; the full workspace transcript and retained PR
+diagnostic tail were copied byte-for-byte before rerunning, not reconstructed.
+
+Parent failure-only instrumentation kept the immediate-live assertion intact.
+With8 concurrent Rust test processes,64 trials returned62 real exited0 and2
+exited101. One failed first read observed an acknowledged grandchild in R,
+then the same start identity in Z after3.955us. The other first read observed
+Linux X (dead), then ENOENT after1.681us. Both original assertions still
+FAILED; their exact diagnostics and test-binary hash are retained. A concurrent
+44-test target passed. Independent Python sampling of256 actual cleanup runs
+found0 immediate-live/0 live-at100ms/0 unexpected statuses; those negatives
+alone did not reproduce or refute the landing red. The Python source is kept
+byte-for-byte as `measure-callback-cleanup.py.source.txt` without a dependency,
+source-injection or guard waiver. A measurement-script JSON parser initially
+refused the builder's stdout banner; its failure is retained too.
+
+The correction is confined to the Linux test observer: parse proc stat state
+and start identity, recognize Z/X as not executing, and poll up to100ms for
+the acknowledged killed identity to stop or disappear. Non-ENOENT read errors
+now fail instead of counting as death. This does not claim a precise OS exit
+instant or grandchild waitpid. Existing1.1s delayed-marker checks and their
+long-deadline positive control stay unchanged. The new
+`cleanup_observer_rejects_acknowledged_live_group_before_accepting_its_stop`
+control starts a real acknowledged child+grandchild group held alive until
+this fixture kills it; it must reject each live identity for the full bound,
+then accept actual kill/direct-child-wait cleanup. Production supervisors,
+groupkill, reap, callbacks, process APIs and policy are untouched.
+
+The8-delegate cycle limit is exhausted, so the parent owns this mechanically
+bounded integration correction rather than invoking a ninth agent. After-change
+stress/known-live controls, targeted verification, full forced gate, preflight
+and serialized target+candidate landing still decide readiness. Neither a
+green retry nor queue execution success substitutes for remote ancestry.
+
+After the observer correction, the same64-trial/8-process stress returned64
+real exited0,0 exited101 and0 absent/other statuses. The independently executed
+known-live control passed1/1, checking live child and grandchild rejection
+before kill and stopped-identity acceptance after actual cleanup. All64 before
+and64 after typed receipts and the after binary hash are retained separately;
+no failing stream was overwritten. This is observer conformance evidence,
+not a substitute for the forced integrated/landing gates still pending.
+
 Broader plan-library verification initially passed425 tests and failed two
 legacy read/memo fixtures because they wrote under the worktree's `target`
 symlink, outside its repository root. The filesystem refusal was correct.

@@ -191,25 +191,124 @@ time.sleep(1.1); open('child-marker','w').write('survived')
 p.wait()
 "#;
 
+    // SIGKILL plus direct-child wait is not a waitpid of the grandchild. A
+    // /proc read may catch its final R -> Z transition, or the Linux X (dead)
+    // state. Preserve its start identity and a short bound, not a single-read
+    // scheduling assertion (1538-pwdr's measured landing/stress refutation).
+    fn acknowledged_task_stopped(ack: &serde_json::Value) -> bool {
+        let pid = ack["pid"].as_u64().unwrap();
+        match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+            Ok(stat) => {
+                let (_, details) = stat.rsplit_once(") ").expect("process stat format");
+                let fields: Vec<_> = details.split_whitespace().collect();
+                fields[19] != ack["start"].as_str().unwrap() || matches!(fields[0], "Z" | "X")
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
+            Err(e) => panic!("cannot observe acknowledged task {pid}: {e}"),
+        }
+    }
+
+    fn acknowledged_task_stopped_by(ack: &serde_json::Value, deadline: Instant) -> bool {
+        loop {
+            if acknowledged_task_stopped(ack) {
+                return true;
+            }
+            if Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
     fn assert_acknowledged_tasks_stopped(f: &ScriptFixture) {
+        let deadline = Instant::now() + Duration::from_millis(100);
         for name in ["child", "grandchild"] {
             let ack: serde_json::Value = serde_json::from_str(
                 &std::fs::read_to_string(f.dir.path().join(format!("{name}-ack")))
                     .expect("producer must acknowledge before cancellation"),
             )
             .unwrap();
-            let pid = ack["pid"].as_u64().unwrap();
-            if let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) {
-                let fields: Vec<_> = stat.split_whitespace().collect();
-                assert!(
-                    fields[21] != ack["start"].as_str().unwrap() || fields[2] == "Z",
-                    "{name} still running: {stat}"
-                );
-            }
+            assert!(
+                acknowledged_task_stopped_by(&ack, deadline),
+                "{name} still running after 100ms: {ack}"
+            );
         }
         std::thread::sleep(Duration::from_millis(1200));
         for name in ["child-marker", "grandchild-marker"] {
             assert!(!f.dir.path().join(name).exists(), "delayed {name}");
+        }
+    }
+
+    #[test]
+    fn cleanup_observer_rejects_acknowledged_live_group_before_accepting_its_stop() {
+        use std::os::unix::process::CommandExt;
+        // The direct child remains unreaped until Drop, so this group identity
+        // cannot be reused before this fixture's own kill-and-wait cleanup.
+        struct OwnedGroup(std::process::Child);
+        impl Drop for OwnedGroup {
+            fn drop(&mut self) {
+                unsafe { libc::killpg(self.0.id() as libc::pid_t, libc::SIGKILL) };
+                self.0.wait().expect("reap observer control child");
+            }
+        }
+        let f = ScriptFixture::new();
+        let producer = f.write(
+            "observer.py",
+            r#"import os,sys,time,subprocess,json
+def identity():
+ return {'pid':os.getpid(),'pgid':os.getpgrp(),'start':open('/proc/self/stat').read().split()[21]}
+if len(sys.argv)>1:
+ open('grandchild-ack','w').write(json.dumps(identity()))
+else:
+ subprocess.Popen([sys.executable,__file__,'grandchild'])
+ while not os.path.exists('grandchild-ack'): time.sleep(.001)
+ open('child-ack','w').write(json.dumps(identity()))
+while True: time.sleep(1)
+"#,
+        );
+        let group = OwnedGroup(
+            std::process::Command::new("python3")
+                .arg(producer)
+                .current_dir(f.dir.path())
+                .stdout(std::process::Stdio::null())
+                .process_group(0)
+                .spawn()
+                .expect("start known-live observer control"),
+        );
+        let ready = Instant::now() + Duration::from_secs(3);
+        let acks = loop {
+            let acks: Option<Vec<(&str, serde_json::Value)>> = ["child", "grandchild"]
+                .into_iter()
+                .map(|name| {
+                    std::fs::read_to_string(f.dir.path().join(format!("{name}-ack")))
+                        .ok()
+                        .and_then(|contents| serde_json::from_str(&contents).ok())
+                        .map(|ack| (name, ack))
+                })
+                .collect();
+            if let Some(acks) = acks {
+                break acks;
+            }
+            assert!(
+                Instant::now() < ready,
+                "observer control did not acknowledge"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        };
+        for (name, ack) in &acks {
+            assert!(!acknowledged_task_stopped(ack), "known-live {name} hidden");
+            assert!(
+                !acknowledged_task_stopped_by(ack, Instant::now() + Duration::from_millis(100)),
+                "known-live {name} hidden by bounded observation"
+            );
+        }
+        drop(group);
+        let deadline = Instant::now() + Duration::from_millis(100);
+        for (name, ack) in &acks {
+            assert!(
+                acknowledged_task_stopped_by(ack, deadline),
+                "{name} survived control cleanup"
+            );
         }
     }
 
