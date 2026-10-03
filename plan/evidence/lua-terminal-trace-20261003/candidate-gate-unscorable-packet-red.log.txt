@@ -1,0 +1,20 @@
+ok:no-competing-gate
+[tillandsias-builder] Re-execing inside 'tillandsias-builder' toolbox...
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+[0;32m[build][0m Git hooks installed (pre-push gate is now active)
+[0;32m[build][0m Skipping host Podman registry setup for check-only dispatch (765-uti9)
+[0;32m[build][0m Skipping host dev cache setup for check-only dispatch (765-uti9)
+[0;36m[build][0m Staging router sidecar (build artifact — not committed)...
+[build-sidecar] up-to-date: /home/tlatoani/codex/tillandsias-lua-work/1539-dt84/images/router/tillandsias-router-sidecar
+[0;36m[build][0m Checking Rust formatting...
+[0;32m[build][0m Formatting check passed
+[0;36m[build][0m Fast refusals: sub-second deciders before any compile (1009-gccx)...
+[0;32m[build][0m ok:gate-memory:55851MB available, floor 1024MB
+could-not-run:competing-gate:inside-dispatch (the caller reports it is INSIDE the dispatch, where the host side is unreadable — the answerable call site is the wrapper's, not this one; NOTHING TO FIX HERE)
+ok:fragment-ts-skew:0 checked, 0 past-noted
+violation:scorable-obligation-missing:1
+  plan/index.d/20261003t235000z-1549-i4va-affordance-vanished-input-audit-macuahuitl.yaml: packet 'audit-affordance-scanner-selected-input-vanishing-during-read' carries no scorable obligation — add a verifiable_closure naming a litmus:<test>, or an explicit 'unscoreable: <reason>' (977-448j). IF THIS PACKET'S DELIVERABLE IS THE TEST ITSELF, pinning a name nothing defines yet will be refused by 885-92iu — use 'unscoreable: unpinnable-until-the-guard-exists', name the future litmus filename in it, and write that litmus in the same commit as the thing it tests (1136-n8sh)
+  A new row that says nothing about how it could be scored is the row
+  rung 4 could not backfill. State the pin, or state why there is none.
+[0;31m[build][0m this change files a packet with no scorable obligation — name a litmus:<test> in its verifiable_closure (977-448j)

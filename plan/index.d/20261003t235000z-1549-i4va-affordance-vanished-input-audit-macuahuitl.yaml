@@ -26,6 +26,7 @@ packets:
       whose separate Lua pipeline guard contract correction awaits approval.
       This packet authorizes only deterministic audit/characterization and a
       proposed smallest contract correction, not a gate refusal rewrite.
+    unscoreable: "Deterministic audit report; a vanished-input contract pin is unpinnable-until-the-guard-exists. If a production correction is approved, introduce openspec/litmus-tests/litmus-affordance-selected-input-vanishes.yaml with its implementation, not an imaginary test now."
     verifiable_closure:
       - "Pin the scanner source and selected-input enumeration, then deterministically reproduce disappearance after enumeration or report why this observation cannot be reproduced."
       - "Record actual typed process status plus separate output/error bytes; known-clean and known-refusal controls must retain their assertions."

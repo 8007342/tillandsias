@@ -1,4 +1,5 @@
 dc132730858f75c6208e69ed468aaef2f32785b8c15a8dd6804ce7a2b5344574  plan/evidence/lua-terminal-trace-20261003/before-toolbox.sh.txt
+d4c365d3b33cce63de67737b347911849bda203ed40fb435ad43b1ee52c1d374  plan/evidence/lua-terminal-trace-20261003/candidate-gate-unscorable-packet-red.log.txt
 63a0bd74cfe81e63b0eceba98e52d08314e8aa9162685779b98ab7d8f4db15ea  plan/evidence/lua-terminal-trace-20261003/claim-gate-corrected.log.txt
 b92a366b3bc86b10d3c46df6018050c7cba7f3caee7e78bc4318f929be6ac916  plan/evidence/lua-terminal-trace-20261003/clippy-toolbox.sh.txt
 a671656c1ff28335ca9fbf7fe4b9a9118dc6ee9e82ab130ddfab429f424aba6c  plan/evidence/lua-terminal-trace-20261003/executor.log.txt
@@ -17,6 +18,7 @@ ae65cc65b6eca8d85251968027fb27314fa15bc8c420c62ae7aa751f5aad8566  plan/evidence/
 e37b42930fcfaf8cfb54585b7574d4ad367f478886182869782cc44104399a9a  plan/evidence/lua-terminal-trace-20261003/trace-control.lua.txt
 6931d84262233dca574a721dc9054a9df22e4133327d5f35cce10ad234ea22be  plan/evidence/lua-terminal-trace-20261003/verify-toolbox.sh.txt
 b569b0c98ea3133c7252b4b8ea6b39b7b353813df0dd5f5c412c355691424112  plan/issues/evidence/lua-terminal-trace-20261003/builder-rustc.txt
+84c3aed8560f07d46436acc85fc686f58e01dc85c27139d996ca085bca9ed36b  plan/issues/evidence/lua-terminal-trace-20261003/candidate-gate-unscorable-packet-red.json
 23591bc2f5f771389b3999f77526affe44e04390f3a9a5e8c0c4493a0d836822  plan/issues/evidence/lua-terminal-trace-20261003/citation-control-after.json
 193f21b3099267d50f2e9beddc8f653be37c001b9d2de81542c799b28c3d8d63  plan/issues/evidence/lua-terminal-trace-20261003/citation-control-before.json
 baf0ca04c069f725a5e8014fb0e55a94a8ad08879fa4b5985a4dacffcd88373e  plan/issues/evidence/lua-terminal-trace-20261003/claim-gate-corrected.json

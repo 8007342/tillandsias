@@ -112,6 +112,11 @@ The evidence archive is byte-exact plaintext. Raw logs contain original trailing
 whitespace and final blank lines, so a whole-archive `git diff --check` reports
 those diagnostic bytes; runtime/test source whitespace is checked separately.
 No diagnostic bytes are stripped and no tracked-binary guard waiver is added.
+The first full candidate gate actually exited1 in4625ms: the new investigation
+packet lacked an explicit scorable/unscoreable obligation. Its audit-only
+deliverable now names an honest unscoreable reason and the future contract
+test path, rather than claiming a nonexistent litmus test. Preserve that gate
+receipt and log before retry; no runtime source or gate contract is changed.
 
 ## Launcher correction and provenance
 

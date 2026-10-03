@@ -1,0 +1,1 @@
+{"run_id":"f90e810b-96b4-4315-90c6-13bfdfa32b0f","status":"exited","code":1,"signal":null,"ok":false,"stdout":"","stderr":"","truncated":false,"wall_ms":4625,"argv":["bash","/tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/candidate-gate.sh"],"policy":{"decision":"allow","rule_id":"default","why":null,"remedy":null}}
