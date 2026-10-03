@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: progress
+      ts: "2026-10-03T19:10:40Z"
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      host: macuahuitl
+      summary: |
+        Parent refutation of the landing red: failure-only instrumentation retained the original immediate-live assertion unchanged.64 callback-cleanup trials with8 concurrent test processes measured62 exited0 and2 exited101, with0 absent/other statuses. One failure first observed grandchildR, then the same acknowledged start identity in Z after3.955us. The other first observed LinuxX (dead), then ENOENT after1.681us. Both original assertions still FAILED and their exact stdout/stderr records, process identities and test-binary SHA-256 are preserved; this was not a green-by-retry or tolerance. The simultaneously executed complete44-test target passed, and the independent Python256-run sampler had0 immediate-live/0 live-at100ms/0 unexpected statuses; those negatives alone did not refute the landing failure, which the Rust diagnostic controls now reproduced directly.
+
+        Parent applies only the Linux test observer correction: parse the actual proc stat state/start fields, count Z/X as not executing, allow up to100ms for the already-killed acknowledged identity to become stopped or absent, and refuse to treat a non-ENOENT read error as evidence of death. Existing1.1s delayed-marker negatives and their long-deadline positive control remain unchanged. A new real acknowledged known-live child+grandchild group checks that the observer rejects BOTH live identities for its full100ms bound, then accepts actual group-kill/direct-child-wait cleanup. Production scope supervision, groupkill, reaping, callbacks and APIs are unchanged. There is no precise OS-exit-time or grandchild-waitpid claim. This is a bounded test scheduling correction based on real transitions, not widening runtime semantics or hiding a survivor.
+
+        Eight delegated invocations are exhausted; the parent owns this measured integration-only test correction and independent re-verification. The after-change64-trial repeat and known-live control are running; no after green is yet claimed. PR212 stays DRAFT and not landed/closed until all targeted, forced integration, preflight and serialized target+candidate gates pass again. Native1543/1544 and Mac1543-f44v remain dependency/ownership gated, parent1384 and tracing1539 remain open, and1547 unreadable-selection contract review is separate. Main/dirty original checkout boundaries and warm target link remain preserved. Next_action:archive before/after raw receipts, finish independent observer negative control, re-gate and push the corrected candidate, then retry READY and serialized landing with remote ancestry as the discriminator; wrapper exited0 is not landing evidence.
