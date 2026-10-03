@@ -1,0 +1,19 @@
+ok:no-competing-gate
+[tillandsias-builder] Re-execing inside 'tillandsias-builder' toolbox...
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+ok:   a host below the floor refuses by name, naming the floor and the reading
+ok:   NC1: a host above the floor is unaffected — no new refusal appears
+ok:   the default floor (1024MB) is well under a completing host's headroom (11698MB)
+ok:   a meminfo without MemAvailable is could-not-run, not a verdict (MemFree would under-report)
+ok:   and it ends on the word a scorer knows, so the inability is skipped rather than scored a refusal (1354-apns)
+ok:   a real below-floor refusal stays a refusal, carries no skip line, and exits non-zero (1354-apns)
+ok:   a kernel OOM record yields refused:gate:oom-killed
+ok:   NC2: an OOM naming a different victim is NOT reported as this gate's kill
+ok:   a readable, quiet journal answers ok:no-oom-record
+ok:   an unreadable journal is could-not-run — never a confident not-OOM
+ok:   the memory floor is checked before the first compile, where it can still save the run
+ok:   build.sh consults the OOM record when a child dies on a signal
+ok:   the land driver consults the OOM record when the gate produced no verdict
+ok:   NC2 structurally: the driver consults the OOM record only on the no-failing-line path
+PASS: gate memory refusal and OOM post-mortem 14/14 (1176-fn2p)

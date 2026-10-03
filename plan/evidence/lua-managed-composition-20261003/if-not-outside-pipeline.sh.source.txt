@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+if ! printf "%s" "foo" | grep -q "foo"; then
+    exit 1
+fi

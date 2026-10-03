@@ -131,6 +131,30 @@ were already invoked; this mechanical integration correction stayed with
 the parent rather than creating a ninth worker. Native execution of the
 fixture-location correction and a complete forced retry remain unmeasured.
 
+The complete forced gate at `46ff10f0ef721518750c242cd4b41c75a6ef1136`
+then passed: actual run `0f15b0dc-d176-45c7-9150-9e06f19bbe4a` exited0,
+ok=true,1007450ms including targeted preparation; phases totalled951s.
+All2891 workspace tests passed with0 new-red/0 tolerated/0 stale. Only
+plan fragments were subsequently merged; prepush check confirmed gate-fresh
+and the startup boundary was preserved. First published source checkpoint
+`09fc59740d047d5179488cb74131f6719ddf5451` is draft PR212, not READY.
+
+Independent adjacent controls also found the if-not-pipeline fixture red
+and pilot-lua-ports at4/5 because their scratch inputs traverse the same
+external target link. Those controls are outside the default full gate;
+its green is not all-litmus proof. Pushed ownership correction `288b37249`
+permits only unique repository-local scratch for these two fixtures. Source
+was not edited while gated. Parent measured the original failures, then
+if-not at3/3 and pilot at5/5 after their data-location changes, retaining
+all parser, byte-agreement,200k-writer, sandbox-env, stale-runner and
+retirement checks. Builder-context re-verification and the final integrated
+forced retry remain pending before READY/landing.
+
+The production if-not decider itself separately emits ok for an unreadable
+selected violating file. Its directly measured false-green receipt and
+exact outside fixture are retained; `1547-ynn5` awaits contract review.
+Moving the fixture does not repair that guard behavior or close its packet.
+
 Broader plan-library verification initially passed425 tests and failed two
 legacy read/memo fixtures because they wrote under the worktree's `target`
 symlink, outside its repository root. The filesystem refusal was correct.
