@@ -161,6 +161,9 @@ pub mod msg_serve;
 // `--dial-once`: the host's X25519 static in its own Vault, the peer record in
 // plan/fleet/peers/, and the Noise XX session pinned to that directory.
 pub mod msg_identity;
+// @trace order:1548-cii8 — `fleet peers check`: the loud schema check over
+// plan/fleet/peers/ (extends the 1506-32k5 record).
+pub mod fleet_peers;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
@@ -348,6 +351,12 @@ fn main() {
             );
             std::process::exit(2);
         }
+    }
+
+    // Order 1548-cii8: `fleet peers check [--peers DIR]`, a pure read of the
+    // peers directory; dispatched early and exits.
+    if user_args.first().map(String::as_str) == Some("fleet") {
+        std::process::exit(fleet_peers::run_cli(&user_args[1..]));
     }
 
     // Order 1506-q7ab: `--msg-serve [--once]`, the same-host mover. Dispatched

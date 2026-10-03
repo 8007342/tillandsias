@@ -248,6 +248,8 @@ specs:
   # 1506-32k5. Same fallback: the host identity and the pinned Noise XX
   # session (--msg-serve --mint / --accept-once / --dial-once).
   - litmus:fleet-msg-identity
+  # 1548-cii8. Same fallback: `fleet peers check` over plan/fleet/peers/.
+  - litmus:fleet-peers-check
   coverage_ratio: 75
   last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher

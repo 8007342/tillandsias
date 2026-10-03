@@ -1,0 +1,59 @@
+# @trace order:1548-cii8, openspec/changes/fleet-wan-rendezvous/specs/fleet-trust/spec.md
+#
+# Pins `tillandsias fleet peers check`: the schema of plan/fleet/peers/<host>.yaml
+# (the one record 1506-32k5 starts and 1548-cii8 completes) and its named
+# refusals, driven through the real binary over temp peers directories whose
+# good records are written by the real `--msg-serve --mint`. Bound under
+# ci-release so a gate actually executes it; the fleet-trust capability is
+# still an unsynced change (openspec/changes/fleet-wan-rendezvous/), so it has
+# no spec_id of its own yet.
+name: litmus:fleet-peers-check
+spec: ci-release
+phase: pre-build
+description: >
+  One complete peer record passes; a directory with a record missing
+  ssh_host_ca_pub, one with host Yoga_Laptop, one whose noise_fp does not
+  hash its noise_pub, and one with an email in a field yields exactly four
+  named refusals, each with a why and a remedy; a duplicate noise_pub, a
+  record filed under another name, a malformed owner.yaml and an empty
+  directory are each refused; fields the check does not own are kept.
+  Mutation control: TILLANDSIAS_FLEET_PEERS_LAX=1 skips the fp check and
+  the fp predicate fails.
+severity: critical
+size: long
+
+# PRE-FIX RESULT: FAILS — there is no `fleet` verb, so the first arm never
+# prints ok:fleet-peers:1-records.
+
+preconditions:
+  - workspace contains scripts/test-fleet-peers-check.sh
+  - workspace contains crates/tillandsias-headless/src/fleet_peers.rs
+  - cargo is available in PATH (the fixture builds tillandsias)
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-fleet-peers-check.sh && test -x scripts/test-fleet-peers-check.sh && echo 'ok: fleet-peers-check-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: fleet-peers-check-fixture-parses"
+
+  - step: "four arms (good, four, more, foreign) and one control pass by name"
+    command: "out=$(bash scripts/test-fleet-peers-check.sh 2>&1); rc=$?; case \"$out\" in (*'ok:fleet-peers-check:4/4+1-controls'*) [ \"$rc\" = 0 ] && echo 'ok: fleet-peers-check 4/4+1' ;; (*) grep -E '^(FAIL|fail:)' <<<\"$out\"; exit 1 ;; esac"
+    timeout_ms: 900000
+    expected_behavior: "ok: fleet-peers-check 4/4+1"
+
+observability:
+  traces:
+    - "@trace order:1548-cii8"
+    - "@trace openspec/changes/fleet-wan-rendezvous/design.md#decision-6"
+  expected_log: "ok:fleet-peers-check:4/4+1-controls"
+  log_fields:
+    spec: "ci-release"
+    test: "fleet-peers-check"
+    artifact: "crates/tillandsias-headless/src/fleet_peers.rs"
+
+rollback:
+  on_failure: >
+    A named arm or the control failed. Re-run `bash scripts/test-fleet-peers-check.sh`
+    and read its FAIL lines. Do not weaken a refusal, add a second name for
+    noise_fp, or skip an empty directory to make it pass.
+  command: "bash scripts/test-fleet-peers-check.sh"

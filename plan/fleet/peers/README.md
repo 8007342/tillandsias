@@ -28,6 +28,9 @@ The private half never leaves the host: it lives at
 `secret/fleet/msg/static` in that host's own Vault, which no forge policy can
 read.
 
+The complete schema and `tillandsias fleet peers check` (which names every
+refusal with a why and a remedy) are documented in `plan/fleet/README.md`.
+
 ## How a record is used
 
 A daemon loads every `*.yaml` here. A record is NOT trusted — its key reads
