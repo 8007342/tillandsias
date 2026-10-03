@@ -1,0 +1,12 @@
+command=bash scripts/test-native-lint-attested.sh
+timestamp_utc=2026-10-03T17:19:54Z
+ok:   arm 1: the incident's change with no attestation is refused, naming the accountable host
+ok:   arm 2: a failing native clippy writes no attestation; the relay still refuses
+ok:   arm 3: clippy --all-targets -D warnings ran, attested; admitted as attested-not-re-run
+ok:   arm 4: an edit after attesting makes the attestation stale — refused
+ok:   arm 5: a linux attestation of a darwin crate does not count
+ok:   arm 6: a change outside the gated crates needs no attestation
+ok:   arm 7: land-on-platform-branch.sh runs the check after the integrate, before the gate (line 312)
+ok:   arm 8: a named override lands as recorded debt; an empty one waits
+ok:native-lint-attested-fixture:8/8
+exit=0
