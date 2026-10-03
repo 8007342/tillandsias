@@ -1,0 +1,1 @@
+{"run_id":"f57d86ae-8c4d-4390-9b0b-fc8046c3f19b","status":"exited","code":1,"signal":null,"ok":false,"stdout":"","stderr":"","truncated":false,"wall_ms":15919,"argv":["bash","/tmp/opencode/lua-composition-parent-20261003.4wzwBC/tmp/prepare-and-force-composition.sh"],"policy":{"decision":"allow","rule_id":"default","why":null,"remedy":null}}

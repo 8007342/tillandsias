@@ -1,0 +1,1 @@
+{"run_id":"2efc6d78-d85b-4a38-9fd3-c21ac5b9ead2","status":"exited","code":0,"signal":null,"ok":true,"stdout":"","stderr":"","truncated":false,"wall_ms":279563,"argv":["bash","/tmp/opencode/lua-composition-parent-20261003.4wzwBC/tmp/land-composition.sh"],"policy":{"decision":"allow","rule_id":"default","why":null,"remedy":null}}

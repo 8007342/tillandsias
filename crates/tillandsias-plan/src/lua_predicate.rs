@@ -225,13 +225,23 @@ pub fn policy_gate(
 /// design section 4.1): one process, run to completion, returned as a VALUE.
 /// A non-zero exit, a signal and a timeout are all DATA; only programmer
 /// errors raise. proc.run remains synchronous; the scoped script runner adds
-/// async proc.spawn/line delivery (1534-puyz), not chain/select/all.
+/// async proc.spawn/line delivery (1534-puyz) and composition (1538-pwdr).
 pub(crate) enum PreparedProc {
     Refused(LuaTable),
     Command {
         argv: Vec<String>,
         command: tillandsias_exec::Command,
     },
+}
+
+// @trace order:1538-pwdr
+// No Lua values survive validation. In particular, authorization may consume
+// consent only when a snapshotted stage is actually about to execute.
+pub(crate) struct ProcSnapshot {
+    pub argv: Vec<String>,
+    pub command: tillandsias_exec::Command,
+    pub cwd: PathBuf,
+    pub explicit_stdin: bool,
 }
 
 // @trace order:1534-puyz
@@ -242,6 +252,14 @@ pub(crate) fn prepare_proc(
     caller: &str,
     managed_group: bool,
 ) -> LuaResult<PreparedProc> {
+    authorize_proc(lua, validate_proc(spec, caller, managed_group)?, caller)
+}
+
+pub(crate) fn validate_proc(
+    spec: LuaTable,
+    caller: &str,
+    managed_group: bool,
+) -> LuaResult<ProcSnapshot> {
     let err = |m: String| mlua::Error::RuntimeError(format!("{caller}: {m}"));
 
     for pair in spec.clone().pairs::<LuaValue, LuaValue>() {
@@ -337,11 +355,13 @@ pub(crate) fn prepare_proc(
         cmd = cmd.env(k, v);
     }
 
-    if let Some(p) = &cwd_path {
-        cmd = cmd.current_dir(p);
-    } else if let Ok(root) = find_repo_root() {
-        cmd = cmd.current_dir(root);
-    }
+    let cwd = match cwd_path {
+        Some(p) => p,
+        None => find_repo_root()
+            .or_else(|_| std::env::current_dir())
+            .map_err(|e| err(format!("cannot resolve effective cwd: {e}")))?,
+    };
+    cmd = cmd.current_dir(&cwd);
 
     match spec.get::<LuaValue>("env")? {
         LuaValue::Nil => {}
@@ -367,16 +387,19 @@ pub(crate) fn prepare_proc(
         }
     }
 
-    match spec.get::<LuaValue>("stdin")? {
-        LuaValue::Nil => {}
-        LuaValue::String(s) => cmd = cmd.stdin_bytes(s.as_bytes().to_vec()),
+    let explicit_stdin = match spec.get::<LuaValue>("stdin")? {
+        LuaValue::Nil => false,
+        LuaValue::String(s) => {
+            cmd = cmd.stdin_bytes(s.as_bytes().to_vec());
+            true
+        }
         other => {
             return Err(err(format!(
                 "stdin must be a string, not a {}",
                 other.type_name()
             )));
         }
-    }
+    };
 
     let timeout_ms: u64 = match spec.get::<LuaValue>("timeout_ms")? {
         LuaValue::Nil => PROC_RUN_DEFAULT_TIMEOUT_MS,
@@ -403,9 +426,9 @@ pub(crate) fn prepare_proc(
     };
     cmd = cmd.group(group);
     if managed_group && !group {
-        return Err(err(
-            "group=false is not supported by script-owned proc.spawn".into(),
-        ));
+        return Err(err(format!(
+            "group=false is not supported by script-owned {caller}"
+        )));
     }
 
     // Per-fd capture cap (order 1443-esm5). Unset keeps the executor's default
@@ -421,7 +444,23 @@ pub(crate) fn prepare_proc(
         }
     }
 
-    if let Some(d) = policy_gate(&argv, cwd_path.as_deref(), caller) {
+    Ok(ProcSnapshot {
+        argv,
+        command: cmd,
+        cwd,
+        explicit_stdin,
+    })
+}
+
+pub(crate) fn authorize_proc(
+    lua: &Lua,
+    snapshot: ProcSnapshot,
+    caller: &str,
+) -> LuaResult<PreparedProc> {
+    let ProcSnapshot {
+        argv, command, cwd, ..
+    } = snapshot;
+    if let Some(d) = policy_gate(&argv, Some(&cwd), caller) {
         let t = lua.create_table()?;
         let echo = lua.create_table()?;
         for (i, a) in argv.iter().enumerate() {
@@ -443,7 +482,7 @@ pub(crate) fn prepare_proc(
         t.set("remedy", d.remedy.unwrap_or_default())?;
         return Ok(PreparedProc::Refused(t));
     }
-    Ok(PreparedProc::Command { argv, command: cmd })
+    Ok(PreparedProc::Command { argv, command })
 }
 
 fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
@@ -1077,8 +1116,8 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
             let (k, _) = pair.map_err(|e| LuaError::VmError(format!("globals: {e}")))?;
             if let LuaValue::String(name) = k {
                 let name = name.to_string_lossy().to_string();
-                if !CACHEABLE_STDLIB_GLOBALS.contains(&name.as_str())
-                    && !(observing
+                if !(CACHEABLE_STDLIB_GLOBALS.contains(&name.as_str())
+                    || (observing
                         && [
                             "os",
                             "io",
@@ -1088,7 +1127,7 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                             "collectgarbage",
                             "coroutine",
                         ]
-                        .contains(&name.as_str()))
+                        .contains(&name.as_str())))
                 {
                     drop.push(name);
                 }
@@ -1561,10 +1600,14 @@ mod tests {
     #[test]
     fn re_registering_a_predicate_invalidates_its_memo() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let rel = format!("target/lua-source-replace-{}.txt", std::process::id());
-        let file = root.join(&rel);
-        std::fs::create_dir_all(file.parent().expect("parent")).expect("mkdir target");
-        std::fs::write(&file, "same").expect("write unchanged input");
+        // target/ may be a warm-cache symlink outside this checkout. The real
+        // repository-bound read must remain inside it; never relax containment.
+        let fixture = tempfile::Builder::new()
+            .prefix("lua-source-replace-")
+            .tempfile_in(&root)
+            .expect("create repository-local input");
+        let rel = fixture.path().file_name().unwrap().to_str().unwrap();
+        std::fs::write(fixture.path(), "same").expect("write unchanged input");
 
         let mut reg = PredicateRegistry::new();
         reg.register(
@@ -1573,8 +1616,8 @@ mod tests {
             "function changed(p) return fs.read(p) == 'same' end",
         )
         .expect("register first source");
-        assert!(reg.eval("changed", &rel).expect("first evaluation"));
-        assert!(reg.eval("changed", &rel).expect("cached evaluation"));
+        assert!(reg.eval("changed", rel).expect("first evaluation"));
+        assert!(reg.eval("changed", rel).expect("cached evaluation"));
         assert_eq!(reg.cache_hits, 1);
 
         reg.register(
@@ -1583,9 +1626,8 @@ mod tests {
             "function changed(p) return fs.read(p) == 'different' end",
         )
         .expect("register replacement source");
-        assert!(!reg.eval("changed", &rel).expect("replacement evaluation"));
+        assert!(!reg.eval("changed", rel).expect("replacement evaluation"));
         assert_eq!(reg.cache_hits, 1, "replacement may not be a cache hit");
-        std::fs::remove_file(file).expect("remove probe");
     }
 
     /// The read log captures observed bytes before a later file replacement.
@@ -1593,10 +1635,12 @@ mod tests {
     #[test]
     fn read_log_authenticates_bytes_returned_to_lua() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let rel = format!("target/lua-read-log-{}.txt", std::process::id());
-        let file = root.join(&rel);
-        std::fs::create_dir_all(file.parent().expect("parent")).expect("mkdir target");
-        std::fs::write(&file, "before").expect("write first version");
+        let fixture = tempfile::Builder::new()
+            .prefix("lua-read-log-")
+            .tempfile_in(&root)
+            .expect("create repository-local input");
+        let rel = fixture.path().file_name().unwrap().to_str().unwrap();
+        std::fs::write(fixture.path(), "before").expect("write first version");
 
         let reads = ReadLog::default();
         let lua = build_environment_logged(PredicateClass::Cacheable, reads.clone())
@@ -1606,7 +1650,7 @@ mod tests {
             .eval()
             .expect("read from Lua");
         assert_eq!(observed, "before");
-        std::fs::write(&file, "after").expect("replace after read");
+        std::fs::write(fixture.path(), "after").expect("replace after read");
 
         let inputs = reads.lock().expect("read log").clone();
         assert_eq!(inputs.len(), 1, "one read must be recorded");
@@ -1620,7 +1664,6 @@ mod tests {
             .still_valid(),
             "a verdict over old bytes cannot validate against new bytes"
         );
-        std::fs::remove_file(file).expect("remove probe");
     }
 
     /// Review of 1367-q9yc (b): the filesystem root is never a repository root,

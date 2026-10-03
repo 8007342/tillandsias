@@ -22,7 +22,9 @@
 #   5 DELETED    both .sh existed at the pinned baseline and are gone, and
 #                both .lua are present (no count: see the arm)
 #
-# Hermetic: scratch under target/plan-scratch; the live tree is only read.
+# Hermetic: unique scratch is physically inside the repository, not through
+# target/ (which may be an external warm-cache symlink); the live tree is read.
+# @trace order:1538-pwdr
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
@@ -43,8 +45,7 @@ fi
 # red for every relay. 5c419a98f is land118's first parent, the last trunk
 # commit that carries both .sh. Override with TILLANDSIAS_PILOT_PARENT.
 PARENT="${TILLANDSIAS_PILOT_PARENT:-5c419a98fd245bbeee63f2cf9c70956cbd5e22c9}"
-mkdir -p target/plan-scratch
-W="$(mktemp -d "$ROOT/target/plan-scratch/pilot-lua.XXXXXX")"; trap 'rm -rf "$W"' EXIT INT TERM
+W="$(mktemp -d "$ROOT/.pilot-lua.XXXXXX")"; trap 'rm -rf "$W"' EXIT INT TERM
 
 # ── ARM 1: SEAM ────────────────────────────────────────────────────────────
 a1_ok=1; a1_why=""

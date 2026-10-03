@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # @trace plan 795-imz3
+# @trace order:1538-pwdr (repository-contained integration fixture inputs)
 # Proves that the if-not-pipeline gate behaves correctly.
 #
 # PORTED to Lua (1525-c6jm): the gate is scripts/lua/check-no-spawn-in-if-not.lua,
 # run through the one runner (`script run`); no runner is a loud
-# could-not-run, never a silent pass. Scratch moved from an outside-the-repo
-# mktemp to target/plan-scratch (1384-ddua's convention) because the guard's
-# fs.read is repo-rooted: a fixture file outside the repo and every declared
-# read-env root is refused, not read.
+# could-not-run, never a silent pass. Scratch must physically remain inside
+# the repository; target/ can be a warm-cache symlink outside it. The guard's
+# fs.read is repo-rooted, so outside-root inputs cannot test its parser.
 
 set -euo pipefail
 
@@ -22,8 +22,7 @@ if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev
 fi
 CHECK="$ROOT/scripts/lua/check-no-spawn-in-if-not.lua"
 
-mkdir -p target/plan-scratch
-WORK="$(mktemp -d "$ROOT/target/plan-scratch/if-not-pipeline-guard.XXXXXX")"
+WORK="$(mktemp -d "$ROOT/.if-not-pipeline-guard.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 fail_fixture="$WORK/fail_fixture.sh"
