@@ -225,13 +225,23 @@ pub fn policy_gate(
 /// design section 4.1): one process, run to completion, returned as a VALUE.
 /// A non-zero exit, a signal and a timeout are all DATA; only programmer
 /// errors raise. proc.run remains synchronous; the scoped script runner adds
-/// async proc.spawn/line delivery (1534-puyz), not chain/select/all.
+/// async proc.spawn/line delivery (1534-puyz) and composition (1538-pwdr).
 pub(crate) enum PreparedProc {
     Refused(LuaTable),
     Command {
         argv: Vec<String>,
         command: tillandsias_exec::Command,
     },
+}
+
+// @trace order:1538-pwdr
+// No Lua values survive validation. In particular, authorization may consume
+// consent only when a snapshotted stage is actually about to execute.
+pub(crate) struct ProcSnapshot {
+    pub argv: Vec<String>,
+    pub command: tillandsias_exec::Command,
+    pub cwd: PathBuf,
+    pub explicit_stdin: bool,
 }
 
 // @trace order:1534-puyz
@@ -242,6 +252,14 @@ pub(crate) fn prepare_proc(
     caller: &str,
     managed_group: bool,
 ) -> LuaResult<PreparedProc> {
+    authorize_proc(lua, validate_proc(spec, caller, managed_group)?, caller)
+}
+
+pub(crate) fn validate_proc(
+    spec: LuaTable,
+    caller: &str,
+    managed_group: bool,
+) -> LuaResult<ProcSnapshot> {
     let err = |m: String| mlua::Error::RuntimeError(format!("{caller}: {m}"));
 
     for pair in spec.clone().pairs::<LuaValue, LuaValue>() {
@@ -337,11 +355,13 @@ pub(crate) fn prepare_proc(
         cmd = cmd.env(k, v);
     }
 
-    if let Some(p) = &cwd_path {
-        cmd = cmd.current_dir(p);
-    } else if let Ok(root) = find_repo_root() {
-        cmd = cmd.current_dir(root);
-    }
+    let cwd = match cwd_path {
+        Some(p) => p,
+        None => find_repo_root()
+            .or_else(|_| std::env::current_dir())
+            .map_err(|e| err(format!("cannot resolve effective cwd: {e}")))?,
+    };
+    cmd = cmd.current_dir(&cwd);
 
     match spec.get::<LuaValue>("env")? {
         LuaValue::Nil => {}
@@ -367,16 +387,19 @@ pub(crate) fn prepare_proc(
         }
     }
 
-    match spec.get::<LuaValue>("stdin")? {
-        LuaValue::Nil => {}
-        LuaValue::String(s) => cmd = cmd.stdin_bytes(s.as_bytes().to_vec()),
+    let explicit_stdin = match spec.get::<LuaValue>("stdin")? {
+        LuaValue::Nil => false,
+        LuaValue::String(s) => {
+            cmd = cmd.stdin_bytes(s.as_bytes().to_vec());
+            true
+        }
         other => {
             return Err(err(format!(
                 "stdin must be a string, not a {}",
                 other.type_name()
             )));
         }
-    }
+    };
 
     let timeout_ms: u64 = match spec.get::<LuaValue>("timeout_ms")? {
         LuaValue::Nil => PROC_RUN_DEFAULT_TIMEOUT_MS,
@@ -403,9 +426,9 @@ pub(crate) fn prepare_proc(
     };
     cmd = cmd.group(group);
     if managed_group && !group {
-        return Err(err(
-            "group=false is not supported by script-owned proc.spawn".into(),
-        ));
+        return Err(err(format!(
+            "group=false is not supported by script-owned {caller}"
+        )));
     }
 
     // Per-fd capture cap (order 1443-esm5). Unset keeps the executor's default
@@ -421,7 +444,23 @@ pub(crate) fn prepare_proc(
         }
     }
 
-    if let Some(d) = policy_gate(&argv, cwd_path.as_deref(), caller) {
+    Ok(ProcSnapshot {
+        argv,
+        command: cmd,
+        cwd,
+        explicit_stdin,
+    })
+}
+
+pub(crate) fn authorize_proc(
+    lua: &Lua,
+    snapshot: ProcSnapshot,
+    caller: &str,
+) -> LuaResult<PreparedProc> {
+    let ProcSnapshot {
+        argv, command, cwd, ..
+    } = snapshot;
+    if let Some(d) = policy_gate(&argv, Some(&cwd), caller) {
         let t = lua.create_table()?;
         let echo = lua.create_table()?;
         for (i, a) in argv.iter().enumerate() {
@@ -443,7 +482,7 @@ pub(crate) fn prepare_proc(
         t.set("remedy", d.remedy.unwrap_or_default())?;
         return Ok(PreparedProc::Refused(t));
     }
-    Ok(PreparedProc::Command { argv, command: cmd })
+    Ok(PreparedProc::Command { argv, command })
 }
 
 fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
