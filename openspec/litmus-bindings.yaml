@@ -245,6 +245,9 @@ specs:
   # 1506-ssb5. Same fallback: the forge-plan MCP msg_* tools and the Codex /
   # OpenCode entrypoints' pending-mail-at-session-start line.
   - litmus:fleet-msg-mcp
+  # 1506-32k5. Same fallback: the host identity and the pinned Noise XX
+  # session (--msg-serve --mint / --accept-once / --dial-once).
+  - litmus:fleet-msg-identity
   coverage_ratio: 75
   last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher

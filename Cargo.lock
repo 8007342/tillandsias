@@ -3377,6 +3377,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "serde_yaml",
  "sha2",
  "signal-hook",
  "tempfile",
@@ -3638,6 +3639,8 @@ dependencies = [
 name = "tillandsias-secure-channel"
 version = "0.1.0"
 dependencies = [
+ "blake2",
+ "curve25519-dalek",
  "hkdf",
  "sha2",
  "snow",

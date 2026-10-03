@@ -2014,6 +2014,45 @@ impl CloudflareTokenStore for VaultCloudflareTokenStore {
     }
 }
 
+/// Order 1506-32k5: the fleet message bus's X25519 static key in the host's
+/// OWN Vault at [`crate::msg_identity::MSG_STATIC_PATH`]
+/// (`secret/fleet/msg/static`). The same root-token client, stability lease
+/// and confirm-by-read-back the Cloudflare store uses; only the host-resident
+/// `tray` policy's `secret/*` covers the path, and no forge, mirror, inference
+/// or login policy names anything under `secret/data/fleet/msg/` (asserted by
+/// `msg_static_key_policies_keep_forges_out` and the 1506-32k5 fixture).
+/// Errors are reason tokens, never the record (it holds the private half).
+pub struct VaultMsgStaticKeyStore {
+    pub debug: bool,
+}
+
+impl crate::msg_identity::MsgStaticKeyStore for VaultMsgStaticKeyStore {
+    fn describe(&self) -> String {
+        format!("vault:{}", crate::msg_identity::MSG_STATIC_PATH)
+    }
+
+    fn read(&self) -> Result<Option<crate::msg_identity::StoredStatic>, String> {
+        if !container_running(VAULT_CONTAINER_NAME) {
+            return Err("vault-unavailable".into());
+        }
+        let (_stability, rt, client) = VaultCloudflareTokenStore { debug: self.debug }.client()?;
+        match rt.block_on(client.read_secret(crate::msg_identity::MSG_STATIC_PATH)) {
+            Ok(v) => crate::msg_identity::parse_static_record(&v).map(Some),
+            Err(VaultError::NotFound(_)) => Ok(None),
+            Err(e) => Err(cloudflare_vault_reason(&e).into()),
+        }
+    }
+
+    fn write(&self, s: &crate::msg_identity::StoredStatic) -> Result<(), String> {
+        // Same store, same confirm-by-read-back, same refusal when Vault
+        // cannot be brought up: there is no other place this key may live.
+        VaultCloudflareTokenStore { debug: self.debug }.write_record(
+            crate::msg_identity::MSG_STATIC_PATH,
+            crate::msg_identity::static_record(s),
+        )
+    }
+}
+
 /// A `cloudflare_oauth` refresh failure reduced to a reason token. The core's
 /// errors are shaped `refused:cloudflare-login:token-exchange-http-<status>:<code>`
 /// (code from the server's JSON), `...:token-response-parse:<serde error>` (a
@@ -10038,14 +10077,27 @@ mod cloudflare_token_rotation_tests {
     }
 
     fn audit_policy_dir(dir: &Path) -> Vec<String> {
-        const PROBES: &[&str] = &[
-            "secret/data/cloudflare/token",
-            "secret/data/cloudflare/refresh",
-            "secret/data/cloudflare/mesh",
-            "secret/data/cloudflare/anything",
-            "secret/metadata/cloudflare/token",
-            "secret/metadata/cloudflare/refresh",
-        ];
+        audit_policy_dir_for(
+            dir,
+            &[
+                "secret/data/cloudflare/token",
+                "secret/data/cloudflare/refresh",
+                "secret/data/cloudflare/mesh",
+                "secret/data/cloudflare/anything",
+                "secret/metadata/cloudflare/token",
+                "secret/metadata/cloudflare/refresh",
+            ],
+            &[
+                "secret/data/cloudflare/token",
+                "secret/data/cloudflare/refresh",
+            ],
+        )
+    }
+
+    /// Every shipped policy but tray.hcl grants nothing on any of `probes`;
+    /// tray.hcl (the host resident) can read every one of `tray_reads`;
+    /// git-mirror.hcl's stanza set is exactly the GitHub token pair.
+    fn audit_policy_dir_for(dir: &Path, probes: &[&str], tray_reads: &[&str]) -> Vec<String> {
         let mut violations = Vec::new();
         let mut files: Vec<_> = std::fs::read_dir(dir)
             .expect("policy dir")
@@ -10065,10 +10117,7 @@ mod cloudflare_token_rotation_tests {
             let st = stanzas(&std::fs::read_to_string(f).unwrap());
             if name == "tray.hcl" {
                 saw_tray = true;
-                for need in [
-                    "secret/data/cloudflare/token",
-                    "secret/data/cloudflare/refresh",
-                ] {
+                for need in tray_reads {
                     if !st
                         .iter()
                         .any(|(p, c)| pattern_matches(p, need) && c.iter().any(|c| c == "read"))
@@ -10094,7 +10143,7 @@ mod cloudflare_token_rotation_tests {
                     violations.push(format!("git-mirror.hcl grants changed: {st:?}"));
                 }
             }
-            for probe in PROBES {
+            for probe in probes {
                 for (p, caps) in &st {
                     if pattern_matches(p, probe) && caps.iter().any(|c| c != "deny") {
                         violations.push(format!(
@@ -10139,5 +10188,44 @@ mod cloudflare_token_rotation_tests {
         ));
         let v = audit_policy_dir(&dir);
         assert!(v.is_empty(), "policy violations:\n{}", v.join("\n"));
+    }
+
+    /// Order 1506-32k5: the fleet message bus's static key at
+    /// secret/fleet/msg/static is the host's alone. No forge, mirror,
+    /// inference or login policy grants anything under secret/data/fleet/msg/
+    /// (or its metadata), the tray policy reads it, and git-mirror.hcl is
+    /// unchanged. A control proves the audit can fail on this probe set.
+    #[test]
+    fn msg_static_key_policies_keep_forges_out() {
+        const PROBES: &[&str] = &[
+            "secret/data/fleet/msg/static",
+            "secret/data/fleet/msg/anything",
+            "secret/metadata/fleet/msg/static",
+        ];
+        assert_eq!(
+            crate::msg_identity::MSG_STATIC_PATH,
+            "secret/fleet/msg/static",
+            "the probes below name the KV v2 form of this path"
+        );
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../images/vault/policies");
+        let v = audit_policy_dir_for(&dir, PROBES, &["secret/data/fleet/msg/static"]);
+        assert!(v.is_empty(), "policy violations:\n{}", v.join("\n"));
+
+        // Control: the same audit over a copy whose forge.hcl gains a
+        // fleet-wide read MUST name forge.hcl.
+        let t = tempfile::tempdir().unwrap();
+        for e in std::fs::read_dir(&dir).unwrap() {
+            let p = e.unwrap().path();
+            std::fs::copy(&p, t.path().join(p.file_name().unwrap())).unwrap();
+        }
+        let forge = t.path().join("forge.hcl");
+        let mut body = std::fs::read_to_string(&forge).unwrap();
+        body.push_str("\npath \"secret/data/fleet/*\" {\n  capabilities = [\"read\"]\n}\n");
+        std::fs::write(&forge, body).unwrap();
+        let v = audit_policy_dir_for(t.path(), PROBES, &["secret/data/fleet/msg/static"]);
+        assert!(
+            v.iter().any(|l| l.starts_with("forge.hcl grants")),
+            "the control did not reach: {v:?}"
+        );
     }
 }

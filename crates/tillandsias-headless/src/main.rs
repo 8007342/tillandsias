@@ -157,6 +157,10 @@ mod cloudflare_login;
 // fleet message bus (fsync-then-ack between lane mailboxes, attribution by
 // mount, TTL sweep, wake socket) and the per-forge lane mount. No network.
 pub mod msg_serve;
+// @trace order:1506-32k5 — `--msg-serve --mint [--rotate]`, `--accept-once`,
+// `--dial-once`: the host's X25519 static in its own Vault, the peer record in
+// plan/fleet/peers/, and the Noise XX session pinned to that directory.
+pub mod msg_identity;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
@@ -787,6 +791,12 @@ fn main() {
         // too so no reorder can make it `Unsupported option`.
         "--msg-serve",
         "--once",
+        // Order 1506-32k5: msg_serve::run_cli parses these itself.
+        "--mint",
+        "--rotate",
+        "--accept-once",
+        "--dial-once",
+        "--peers",
         "--refresh-github-token",
         "--github-refresh",
         "--claude-login",
@@ -1659,6 +1669,8 @@ fn print_usage(version: &str) {
     println!("       tillandsias --github-login [--with-token] [--debug]");
     println!("       tillandsias --cloudflare-login [--via loopback|qr|paste] [--debug]");
     println!("       tillandsias --msg-serve [--once]");
+    println!("       tillandsias --msg-serve --mint [--rotate] [--peers DIR]");
+    println!("       tillandsias --msg-serve --accept-once ADDR|--dial-once ADDR [--peers DIR]");
     println!("       tillandsias --cloudflare-logout [--debug]");
     println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
@@ -1735,7 +1747,10 @@ fn print_usage(version: &str) {
     println!(
         "  --msg-serve    Run the same-host mover of the fleet message bus in the foreground: deliver every lane's outbox \
          into the destination lanes on this host, ack after fsync, sweep at TTL (the tray runs one itself). \
-         --once: one pass and one sweep, then exit"
+         --once: one pass and one sweep, then exit. \
+         --mint [--rotate]: generate this host's X25519 message identity into its own Vault \
+         (secret/fleet/msg/static) and write plan/fleet/peers/<host>.yaml; without --rotate an existing key is kept. \
+         --accept-once/--dial-once ADDR: one Noise XX session pinned to the peer directory (--peers DIR)"
     );
     println!(
         "  --refresh-github-token Refresh GitHub OAuth access token using refresh token in Vault"
