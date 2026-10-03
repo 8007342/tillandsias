@@ -89,6 +89,25 @@ and silent legacy spawn keep their original modes, deadlines and bounds.
 The forced integration/landing receipts are still pending; do not infer
 them from targeted verification.
 
+The first gate preflight refused raw diagnostic source-line references in
+the evidence logs. Those streams are now losslessly gzip-archived with
+uncompressed SHA-256 hashes; no diagnostic rewrite or citation waiver was
+used. The subsequent forced gate at `04b015eb06359ca37cabdf166883ff4f50e89228`
+reached the workspace suite, ran2891 tests, and reported2 new reds,0 tolerated
+and0 stale. The failed `lua_predicate_classes` target reproduced the same
+external-target fixture assumption in its memo-input and observing-list
+cases. Pushed ownership correction `25559544b` authorizes only their
+repository-local fixture repair. The actual gate-failure receipt, diagnostic
+stream and source identity are retained. This gate remains red until repaired
+fixtures and a complete forced retry pass; the diagnostic archive is evidence
+of the failure, not a substitute for a green gate.
+
+Terra's bounded fixture repair reproduced20 passes and2 failures before,
+then22 passes after; parent reviewed its unique repository-local tempfile
+and tempdir lifetimes. The old memo cache-hit/stale-verdict, byte-order,
+symlink-exclusion and outside-root assertions remain unchanged. Parent
+independent22-test execution and the full-gate retry still decide readiness.
+
 Broader plan-library verification initially passed425 tests and failed two
 legacy read/memo fixtures because they wrote under the worktree's `target`
 symlink, outside its repository root. The filesystem refusal was correct.
