@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: agent-identity-derivation-absent-from-the-bootstrap-skill
+    field: status
+    value: completed
+    ts: "2026-09-30T03:47:46Z"
+    host: yoga
+
+events:
+  - packet_id: agent-identity-derivation-absent-from-the-bootstrap-skill
+    event:
+      type: completed
+      ts: "2026-09-30T03:47:46Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 15e83188c (land100, on origin/linux-next) + grep agent-identity.sh in skills/meta-orchestration/SKILL.md on trunk -> 2 hits; audit enumeration event on trunk df7640b60; follow-up filed as 1513-pppk
+  - packet_id: agent-identity-derivation-absent-from-the-bootstrap-skill
+    event:
+      type: note
+      ts: "2026-09-30T03:47:46Z"
+      host: yoga
+      summary: |-
+        landed: Start Of Cycle step 0b names scripts/agent-identity.sh before the first ledger write

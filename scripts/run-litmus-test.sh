@@ -1578,14 +1578,18 @@ run_litmus_test_file() {
     # started, so the gate says it cannot validate this mode. Non-fake tests
     # are unaffected; a host that sets the variable deliberately (the
     # dedicated service account) runs fake tests with it unset.
-    if grep -q '^backend: fake' "$test_file" 2>/dev/null \
+    # Parse-only judges YAML/extractability, not runtime availability. Keep the
+    # execution preflights on the normal path without invoking any of them here.
+    if [[ $PARSE_ONLY -ne 1 ]] \
+        && grep -q '^backend: fake' "$test_file" 2>/dev/null \
         && [ -n "${TILLANDSIAS_PODMAN_REMOTE_URL:-${CONTAINER_HOST:-}}" ]; then
         local _remote_var=CONTAINER_HOST
         [ -n "${TILLANDSIAS_PODMAN_REMOTE_URL:-}" ] && _remote_var=TILLANDSIAS_PODMAN_REMOTE_URL
         echo -e "  ${RED}[ENV-FAIL]${NC} refused:litmus-gate:fake-backend-under-remote-podman — this test declares 'backend: fake', but ${_remote_var} is set, and common.sh's remote mode pins TILLANDSIAS_PODMAN_BIN ahead of the harness's fake, so the fixture would drive the REAL podman. The gate cannot validate this mode: re-run with the variable unset (798-9xpq)."
         return 1
     fi
-    if [ "$(uname -s)" = "Linux" ] \
+    if [[ $PARSE_ONLY -ne 1 ]] \
+        && [ "$(uname -s)" = "Linux" ] \
         && _lt_command_invokes_podman "$test_file" \
         && ! grep -q '^backend: fake' "$test_file" 2>/dev/null \
         && command -v podman >/dev/null 2>&1; then
@@ -1605,7 +1609,9 @@ run_litmus_test_file() {
         fi
     fi
 
-    if ! run_rust_queries_for_litmus "$test_file"; then
+    # A Rust query is an execution check (and can fall back to Cargo), never
+    # part of step extraction. All parser/load/duplicate checks below remain.
+    if [[ $PARSE_ONLY -ne 1 ]] && ! run_rust_queries_for_litmus "$test_file"; then
         return 1
     fi
 

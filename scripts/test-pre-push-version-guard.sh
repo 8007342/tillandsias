@@ -32,7 +32,7 @@ git config user.email fixture@example.invalid
 git config user.name Fixture
 git symbolic-ref HEAD refs/heads/main
 
-echo "0.4.260810.1" > VERSION
+echo "56.9.10.1" > VERSION
 echo seed > file.txt
 git add -A
 git commit -qm "seed at release identity"
@@ -41,7 +41,7 @@ git branch "origin/main" "$MAIN_SHA"
 
 # linux-next runs ahead of main between releases — the documented normal state.
 git checkout -q -b "origin/linux-next" "$MAIN_SHA"
-echo "0.4.260812.1" > VERSION
+echo "56.9.12.1" > VERSION
 git commit -qam "linux-next build counter"
 INTEGRATION_SHA="$(git rev-parse HEAD)"
 
@@ -66,17 +66,20 @@ if ! run_guard windows-next "$MAIN_SHA" "$CATCHUP_SHA"; then
 fi
 echo "ok: case 1 — platform branch carrying linux-next's VERSION pushes"
 
-# --- case 2 (NEGATIVE CONTROL): a VERSION of the branch's own invention ------
-# Ahead of BOTH main and linux-next. A platform host does not own the release,
-# so this must still be refused — otherwise case 1's exception repealed the
-# guard rather than narrowing it.
-echo "0.4.260812.2" > VERSION
-git commit -qam "platform-local counter bump"
+# --- case 2: a platform branch's OWN strictly-greater bump, committed alone -
+# RETIRED NEGATIVE CONTROL, kept here with its disproof. Until 2026-09-17 this
+# case asserted REFUSAL ("a platform host does not own the release"). The
+# operator's ruling that day made the local build counter a monotonic
+# YEAR_FROM_EPOCH.MONTH.DAY.BUILD counter that increments freely on any branch
+# (order 643-64bx exception 5), so a well-formed, strictly-greater, isolated
+# bump now PUSHES. The refusals that replace it are cases 5-9.
+echo "56.9.12.2" > VERSION
+git commit -qam "platform-local counter bump, alone"
 OWN_SHA="$(git rev-parse HEAD)"
-if run_guard windows-next "$MAIN_SHA" "$OWN_SHA"; then
-    fail "case 2: a divergent bump ahead of main AND linux-next must be refused"
+if ! run_guard windows-next "$MAIN_SHA" "$OWN_SHA"; then
+    fail "case 2: a well-formed, strictly-greater bump committed alone must push (643-64bx)"
 fi
-echo "ok: case 2 — divergent platform-local bump still refused"
+echo "ok: case 2 — a monotonic build bump committed alone pushes"
 
 # --- case 3: commits that do not touch VERSION are none of the guard's business
 git checkout -q -B windows-next "$CATCHUP_SHA"
@@ -90,11 +93,45 @@ echo "ok: case 3 — range not touching VERSION pushes"
 
 # --- case 4: main may move the release identity ------------------------------
 git checkout -q -B main "$MAIN_SHA"
-echo "0.4.260813.1" > VERSION
+echo "56.9.13.1" > VERSION
 git commit -qam "release bump on main"
 if ! run_guard main "$MAIN_SHA" "$(git rev-parse HEAD)"; then
     fail "case 4: main is where a release bump lands"
 fi
 echo "ok: case 4 — release bump on main allowed"
 
-echo "PASS: pre-push VERSION guard (4/4)"
+# --- cases 5-9: what exception 5 must still refuse --------------------------
+# Each starts from the catch-up branch (VERSION == linux-next's 56.9.12.1).
+refuse() { # <case> <why> <sha> [remote-sha]
+    if run_guard windows-next "${4:-$CATCHUP_SHA}" "$3"; then fail "case $1: $2 must be refused"; fi
+    echo "ok: case $1 — $2 refused"
+}
+git checkout -q -B windows-next "$CATCHUP_SHA"
+echo "56.9.11.9" > VERSION; git commit -qam "lower than linux-next"
+refuse 5 "a bump LOWER than linux-next" "$(git rev-parse HEAD)"
+
+# 6 (NEGATIVE CONTROL): NON-MONOTONIC against the TARGET. windows-next already
+# carries its own earlier bump 56.9.12.5; a push that moves it to 56.9.12.4 is
+# above linux-next (56.9.12.1) yet goes BACKWARDS on the branch it lands on.
+# The pre-643-64bx guard refused it too (a VERSION matching no catch-up
+# source), so this refusal is unchanged. "Equal" has no separate arm: a range
+# ending on the target's own value is no net VERSION change (case 3), and one
+# ending on linux-next's, main's or a tag's is a catch-up (case 1).
+git checkout -q -B windows-next "$CATCHUP_SHA"
+echo "56.9.12.5" > VERSION; git commit -qam "target's earlier bump"; PRIOR_SHA="$(git rev-parse HEAD)"
+echo "56.9.12.4" > VERSION; git commit -qam "backwards on the target"
+refuse 6 "a bump BELOW the target's previous VERSION (non-monotonic)" "$(git rev-parse HEAD)" "$PRIOR_SHA"
+
+git checkout -q -B windows-next "$CATCHUP_SHA"
+echo "56.13.12.2" > VERSION; git commit -qam "month 13"
+refuse 7 "a MALFORMED VERSION (month 13)" "$(git rev-parse HEAD)"
+git checkout -q -B windows-next "$CATCHUP_SHA"
+echo "0.4.260812.2" > VERSION; git commit -qam "legacy shape"
+refuse 8 "a MALFORMED VERSION (legacy 0.4.YYMMDD.N shape)" "$(git rev-parse HEAD)"
+
+git checkout -q -B windows-next "$CATCHUP_SHA"
+echo "56.9.12.2" > VERSION; echo swept >> platform.txt
+git commit -qam "bump swept in with work"
+refuse 9 "a MIXED-CONTENT bump (VERSION + unrelated file, 702-eusw)" "$(git rev-parse HEAD)"
+
+echo "PASS: pre-push VERSION guard (9/9)"

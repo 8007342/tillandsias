@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-forge-entrypoint-sources-agent-profile-from-a-path-the-image-never-installs-so-no-forge-has-run-it-since-2026-05-14
+    field: status
+    value: completed
+    ts: "2026-09-30T19:58:26Z"
+    host: macuahuitl
+
+events:
+  - packet_id: every-forge-entrypoint-sources-agent-profile-from-a-path-the-image-never-installs-so-no-forge-has-run-it-since-2026-05-14
+    event:
+      type: completed
+      ts: "2026-09-30T19:58:26Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 278fd6f31
+  - packet_id: every-forge-entrypoint-sources-agent-profile-from-a-path-the-image-never-installs-so-no-forge-has-run-it-since-2026-05-14
+    event:
+      type: note
+      ts: "2026-09-30T19:58:26Z"
+      host: macuahuitl
+      summary: |-
+        LANDED in land114 (278fd6f31, gate 906 s): entrypoints call load_agent_profile from the image's real path; a subshell probe keeps a failing profile (-e or -u) from killing the entrypoint; fixture 6/6 incl. ARM 6 red on d69e2a25e. Relay-fix c95c8c8d6: the warning's rc is read in else (after fi, $? is the if's own 0)

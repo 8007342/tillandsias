@@ -1,0 +1,19 @@
+import json, os, pathlib, subprocess, tempfile
+repo = pathlib.Path('/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002')
+root = pathlib.Path(tempfile.mkdtemp(prefix='parent-1533-root-link-', dir='/tmp/opencode'))
+(root/'crates/fixture/src').mkdir(parents=True)
+(root/'.git').mkdir()
+(root/'crates/fixture/src/bad.rs').write_text('fn probe() { let _ = std::process::Command::new("podman"); }\n')
+(root/'scan alias').symlink_to(root/'crates', target_is_directory=True)
+old = root/'scripts/check-podman-sync-budgets.sh'
+old.parent.mkdir()
+old.write_bytes(subprocess.check_output(['git','show','8c7af3886:scripts/check-podman-sync-budgets.sh'],cwd=repo))
+new = root/'guard.lua'
+new.write_bytes(subprocess.check_output(['git','show','4c21f133:scripts/lua/check-podman-sync-budgets.lua'],cwd=repo))
+env = dict(os.environ, TILLANDSIAS_REPO_ROOT=str(root), PODMAN_SYNC_SEARCH_ROOT=str(root/'scan alias'))
+records = {}
+for name, command in [('bash',['bash',str(old)]),('lua',[str(repo/'target/release/tillandsias-plan'),'script','run',str(new)])]:
+    r = subprocess.run(command,cwd=root,env=env,capture_output=True,text=True,timeout=15)
+    records[name] = {'argv':command,'code':r.returncode,'stdout':r.stdout,'stderr':r.stderr}
+(root/'receipts.json').write_text(json.dumps(records,indent=2)+'\n')
+print(json.dumps({'scratch':str(root),'records':records},indent=2))

@@ -1,0 +1,58 @@
+{
+  "utc": "2026-10-02T17:30:45.877839+00:00",
+  "base_head": "6024a624d0da51c348a0b1fe070c45fbbea12da2",
+  "scope": "1534 narrow advisory-terminal latch repair",
+  "trials": [
+    {
+      "label": "before",
+      "binary_sha256": "fc91226e1a1568a4e883bb15ac9252c8814e7ad5b868373586c70f5c22876765",
+      "exit": 0,
+      "stdout": "scope-probe (advisory)\n",
+      "stderr": "",
+      "elapsed_ms": 126.37558199639898,
+      "escaped_after_advisory": true
+    },
+    {
+      "label": "after",
+      "binary_sha256": "ddc6cc86bb79e52240ea93df227f42e2b81322153918b1acb5198c18b02566c7",
+      "exit": 0,
+      "stdout": "scope-probe (advisory)\n",
+      "stderr": "",
+      "elapsed_ms": 114.51178399875062,
+      "escaped_after_advisory": false
+    }
+  ],
+  "focused_before": {
+    "passed": 1,
+    "failed": 3
+  },
+  "focused_after": {
+    "passed": 4,
+    "failed": 0
+  },
+  "targets": {
+    "passed": 83,
+    "failed": 0,
+    "counts": {
+      "command_policy_doors": 6,
+      "lua_observing_boundary": 6,
+      "lua_predicate_classes": 22,
+      "lua_proc": 26,
+      "lua_source_agreements": 7,
+      "lua_std": 16
+    }
+  },
+  "fmt_exit": 0,
+  "validation": "Invalid suffix, newline and carriage return rejected before scope closure; valid terminal advisory preserves exact stdout and exit0.",
+  "cleanup": "Named CPU-loop and callback regressions acknowledge child/grandchild before advisory, assert stopped identities/no delayed markers and completion under1s with2s outer deadline. Direct-child reaping only; descendants terminated, not claimed reaped by runner.",
+  "not_run": [
+    "full gate",
+    "clippy",
+    "native platform measurement",
+    "parent independent executor and deadline repro"
+  ],
+  "source_sha256": {
+    "crates/tillandsias-plan/src/script_run.rs": "5a59cfe9a4cc4bf3a57ce2605e2c42c1ccd539fa889e8aabd9307329d0673f57",
+    "crates/tillandsias-plan/tests/lua_proc.rs": "f61d97653632bf007969eaedcd94feee152a4f110ed20a1819896082f2af2bbe"
+  }
+}

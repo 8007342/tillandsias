@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-target-clippy-refuses-lua-source-agreements-tests-because-unix-only-helpers-are-not-cfg-gated
+    field: status
+    value: completed
+    ts: "2026-09-30T00:31:34Z"
+    host: yolanda
+
+events:
+  - packet_id: windows-target-clippy-refuses-lua-source-agreements-tests-because-unix-only-helpers-are-not-cfg-gated
+    event:
+      type: completed
+      ts: "2026-09-30T00:31:34Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 5f23f15f3
+  - packet_id: windows-target-clippy-refuses-lua-source-agreements-tests-because-unix-only-helpers-are-not-cfg-gated
+    event:
+      type: note
+      ts: "2026-09-30T00:31:34Z"
+      host: yolanda
+      summary: |-
+        landed at 5f23f15f3 (relay: land work/1506-ezv3 on linux-next); content verified on origin/linux-next by content

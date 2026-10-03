@@ -1,0 +1,6 @@
+scripts/run-litmus-test.sh ci-release --phase pre-build --size instant --compact
+scripts/run-litmus-test.sh forge-environment-discoverability --phase pre-build --size quick --compact
+scripts/run-litmus-test.sh git-mirror-service --phase pre-build --size quick --compact
+scripts/run-litmus-test.sh methodology-accountability --phase pre-build --size quick --compact
+scripts/run-litmus-test.sh observability-metrics --phase pre-build --size instant --compact
+ok:litmus-coverage:5-spec(s)

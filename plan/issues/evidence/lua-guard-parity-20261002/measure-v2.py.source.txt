@@ -1,0 +1,130 @@
+import argparse
+import base64
+import datetime
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import subprocess
+import tarfile
+import tempfile
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--candidate', required=True)
+args = parser.parse_args()
+repo = Path('/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002')
+binary = repo / 'target/release/tillandsias-plan'
+base = '8c7af3886'
+out = Path(tempfile.mkdtemp(prefix='parent-1533-parity-', dir='/tmp/opencode'))
+guard_names = {'guest': 'check-guest-unit-hardening', 'tray': 'check-tray-refresh-no-polling',
+               'podman': 'check-podman-sync-budgets'}
+def blob(ref, path):
+    return subprocess.check_output(['git', 'show', f'{ref}:{path}'], cwd=repo)
+def sha(data):
+    return hashlib.sha256(data).hexdigest()
+def write(root, name, data):
+    p = root / name
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(data if isinstance(data, bytes) else data.encode())
+    return p
+source = 'crates/tillandsias-windows-tray/src/notify_icon.rs'
+vz = 'crates/tillandsias-vm-layer/src/vz.rs'
+wsl = 'crates/tillandsias-vm-layer/src/wsl.rs'
+live = {n: blob(base, n) for n in [source, vz, wsl]}
+archive = subprocess.check_output(['git', 'archive', base, 'crates'], cwd=repo)
+with tarfile.open(fileobj=io.BytesIO(archive)) as tf:
+    rust = {m.name: tf.extractfile(m).read() for m in tf.getmembers()
+            if m.isfile() and m.name.endswith('.rs')}
+old = {k: blob(base, 'scripts/' + n + '.sh') for k, n in guard_names.items()}
+new = {k: blob(args.candidate, 'scripts/lua/' + n + '.lua') for k, n in guard_names.items()}
+cases = []
+def case(name, kind, files, env=None, core=True, note=''):
+    cases.append({'name': name, 'kind': kind, 'files': files, 'env': env or {},
+                  'core': core, 'note': note})
+guest = {vz: live[vz], wsl: live[wsl]}
+case('guest-live', 'guest', guest)
+regress = live[vz].decode()
+marker = 'cat > /etc/systemd/system/tillandsias-headless.service'
+pos = regress.index('[Service]', regress.index(marker)) + len('[Service]')
+regress = regress[:pos] + '\nNoNewPrivileges=yes\nCapabilityBoundingSet=CAP_NET_BIND_SERVICE' + regress[pos:]
+case('guest-308-directives', 'guest', {vz: regress, wsl: live[wsl]})
+case('guest-marker-drift', 'guest', {n: b.replace(marker.encode(), b'cat > /etc/systemd/system/renamed-unit.service') for n,b in guest.items()})
+tray = live[source].decode()
+def insert(text, sig, line):
+    at = text.index('{', text.index(sig)) + 1
+    return text[:at] + '\n' + line + text[at:]
+case('tray-live', 'tray', {source: tray})
+case('tray-static-renamed', 'tray', {source: tray.replace('static LIVE_CLIENT:', 'static LIVE_CLIENT_RENAMED:')})
+needle = '    LIVE_CLIENT.get_or_init(|| tokio::sync::Mutex::new(None))'
+assert needle in tray
+case('tray-accessor-not-static', 'tray', {source: tray.replace(needle, '    Box::leak(Box::new(tokio::sync::Mutex::new(None)))')})
+polling = insert(tray, 'async fn refresh_vm_status', '    loop { break; }')
+case('tray-retry-loop', 'tray', {source: polling})
+case('tray-sleep', 'tray', {source: insert(tray, 'async fn refresh_github_login', '    tokio::time::sleep(std::time::Duration::from_secs(1)).await;')})
+case('tray-comment-is-not-action', 'tray', {source: insert(tray, 'async fn refresh_vm_status', '    // this used to loop and sleep( before order 147')})
+case('podman-live', 'podman', rust)
+direct = {'crates/fixture/src/bad.rs': 'fn probe() {\n    let mut cmd = std::process::Command::new("podman");\n    let _ = cmd.arg("ps").output();\n}\n'}
+hatch = {'crates/fixture/src/hatch.rs': 'fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\nfn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\n'}
+case('podman-direct-command', 'podman', direct)
+case('podman-hatch-growth', 'podman', hatch, {'PODMAN_SYNC_ESCAPE_HATCHES':'1'})
+case('podman-reviewed-budget', 'podman', hatch, {'PODMAN_SYNC_ESCAPE_HATCHES':'2'})
+case('podman-unbounded-capture', 'podman', {'crates/tillandsias-podman/src/bad_capture.rs': 'fn probe(mut pipe: std::process::ChildStdout) {\n    let mut buf = Vec::new();\n    let _ = pipe.read_to_end(&mut buf);\n}\n'})
+sleep = {'crates/tillandsias-podman/src/busy_wait.rs': '/// Documentation may name `thread::sleep` without becoming executable.\nfn wait(mut child: std::process::Child) -> std::io::Result<()> {\n    loop {\n        if child.try_wait()?.is_some() {\n            return Ok(());\n        }\n        std::thread::sleep(std::time::Duration::from_millis(20));\n    }\n}\n',
+         'crates/tillandsias-podman/tests/allowed_poll.rs': 'fn test_only_wait(mut child: std::process::Child) {\n    while child.try_wait().unwrap().is_none() {\n        std::thread::sleep(std::time::Duration::from_millis(20));\n    }\n}\n'}
+case('podman-sleep-poll', 'podman', sleep)
+case('guest-no-source', 'guest', {}, core=False)
+case('guest-crlf-live', 'guest', {n: b.replace(b'\n',b'\r\n') for n,b in guest.items()}, core=False)
+case('guest-crlf-directives', 'guest', {vz: regress.replace('\n','\r\n'), wsl: live[wsl].replace(b'\n',b'\r\n')}, core=False)
+case('tray-unreadable', 'tray', {}, core=False)
+case('tray-crlf-polling-space-path', 'tray', {source: polling.replace('\n', '\r\n')}, core=False)
+case('podman-crlf-space-path', 'podman', {k: v.replace('\n','\r\n') for k,v in hatch.items()}, core=False)
+case('podman-absolute-space-root', 'podman', direct, {'PODMAN_SYNC_SEARCH_ROOT':'ABSOLUTE'}, core=False)
+case('tray-spoof-signature-polling', 'tray', {source: '// async fn refresh_vm_status() { return; }\n' + polling}, core=False,
+     note='Safety control: baseline may be false-green; repaired lexer must refuse. This is an intentional improvement, not parity credit.')
+records = []
+for item in cases:
+    root = out / ('case roots with spaces/' + item['name'])
+    (root / '.git').mkdir(parents=True)
+    write(root, 'plan/index.yaml', 'packets: []\n')
+    for name, data in item['files'].items():
+        write(root, name, data)
+    kind = item['kind']
+    bash_script = write(root, 'scripts/' + guard_names[kind] + '.sh', old[kind])
+    lua_script = write(root, 'lua/' + guard_names[kind] + '.lua', new[kind])
+    env = {'PATH':'/usr/bin:/bin', 'HOME':str(out), 'TMPDIR':str(out), 'LC_ALL':'C', 'LANG':'C', 'TZ':'UTC',
+           'TILLANDSIAS_REPO_ROOT':str(root), **item['env']}
+    argv = []
+    if kind == 'guest':
+        env['TILLANDSIAS_GUEST_UNIT_ROOT'] = str(root)
+    elif kind == 'tray':
+        argv = [str(root / source)]
+        env['TILLANDSIAS_TRAY_REFRESH_SOURCE'] = argv[0]
+    else:
+        env.setdefault('PODMAN_SYNC_SEARCH_ROOT', 'crates')
+        if env['PODMAN_SYNC_SEARCH_ROOT'] == 'ABSOLUTE':
+            env['PODMAN_SYNC_SEARCH_ROOT'] = str(root / 'crates')
+    results = {}
+    for profile, command in [('bash', ['bash', str(bash_script), *argv]),
+                             ('lua', [str(binary), 'script', 'run', str(lua_script), '--', *argv])]:
+        r = subprocess.run(command, cwd=root, env=env, capture_output=True, timeout=30)
+        results[profile] = {'argv':command, 'code':r.returncode,
+                            'stdout_b64':base64.b64encode(r.stdout).decode(),
+                            'stderr_b64':base64.b64encode(r.stderr).decode(),
+                            'stdout':r.stdout.decode(errors='replace'), 'stderr':r.stderr.decode(errors='replace')}
+    equal = all(results['bash'][k] == results['lua'][k] for k in ['code','stdout_b64','stderr_b64'])
+    records.append({'name':item['name'], 'core':item['core'], 'note':item['note'], 'byte_equal':equal,
+                    'inputs':{n:sha(d if isinstance(d,bytes) else d.encode()) for n,d in item['files'].items()}, 'results':results})
+result = {'utc':datetime.datetime.now(datetime.timezone.utc).isoformat(), 'baseline':subprocess.check_output(['git','rev-parse',base],cwd=repo,text=True).strip(),
+          'candidate':subprocess.check_output(['git','rev-parse',args.candidate],cwd=repo,text=True).strip(),
+          'scope':'Retrospective actual immutable Bash-v-production Lua comparison, not a pre-deletion historical measurement. Same case root/path spellings, no output normalization; Linux only.',
+          'binary':{'path':str(binary), 'sha256':sha(binary.read_bytes()), 'build_id':subprocess.check_output([str(binary),'build-id'],cwd=repo,text=True).strip()},
+          'guard_sources':{k:{'bash_sha256':sha(old[k]),'lua_sha256':sha(new[k])} for k in guard_names},
+          'harness_sha256':sha(Path(__file__).read_bytes()), 'scratch':str(out),
+          'core':{'total':sum(r['core'] for r in records), 'byte_equal':sum(r['core'] and r['byte_equal'] for r in records),
+                  'mismatches':[r['name'] for r in records if r['core'] and not r['byte_equal']]},
+          'supplemental_mismatches':[r['name'] for r in records if not r['core'] and not r['byte_equal']], 'cases':records}
+receipt = out / 'receipts.json'
+receipt.write_text(json.dumps(result, indent=2) + '\n')
+print(json.dumps({'receipt':str(receipt), 'sha256':sha(receipt.read_bytes()), 'core':result['core'],
+                  'supplemental_mismatches':result['supplemental_mismatches']}, indent=2))

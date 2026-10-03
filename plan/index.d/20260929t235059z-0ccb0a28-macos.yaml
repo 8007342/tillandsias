@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    event:
+      type: note
+      ts: "2026-09-29T23:50:59Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t235058z
+      host: macos
+      summary: |
+        WIRE COMPATIBILITY (the coordinator's question; work/1503-qrgz @ 6dc8d0140). WIRE_VERSION UNCHANGED. Why a trailing variant is safe, from source: derive_psk binds "v={build_version};wire={wire_version};hop" into the key, and the host's side of the host-guest hop is channel_psk_for_guest(SHA-256 of the guest binary shipped with THIS tray build). So tray and guest from different builds fail the handshake closed. (a) NEW tray, OLD guest: the handshake fails, so discriminant 36 is never sent to a guest that does not know it. The send path is time-bounded at every step (connect 5 s; handshake 5 s, added at a4350154c because it was the one unbounded step; reply 5 s) with NO retry: one logged failure per wake. (b) OLD tray, NEW guest: cannot handshake either. Layer 2 ships in the tray's provisioning user-data, so it reaches only guests PROVISIONED by the new tray; an already-provisioned guest keeps "makestep 1.0 3" until reprovisioned, and layer 1 covers it at once. No live mixed-version pair was run; this is source plus construction. The latent SetVsockForwardTarget request/reply mismatch is filed separately as 1509-kf4d.

@@ -219,7 +219,7 @@ methodology:
         A broken flow that fails loudly is always preferable to a working flow that
         hides a policy violation.
       incident_reference: plan/issues/violation-python-base64-injection-2026-07-01.md
-      checker: scripts/check-no-base64-script-injection.sh
+      checker: scripts/lua/check-no-base64-script-injection.lua
       reintroduction_note: >
         Reintroduced on windows-next (0c4a6aa3, a bash podman shim in
         pty/mod.rs) and removed again 2026-07-02 during the windows->linux

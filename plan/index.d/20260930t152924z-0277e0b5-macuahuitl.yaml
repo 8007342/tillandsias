@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: relay-preflight-one-command-merge-deciders-fmt-fixtures-crates-covering
+    field: status
+    value: in_progress
+    ts: "2026-09-30T15:29:24Z"
+    host: macuahuitl
+
+events:
+  - packet_id: relay-preflight-one-command-merge-deciders-fmt-fixtures-crates-covering
+    event:
+      type: note
+      ts: "2026-09-30T15:29:24Z"
+      host: macuahuitl
+      summary: |-
+        coordinator: delegated to a sonnet agent overnight (operator: advance freely)
+  - packet_id: relay-preflight-one-command-merge-deciders-fmt-fixtures-crates-covering
+    event:
+      type: note
+      ts: "2026-09-30T15:29:24Z"
+      host: macuahuitl
+      summary: |-
+        wip-override by macuahuitl: the 3 claims macuahuitl holds belong to other agents on this host: Codex (1448-2vth, 1469-vhuk) and the exited operator forge (1381-za6b); the coordinator is not theirs to release — admitted past: refused:set-field:wip-limit:3/3 — macuahuitl already holds 3 in_progress packet(s) outside a story: 1381-za6b, 1448-2vth, 1469-vhuk (1367-2sbc; the limit is 3, from methodology/distributed-work.yaml packet_discipline.wip_limit).

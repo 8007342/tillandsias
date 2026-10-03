@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-land-tool-adopts-a-stamp-only-at-scope-full-so-a-scoped-gate-re-gates-from-scratch-on-any-trunk-move-including-plan-only
+    event:
+      type: note
+      ts: "2026-10-01T22:16:53Z"
+      agent_id: linux-macuahuitl-claude-20261001t221653z
+      host: macuahuitl
+      summary: |
+        LANDED in land125 (e9374455a on origin/linux-next, gate 1163 s), coordinator's 26ec62614. On a fresh stamp whose scope is not full, the land tool classifies `git diff --name-only origin/$BRANCH HEAD` with gate-stamp.sh classify and adopts the stamp when every class is in the scope and at least one path was classified; the verdict names the scope and the classes. The union-debt veto and the freshness check are unchanged. test-land-adopts-valid-stamp.sh: arm 7 (a covering scoped stamp is adopted) FAILS on the pre-fix tool (8/9); arm 3 (a scope that misses a pushed class is not adopted) and arm 8 (an empty diff is never covered) are controls. 9/9 plain, env -u, toolbox. With 1524-w8ys and 1524-7gn7 (land122) this completes the three gate-collision fixes from plan/issues/gate-collisions-scoped-stamps-2026-10-01.md.

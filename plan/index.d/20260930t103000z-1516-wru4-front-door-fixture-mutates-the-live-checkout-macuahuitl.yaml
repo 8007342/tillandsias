@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by the coordinator on 2026-09-30 during a full cycle.
+packets:
+  - packet_id: test-preflight-front-door-plants-guards-and-edits-build-sh-in-the-live-checkout-while-it-runs-so-a-concurrent-gate-or-boundary-snapshot-sees-them
+    order: 1516-wru4
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [litmus, fixtures, preflight, hermeticity]
+    estimated_hours: 3
+    owned_files:
+      - scripts/test-preflight-front-door.sh
+    title: |
+      scripts/test-preflight-front-door.sh plants check scripts and gate steps, and appends a function to build.sh, INSIDE the live checkout while it runs; a gate or snapshot running at the same moment sees them.
+    context: |
+      MEASURED 2026-09-30 on macuahuitl: a meta-orchestration boundary snapshot
+      taken while litmus ci-release ran recorded four untracked paths that were
+      not the operator's or the cycle's: scripts/gate-steps.d/999-zz-1499-serial.step
+      and scripts/test-zz-1499-serial-{a,b,c}.sh. They vanished when the run's
+      trap cleaned up, which invalidated the snapshot (re-taken on the clean
+      tree, noted in the cycle entry). Reading the fixture: it also writes
+      scripts/check-zz-1305-planted.sh, scripts/check-zz-1499-{planted,args}.sh,
+      scripts/gate-steps.d/999-zz-{1305-planted,1496-gate-only}.step, and it
+      APPENDS a never-called function to the live build.sh (restored by trap).
+      Any ./build.sh --check, land gate, stamp computation or boundary snapshot
+      that runs during that window reads a tree carrying planted guards and a
+      modified build.sh. The fixture exists to prove the door picks up a newly
+      wired guard, which needs a tree to plant into; it just must not be the
+      live one.
+    outcome: |
+      The fixture plants into a scratch copy of the tree (the files build.sh
+      --preflight reads: build.sh, scripts/, scripts/gate-steps.d/,
+      scripts/hooks/) and runs that copy's build.sh --preflight; the live
+      checkout is byte-identical before, during and after a run.
+    exit_criteria:
+      - "Running scripts/test-preflight-front-door.sh leaves `git status --porcelain` empty at every sampled moment of the run (sample in a loop from a second shell), and build.sh's sha256 unchanged throughout. Pre-fix, the sample shows the zz-* paths and a changed build.sh."
+      - "The fixture's own arms stay green (planted guard picked up and refused, argument vector passed, serial exclusivity, gate-only declared skip, budget)."
+    verifiable_closure: |
+      A new arm (or a wrapper test) that samples the live checkout's status
+      and build.sh digest during the run and fails if either moves; red on the
+      pre-fix fixture, green after.
+    unscoreable: "unpinnable-until-the-guard-exists: the sampling arm is written by this row; pin it under ci-release when it lands"
+    next_action: >
+      Copy the tree files --preflight reads into mktemp -d (under
+      target/plan-scratch), plant there, run that copy's build.sh --preflight,
+      and delete the copy. Keep every existing arm's assertion.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Changes a fixture that guards the pre-push door; an opus review before
+      landing.

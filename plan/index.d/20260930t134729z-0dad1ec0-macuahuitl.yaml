@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-plan-mcp-gains-msg-send-recv-ack-list-tools-and-the-codex-and-opencode-entrypoints-print-pending-messages-at-session-start-so-non-claude-harnesses-are-first-class
+    field: status
+    value: completed
+    ts: "2026-09-30T13:47:29Z"
+    host: macuahuitl
+
+events:
+  - packet_id: forge-plan-mcp-gains-msg-send-recv-ack-list-tools-and-the-codex-and-opencode-entrypoints-print-pending-messages-at-session-start-so-non-claude-harnesses-are-first-class
+    event:
+      type: completed
+      ts: "2026-09-30T13:47:29Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 10e8ff2e4
+  - packet_id: forge-plan-mcp-gains-msg-send-recv-ack-list-tools-and-the-codex-and-opencode-entrypoints-print-pending-messages-at-session-start-so-non-claude-harnesses-are-first-class
+    event:
+      type: note
+      ts: "2026-09-30T13:47:29Z"
+      host: macuahuitl
+      summary: |-
+        landed in land110; MCP msg tools (no msg_ack) and recv --keep at Codex/OpenCode start; fixture 8/8, 0/8 pre-fix

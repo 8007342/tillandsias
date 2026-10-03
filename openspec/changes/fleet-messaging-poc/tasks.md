@@ -10,37 +10,97 @@ is ephemeral; broadcasts ack per recipient and are never replied to.
 
 ## 1. Store, shape and CLI [1506-nvqt, opus]
 
-- [ ] 1.1 `msg_shape` (pure): the 600-byte/8-line budget with the KIND
+- [x] 1.1 `msg_shape` (pure): the 600-byte/8-line budget with the KIND
       vocabulary and the ref rule; `secret_shaped` with the pattern list
       from the design note; TTL bounds.
-- [ ] 1.2 `msg_store`: lane directories, `tmp` → `rename` → fsync writes,
+- [x] 1.2 `msg_store`: lane directories, `tmp` → `rename` → fsync writes,
       `seq`, `seen`, receipts (`pending`, `acked:<host>/<lane>@<ts>`,
       `undelivered:<reason>`, per-recipient for broadcasts), TTL sweep;
       envelope YAML on disk with `ttl_s`, `broadcast`, `in_reply_to`.
-- [ ] 1.3 `tillandsias-plan msg whoami|send|recv [--keep]|list|status|lint|gc`
+- [x] 1.3 `tillandsias-plan msg whoami|send|recv [--keep]|list|status|lint|gc`
       and the `capabilities` entry; `send` with several `--to`, groups
       from `plan/fleet/groups.yaml`, `--ttl`, `--in-reply-to` with the
       reply-to-broadcast and unknown-reply-target refusals.
-- [ ] 1.4 `scripts/test-fleet-msg-store.sh`: shape refusals, secret
+- [x] 1.4 `scripts/test-fleet-msg-store.sh`: shape refusals, secret
       refusals, duplicate id, `send` returns the id with no daemon, `recv`
       twice with the sender's receipt byte-identical, `status` transitions
       from fixture-written receipts, TTL bounds refusal, unread message
       dropped at TTL, reply-to-broadcast refused at the CLI, gap flag.
 
+Implementation notes for 1506-nvqt (what the mover and the daemon inherit):
+
+- COORDINATOR DEFAULT, REVERSIBLE (operator questions 2 and 3 still open):
+  one bare-metal mailbox per host, `<host>/host` (bare-metal sessions pass
+  `--lane host`; `whoami` still refuses `no-lane` rather than guess), plus
+  one lane per forge, `<project>-<instance>`; no network discovery of any
+  kind — `@all-hosts` reads `plan/fleet/peers/` and nothing else.
+- Receipts are YAML (`id`, `from`, `ts`, `ttl_s`, `broadcast`, `row`,
+  `recipients: [{to, state: pending|acked|undelivered, at, via, reason}]`);
+  `status` renders the spec's grammar from it. The infrastructure writes
+  them through `msg_store::mailbox_accept` (durable, fsync'd, deduplicated
+  by the `seen` set) then `msg_store::record_ack` / `record_undelivered`;
+  no verb reaches either.
+- The secret check runs BEFORE the shape check, so a credential is named as
+  one whatever else is wrong with the body.
+- `seq` is per (sender lane, destination address); a broadcast is
+  unsequenced (`seq: 0`) and never flagged `gap:`, because one counter
+  cannot be gap-free for several different groups.
+- `@<host>/*` stays literal in the outbox and the receipt; the mover
+  resolves it and adds one receipt entry per lane (`record_ack` appends an
+  unknown mailbox).
+- `recv --wait` polls `inbox/new`; the wake socket is 2.1's.
+- `msg gc` moves an outbox entry past its TTL to `dead/` and marks its
+  still-pending recipients `undelivered:expired`, as the daemon's sweep will.
+- `TILLANDSIAS_MSG_SHAPE_LAX=1` (the fixture's negative-control seam) is
+  honoured only with an explicit `TILLANDSIAS_MSG_ROOT`; it cannot switch
+  the CLI's secret check off for a real store, and the mover repeats the
+  check regardless.
+- Inside a forge the CLI uses `/run/host/tillandsias-msg` as its lane
+  directory when that mount exists (2.2 provides it).
+
 ## 2. Same-host mover and lane mounts [1506-q7ab, opus]
 
-- [ ] 2.1 `tillandsias --msg-serve`: watch outboxes, verify `from.lane`
+- [x] 2.1 `tillandsias --msg-serve`: watch outboxes, verify `from.lane`
       by directory, second `secret_shaped`, reply-to-broadcast refusal at
       the exchange layer, hard-link delivery, fsync, the `acked:` receipt,
       TTL sweep of mailboxes, wake socket, `@<host>/*` fan-out with one
       receipt per lane.
-- [ ] 2.2 Forge launch args: bind-mount the lane directory at
+- [x] 2.2 Forge launch args: bind-mount the lane directory at
       `/run/host/tillandsias-msg` and export `TILLANDSIAS_MSG_LANE`, beside
       the MCP mount.
-- [ ] 2.3 `scripts/test-fleet-msg-same-host.sh`: two lanes on one host,
+- [x] 2.3 `scripts/test-fleet-msg-same-host.sh`: two lanes on one host,
       an ack with no `recv` ever run, a lane that lies about `from.lane`, a
       body written straight into an outbox directory that only the mover
       can refuse, a reply-to-broadcast written straight into an outbox.
+
+Implementation notes for 1506-q7ab (what 1506-7tq4 and 1506-ssb5 inherit):
+
+- The store moved out of `tillandsias-plan` into the `tillandsias-msg` crate
+  (`shape`, `store`, `lanefs`); the plan CLI re-exports it unchanged. The
+  mover ships in the musl tray binary, which must not link the plan
+  engine's vendored Lua and redb.
+- Delivery is not a hard link: the mailbox copy carries exactly one `to`,
+  so it is a new file written by `store::mailbox_accept_with` (tmp, fsync,
+  rename, fsync(dir), then `seen` appended and fsync'd). The ack function
+  takes a proof value only a durable delivery constructs; an injected fsync
+  failure leaves the receipt pending and the outbox entry for the retry.
+- Every read and write the infrastructure makes inside a lane is fd-relative
+  and O_NOFOLLOW per component (`lanefs::Lane`): a forge holds its lane
+  directory read-write, and a symlinked `outbox/new` would otherwise let it
+  read and move another lane's inbox through the host-side mover. Such a
+  lane is `refused:msg:lane-not-plain:<lane>` and nothing in it moves.
+- `@<host>/*` resolves to every lane present EXCEPT the sender's; with none,
+  the wildcard entry is `undelivered:refused:empty-group`.
+- A local recipient whose lane directory does not exist yet stays pending
+  (the forge may launch later) and expires at its TTL like any other.
+- One mover per store (`<root>/.mover.lock`, flock): the tray runs it beside
+  the control socket; a foreground `--msg-serve` on the same store is
+  refused `refused:msg-serve:already-running` and vice versa.
+- The launcher also exports `TILLANDSIAS_MSG_HOST`: inside a forge
+  gethostname is the container's, and the mover refuses any `from` that is
+  not `<host>/<lane>` for the directory it sits in.
+- The guest headless on macOS/Windows does not start a mover yet (the tray
+  is Linux's); that start is left to the rung that needs it.
 
 ## 3. MCP tools and non-Claude entrypoints [1506-ssb5, sonnet]
 

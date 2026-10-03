@@ -764,6 +764,28 @@ pub enum ControlMessage {
     ///
     /// @trace order:679-rp9m, spec:tray-host-control-socket
     GithubLoginStored { seq: u64, ts_unix: u64 },
+    /// Host → in-VM headless, vsock only (order 1503-qrgz): "the host's wall
+    /// clock now reads `host_unix_ms`". Sent by the macOS tray on every
+    /// NSWorkspace did-wake notification. The guest ALWAYS answers exactly one
+    /// frame: `IssueAck { seq_acked }` on success (including "within 1 s, left
+    /// alone") or `Error`. Not silent-on-success like `SetVsockForwardTarget`:
+    /// the host client's `request` returns the NEXT inbound frame, so a silent
+    /// success would hand the caller's next reply to this request.
+    ///
+    /// WHY. Measured 2026-09-29: the VM does not run while the Mac sleeps, so
+    /// its clock falls behind by the sleep (about 30 s of guest time in 13 host
+    /// minutes; 69 min in one live incident). chrony then needs about 3.5 min to
+    /// re-acquire and, under Fedora's "makestep 1.0 3", only SLEWS after its
+    /// first three updates (about 77 ms/s, so about 15 h for 69 min). A token
+    /// TTL or device-flow poll judged against that clock fails. The host knows
+    /// the right time the moment it wakes; this carries it.
+    ///
+    /// New trailing variant: additive per the `WIRE_VERSION` doc (does not
+    /// bump the version). Same no-capability-bit argument as
+    /// `SetVsockForwardTarget`: the build version is bound into the channel key.
+    ///
+    /// @trace order:1503-qrgz, spec:vsock-transport
+    HostClockSync { seq: u64, host_unix_ms: u64 },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -1119,6 +1141,7 @@ impl ControlMessage {
             ControlMessage::FlowStatePush { .. } => "FlowStatePush",
             ControlMessage::ProgressPush { .. } => "ProgressPush",
             ControlMessage::GithubLoginStored { .. } => "GithubLoginStored",
+            ControlMessage::HostClockSync { .. } => "HostClockSync",
         }
     }
 }
@@ -2840,6 +2863,13 @@ mod tests {
                 },
                 "GithubLoginStored",
             ),
+            (
+                ControlMessage::HostClockSync {
+                    seq: 1,
+                    host_unix_ms: 1_790_706_540_000,
+                },
+                "HostClockSync",
+            ),
         ]
     }
 
@@ -3114,6 +3144,8 @@ mod tests {
             ControlMessage::ProgressPush { .. } => 34,
             // 679-rp9m: trailing addition.
             ControlMessage::GithubLoginStored { .. } => 35,
+            // 1503-qrgz: trailing addition.
+            ControlMessage::HostClockSync { .. } => 36,
         }
     }
 
@@ -3148,7 +3180,7 @@ mod tests {
         /// The number of `ControlMessage` variants. An independent literal for
         /// the same reason the discriminants are: anything computed from the
         /// enum agrees with the enum by construction.
-        const DECLARED_VARIANTS: usize = 36;
+        const DECLARED_VARIANTS: usize = 37;
 
         let samples = one_sample_per_variant();
         assert_eq!(

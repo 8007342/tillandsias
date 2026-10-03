@@ -1,0 +1,36 @@
+packets:
+  - packet_id: check-bash-dialect-still-misses-the-door-deadline-on-a-slower-host-so-litmus-deciders-within-door-deadline-reds-a-daily-cut
+    order: 1510-pfuj
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [preflight, deciders, performance, fail-loud]
+    estimated_hours: 2
+    owned_files: [scripts/check-bash-dialect.sh]
+    title: |
+      litmus:deciders-within-door-deadline (1500-gu5r's pin) reads FAIL 5/6 on macuahuitl, alone and in a full ci-release run; check-bash-dialect sat at 3.6-4.1 s of the 5 s door deadline on yoga after 1500-gu5r and the tree has grown since
+    context: |
+      REPORTED by macuahuitl-fedora 2026-09-30 (load ~2, Fedora 44): the
+      release-tier litmus is red 5/6, so it would red a daily cut; it does not
+      block lands. Coordinator ruling: name the decider and its time, then make
+      it faster or re-measure its cap with the regime attached; do NOT widen
+      the 5 s door deadline (it is the floor host's number).
+      MEASURED on yoga at trunk 4de2a4824, three runs each: check-bash-dialect
+      4127/3573/3631 ms, check-groundtruth-regime-invariance 4422 cold then
+      2662/2719 ms, the other four under 0.6 s. bash-dialect is the likely
+      miss on a slower host: after 1500-gu5r's prefilter ~200 of 885 files
+      remain, and each still pays a sed+grep pair per rule plus two awk passes
+      (~20 spawns, ~19 ms/file; the loop is 3.8 s of the 4.1 s).
+      REMEDY: one bulk grep -l per rule over the candidates, so each rule runs
+      only on files whose raw text can match it. Raw text is a superset of
+      code_of's comment-stripped text, so a skipped file cannot produce a hit
+      and no verdict changes.
+    exit_criteria:
+      - check-bash-dialect under 5 s on the full population on yoga with margin, measured three times
+      - stdout and stderr byte-identical to the previous version on the live tree AND on a tree seeded with a violating file
+      - test-check-bash-dialect.sh all scenarios green
+      - litmus:deciders-within-door-deadline PASS on yoga; macuahuitl re-run requested with its regime attached
+    verifiable_closure: 'litmus:deciders-within-door-deadline PASS 6/6, and bash scripts/test-check-bash-dialect.sh green'

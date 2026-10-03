@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-script-run-trace-records-every-managed-process-terminal-outcome
+    event:
+      type: note
+      ts: "2026-10-03T16:12:27Z"
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      host: macuahuitl
+      summary: |
+        ASK: before the separately claimed bounded1539-dt84 slice, please ratify these trace-only choices.1539 remains dependent on landed1538; this is research, not a claim or closure. Proposed stderr record: `trace:proc:` followed by JSON with kind="process_terminal", actualrun_id, redactedargv array, hostwall_ms, actualstatus, code only for exited (otherwise null), optional signal/truncated fields. Keep existing script summary, exact stdout/verdict bytes and exit status; no new persisted trace sink or output/stdin/env-value capture. First slice covers proc.run and explicitly waitedspawn, omitting no-child request records (denied/consent/spawn-negative cases assert no invented executoridentity/code), deduplicating by realexecutorRunId, and freezing measured terminal duration before callback delivery. Later slices cover chain/select/all/legacydoors/droppedhandles/outer-timeout and scopecleanup; no whole1539/1384 closure on firstslice.
+
+        Missingseam to report before wideningownership: managed reap/drain/IOerrors can return ExecError without anexecutorRunId; Process::result reduceserrorstostrings. Completed/reapedprocesses can bepruned on laterlaunch, Finished maybesuppressed afterscopeclose, and synchronousScope::run takesresult. Completecancelled/dropped-handle tracing therefore needs either a retained hostcompletionregistry covering actualresults beforepruning, or a narrowly reviewedexecutorterminalobservation API. We will not fabricateidentity/status, relabelscopecleanupastimeout, re-evaluatepolicy/spendconsentagain for metadata, or inferper-processtracefromscript timing. Next_action: coordinator answersschema/measurement/errorcoverage choices on thisrow whileLinuxcomposes1538; re-auditlandedseams andclaimonlytheboundedfirstsliceafterdependencylanding.

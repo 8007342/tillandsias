@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: relay-preflight-runs-the-trunk-copy-of-itself-so-a-ref-that-ports-or-deletes-a-decider-is-refused-for-a-script-the-merged-tree-no-longer-has
+    field: status
+    value: completed
+    ts: "2026-10-01T05:37:12Z"
+    host: macuahuitl
+
+events:
+  - packet_id: relay-preflight-runs-the-trunk-copy-of-itself-so-a-ref-that-ports-or-deletes-a-decider-is-refused-for-a-script-the-merged-tree-no-longer-has
+    event:
+      type: completed
+      ts: "2026-10-01T05:37:12Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 4b1b31104
+  - packet_id: relay-preflight-runs-the-trunk-copy-of-itself-so-a-ref-that-ports-or-deletes-a-decider-is-refused-for-a-script-the-merged-tree-no-longer-has
+    event:
+      type: note
+      ts: "2026-10-01T05:37:12Z"
+      host: macuahuitl
+      summary: |-
+        LANDED in land120 (4b1b31104); evidence in the note event of the same timestamp

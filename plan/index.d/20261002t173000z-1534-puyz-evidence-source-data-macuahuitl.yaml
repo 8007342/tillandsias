@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: lua-live-streaming-callbacks-and-managed-process-lifecycle
+    event:
+      type: progress
+      ts: "2026-10-02T17:30:00Z"
+      agent_id: linux-macuahuitl-opencode-20261002t053211z
+      host: macuahuitl
+      summary: |
+        Evidence-only packaging: archived Python fixture sources were renamed to .py.source.txt without payload edits so the no-Python repository gate does not classify measured source data as runtime tooling. final-summary.json retains the original historical filenames and SHA-256 identities; external reproduction materializes the original names only in a scratch fixture. No runtime code, Cargo metadata, or gate policy changed.

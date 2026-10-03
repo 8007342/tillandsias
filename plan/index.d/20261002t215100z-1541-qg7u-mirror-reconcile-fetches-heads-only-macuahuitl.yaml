@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the macuahuitl coordinator, 2026-10-02 (session_01T88pDM3B8tdzfk8kUdtjUF).
+packets:
+  - packet_id: the-mirror-reconcile-fetches-heads-only-so-the-floating-release-tags-drift-after-every-daily-cut-and-the-atomic-relay-refuses-every-push-with-would-clobber-existing-tag
+    order: 1541-qg7u
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [git-mirror, relay, podman, linux]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - scripts/test-git-mirror-stale-reconcile.sh
+    title: "The mirror's reconcile fetches heads only, so the floating tags drift and the relay refuses every push after a daily cut"
+    context: |
+      Measured on macuahuitl 2026-10-02 ~20:50Z. Every push through the host
+      mirror lane (ssh 127.0.0.1:2223) was refused by the mirror's pre-receive:
+      "! [rejected] latest -> latest (would clobber existing tag)" (also stable,
+      unstable), then "[pre-receive] Push rejected: configured upstream did not
+      durably accept the ref transaction". The mirror held latest=5594af060,
+      stable=d412d0a5d, unstable=be6863e45 while GitHub held 66b2904f0,
+      cd7f9675f, 8fdaee0b0: the daily cut had moved the three floating tags
+      upstream. `tillandsias --sync tillandsias linux-next` reported
+      ok:sync:heads-current because its reconcile runs
+      `git fetch origin 'refs/heads/*:refs/heads/*'` and never touches tags,
+      yet the relay pushes the mirror's whole ref set atomically, so one stale
+      tag fails the branch push too. The hand fix that cleared it:
+      `podman exec tillandsias-git-tillandsias git -C /srv/git/tillandsias
+      fetch origin '+refs/tags/*:refs/tags/*'`.
+    outcome: |
+      The mirror's reconcile (both the on-demand --sync and the relay's
+      "non-forced reconcile fetch") also fast-forwards the floating tags from
+      upstream, or the relay pushes only the refs the client sent instead of
+      the mirror's whole ref set. A stale floating tag on the mirror never
+      refuses a branch push again.
+    exit_criteria:
+      - "With the mirror's refs/tags/latest deliberately set behind upstream, a plan-only push of one fragment through the lane lands on GitHub (the control: before the fix the same setup prints 'would clobber existing tag' and refuses)."
+      - "`tillandsias --sync <project> linux-next` prints the tag reconciliation it performed, or the relay's push omits tags the client did not send; either way the refusal above cannot recur."
+      - "scripts/test-git-mirror-stale-reconcile.sh gains an arm that plants a stale floating tag and asserts the push succeeds; the arm fails on the pre-fix code."
+    unscoreable: "unpinnable-until-the-guard-exists: the closure is the new arm in scripts/test-git-mirror-stale-reconcile.sh (planted stale refs/tags/latest, push succeeds); the claimer writes that arm in the same commit as the fix and moves this text into verifiable_closure."
+    next_action: "On a Linux host with the enclave up: reproduce by setting refs/tags/latest in /srv/git/<project> inside tillandsias-git-<project> to an older release tag, push one fragment through the lane, and capture the refusal; then fix the reconcile in crates/tillandsias-headless/src/main.rs (the sync and the relay's reconcile path) and add the fixture arm. Note 1461-8tyy is a separate failure seen the same night (Vault held no GitHub credential) and is not this packet."
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Seen the same evening after this fix: the relay then failed with "Invalid
+      username or token" because Vault held no GitHub credential at all
+      (`--refresh-github-token` → refused:github-refresh:no-token); that is
+      1461-8tyy's subject and an operator --github-login, not this row.
+    provenance: "Filed by linux-macuahuitl-claude-20261002t204304z (coordinator) from a measured refusal on macuahuitl, 2026-10-02."

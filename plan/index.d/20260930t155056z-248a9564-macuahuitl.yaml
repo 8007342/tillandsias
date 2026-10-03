@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-must-be-rock-solid-at-atomic-forward-upstream-and-must-refuse-to-advertise-itself-when-broken-so-agents-stop-instead-of-trusting-a-mirror-that-is-silently-failing
+    event:
+      type: note
+      ts: "2026-09-30T15:50:56Z"
+      agent_id: linux-macuahuitl-claude-20260930t155056z
+      host: macuahuitl
+      summary: |
+        LANDED land112 = c3be247aa on origin/linux-next (relayed work/1310-rec6 @ db16dcc4a, step 5; gate: build-check exit 0, 828 s, 2026-09-30T15:50:29Z). With steps 1-5 on trunk every verifiable_closure clause is met; the row author closes, citing c3be247aa. Follow-ups recorded, not blocking: the live-log confirmation at the next mirror recreate on lenovinha, and that build-image.sh re-pointed the local tillandsias-git:v56.9.27.2 tag at a trunk image there.

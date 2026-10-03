@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# @trace order:889-twhe, order:881-29me, order:863-iicc
+# @trace order:889-twhe, order:881-29me, order:863-iicc, order:1507-e693
 #
 # test-pre-push-issue-capture-lane.sh — pin that the pre-push plan-only lane
 # admits NEW plan/issues captures, and pin every boundary of that admission.
+# Also pins the plan/inbox/ mailbox arms added by 1507-e693 (section 1e-1h
+# below): the same shape as plan/deslop-sweeps.d, one directory over.
 #
 # WHY THE LANE WAS WIDENED. The meta-orchestration Reduction Engine makes
 # filing a plan/issues capture a NON-NEGOTIABLE exit condition of every cycle
@@ -193,7 +195,7 @@ run_guard() {
     printf 'refs/heads/linux-next %s refs/heads/linux-next %s\n' "$(git rev-parse HEAD)" "$rsha" \
         | bash scripts/hooks/pre-push-local-gate.sh 2>&1
 }
-reset_to_remote() { G reset -q --hard origin/linux-next; git clean -qfd; mkdir -p plan/issues plan/index.d scripts/hooks; printf "packets: []\n" > plan/index.yaml; }
+reset_to_remote() { G reset -q --hard origin/linux-next; git clean -qfd; mkdir -p plan/issues plan/index.d plan/inbox scripts/hooks; printf "packets: []\n" > plan/index.yaml; }
 
 # ── 1. (a) A NEW top-level capture with symbol citations is ADMITTED. ──────
 printf 'The const lives in `main.rs` `build_git_run_args`.\n' > plan/issues/new-capture.md
@@ -312,6 +314,88 @@ if lane_qualified "$out"; then
 else
     ok "CONTROL: the nested .d/ shape still takes the full gate, so 1d is about the NAME and not about a permissive lane"
 fi
+reset_to_remote
+
+# ── 1e. ORDER 1507-e693: a NEW plan/inbox/ MAILBOX MESSAGE qualifies. ───────
+#      plan/inbox/<host>.md (today only plan/inbox/codex.md) is the STOPGAP
+#      mailbox for a plan_only_peer (Codex) that cannot receive a direct
+#      message. This lane never listed plan/inbox/, so every message —
+#      coordinator or peer — took the whole push onto the full gate. MEASURED
+#      2026-09-29 on macuahuitl: a push touching only plan/inbox/codex.md was
+#      refused as outside the allowlist and waited ~20 minutes for the next
+#      relay gate. Same shape as plan/deslop-sweeps.d (1e-1h mirror 1b-1c).
+mkdir -p plan/inbox
+printf '# Codex inbox\n\n## MSG codex-2026-09-29-01 — hello\nfirst message\n' > plan/inbox/codex.md
+G add -A >/dev/null; G commit -q -m "file the first inbox message"
+out="$(run_guard)"
+if lane_qualified "$out" && grep -qE 'plan-only lane clean|plan-only lane: validated plan/inbox/codex.md' <<<"$out"; then
+    ok "a NEW plan/inbox/ mailbox message qualifies for the lane (1507-e693)"
+else
+    bad "a new inbox message was turned away: $(grep -m1 'not applicable' <<<"$out")"
+fi
+# APPENDED, the common case after the first message: the coordinator posts a
+# new MSG section, or a peer appends a RECEIVED/ASK note to an existing row.
+printf '\n## MSG codex-2026-09-30-02 — second message\nRECEIVED: codex-2026-09-29-01\n' >> plan/inbox/codex.md
+G add -A >/dev/null; G commit -q -m "append a second inbox message"
+out="$(run_guard)"
+if lane_qualified "$out"; then
+    ok "an APPENDED inbox message qualifies (M, not just A)"
+else
+    bad "an appended inbox message was turned away: $(grep -m1 'not applicable' <<<"$out")"
+fi
+reset_to_remote
+
+# ── 1f. NEGATIVE CONTROL for 1507-e693: an inbox REWRITE must fall back. ───
+#      Several parties write the same mailbox file (the coordinator posts
+#      messages; a peer appends RECEIVED/ASK notes to an EXISTING row), so the
+#      lane cannot tell a correction from erasing another party's row and a
+#      removal must not ride the cheap lane.
+mkdir -p plan/inbox
+printf '# Codex inbox\n\n## MSG one\nfirst\n\n## MSG two\nsecond\n' > plan/inbox/codex.md
+G add -A >/dev/null; G commit -q -m "seed two inbox messages"
+G push -q origin linux-next 2>/dev/null || true
+printf '# Codex inbox\n\n## MSG one\nfirst\n' > plan/inbox/codex.md
+G add -A >/dev/null; G commit -q -m "REWRITE: drop an inbox message"
+out="$(run_guard)"
+if grep -q 'plan-only lane clean' <<<"$out"; then
+    bad "NEGATIVE CONTROL BREACHED — an edit REMOVING an inbox message rode the lane"
+else
+    ok "an inbox-message REMOVAL falls back to the full gate (1507-e693)"
+fi
+reset_to_remote
+
+# ── 1g. NEGATIVE CONTROL: plan/inbox/ mixed with a scripts/ file in the same
+#      push is still refused, without a gate stamp (packet 1507-e693 exit
+#      criterion 2). The lane is all-or-nothing; one non-plan path
+#      disqualifies the whole push, exactly as arm 6 pins for plan/issues/.
+mkdir -p plan/inbox
+printf '# Codex inbox\n\n## MSG\nhello\n' > plan/inbox/codex.md
+printf 'echo hi\n' > scripts/some-inbox-code.sh
+G add -A >/dev/null; G commit -q -m "inbox message plus code"
+out="$(run_guard)"
+grep -q 'plan-only lane clean' <<<"$out" \
+    && bad "a push mixing plan/inbox/ with code rode the lane" \
+    || ok "plan/inbox/ mixed with a scripts/ file still takes the full gate (no gate stamp exists in this scratch tree, so a stamp-free acceptance would show up as 'plan-only lane clean')"
+reset_to_remote
+
+# ── 1h. plan/inbox/ SHAPE GUARDS: nested path and non-markdown are refused
+#      (packet 1507-e693 exit criteria 3 and the task's fourth arm).
+mkdir -p plan/inbox/sub
+printf 'nested message\n' > plan/inbox/sub/x.md
+G add -A >/dev/null; G commit -q -m "nested inbox path"
+out="$(run_guard)"
+grep -q 'plan-only lane clean' <<<"$out" \
+    && bad "a nested plan/inbox/sub/x.md rode the lane" \
+    || ok "a nested plan/inbox/sub/x.md takes the full gate"
+reset_to_remote
+
+mkdir -p plan/inbox
+printf '#!/usr/bin/env bash\necho hi\n' > plan/inbox/x.sh
+G add -A >/dev/null; G commit -q -m "non-markdown inbox file"
+out="$(run_guard)"
+grep -q 'plan-only lane clean' <<<"$out" \
+    && bad "a non-markdown plan/inbox/x.sh rode the lane" \
+    || ok "a non-markdown plan/inbox/x.sh takes the full gate"
 reset_to_remote
 
 # ── 2. (d) THE NEGATIVE CONTROL: a capture whose citations violate 881-29me

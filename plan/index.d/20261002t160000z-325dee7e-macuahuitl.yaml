@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: atomically-cut-over-the-four-source-agreement-shell-files-to-the-typed-lua-runner
+    event:
+      type: progress
+      ts: "2026-10-02T16:00:00Z"
+      agent_id: linux-macuahuitl-opencode-20261002t053211z
+      host: macuahuitl
+      summary: |
+        Parent forced PR203 gate refused at7a4f34fcfa1663ef462e1d136f6e86b8c242eae3 with typed agent-door status exited,code3 (land tool reports gate-failed); the underlying check named four archived .py source files under plan/issues/evidence. Parent salvaged the candidate atsalvage/macuahuitl/20261002-lua-source-cutover-evidence-packaging-gate before repair. No Lua decision or output-parity failure was observed. Packaging repair renames the four exact-byte archival sources to .py.source.txt, retains normal100644 non-executable mode and adds a provenance README; no repository/runtime/gate caller invokes them, no interpreter dependency is introduced and the no-Python guard is unchanged. JSON receipts, source hashes and performance qualifications are unchanged. Parent rechecks the unmodified no-Python guard and retries the serialized forced integration gate before closure; packet remainsin_progress. Raw gate failure log retained externally aspr-203-first-gate-failure.log.

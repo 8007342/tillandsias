@@ -9,7 +9,8 @@
 #   2. `check-ref` on this seed: main is refused (enforced) with why: and the
 #      seed's substituted message as remedy:; a work ref is ok; feature-x is
 #      warn (the grammar rule is at warn here) — and refused against a
-#      fixture seed holding that rule at enforced.
+#      fixture seed holding that rule at enforced over synthetic two-host
+#      history and a local origin work ref. The same seed over one host warns.
 #   3. FLOOR: a scratch project with NO seed answers
 #      ok:discipline:default-branch:level=0 for main and refuses nothing.
 #   4. `show --json` carries digest == `hash sha256` of the seed.
@@ -43,7 +44,8 @@ jget() { "$PLAN" json get "$@"; }
 first() { printf '%s' "${1%%$'\n'*}"; }
 command -v git >/dev/null 2>&1 || { echo "skip:branch-discipline-verb:no-git"; exit 0; }
 
-_tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
+_tmpbase="${TMPDIR:-/tmp}"
+[ ! -d /tmp/opencode ] || _tmpbase=/tmp/opencode
 W="$(mktemp -d "$_tmpbase/branch-discipline.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 
@@ -65,18 +67,50 @@ main_out="$(dis check-ref refs/heads/main --root "$ROOT" 2>&1)"; main_rc=$?
 work_out="$(dis check-ref refs/heads/work/1443-w79y --root "$ROOT" 2>&1)"; work_rc=$?
 feat_out="$(dis check-ref refs/heads/feature-x --root "$ROOT" 2>&1)"; feat_rc=$?
 sed 's/ref_grammar: warn/ref_grammar: enforced/' "$SEED" > "$W/strict.yaml"
-strict_out="$(dis check-ref refs/heads/feature-x --root "$ROOT" --seed "$W/strict.yaml" 2>&1)"; strict_rc=$?
+# Strict enforcement depends on observed history, NOT just the seed. Never use
+# the checkout's rolling last-50 window for this assertion: a sole builder's
+# checkpoints legitimately make it warn. Keep every synthetic ref/history local.
+# Forge identity variables override git -c, so clear them only in this helper.
+fixture_git() (
+    unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL
+    git -c init.defaultBranch=main -c user.name=fixture \
+        -c user.email=fixture@host-a.test -c commit.gpgsign=false "$@"
+)
+STRICT="$W/strict-project"
+fixture_git init -q --bare "$W/strict-origin.git"
+fixture_git init -q "$STRICT"
+fixture_git -C "$STRICT" remote add origin "$W/strict-origin.git"
+fixture_git -C "$STRICT" commit -q --allow-empty -m first-host
+fixture_git -C "$STRICT" -c user.email=another@host-a.test commit -q --allow-empty -m same-host
+fixture_git -C "$STRICT" push -q origin HEAD:refs/heads/main \
+    HEAD:refs/heads/linux-next HEAD:refs/heads/work/1443-w79y
+fixture_git -C "$STRICT" remote set-head origin main
+fixture_git -C "$STRICT" fetch -q origin
+low_derive="$(dis derive --root "$STRICT" 2>&1)"
+low_out="$(dis check-ref refs/heads/feature-x --root "$STRICT" --seed "$W/strict.yaml" 2>&1)"; low_rc=$?
+# Only host diversity changes; the integration/work refs already exist above.
+fixture_git -C "$STRICT" -c user.email=fixture@host-b.test commit -q --allow-empty -m second-host
+fixture_git -C "$STRICT" push -q origin HEAD:refs/heads/main HEAD:refs/heads/work/1443-w79y
+fixture_git -C "$STRICT" fetch -q origin
+high_derive="$(dis derive --root "$STRICT" 2>&1)"
+strict_out="$(dis check-ref refs/heads/feature-x --root "$STRICT" --seed "$W/strict.yaml" 2>&1)"; strict_rc=$?
 arm2=1
 [ "$main_rc" -eq 1 ] && [ "$(first "$main_out")" = "refused:discipline:default-branch-protected:enforced" ] || arm2=0
 grep -q '^why: ' <<<"$main_out" || arm2=0
 grep -q '^remedy: push to main denied: this project uses branch linux-next|osx-next|windows-next for integration and work/' <<<"$main_out" || arm2=0
 [ "$work_rc" -eq 0 ] && [ "$(first "$work_out")" = "ok:discipline:work-ref" ] || arm2=0
 [ "$feat_rc" -eq 0 ] && [ "$(first "$feat_out")" = "warn:discipline:ref-outside-grammar" ] || arm2=0
+[ "$(first "$low_derive")" = "derived=1 seed=none effective=0" ] || arm2=0
+[ "$low_rc" -eq 0 ] && [ "$(first "$low_out")" = "warn:discipline:ref-outside-grammar:seed-ahead-of-reality" ] || arm2=0
+grep -q '^remedy: .*two or more distinct committer hosts (by author email domain)' <<<"$low_out" || arm2=0
+[ "$(first "$high_derive")" = "derived=2 seed=none effective=0" ] || arm2=0
 [ "$strict_rc" -eq 1 ] && [ "$(first "$strict_out")" = "refused:discipline:ref-outside-grammar:enforced" ] || arm2=0
+grep -q '^why: ' <<<"$strict_out" || arm2=0
+grep -q '^remedy: name the branch by the grammar (work: work/' <<<"$strict_out" || arm2=0
 if [ "$arm2" = 1 ]; then
-    ok "arm 2: main refused (enforced, seeded remedy), work ref ok, feature-x warn here and refused under an enforced seed"
+    ok "arm 2: main refused (seeded remedy), work ref ok, feature-x warn here; strict seed warns at one host and refuses at two hosts with origin work ref"
 else
-    bad "arm 2: main rc=$main_rc [$main_out] | work rc=$work_rc [$work_out] | feature rc=$feat_rc [$feat_out] | strict rc=$strict_rc [$strict_out]"
+    bad "arm 2: main rc=$main_rc [$main_out] | work rc=$work_rc [$work_out] | feature rc=$feat_rc [$feat_out] | low derive=[$low_derive] rc=$low_rc [$low_out] | high derive=[$high_derive] strict rc=$strict_rc [$strict_out]"
 fi
 
 # 3 — the floor: a bare project with no seed is never refused.

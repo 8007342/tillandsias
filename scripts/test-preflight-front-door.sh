@@ -6,6 +6,34 @@
 # way it can lie has to be pinned.
 set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || exit 1
+# ORDER 1516-wru4: NEVER PLANT IN THE LIVE CHECKOUT. The arms below plant
+# guards and gate steps and append to build.sh; run in place, a concurrent gate
+# or boundary snapshot in this checkout saw them. So the fixture re-execs itself
+# inside a detached scratch worktree (target/ is ignored, so the live status
+# does not move), overlaid with the live tracked files so uncommitted edits are
+# still what is tested. A sampler watches the live tree the whole run and the
+# outer half refuses if its status or build.sh moved.
+if [ -z "${FRONT_DOOR_SCRATCH:-}" ]; then
+    mkdir -p "$ROOT/target/plan-scratch"
+    SCR="$(mktemp -d "$ROOT/target/plan-scratch/front-door.XXXXXX")"
+    git worktree add -q --detach "$SCR" HEAD >/dev/null 2>&1 || { echo "FAIL: cannot create scratch worktree"; exit 1; }
+    git diff --name-only -z HEAD | while IFS= read -r -d '' f; do
+        if [ -e "$f" ]; then mkdir -p "$SCR/$(dirname "$f")"; cp -p "$f" "$SCR/$f"; else rm -f "$SCR/$f"; fi
+    done
+    _live() { git -C "$ROOT" status --porcelain; sha256sum "$ROOT/build.sh"; }
+    before="$(_live)"
+    ( while :; do [ "$(_live)" = "$before" ] || { [ -e "$SCR.moved" ] || { date +%T; diff <(printf '%s\n' "$before") <(_live); } > "$SCR.moved"; }; sleep 1; done ) & sampler=$!
+    ( cd "$SCR" && FRONT_DOOR_SCRATCH=1 bash scripts/test-preflight-front-door.sh ); rc=$?
+    kill "$sampler" 2>/dev/null; wait "$sampler" 2>/dev/null
+    moved=0; [ "$(_live)" = "$before" ] || moved=1
+    [ -e "$SCR.moved" ] && { moved=1; sed 's/^/        /' "$SCR.moved"; }
+    git worktree remove --force "$SCR" >/dev/null 2>&1; rm -rf "$SCR" "$SCR.moved"
+    if [ "$moved" -ne 0 ]; then
+        echo "  [FAIL] the live checkout moved while the door ran (status or build.sh changed) — 1516-wru4"; exit 1
+    fi
+    echo "  [OK]   the live checkout's status and build.sh never moved during the run (1516-wru4)"
+    exit "$rc"
+fi
 pass=0; fail=0
 # Orphan baseline BEFORE this fixture runs the door: a host may have background
 # work of its own, and an arm that counts globally would blame this door for it.
@@ -71,6 +99,18 @@ if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'zz-1305-planted'; then
 else
     bad "a newly wired guard was invisible to the front door (rc=$rc)"
 fi
+# ── ARM 2b (1515-iwb3, 1247-amcu criterion 5): THE REFUSAL'S REMEDY RUNS ─────
+# The per-guard refusal must say why and name the command that reruns that
+# guard alone, and that command, EXECUTED, must reproduce the guard's own
+# verdict: a remedy that names a command which does not exist or does not
+# reach the guard would be confidently wrong.
+remedy_cmd="$(grep -A1 'the guard check-zz-1305-planted refused' <<<"$out" | sed -n 's/.*confirm with the guard alone: \(bash [^ ]*\).*/\1/p' | head -n 1)"
+if grep -q '  why: the guard check-zz-1305-planted refused this tree' <<<"$out" && [ -n "$remedy_cmd" ]; then
+    again="$($remedy_cmd 2>&1)"; again_rc=$?
+    if [ "$again_rc" -ne 0 ] && grep -q 'violation:planted-guard' <<<"$again"; then
+        ok "the refusal names its why and a remedy command that, executed ($remedy_cmd), reproduces the guard's verdict"
+    else bad "the remedy command '$remedy_cmd' did not reproduce the guard (rc=$again_rc)"; fi
+else bad "the per-guard refusal carries no why/remedy with a runnable command"; fi
 cleanup; trap - EXIT INT TERM HUP PIPE
 
 # ── ARM 2c: A GUARD THE GATE RUNS INLINE IS A ROSTER ENTRY (1499-m9fj) ──────
@@ -209,7 +249,11 @@ ser_cleanup; trap - EXIT INT TERM HUP PIPE
 # MEASURED: test-uninstall-matcher-spares-bystanders prints skip:not-darwin and
 # exits non-zero, and this door called it `refused` — 1309-fhxb's shape inside
 # the fix for 1305, written by the host that filed 1309-fhxb the same evening.
-if grep -qE "grep -qE '\^skip:'" build.sh; then
+# 1384-bqhy: the door no longer greps for ^skip: itself; it asks the one
+# classifier (script classify, whose precedence puts a named skip first) and
+# books its `skip` kind as a declared skip.
+if grep -q '_pf_kind="$(_pf_classify "$_pf_rc" "$_pf_tmp")"' build.sh \
+   && grep -qE '^[[:space:]]+skip\)$' build.sh && grep -q '_pf_declskip=$((_pf_declskip + 1)) ;;' build.sh; then
     ok "a skip: line is treated as a skip whatever the guard exits with"
 else
     bad "the door does not recognise a named skip"

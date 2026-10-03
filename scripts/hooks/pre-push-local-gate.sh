@@ -756,6 +756,54 @@ attempt_plan_only_lane() {
                     fi
                     bases+=("")
                     ;;
+                plan/inbox/?*.md)
+                    # ORDER 1507-e693. plan/inbox/<host>.md (currently
+                    # plan/inbox/codex.md only) is the STOPGAP mailbox for a
+                    # plan_only_peer that cannot receive a direct message
+                    # (Codex today; the message bus at 1506-3xu7 replaces it).
+                    # This lane never listed plan/inbox/, so every message —
+                    # the coordinator appending a new MSG section, or a peer
+                    # appending a RECEIVED/ASK note to an existing row — took
+                    # the whole push onto the full gate. MEASURED 2026-09-29 on
+                    # macuahuitl: a push touching only plan/inbox/codex.md was
+                    # refused with "outside plan/index.d/, ..., and
+                    # plan/deslop-sweeps.d/ ... (full gate required)", and the
+                    # message waited ~20 minutes for the next relay gate. A
+                    # mailbox that needs a full gate per message defeats its
+                    # purpose.
+                    #
+                    # SAME SHAPE AS plan/deslop-sweeps.d, the closest
+                    # precedent this lane already carries: a flat per-mailbox
+                    # .md file, no nesting, and the SAME A-OR-M-APPEND-ONLY
+                    # reasoning as the sweep and work-queue arms — SEVERAL
+                    # PARTIES WRITE THE SAME FILE (the coordinator posts
+                    # messages; a peer appends a RECEIVED/ASK note to an
+                    # EXISTING row), so the lane cannot tell a correction from
+                    # erasing another party's row, and a rewrite still takes
+                    # the full gate exactly as it does for a work-queue ledger
+                    # or a sweep record.
+                    if [[ "$status" != "A" && "$status" != "M" ]]; then
+                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; inbox mailboxes qualify as new (A) or appended (M) only (full gate required)" >&2
+                        return 1
+                    fi
+                    if [[ "${path#plan/inbox/}" == */* ]]; then
+                        echo "plan-only lane: not applicable — '$path' is nested below plan/inbox/ (full gate required)" >&2
+                        return 1
+                    fi
+                    # APPEND-ONLY ON M, the sweep/work-queue reasoning above: a
+                    # rewrite cannot be told apart from erasing another
+                    # party's message or acknowledgement.
+                    if [[ "$status" == "M" ]]; then
+                        _ib_removed="$(git diff "$remote_sha" "$local_sha" -- "$path" 2>/dev/null \
+                            | grep '^-' | grep -v '^---' | head -3)"
+                        if [[ -n "$_ib_removed" ]]; then
+                            echo "plan-only lane: not applicable — '$path' is an inbox mailbox and this edit REMOVES or REWRITES lines, which the lane cannot tell from erasing another party's message or RECEIVED/ASK note (full gate required)" >&2
+                            printf '%s\n' "$_ib_removed" | sed 's/^/    /' >&2
+                            return 1
+                        fi
+                    fi
+                    bases+=("")
+                    ;;
                 plan/issues/?*.md)
                     # Order 889-twhe. The Reduction Engine makes filing a
                     # plan/issues capture a NON-NEGOTIABLE exit condition of
@@ -934,7 +982,7 @@ attempt_plan_only_lane() {
                             continue
                         fi
                     fi
-                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, plan/deslop-sweeps.d/, and plan/mo-full-attestations.d/, and differs from origin/linux-next (full gate required)" >&2
+                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, plan/deslop-sweeps.d/, plan/inbox/, and plan/mo-full-attestations.d/, and differs from origin/linux-next (full gate required)" >&2
                     return 1
                     ;;
             esac
@@ -1561,14 +1609,28 @@ attempt_plan_only_lane() {
 
     # Forbidden-pattern check that applies to any tracked text, fragments
     # included (methodology base64_script_injection_ban).
-    if [[ -f scripts/check-no-base64-script-injection.sh ]]; then
-        if ! out="$(bash scripts/check-no-base64-script-injection.sh 2>&1)"; then
-            echo "plan-only lane: validation FAILED — check-no-base64-script-injection refused (full gate required):" >&2
-            echo "$out" | head -6 | sed 's/^/  /' >&2
+    # PORTED to Lua (1525-c6jm): scripts/lua/check-no-base64-script-injection.lua
+    # through the one runner (`plan_bin`, resolved above). A missing plan
+    # binary is a loud could-not-run — the lane denies the fast path rather
+    # than silently skipping a security gate, unlike the "absent" skip below
+    # (which is for the checker SOURCE being absent, not its runner).
+    if [[ -f scripts/lua/check-no-base64-script-injection.lua ]]; then
+        if [[ -n "$plan_bin" ]] && ! grep -qx script <<<"$("$plan_bin" capabilities 2>/dev/null)"; then
+            echo "plan-only lane: validation COULD-NOT-RUN — check-no-base64-script-injection: $plan_bin predates \`script run\`, so the check was not asked (full gate required)" >&2
+            echo "  remedy: cargo build --release -p tillandsias-plan (or scripts/cycle-preflight.sh), then push again" >&2
+            return 1
+        elif [[ -n "$plan_bin" ]]; then
+            if ! out="$("$plan_bin" script run scripts/lua/check-no-base64-script-injection.lua 2>&1)"; then
+                echo "plan-only lane: validation FAILED — check-no-base64-script-injection refused (full gate required):" >&2
+                echo "$out" | head -6 | sed 's/^/  /' >&2
+                return 1
+            fi
+        else
+            echo "plan-only lane: validation FAILED — check-no-base64-script-injection could-not-run: no tillandsias-plan with \`script run\` resolves (full gate required)" >&2
             return 1
         fi
     else
-        LANE_NOTES+=("scripts/check-no-base64-script-injection.sh absent — skipped")
+        LANE_NOTES+=("scripts/lua/check-no-base64-script-injection.lua absent — skipped")
     fi
 
     # ORDER 1261-bn7v. A long-form field whose OUTGOING fold drops a line
@@ -1681,11 +1743,25 @@ enforce_stamp_scope() {
     while read -r local_ref local_sha remote_ref remote_sha; do
         [[ -n "$local_ref" ]] || continue
         if [[ "$local_sha" =~ ^0+$ ]]; then continue; fi
-        if [[ "$remote_sha" =~ ^0+$ ]] || ! git cat-file -e "$remote_sha" 2>/dev/null; then
+        if [[ "$remote_sha" =~ ^0+$ ]]; then
             refuse "the gate stamp is scoped to '$scope' but $remote_ref has no usable local base to diff against" \
                    "A scoped stamp can only be honoured when the push can be classified." \
                    "Re-run the full gate:" \
                    "  ./build.sh --check"
+        fi
+        # ORDER 1524-w8ys — A REMOTE THAT MOVED IS A RACE, NOT A GATE PROBLEM.
+        # git hands this hook the remote's ADVERTISED tip, so a sha we do not
+        # have means the branch moved since the last fetch. This used to share
+        # the refusal above and tell the pusher to re-run the full gate, which
+        # cost land120 a whole second gate on 2026-10-01 for one plan-only
+        # commit; fetching and merging is enough, because the merged tree is
+        # classified against the scope on the next push (Fable investigation,
+        # plan/issues/gate-collisions-scoped-stamps-2026-10-01.md).
+        if ! git cat-file -e "$remote_sha" 2>/dev/null; then
+            refuse "refused:pre-push:remote-moved-since-fetch:$remote_ref — origin has $remote_sha, which this checkout has never fetched" \
+                   "The branch moved on origin after your last fetch (another push landed). Nothing is wrong with your gate." \
+                   "Fetch and merge, then push again; no new gate is needed unless the merge brings in a change class your stamp's scope ('$scope') does not cover:" \
+                   "  git fetch origin && git merge origin/${remote_ref#refs/heads/}"
         fi
         while IFS= read -r path; do
             [[ -n "$path" ]] && paths+=("$path")
@@ -1718,6 +1794,18 @@ enforce_stamp_scope() {
     done
 
     if [[ ${#missing[@]} -gt 0 ]]; then
+        # ORDER 1521-y72e — OFFER THE PLAN-ONLY LANE BEFORE REFUSING, as the
+        # stale:* arms below do. The digest excludes plan fragments (930-i6x4),
+        # so a stamp written by a SCOPED gate stays ok:gate-fresh when a fragment
+        # lands on top, and this branch used to refuse that fragment's class
+        # (plan-ledger) without asking the lane. MEASURED on land117: every
+        # coordinator closure after a scoped land was refused here. The lane
+        # validates the whole outgoing diff and declines anything that is not
+        # plan-only, so a code class outside the scope still reaches the refusal
+        # below (test-gate-stamp-scope.sh case 9).
+        if attempt_plan_only_lane; then
+            exit 0
+        fi
         local missing_csv
         missing_csv="$(printf '%s,' "${missing[@]}")"; missing_csv="${missing_csv%,}"
         refuse "the gate stamp is scoped to '$scope' but this push also changes: $missing_csv" \

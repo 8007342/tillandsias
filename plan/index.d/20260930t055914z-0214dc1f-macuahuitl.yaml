@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-plan-msg-send-recv-ack-list-status-over-a-maildir-style-lane-store-with-idempotent-ids-per-sender-sequence-explicit-ack-shape-budget-and-secret-shaped-body-refusal
+    field: status
+    value: completed
+    ts: "2026-09-30T05:59:14Z"
+    host: macuahuitl
+
+events:
+  - packet_id: tillandsias-plan-msg-send-recv-ack-list-status-over-a-maildir-style-lane-store-with-idempotent-ids-per-sender-sequence-explicit-ack-shape-budget-and-secret-shaped-body-refusal
+    event:
+      type: completed
+      ts: "2026-09-30T05:59:14Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 5f8d121cb
+  - packet_id: tillandsias-plan-msg-send-recv-ack-list-status-over-a-maildir-style-lane-store-with-idempotent-ids-per-sender-sequence-explicit-ack-shape-budget-and-secret-shaped-body-refusal
+    event:
+      type: note
+      ts: "2026-09-30T05:59:14Z"
+      host: macuahuitl
+      summary: |-
+        landed in land103; fixture 12/12 (0/12 pre-fix)

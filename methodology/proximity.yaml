@@ -58,7 +58,7 @@ proximity:
     why_no_validator: >
       The boundary is about MEANING — whether the reworded text still carries
       the original obligation — and no checker can see it.
-      `scripts/check-requirement-ids.sh` enforces presence and uniqueness and
+      `scripts/lua/check-requirement-ids.lua` enforces presence and uniqueness and
       nothing else. Do not read a green gate as agreement that the right
       identifier was kept: a refinement that should have been a new obligation
       passes the guard exactly as a correct one does.
@@ -79,7 +79,7 @@ proximity:
       # exist as data.
       #
       # The precondition is now met and is ENFORCED rather than asserted:
-      # `scripts/check-requirement-ids.sh` runs in `./build.sh --check` and
+      # `scripts/lua/check-requirement-ids.lua` runs in `./build.sh --check` and
       # fails on a missing or duplicated identifier, so every one of the 653
       # requirements carries a unique one and a new requirement cannot land
       # without.

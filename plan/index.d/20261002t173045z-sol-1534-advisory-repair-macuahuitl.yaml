@@ -1,0 +1,9 @@
+events:
+  - packet_id: lua-live-proc-spawn-streams-with-script-owned-cancellation-and-reaping
+    event:
+      type: progress
+      ts: "2026-10-02T17:30:45Z"
+      agent_id: linux-macuahuitl-opencode-20261002t053211z
+      host: macuahuitl
+      summary: |
+        Parent review blocker repaired on isolated work/1534-puyz from archival-only6024a624d: valid verdict.advisory now closes the script scope exactly like other terminal verdicts, AFTER suffix/newline/CR validation and verdict storage. Exact advisory stdout and exit0 preserved. Four named regressions cover caught advisory refusal of new proc.run/proc.spawn, caught advisory CPU-loop prompt return and acknowledged owned-group cleanup, caught callback advisory CPU-loop cleanup/byte identity, and invalid advisory nonterminal validation. Preserved pre-fix binary:3 valid-advisory regressions FAIL and invalid-input control PASS; fixed binary4/4 PASS. All6 Lua/policy targets83/83 PASS (lua_proc26, predicate_classes22, observing_boundary6, command_policy_doors6, source_agreements7, lua_std16); targeted cargo fmt --check PASS. Raw diagnostic captures are JSON data with capture notes, not authored file:line prose. Receipts at plan/issues/evidence/lua-live-streaming-1534-20261002/advisory-latch/receipt.json: identical parent probe before escaped=true, after escaped=false, both exact scope-probe advisory line and exit0. Parent-before receipt retained. Only Rust edits are script_run.rs and lua_proc.rs. No full gates/agents/completed/native claims; parent independently gates executor and original deadline fixture. Composition/trace stay with1538/1539; parent1384 remains open. This repairs the prior READY review blocker, not a landing or completion declaration.

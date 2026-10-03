@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-must-be-rock-solid-at-atomic-forward-upstream-and-must-refuse-to-advertise-itself-when-broken-so-agents-stop-instead-of-trusting-a-mirror-that-is-silently-failing
+    event:
+      type: progress
+      ts: "2026-09-30T08:54:05Z"
+      agent_id: linux-lenovinha-claude-20260930t085405z
+      host: lenovinha
+      summary: |
+        STEP 3+4 PROPOSAL (lenovinha, for review before code). What withdrawing the advertisement means, given what exists now.
+        FACT that shapes it: pre-receive already relays SYNCHRONOUSLY (a push lands locally only after upstream accepted it), so work pushed into a broken mirror is NOT silently stranded today; the pusher gets the relay failure. The real cost of a broken mirror that keeps answering is EARLIER: a forge clones it, works for hours, and learns at push time. So withdrawal has to act BEFORE work starts, and the push path should refuse fast with the right remedy instead of attempting a doomed relay.
+        PROPOSED, reading step 2's refs/tillandsias/relay-state/broken/<class>/... (published only after 2 consecutive failing ticks):
+        (a) PUSH PATH (pre-receive, before any relay): when relay-state is broken, refuse every ref update immediately with the class and the remedy for WHO is pushing. The mirror can tell: pushes over git:// are forge agents; pushes over the host-push lane arrive via sshd with principal til:host-push:<host>. Forge: stop hard, ask the operator for a tillandsias upgrade and a forge rebuild. Host: fix the mirror (credential: the operator re-seeds with tillandsias --github-login; transport: restore connectivity), then the next ok tick restores service. Reads (clone, fetch, ls-remote) stay open so both can still read the verdict refs.
+        (b) FORGE START (step 4, forge class): the forge entrypoint reads relay-state with git ls-remote before any work and, on broken, refuses to start work with the upgrade-and-rebuild message: a hard stop, not a warning.
+        (c) BARE METAL (step 4, host class): check-credential-channel reads relay-state on the host-push-lane path; broken becomes blocked:mirror-broken:<class> with the fix-the-mirror remedy (and the ib6i lane stops counting as a push path while broken).
+        RESTORE: one ok tick republishes ok and every refusal above lifts with no restart.
+        Open for the coordinator: whether the git daemon should also stop EXPORTING (clones fail) on broken, which I propose NOT to do, because the verdict refs must stay readable.

@@ -1853,6 +1853,7 @@ dependencies = [
  "bstr",
  "either",
  "erased-serde",
+ "futures-util",
  "mlua-sys",
  "num-traits",
  "parking_lot",
@@ -3377,6 +3378,7 @@ dependencies = [
  "tillandsias-host-shell",
  "tillandsias-logging",
  "tillandsias-metrics",
+ "tillandsias-msg",
  "tillandsias-otp",
  "tillandsias-podman",
  "tillandsias-progress-tty",
@@ -3456,6 +3458,7 @@ dependencies = [
 name = "tillandsias-macos-tray"
 version = "0.1.0"
 dependencies = [
+ "block2",
  "futures-util",
  "libc",
  "objc2",
@@ -3495,6 +3498,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tillandsias-msg"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "libc",
+ "regex",
+ "serde",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "tillandsias-otp"
 version = "0.1.170"
 dependencies = [
@@ -3523,6 +3539,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "tillandsias-exec",
+ "tillandsias-msg",
  "tillandsias-podman",
  "tokio",
 ]

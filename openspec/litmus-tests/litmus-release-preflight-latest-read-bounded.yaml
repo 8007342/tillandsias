@@ -1,0 +1,30 @@
+# @trace spec:ci-release
+# @trace order:1523-rxt6
+#
+# Order 1523-rxt6: release-preflight.sh reads the latest release tag
+# anonymously and bounded, so a host whose login keyring is locked cannot
+# stall it (gh waited ~120 s and timed out release-gates-run-locally STEP 1).
+name: litmus:release-preflight-latest-read-bounded
+spec: ci-release
+phase: pre-build
+description: >
+  With gh and curl stubbed to hang, release-preflight.sh finishes inside 40 s,
+  names the latest read as could-not-run, and never calls gh; with curl stubbed
+  to return a tag, that tag reaches the stable-vs-latest comparison.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-release-preflight-latest-read-bounded.sh
+  - a runnable tillandsias-plan, or the fixture says could-not-run
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-release-preflight-latest-read-bounded.sh && test -x scripts/test-release-preflight-latest-read-bounded.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "the two arms hold"
+    command: "bash scripts/test-release-preflight-latest-read-bounded.sh"
+    timeout_ms: 180000
+    expected_behavior: "release-preflight-latest-read-bounded: 2 passed, 0 failed"

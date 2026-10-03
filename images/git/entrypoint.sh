@@ -401,6 +401,23 @@ run_publish_discipline() {
     return 0
 }
 
+# @trace spec:git-mirror-service
+# Order 1310-rec6 step 2: after the tick's fetch (reconcile) and the sync-state
+# publish, decide BROKEN in the mirror's own terms: heads still unrelayed are
+# retried and classified by the failing layer, with hysteresis, and published
+# as refs/tillandsias/relay-state/*. Runs AFTER the fetch on purpose: judged on
+# a stale tracking ref, every successful lane push reads as unrelayed.
+PUBLISH_RELAY_STATE="${PUBLISH_RELAY_STATE:-/usr/local/share/git-service/publish-relay-state}"
+run_publish_relay_state() {
+    if [ ! -x "$PUBLISH_RELAY_STATE" ]; then
+        retry_msg "[git-mirror] relay-state NOT published: $PUBLISH_RELAY_STATE missing"
+        return 0
+    fi
+    OUT="$(RELAY_REF="$1/hooks/tillandsias-relay-refs" "$PUBLISH_RELAY_STATE" "$1" 2>&1)" || true
+    [ -n "$OUT" ] && retry_msg "[git-mirror] relay-state: $OUT"
+    return 0
+}
+
 start_mirror_reconciler() {
     if [ ! -x "$RECONCILE_HEADS" ]; then
         retry_msg "[git-mirror] periodic reconciler NOT started: $RECONCILE_HEADS missing"
@@ -419,6 +436,7 @@ start_mirror_reconciler() {
                 # And the sync state, immediately after the reconcile that
                 # refreshed the tracking refs it reads (order 1350-ku7v).
                 run_sync_state "$m"
+                run_publish_relay_state "$m"
                 run_publish_discipline "$m"
             done
         done

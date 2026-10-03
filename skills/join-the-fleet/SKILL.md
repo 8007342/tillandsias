@@ -231,16 +231,15 @@ there.
      check-plan-binary-probe-usage, check-litmus-pin-claims,
      check-script-exec-bits, check-added-fragments-parse,
      check-scorable-obligation-added, and `cargo fmt --check`.
-     ONE COMMAND FOR THE WHOLE SEQUENCE (trims 2026-09-27, 1437-664a):
-     `scripts/relay-preflight.sh work/<order>` merges onto a scratch
-     branch, runs cycle-preflight, the deciders above plus
+     ONE COMMAND FOR THE WHOLE SEQUENCE (trims 2026-09-27, 1437-664a,
+     landed): `scripts/relay-preflight.sh work/<order>` merges onto a
+     scratch branch, runs cycle-preflight, the deciders above plus
      check-gate-step-regimes, check-added-test-is-referenced,
      check-jq-callsite-ratchet, preflight-fixtures-default-target and
      check-issue-citation-convention, `cargo fmt --check`, the touched
      fixtures, the touched crates' tests and the SCOPED covering litmus
      (`litmus-covering-specs.sh --relay-scope`, 1437-yfuh), and prints
-     ONE verdict line on stdout with per-item lines on stderr. Until it
-     lands, the list above is the hand-typed sequence. Canonical:
+     ONE verdict line on stdout with per-item lines on stderr. Canonical:
      `methodology/multi-host-development.yaml` →
      `pull_merge_cadence.relay_preflight`.
      ONE COMMAND, FOUR BEHAVIOURS (measured 2026-09-22, one row:
@@ -333,25 +332,25 @@ there.
   `281011af5472…`, byte-identical to GitHub's, with 693 refs present and the
   mirror's `linux-next` current at `aef882402`.
 
-  **WHAT THIS DOES NOT COVER, and the failure is silent.** A ref pushed from
-  SOMEWHERE ELSE — another host's work ref, or anything that reached GitHub
-  without passing through YOUR mirror — is not in your mirror until it syncs,
-  and today the exported heads move only at startup and on a relay. There is no
-  `tillandsias --sync` yet: that command lands under T1 of
-  cloud-only-project-lifecycle, and this page names it rather than describing it,
-  because a documented command that does not answer is worse than a named gap.
-  Until then, a mirror that has not relayed lately is SILENTLY BEHIND — lenovinha
-  met this at 00:03 on 2026-09-22 with a mirror four commits behind GitHub, and
-  the symptom was a push rejected for a stale old-object-id, not a message about
-  staleness.
-  AND DO NOT GO LOOKING FOR A sync-state REF: v56.9.22.1 shipped the
-  sync-state PUBLISHER and the sweep's stranded-tag explanation, but
-  nothing CALLS the publisher — the script was never copied into the
-  mirror image and no call site existed — so a mirror built from this
-  release produces no sync-state ref and `git ls-remote` for it returns
-  nothing. The lifecycle that runs it arrives with PR #163. Stated here
-  because a half-shipped feature reads exactly like a broken one from
-  the outside, and the search costs more than the sentence.
+  **A REF PUSHED FROM SOMEWHERE ELSE** — another host's work ref, or anything
+  that reached GitHub without passing through YOUR mirror — is in your mirror
+  only after it syncs. It syncs on its own every reconcile tick
+  (`MIRROR_RECONCILE_INTERVAL`, 120 s), and on demand, before you spend a push
+  or a forge launch on it:
+
+  ```bash
+  tillandsias --sync <project> [<branch>]   # default branch linux-next
+  # ok:sync:<project>:<branch>:heads-current   exit 0; anything else exits non-zero
+  ```
+
+  The mirror also publishes the answer as `refs/tillandsias/sync-state/<state>/<epoch>`
+  (`git ls-remote` reads it without fetching). Both landed with T1
+  (1350-ku7v); measured on lenovinha 2026-09-29: `--sync tillandsias` answered
+  `heads-current` and the mirror carried `refs/tillandsias/sync-state/heads-current/<epoch>`.
+  Before T1 a mirror that had not relayed lately was SILENTLY BEHIND (lenovinha,
+  2026-09-22, four commits behind, surfacing only as a push rejected for a
+  stale old-object-id), which is why the sync step is part of the sequence
+  rather than an afterthought.
 
   **AND TESTING ON THE HOST IS UNAFFECTED BY ANY OF THIS.** Editing in your
   checkout and running `./build.sh --check` needs no forge, no mirror and no

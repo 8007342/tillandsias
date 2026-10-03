@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    event:
+      type: note
+      ts: "2026-10-03T16:55:14Z"
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      host: macuahuitl
+      summary: |
+        Native Codex coordination: operator is launching Mac/Windows peers; no native execution receipt has arrived on this Linux session. Shaped disjoint post1538 verification children1543-ffhg (macos) and1544-cnae (windows), both dependency-gated on composition landing. Mac first addresses existing1519-6rcp /1375-amye native blockers, then runs9 Unix dispatcher and4 executor mode units plus focused native CLI controls. Windows needs genuinely Windows-enabled composition/cleanup controls in its own lua_proc_windows.rs; existing new units are Unix-gated and CLI managed_script is Linux-gated. WSL/cross compile/zero selected tests do not establish native runtime conformance. Native test files are disjoint from each other and the Linux lua_proc.rs. Record pinned landedsource SHA, OS/toolchain/architecture, nonzero named counts, actual completion status and raw outputs. Harmless fixtures only; do not run real destructive commands or runtime resets, nor infer Unix signal status for native Windows jobs.
+
+        Linux1538 parent review integrated Sol/Terra work and repaired the unused1MiB streaming-line bound incorrectly imposed on byte-only chain stages. Independently44/44 lua_proc,9/9 dispatcher units,32/32 executor tests and package-only Clippy now pass; all18 newcomposition tests fail against the pre-composition binary, and the long-byte control fails before repair and passes after. Actual proc.spawn line bound and8MiB prefix capture remain unchanged. The forced gate and first code push are next, not already proved. Parent1384, tracing1539, dependent1520, all native obligations and composite OpenSpec task4.2 remain open. Next_action: native peers readfreshinbox/rowclaims and waitforpinned landed1538; Linux gates/pushes/PR-integrates composition without claiming native closure.

@@ -712,6 +712,45 @@ git_mirror_host() {
 # it returns 0 and defers to the existing seed-tolerant clone retry loop, so the
 # generous seed window is preserved and a slow-seeding mirror is NOT regressed.
 # Returns 0 to proceed; returns 1 ONLY for a confirmed unresolvable alias.
+# forge_mirror_relay_gate <mirror-url> — order 1310-rec6 step 4 (forge class).
+# @trace spec:git-mirror-service
+# Reads the mirror's published relay-state (publish-relay-state, step 2). When
+# it is BROKEN (two failing ticks) the answer depends on the LANE, which the
+# entrypoint already knows (coordinator ruling 2026-09-30):
+#   an AUTONOMOUS lane (a prompted Codex or OpenCode run: it will commit and
+#   push unattended) must not start hours of work it cannot land: hard stop;
+#   an INTERACTIVE forge (a human, or Claude with --prompt, which stays
+#   interactive) starts with a loud banner so it can still read, debug and
+#   fix; its first push gets the mirror's own refusal.
+# The remedy is by failing layer: credential means the operator re-seeds the
+# GitHub token (a forge rebuild would not help); transport means ask for a
+# tillandsias upgrade and a forge rebuild, since a forge cannot fix upstream.
+# An unreadable or absent relay-state gates nothing (older mirrors publish
+# none), so this can never be the thing that stops a healthy launch.
+forge_mirror_relay_gate() {
+    local url="$1" st cls remedy
+    st="$(git ls-remote "$url" 'refs/tillandsias/relay-state/*' 2>/dev/null | awk '{ print $2; exit }')"
+    case "$st" in refs/tillandsias/relay-state/broken/*) ;; *) return 0 ;; esac
+    cls="${st#refs/tillandsias/relay-state/broken/}"; cls="${cls%%/*}"
+    case "$cls" in
+        credential) remedy="the operator re-seeds the GitHub token (tillandsias --github-login); a forge rebuild will not help" ;;
+        *) remedy="ask the operator for a tillandsias upgrade and a forge rebuild; a forge cannot repair the mirror's upstream" ;;
+    esac
+    if [ -n "${TILLANDSIAS_CODEX_PROMPT:-}${TILLANDSIAS_OPENCODE_PROMPT:-}" ]; then
+        echo "[forge] FATAL: the git mirror cannot relay to upstream (relay-state: broken/$cls), and this is an unattended lane that would work for hours and be unable to land it." >&2
+        echo "  why: the mirror failed to relay at the $cls layer on two consecutive ticks and refuses every push until it recovers" >&2
+        echo "  remedy: $remedy" >&2
+        echo "blocked:mirror-broken:$cls" >&2
+        return 1
+    fi
+    echo "[forge] ================================================================" >&2
+    echo "[forge] WARNING: the git mirror cannot relay to upstream (relay-state: broken/$cls)." >&2
+    echo "[forge]   Reading, debugging and fixing work; every PUSH will be refused until it recovers." >&2
+    echo "[forge]   remedy: $remedy" >&2
+    echo "[forge] ================================================================" >&2
+    return 0
+}
+
 probe_mirror_reachable() {
     local host="$1" project="$2"
     local timeout_s="${TILLANDSIAS_MIRROR_REACHABLE_TIMEOUT_S:-20}"
@@ -1113,6 +1152,8 @@ _clone_project_from_mirror_impl() {
             echo "[forge] FATAL: git mirror $(git_mirror_host) is not reachable for clone (see the classified reason above)." >&2
             exit 1
         fi
+        # Order 1310-rec6: a reachable mirror may still be unable to RELAY.
+        forge_mirror_relay_gate "git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" || exit 1
         # Retry budget: the launcher-side wait_for_git_mirror_ready gate
         # (order 452 slice 2) blocks the launch until the mirror advertises a
         # resolvable HEAD, so this loop is the fail-loud BACKSTOP, not the
@@ -5012,6 +5053,7 @@ quietly.
 ## Skills
 
 Available skills are under \`.claude/skills/\` (Claude Code), \`.codex/skills/\` (Codex), \`.gemini/skills/\` (Antigravity), or \`.opencode/skills/\` (OpenCode).
+Skills come from two places: the project checkout (the directories above, current with the branch you cloned) and, for every project, the generic ones such as \`/project-discipline\`, which agent-profile.sh links from \`/opt/skills\` into your user skill directory (\`~/.claude/skills/\` and siblings). \`/opt/skills\` is frozen at image build; to change a skill, edit the checkout copy, never \`/opt/skills\`.
 Key skills: \`/forge-quick-intro\`, \`meta-orchestration\`, \`advance-work-from-plan\`, \`merge-to-main-and-release\`.
 
 ## Tooling actually present here — check this before reaching for something
@@ -5187,4 +5229,46 @@ show_banner() {
     echo "  $banner_agent $agent_name"
     echo "========================================"
     echo ""
+}
+
+# ORDER 1517-p83m — LOAD THE AGENT PROFILE FROM WHERE THE IMAGE PUTS IT, LOUDLY.
+# Every agent entrypoint used to run `[ -f /opt/config-overlay/mcp/agent-profile.sh ]
+# && source` — a path the image never installs (the Containerfile COPYs
+# config-overlay/mcp/ to /home/forge/.config-overlay/mcp/, the ConfigOverlay
+# mount point in container_profile.rs). The guard made the miss silent, so from
+# 2026-05-14 no forge exported AGENT_PROFILE or linked the generic skills
+# (1446-qkx4). One resolver now, and a missing profile says so on stderr.
+load_agent_profile() {
+    local p="${TILLANDSIAS_AGENT_PROFILE_SH:-${HOME:-/home/forge}/.config-overlay/mcp/agent-profile.sh}"
+    if [ -f "$p" ]; then
+        # The profile opens with `set -euo pipefail` and had never run in a real
+        # forge before 1517-p83m, so it must not be able to kill the entrypoint.
+        # An `if` suppresses -e for the sourced body, but NOT -u: an unset
+        # variable still exits a non-interactive shell. So probe it in a
+        # subshell first (its link step never overwrites, so running it twice
+        # is harmless), source it for real only if the probe survived, and
+        # restore the caller's options either way.
+        local _opts _rc=0
+        _opts="$(set +o)"
+        # shellcheck source=/dev/null
+        ( source "$p" ) >/dev/null 2>&1 || _rc=$?
+        if [ "$_rc" -eq 0 ]; then
+            # shellcheck source=/dev/null
+            if source "$p"; then
+                eval "$_opts"
+                return 0
+            else
+                _rc=$?   # read HERE: after `fi`, $? is the if statement's own 0
+            fi
+        fi
+        eval "$_opts"
+        echo "[forge] WARNING: agent profile at $p failed (rc=$_rc) — AGENT_PROFILE may be unset and generic skills such as /project-discipline may not be linked; the forge continues" >&2
+        echo "[forge]   why: the profile's own set -euo pipefail turns any failing line into a failure of the whole file, and it must not take the entrypoint down with it (1517-p83m)" >&2
+        echo "[forge]   remedy: run it by hand to see the failing line: bash -x $p" >&2
+        return 0
+    fi
+    echo "[forge] WARNING: agent profile not found at $p — AGENT_PROFILE is unset and generic skills such as /project-discipline are not linked" >&2
+    echo "[forge]   why: the image installs config-overlay/mcp/ at /home/forge/.config-overlay/mcp/, and a drifted path was skipped silently for months (1517-p83m)" >&2
+    echo "[forge]   remedy: rebuild the forge image; if this persists, report 1517-p83m with the output of: ls -la ~/.config-overlay/mcp/" >&2
+    return 0
 }

@@ -1,0 +1,22 @@
+{
+  "scratch": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-cli-live-ack.0zayn7bb",
+  "binary_source": "/home/tlatoani/codex/tillandsias-lua-work/1534-puyz/target/debug/tillandsias-plan",
+  "binary_sha256": "4d02f4d8d5795ebf00e6bac75645754c2388e165ffb329f09f832d58bca12eda",
+  "argv": [
+    "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-cli-live-ack.0zayn7bb/plan",
+    "script",
+    "run",
+    "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-cli-live-ack.0zayn7bb/probe.lua",
+    "--timeout",
+    "4s",
+    "--",
+    "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-cli-live-ack.0zayn7bb/producer.sh",
+    "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-cli-live-ack.0zayn7bb"
+  ],
+  "exit": 0,
+  "stdout": "ok:parent-cli-live-ack:2:1\n",
+  "stderr": "",
+  "wall_ms": 133.5405210047611,
+  "ack": "callback-before-child-exit\n",
+  "note": "Producer cannot exit successfully until the line callback creates ACK. Real child stdout preserves CR; stdout/stderr line callbacks and full captured result are separately asserted."
+}

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-land-tool-classifies-a-refused-push-by-matching-message-text-so-a-hook-refusal-caused-by-a-moved-trunk-reads-not-a-lost-race-and-exits-6
+    event:
+      type: note
+      ts: "2026-10-01T18:57:38Z"
+      agent_id: linux-macuahuitl-claude-20261001t185736z
+      host: macuahuitl
+      summary: |
+        LANDED in land122 (422146e91, gate 1204 s), coordinator's cde7c0b02. After a failed push whose text matches none of git's four race phrasings, the land tool fetches and asks git first: if origin/$BRANCH holds commits HEAD lacks, it is a lost race whatever the wording, and the attempt loop re-integrates. test-land-push-classification.sh ARM 6: origin moves and the hook refuses in land120's words, and the tool lands on the retry (pre-fix FAILS, rc 6 "not a lost race"). ARM 7 control: the same kind of hook refusal with origin unmoved stops after one push (rc 6). 11/11 plain, env -u, toolbox.

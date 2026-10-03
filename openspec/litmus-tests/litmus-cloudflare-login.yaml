@@ -1,0 +1,65 @@
+# @trace order:1505-kc5f, openspec/changes/cloudflare-login-and-fleet-vpn/design.md (Decision 1, Decision 7)
+# @trace openspec/changes/cloudflare-login-and-fleet-vpn/specs/cloudflare-auth/spec.md
+name: litmus:cloudflare-login
+spec: ci-release
+phase: pre-build
+description: >
+  tillandsias --cloudflare-login [--via loopback|qr|paste] and
+  --cloudflare-logout against tillandsias-fake-cloudflare, with no real
+  Cloudflare, Vault or credential. The REAL binary (fake browser opener on
+  PATH, fake podman so it cannot reach this host's Vault) refuses a denied
+  consent (access-denied, nothing past /oauth2/auth), a tampered state
+  (state-mismatch, no /oauth2/token), an unreachable Vault before the code is
+  spent, --via qr without a relay (naming loopback and paste), paste without
+  a terminal, and a code on argv; under LITMUS_PODMAN_MODE it renders the QR
+  and stops before the browser, the receiver and the exchange, and that QR
+  decodes to the printed authorize URL and nothing else. In-process against
+  the same fake with the in-memory Vault seam: loopback approve, paste and
+  qr+relay-poll store both records; logout deletes them and leaves
+  secret/cloudflare/mesh unchanged; no token, verifier or code reaches any
+  output. The static relay page never calls out (two mutation controls).
+severity: critical
+size: long
+
+# PRE-FIX RESULT: FAILS — --cloudflare-login is an unknown flag
+# ("Unsupported option"), and the cloudflare_login module, its tests and
+# assets/cloudflare-relay/index.html do not exist. Measured: pointing the
+# script's BIN arms at the pre-1505-kc5f installed binary
+# (TILLANDSIAS_CLOUDFLARE_LOGIN_BIN) fails every BIN arm.
+
+preconditions:
+  - workspace contains scripts/test-cloudflare-login.sh
+  - workspace contains crates/tillandsias-headless/src/cloudflare_login.rs
+  - workspace contains crates/tillandsias-headless/src/bin/tillandsias-fake-cloudflare.rs
+  - workspace contains assets/cloudflare-relay/index.html
+  - cargo and curl are available in PATH
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-cloudflare-login.sh && test -x scripts/test-cloudflare-login.sh && echo 'ok: cloudflare-login-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: cloudflare-login-fixture-parses"
+
+  - step: "every BIN and CARGO arm and every control passes by name"
+    command: "out=$(bash scripts/test-cloudflare-login.sh 2>&1); rc=$?; case \"$out\" in (*'ok:cloudflare-login:all-arms+controls'*) [ \"$rc\" = 0 ] && echo 'ok: cloudflare login all arms+controls' ;; (*) printf '%s\\n' \"$out\" | grep -E '^FAIL' | head -12; exit 1 ;; esac"
+    timeout_ms: 900000
+    expected_behavior: "ok: cloudflare login all arms+controls"
+
+observability:
+  traces:
+    - "@trace order:1505-kc5f"
+    - "@trace openspec/changes/cloudflare-login-and-fleet-vpn/design.md#decision-1"
+  expected_log: "ok:cloudflare-login:all-arms+controls"
+  log_fields:
+    spec: "ci-release"
+    test: "cloudflare-login"
+    artifact: "crates/tillandsias-headless/src/cloudflare_login.rs"
+
+rollback:
+  on_failure: >
+    A named arm or control failed. Re-run `bash scripts/test-cloudflare-login.sh`
+    and read its FAIL lines. Do not move the state check after the code or
+    error read, bind anything but 127.0.0.1, accept more than one callback,
+    add an environment switch that selects a non-Vault store, or print a
+    token, verifier or code to make it pass.
+  command: "bash scripts/test-cloudflare-login.sh"

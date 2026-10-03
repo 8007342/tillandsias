@@ -305,7 +305,7 @@ pub fn execute(spec: &RunSpec, caller: &str) -> RunOutcome {
         .unwrap_or_else(|| PathBuf::from("."));
     let root = crate::branch_discipline::find_root(&cwd).unwrap_or_else(|| cwd.clone());
     let protected = cp::protected_refs(&root);
-    let (seed, _) = cp::load_seed(&root, None, &protected);
+    let (seed, load) = cp::load_seed(&root, None, &protected);
     let regime = std::env::var("TILLANDSIAS_POLICY_REGIME")
         .ok()
         .filter(|r| cp::REGIMES.contains(&r.as_str()))
@@ -318,16 +318,15 @@ pub fn execute(spec: &RunSpec, caller: &str) -> RunOutcome {
         regime,
         caller: caller.to_string(),
     };
-    // decide() is side-effect free; the audit line is written once, below,
-    // when the run identity (if any) is known.
-    let d = cp::decide(&req, seed.as_ref(), &protected);
-    // A consent class may be satisfied by the smoke-skill env or an operator
-    // token (1443-9f5w); a token is spent here because the child then spawns.
-    let d = if d.strictness == cp::Strictness::Consent {
-        cp::resolve_consent(&req, d, &cp::ConsentCtx::from_env(&root))
-    } else {
-        d
-    };
+    // Honor refused loads before resolving consent. Audit once below when the
+    // run identity (if any) is known. Only this execution path may spend a token.
+    let d = cp::decide_execution(
+        &req,
+        seed.as_ref(),
+        &load,
+        &protected,
+        &cp::ConsentCtx::from_env(&root),
+    );
     if d.strictness != cp::Strictness::Allow {
         cp::audit_decision(&req, &d, None);
         return RunOutcome::Refused(d);

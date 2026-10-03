@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-deciders-with-recorded-pipe-and-dialect-incidents-are-ported-to-scripts-lua-on-script-run-their-sh-deleted-in-the-same-commit-and-each-incident-class-shown-unrepresentable
+    field: status
+    value: completed
+    ts: "2026-10-01T02:53:53Z"
+    host: macuahuitl
+
+events:
+  - packet_id: three-deciders-with-recorded-pipe-and-dialect-incidents-are-ported-to-scripts-lua-on-script-run-their-sh-deleted-in-the-same-commit-and-each-incident-class-shown-unrepresentable
+    event:
+      type: completed
+      ts: "2026-10-01T02:53:53Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: d9fd31940
+  - packet_id: three-deciders-with-recorded-pipe-and-dialect-incidents-are-ported-to-scripts-lua-on-script-run-their-sh-deleted-in-the-same-commit-and-each-incident-class-shown-unrepresentable
+    event:
+      type: note
+      ts: "2026-10-01T02:53:53Z"
+      host: macuahuitl
+      summary: |-
+        LANDED in land118 (d9fd31940 on origin/linux-next, gate 1206 s; lenovinha's dbc1d2c1a). check-seam-writers-canonical and check-bash-dialect run as scripts/lua/*.lua on `tillandsias-plan script run`; both .sh deleted in the same commit. The door port (arm 3) moved to 1520-z95v (depends on 1384-aixy's proc.spawn). Evidence (lenovinha, accepted by the coordinator): (a) Full-population parity: the .sh from origin/linux-next vs the .lua on the live tree (915 files + build.sh): rc 0/0, stdout-diff=0, stderr-diff=0 (ok:bash-dialect-clean, population=915 bootstrap=13). Violating paths: all 33 fixture scenarios through both, 75 capture files, diff -r empty. (b) Consumer sweep: git grep -n 'check-bash-dialect' -- '*.sh' '*.yaml' '*.rs' '*.md' '*.step' 'build.sh'. Every live invoker repointed and green: build.sh --check (_run_lua_decider), relay-preflight _run_decider, litmus enclave-service-health and proxy-crash-supervision, check-decider-retirement (13/13), test-check-bash-dialect (33/33), test-deciders-within-door-deadline (6/6, the .lua ~1 s), test-discipline-install-hooks (18/18), test-pretooluse-command-policy (39/39), test-shipped-diagnostic-tool-dispatch, test-relay-preflight (7/7), test-gate-divergence-is-declared. Safe and unchanged: test-pretooluse-command-policy:95 (a command string), test-bash-composition-hazards (historical blobs via git show). (c) A plan binary without `script run` (named by absolute path): could-not-run:lua-decider:check-bash-dialect.lua:no-script-runner, rc=3, and the gate refuses on it. (d) Sandbox: fs.read widens only via a header `-- @read-env NAME`, read-only, realpath-contained. Negative arm in test-pilot-lua-ports: an undeclared env var path gives refused:script-error:undeclared; with the declaration check mutated away, the arm FAILS (ok:read:24). TILLANDSIAS_REPO_ROOT pins the tree the caller already chose and adds no route. (e) Gate: lenovinha, alone on the host: rc=0, test-baseline 2829 new-red=0. Relay: relay-preflight from the merged tree's own copy, ok deciders=16 fmt=ok fixtures=31/31 crates=1 litmus=15/11. The trunk copy refused at the deleted .sh, which is a tool defect, not this row's; filed as 1522-ey4h.

@@ -1,0 +1,9 @@
+{
+  "kind": "retroactive-immutable-baseline-receipt",
+  "baseline": "8c7af38867886b7144a0c27a33eec2de4451ba46",
+  "lua_candidate": "0f2ae8d9b7fcfca7308d54ed166c8e6815da51e5",
+  "plan_binary": "/home/tlatoani/.local/bin/tillandsias-plan",
+  "plan_binary_sha256": "f7acc054dba7cb72d716d4aac4be5718d56372bfa357825adfb3974f62012149",
+  "status": "incomplete: harness staged; per-arm raw execution still required before landing",
+  "note": "This is retroactive evidence from immutable baseline, not a claim that capture occurred before cutover."
+}

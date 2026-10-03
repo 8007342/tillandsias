@@ -1,0 +1,38 @@
+packets:
+  - packet_id: linux-toolbox-typed-gate-launch-recipes-explicitly-forward-runtime-context
+    order: 1542-qkc8
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [lua, toolbox, documentation, tests]
+    size: S
+    implementer_tier: haiku
+    estimated_hours: 0.5
+    depends_on: []
+    owned_files:
+      - skills/advance-work-from-plan/SKILL.md
+      - skills/meta-orchestration/SKILL.md
+      - plan/issues/typed-gate-launch-missing-toolbox-runtime-env-2026-10-03.md
+    title: "Typed gate-launch recipes need explicit Linux toolbox runtime context after the run door clears inherited environment"
+    context: |
+      Two Linux gate attempts through the documented typed run door failed
+      before checks because XDG_RUNTIME_DIR was absent. Explicit supported
+      --env forwarding restored toolbox entry and the full gate; source and
+      typed receipts are in the finding. This is a recipe gap, not permission
+      to widen the sandbox environment or bypass containerized builds.
+    outcome: "A fresh agent can launch the documented Linux typed-door gate without an unstated runtime-context prerequisite."
+    exit_criteria:
+      - "Linux toolbox gate recipes explicitly pass existing XDG_RUNTIME_DIR via the supported --env form; do not assert that the default run-door environment inherits it."
+      - "Typed JSON status, long gate timeout, script-file launch and containerized build remain intact; a narrow recipe control and a pinned Linux toolbox probe verify the spelling."
+      - "No production environment allowlist, host-native fallback, runtime reset, unrelated build/landing rewrite, scheduler or unmeasured native-platform claim is introduced."
+    verifiable_closure: |
+      Named recipe argument-construction control plus recorded Linux typed-door
+      toolbox entry and a gate invocation with explicit runtime context;
+      failure-before and success-after are retained without claiming native parity.
+    unscoreable: "measured-recipe-boundary: explicit runtime context restores the existing sanctioned toolbox door"
+    next_action: "After the composition/trace priorities, claim a bounded documentation/recipe slice; preserve the default process environment and validate only Linux behavior actually measured."
+    notes: "Queued finding only; no new claim or implementation. Existing composition/tracing and native obligations stay separate."
+    provenance: "Observed during the operator-approved24h Lua continuation on2026-10-03, before the1538 claim push; two typed negatives and explicit-context positive/full gate."

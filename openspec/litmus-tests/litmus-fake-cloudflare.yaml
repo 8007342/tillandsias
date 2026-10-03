@@ -1,0 +1,58 @@
+# @trace order:1505-svve, openspec/changes/cloudflare-login-and-fleet-vpn/design.md#decision-3
+name: litmus:fake-cloudflare
+spec: ci-release
+phase: pre-build
+description: >
+  tillandsias-fake-cloudflare (order 1505-svve) is the one fake Cloudflare
+  every fixture in the cloudflare-login-and-fleet-vpn milestone (1505-sm2j)
+  runs against instead of the real App. Its /oauth2/token must be as strict
+  as Cloudflare's documented behaviour — PKCE S256 only, single-use codes, an
+  EXACT redirect_uri match, refresh rotation that invalidates the old token —
+  so a login test that passes against it is not a false green. No fixture in
+  this milestone may require the real OAuth client.
+severity: high
+size: quick
+
+# scripts/test-fake-cloudflare.sh names five arms (wrong_verifier_refused,
+# code_single_use_refused, redirect_uri_trailing_slash_refused,
+# refresh_rotates_and_invalidates_old, ledger_records_calls_in_order) plus a
+# negative control: the same wrong-verifier request re-run against a second
+# instance started with TILLANDSIAS_FAKE_CLOUDFLARE_LAX=1 (which disables the
+# code_verifier check). If that control run were ALSO refused, arm 1 would not
+# actually be gated by the check it claims to test — the control's own PASS
+# means the LAX run succeeded, proving the normal run's refusal is real.
+#
+# PRE-FIX RESULT: FAILS — before 1505-svve, neither the binary nor this
+# script exists on the tree ("no such binary or script").
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/bin/tillandsias-fake-cloudflare.rs
+  - workspace contains scripts/test-fake-cloudflare.sh
+  - cargo is available in PATH
+  - openssl is available in PATH
+
+critical_path:
+  - step: "tillandsias-fake-cloudflare enforces PKCE S256, single-use codes, exact redirect_uri and refresh-token rotation, and its ledger records every call in order"
+    command: "bash scripts/test-fake-cloudflare.sh 2>&1 | tail -5 | grep -E '^ok:fake-cloudflare:5/5\\+control$'"
+    timeout_ms: 300000
+    expected_behavior: "ok:fake-cloudflare:5/5+control"
+
+observability:
+  traces:
+    - "@trace order:1505-svve"
+    - "@trace openspec/changes/cloudflare-login-and-fleet-vpn/design.md#decision-3"
+  expected_log: "ok:fake-cloudflare:5/5+control"
+  log_fields:
+    spec: "ci-release"
+    test: "fake-cloudflare"
+    artifact: "crates/tillandsias-headless/src/bin/tillandsias-fake-cloudflare.rs"
+
+rollback:
+  on_failure: >
+    A named arm failed, or the negative control did not succeed under
+    TILLANDSIAS_FAKE_CLOUDFLARE_LAX=1 (which would mean the wrong-verifier arm
+    is not actually gated by the code_verifier check it claims to test).
+    Re-run `bash scripts/test-fake-cloudflare.sh` locally, read the FAIL lines
+    it prints per arm, and fix the fake's /oauth2/token handler rather than
+    weakening a fixture to match it.
+  command: "bash scripts/test-fake-cloudflare.sh"

@@ -1,0 +1,12 @@
+#!/bin/sh
+# External, bounded diagnostic producer; no pipe or inherited terminal.
+root=$1
+printf 'ready\r\n'
+i=0
+while [ ! -f "$root/ack" ] && [ "$i" -lt 150 ]; do
+    sleep 0.01
+    i=$((i + 1))
+done
+[ -f "$root/ack" ] || exit 31
+printf 'released-by-live-callback\n'
+printf 'stderr-only\n' >&2

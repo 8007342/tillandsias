@@ -151,6 +151,11 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:script-run-verb
+  - litmus:release-preflight-latest-read-bounded
+  - litmus:pilot-lua-ports
+  - litmus:shell-ratchet
+  - litmus:source-agreement-lua-cutover
   - litmus:pre-push-trailer-states-what-it-saw
   - litmus:land-refusals-carry-affordance
   - litmus:plan-fragments-lane-refusals-carry-affordance
@@ -176,11 +181,13 @@ specs:
   - litmus:land-verdict-through-a-pipe
   - litmus:deciders-within-door-deadline
   - litmus:groundtruth-regime-fails-closed
+  - litmus:spec-script-paths
   - litmus:smoke-consecutive-lanes-shape
   - litmus:github-token-auto-rotation
   - litmus:mirror-upstream-auth-overwrite
   - litmus:exit-pause-host-hold
   - litmus:covering-relay-scope-shape
+  - litmus:relay-preflight-shape
   - litmus:command-policy-evaluator-shape
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
@@ -221,6 +228,23 @@ specs:
   - litmus:gate-stamp-portable-digest
   - litmus:macos-portability-residuals
   - litmus:sidecar-arch-derivation
+  # 1505-svve / 1505-kyx8. No cloudflare-auth spec_id exists yet (the
+  # openspec/changes/cloudflare-login-and-fleet-vpn/ change has not been
+  # archived into openspec/specs/), so these bind here per the fallback
+  # scripts/check-added-test-is-referenced.sh names: a script's basename
+  # must appear in a bound litmus yaml or it cannot fail a gate.
+  - litmus:fake-cloudflare
+  - litmus:cloudflare-oauth-core
+  - litmus:cloudflare-token-rotation
+  - litmus:cloudflare-login
+  # 1506-nvqt. Same fallback: the fleet-messaging capability lives in the
+  # unsynced openspec/changes/fleet-messaging-poc/ change.
+  - litmus:fleet-msg-store-shape
+  # 1506-q7ab. Same fallback: the same-host mover (--msg-serve).
+  - litmus:fleet-msg-same-host
+  # 1506-ssb5. Same fallback: the forge-plan MCP msg_* tools and the Codex /
+  # OpenCode entrypoints' pending-mail-at-session-start line.
+  - litmus:fleet-msg-mcp
   coverage_ratio: 75
   last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher
@@ -410,6 +434,7 @@ specs:
   litmus_tests:
   - litmus:mcp-plan-resolver-pinning-shape
   - litmus:forge-environment-discoverability-shape
+  - litmus:forge-entrypoints-source-agent-profile
   - litmus:lane-observed-startup-log
   - litmus:onboarding-cold-start-discovery
   - litmus:forge-environment-discoverability-install-shape
@@ -516,6 +541,8 @@ specs:
   - litmus:git-mirror-seed-failure-surfaced-shape
   - litmus:forge-clone-reachability-probe-shape
   - litmus:forge-seeds-from-salvage-ref
+  - litmus:mirror-relay-state
+  - litmus:mirror-refuses-to-advertise-when-broken
   - litmus:running-image-freshness
   - litmus:git-mirror-no-anonymous-http-write
   - litmus:git-mirror-no-anonymous-daemon-write
@@ -695,6 +722,7 @@ specs:
   - litmus:pre-push-deletion-only
   - litmus:expire-claims-reads-the-status-write
   - litmus:a-claim-names-a-workstation
+  - litmus:claim-wip-limit-shape
   - litmus:fragment-keys-are-read
   - litmus:gate-step-prefix-allocation
   - litmus:methodology-accountability-shape
@@ -1304,6 +1332,7 @@ specs:
   status: draft
   litmus_tests:
   - litmus:discipline-install-hooks-shape
+  - litmus:land-discipline-probe-shape
   coverage_ratio: 0
   last_verified: '2026-09-27'
 - spec_id: forge-git-identity-anonymization

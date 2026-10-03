@@ -1,0 +1,1781 @@
+{
+  "method": "Linux ptrace TRACEME then SIGSTOP; TRACEFORK/VFORK/CLONE/EXEC/EXIT and EXITKILL; waitpid __WALL; no attach",
+  "scope": "only six harness-launched synthetic guard processes and their descendants; tracing is separate from accepted timing samples",
+  "definitions": {
+    "harness_launch": "one tracer fork, followed by exec of Bash or plan-release",
+    "descendant_process": "ptrace birth whose child TGID differs from parent TGID",
+    "descendant_thread": "ptrace birth whose child TGID equals parent TGID",
+    "exec": "successful exec ptrace event; image replacement does not create a process; includes launch exec",
+    "tgid": "read from /proc/<known-child-tid>/status at ptrace birth stop, before resuming parent"
+  },
+  "limitations": "ordinary stopped-child snapshot, not global monitoring; no time measurements or general no-spawn proof; nonleader exec or unknown stop refuses rather than guessing",
+  "accepted_receipts_sha256": "6a046ed3e4f044e267e6a9ddcab8684667c3bd97c1333b46d405fe58dde40c9b",
+  "release_sha256": "a20e33003876675bd530c7406d624334e3ddf4e8835dff373934c8b2f85d044e",
+  "release_build_id": "0.1.0+321c64fa5c76a652\n",
+  "bash_sha256": "379c1bfc53d08815975c647ad7da5d19d8e8a8566ce8097c50231c8b116e5e7b",
+  "lua_sha256": "0683e63f537a70e3cfe5d32442675dab8ddae83c2ed21b18ce5a0badccf26899",
+  "tracer_sha256": "3313b38e1bbd4c704209c3ff305b802cf900bbff5182499825a2f9e1ce736135",
+  "traces": [
+    {
+      "case": "tray-live",
+      "profile": "old",
+      "argv": [
+        "/usr/bin/bash",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/tray-live/scripts/check-tray-process-running-naming.sh"
+      ],
+      "cwd": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/tray-live",
+      "environment": {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse",
+        "TMPDIR": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse",
+        "LC_ALL": "C",
+        "LANG": "C",
+        "TZ": "UTC",
+        "GIT_TERMINAL_PROMPT": "0",
+        "TILLANDSIAS_REPO_ROOT": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/tray-live"
+      },
+      "root_tid": 817364,
+      "exit": 0,
+      "stdout": {
+        "b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+        "sha256": "51b9160a09bdd8d58c303a6f486b2de7a921fe043a53994fc39413cc9aa23028",
+        "length": 33
+      },
+      "stderr": {
+        "b64": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "length": 0
+      },
+      "error": null,
+      "counts": {
+        "harness_launches": 1,
+        "descendant_processes": 4,
+        "descendant_threads": 0,
+        "distinct_thread_groups_including_launch": 5,
+        "distinct_tids_including_launch": 5,
+        "fork_events": 4,
+        "vfork_events": 0,
+        "clone_events": 0,
+        "exec_events": 5
+      },
+      "events": [
+        {
+          "event": "harness-launch",
+          "tid": 817364,
+          "tgid": 817364,
+          "ppid": 817165,
+          "name": "python3",
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817364,
+          "message": 817364,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817364,
+            "tgid": 817364,
+            "ppid": 817165,
+            "name": "bash"
+          },
+          "exe": "/usr/bin/bash"
+        },
+        {
+          "event": "fork",
+          "tid": 817364,
+          "message": 817377,
+          "wait_status": 66943,
+          "parent": {
+            "tid": 817364,
+            "tgid": 817364,
+            "ppid": 817165,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817377,
+            "tgid": 817377,
+            "ppid": 817364,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "new-child-stop",
+          "tid": 817377,
+          "identity": {
+            "tid": 817377,
+            "tgid": 817377,
+            "ppid": 817364,
+            "name": "bash"
+          },
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817377,
+          "message": 817377,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817377,
+            "tgid": 817377,
+            "ppid": 817364,
+            "name": "dirname"
+          },
+          "exe": "/usr/bin/dirname"
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817377,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817377,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817364,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "fork",
+          "tid": 817364,
+          "message": 817408,
+          "wait_status": 66943,
+          "parent": {
+            "tid": 817364,
+            "tgid": 817364,
+            "ppid": 817165,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817408,
+            "tgid": 817408,
+            "ppid": 817364,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "new-child-stop",
+          "tid": 817408,
+          "identity": {
+            "tid": 817408,
+            "tgid": 817408,
+            "ppid": 817364,
+            "name": "bash"
+          },
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817408,
+          "message": 817408,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817408,
+            "tgid": 817408,
+            "ppid": 817364,
+            "name": "grep"
+          },
+          "exe": "/usr/bin/grep"
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817408,
+          "message": 256,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817408,
+          "exit": 1,
+          "wait_status": 256
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817364,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "fork",
+          "tid": 817364,
+          "message": 817433,
+          "wait_status": 66943,
+          "parent": {
+            "tid": 817364,
+            "tgid": 817364,
+            "ppid": 817165,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817433,
+            "tgid": 817433,
+            "ppid": 817364,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "new-child-stop",
+          "tid": 817433,
+          "identity": {
+            "tid": 817433,
+            "tgid": 817433,
+            "ppid": 817364,
+            "name": "bash"
+          },
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817433,
+          "message": 817433,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817433,
+            "tgid": 817433,
+            "ppid": 817364,
+            "name": "grep"
+          },
+          "exe": "/usr/bin/grep"
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817433,
+          "message": 256,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817433,
+          "exit": 1,
+          "wait_status": 256
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817364,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "fork",
+          "tid": 817364,
+          "message": 817464,
+          "wait_status": 66943,
+          "parent": {
+            "tid": 817364,
+            "tgid": 817364,
+            "ppid": 817165,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817464,
+            "tgid": 817464,
+            "ppid": 817364,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "new-child-stop",
+          "tid": 817464,
+          "identity": {
+            "tid": 817464,
+            "tgid": 817464,
+            "ppid": 817364,
+            "name": "bash"
+          },
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817464,
+          "message": 817464,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817464,
+            "tgid": 817464,
+            "ppid": 817364,
+            "name": "grep"
+          },
+          "exe": "/usr/bin/grep"
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817464,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817464,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817364,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817364,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817364,
+          "exit": 0,
+          "wait_status": 0
+        }
+      ],
+      "known_tasks": {
+        "817364": {
+          "tid": 817364,
+          "tgid": 817364,
+          "ppid": 817165,
+          "name": "python3"
+        },
+        "817377": {
+          "tid": 817377,
+          "tgid": 817377,
+          "ppid": 817364,
+          "name": "bash"
+        },
+        "817408": {
+          "tid": 817408,
+          "tgid": 817408,
+          "ppid": 817364,
+          "name": "bash"
+        },
+        "817433": {
+          "tid": 817433,
+          "tgid": 817433,
+          "ppid": 817364,
+          "name": "bash"
+        },
+        "817464": {
+          "tid": 817464,
+          "tgid": 817464,
+          "ppid": 817364,
+          "name": "bash"
+        }
+      },
+      "matches_accepted": true
+    },
+    {
+      "case": "tray-live",
+      "profile": "release",
+      "argv": [
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/plan-release",
+        "script",
+        "run",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/source-agreements.lua",
+        "--",
+        "tray_process_naming",
+        "crates/tillandsias-macos-tray/src/diagnose.rs"
+      ],
+      "cwd": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/tray-live",
+      "environment": {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse",
+        "TMPDIR": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse",
+        "LC_ALL": "C",
+        "LANG": "C",
+        "TZ": "UTC",
+        "GIT_TERMINAL_PROMPT": "0",
+        "TILLANDSIAS_REPO_ROOT": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/tray-live"
+      },
+      "root_tid": 817507,
+      "exit": 0,
+      "stdout": {
+        "b64": "b2s6dHJheS1wcm9jZXNzLW5hbWluZzozIGNoZWNrZWQK",
+        "sha256": "51b9160a09bdd8d58c303a6f486b2de7a921fe043a53994fc39413cc9aa23028",
+        "length": 33
+      },
+      "stderr": {
+        "b64": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "length": 0
+      },
+      "error": null,
+      "counts": {
+        "harness_launches": 1,
+        "descendant_processes": 0,
+        "descendant_threads": 0,
+        "distinct_thread_groups_including_launch": 1,
+        "distinct_tids_including_launch": 1,
+        "fork_events": 0,
+        "vfork_events": 0,
+        "clone_events": 0,
+        "exec_events": 1
+      },
+      "events": [
+        {
+          "event": "harness-launch",
+          "tid": 817507,
+          "tgid": 817507,
+          "ppid": 817165,
+          "name": "python3",
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817507,
+          "message": 817507,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817507,
+            "tgid": 817507,
+            "ppid": 817165,
+            "name": "plan-release"
+          },
+          "exe": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/plan-release"
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817507,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817507,
+          "exit": 0,
+          "wait_status": 0
+        }
+      ],
+      "known_tasks": {
+        "817507": {
+          "tid": 817507,
+          "tgid": 817507,
+          "ppid": 817165,
+          "name": "python3"
+        }
+      },
+      "matches_accepted": true
+    },
+    {
+      "case": "dev-model-live",
+      "profile": "old",
+      "argv": [
+        "/usr/bin/bash",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/dev-model-live/scripts/check-dev-embed-model-agreement.sh"
+      ],
+      "cwd": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/dev-model-live",
+      "environment": {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse",
+        "TMPDIR": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse",
+        "LC_ALL": "C",
+        "LANG": "C",
+        "TZ": "UTC",
+        "GIT_TERMINAL_PROMPT": "0",
+        "TILLANDSIAS_REPO_ROOT": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/dev-model-live"
+      },
+      "root_tid": 817533,
+      "exit": 0,
+      "stdout": {
+        "b64": "b2s6ZGV2LWVtYmVkLW1vZGVsLWFncmVlbWVudDpub21pYy1lbWJlZC10ZXh0Cg==",
+        "sha256": "5f95ddfe2c53fe0261eda7b2249b9b9e9764f64fa22e15fa9bb4475c2790d98d",
+        "length": 46
+      },
+      "stderr": {
+        "b64": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "length": 0
+      },
+      "error": null,
+      "counts": {
+        "harness_launches": 1,
+        "descendant_processes": 8,
+        "descendant_threads": 0,
+        "distinct_thread_groups_including_launch": 9,
+        "distinct_tids_including_launch": 9,
+        "fork_events": 8,
+        "vfork_events": 0,
+        "clone_events": 0,
+        "exec_events": 6
+      },
+      "events": [
+        {
+          "event": "harness-launch",
+          "tid": 817533,
+          "tgid": 817533,
+          "ppid": 817165,
+          "name": "python3",
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817533,
+          "message": 817533,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817533,
+            "tgid": 817533,
+            "ppid": 817165,
+            "name": "bash"
+          },
+          "exe": "/usr/bin/bash"
+        },
+        {
+          "event": "fork",
+          "tid": 817533,
+          "message": 817545,
+          "wait_status": 66943,
+          "parent": {
+            "tid": 817533,
+            "tgid": 817533,
+            "ppid": 817165,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817545,
+            "tgid": 817545,
+            "ppid": 817533,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "new-child-stop",
+          "tid": 817545,
+          "identity": {
+            "tid": 817545,
+            "tgid": 817545,
+            "ppid": 817533,
+            "name": "bash"
+          },
+          "wait_status": 4991
+        },
+        {
+          "event": "early-child-stop-held",
+          "tid": 817552,
+          "wait_status": 4991
+        },
+        {
+          "event": "fork",
+          "tid": 817545,
+          "message": 817552,
+          "wait_status": 66943,
+          "initial_stop_already_received": 4991,
+          "parent": {
+            "tid": 817545,
+            "tgid": 817545,
+            "ppid": 817533,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817552,
+            "tgid": 817552,
+            "ppid": 817545,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "exec",
+          "tid": 817552,
+          "message": 817552,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817552,
+            "tgid": 817552,
+            "ppid": 817545,
+            "name": "dirname"
+          },
+          "exe": "/usr/bin/dirname"
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817552,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817552,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817545,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817545,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817545,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817533,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "fork",
+          "tid": 817533,
+          "message": 817595,
+          "wait_status": 66943,
+          "parent": {
+            "tid": 817533,
+            "tgid": 817533,
+            "ppid": 817165,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817595,
+            "tgid": 817595,
+            "ppid": 817533,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "new-child-stop",
+          "tid": 817595,
+          "identity": {
+            "tid": 817595,
+            "tgid": 817595,
+            "ppid": 817533,
+            "name": "bash"
+          },
+          "wait_status": 4991
+        },
+        {
+          "event": "early-child-stop-held",
+          "tid": 817602,
+          "wait_status": 4991
+        },
+        {
+          "event": "fork",
+          "tid": 817595,
+          "message": 817602,
+          "wait_status": 66943,
+          "initial_stop_already_received": 4991,
+          "parent": {
+            "tid": 817595,
+            "tgid": 817595,
+            "ppid": 817533,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817602,
+            "tgid": 817602,
+            "ppid": 817595,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "early-child-stop-held",
+          "tid": 817609,
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817602,
+          "message": 817602,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817602,
+            "tgid": 817602,
+            "ppid": 817595,
+            "name": "sed"
+          },
+          "exe": "/usr/bin/sed"
+        },
+        {
+          "event": "fork",
+          "tid": 817595,
+          "message": 817609,
+          "wait_status": 66943,
+          "initial_stop_already_received": 4991,
+          "parent": {
+            "tid": 817595,
+            "tgid": 817595,
+            "ppid": 817533,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817609,
+            "tgid": 817609,
+            "ppid": 817595,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "exec",
+          "tid": 817609,
+          "message": 817609,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817609,
+            "tgid": 817609,
+            "ppid": 817595,
+            "name": "head"
+          },
+          "exe": "/usr/bin/head"
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817602,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817609,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817602,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "reaped",
+          "tid": 817609,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817595,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817595,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817595,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817533,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "fork",
+          "tid": 817533,
+          "message": 817656,
+          "wait_status": 66943,
+          "parent": {
+            "tid": 817533,
+            "tgid": 817533,
+            "ppid": 817165,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817656,
+            "tgid": 817656,
+            "ppid": 817533,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "new-child-stop",
+          "tid": 817656,
+          "identity": {
+            "tid": 817656,
+            "tgid": 817656,
+            "ppid": 817533,
+            "name": "bash"
+          },
+          "wait_status": 4991
+        },
+        {
+          "event": "early-child-stop-held",
+          "tid": 817665,
+          "wait_status": 4991
+        },
+        {
+          "event": "fork",
+          "tid": 817656,
+          "message": 817665,
+          "wait_status": 66943,
+          "initial_stop_already_received": 4991,
+          "parent": {
+            "tid": 817656,
+            "tgid": 817656,
+            "ppid": 817533,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817665,
+            "tgid": 817665,
+            "ppid": 817656,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "early-child-stop-held",
+          "tid": 817671,
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817665,
+          "message": 817665,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817665,
+            "tgid": 817665,
+            "ppid": 817656,
+            "name": "sed"
+          },
+          "exe": "/usr/bin/sed"
+        },
+        {
+          "event": "fork",
+          "tid": 817656,
+          "message": 817671,
+          "wait_status": 66943,
+          "initial_stop_already_received": 4991,
+          "parent": {
+            "tid": 817656,
+            "tgid": 817656,
+            "ppid": 817533,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817671,
+            "tgid": 817671,
+            "ppid": 817656,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "exec",
+          "tid": 817671,
+          "message": 817671,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817671,
+            "tgid": 817671,
+            "ppid": 817656,
+            "name": "head"
+          },
+          "exe": "/usr/bin/head"
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817665,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817671,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817665,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "reaped",
+          "tid": 817671,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817656,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817656,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817656,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817533,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817533,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817533,
+          "exit": 0,
+          "wait_status": 0
+        }
+      ],
+      "known_tasks": {
+        "817533": {
+          "tid": 817533,
+          "tgid": 817533,
+          "ppid": 817165,
+          "name": "python3"
+        },
+        "817545": {
+          "tid": 817545,
+          "tgid": 817545,
+          "ppid": 817533,
+          "name": "bash"
+        },
+        "817552": {
+          "tid": 817552,
+          "tgid": 817552,
+          "ppid": 817545,
+          "name": "bash"
+        },
+        "817595": {
+          "tid": 817595,
+          "tgid": 817595,
+          "ppid": 817533,
+          "name": "bash"
+        },
+        "817602": {
+          "tid": 817602,
+          "tgid": 817602,
+          "ppid": 817595,
+          "name": "bash"
+        },
+        "817609": {
+          "tid": 817609,
+          "tgid": 817609,
+          "ppid": 817595,
+          "name": "bash"
+        },
+        "817656": {
+          "tid": 817656,
+          "tgid": 817656,
+          "ppid": 817533,
+          "name": "bash"
+        },
+        "817665": {
+          "tid": 817665,
+          "tgid": 817665,
+          "ppid": 817656,
+          "name": "bash"
+        },
+        "817671": {
+          "tid": 817671,
+          "tgid": 817671,
+          "ppid": 817656,
+          "name": "bash"
+        }
+      },
+      "matches_accepted": true
+    },
+    {
+      "case": "dev-model-live",
+      "profile": "release",
+      "argv": [
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/plan-release",
+        "script",
+        "run",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/source-agreements.lua",
+        "--",
+        "dev_embed_model_agreement",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/dev-model-live/images/default/config-overlay/mcp/lib-dev-env.sh",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/dev-model-live/scripts/dev-inference-ensure.sh"
+      ],
+      "cwd": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/dev-model-live",
+      "environment": {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse",
+        "TMPDIR": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse",
+        "LC_ALL": "C",
+        "LANG": "C",
+        "TZ": "UTC",
+        "GIT_TERMINAL_PROMPT": "0",
+        "TILLANDSIAS_REPO_ROOT": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/dev-model-live"
+      },
+      "root_tid": 817733,
+      "exit": 0,
+      "stdout": {
+        "b64": "b2s6ZGV2LWVtYmVkLW1vZGVsLWFncmVlbWVudDpub21pYy1lbWJlZC10ZXh0Cg==",
+        "sha256": "5f95ddfe2c53fe0261eda7b2249b9b9e9764f64fa22e15fa9bb4475c2790d98d",
+        "length": 46
+      },
+      "stderr": {
+        "b64": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "length": 0
+      },
+      "error": null,
+      "counts": {
+        "harness_launches": 1,
+        "descendant_processes": 0,
+        "descendant_threads": 0,
+        "distinct_thread_groups_including_launch": 1,
+        "distinct_tids_including_launch": 1,
+        "fork_events": 0,
+        "vfork_events": 0,
+        "clone_events": 0,
+        "exec_events": 1
+      },
+      "events": [
+        {
+          "event": "harness-launch",
+          "tid": 817733,
+          "tgid": 817733,
+          "ppid": 817165,
+          "name": "python3",
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817733,
+          "message": 817733,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817733,
+            "tgid": 817733,
+            "ppid": 817165,
+            "name": "plan-release"
+          },
+          "exe": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/plan-release"
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817733,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817733,
+          "exit": 0,
+          "wait_status": 0
+        }
+      ],
+      "known_tasks": {
+        "817733": {
+          "tid": 817733,
+          "tgid": 817733,
+          "ppid": 817165,
+          "name": "python3"
+        }
+      },
+      "matches_accepted": true
+    },
+    {
+      "case": "inference-live",
+      "profile": "old",
+      "argv": [
+        "/usr/bin/bash",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/inference-live/scripts/check-inference-container-name-agreement.sh"
+      ],
+      "cwd": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/inference-live",
+      "environment": {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse",
+        "TMPDIR": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse",
+        "LC_ALL": "C",
+        "LANG": "C",
+        "TZ": "UTC",
+        "GIT_TERMINAL_PROMPT": "0",
+        "TILLANDSIAS_REPO_ROOT": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/inference-live",
+        "TILLANDSIAS_DEV_INFERENCE_SCRIPT": "scripts/dev-inference-ensure.sh",
+        "TILLANDSIAS_ACCEL_PROBE_SRC": "crates/tillandsias-headless/src/accel_probe.rs"
+      },
+      "root_tid": 817752,
+      "exit": 0,
+      "stdout": {
+        "b64": "b2s6aW5mZXJlbmNlLWNvbnRhaW5lci1uYW1lLWFncmVlbWVudDp0aWxsYW5kc2lhcy1kZXYtaW5mZXJlbmNlCg==",
+        "sha256": "ea08e0196ee42dc0e5d69c986d20487984fde3f3f17719a198e28760cbec66d6",
+        "length": 64
+      },
+      "stderr": {
+        "b64": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "length": 0
+      },
+      "error": null,
+      "counts": {
+        "harness_launches": 1,
+        "descendant_processes": 8,
+        "descendant_threads": 0,
+        "distinct_thread_groups_including_launch": 9,
+        "distinct_tids_including_launch": 9,
+        "fork_events": 8,
+        "vfork_events": 0,
+        "clone_events": 0,
+        "exec_events": 6
+      },
+      "events": [
+        {
+          "event": "harness-launch",
+          "tid": 817752,
+          "tgid": 817752,
+          "ppid": 817165,
+          "name": "python3",
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817752,
+          "message": 817752,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817752,
+            "tgid": 817752,
+            "ppid": 817165,
+            "name": "bash"
+          },
+          "exe": "/usr/bin/bash"
+        },
+        {
+          "event": "fork",
+          "tid": 817752,
+          "message": 817765,
+          "wait_status": 66943,
+          "parent": {
+            "tid": 817752,
+            "tgid": 817752,
+            "ppid": 817165,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817765,
+            "tgid": 817765,
+            "ppid": 817752,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "new-child-stop",
+          "tid": 817765,
+          "identity": {
+            "tid": 817765,
+            "tgid": 817765,
+            "ppid": 817752,
+            "name": "bash"
+          },
+          "wait_status": 4991
+        },
+        {
+          "event": "early-child-stop-held",
+          "tid": 817770,
+          "wait_status": 4991
+        },
+        {
+          "event": "fork",
+          "tid": 817765,
+          "message": 817770,
+          "wait_status": 66943,
+          "initial_stop_already_received": 4991,
+          "parent": {
+            "tid": 817765,
+            "tgid": 817765,
+            "ppid": 817752,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817770,
+            "tgid": 817770,
+            "ppid": 817765,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "exec",
+          "tid": 817770,
+          "message": 817770,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817770,
+            "tgid": 817770,
+            "ppid": 817765,
+            "name": "dirname"
+          },
+          "exe": "/usr/bin/dirname"
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817770,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817770,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817765,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817765,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817765,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817752,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "fork",
+          "tid": 817752,
+          "message": 817809,
+          "wait_status": 66943,
+          "parent": {
+            "tid": 817752,
+            "tgid": 817752,
+            "ppid": 817165,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817809,
+            "tgid": 817809,
+            "ppid": 817752,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "new-child-stop",
+          "tid": 817809,
+          "identity": {
+            "tid": 817809,
+            "tgid": 817809,
+            "ppid": 817752,
+            "name": "bash"
+          },
+          "wait_status": 4991
+        },
+        {
+          "event": "early-child-stop-held",
+          "tid": 817813,
+          "wait_status": 4991
+        },
+        {
+          "event": "fork",
+          "tid": 817809,
+          "message": 817813,
+          "wait_status": 66943,
+          "initial_stop_already_received": 4991,
+          "parent": {
+            "tid": 817809,
+            "tgid": 817809,
+            "ppid": 817752,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817813,
+            "tgid": 817813,
+            "ppid": 817809,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "early-child-stop-held",
+          "tid": 817817,
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817813,
+          "message": 817813,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817813,
+            "tgid": 817813,
+            "ppid": 817809,
+            "name": "sed"
+          },
+          "exe": "/usr/bin/sed"
+        },
+        {
+          "event": "fork",
+          "tid": 817809,
+          "message": 817817,
+          "wait_status": 66943,
+          "initial_stop_already_received": 4991,
+          "parent": {
+            "tid": 817809,
+            "tgid": 817809,
+            "ppid": 817752,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817817,
+            "tgid": 817817,
+            "ppid": 817809,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "exec",
+          "tid": 817817,
+          "message": 817817,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817817,
+            "tgid": 817817,
+            "ppid": 817809,
+            "name": "head"
+          },
+          "exe": "/usr/bin/head"
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817813,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817817,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817813,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "reaped",
+          "tid": 817817,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817809,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817809,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817809,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817752,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "fork",
+          "tid": 817752,
+          "message": 817857,
+          "wait_status": 66943,
+          "parent": {
+            "tid": 817752,
+            "tgid": 817752,
+            "ppid": 817165,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817857,
+            "tgid": 817857,
+            "ppid": 817752,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "new-child-stop",
+          "tid": 817857,
+          "identity": {
+            "tid": 817857,
+            "tgid": 817857,
+            "ppid": 817752,
+            "name": "bash"
+          },
+          "wait_status": 4991
+        },
+        {
+          "event": "early-child-stop-held",
+          "tid": 817862,
+          "wait_status": 4991
+        },
+        {
+          "event": "fork",
+          "tid": 817857,
+          "message": 817862,
+          "wait_status": 66943,
+          "initial_stop_already_received": 4991,
+          "parent": {
+            "tid": 817857,
+            "tgid": 817857,
+            "ppid": 817752,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817862,
+            "tgid": 817862,
+            "ppid": 817857,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "early-child-stop-held",
+          "tid": 817868,
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817862,
+          "message": 817862,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817862,
+            "tgid": 817862,
+            "ppid": 817857,
+            "name": "sed"
+          },
+          "exe": "/usr/bin/sed"
+        },
+        {
+          "event": "fork",
+          "tid": 817857,
+          "message": 817868,
+          "wait_status": 66943,
+          "initial_stop_already_received": 4991,
+          "parent": {
+            "tid": 817857,
+            "tgid": 817857,
+            "ppid": 817752,
+            "name": "bash"
+          },
+          "child": {
+            "tid": 817868,
+            "tgid": 817868,
+            "ppid": 817857,
+            "name": "bash"
+          },
+          "birth_kind": "process"
+        },
+        {
+          "event": "exec",
+          "tid": 817868,
+          "message": 817868,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817868,
+            "tgid": 817868,
+            "ppid": 817857,
+            "name": "tr"
+          },
+          "exe": "/usr/bin/tr"
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817862,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817868,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817862,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "reaped",
+          "tid": 817868,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817857,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817857,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817857,
+          "exit": 0,
+          "wait_status": 0
+        },
+        {
+          "event": "signal-delivery",
+          "tid": 817752,
+          "signal": 17,
+          "wait_status": 4479
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817752,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817752,
+          "exit": 0,
+          "wait_status": 0
+        }
+      ],
+      "known_tasks": {
+        "817752": {
+          "tid": 817752,
+          "tgid": 817752,
+          "ppid": 817165,
+          "name": "python3"
+        },
+        "817765": {
+          "tid": 817765,
+          "tgid": 817765,
+          "ppid": 817752,
+          "name": "bash"
+        },
+        "817770": {
+          "tid": 817770,
+          "tgid": 817770,
+          "ppid": 817765,
+          "name": "bash"
+        },
+        "817809": {
+          "tid": 817809,
+          "tgid": 817809,
+          "ppid": 817752,
+          "name": "bash"
+        },
+        "817813": {
+          "tid": 817813,
+          "tgid": 817813,
+          "ppid": 817809,
+          "name": "bash"
+        },
+        "817817": {
+          "tid": 817817,
+          "tgid": 817817,
+          "ppid": 817809,
+          "name": "bash"
+        },
+        "817857": {
+          "tid": 817857,
+          "tgid": 817857,
+          "ppid": 817752,
+          "name": "bash"
+        },
+        "817862": {
+          "tid": 817862,
+          "tgid": 817862,
+          "ppid": 817857,
+          "name": "bash"
+        },
+        "817868": {
+          "tid": 817868,
+          "tgid": 817868,
+          "ppid": 817857,
+          "name": "bash"
+        }
+      },
+      "matches_accepted": true
+    },
+    {
+      "case": "inference-live",
+      "profile": "release",
+      "argv": [
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/plan-release",
+        "script",
+        "run",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/source-agreements.lua",
+        "--",
+        "inference_container_name_agreement",
+        "scripts/dev-inference-ensure.sh",
+        "crates/tillandsias-headless/src/accel_probe.rs"
+      ],
+      "cwd": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/inference-live",
+      "environment": {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse",
+        "TMPDIR": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse",
+        "LC_ALL": "C",
+        "LANG": "C",
+        "TZ": "UTC",
+        "GIT_TERMINAL_PROMPT": "0",
+        "TILLANDSIAS_REPO_ROOT": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/run-20261002T060948.342189Z/case roots/inference-live",
+        "TILLANDSIAS_DEV_INFERENCE_SCRIPT": "scripts/dev-inference-ensure.sh",
+        "TILLANDSIAS_ACCEL_PROBE_SRC": "crates/tillandsias-headless/src/accel_probe.rs"
+      },
+      "root_tid": 817923,
+      "exit": 0,
+      "stdout": {
+        "b64": "b2s6aW5mZXJlbmNlLWNvbnRhaW5lci1uYW1lLWFncmVlbWVudDp0aWxsYW5kc2lhcy1kZXYtaW5mZXJlbmNlCg==",
+        "sha256": "ea08e0196ee42dc0e5d69c986d20487984fde3f3f17719a198e28760cbec66d6",
+        "length": 64
+      },
+      "stderr": {
+        "b64": "",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "length": 0
+      },
+      "error": null,
+      "counts": {
+        "harness_launches": 1,
+        "descendant_processes": 0,
+        "descendant_threads": 0,
+        "distinct_thread_groups_including_launch": 1,
+        "distinct_tids_including_launch": 1,
+        "fork_events": 0,
+        "vfork_events": 0,
+        "clone_events": 0,
+        "exec_events": 1
+      },
+      "events": [
+        {
+          "event": "harness-launch",
+          "tid": 817923,
+          "tgid": 817923,
+          "ppid": 817165,
+          "name": "python3",
+          "wait_status": 4991
+        },
+        {
+          "event": "exec",
+          "tid": 817923,
+          "message": 817923,
+          "wait_status": 263551,
+          "identity": {
+            "tid": 817923,
+            "tgid": 817923,
+            "ppid": 817165,
+            "name": "plan-release"
+          },
+          "exe": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-source-parity-1474ljse/plan-release"
+        },
+        {
+          "event": "exit-pending",
+          "tid": 817923,
+          "message": 0,
+          "wait_status": 394623
+        },
+        {
+          "event": "reaped",
+          "tid": 817923,
+          "exit": 0,
+          "wait_status": 0
+        }
+      ],
+      "known_tasks": {
+        "817923": {
+          "tid": 817923,
+          "tgid": 817923,
+          "ppid": 817165,
+          "name": "python3"
+        }
+      },
+      "matches_accepted": true
+    }
+  ],
+  "totals": {
+    "old": {
+      "harness_launches": 3,
+      "descendant_processes": 20,
+      "descendant_threads": 0,
+      "distinct_thread_groups_including_launch": 23,
+      "distinct_tids_including_launch": 23,
+      "fork_events": 20,
+      "vfork_events": 0,
+      "clone_events": 0,
+      "exec_events": 17
+    },
+    "release": {
+      "harness_launches": 3,
+      "descendant_processes": 0,
+      "descendant_threads": 0,
+      "distinct_thread_groups_including_launch": 3,
+      "distinct_tids_including_launch": 3,
+      "fork_events": 0,
+      "vfork_events": 0,
+      "clone_events": 0,
+      "exec_events": 3
+    }
+  },
+  "paired_byte_parity": {
+    "tray-live": true,
+    "dev-model-live": true,
+    "inference-live": true
+  },
+  "complete": true
+}

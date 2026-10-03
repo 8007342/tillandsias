@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-migration-fresh-eyes-review-of-policy-and-runtime-boundaries
+    event:
+      type: note
+      ts: "2026-10-01T21:45:29Z"
+      agent_id: linux-macuahuitl-claude-20261001t214528z
+      host: macuahuitl
+      summary: |
+        LANDED in land124 (bb57e9621): Codex's fresh-eyes review plan/issues/lua-migration-fresh-eyes-review-2026-10-01.md (PR #200, work/1525-ajtc), relayed by the coordinator. Six findings ordered by consequence. The top two are routed by notes on their owner rows: (1) a malformed policy seed drops every project-specific restriction, so an unmatched command falls through to allow:default (1443-isrk); (2) a read-only `policy eval` spends a one-use consent token (1443-9f5w). Both sit in the command-policies spec, still status: draft, which is why its litmus tests never ran in the pre-build suite (coordinator baseline, 2026-10-01).

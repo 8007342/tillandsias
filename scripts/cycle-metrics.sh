@@ -1269,9 +1269,13 @@ printf 'timing: steps=%s build_check_ms_avg=%s%s litmus_ms_avg=%s slowest=%s sou
 # V_c can be computed from it on trunk (1395-miwn). --no-snapshot: reporting
 # here must never advance the snapshot and swallow the next --check's
 # lost-satisfaction warning. Best-effort: a pipeline that cannot run prints
-# `centicolon: blocked:…`, and a missing script prints nothing.
-if [ -f "$(dirname "$0")/check-centicolon-ratchet.sh" ]; then
-    { bash "$(dirname "$0")/check-centicolon-ratchet.sh" --no-snapshot 2>/dev/null | grep '^centicolon:'; } || true
+# `centicolon: blocked:…`, and a missing runner prints nothing.
+if [ -f "$SCRIPT_DIR/lua/check-centicolon-ratchet.lua" ]; then
+    . "$SCRIPT_DIR/plan-binary-probe.sh"
+    if _cc_plan="$(cd "$REPO_ROOT" && resolve_plan_binary 2>/dev/null)"; then
+        case "$_cc_plan" in ./*) _cc_plan="$REPO_ROOT/${_cc_plan#./}" ;; esac
+        { TILLANDSIAS_REPO_ROOT="$REPO_ROOT" "$_cc_plan" script run "$SCRIPT_DIR/lua/check-centicolon-ratchet.lua" -- --no-snapshot 2>/dev/null | grep '^centicolon:'; } || true
+    fi
 fi
 
 # ── ORDER 1119-6wn6: tokens ─────────────────────────────────────────────────

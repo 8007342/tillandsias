@@ -17,6 +17,10 @@
 #
 # The list is symbol-anchored for order 881-29me's reason: a symbol survives
 # every edit that does not rename it, and a rename is an event worth noticing.
+#
+# PORTED to Lua (1527-v7cy): the guard is
+# scripts/lua/check-enclave-membership-documented.lua, run through the one
+# runner; no runner is a loud skip, never a silent pass.
 name: litmus:enclave-membership-documented
 spec: enclave-network
 phase: pre-build
@@ -28,38 +32,38 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/check-enclave-membership-documented.sh
+  - workspace contains scripts/lua/check-enclave-membership-documented.lua (1527-v7cy port of the .sh)
   - workspace contains openspec/specs/enclave-network/spec.md
   - shell utilities (bash, grep, awk, comm, mktemp) are available in PATH
 
 critical_path:
-  - step: "the guard parses, is executable, and the tree agrees in the pinned grammar"
-    command: "bash -n scripts/check-enclave-membership-documented.sh && test -x scripts/check-enclave-membership-documented.sh && out=$(scripts/check-enclave-membership-documented.sh) && printf '%s' \"$out\" | grep -qE '^ok:enclave-membership:[0-9]+ attach site\\(s\\) documented$' && echo 'ok: spec agrees with the code'"
+  - step: "the guard resolves through the one runner and the tree agrees in the pinned grammar"
+    command: ". scripts/plan-binary-probe.sh; out=$(\"$(resolve_plan_binary)\" script run scripts/lua/check-enclave-membership-documented.lua) && printf '%s' \"$out\" | grep -qE '^ok:enclave-membership:[0-9]+ attach site\\(s\\) documented$' && echo 'ok: spec agrees with the code'"
     timeout_ms: 30000
     expected_behavior: "ok: spec agrees with the code"
 
   - step: "NEGATIVE CONTROL — an attach site the spec does not name is refused (this is the state the spec was actually in, six times over)"
-    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'fn build_newthing_run_args() -> Vec<String> {\\n    vec![ENCLAVE_NET.into()]\\n}\\n' > \"$T/crates/x.rs\"; printf '# fixture\\n\\n- `x.rs` `fn build_somethingelse`\\n' > \"$T/spec.md\"; out=$(TILLANDSIAS_ENCLAVE_SPEC=\"$T/spec.md\" TILLANDSIAS_ENCLAVE_SRC_ROOT=\"$T/crates\" scripts/check-enclave-membership-documented.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:enclave-membership:undocumented=1:stale=1$' && echo 'ok: undocumented member refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'fn build_newthing_run_args() -> Vec<String> {\\n    vec![ENCLAVE_NET.into()]\\n}\\n' > \"$T/crates/x.rs\"; printf '# fixture\\n\\n- `x.rs` `fn build_somethingelse`\\n' > \"$T/spec.md\"; . scripts/plan-binary-probe.sh; out=$(TILLANDSIAS_ENCLAVE_SPEC=\"$T/spec.md\" TILLANDSIAS_ENCLAVE_SRC_ROOT=\"$T/crates\" \"$(resolve_plan_binary)\" script run scripts/lua/check-enclave-membership-documented.lua 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:enclave-membership:undocumented=1:stale=1$' && echo 'ok: undocumented member refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
     timeout_ms: 30000
     expected_behavior: "ok: undocumented member refused"
 
   - step: "NEGATIVE CONTROL — the other direction: a bullet the code no longer backs is refused too, so the list cannot outlive the wiring"
-    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'fn build_newthing_run_args() -> Vec<String> {\\n    vec![ENCLAVE_NET.into()]\\n}\\n' > \"$T/crates/x.rs\"; printf '# fixture\\n\\n- `x.rs` `fn build_newthing_run_args`\\n- `x.rs` `fn build_departed_run_args`\\n' > \"$T/spec.md\"; out=$(TILLANDSIAS_ENCLAVE_SPEC=\"$T/spec.md\" TILLANDSIAS_ENCLAVE_SRC_ROOT=\"$T/crates\" scripts/check-enclave-membership-documented.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:enclave-membership:undocumented=0:stale=1$' && echo 'ok: stale bullet refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'fn build_newthing_run_args() -> Vec<String> {\\n    vec![ENCLAVE_NET.into()]\\n}\\n' > \"$T/crates/x.rs\"; printf '# fixture\\n\\n- `x.rs` `fn build_newthing_run_args`\\n- `x.rs` `fn build_departed_run_args`\\n' > \"$T/spec.md\"; . scripts/plan-binary-probe.sh; out=$(TILLANDSIAS_ENCLAVE_SPEC=\"$T/spec.md\" TILLANDSIAS_ENCLAVE_SRC_ROOT=\"$T/crates\" \"$(resolve_plan_binary)\" script run scripts/lua/check-enclave-membership-documented.lua 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^violation:enclave-membership:undocumented=0:stale=1$' && echo 'ok: stale bullet refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
     timeout_ms: 30000
     expected_behavior: "ok: stale bullet refused"
 
   - step: "POSITIVE CONTROL — an exactly-agreeing fixture pair passes, so a refuse-everything guard cannot satisfy the two negatives"
-    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'fn build_newthing_run_args() -> Vec<String> {\\n    vec![ENCLAVE_NET.into()]\\n}\\n' > \"$T/crates/x.rs\"; printf '# fixture\\n\\n- `x.rs` `fn build_newthing_run_args`\\n' > \"$T/spec.md\"; out=$(TILLANDSIAS_ENCLAVE_SPEC=\"$T/spec.md\" TILLANDSIAS_ENCLAVE_SRC_ROOT=\"$T/crates\" scripts/check-enclave-membership-documented.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:enclave-membership:1 attach site(s) documented$' && echo 'ok: agreement accepted' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'fn build_newthing_run_args() -> Vec<String> {\\n    vec![ENCLAVE_NET.into()]\\n}\\n' > \"$T/crates/x.rs\"; printf '# fixture\\n\\n- `x.rs` `fn build_newthing_run_args`\\n' > \"$T/spec.md\"; . scripts/plan-binary-probe.sh; out=$(TILLANDSIAS_ENCLAVE_SPEC=\"$T/spec.md\" TILLANDSIAS_ENCLAVE_SRC_ROOT=\"$T/crates\" \"$(resolve_plan_binary)\" script run scripts/lua/check-enclave-membership-documented.lua 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:enclave-membership:1 attach site(s) documented$' && echo 'ok: agreement accepted' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
     timeout_ms: 30000
     expected_behavior: "ok: agreement accepted"
 
   - step: "SCOPE CONTROL — a nested helper inside a builder must not steal the attribution, and a #[test] fn must not count as a member"
-    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'fn build_outer_run_args() -> Vec<String> {\\n    fn helper() {}\\n    vec![ENCLAVE_NET.into()]\\n}\\n\\n#[cfg(test)]\\nmod t {\\n    #[test]\\n    fn build_looks_like_a_member() { let _ = ENCLAVE_NET; }\\n}\\n' > \"$T/crates/x.rs\"; printf '# fixture\\n\\n- `x.rs` `fn build_outer_run_args`\\n' > \"$T/spec.md\"; out=$(TILLANDSIAS_ENCLAVE_SPEC=\"$T/spec.md\" TILLANDSIAS_ENCLAVE_SRC_ROOT=\"$T/crates\" scripts/check-enclave-membership-documented.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -eq 0 ] && echo 'ok: nested helper and test fn both excluded' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    command: "T=$(mktemp -d); mkdir -p \"$T/crates\"; printf 'fn build_outer_run_args() -> Vec<String> {\\n    fn helper() {}\\n    vec![ENCLAVE_NET.into()]\\n}\\n\\n#[cfg(test)]\\nmod t {\\n    #[test]\\n    fn build_looks_like_a_member() { let _ = ENCLAVE_NET; }\\n}\\n' > \"$T/crates/x.rs\"; printf '# fixture\\n\\n- `x.rs` `fn build_outer_run_args`\\n' > \"$T/spec.md\"; . scripts/plan-binary-probe.sh; out=$(TILLANDSIAS_ENCLAVE_SPEC=\"$T/spec.md\" TILLANDSIAS_ENCLAVE_SRC_ROOT=\"$T/crates\" \"$(resolve_plan_binary)\" script run scripts/lua/check-enclave-membership-documented.lua 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" -eq 0 ] && echo 'ok: nested helper and test fn both excluded' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
     timeout_ms: 30000
     expected_behavior: "ok: nested helper and test fn both excluded"
 
   - step: "build.sh consults the guard (wiring is real, not prose)"
-    command: "grep -q 'check-enclave-membership-documented.sh' build.sh && echo 'ok: wired into the gate'"
+    command: "grep -q 'check-enclave-membership-documented.lua' build.sh && echo 'ok: wired into the gate'"
     timeout_ms: 8000
     expected_behavior: "ok: wired into the gate"
 
@@ -71,7 +75,7 @@ observability:
   log_fields:
     spec: "enclave-network"
     test: "enclave-membership-documented"
-    artifact: "scripts/check-enclave-membership-documented.sh + openspec/specs/enclave-network/spec.md"
+    artifact: "scripts/lua/check-enclave-membership-documented.lua + openspec/specs/enclave-network/spec.md"
 
 rollback:
   on_failure: >
@@ -81,4 +85,4 @@ rollback:
     this by returning the spec to a prose enumeration: that form went stale by
     six members before this guard existed, and the sixth was found only by the
     scan.
-  command: "scripts/check-enclave-membership-documented.sh; grep -rn 'ENCLAVE_NET\\|ENCLAVE_ONLY_NET\\|ENCLAVE_EGRESS_NETS' --include='*.rs' crates/ | head -20"
+  command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/check-enclave-membership-documented.lua; grep -rn 'ENCLAVE_NET\\|ENCLAVE_ONLY_NET\\|ENCLAVE_EGRESS_NETS' --include='*.rs' crates/ | head -20"

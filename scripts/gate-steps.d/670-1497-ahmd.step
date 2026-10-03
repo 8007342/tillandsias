@@ -1,0 +1,15 @@
+# Gate step 1497-ahmd — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. check-credential-channel.sh's blocked: verdicts are the
+# refusals agents hit most (1494-kkbi ranks three of the top ten here). Every
+# one now carries why + remedy; no remedy tells an agent to run the re-auth
+# 1025-a896 forbids (three did: gh auth login / refresh); and the
+# interactive-credential-helper remedy is EXECUTED verbatim in a scratch repo
+# and shown to clear the refusal, with a no-remedy negative control.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking every credential-channel refusal says why and what clears it, and its remedy works (1497-ahmd)"
+STEP_SCRIPT="scripts/test-credential-channel-affordances.sh"
+STEP_ERROR="a credential-channel refusal lost its why/remedy, a remedy again instructs gh auth login/refresh, or the printed remedy no longer clears its refusal (1497-ahmd)"
+STEP_OK="credential-channel refusals carry working affordances"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: credential-channel-affordances (1497-ahmd) at 389c7866c, 3 arms, bash 3.2; HOME pinned to the scratch dir afterwards at their suggestion"

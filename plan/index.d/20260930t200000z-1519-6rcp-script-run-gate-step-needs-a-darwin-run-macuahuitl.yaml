@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Split from 1384-bqhy by coordinator ruling, 2026-09-30 (no macOS host was up).
+packets:
+  - packet_id: the-script-run-verb-fixture-is-wired-as-gate-step-760-once-a-mac-has-run-it-and-recorded-a-darwin-second-regime
+    order: 1519-6rcp
+    status: blocked
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    pickup_role: macos
+    capability_tags: [lua, ci-gate, gate-steps, macos, regime]
+    estimated_hours: 1
+    depends_on: [tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d]
+    owned_files:
+      - scripts/gate-steps.d/760-1384-bqhy.step
+    blocked_by: macOS runner — check-gate-step-regimes refuses a new .step without a darwin or msys STEP_SECOND_REGIME, and no Mac was up when 1384-bqhy landed
+    title: |
+      scripts/test-script-run-verb.sh (1384-bqhy's fixture) runs in a litmus but not in ./build.sh --check, because its gate step needs a macOS run nobody could supply on 2026-09-30; wire scripts/gate-steps.d/760-1384-bqhy.step with that run's record
+    context: |
+      RULING (macuahuitl coordinator, 2026-09-30): 1384-bqhy landed its verb and
+      fixture without the gate step. Holding it for a Mac would have stalled
+      1384-bxhk and 1384-ddua, and an unwired fixture cannot turn a Mac's gate
+      red. Its build.sh changes (the _run_gate_steps loop, --gate-steps, the
+      script classify call sites) DO run on Macs from the next --check. This
+      row is the Mac verification that was skipped for the step itself.
+      1375-amye (the portable run verb) waits on the same kind of Mac run;
+      do both in one sitting.
+    outcome: |
+      The fixture runs in every host's --check with a recorded darwin result.
+    exit_criteria:
+      - "On a Mac, with this tree's plan binary built (`cargo build --release -p tillandsias-plan`), `bash scripts/test-script-run-verb.sh` prints its summary line; that line (pass or skip:<reason>) is the step's STEP_SECOND_REGIME."
+      - "`bash scripts/check-gate-step-regimes.sh` prints ok with scripts/gate-steps.d/760-1384-bqhy.step present (pre-fix: the step is absent, so nothing wires the fixture into --check)."
+    verifiable_closure: |
+      The landed .step file carries STEP_SECOND_REGIME="<mac host> <date> darwin <verdict>",
+      and a ./build.sh --check log on linux-next shows the step's STEP_OK line.
+    unscoreable: "regime-record: the closure is a recorded run on another platform, not a litmus pin"
+    next_action: >
+      On macbookair or macneo: fetch linux-next, build the plan binary, run the
+      fixture, and write the 760 step with the verdict line; same session:
+      scripts/test-plan-run-verb.sh for 1375-amye's 750 step.
+    notes: |
+      size: S
+      implementer_tier: haiku

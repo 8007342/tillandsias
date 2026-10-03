@@ -1,0 +1,16 @@
+# Gate step 1470-v67y — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. The operator ruled (2026-09-17, 1247-amcu) that every refusal
+# says why it refused and what would make it not a refusal; a bare verdict
+# token leaves an agent stuck with no next action. build.sh --check runs
+# scripts/check-refusal-affordance-added.sh, which refuses an ADDED
+# refused:/blocked:/violation: emission with no why/remedy (or _afford, or a
+# reasoned affordance-ok marker) nearby; --audit counts coverage per site. The
+# fixture drives the guard over scratch repos, and checks the audit per site.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a newly-added refusal cannot ship without its affordance (1470-v67y)"
+STEP_SCRIPT="scripts/test-refusal-affordance-added.sh"
+STEP_ERROR="the refusal-affordance guard no longer refuses a bare added verdict, or its audit stopped counting per site (1470-v67y); see which arm failed above"
+STEP_OK="newly-added refusals carry why and remedy; audit counts per site"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:refusal-affordance-added-fixture:8/8"

@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by the Lua migration's batch C (1527-v7cy), filed by the coordinator 2026-10-01.
+packets:
+  - packet_id: the-lua-runner-has-no-advisory-verdict-so-a-decider-that-reports-without-refusing-cannot-be-ported
+    order: 1528-gxzf
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [lua, script-run, verdict, migration]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/script_run.rs
+    title: |
+      `tillandsias-plan script run`'s verdict module emits only ok:/skip:/refused:/blocked:/could-not-run:/violation:, so a shell decider whose verdict is an advisory line (check-centicolon-ratchet.sh prints `centicolon: … (advisory)` and exits 0) cannot be ported without changing its output, which is an interface
+    context: |
+      MEASURED 2026-10-01 by the batch C port (1527-v7cy): verdict.emit
+      refuses any line outside the six prefixes, so check-centicolon-ratchet
+      stayed shell. Other deciders that report without refusing (advisory or
+      note-style verdicts) will hit the same wall as the migration reaches
+      them. The verdict line is an interface: consumers grep for it, so
+      changing a decider's output to fit the runner is a consumer change, not
+      a port.
+    outcome: |
+      A Lua decider can emit an advisory verdict that exits 0 and is
+      classified as advisory (not ok, not refused) by the one classifier the
+      gate and the door share.
+    exit_criteria:
+      - "A Lua script calling the new advisory verdict prints its line verbatim, exits 0, and `script classify` reports it as advisory (pre-fix: the runner refuses the line — FAILS)."
+      - "check-centicolon-ratchet ported on top of it with byte-identical output on the live tree."
+    verifiable_closure: |
+      An arm in scripts/test-script-run-verb.sh for the advisory verdict, red
+      on the pre-fix runner, plus the centicolon-ratchet parity run quoted on
+      the closing event.
+    unscoreable: "pinned-by-its-own-fixture: the new arm of scripts/test-script-run-verb.sh"
+    next_action: >
+      Add an advisory kind to script_run's verdict module and classify(),
+      decide its exact line grammar against check-centicolon-ratchet's
+      existing output, then port that decider.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Touches the classifier the gate and door share: an opus review.

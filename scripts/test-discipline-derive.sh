@@ -15,8 +15,9 @@
 #   3. no seed, origin carries linux-next and work/1446-664f, two authors ->
 #      derived=2 seed=none and the affordance `discipline raise --to 2; use
 #      /project-discipline for instructions`; nothing is refused;
-#   4. THIS repository: derived=2 seed=2 effective=2, and check-ref main stays
-#      refused:discipline:default-branch-protected:enforced;
+#   4. the two-host scratch project with THIS seed: derived=2 seed=2
+#      effective=2, and check-ref main is refused (enforced). THIS repository's
+#      main stays refused with source=seed level=2, regardless of live diversity;
 #   5. derive --json names every observation with the command that made it.
 #
 # PRE-FIX RESULT: FAILS at arm 1 — there was no derive verb, and the seed alone
@@ -38,12 +39,13 @@ case "$_plan" in ./*) _plan="$ROOT/${_plan#./}" ;; esac
 PLAN="$_plan"
 command -v git >/dev/null 2>&1 || { echo "skip:discipline-derive:no-git"; exit 0; }
 
-_tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
+_tmpbase="${TMPDIR:-/tmp}"
+[ ! -d /tmp/opencode ] || _tmpbase=/tmp/opencode
 W="$(mktemp -d "$_tmpbase/discipline-derive.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 
 first() { printf '%s' "${1%%$'\n'*}"; }
-g() { git -c init.defaultBranch=main -c user.name=fixture -c user.email="${EMAIL:-one@host-a}" "$@"; }
+g() { git -c init.defaultBranch=main -c user.name=fixture -c user.email="${EMAIL:-one@host-a.test}" -c commit.gpgsign=false "$@"; }
 
 # project <name> -> a clone at $W/<name> of a bare origin with one commit on main.
 project() {
@@ -87,7 +89,7 @@ fi
 # 3 — a project that outgrew its (absent) seed: derived 2, raise affordance, no refusal.
 project p3
 g -C "$W/p3" push -q origin main:linux-next 2>/dev/null
-EMAIL=two@host-b g -C "$W/p3" commit -q --allow-empty -m second
+EMAIL=two@host-b.test g -C "$W/p3" commit -q --allow-empty -m second
 g -C "$W/p3" push -q origin HEAD:refs/heads/work/1446-664f 2>/dev/null
 g -C "$W/p3" push -q origin HEAD:main 2>/dev/null
 g -C "$W/p3" fetch -q origin
@@ -101,14 +103,21 @@ else
     bad "arm 3: derive=[$d3] check-ref rc=$rc3 [$(first "$c3")]"
 fi
 
-# 4 — Tillandsias itself: seed and reality agree, enforcement unchanged.
-d4="$(dis derive --root "$ROOT")"
-c4="$(dis check-ref refs/heads/main --root "$ROOT")"; rc4=$?
+# 4 — Seed/reality agreement uses p3's explicit two-host history, never the
+# checkout's rolling last-50 window (sole-builder checkpoints can derive 1).
+mkdir -p "$W/p3/.tillandsias"; cp "$ROOT/.tillandsias/branch-discipline.yaml" "$W/p3/.tillandsias/"
+d4="$(dis derive --root "$W/p3")"
+c4="$(dis check-ref refs/heads/main --root "$W/p3")"; rc4=$?
+live_main="$(dis check-ref refs/heads/main --root "$ROOT")"; live_rc=$?
 if [ "$(first "$d4")" = "derived=2 seed=2 effective=2" ] && [ "$rc4" -eq 1 ] \
-   && [ "$(first "$c4")" = "refused:discipline:default-branch-protected:enforced" ]; then
-    ok "arm 4: this repository derives 2 = seed 2; main stays refused (enforced)"
+   && [ "$(first "$c4")" = "refused:discipline:default-branch-protected:enforced" ] \
+   && grep -qx 'source=seed level=2 enforcement=enforced' <<<"$c4" \
+   && [ "$live_rc" -eq 1 ] \
+   && [ "$(first "$live_main")" = "refused:discipline:default-branch-protected:enforced" ] \
+   && grep -qx 'source=seed level=2 enforcement=enforced' <<<"$live_main"; then
+    ok "arm 4: two-host scratch derives 2 = seed 2; scratch and live main stay refused (source=seed level=2 enforced)"
 else
-    bad "arm 4: derive=[$(first "$d4")] check-ref rc=$rc4 [$(first "$c4")]"
+    bad "arm 4: scratch derive=[$(first "$d4")] check-ref rc=$rc4 [$c4] | live main rc=$live_rc [$live_main]"
 fi
 
 # 5 — every observation carries the command that made it.

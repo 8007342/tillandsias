@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lua-live-proc-spawn-streams-with-script-owned-cancellation-and-reaping
+    field: status
+    value: in_progress
+    ts: "2026-10-02T15:38:35Z"
+    host: macuahuitl
+
+events:
+  - packet_id: lua-live-proc-spawn-streams-with-script-owned-cancellation-and-reaping
+    event:
+      type: note
+      ts: "2026-10-02T15:38:35Z"
+      host: macuahuitl
+      summary: |-
+        claimed for Sol live streaming and script-owned cancel/reap implementation under linux-macuahuitl-opencode-20261002t053211z after PR204 filesystem dependency landed d0437d2f6; bounded child only, no parent closure claim

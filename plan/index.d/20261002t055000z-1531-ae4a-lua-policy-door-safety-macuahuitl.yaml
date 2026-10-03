@@ -1,0 +1,45 @@
+packets:
+  - packet_id: lua-policy-doors-refuse-invalid-seeds-and-inspection-never-spends-consent
+    order: 1531-ae4a
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [lua, rust, policy, consent, tests]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-plan/src/command_policy.rs
+      - crates/tillandsias-plan/src/main.rs
+      - crates/tillandsias-plan/src/run_verb.rs
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/tests/command_policy_doors.rs
+    title: "Lua policy doors distinguish refused seeds from absence and policy inspection never consumes consent"
+    context: |
+      Findings 1 and 2 of plan/issues/lua-migration-fresh-eyes-review-2026-10-01.md:
+      policy eval --seed /dev/null permits unmatched argv after reporting an
+      invalid seed; execution doors discard the same load verdict. Inspection
+      calls evaluate, whose consent resolution can consume a one-use token
+      without executing anything. Operator authorized implementing the 12-hour
+      Bash-to-Lua plan, with Sol on runtime safety, work refs and PR integration.
+    outcome: |
+      A present but invalid or unreadable seed cannot silently relax effective
+      policy at CLI or Lua execution doors. Inspecting a policy never spends
+      consent; the immediately preceding execution decision alone may spend it.
+    exit_criteria:
+      - "A missing default seed preserves the existing floor; present malformed, invalid, and unreadable seeds produce a typed refusal and no child spawn in CLI and Lua doors."
+      - "Scratch default-deny policy corruption cannot make an unmatched harmless argv allowed; CLI policy eval reports refusal rather than contradictory allow."
+      - "An isolated consent fixture permits repeated policy inspection without spending its token; the first actual harmless approved execution alone consumes it, and a second execution cannot reuse it."
+      - "Existing policy and Lua process tests pass; no default-deny activation, credential mutation, destructive e2e, or native-platform coverage claim is introduced."
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test command_policy_doors and targeted
+      policy unit tests. Pin pre-fix failures, no-spawn marker controls, and
+      isolated one-use consent lifecycle; integrate through the full local gate.
+    unscoreable: "pinned-by-its-own-fixture: crates/tillandsias-plan/tests/command_policy_doors.rs"
+    next_action: "Reproduce in scratch fixtures, repair seed load handling and split inspection from consent-consuming execution, then request Sol-reviewed PR landing."
+    notes: |
+      size: L
+      implementer_tier: opus
+      Scope excludes script_run.rs, the asynchronous runtime redesign, and UX.
+    provenance: "Operator /goal implementation authorization; landed 1525-ajtc review findings 1 and 2."

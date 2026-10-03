@@ -1,0 +1,17 @@
+# Gate step 1508-7s4w — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. On MSYS an extensionless probe candidate whose .exe sibling
+# exists IS that .exe (exe magic), so resolve_plan_binary answered the DEBUG
+# build ahead of a fresh release .exe whenever the release extensionless name
+# held an unrunnable file (yolanda 2026-09-29). The probe now skips such
+# candidates on MSYS/Cygwin only, and lets the .exe entries answer in their
+# release-before-debug order. The fixture runs its MSYS arm on Git Bash and
+# its Linux negative control (order unchanged) on Linux, each skipping the
+# other by name. Pre-fix MSYS: 0/1, answering ./target/debug/tillandsias-plan.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the plan-binary probe prefers a release .exe over a debug build on MSYS (1508-7s4w)"
+STEP_SCRIPT="scripts/test-plan-binary-probe-release-over-debug.sh"
+STEP_ERROR="the plan-binary probe again answers a debug build ahead of the release .exe on MSYS, or its Linux order changed (1508-7s4w); see which arm failed above"
+STEP_OK="plan-binary probe answers the release .exe on MSYS and keeps its Linux order"
+STEP_SECOND_REGIME="yolanda 2026-09-29 msys ok:1/1 (MSYS arm); tillandsias-build linux ok:1/1 (negative control)"

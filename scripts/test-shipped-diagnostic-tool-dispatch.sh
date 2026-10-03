@@ -139,14 +139,17 @@ ok "both take the documented host-preferred / toolbox-fallback dispatch"
 # would report "clean" against a definition the project no longer uses. There is
 # one checker, it is wired into ./build.sh --check, and it already scans these
 # two files. Ask it.
-if [ -x "$ROOT/scripts/check-bash-dialect.sh" ]; then
-    if bash "$ROOT/scripts/check-bash-dialect.sh" >/dev/null 2>&1; then
-        ok "both remain bash 3.2 clean (per check-bash-dialect.sh, the one definition)"
+# 1384-ddua: the one checker is scripts/lua/check-bash-dialect.lua on the runner.
+_bd_plan="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _bd_plan=""
+case "$_bd_plan" in ./*) _bd_plan="$ROOT/${_bd_plan#./}" ;; esac
+if [ -f "$ROOT/scripts/lua/check-bash-dialect.lua" ] && [ -n "$_bd_plan" ]; then
+    if (cd "$ROOT" && "$_bd_plan" script run scripts/lua/check-bash-dialect.lua >/dev/null 2>&1); then
+        ok "both remain bash 3.2 clean (per check-bash-dialect.lua, the one definition)"
     else
-        bad "check-bash-dialect.sh refuses the tree — these two ship to macOS (bash 3.2)"
+        bad "check-bash-dialect.lua refuses the tree — these two ship to macOS (bash 3.2)"
     fi
 else
-    bad "check-bash-dialect.sh is missing; the bash-3.2 property is unverified"
+    bad "check-bash-dialect.lua or a script runner is missing; the bash-3.2 property is unverified"
 fi
 
 if [ "$fail" -eq 0 ]; then

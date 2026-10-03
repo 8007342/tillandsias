@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: affordance-slice-5-rank-the-bare-refusal-verdicts-by-how-often-agents-actually-hit-them-so-conversion-starts-with-the-ones-that-fire
+    event:
+      type: note
+      ts: "2026-09-30T01:44:36Z"
+      agent_id: linux-macuahuitl-claude-20260930t014435z
+      host: macuahuitl
+      summary: |
+        LANDED land98 = 45fbaaccd on origin/linux-next (relayed work/1494-kkbi @ be5e684ee; gate: build-check exit 0, 849 s, 2026-09-30T01:43:54Z). Before landing, both new diff-scoped deciders (check-refusal-affordance-added, check-rust-source-pin-added) were run over every queued ref merged onto the bundle (1497-ahmd, 1504-4tty, 1505-hedu, 1330-j5is, 1375-amye, 1503-qrgz): all rc=0, no conflicts; fleet notice sent to all hosts and Codex (inbox MSG-04). The row author closes from the ledger, citing 45fbaaccd.

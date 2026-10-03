@@ -765,6 +765,17 @@ filing — not the prompt.
    compiles what it validates, and rebuilding everything on a schedule is a
    heavier decision than this step is making.
 
+   Confirm the rebuilt instrument is CURRENT before minting or writing, and
+   again after any merge that touches crates/tillandsias-plan/src (a relay of
+   a plan-binary change makes the binary you built an hour ago stale; the
+   next `next-order` then refuses with `stale-plan-binary`) (1513-pppk):
+
+   ```bash
+   bash scripts/check-plan-binary-current.sh
+   # -> ends ok:plan-binary-current; any stale:* or blocked:* line is a stop:
+   #    cargo build --release -p tillandsias-plan, then re-run
+   ```
+
    A `blocked:preflight:*` verdict means do not start the cycle — selecting work
    with an unverified instrument is the one failure the loop cannot reason its
    way out of, because the tool it would reason WITH is the stale thing. That is
@@ -775,6 +786,27 @@ filing — not the prompt.
    degraded, not broken. When inference cannot be established, the report
    segment reads `degraded:<reason>` (never `blocked:*` — the gate word is
    reserved for `blocked:preflight:*`); continue the cycle.
+
+0b. **Name yourself before the first ledger write** (orders 756-hn3a, 885-zvzu):
+
+   ```bash
+   agent_id="$(scripts/agent-identity.sh id <backend>)" || exit 1   # claude|codex|opencode|gemini
+   ```
+
+   Every `append-event`, `set-field` reason and loop-status entry this cycle
+   writes carries an `agent_id`, and the plan binary REFUSES a non-canonical
+   one (874-idnt): `<platform>-<workstation>-<backend>-<utc-timestamp>`,
+   sanitised to `[a-z0-9-]`. Never hand-compose it. The helper resolves it
+   from stable sources and itself refuses
+   (`refused:agent-identity:empty-<component>`, empty stdout) rather than mint
+   an incomplete id; on that refusal append, claim and push nothing.
+
+   WHY IT IS HERE: this skill is the whole bootstrap contract, and it never
+   named the helper. Measured on macuahuitl 2026-08-25: the first
+   `append-event` of a cycle driven by the documented prompt hand-wrote an id
+   and was refused, and the cycle recovered only by reading the error text.
+   Same class as the two gate variables in "How to invoke the gate", which
+   lived in operator prompt text for ten cycles.
 
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
    Report this host's scheduler posture in the same breath — it is one line and
@@ -1343,6 +1375,9 @@ Any time a worker notices "welp, this isn't great" — an inefficiency, a rough
 edge, a fragile assumption, an advisory-only guard, a repeated manual step, a
 log warning, a deprecation notice — it MUST be filed before the cycle exits.
 
+Every capture is a ledger write, so it carries the `agent_id` from Start Of
+Cycle step 0b (`scripts/agent-identity.sh id <backend>`), never a hand-typed one.
+
 **CAPTURE IS MANDATORY. A NEW ROW IS NOT.** These are different acts and
 conflating them is what grew the ready queue to 410 rows against a service rate
 of ~19/day. Route every capture:
@@ -1815,16 +1850,33 @@ claims older than 24h so a dead host cannot strand work permanently. As of
 all, so every host is offered every packet, and on 2026-08-18 two hosts
 implemented 798-tk7b six minutes apart (order 814-iyu7, ~4h duplicated).
 
-So, before you implement anything from the batch:
+So, before you implement anything from the batch — and before a coordinator
+ROUTES a row to another host — ask whether a sibling branch already holds it
+(order 1513-pppk):
+
+```bash
+scripts/check-claims-across-branches.sh --batch <order>...
+# -> claimed-elsewhere:<order>:<branch> per held row, then ok:cross-branch-claims:<n>
+#    blocked:* means the fold could not be read: do not treat it as "free"
+```
+
+A trunk-only read cannot see a claim that sits on osx-next or windows-next
+until the relay, and on 2026-09-29 the coordinator nearly re-assigned a row
+another host had claimed that morning. Then claim:
 
 ```bash
 tillandsias-plan set-field <order> status in_progress \
     --host "$(hostname -s)" --reason "claimed for cycle <UTC ts>"
 git add plan/index.d && git commit -m "claim(<order>): <host>" && git push
+scripts/check-claim-confirmed.sh <order>
+# -> ok:claim-confirmed:<order> | refused:claim-not-on-origin | refused:claim-lost:<order>
+#    | unknown:claim-origin-unreachable (never a pass)
 ```
 
 Push the claim BEFORE the work, not with it — an unpushed claim separates
-nobody. Then:
+nobody, and a push that failed quietly (a locked keyring, 2026-09-29) looks
+exactly like one that landed until `check-claim-confirmed` asks origin
+(1493-d93i). Then:
 
 - **Losing the race is normal and cheap.** The ledger is a CRDT; two hosts can
   claim in the same window. On your next fetch, if another host's claim event
@@ -2288,9 +2340,12 @@ Before exit:
 
    On `blocked:credential-expired-mid-cycle` the credential WORKED and then
    stopped; that is distinct from never having had one, and the printed remedy
-   is `gh auth refresh`, not seeding a store. Do NOT discard the cycle's work to
-   get unstuck — salvage first (872-c9nd) and report blocked with the salvage
-   ref.
+   is the OPERATOR re-seeding the token (`tillandsias --github-login`), not
+   seeding a store. An agent never runs `gh auth refresh` or `gh auth login`
+   itself (1025-a896: a re-auth on one host evicts the token on every other;
+   1497-ahmd corrected the guard, which used to print it). Do NOT discard the
+   cycle's work to get unstuck — salvage first (872-c9nd) and report blocked
+   with the salvage ref.
 
 3c. **EVERY LEDGER WRITE HAPPENS BEFORE THE GATE, NOT AFTER IT** (yolanda,
    2026-09-02). The gate stamp hashes the CONTENT of every tracked and

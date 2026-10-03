@@ -1,0 +1,41 @@
+fields:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    field: owned_files
+    value:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/src/lua_process.rs
+      - crates/tillandsias-plan/src/script_run.rs
+      - crates/tillandsias-plan/tests/lua_proc.rs
+      - crates/tillandsias-exec/src/managed.rs
+    ts: "2026-10-03T16:38:31Z"
+    host: macuahuitl
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: progress
+      ts: "2026-10-03T16:38:31Z"
+      host: macuahuitl
+      agent: linux-macuahuitl-opencode-20261003t154937z
+      summary: |
+        Parent independently integrated runtime/tests at local candidate
+        dab7017143d6a04d3eeac4739df7080d09a1e5ce:42/42 lua_proc tests,
+        9/9 dispatcher units, executor tests and package-only Clippy passed;
+        all16 composition tests failed against the preserved pre-fix binary.
+        This is targeted Linux evidence, not a forced integration gate or closure.
+        A further parent boundary probe refuted chain byte conformance:
+        1048577 newline-free bytes passed proc.run but proc.chain raised
+        'io while draining ["cat"]: proc-line-too-long'. Chain stages have
+        no public line callbacks yet wrongly request full streaming and its
+        1MiB line bound. Preserve the actual proc.spawn streaming bound and
+        8MiB per-fd prefix capture; do not enlarge either as a workaround.
+        The parent reviews/authorizes a narrow managed.rs completion-only
+        observation seam if needed: chain retains managed ownership, existing
+        host dispatch/publication ordering and scope-wide pumping without
+        materializing unused line events. Ownership correction above is for
+        this measured repair only, not general executor or runner redesign.
+        Preserved candidate binary sha256:
+        6e05156d5892b778bb8b8490e84a3546940301e6489eb8e49e60bd6c48eb40a9.
+        Next_action:Sol repairs the narrow seam; parent adds the long-byte
+        failure-before/success-after control, re-verifies all existing tests,
+        then forces the integration gate and pushes the first code checkpoint.
+        Native receipts and all parent/tracing obligations remain open.

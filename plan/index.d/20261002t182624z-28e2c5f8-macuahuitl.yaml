@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    field: status
+    value: blocked
+    ts: "2026-10-02T18:26:24Z"
+    host: macuahuitl
+
+events:
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    event:
+      type: progress
+      ts: "2026-10-02T18:26:24Z"
+      host: macuahuitl
+      summary: |-
+        status 'blocked' (not terminal) with evidence_refs: 1534 landed7b829b205 after forcedgate; remaining-composition-and-trace-handoff-2026-10-02.md cites immutable delivered seams and unimplemented APIs; no native validation claim
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    event:
+      type: note
+      ts: "2026-10-02T18:26:24Z"
+      host: macuahuitl
+      summary: |-
+        Parent linux-macuahuitl-opencode-20261002t053211z parks the composite while scheduled children1538-pwdr/1539-dt84 and native Mac/Windows receipts remain unmet. Do not compete with the children or prematurely unblock1520-z95v. Smallest next action: claim1538 after measured1534 landing; trace follows composition. Parent closure additionally requires native evidence and explicit contract reconciliation.

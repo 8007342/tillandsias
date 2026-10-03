@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    field: next_action
+    value: 'HELD FOR A MAC RUN; nothing is left on Linux. PR #196 (work/1375-amye @ dac5f5c3e) is reviewed and relay-fixed, and the coordinator set it to DRAFT on 2026-10-02 so the landing queue skips it until a Mac host does this in one session: git fetch origin && git checkout work/1375-amye; cargo build --release -p tillandsias-plan; bash scripts/test-plan-run-verb.sh (expect PASS, and the Darwin session arm must go red when setsid is swapped for setpgid); add the STEP_SECOND_REGIME line with the verdict to scripts/gate-steps.d/750-1375-amye.step; commit, push the ref, write READY: work/1375-amye @ <sha> on this row, and mark PR #196 ready (gh pr ready 196). Pair it with 1519-6rcp''s 760 step in the same session. Then the coordinator lands it from the queue.'
+    ts: "2026-10-02T20:42:48Z"
+    host: macuahuitl
+    replaces_sha256: "1e737ce9001dcf6919d8a467c834f5787daaa8c35dea2b51cfffe7f5d2d5cc69"
+
+events:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    event:
+      type: note
+      ts: "2026-10-02T20:42:48Z"
+      host: macuahuitl
+      summary: |-
+        PR #196 held for a Mac run; make the hold mechanical (draft) and the Mac steps exact

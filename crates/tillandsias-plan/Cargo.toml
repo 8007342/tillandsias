@@ -30,12 +30,16 @@ serde_json = { workspace = true }
 # 714-4r6w gate forbids raw synchronous podman anywhere — this workspace crate
 # is the one bounded surface, and the rung inherits its discipline.
 tillandsias-podman = { path = "../tillandsias-podman" }
+# Order 1506-q7ab: the fleet message bus's shape checks and lane store, shared
+# with the resident mover in tillandsias-headless (`--msg-serve`), which must
+# not link this crate's Lua/redb engine.
+tillandsias-msg = { path = "../tillandsias-msg" }
 # Lua runtime for the adversarial decomposition pipeline (order 920-pxg6;
 # 687eb6d57 originally miscited 902-5bf9, whose mlua-portability exit
 # criterion is still open). `vendored` builds Lua from C source — a C
 # toolchain cost every platform lane pays; `send` enables Send-bound
 # across tokio tasks for concurrent dispatch.
-mlua = { version = "0.10", features = ["vendored", "lua54", "send", "serialize"] }
+mlua = { version = "0.10", features = ["vendored", "lua54", "send", "serialize", "async"] }
 tillandsias-exec = { path = "../tillandsias-exec" }
 tokio = { workspace = true }
 chrono = { workspace = true }

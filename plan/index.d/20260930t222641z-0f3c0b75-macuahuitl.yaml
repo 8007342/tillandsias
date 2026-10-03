@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d
+    field: status
+    value: completed
+    ts: "2026-09-30T22:26:41Z"
+    host: macuahuitl
+
+events:
+  - packet_id: tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d
+    event:
+      type: completed
+      ts: "2026-09-30T22:26:41Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: db1e5b87a
+  - packet_id: tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d
+    event:
+      type: note
+      ts: "2026-09-30T22:26:41Z"
+      host: macuahuitl
+      summary: |-
+        LANDED in land115 (db1e5b87a on origin/linux-next, gate 1212 s; lenovinha's 33a167cac). tillandsias-plan script run is the one Lua decider runner; one exit-code classifier (script_run::classify) serves the gate loop and the door. Per the coordinator ruling: (1) the verb and its fixture close this row; scripts/test-script-run-verb.sh is 7/7 in both regimes and bound as litmus:script-run-verb under ci-release; (2) the gate step (760) is 1519-6rcp, blocked by the macOS runner; (3) arm 7 pins fn classify[a-z_]*\(rc: i32, since answer.rs, bash_policy.rs and gitref.rs already have classify functions over other things, which is what the row meant; (4) an old-binary test must name the old binary by absolute path, because check-plan-binary-current.sh installs the fresh build into ~/.local/bin and a PATH lookup then silently tests the new one. Relay note: relay-preflight ran only 2 of 6 selected fixtures on this ref (1520-zjmk); the other 4 were run by hand on the merged tree before landing, all green.

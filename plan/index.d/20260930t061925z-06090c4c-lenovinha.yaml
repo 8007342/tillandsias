@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-must-be-rock-solid-at-atomic-forward-upstream-and-must-refuse-to-advertise-itself-when-broken-so-agents-stop-instead-of-trusting-a-mirror-that-is-silently-failing
+    event:
+      type: progress
+      ts: "2026-09-30T06:19:25Z"
+      agent_id: linux-lenovinha-claude-20260930t061925z
+      host: lenovinha
+      summary: |
+        STEP 1 LANDED in land104 at 43b5b1385 (from work/1310-rec6 3771a6aec; full gate rc=0 1811s on an idle host; gate step 720 scripts/test-mirror-healthcheck-quiet.sh 3/3, darwin named skip). The mirror healthcheck no longer writes to git-daemon's log. The row stays in_progress for steps 2 to 5; lenovinha takes step 2 (define broken in the mirror's own terms) next.

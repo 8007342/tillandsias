@@ -159,7 +159,7 @@ HOOKS="$P1/.git/hooks"
 for ev in pre-commit post-commit post-merge post-checkout pre-push; do
     f="$HOOKS/$ev"
     n="$(wc -l < "$f" | tr -d ' ')"
-    dialect="$(TILLANDSIAS_DIALECT_SCAN_DIR="$f" bash "$ROOT/scripts/check-bash-dialect.sh" 2>/dev/null)"
+    dialect="$(TILLANDSIAS_DIALECT_SCAN_DIR="$f" "$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)" script run "$ROOT/scripts/lua/check-bash-dialect.lua" 2>/dev/null)"
     blocked="$(cd "$P1" && TILLANDSIAS_PLAN_BIN="$W/not-runnable" bash "$f" </dev/null 2>/dev/null)"; rc=$?
     if [ "$n" -lt 60 ] && [ "$dialect" = "ok:bash-dialect-clean" ] &&
         [ "$rc" -eq 1 ] && [ "$blocked" = "blocked:hook:$ev:no-plan-binary" ]; then

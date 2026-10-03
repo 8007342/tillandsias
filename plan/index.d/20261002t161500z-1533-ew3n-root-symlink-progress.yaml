@@ -1,0 +1,10 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: lua-port-guest-hardening-tray-refresh-and-podman-budget-deciders
+    event:
+      type: progress
+      ts: "2026-10-02T16:15:00Z"
+      agent_id: linux-macuahuitl-opencode-20261002t053211z
+      host: macuahuitl
+      summary: |
+        1533-ew3n follow-up: external PODMAN_SYNC_SEARCH_ROOT listing now uses typed `test -e` then `find -H`, so an absolute starting symlink follows exactly as legacy grep -r did while interior symlinks remain un-followed. The Podman fixture is 11/11: it proves an absolute space-path root and its starting alias both refuse a direct Command, and a broken alias blocks rather than returning a green empty scan. No full gate or completion claim in this event.

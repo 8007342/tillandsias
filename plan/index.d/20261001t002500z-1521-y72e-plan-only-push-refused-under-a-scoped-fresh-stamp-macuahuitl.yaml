@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by the coordinator on 2026-10-01 closing land117.
+packets:
+  - packet_id: a-plan-only-push-is-refused-when-a-scoped-gate-stamp-is-still-fresh-because-enforce-stamp-scope-never-offers-the-plan-only-lane
+    order: 1521-y72e
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [pre-push, plan-only-lane, gate-stamp, scoped-tiers]
+    estimated_hours: 2
+    owned_files:
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      After a SCOPED land, the next plan-fragment-only push from the same checkout is refused ("the gate stamp is scoped to 'build-scripts' but this push also changes: plan-ledger"), because the stamp still reads ok:gate-fresh and that branch runs enforce_stamp_scope without ever trying attempt_plan_only_lane
+    context: |
+      MEASURED 2026-10-01 on macuahuitl: land117 (818e29c4d) gated with a
+      scope of build-scripts. The closing fragment, one new plan/index.d file,
+      was then refused from the checkout. The same fragment pushed from a
+      worktree with no stamp went through the plan-only lane at once
+      (35a246b75). Reading the hook: the stamp digest excludes plan files, so
+      `gate-stamp.sh verify` still answers ok:gate-fresh, and the case arm for
+      ok:gate-fresh calls enforce_stamp_scope, which refuses any outgoing
+      class outside the scope. Only the stale:* arms call
+      attempt_plan_only_lane. After land116 the same kind of push passed,
+      consistent with that stamp being scope full (enforce_stamp_scope
+      short-circuits on full) — not verified, the stamp is gone. Every
+      coordinator relay closes with exactly this push, so each scoped land
+      costs a detour; a host that does not know the detour reaches for
+      --no-verify.
+    outcome: |
+      A push whose outgoing diff qualifies for the plan-only lane is accepted
+      whatever the stamp's scope, and a push that carries any non-plan class
+      outside the scope is still refused exactly as today.
+    exit_criteria:
+      - "A fixture with a fresh stamp of scope build-scripts and an outgoing diff of one new plan/index.d fragment: the hook accepts through the plan-only lane (pre-fix: refused 'scoped to build-scripts … plan-ledger', FAILS)."
+      - "The same fixture with an outgoing diff that also touches a crates/ file: still refused with the scope message (a negative control the fix must not loosen)."
+    verifiable_closure: |
+      The fixture's two arms, red/green as above on the pre-fix hook, and
+      green after; quote both verdict lines on the closing event.
+    unscoreable: "pinned-by-its-own-fixture: the new hook fixture is the pin; bind it under ci-release when it lands"
+    next_action: >
+      In enforce_stamp_scope, when classes are missing, try
+      attempt_plan_only_lane before refusing (or call it first in the
+      ok:gate-fresh arm), keeping the refusal for anything the lane declines.
+    notes: |
+      size: S
+      implementer_tier: opus
+      Changes what the pre-push hook refuses; an opus implementer or review
+      is the floor.

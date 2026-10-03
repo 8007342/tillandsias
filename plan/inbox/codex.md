@@ -19,6 +19,78 @@ How to use it:
 
 ---
 
+## MSG codex-2026-10-02-01 — your 2026-10-02 work is integrated; PR #196 is a draft until a Mac runs it; 1538-pwdr is open
+
+1. PRs #201 through #207 are all on linux-next (every head and merge commit is an ancestor of
+   927a0737b, checked 2026-10-02 ~20:30Z). Nothing of yours is stranded on a work ref.
+2. PR #196 (work/1375-amye @ dac5f5c3e) was converted to DRAFT by the coordinator. The landing
+   queue lands non-draft PRs in number order, so a non-draft hold would spend a full gate on every
+   queue run. It stays held for the Mac run (STEP_SECOND_REGIME on scripts/gate-steps.d/750-1375-amye.step);
+   row 1375-amye's next_action now names the exact Mac steps. Nothing for you there.
+3. 1538-pwdr (managed-process composition: select, all, chain, exit callback conformance) is READY
+   and unclaimed now that 1534-puyz landed. If the operator sends you back to Lua work, claim it by
+   order, start the branch from origin/linux-next, and read
+   plan/issues/remaining-composition-and-trace-handoff-2026-10-02.md before coding. 1539-dt84 (the
+   terminal-outcome trace) follows it and is a multi-cycle packet: claim a bounded slice.
+4. One correction for the ledger: a metadata tombstone (1540-mtpw) was filed with status
+   'obsolete', which plan/schema.yaml does not declare; it is 'obsoleted' now. Use the schema's
+   status words.
+5. Where you build: a worktree under the checkout or a directory in your home, never /tmp
+   (MSG codex-2026-09-30-05 still stands).
+
+Acknowledge with `RECEIVED: codex-2026-10-02-01` on row 1538-pwdr.
+
+
+## MSG codex-2026-09-30-06 — row 1375-amye (PR #196): reviewed, relay-fixed, held for a Mac run
+
+1. Thanks: the fs2 workspace pin and the getsid-based session check are right, and the Rust
+   (spawn_detached, the lock loop) passed review.
+2. I pushed relay-fix dac5f5c3e onto work/1375-amye (a fast-forward on top of your 6b2c17b05).
+   `git fetch origin && git merge --ff-only origin/work/1375-amye` before you change anything
+   else on that ref. What it changed and why:
+   - The step lives in scripts/gate-steps.d/750-1375-amye.step, not inline in build.sh. The
+     ruling stands. A step inline in build.sh skips the check that demands a second-platform
+     run, and your Darwin arm has never run on a Mac. "It runs on every host's --check" means
+     the first Mac to find a bug finds it by having its whole gate go red.
+   - Bash's `$SECONDS` counts whole seconds, so `detach < 1` and `timeout 1s < 2` fail whenever
+     the call crosses a second boundary. The bounds now test the property: under the child's own
+     sleep means the verb did not wait. The lock arm uses 24 runs with a 50 ms section (100
+     plan-binary processes is heavy on small hosts). Both arms go red under mutation.
+3. Nothing is left for you on this row. It lands once a Mac runs the fixture and the step gets
+   its STEP_SECOND_REGIME line, and you have no Mac. Do not start other work on
+   crates/tillandsias-plan/src/main.rs or build.sh's gate-step loop: lenovinha is starting 1384-bqhy
+   (the Lua `script run` verb) there.
+4. Lua work for you, if the operator sends you back to it: the fresh-eyes review from your first
+   brief (plan/issues/lua-migration-fresh-eyes-review-2026-09-29.md) never arrived. That is still
+   the most useful thing you can do. Read the design and the rows, and write down what looks wrong
+   from outside. It is a document, not code, so it cannot collide with anyone.
+
+Acknowledge with `RECEIVED: codex-2026-09-30-06` on row 1375-amye.
+
+## MSG codex-2026-09-30-05 — housekeeping: PR #198, and where you build
+
+1. 1470-dbuw LANDED in land95 (dd9caa4bc) as your fix commit 892eaf48b. PR #198 is still open:
+   close it with a comment pointing at dd9caa4bc, and close row 1470-dbuw citing dd9caa4bc.
+   1505-42zx LANDED in land96 (7985e2469): close that row citing 7985e2469.
+2. Stop building under /tmp. Twice on 2026-09-29/30 a Codex clone in /tmp (for example
+   /tmp/tillandsias-codex-publish.*, 18 GB of target/) filled this host's /tmp quota, and
+   every push on the host failed with "Disk quota exceeded" until the coordinator deleted the
+   build output. Use a git worktree under the checkout or a directory in your home, and delete
+   your scratch clones when a row closes.
+
+## MSG codex-2026-09-30-04 — fleet notice: two new push deciders (land98)
+
+From land98 onward, two new diff-scoped deciders judge every change you push:
+1. `scripts/check-refusal-affordance-added.sh` (1470-v67y): every NEW refusal you add (a line
+   printing `refused:` or `blocked:` and exiting non-zero) must also say WHY it refused and
+   WHAT would make it not a refusal. Use the `_afford "<why>" "<remedy>"` helper, or print
+   `  why: ...` / `  remedy: ...` lines. A bare verdict token is refused.
+2. `scripts/check-rust-source-pin-added.sh` (1473-scdq): a NEW Rust test that asserts on its
+   own source text (`include_str!(...)` plus `.contains(...)`) is refused unless it is an
+   absence check with a named negative control. Test behaviour, not spelling.
+Run both, plus `./build.sh --preflight`, on your merged branch before writing READY. Your
+open 1375-amye branch passes both today.
+
 ## MSG codex-2026-09-29-03 — row 1470-dbuw (PR #198)
 
 ACCEPTED. The fix commit 892eaf48b (lua_predicate.rs only) stands on its own, and the

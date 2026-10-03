@@ -26,6 +26,8 @@
 #
 # Usage:
 #   scripts/land-on-platform-branch.sh [branch] [max-attempts]
+#   (no branch: the integration branch the seed names for this platform, or
+#   the default branch in a project with no seed — never the current work ref)
 #   scripts/land-on-platform-branch.sh linux-next 4
 #
 # Exit: 0 landed (verified against origin) | 1 dirty tree | 2 rebase conflict
@@ -36,9 +38,13 @@
 #       9 a cfg-gated platform crate changed with no native-lint attestation (1235-rfub)
 #       7 push emitted nothing and hit its bound (1131-iax2: blocked credential
 #         helper — the push hangs forever and the log stays zero-byte)
+#       9 the discipline probe refused the target before any fetch or gate
+#         (1443-z3vb: refused:land:discipline:<reason>, the seed's remedy)
 set -uo pipefail
 
-BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD)}"
+# The target is decided by the discipline probe below (order 1443-z3vb): the
+# named branch, else the platform's integration branch from the seed.
+BRANCH="${1:-}"
 TRUNK="${TILLANDSIAS_TRUNK_BRANCH:-linux-next}"
 ATTEMPTS="${2:-4}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -55,6 +61,121 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
     _afford "the working tree or index has uncommitted changes, and landing gates and pushes a committed tree only" \
         "commit or stash them (git status lists them), or hand an ungated tree off with scripts/salvage-dirty-worktree.sh <slug>; then re-run"
     exit 1
+fi
+
+# ── ORDER 1443-z3vb: THE DISCIPLINE PROBE, before any fetch or gate ─────────
+# The tool asks the runtime WHERE to land instead of learning it from the
+# remote's GH006 after a fifteen-minute gate, and a host parked on a work ref
+# no longer lands that work ref as if it were trunk. Local verbs first
+# (seconds, no network):
+#   1. the target: the named branch, else `discipline target` for this
+#      platform — the seed's integration branch, or the default branch in a
+#      project with no seed (operator ruling 6: per project, from the seed
+#      only; level 0 lands on its default branch);
+#   2. `discipline check-ref` on it, which reads the EFFECTIVE level (ruling
+#      4: a seed ahead of reality WARNS, it does not refuse). A target outside
+#      the seed's grammar is refused here even where a plain push only warns:
+#      this tool lands on integration, default, work and salvage refs only.
+# Then ONE bounded ls-remote compares the mirror's published seed digest
+# (refs/tillandsias/discipline/…, 1443-uit6) to the checkout's. Refusals
+# exit 9 and name the skill (ruling 7). With no plan binary that has the
+# discipline verb the probe says so and the tool behaves as it did before:
+# the mirror and the remote still enforce.
+# New tokens only; every existing verdict line is unchanged.
+_disc_refuse() { # _disc_refuse <reason> <why> <remedy>
+    echo "refused:land:discipline:$1" >&2
+    _afford "$2" "$3; use /project-discipline for instructions"
+    exit 9
+}
+_disc_plan=""
+if [ -f "$ROOT/scripts/plan-binary-probe.sh" ]; then
+    _disc_plan="$(. "$ROOT/scripts/plan-binary-probe.sh" && resolve_plan_binary 2>/dev/null)" || _disc_plan=""
+    case "$_disc_plan" in "" | /*) ;; *) _disc_plan="$ROOT/${_disc_plan#./}" ;; esac
+fi
+[ -n "$_disc_plan" ] || _disc_plan="$(command -v tillandsias-plan 2>/dev/null || true)"
+_disc_caps=""
+[ -n "$_disc_plan" ] && _disc_caps="$("$_disc_plan" capabilities 2>/dev/null)"
+if ! grep -qx discipline <<<"$_disc_caps"; then
+    [ -n "$BRANCH" ] || BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+    echo "warn:land:discipline:probe-unavailable — no tillandsias-plan with the discipline verb; landing on $BRANCH unprobed (the mirror and the remote still enforce)" >&2
+else
+    case "${TILLANDSIAS_HOST_KIND:-}" in
+        forge) _disc_platform=forge ;;
+        *)
+            case "$(uname -s)" in
+                Darwin) _disc_platform=macos ;;
+                MINGW* | MSYS* | CYGWIN*) _disc_platform=windows ;;
+                *) _disc_platform=linux ;;
+            esac
+            ;;
+    esac
+    _disc_jget() { "$_disc_plan" json get -r "$1" 2>/dev/null; }
+    _disc_show="$("$_disc_plan" discipline show --json --root "$ROOT" 2>/dev/null)"
+    _disc_level="$(_disc_jget '.level' <<<"$_disc_show")"
+    _disc_digest="$(_disc_jget '.digest // empty' <<<"$_disc_show")"
+    case "$(_disc_jget '.source' <<<"$_disc_show")" in
+        seed) _disc_from=seed ;;
+        *) _disc_from=default ;;
+    esac
+    if [ -z "$BRANCH" ]; then
+        _disc_t="$("$_disc_plan" discipline target --platform "$_disc_platform" --root "$ROOT" 2>/dev/null)"
+        BRANCH="${_disc_t%% *}"
+        [ -n "$BRANCH" ] || _disc_refuse no-target \
+            "the discipline verb named no landing branch for platform $_disc_platform" \
+            "name the branch: scripts/land-on-platform-branch.sh <branch>"
+    fi
+    echo "land:target:$BRANCH:from=$_disc_from:level=${_disc_level:-0}"
+
+    _disc_out="$("$_disc_plan" discipline check-ref "$BRANCH" --root "$ROOT" 2>&1)"
+    _disc_verdict="$(head -n 1 <<<"$_disc_out")"
+    _disc_why="$(sed -n 's/^why: //p' <<<"$_disc_out")"
+    _disc_remedy="$(sed -n 's/^remedy: //p' <<<"$_disc_out")"
+    case "$_disc_verdict" in
+        ok:discipline:*) ;;
+        warn:discipline:ref-outside-grammar*)
+            _disc_refuse ref-outside-grammar "$_disc_why" \
+                "land onto your platform's integration branch (run with no branch to let the seed name it), or push a work ref with plain git push"
+            ;;
+        # check-ref reads the EFFECTIVE level itself (seed checked against
+        # `discipline derive`): a seed ahead of reality answers warn:…:
+        # seed-ahead-of-reality, and its remedy names the missing qualifier.
+        warn:discipline:*:seed-ahead-of-reality)
+            echo "land:discipline:seed-ahead-of-reality — $_disc_verdict; proceeding with a warning" >&2
+            echo "  missing: $_disc_remedy" >&2
+            ;;
+        warn:discipline:*) echo "$_disc_verdict" >&2 ;;
+        refused:discipline:*)
+            _disc_reason="${_disc_verdict#refused:discipline:}"
+            _disc_refuse "${_disc_reason%%:*}" "$_disc_why" "$_disc_remedy"
+            ;;
+        *)
+            echo "warn:land:discipline:probe-unreadable — check-ref answered [$_disc_verdict]; landing on $BRANCH unprobed" >&2
+            ;;
+    esac
+
+    # The mirror's published seed digest (1443-uit6). A digest the checkout
+    # does not carry is drift, unless THIS checkout is the one changing the
+    # seed (a commit ahead of origin/$BRANCH touches it).
+    _disc_bound=""
+    command -v timeout >/dev/null 2>&1 && _disc_bound="timeout 20"
+    _disc_ls_rc=0
+    _disc_ls="$(GIT_TERMINAL_PROMPT=0 $_disc_bound git ls-remote origin 'refs/tillandsias/discipline/*' 2>/dev/null)" || _disc_ls_rc=$?
+    if [ "$_disc_ls_rc" -ne 0 ]; then
+        echo "land:discipline:mirror-unreachable — ls-remote rc=$_disc_ls_rc; continuing from the seed" >&2
+    elif [ -z "$_disc_ls" ]; then
+        echo "land:discipline:mirror-silent — origin publishes no discipline ref; continuing from the seed" >&2
+    else
+        _disc_mdigest="$(cut -f2 <<<"$_disc_ls" | tr '/' '\n' | grep -E '^[0-9a-f]{64}$' | head -n 1)"
+        if [ "$_disc_mdigest" = "$_disc_digest" ]; then
+            echo "land:discipline:mirror-agrees:${_disc_digest:-no-seed}"
+        elif [ -n "$(git log --format=%h "origin/$BRANCH..HEAD" -- .tillandsias/branch-discipline.yaml 2>/dev/null)" ]; then
+            echo "land:discipline:seed-change-in-flight:mirror=${_disc_mdigest:-none}:checkout=${_disc_digest:-none}" >&2
+        else
+            _disc_refuse "seed-drift:mirror=${_disc_mdigest:-none}:checkout=${_disc_digest:-none}" \
+                "the mirror publishes a different branch-discipline seed than this checkout carries, so the probe above read a stale seed" \
+                "git fetch origin $BRANCH && git merge origin/$BRANCH (it brings the published seed), then re-run"
+        fi
+    fi
 fi
 
 for attempt in $(seq 1 "$ATTEMPTS"); do
@@ -297,14 +418,43 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         _sv="$(bash scripts/gate-stamp.sh verify 2>/dev/null)"
         if [ "$_sv" = "ok:gate-fresh" ]; then
             _ss="$(bash scripts/gate-stamp.sh scope 2>/dev/null)"
+            # ORDER 1524-jnby — A SCOPED STAMP IS ADOPTED WHEN ITS SCOPE COVERS
+            # EVERY CLASS THIS PUSH CARRIES. The 1174-u5wp worry above ("a narrower
+            # stamp could satisfy the hook for a narrow push while saying nothing
+            # about the gate this tool owes") is exactly the case where the scope
+            # does NOT cover the push; when it does, the gate validated every
+            # class being pushed, and the hook's enforce_stamp_scope re-checks the
+            # same classes seconds later. Measured 2026-10-01: since 765-xpct the
+            # selector writes scoped stamps on most gates, so a plan-only trunk
+            # move during a gate cost a whole second gate (land120: 1183 s, then
+            # again), although the merged tree's code was unchanged. The classes
+            # come from gate-stamp.sh classify, the one taxonomy the hook uses.
+            _scope_why=""
             if [ "$_ss" = "full" ]; then
+                _scope_why="full-scope"
+            else
+                case "$_ss" in
+                    ""|stale:*|*" "*) ;;
+                    *)
+                        _push_cls="$(git diff --name-only --no-renames "origin/$BRANCH" HEAD -- 2>/dev/null | bash scripts/gate-stamp.sh classify 2>/dev/null | sort -u | tr '\n' ' ')"
+                        _uncov=""
+                        for _c in $_push_cls; do
+                            case ",$_ss," in *",$_c,"*) ;; *) _uncov="$_uncov $_c" ;; esac
+                        done
+                        if [ -n "${_push_cls// /}" ] && [ -z "$_uncov" ]; then
+                            _scope_why="scope $_ss covers every class this push carries: ${_push_cls% }"
+                        fi
+                        ;;
+                esac
+            fi
+            if [ -n "$_scope_why" ]; then
                 # NAME THE STAMP, or a reader cannot tell a SKIPPED gate from a
                 # gate that never ran -- the row's third criterion. gate-stamp.sh
                 # exposes no field reader, so the `stamped` line is read from the
                 # file it owns; an unreadable one degrades to a named token
                 # rather than to silence.
                 _adopted="$(sed -n 's/^stamped[[:space:]]\{1,\}//p' "$(git rev-parse --absolute-git-dir)/tillandsias-gate-stamp" 2>/dev/null | head -1)"
-                echo "ok:land-adopts-valid-stamp:${_adopted:-stamped-time-unreadable} — this tree already holds a green full-scope gate stamp; skipping the gate and going straight to the push (1174-u5wp)"
+                echo "ok:land-adopts-valid-stamp:${_adopted:-stamped-time-unreadable} — this tree already holds a green gate stamp ($_scope_why); skipping the gate and going straight to the push (1174-u5wp, 1524-jnby)"
                 echo "land: attempt $attempt — gate ADOPTED, not run. A gate that finished green is worth adopting; the pre-push hook re-verifies this same stamp against this same tree."
             fi
         fi
@@ -396,7 +546,17 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
             # cannot launder a real failure, which is 1176-fn2p's second
             # negative control, enforced by POSITION here and by the kernel
             # record itself inside the probe.
-            _oom_out="$(bash "$ROOT/scripts/check-oom-postmortem.sh" --since -60min 2>&1)"; _oom_rc=$?
+            # PORTED to Lua (1526-gv3t): scripts/lua/check-oom-postmortem.lua,
+            # run through the one runner; no runner is a could-not-run (the
+            # Lua port's own `*` case below), never a silent pass.
+            _oom_bin="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _oom_bin=""
+            case "$_oom_bin" in ./*) _oom_bin="$ROOT/${_oom_bin#./}" ;; esac
+            if [ -n "$_oom_bin" ] && grep -qx script <<<"$("$_oom_bin" capabilities 2>/dev/null)"; then
+                _oom_out="$("$_oom_bin" script run "$ROOT/scripts/lua/check-oom-postmortem.lua" -- --since -60min 2>&1)"; _oom_rc=$?
+            else
+                _oom_out="could-not-run:oom-postmortem:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+                _oom_rc=3
+            fi
             case "$_oom_rc" in
                 1) echo "refused:land:gate-oom-killed — the gate produced no verdict (exit $_gate_rc) and the kernel records an OOM kill (1176-fn2p)" >&2
                    _afford "the kernel killed the gate for memory, so it never reached a verdict on this tree" \
@@ -702,7 +862,24 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
         # pre-receive refusals, and then enumerated three race phrasings as
         # though they were all of them. Narrowing a pattern is not the same as
         # enumerating what it must still cover.
+        # ORDER 1524-7gn7 — ANCESTRY DECIDES A RACE, NOT THE WORDING. The four
+        # phrasings below are git's; a PRE-PUSH HOOK that refuses because the
+        # branch moved under it says so in its own words, which match none of
+        # them. On land120 (2026-10-01) one plan-only push from another host
+        # landed mid-gate, the hook refused, and this branch printed "not a
+        # lost race" and exited 6. So before believing the text, ask git: if
+        # origin/$BRANCH now holds commits this HEAD lacks, the push lost a race
+        # whatever it said, and the verdict below re-integrates and retries.
+        _race_by_ancestry=0
         if ! grep -qiE "non-fast-forward|fetch first|stale info|cannot lock ref" "$_plog"; then # sigpipe-ok: safe pipeline
+            git fetch -q origin "$BRANCH" 2>/dev/null
+            if git rev-parse -q --verify "origin/$BRANCH" >/dev/null 2>&1 \
+               && ! git merge-base --is-ancestor "origin/$BRANCH" HEAD 2>/dev/null; then
+                _race_by_ancestry=1
+                echo "land: the push was refused in words that name no race, but origin/$BRANCH moved (it holds commits this HEAD lacks) — a lost race; re-integrating"
+            fi
+        fi
+        if [ "$_race_by_ancestry" = 0 ] && ! grep -qiE "non-fast-forward|fetch first|stale info|cannot lock ref" "$_plog"; then # sigpipe-ok: safe pipeline
             # 1064-r8fv named the LANE but left the sentence absolute. MEASURED
             # on macbookair 2026-09-15: "retrying cannot help" is true of
             # retrying THIS PUSH and false of re-running this script, whose

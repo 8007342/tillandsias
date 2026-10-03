@@ -98,11 +98,15 @@ critical_path:
   # directions (order 643-64bx, 2026-08-13). A platform branch must be able to
   # push after the merge from origin/linux-next the pre-push gate requires, and
   # must still be refused when it invents a VERSION of its own — the release is
-  # the linux host's to move. Case 2 of the fixture is that negative control.
-  - step: "Req: the VERSION guard allows integration catch-up and still refuses a divergent bump"
+  # the linux host's to move. Case 2 of the fixture was that negative control
+  # until the operator's 2026-09-17 ruling made the build counter monotonic on
+  # every branch (643-64bx exception 5): a well-formed, strictly-greater bump
+  # committed alone now pushes, and cases 5-9 pin what stays refused (lower,
+  # non-monotonic against the target, malformed, mixed-content).
+  - step: "Req: the VERSION guard allows catch-up and monotonic isolated bumps, and refuses the rest"
     command: "bash scripts/test-pre-push-version-guard.sh"
     timeout_ms: 120000
-    expected_behavior: "PASS: pre-push VERSION guard (4/4)"
+    expected_behavior: "PASS: pre-push VERSION guard (9/9)"
 
   # The fixture above decides the guard's POLICY on small ranges. This one pins
   # that the guard still reaches a verdict at all on a LARGE one (order

@@ -67,6 +67,10 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+// @trace order:1534-puyz
+#[path = "lua_process.rs"]
+pub(crate) mod script_process;
+
 /// Which capabilities a predicate is given, and therefore whether its result may
 /// be cached. The class is what the environment is built FROM, not a label
 /// attached to it afterwards.
@@ -101,7 +105,7 @@ impl PredicateClass {
 /// What `expert.shell{...}` returns to Lua, mirroring tillandsias_exec::Output.
 /// Three SEPARATE values plus the run identity — a predicate can tell stdout
 /// from stderr, and a stale artifact from a fresh one.
-fn shell_result_to_lua(lua: &Lua, out: tillandsias_exec::Output) -> LuaResult<LuaTable> {
+pub(crate) fn shell_result_to_lua(lua: &Lua, out: tillandsias_exec::Output) -> LuaResult<LuaTable> {
     let t = lua.create_table()?;
     t.set("stdout", String::from_utf8_lossy(&out.stdout).to_string())?;
     t.set("stderr", String::from_utf8_lossy(&out.stderr).to_string())?;
@@ -193,7 +197,7 @@ pub fn policy_gate(
     let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let root = find_repo_root().unwrap_or_else(|_| here.clone());
     let protected = cp::protected_refs(&root);
-    let (seed, _) = cp::load_seed(&root, None, &protected);
+    let (seed, load) = cp::load_seed(&root, None, &protected);
     let regime = std::env::var("TILLANDSIAS_POLICY_REGIME")
         .ok()
         .filter(|r| cp::REGIMES.contains(&r.as_str()))
@@ -206,17 +210,39 @@ pub fn policy_gate(
         regime,
         caller: caller.to_string(),
     };
-    let d = cp::evaluate(&req, seed.as_ref(), &protected);
+    let d = cp::decide_execution(
+        &req,
+        seed.as_ref(),
+        &load,
+        &protected,
+        &cp::ConsentCtx::from_env(&root),
+    );
+    cp::audit_decision(&req, &d, None);
     (d.strictness != cp::Strictness::Allow).then_some(d)
 }
 
 /// `proc.run{argv=..., cwd, env, stdin, timeout_ms, group}` (order 1384-aixy,
 /// design section 4.1): one process, run to completion, returned as a VALUE.
 /// A non-zero exit, a signal and a timeout are all DATA; only programmer
-/// errors raise. This first slice is synchronous: `proc.spawn`, line
-/// callbacks, `proc.chain`, `proc.select` and `proc.all` come in later slices.
-fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
-    let err = |m: String| mlua::Error::RuntimeError(format!("proc.run: {m}"));
+/// errors raise. proc.run remains synchronous; the scoped script runner adds
+/// async proc.spawn/line delivery (1534-puyz), not chain/select/all.
+pub(crate) enum PreparedProc {
+    Refused(LuaTable),
+    Command {
+        argv: Vec<String>,
+        command: tillandsias_exec::Command,
+    },
+}
+
+// @trace order:1534-puyz
+// Validate the WHOLE call before the execution gate can consume consent.
+pub(crate) fn prepare_proc(
+    lua: &Lua,
+    spec: LuaTable,
+    caller: &str,
+    managed_group: bool,
+) -> LuaResult<PreparedProc> {
+    let err = |m: String| mlua::Error::RuntimeError(format!("{caller}: {m}"));
 
     for pair in spec.clone().pairs::<LuaValue, LuaValue>() {
         let (k, _) = pair?;
@@ -264,45 +290,38 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
     if argv.is_empty() {
         return Err(err("argv is empty".into()));
     }
+    if argv.iter().any(|arg| arg.contains('\0')) {
+        return Err(err("argv strings must not contain NUL".into()));
+    }
     if argv_t.pairs::<LuaValue, LuaValue>().count() != argv.len() {
         return Err(err(
             "argv must be a sequence with no holes and no named keys".into(),
         ));
     }
-    // Resolve cwd first: the policy measures a destroy against it.
+    // Snapshot cwd ONCE. Lua __index may return a different value on every
+    // lookup; authorization must measure the exact cwd execution will use.
     let cwd_path: Option<PathBuf> = match spec.get::<LuaValue>("cwd")? {
-        LuaValue::String(s) => Some(PathBuf::from(s.to_str()?.to_string())),
-        _ => None,
-    };
-    if let Some(d) = policy_gate(
-        &argv,
-        cwd_path.as_deref().filter(|p| p.is_absolute()),
-        "proc.run",
-    ) {
-        // A refusal is a VALUE, like every other outcome of proc.run, and NO
-        // process is spawned (1443-isrk arm 5).
-        let t = lua.create_table()?;
-        let echo = lua.create_table()?;
-        for (i, a) in argv.iter().enumerate() {
-            echo.set(i + 1, crate::command_policy::redact(a))?;
+        LuaValue::Nil => None,
+        LuaValue::String(s) => {
+            let p = PathBuf::from(s.to_str()?.to_string());
+            if s.as_bytes().contains(&0) {
+                return Err(err("cwd must not contain NUL".into()));
+            }
+            if !p.is_absolute() {
+                return Err(err(format!(
+                    "cwd '{}' is relative; pass an absolute path",
+                    p.display()
+                )));
+            }
+            Some(p)
         }
-        t.set("argv", echo)?;
-        t.set(
-            "status",
-            if d.strictness == crate::command_policy::Strictness::Deny {
-                "policy_denied"
-            } else {
-                "policy_consent_required"
-            },
-        )?;
-        t.set("ok", false)?;
-        t.set("rule_id", d.rule_id.as_str())?;
-        t.set("decision", d.token.as_str())?;
-        t.set("why", d.why.unwrap_or_default())?;
-        t.set("remedy", d.remedy.unwrap_or_default())?;
-        return Ok(t);
-    }
-
+        other => {
+            return Err(err(format!(
+                "cwd must be a string, not a {}",
+                other.type_name()
+            )));
+        }
+    };
     let mut cmd = tillandsias_exec::Command::new(argv.clone()).env_clear();
     for key in PROC_RUN_BASE_ENV_PASSTHROUGH {
         if let Some(v) = std::env::var_os(key) {
@@ -318,35 +337,25 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
         cmd = cmd.env(k, v);
     }
 
-    match spec.get::<LuaValue>("cwd")? {
-        LuaValue::Nil => {
-            if let Ok(root) = find_repo_root() {
-                cmd = cmd.current_dir(root);
-            }
-        }
-        LuaValue::String(s) => {
-            let p = PathBuf::from(s.to_str()?.to_string());
-            if !p.is_absolute() {
-                return Err(err(format!(
-                    "cwd '{}' is relative; pass an absolute path",
-                    p.display()
-                )));
-            }
-            cmd = cmd.current_dir(p);
-        }
-        other => {
-            return Err(err(format!(
-                "cwd must be a string, not a {}",
-                other.type_name()
-            )));
-        }
+    if let Some(p) = &cwd_path {
+        cmd = cmd.current_dir(p);
+    } else if let Ok(root) = find_repo_root() {
+        cmd = cmd.current_dir(root);
     }
 
     match spec.get::<LuaValue>("env")? {
         LuaValue::Nil => {}
         LuaValue::Table(t) => {
-            for pair in t.pairs::<String, String>() {
-                let (k, v) = pair.map_err(|_| err("env must map strings to strings".into()))?;
+            for pair in t.pairs::<LuaValue, LuaValue>() {
+                let (LuaValue::String(k), LuaValue::String(v)) = pair? else {
+                    return Err(err("env must map strings to strings".into()));
+                };
+                let (k, v) = (k.to_str()?.to_string(), v.to_str()?.to_string());
+                if k.is_empty() || k.contains(['\0', '=']) || v.contains('\0') {
+                    return Err(err(
+                        "env names must be nonempty without NUL or '=', values without NUL".into(),
+                    ));
+                }
                 cmd = cmd.env(k, v);
             }
         }
@@ -393,6 +402,11 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
         }
     };
     cmd = cmd.group(group);
+    if managed_group && !group {
+        return Err(err(
+            "group=false is not supported by script-owned proc.spawn".into(),
+        ));
+    }
 
     // Per-fd capture cap (order 1443-esm5). Unset keeps the executor's default
     // (tillandsias_exec::DEFAULT_CAPTURE_BYTES); a clipped capture comes back
@@ -407,6 +421,37 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
         }
     }
 
+    if let Some(d) = policy_gate(&argv, cwd_path.as_deref(), caller) {
+        let t = lua.create_table()?;
+        let echo = lua.create_table()?;
+        for (i, a) in argv.iter().enumerate() {
+            echo.set(i + 1, crate::command_policy::redact(a))?;
+        }
+        t.set("argv", echo)?;
+        t.set(
+            "status",
+            if d.strictness == crate::command_policy::Strictness::Deny {
+                "policy_denied"
+            } else {
+                "policy_consent_required"
+            },
+        )?;
+        t.set("ok", false)?;
+        t.set("rule_id", d.rule_id.as_str())?;
+        t.set("decision", d.token.as_str())?;
+        t.set("why", d.why.unwrap_or_default())?;
+        t.set("remedy", d.remedy.unwrap_or_default())?;
+        return Ok(PreparedProc::Refused(t));
+    }
+    Ok(PreparedProc::Command { argv, command: cmd })
+}
+
+fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
+    let (argv, cmd) = match prepare_proc(lua, spec, "proc.run", false)? {
+        PreparedProc::Refused(t) => return Ok(t),
+        PreparedProc::Command { argv, command } => (argv, command),
+    };
+    let err = |m: String| mlua::Error::RuntimeError(format!("proc.run: {m}"));
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -421,6 +466,17 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
     // Windows, proc.run reported wall_ms=544 and returned to Lua 30.2 s later.
     // shutdown_background returns now and lets those threads end on their own.
     rt.shutdown_background();
+
+    proc_result_to_lua(lua, &argv, result, wall_ms)
+}
+
+pub(crate) fn proc_result_to_lua(
+    lua: &Lua,
+    argv: &[String],
+    result: Result<tillandsias_exec::Output, tillandsias_exec::ExecError>,
+    wall_ms: u64,
+) -> LuaResult<LuaTable> {
+    let err = |m: String| mlua::Error::RuntimeError(format!("proc.run: {m}"));
 
     let t = lua.create_table()?;
     let echo = lua.create_table()?;
@@ -510,7 +566,7 @@ fn strip_verbatim(p: PathBuf) -> PathBuf {
 /// under a temp dir (`/var/folders/…`) was refused as "outside the repository
 /// root" and `lua_std::the_archiver_sweeps_in_the_default_sandbox` failed on
 /// every Mac, 3/3. Linux `/tmp` is not a symlink, so Linux was green.
-fn containment_path(normalized: &Path) -> Option<PathBuf> {
+pub(crate) fn containment_path(normalized: &Path) -> Option<PathBuf> {
     let mut probe = normalized.to_path_buf();
     let mut tail: Vec<std::ffi::OsString> = Vec::new();
     // symlink_metadata: a dangling link EXISTS here, so it becomes the probe
@@ -777,7 +833,7 @@ pub const CACHEABLE_STDLIB_GLOBALS: &[&str] = &[
 /// would make every absolute path "inside the repository", so an unlocatable
 /// root is a named refusal at `fs.read` time, never a guess. `/` itself is
 /// never accepted as a root, whichever route proposed it.
-fn find_repo_root() -> Result<PathBuf, String> {
+pub(crate) fn find_repo_root() -> Result<PathBuf, String> {
     let root = locate_repo_root().ok_or_else(|| {
         "fs.read: refused — no repository root found (set TILLANDSIAS_REPO_ROOT, or run \
          inside a checkout containing plan/index.yaml or .git)"
@@ -927,45 +983,113 @@ pub fn build_environment(class: PredicateClass) -> Result<Lua, LuaError> {
 pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result<Lua, LuaError> {
     let lua = Lua::new();
 
-    // Same stdlib removals as lua_runtime::new. Repeated rather than shared
-    // because this environment must not silently inherit a future widening of
-    // that one — the two have different purposes and a common helper would make
-    // a change there change the trust boundary here.
+    // @trace order:1532-u9en
+    // Both sandboxed classes use a capability allow-list. Being uncached does
+    // not authorize Observing to bypass rooted fs verbs with io.lines,
+    // os.remove, or package.loadlib. In particular, do not retain package:
+    // package.loaded aliases the original stdlib tables and its searchers can
+    // load files/native code even if the corresponding globals are removed.
+    // There is no debug/registry access or loader alias in the reachable set.
+    // This is not a filesystem sandbox for children spawned by proc/sh.
     {
         let globals = lua.globals();
-        if let Ok(os_table) = globals.get::<LuaTable>("os") {
-            let _ = os_table.set("execute", LuaValue::Nil);
-            let _ = os_table.set("exit", LuaValue::Nil);
-            let _ = os_table.set("getenv", LuaValue::Nil);
+        let observing = matches!(class, PredicateClass::Observing);
+        if observing {
+            // Fresh tables expose only clock helpers and fixed-stream logging,
+            // never file handles, filename readers, or filesystem verbs.
+            for (name, members) in [
+                ("os", &["clock", "date", "difftime", "time"][..]),
+                ("io", &["write", "flush"][..]),
+            ] {
+                let original: LuaTable = globals
+                    .get(name)
+                    .map_err(|e| LuaError::VmError(format!("{name}: {e}")))?;
+                let restricted = lua
+                    .create_table()
+                    .map_err(|e| LuaError::VmError(format!("{name}: {e}")))?;
+                for member in members {
+                    let value: LuaValue = original
+                        .get(*member)
+                        .map_err(|e| LuaError::VmError(format!("{name}.{member}: {e}")))?;
+                    restricted
+                        .set(*member, value)
+                        .map_err(|e| LuaError::VmError(format!("{name}.{member}: {e}")))?;
+                }
+                if name == "io" {
+                    // The push hook consumes Git's supplied stdin with
+                    // io.lines(). Its filename form is a different capability
+                    // and must not reach the native reader. No input/output
+                    // setter exists, so the streams cannot be redirected.
+                    let lines: LuaFunction = original
+                        .get("lines")
+                        .map_err(|e| LuaError::VmError(format!("io.lines: {e}")))?;
+                    let stdin_lines = lua
+                        .create_function(move |_, args: LuaMultiValue| {
+                            if !args.is_empty() {
+                                return Err(mlua::Error::RuntimeError(
+                                    "io.lines: refused — filenames are unmanaged; use fs.read (io.lines() is stdin-only)".into(),
+                                ));
+                            }
+                            lines.call::<LuaMultiValue>(())
+                        })
+                        .map_err(|e| LuaError::VmError(format!("io.lines: {e}")))?;
+                    restricted
+                        .set("lines", stdin_lines)
+                        .map_err(|e| LuaError::VmError(format!("io.lines: {e}")))?;
+                    // Do not return native file userdata from write, or expose
+                    // its metatable. A private closure owns each fixed stream.
+                    let proxy: LuaFunction = lua
+                        .load("return function(stream) return {write = function(_, ...) stream:write(...) end, flush = function(_) return stream:flush() end} end")
+                        .eval()
+                        .map_err(|e| LuaError::VmError(format!("io streams: {e}")))?;
+                    for stream in ["stdout", "stderr"] {
+                        let handle: LuaValue = original
+                            .get(stream)
+                            .map_err(|e| LuaError::VmError(format!("io.{stream}: {e}")))?;
+                        let table: LuaTable = proxy
+                            .call(handle)
+                            .map_err(|e| LuaError::VmError(format!("io.{stream}: {e}")))?;
+                        restricted
+                            .set(stream, table)
+                            .map_err(|e| LuaError::VmError(format!("io.{stream}: {e}")))?;
+                    }
+                    let write: LuaFunction = original
+                        .get("write")
+                        .map_err(|e| LuaError::VmError(format!("io.write: {e}")))?;
+                    restricted
+                        .set(
+                            "write",
+                            lua.create_function(move |_, args: LuaMultiValue| {
+                                write.call::<LuaMultiValue>(args)?;
+                                Ok(())
+                            })
+                            .map_err(|e| LuaError::VmError(format!("io.write: {e}")))?,
+                        )
+                        .map_err(|e| LuaError::VmError(format!("io.write: {e}")))?;
+                }
+                globals
+                    .set(name, restricted)
+                    .map_err(|e| LuaError::VmError(format!("{name}: {e}")))?;
+            }
         }
-        if let Ok(io_table) = globals.get::<LuaTable>("io") {
-            let _ = io_table.set("open", LuaValue::Nil);
-            let _ = io_table.set("popen", LuaValue::Nil);
-            let _ = io_table.set("close", LuaValue::Nil);
-            let _ = io_table.set("output", LuaValue::Nil);
-            let _ = io_table.set("input", LuaValue::Nil);
-        }
-        let _ = globals.set("debug", LuaValue::Nil);
-        let _ = globals.set("loadfile", LuaValue::Nil);
-        let _ = globals.set("dofile", LuaValue::Nil);
-        let _ = globals.set("require", LuaValue::Nil);
-    }
-
-    // ORDER 1367-upz6. The removals above are a DENY-list, and a deny-list
-    // left os.time, os.clock, io.lines, os.remove and math.random reachable,
-    // so a cacheable predicate could read the clock or the disk and have that
-    // verdict replayed from cache. The cacheable class is therefore cut down
-    // to an ALLOW-list: every global not named below is removed, and math
-    // loses its non-deterministic half. The observing class keeps the wider
-    // set; it is never cached and already holds the shell verb.
-    if matches!(class, PredicateClass::Cacheable) {
-        let globals = lua.globals();
         let mut drop: Vec<String> = Vec::new();
         for pair in globals.clone().pairs::<LuaValue, LuaValue>() {
             let (k, _) = pair.map_err(|e| LuaError::VmError(format!("globals: {e}")))?;
             if let LuaValue::String(name) = k {
                 let name = name.to_string_lossy().to_string();
-                if !CACHEABLE_STDLIB_GLOBALS.contains(&name.as_str()) {
+                if !CACHEABLE_STDLIB_GLOBALS.contains(&name.as_str())
+                    && !(observing
+                        && [
+                            "os",
+                            "io",
+                            "print",
+                            "warn",
+                            "load",
+                            "collectgarbage",
+                            "coroutine",
+                        ]
+                        .contains(&name.as_str()))
+                {
                     drop.push(name);
                 }
             }
@@ -975,9 +1099,11 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                 .set(name.as_str(), LuaValue::Nil)
                 .map_err(|e| LuaError::VmError(format!("remove {name}: {e}")))?;
         }
-        if let Ok(math) = globals.get::<LuaTable>("math") {
-            let _ = math.set("random", LuaValue::Nil);
-            let _ = math.set("randomseed", LuaValue::Nil);
+        if !observing && let Ok(math) = globals.get::<LuaTable>("math") {
+            math.set("random", LuaValue::Nil)
+                .map_err(|e| LuaError::VmError(format!("math.random: {e}")))?;
+            math.set("randomseed", LuaValue::Nil)
+                .map_err(|e| LuaError::VmError(format!("math.randomseed: {e}")))?;
         }
     }
 

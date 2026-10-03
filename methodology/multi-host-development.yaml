@@ -914,9 +914,11 @@ multi_host_development:
         (above) imports that VERSION and the pre-push VERSION guard then refuses
         the platform push (702-eusw, 2026-08-13: dd8fd63f swept a build-number
         bump into an unrelated security fix; osx-next and windows-next could not
-        push at all). RULE: a VERSION bump belongs on MAIN first (a
+        push at all). RULE: a RELEASE VERSION bump belongs on MAIN first (a
         release/version-bump-* PR, per PR #94/#95), never as a side effect of a
-        work commit on linux-next. Two guards enforce this: the pre-push VERSION
+        work commit on linux-next. A LOCAL BUILD-COUNTER bump committed alone
+        and strictly greater than every reference may push on any branch
+        (643-64bx, methodology/versioning.yaml monotonic_build_bump). Two guards enforce this: the pre-push VERSION
         guard treats a platform VERSION == origin/linux-next as a legitimate
         integration-branch CATCH-UP (643-64bx), and
         scripts/check-version-bump-isolation.sh (wired into ./build.sh --check,

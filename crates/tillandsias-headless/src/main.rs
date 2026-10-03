@@ -80,6 +80,8 @@ mod image_build_progress;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
+#[cfg(feature = "listen-vsock")]
+mod clock_sync;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 mod cloud_projects;
 mod container_deps;
@@ -140,6 +142,21 @@ pub mod policy_router;
 // I/O; `pub` so the login and fleet-vpn packets built on this table (siblings
 // under 1505-sm2j) can reach it.
 pub mod cloudflare_names;
+// @trace order:1505-kyx8 — cloudflare_oauth::{begin, exchange, refresh,
+// revoke}: Authorization Code + PKCE (S256) as pure functions over an
+// injected HttpClient trait object, since Cloudflare has no device grant.
+// `pub` so the redirect-receiver packet (1505-kc5f) and the rotation
+// scheduler (siblings under 1505-sm2j) can reach it.
+pub mod cloudflare_oauth;
+// @trace order:1505-kc5f — `--cloudflare-login [--via loopback|qr|paste]` and
+// `--cloudflare-logout`: the three redirect receivers over cloudflare_oauth,
+// storing through the 1505-iysn Vault functions. Needs Vault, so `vault`-gated.
+#[cfg(feature = "vault")]
+mod cloudflare_login;
+// @trace order:1506-q7ab — `--msg-serve [--once]`: the same-host mover of the
+// fleet message bus (fsync-then-ack between lane mailboxes, attribution by
+// mount, TTL sweep, wake socket) and the per-forge lane mount. No network.
+pub mod msg_serve;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
@@ -302,6 +319,39 @@ fn main() {
     if user_args.iter().any(|a| a == "--help" || a == "-h") {
         print_usage(version);
         return;
+    }
+
+    // Order 1505-kc5f: `--cloudflare-login` / `--cloudflare-logout`. Dispatched
+    // early and exits, like --swap: the module parses its own arguments
+    // (refusing anything it does not take, and never echoing a positional
+    // argument, which might be a pasted code), runs on the HOST binary (no
+    // container, no singleton) and stores only through the 1505-iysn Vault
+    // store. Also listed in known_flags below, per the five-sites rule.
+    if user_args
+        .iter()
+        .any(|a| a == "--cloudflare-login" || a == "--cloudflare-logout")
+    {
+        #[cfg(feature = "vault")]
+        std::process::exit(cloudflare_login::run_cli(&user_args));
+        #[cfg(not(feature = "vault"))]
+        {
+            eprintln!("refused:cloudflare-login:vault-not-compiled");
+            eprintln!(
+                "  why: the Cloudflare credential is stored only in Vault, and this binary was built without the `vault` feature"
+            );
+            eprintln!(
+                "  remedy: use a default build of tillandsias (the `vault` feature is on by default)"
+            );
+            std::process::exit(2);
+        }
+    }
+
+    // Order 1506-q7ab: `--msg-serve [--once]`, the same-host mover. Dispatched
+    // early and exits, like --cloudflare-login: it parses its own arguments,
+    // takes its own singleton (<store>/.mover.lock, not the launcher's), and
+    // touches no container. Also listed in known_flags below (five sites).
+    if user_args.iter().any(|a| a == "--msg-serve") {
+        std::process::exit(msg_serve::run_cli(&user_args));
     }
 
     // Order 828-h7kw: `--hold-window -- <command...>`. The terminal a lane
@@ -728,6 +778,15 @@ fn main() {
         "--sync",
         "--github-login",
         "--with-token",
+        // Order 1505-kc5f: dispatched early (cloudflare_login::run_cli), listed
+        // here too so no reorder can make them `Unsupported option`.
+        "--cloudflare-login",
+        "--cloudflare-logout",
+        "--via",
+        // Order 1506-q7ab: dispatched early (msg_serve::run_cli), listed here
+        // too so no reorder can make it `Unsupported option`.
+        "--msg-serve",
+        "--once",
         "--refresh-github-token",
         "--github-refresh",
         "--claude-login",
@@ -1598,6 +1657,9 @@ fn print_usage(version: &str) {
     println!("       tillandsias --status-check [--debug]");
     println!("       tillandsias --swap on|off|status [--prefix DIR] [--user NAME]");
     println!("       tillandsias --github-login [--with-token] [--debug]");
+    println!("       tillandsias --cloudflare-login [--via loopback|qr|paste] [--debug]");
+    println!("       tillandsias --msg-serve [--once]");
+    println!("       tillandsias --cloudflare-logout [--debug]");
     println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
     println!("       tillandsias --codex-login [--debug]");
@@ -1660,6 +1722,21 @@ fn print_usage(version: &str) {
     );
     println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --with-token   Read a GitHub token from stdin; requires --github-login");
+    println!(
+        "  --cloudflare-login Sign in to Cloudflare (OAuth code + PKCE; Cloudflare has no device flow) and store the token pair in Vault. \
+         --via loopback: a browser on this desktop (127.0.0.1 ports 48631-48633); \
+         --via qr: a phone scans a QR whose redirect is the relay page ($TILLANDSIAS_CLOUDFLARE_RELAY_URL); \
+         --via paste: paste the authorization CODE the relay page (or the address bar) shows. A code, never a token: \
+         it is single-use and useless without the verifier that stays in this process"
+    );
+    println!(
+        "  --cloudflare-logout Revoke (best effort) and delete the stored Cloudflare sign-in; the fleet-vpn mesh credential is kept"
+    );
+    println!(
+        "  --msg-serve    Run the same-host mover of the fleet message bus in the foreground: deliver every lane's outbox \
+         into the destination lanes on this host, ack after fsync, sweep at TTL (the tray runs one itself). \
+         --once: one pass and one sweep, then exit"
+    );
     println!(
         "  --refresh-github-token Refresh GitHub OAuth access token using refresh token in Vault"
     );
@@ -8404,6 +8481,14 @@ fn build_opencode_forge_args(
             "--env".into(),
             "TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock".into(),
         ]);
+    }
+    // ORDER 1506-q7ab: beside the MCP socket, this lane's MAILBOX — its own
+    // lane directory ($XDG_STATE_HOME/tillandsias/msg/lanes/<project>-<instance>)
+    // read-write at /run/host/tillandsias-msg, and only that directory, with
+    // TILLANDSIAS_MSG_LANE and TILLANDSIAS_MSG_HOST so `tillandsias-plan msg`
+    // inside names itself. The mover attributes by this mount.
+    if let Some(lane) = msg_serve::prepare_forge_lane(project_name, raw_instance.as_deref()) {
+        args.extend(lane.podman_args());
     }
     // Forge gitconfig injection (order 224): pre-populate global git config
     // with mirror redirect and safe.directory, bind-mounted
@@ -17008,6 +17093,9 @@ pub(crate) fn ensure_enclave_for_project(
     // 8 h. Idempotent per process; the tray's own start is deduplicated.
     #[cfg(feature = "vault")]
     crate::vault_bootstrap::spawn_github_token_rotation_scheduler(debug, None);
+    // Order 1505-iysn: and the Cloudflare OAuth bundle, from the same entry.
+    #[cfg(feature = "vault")]
+    crate::vault_bootstrap::spawn_cloudflare_token_rotation_scheduler(debug);
 
     Ok((certs_dir, mirror_identity))
 }
@@ -17858,6 +17946,19 @@ fn build_forge_agent_run_args_with_vault(
                 "/run/host/tillandsias-mcp/mcp.sock",
             );
     }
+    // ORDER 1506-q7ab: beside the MCP socket, this lane's MAILBOX, read-write
+    // at /run/host/tillandsias-msg (only its own lane directory), with the lane
+    // and host labels the in-forge `tillandsias-plan msg` names itself by.
+    if let Some(lane) = msg_serve::prepare_forge_lane(project_name, raw_instance.as_deref()) {
+        spec = spec
+            .bind_mount(
+                lane.source.display().to_string(),
+                tillandsias_msg::store::FORGE_LANE_MOUNT,
+                false,
+            )
+            .env("TILLANDSIAS_MSG_LANE", lane.lane)
+            .env("TILLANDSIAS_MSG_HOST", lane.host);
+    }
 
     // Forge gitconfig injection (order 224): pre-populate Git's standard
     // global config with mirror redirect and safe.directory so the
@@ -18529,6 +18630,10 @@ fn maybe_spawn_vsock_listener(
     // 30-minute window. The Linux tray starts the same scheduler.
     #[cfg(feature = "vault")]
     crate::vault_bootstrap::spawn_github_token_rotation_scheduler(false, None);
+    // Order 1505-iysn: the guest's resident service keeps the Cloudflare OAuth
+    // bundle alive too.
+    #[cfg(feature = "vault")]
+    crate::vault_bootstrap::spawn_cloudflare_token_rotation_scheduler(false);
     Some(tokio::spawn(async move {
         // One VmStateHandle drives three concurrent tasks below — the
         // accept loop (reads it on every VmStatusRequest), the phase
@@ -32390,6 +32495,10 @@ esac
     /// @trace spec:mcp-tool-socket
     #[test]
     fn forge_container_spec_mounts_only_per_lane_mcp_dir() {
+        // @trace order1537-75tv: this reader derives its lane from process env.
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_FORGE_INSTANCE"]);
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
         let args = build_forge_agent_run_args_with_vault(
             &PathBuf::from("/tmp/project"),
             // 1119-w2rj: a real on-disk checkout in this test.
@@ -32422,11 +32531,54 @@ esac
             "forge spec must set TILLANDSIAS_CONTROL_SOCKET; args: {args_str}"
         );
 
+        // ORDER 1506-q7ab: beside it, the lane MAILBOX — only this lane's
+        // directory, read-write, and the lane label exported.
+        assert_forge_lane_mailbox(&args, "testproj-default");
+
         // Must NOT mount control.sock
         assert!(
             !args_str.contains("control.sock"),
             "forge spec must NEVER mount control.sock; args: {args_str}"
         );
+    }
+
+    /// ORDER 1506-q7ab: a forge's argv carries exactly one mailbox mount —
+    /// `--mount type=bind,source=<store>/lanes/<lane>,target=/run/host/tillandsias-msg`
+    /// read-write (no readonly=true: the lane writes its outbox) — plus
+    /// `--env TILLANDSIAS_MSG_LANE=<lane>` and the host label, and the source
+    /// directory exists with the lane layout before podman runs. Asserted on
+    /// the argv each real builder RETURNS; the store root is the per-process
+    /// temp root unit-test builds get (msg_serve::store_root), never $HOME.
+    fn assert_forge_lane_mailbox(args: &[String], lane: &str) {
+        let source = msg_serve::store_root().join("lanes").join(lane);
+        let want = format!(
+            "type=bind,source={},target=/run/host/tillandsias-msg,relabel=shared",
+            source.display()
+        );
+        let mounts: Vec<&String> = args
+            .windows(2)
+            .filter(|w| w[0] == "--mount" && w[1].contains("target=/run/host/tillandsias-msg"))
+            .map(|w| &w[1])
+            .collect();
+        assert_eq!(
+            mounts,
+            vec![&want],
+            "exactly one lane mailbox mount; args: {args:?}"
+        );
+        let envs: Vec<&String> = args
+            .windows(2)
+            .filter(|w| w[0] == "--env" || w[0] == "-e")
+            .map(|w| &w[1])
+            .collect();
+        assert!(
+            envs.contains(&&format!("TILLANDSIAS_MSG_LANE={lane}")),
+            "TILLANDSIAS_MSG_LANE={lane} exported; args: {args:?}"
+        );
+        assert!(
+            envs.iter().any(|e| e.starts_with("TILLANDSIAS_MSG_HOST=")),
+            "the host label exported so the in-forge CLI names this host, not the container; args: {args:?}"
+        );
+        assert!(source.join("outbox/new").is_dir() && source.join("inbox/new").is_dir());
     }
 
     /// 920-c3af: an OpenCode lane's argv comes from `build_opencode_forge_args`,
@@ -32464,6 +32616,9 @@ esac
             "OpenCode lane argv must bind-mount the per-lane MCP socket dir and set \
              TILLANDSIAS_CONTROL_SOCKET; args: {args_str}"
         );
+
+        // ORDER 1506-q7ab: the lane mailbox rides the OpenCode lane too.
+        assert_forge_lane_mailbox(&args, "alpha-default");
 
         // Must NOT mount control.sock
         assert!(

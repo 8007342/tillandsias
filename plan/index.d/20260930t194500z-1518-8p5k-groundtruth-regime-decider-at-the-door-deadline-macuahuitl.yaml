@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by lenovinha (relay-preflight red) and measured by the coordinator, 2026-09-30.
+packets:
+  - packet_id: check-groundtruth-regime-invariance-spends-ninety-percent-of-the-five-second-door-deadline-on-the-fastest-host-and-outlives-it-on-lenovinha-so-the-door-skips-it-there
+    order: 1518-8p5k
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [preflight, deciders, groundtruth, inference, timing]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-groundtruth-regime-invariance.sh
+    title: |
+      check-groundtruth-regime-invariance.sh takes 4.5-4.7 s of the preflight door's 5 s deadline on macuahuitl and outlives it on lenovinha, so litmus ci-release/deciders-within-door-deadline is red there and the door would SKIP the decider instead of running it
+    context: |
+      MEASURED 2026-09-30. lenovinha: deciders-within-door-deadline 5/6, the
+      one FAIL is this decider at 5 s, deterministic (twice on the 1517-p83m
+      tree, once on origin/linux-next) — not caused by either relayed row.
+      macuahuitl, three runs on origin/linux-next ecfde1b29: 4529 ms, 4748 ms,
+      4503 ms, rc=0 each. So it is not a lenovinha defect: the decider sits at
+      ~90% of the budget on the fastest host, and the slower host is the first
+      to cross. The script already runs its eight grades (four sets x live/dead)
+      in parallel, so the wall is the slowest single grade; the live-regime
+      grades go through local inference, whose latency is a host property, so
+      this decider's cost is not bounded by anything in the tree. Last touched
+      in 900fe18ed.
+    outcome: |
+      The decider finishes well inside the door deadline on every Linux host,
+      with the same verdict on the same corpus, so the door runs it instead of
+      skipping it.
+    exit_criteria:
+      - "Three consecutive runs of `bash scripts/check-groundtruth-regime-invariance.sh` on macuahuitl each finish in under 2500 ms with rc=0 (pre-fix: 4503-4748 ms, FAILS)."
+      - "`bash scripts/test-deciders-within-door-deadline.sh` passes 6/6 on lenovinha (pre-fix: 5/6)."
+      - "The verdict is unchanged: the corpus still grades ok, and a case whose answer differs between the live and dead regimes is still refused (keep or add an arm that plants one)."
+    verifiable_closure: |
+      Paste the three wall times from macuahuitl and the lenovinha 6/6 line
+      on the closing event, with the planted-varying-case arm red on a scratch
+      corpus and green on the real one.
+    unscoreable: "host-timing: a wall-time bound is measured per host, not pinned by a litmus; the planted-case arm is the pinnable part"
+    next_action: >
+      Find where the wall goes (time each of the eight raw_grade calls); if it
+      is the live grades waiting on inference, the remedy is the implementer's
+      call, but the verdict must not change and a varying case must still be
+      refused.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Changes a push decider: an opus review before landing.

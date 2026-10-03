@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: on-msys-the-plan-binary-probe-answers-a-stale-debug-build-before-a-fresh-release-exe-because-exe-magic-resolves-the-extensionless-debug-candidate
+    order: 1508-7s4w
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [windows, msys, plan-binary, probe]
+    estimated_hours: 2
+    owned_files: [scripts/plan-binary-probe.sh]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixture (runnable release .exe newer than runnable debug .exe, assert the release path; plus the Linux negative control) is written in the same commit as the reorder.
+    title: |
+      REGIME: MSYS/Git Bash. resolve_plan_binary tries ./target/release/tillandsias-plan, then ./target/debug/tillandsias-plan, and only then the .exe names. On MSYS the extensionless debug name resolves to the debug .exe (exe magic), so whenever the release extensionless name does not run (e.g. a stale Linux ELF there), the probe answers the DEBUG build ahead of a fresh RELEASE .exe.
+    context: |
+      MEASURED on yolanda 2026-09-29 (1268-yanm): with a non-runnable ELF header at target/release/tillandsias-plan and a current target/release/tillandsias-plan.exe, resolve_plan_binary printed ./target/debug/tillandsias-plan. The debug build happened to be current, so nothing broke here. A stale debug build would silently win. Not yet seen picking a wrong binary in a real gate, hence p2.
+      FIXTURE-AUTHOR TRAP, same mechanism: on MSYS, writing to target/release/tillandsias-plan when only tillandsias-plan.exe exists writes INTO the .exe (it overwrote the release plan binary with 29 bytes; rebuilt). test -x, [ -f ], exec and cp resolve the same way. Plant or remove an extensionless file beside a .exe with PowerShell ([System.IO.File]::WriteAllBytes / Remove-Item -LiteralPath), never from Git Bash.
+    verifiable_closure: |
+      On MSYS, with a runnable release .exe NEWER than a runnable debug .exe (and with an unrunnable file at the extensionless release path), resolve_plan_binary answers the release path. NEGATIVE CONTROL: on Linux the candidate order and answer are unchanged. Pre-fix on yolanda 2026-09-29: it answers ./target/debug/tillandsias-plan.
+    events:
+      - type: filed
+        ts: "2026-09-29T23:39:36Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request, from the 1268-yanm verification.

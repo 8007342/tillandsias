@@ -72,6 +72,10 @@ trace_lifecycle() { :; }
 checkout_forge_seed_branch() { :; }
 rewrite_origin_for_enclave_push() { :; }
 probe_mirror_reachable() { return 0; }
+# 1310-rec6 step 4 added this call to the extracted impl; the block does not
+# carry its definition, so an unstubbed call exits 127 before the clone loop
+# and arm 3 loses its FATAL. A healthy relay-state is what this fixture assumes.
+forge_mirror_relay_gate() { return 0; }
 export_ssh_env() { :; }
 sleep() { :; }                 # twelve backoffs cost nothing
 git() {

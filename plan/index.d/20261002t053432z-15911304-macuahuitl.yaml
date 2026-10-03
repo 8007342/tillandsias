@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-lua-runner-has-no-advisory-verdict-so-a-decider-that-reports-without-refusing-cannot-be-ported
+    field: status
+    value: in_progress
+    ts: "2026-10-02T05:34:32Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-lua-runner-has-no-advisory-verdict-so-a-decider-that-reports-without-refusing-cannot-be-ported
+    event:
+      type: note
+      ts: "2026-10-02T05:34:32Z"
+      host: macuahuitl
+      summary: |-
+        claimed for Terra implementation under linux-macuahuitl-opencode-20261002t053211z, work/1528-gxzf

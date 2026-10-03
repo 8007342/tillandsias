@@ -51,6 +51,9 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::Duration;
 
+// @trace order:1534-puyz
+pub mod managed;
+
 /// How a run ended. Exit status is a VALUE, and the three outcomes are distinct
 /// cases rather than one integer a caller has to decode.
 ///

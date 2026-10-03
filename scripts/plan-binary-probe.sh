@@ -115,6 +115,22 @@ resolve_plan_binary() {
         "$(command -v tillandsias-plan 2>/dev/null)"; do
         [ -n "$candidate" ] || continue
         [ -f "$candidate" ] || continue
+        # ORDER 1508-7s4w. On MSYS (Git Bash) an EXTENSIONLESS name whose `.exe`
+        # sibling exists is that .exe under exe magic, so trying it here
+        # promoted target/debug ahead of target/release/…exe. Measured on
+        # yolanda 2026-09-29: with an unrunnable Linux ELF at the release
+        # path, this answered ./target/debug/tillandsias-plan (the DEBUG .exe)
+        # before the fresh release .exe. A real ELF at that name cannot run on
+        # Windows either, so skip it and let the .exe entries below answer in
+        # their own release-before-debug order. Linux and WSL are untouched:
+        # this only applies under an MSYS/Cygwin kernel name.
+        case "$(uname -s 2>/dev/null)" in
+            MINGW*|MSYS*|CYGWIN*)
+                case "$candidate" in
+                    *.exe) ;;
+                    *) [ -e "$candidate.exe" ] && continue ;;
+                esac ;;
+        esac
         # `capabilities` is the right probe rather than `--help`: it exits 0
         # only on a binary built from sources carrying order 569, and its
         # output is the capability set the caller may want next.

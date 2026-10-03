@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: atomically-cut-over-the-four-source-agreement-shell-files-to-the-typed-lua-runner
+    field: status
+    value: completed
+    ts: "2026-10-02T16:19:30Z"
+    host: macuahuitl
+
+events:
+  - packet_id: atomically-cut-over-the-four-source-agreement-shell-files-to-the-typed-lua-runner
+    event:
+      type: completed
+      ts: "2026-10-02T16:19:30Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 7133bc78d52023a079dc283ce28aa00c7308463e + forced ./build.sh --check PASS at merged candidate; PR #203 MERGED; parent independent lua_source_agreements7/7,13 real Bash/CLI byte-parity cases debug/release, measured warm and own-file-page-cold controls retained
+  - packet_id: atomically-cut-over-the-four-source-agreement-shell-files-to-the-typed-lua-runner
+    event:
+      type: note
+      ts: "2026-10-02T16:19:30Z"
+      host: macuahuitl
+      summary: |-
+        Closed by linux-macuahuitl-opencode-20261002t053211z after atomic source cutover review, exact fixtures, forced integration gate exited0 and remote ancestry. Four archived Python sources repackaged unchanged as non-runtime source text; guard unchanged. No global OS-cold, native-platform, general zero-descendants or all-litmus claim; gate reports25 unexercised specs.

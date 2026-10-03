@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-new-gate-step-prefix-is-chosen-without-seeing-unlanded-work-refs-so-three-collisions-in-one-day-each-cost-a-relaunch
+    order: 1512-3afc
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, gate-steps, deciders, fleet-coordination]
+    estimated_hours: 3
+    owned_files: [scripts/allocate-gate-step-prefix.sh]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixture (a bare remote whose work/* ref holds prefix N, and a branch adding a new step at N, refused by name; the same branch at a free N accepted) is written with the decider.
+    title: |
+      Gate-step prefixes keep colliding: THREE times on 2026-09-30 (1266-dh2d vs 1494-kkbi, 1494-kkbi vs 815-yace, 1508-7s4w vs 1504-4tty). An author picks the next free number from their own ref's view, which cannot see other hosts' unlanded origin/work/* refs. Each collision costs a rename and a relaunch.
+    context: |
+      allocate-gate-step-prefix.sh (1162-qbrx) already reallocates a colliding ADDED step at land time, against the refs the land integrated. It does not see refs queued for LATER lands, and nothing warns the author at push time.
+      PROPOSAL (the coordinator's): a push-path decider that refuses a ref whose NEWLY ADDED scripts/gate-steps.d/NNN-*.step prefix already exists on origin/linux-next OR on any other origin/work/* ref, naming the holder and printing the next free prefix computed over that union. Manual check used today: git ls-tree --name-only of scripts/gate-steps.d/ over origin/linux-next plus every origin/work/* ref.
+    verifiable_closure: |
+      A push adding scripts/gate-steps.d/NNN-<order>.step is refused by name when NNN is used on origin/linux-next or on any other origin/work/* ref. The refusal names the holding ref and suggests a free prefix. The same push at a free prefix is accepted. A fixture with a bare remote proves both, plus a negative control where the only holder of NNN is the pushing ref itself (accepted).
+    events:
+      - type: filed
+        ts: "2026-09-30T02:58:55Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's suggestion after the third collision of the day.

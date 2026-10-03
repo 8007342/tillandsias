@@ -275,6 +275,7 @@ forge_upstream_auth_verdict() {
         echo "[check-credential-channel] CAUSE: could not determine which precondition is unmet (image built / container created / service healthy). Inspect podman state directly rather than assuming staleness." >&2
         ;;
     esac
+    _afford "the mirror has published no upstream write-authorization verdict, so whether a push can land is unproven" "bring the stack up so the mirror container exists and runs its probe (the CAUSE line above names the missing precondition), then re-run this guard"
     echo "blocked:upstream-auth-unpublished"
     return 1
   fi
@@ -283,6 +284,7 @@ forge_upstream_auth_verdict() {
   max_age="${TILLANDSIAS_CRED_AUTH_MAX_AGE:-900}"
   if [ "$age" -gt "$max_age" ]; then
     echo "[check-credential-channel] The mirror's upstream write-authorization verdict is ${age}s old (max ${max_age}s). A stale 'authorized' proves nothing about the CURRENT token epoch — the 2026-08-15 loss happened exactly because authorization was assumed rather than fresh. Check the mirror's probe loop (images/git/entrypoint.sh) before draining workers." >&2
+    _afford "the mirror's newest authorization verdict is older than TILLANDSIAS_CRED_AUTH_MAX_AGE, and a stale 'authorized' proves nothing about the current token" "check the mirror's reconcile/probe loop (a running lane refreshes it every tick), then re-run; do not drain workers on a stale verdict"
     echo "blocked:upstream-auth-stale"
     return 1
   fi
@@ -313,11 +315,13 @@ forge_upstream_auth_verdict() {
           echo "[check-credential-channel] REASON=$best_reason — not a reason this guard knows. The mirror is newer than this checkout's guard; read the mirror's [upstream-auth] log for the upstream message." >&2
           ;;
       esac
+      _afford "GitHub refused the mirror's credential (the REASON line above says how)" "the operator re-seeds the GitHub token with tillandsias --github-login (device flow, so it can rotate; or --with-token); an agent never runs gh auth login/refresh (1025-a896); for reason=sso, authorize the token for the org instead"
       echo "blocked:upstream-push-unauthorized"
       return 1
       ;;
     no-credential)
       echo "[check-credential-channel] The mirror is reachable but has NO upstream credential readable from Vault (mirror-published verdict: no-credential). A push would fail with 'run GitHub Login' — stop BEFORE worker drain and restore the Vault-provided GitHub token." >&2
+      _afford "the mirror reached Vault and Vault holds no GitHub token, so every push would fail" "the operator re-seeds the GitHub token with tillandsias --github-login (device flow, so it can rotate; or --with-token); an agent never runs gh auth login/refresh (1025-a896)"
       echo "blocked:upstream-no-credential"
       return 1
       ;;
@@ -328,6 +332,7 @@ forge_upstream_auth_verdict() {
       # dead, the GitHub token's state is UNKNOWN, and running GitHub Login
       # treats a symptom the operator can see for a cause they cannot.
       echo "[check-credential-channel] The mirror is reachable but its OWN Vault client token is dead (mirror-published verdict: agent-unauthenticated), so it cannot read ANY credential and the GitHub token's state is UNKNOWN. Do NOT run GitHub Login — that repairs a different failure. Inspect the mirror's [vault-agent] log: if its AppRole login is failing with 'invalid role or secret ID', the SecretID was destroyed while this mirror kept running (order 828-k3mq) and the fix is to recreate the mirror, not to touch the GitHub credential. Repeated failed logins also trip Vault's user-lockout, so quiesce the retry loop before re-issuing anything." >&2
+      _afford "the mirror's own Vault client token is dead, so it cannot read any credential; the GitHub token's state is unknown" "read the mirror's [vault-agent] log; a failing AppRole login means recreate the mirror (relaunch the lane), NOT GitHub Login"
       echo "blocked:upstream-agent-unauthenticated"
       return 1
       ;;
@@ -355,6 +360,7 @@ forge_upstream_auth_verdict() {
           echo "[check-credential-channel] The mirror's upstream write-authorization probe reported '$best_state' — it could not determine authorization (network/transport failure?). Authorization is unproven; stop BEFORE worker drain and inspect the mirror's [upstream-auth] log." >&2
           ;;
       esac
+      _afford "the mirror's authorization probe could not decide (unseeded, damaged or unreachable), so authorization is unproven" "read the mirror's [upstream-auth] and seed logs for the cause named above, fix that, then re-run; do not touch the credential first"
       echo "blocked:upstream-auth-error"
       return 1
       ;;
@@ -835,6 +841,7 @@ credential_channel_verdict() {
     echo "  (1265-8qr6), after which D-Bus re-activates it LOCKED. The probe would" >&2
     echo "  manufacture the state it reports." >&2
     echo "  REMEDY: run inside a session with a keyring, or inject GH_TOKEN for this run." >&2
+    _afford "no secret service is on the session bus, so gh cannot retrieve any stored credential; nothing reached GitHub" "run inside a desktop session with a keyring, or push through a wired host-push lane (skills/initialize-bare-metal-host section 6)"
     echo "blocked:credential-unretrievable-no-keyring-service"
     return 1
   fi
@@ -874,6 +881,7 @@ credential_channel_verdict() {
         _ccc_seed_remedy_line >&2
         echo "    git config --local --replace-all credential.helper ''         # empty entry DROPS the system manager" >&2
         echo "    git config --local --add credential.helper \"store --file=\$(git rev-parse --path-format=absolute --git-common-dir)/.gh-credentials\"" >&2
+        _afford "git's credential helper chain is interactive-only, so an unattended push would hang on a prompt" "seed the repo-local credential store and helper with the commands printed above, then re-run"
         echo "blocked:interactive-credential-helper"
         return 1
         ;;
@@ -990,8 +998,10 @@ credential_channel_verdict() {
         echo "  gh's own message says \"The token in keyring is invalid\", which names the" >&2
         echo "  layer it OBSERVED rather than the one that FAILED (894-scxy). Three hosts" >&2
         echo "  diagnosed the keyring from that string on 2026-08-25; the keyring was healthy." >&2
-        echo "  REMEDY:  gh auth login" >&2
-        echo "  Then re-run this guard. Do NOT go looking at secret-service." >&2
+        echo "  REMEDY: the operator re-seeds the token (tillandsias --github-login)." >&2
+        echo "  An agent must NOT run gh auth login (1025-a896: it evicts the token on" >&2
+        echo "  every other host). Then re-run this guard. Do NOT go looking at secret-service." >&2
+        _afford "GitHub returned 401 for the stored token: the keyring worked, the token is revoked, expired or evicted" "the operator re-seeds the GitHub token with tillandsias --github-login (device flow, so it can rotate; or --with-token); an agent never runs gh auth login/refresh (1025-a896)"
         echo "blocked:credential-rejected-by-github"
         return 1 ;;
       unretrievable-no-service)
@@ -1000,6 +1010,7 @@ credential_channel_verdict() {
         echo "  the secret store at all, so nothing has been presented to GitHub yet." >&2
         echo "  Common in a headless/cron/ssh session with no session keyring." >&2
         echo "  REMEDY: run inside a session with a keyring, or inject GH_TOKEN for this run." >&2
+        _afford "no secret service is on the session bus, so gh cannot retrieve any stored credential; nothing reached GitHub" "run inside a desktop session with a keyring, or push through a wired host-push lane (skills/initialize-bare-metal-host section 6)"
         echo "blocked:credential-unretrievable-no-keyring-service"
         return 1 ;;
       unknown-secret-service-unprobed)
@@ -1029,7 +1040,9 @@ credential_channel_verdict() {
         echo "  Reported because it changes where to look: keyring probes say nothing about" >&2
         echo "  this host, and a keyring-shaped diagnosis would be misattribution (894-scxy)." >&2
         echo "  The push probe still failed, so the stored token is bad or lacks push rights." >&2
-        echo "  REMEDY: gh auth login  (and consider moving off the plaintext fallback)" >&2
+        echo "  REMEDY: the operator re-seeds the token (tillandsias --github-login), off the" >&2
+        echo "  plaintext fallback. An agent must NOT run gh auth login (1025-a896)." >&2
+        _afford "the plaintext token in gh's hosts.yml failed the push probe, so it is bad or lacks push rights" "the operator re-seeds the GitHub token with tillandsias --github-login (device flow, so it can rotate; or --with-token); an agent never runs gh auth login/refresh (1025-a896)"
         echo "blocked:credential-plaintext-token-rejected"
         return 1 ;;
       accepted)
@@ -1038,6 +1051,7 @@ credential_channel_verdict() {
         echo "  something about the PUSH is not. Usually repository push permission, SSO" >&2
         echo "  authorisation not granted for this org, or a scope missing from the token." >&2
         echo "  REMEDY: check the token's repo scope and any org SSO authorisation." >&2
+        _afford "GitHub accepts the identity but refuses the push, so the gap is permission, not the credential" "check the token's repository write permission and any org SSO authorisation; re-seeding the same token will not help"
         echo "blocked:credential-accepted-but-push-refused"
         return 1 ;;
     esac
@@ -1046,7 +1060,9 @@ credential_channel_verdict() {
     # explains it: a distinct verdict the cycle must RESOLVE before any
     # committable work, never a bare ok (exit criterion 1).
     echo "  gh auth is green but a bounded non-interactive push probe failed" >&2
-    echo "  (${TILLANDSIAS_CRED_PROBE_CMD:-git push --dry-run origin HEAD}). Seed the repo-local store before committable work." >&2
+    echo "  (${TILLANDSIAS_CRED_PROBE_CMD:-git push --dry-run origin HEAD}). Seed the repo-local store before committable work:" >&2
+    _ccc_seed_remedy_line >&2
+    _afford "gh holds a working token but git's non-interactive push probe failed, so git is not using it" "seed the repo-local credential store with the command printed above, then re-run this guard"
     echo "blocked:gh-cli-only"
     return 1
   fi
@@ -1348,9 +1364,35 @@ _ccc_host_push_lane() {
   project="${TILLANDSIAS_HOST_PUSH_PROJECT:-$(basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)")")}"
   upstream="$(forge_upstream_auth_verdict "podman-exec:tillandsias-git-$project:/srv/git/$project")"
   case "$upstream" in
-    ok:*) echo "ok:host-push-lane:$alias"; return 0 ;;
+    ok:*) ;;
     *) echo "$upstream"; return 2 ;;
   esac
+  # ORDER 1310-rec6 step 4 (host class): an authorized credential is not a
+  # working mirror. publish-relay-state marks the mirror BROKEN after two
+  # failing ticks; the mirror then refuses every push, so the lane is not a
+  # push path until one ok tick restores it.
+  local rstate cls
+  rstate="$(_ccc_relay_state "$project")"
+  case "$rstate" in
+    broken/*)
+      cls="${rstate#broken/}"; cls="${cls%%/*}"
+      case "$cls" in
+        credential) _afford "the mirror cannot relay to GitHub at the credential layer (two failing ticks), so every push through the lane is refused" \
+                        "the operator re-seeds the GitHub token (tillandsias --github-login); the mirror recovers on its next ok tick, no restart" ;;
+        *) _afford "the mirror cannot relay to GitHub at the $cls layer (two failing ticks), so every push through the lane is refused" \
+               "fix the mirror from this host: restore its connectivity to upstream (tillandsias --sync <project> shows when it answers); it recovers on the next ok tick" ;;
+      esac
+      echo "blocked:mirror-broken:$cls"; return 2 ;;
+  esac
+  echo "ok:host-push-lane:$alias"; return 0
+}
+
+# _ccc_relay_state <project>: the mirror's published relay-state path segment
+# (ok/none/0, degraded/transport/1, broken/credential/1, ...) or empty.
+_ccc_relay_state() {
+  podman exec "tillandsias-git-$1" git -C "/srv/git/$1" for-each-ref --count=1 \
+      --format='%(refname)' refs/tillandsias/relay-state 2>/dev/null \
+    | sed -n 's#^refs/tillandsias/relay-state/##p' | head -n 1
 }
 
 # The final verdict: the keyring path first, then the lane (1456-ib6i). On a
@@ -1376,6 +1418,10 @@ _ccc_verdict_with_lane() {
   echo "$verdict"
   return "$rc"
 }
+
+# ORDER 1497-ahmd (1247-amcu): every blocked: verdict carries its affordance,
+# the rule that refused and what clears it, in the fleet's why/remedy shape.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
 
 _ccc_seed_remedy_line() {
     # QUOTED heredoc: every $( ) and every backslash-n must survive verbatim
@@ -1448,8 +1494,9 @@ case "${1:-}" in
       echo "  Commits already made are safe on the local branch; they need a push, not a redo." >&2
       echo "  Report blocked with the salvage ref rather than exiting clean." >&2
       echo "  REMEDY for the credential itself:" >&2
-      echo "    gh auth refresh        # or: gh auth login" >&2
+      echo "    tillandsias --github-login   # the OPERATOR re-seeds; an agent never runs gh auth refresh/login (1025-a896)" >&2
       _ccc_seed_remedy_line >&2
+      _afford "the credential that verified at cycle start no longer pushes, so this cycle's work cannot land" "salvage uncommitted work first (the command above), then the operator re-seeds the GitHub token with tillandsias --github-login (device flow, so it can rotate; or --with-token); an agent never runs gh auth login/refresh (1025-a896)"
       echo "blocked:credential-expired-mid-cycle"
       exit 1
     fi

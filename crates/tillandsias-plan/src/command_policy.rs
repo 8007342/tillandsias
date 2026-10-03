@@ -1248,7 +1248,14 @@ pub fn load_seed(
         .unwrap_or_else(|| root.join(SEED_RELATIVE_PATH));
     let text = match std::fs::read_to_string(&path) {
         Ok(t) => t,
-        Err(_) if seed_path.is_none() => return (None, SeedLoad::Absent),
+        Err(e)
+            if seed_path.is_none()
+                && e.kind() == std::io::ErrorKind::NotFound
+                && std::fs::symlink_metadata(&path)
+                    .is_err_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
+        {
+            return (None, SeedLoad::Absent);
+        }
         Err(_) => return (None, SeedLoad::Refused("unreadable".into())),
     };
     let seed = match parse_seed(&text) {
@@ -1266,23 +1273,51 @@ pub fn load_seed(
 
 /// The answer for one request: the strictest of the floor's and every matching
 /// seed rule's; the seed's default when nothing matched. Ties go to the floor.
-/// Decide one request AND append the decision to the per-host audit log
-/// (order 1443-w9hf). Every caller goes through here, so the log is complete
-/// by construction: `policy eval`, proc.run's pre-spawn check, and whatever
-/// door calls the evaluator next.
+/// Inspect one validated request AND append the decision to the per-host audit
+/// log. Inspection never resolves consent or modifies the consent store.
+/// File-backed callers must use `decide_loaded` so a refused load cannot become
+/// an absent seed. Execution doors use `decide_execution` immediately before spawn.
 pub fn evaluate(req: &Request, seed: Option<&Seed>, protected: &[String]) -> Decision {
     let d = decide(req, seed, protected);
-    // A consent is resolved HERE, where the request then proceeds: a token is
-    // spent only by a decision that is acted on (1443-9f5w). Never under unit
-    // tests, which must not spend a real token on a developer's host: those
-    // call resolve_consent with a scratch ConsentCtx.
-    let d = if d.strictness == Strictness::Consent && !cfg!(test) {
-        resolve_consent(req, d, &ConsentCtx::from_env(&req.workspace))
-    } else {
-        d
-    };
     audit_decision(req, &d, None);
     d
+}
+
+/// Read-only decision for a file-backed seed. A refused seed is NOT absence:
+/// refusing the whole request preserves project restrictions after corruption.
+pub fn decide_loaded(
+    req: &Request,
+    seed: Option<&Seed>,
+    load: &SeedLoad,
+    protected: &[String],
+) -> Decision {
+    if let SeedLoad::Refused(reason) = load {
+        return Decision::deny(
+            "policy-seed",
+            load.verdict(),
+            &format!("the project command policy seed was refused: {reason}"),
+            format!("repair the command policy seed at {SEED_RELATIVE_PATH} before executing"),
+        );
+    }
+    decide(req, seed, protected)
+}
+
+/// The execution-only decision. This may spend one isolated/operator token;
+/// callers must act on it, not use it for previews or policy inspection.
+/// Audit separately when the execution door knows the run identity.
+pub fn decide_execution(
+    req: &Request,
+    seed: Option<&Seed>,
+    load: &SeedLoad,
+    protected: &[String],
+    ctx: &ConsentCtx,
+) -> Decision {
+    let d = decide_loaded(req, seed, load, protected);
+    if d.strictness == Strictness::Consent {
+        resolve_consent(req, d, ctx)
+    } else {
+        d
+    }
 }
 
 /// The decision alone, with no side effect.
@@ -1535,7 +1570,7 @@ pub enum TokenCheck {
 }
 
 /// Spend a token for `class` and `argv`, if one is valid. SIDE EFFECT: only on
-/// a path that then proceeds (evaluate, the run door).
+/// a path that then proceeds (decide_execution, the run door), never inspection.
 pub fn consent_consume(ctx: &ConsentCtx, class: &str, argv: &[String]) -> TokenCheck {
     let digest = argv_digest(argv);
     let mut paths: Vec<PathBuf> = match std::fs::read_dir(&ctx.dir) {

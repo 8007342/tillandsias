@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-bash-dialect-still-misses-the-door-deadline-on-a-slower-host-so-litmus-deciders-within-door-deadline-reds-a-daily-cut
+    field: status
+    value: completed
+    ts: "2026-09-30T01:27:03Z"
+    host: yoga
+
+events:
+  - packet_id: check-bash-dialect-still-misses-the-door-deadline-on-a-slower-host-so-litmus-deciders-within-door-deadline-reds-a-daily-cut
+    event:
+      type: completed
+      ts: "2026-09-30T01:27:03Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 941e45b69 (land97, on origin/linux-next) + test-deciders-within-door-deadline 6/6 on trunk (yoga 2026-09-30); bash-dialect 1 s on macuahuitl per the coordinator
+  - packet_id: check-bash-dialect-still-misses-the-door-deadline-on-a-slower-host-so-litmus-deciders-within-door-deadline-reds-a-daily-cut
+    event:
+      type: note
+      ts: "2026-09-30T01:27:03Z"
+      host: yoga
+      summary: |-
+        landed: check-bash-dialect runs each rule only on files that can match (4.1 s -> 1.2 s, byte-identical)

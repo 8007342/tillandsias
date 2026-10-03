@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: affordance-slice-finalize-cycle-every-refused-finalize-verdict-says-why-and-what-clears-it
+    field: status
+    value: completed
+    ts: "2026-09-30T02:55:59Z"
+    host: lenovinha
+
+events:
+  - packet_id: affordance-slice-finalize-cycle-every-refused-finalize-verdict-says-why-and-what-clears-it
+    event:
+      type: completed
+      ts: "2026-09-30T02:55:59Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: adc9d4b76 (land99 relay of work/1504-4tty 3152727a5) + scripts/test-finalize-cycle-affordances.sh 3/3 (step 680, darwin regime)
+  - packet_id: affordance-slice-finalize-cycle-every-refused-finalize-verdict-says-why-and-what-clears-it
+    event:
+      type: note
+      ts: "2026-09-30T02:55:59Z"
+      host: lenovinha
+      summary: |-
+        landed in land99

@@ -1,0 +1,31 @@
+# @trace spec:ci-release
+# @trace order:1484-uf29
+#
+# The four Bash source-agreement files were retired together. Their production
+# callers name the operation and inputs for scripts/lua/source-agreements.lua;
+# the integration target asserts the captured exit/stdout/stderr bytes for all
+# 13 manifest cases, including the three dev-model and six inference arms.
+name: litmus:source-agreement-lua-cutover
+spec: ci-release
+phase: pre-build
+description: >
+  Four legacy Bash files are absent; build.sh and local-ci invoke one typed Lua
+  runner with explicit paths and no fallback; the unfiltered production-CLI
+  integration target has selected tests and preserves pinned diagnostic bytes.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/lua/source-agreements.lua
+  - a runnable tillandsias-plan that knows script run is available to cargo tests
+
+critical_path:
+  - step: "the atomic deletion and typed callers are pinned"
+    command: "cargo test -p tillandsias-plan --test lua_source_agreements cutover_callers_name_inputs_and_leave_no_bash_fallback -- --exact --test-threads=1"
+    timeout_ms: 120000
+    expected_behavior: "test result: ok. 1 passed"
+
+  - step: "the production CLI preserves every source-agreement byte contract"
+    command: "cargo test -p tillandsias-plan --test lua_source_agreements production_script_run_preserves_pinned_exit_stdout_and_stderr_bytes -- --exact --test-threads=1"
+    timeout_ms: 120000
+    expected_behavior: "test result: ok. 1 passed"

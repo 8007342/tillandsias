@@ -1,0 +1,19 @@
+# spec-script-paths-baseline.txt — script paths active specs name that do not
+# resolve, recorded when scripts/check-spec-script-paths.sh landed (815-yace,
+# measured on yoga 2026-09-30: 98 distinct spec/path pairs, 10 unresolved).
+#
+# A BURNDOWN LIST. Never add to it: a new unresolved path is a defect in the
+# spec or the tree, and the check refuses it. Remove a line when its path
+# resolves (the check prints a note) or when the spec is corrected.
+#
+# Format: <spec>\t<path>\t<reason>
+openspec/specs/project-summarizers/spec.md	scripts/summarizers/summarize-cargo.sh	815-yace: no scripts/summarizers/ dir; ships flat as scripts/summarize-cargo.sh; spec left for its own audit draw
+openspec/specs/project-summarizers/spec.md	scripts/summarizers/summarize-flutter.sh	815-yace: ships as scripts/summarize-pubspec.sh
+openspec/specs/project-summarizers/spec.md	scripts/summarizers/summarize-go.sh	815-yace: ships as scripts/summarize-go-mod.sh
+openspec/specs/project-summarizers/spec.md	scripts/summarizers/summarize-gradle.sh	815-yace: never committed
+openspec/specs/project-summarizers/spec.md	scripts/summarizers/summarize-maven.sh	815-yace: never committed
+openspec/specs/project-summarizers/spec.md	scripts/summarizers/summarize-package-json.sh	815-yace: ships flat as scripts/summarize-package-json.sh
+openspec/specs/clickable-trace-index/spec.md	scripts/generate-traces.sh	815-yace census: required generator not in the tree
+openspec/specs/default-image/spec.md	scripts/build-tools-overlay.sh	815-yace census: a NEGATIVE requirement (the tray MUST NOT invoke it); candidate for a spec-path-absent marker
+openspec/specs/knowledge-source-of-truth/spec.md	scripts/verify-freshness.sh	815-yace census: named verifier not in the tree
+openspec/specs/podman-registries-config/spec.md	scripts/build.sh	815-yace census: build.sh lives at the repository root, not under scripts/

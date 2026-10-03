@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by the coordinator on 2026-10-01 for the Lua migration's batch B.
+packets:
+  - packet_id: five-small-shell-deciders-run-as-lua-on-script-run-with-their-sh-deleted-and-byte-identical-verdicts-batch-b
+    order: 1526-gv3t
+    status: in_progress
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [lua, deciders, migration, parity]
+    estimated_hours: 3
+    depends_on: [four-small-shell-deciders-run-as-lua-on-script-run-with-their-sh-deleted-and-byte-identical-verdicts-batch-a]
+    owned_files:
+      - scripts/lua/check-ca-path-literals.lua
+      - scripts/lua/check-backgrounded-jobs-redirect-stderr.lua
+      - scripts/lua/check-secure-wire-single-reader.lua
+      - scripts/lua/check-cheatsheet-source-anchors.lua
+      - scripts/lua/check-oom-postmortem.lua
+    title: |
+      Lua migration batch B: check-ca-path-literals, check-backgrounded-jobs-redirect-stderr, check-secure-wire-single-reader, check-cheatsheet-source-anchors and check-oom-postmortem run as scripts/lua on `tillandsias-plan script run`, each .sh deleted in the same commit with byte-identical verdicts on the live tree, the fixture scenarios and a planted violating input
+    context: |
+      Operator direction 2026-10-01 (sole worker, advance the Bash-to-Lua
+      migration). Ported by a sonnet agent on work/1526-gv3t (492791c52).
+      Disclosed deviations: check-oom-postmortem's refusal detail lines move
+      from stdout to stderr (both live callers capture 2>&1 and branch on the
+      exit code only), and its never-exercised bad-flag path gains one stdout
+      line with the same exit code. Left as .sh: check-fragment-events-land,
+      which rebuilds the plan binary it would run inside
+      (ensure_fresh_plan_binary).
+    outcome: |
+      Five fewer shell deciders, with the same verdicts on every input.
+    exit_criteria:
+      - "Each .lua matches its .sh's stdout/stderr lines and exit code on the live tree and on a planted violating input, and its fixture scenarios pass unchanged: test-cheatsheet-source-anchors 5/5, test-gate-memory-refusal 14/14."
+      - "No scripts/check-<the five>.sh remains, and every live consumer (build.sh x5, land-on-platform-branch.sh) runs the .lua."
+    verifiable_closure: |
+      The two fixtures green in plain, env -u and toolbox regimes on the
+      landed tree; quoted on the closing event.
+    unscoreable: "pinned-by-its-fixtures: test-cheatsheet-source-anchors.sh, test-gate-memory-refusal.sh"
+    next_action: >
+      Relay work/1526-gv3t (file this row first so the @trace cites resolve),
+      then close citing the landed commit.
+    notes: |
+      size: M
+      implementer_tier: sonnet

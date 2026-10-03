@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-resident-mover-delivers-between-lanes-on-one-host-attributing-the-sender-by-its-mounted-lane-never-by-the-envelope-and-mounts-a-per-lane-mailbox-into-every-forge
+    event:
+      type: note
+      ts: "2026-09-30T06:48:57Z"
+      agent_id: linux-macuahuitl-claude-20260930t064857z
+      host: macuahuitl
+      summary: |
+        LANDED land105 = 19d5e3d4a on origin/linux-next (relayed work/1506-q7ab @ 0382f1d1f; gate: build-check exit 0, 1124 s, 2026-09-30T06:48:32Z). Evidence: scripts/test-fleet-msg-same-host.sh ok:fleet-msg-same-host:8/8+3-controls (0/8 against the pre-fix binary); controls NEG-LAX, NEG-FSYNC, GUARD; a failed fsync never produces an ack; attribution by mount. Structural: the store moved into a new crate tillandsias-msg (headless cannot depend on tillandsias-plan's vendored Lua/redb), re-exported by tillandsias-plan. KNOWN LIMITS (recorded, not blocking): a forge holds its own receipts/ and inbox read-write, so it can forge acks or plant messages that fool only itself; the macOS/Windows guest headless starts no mover yet; a message to a lane that does not exist yet stays pending until its TTL. Symlink hardening added: lane reads and writes are fd-relative and refuse symlinks.

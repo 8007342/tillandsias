@@ -11,7 +11,7 @@
 # constraint.
 #
 # It is a RATCHET rather than the packet's end-state assertion, and that is
-# deliberate — see the rationale block in scripts/check-framing-raw-decodes.sh.
+# deliberate — see the rationale block in scripts/lua/check-framing-raw-decodes.lua.
 # The short version: 18 raw decodes across 10 files remain, several of them
 # dispositioned keeps, so "at most one" fails on day one and protects nothing
 # during the months the migration takes. The ratchet is falsifiable every day
@@ -34,33 +34,33 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/check-framing-raw-decodes.sh
+  - workspace contains scripts/lua/check-framing-raw-decodes.lua (1527-v7cy port of the .sh)
   - workspace contains scripts/framing-raw-decode-baseline.tsv
   - shell utilities (bash, grep, sed, awk, find, mktemp) are available in PATH
 
 critical_path:
-  - step: "the scan parses, is executable, and agrees with the tree at HEAD"
-    command: "bash -n scripts/check-framing-raw-decodes.sh && test -x scripts/check-framing-raw-decodes.sh && out=$(scripts/check-framing-raw-decodes.sh) && printf '%s' \"$out\" | grep -qE '^ok:framing-ratchet:sites=[0-9]+:files=[0-9]+$' && echo 'ok: ratchet-agrees'"
+  - step: "the scan resolves through the one runner and agrees with the tree at HEAD"
+    command: ". scripts/plan-binary-probe.sh; out=$(\"$(resolve_plan_binary)\" script run scripts/lua/check-framing-raw-decodes.lua) && printf '%s' \"$out\" | grep -qE '^ok:framing-ratchet:sites=[0-9]+:files=[0-9]+$' && echo 'ok: ratchet-agrees'"
     timeout_ms: 20000
     expected_behavior: "ok: ratchet-agrees"
 
   - step: "NEGATIVE CONTROL — a NEW hand-rolled decode in an unlisted file is refused (this is the regression the ratchet exists to catch)"
-    command: "p=crates/tillandsias-control-wire/src/zz_litmus_795_5itp_probe.rs; printf 'fn p(b: [u8; 4]) -> usize { u32::from_be_bytes(b) as usize }\\n' > \"$p\"; out=$(scripts/check-framing-raw-decodes.sh 2>&1); rc=$?; rm -f \"$p\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -qE '^blocked:framing-ratchet-new-site:' && echo 'ok: new-site-refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    command: "p=crates/tillandsias-control-wire/src/zz_litmus_795_5itp_probe.rs; printf 'fn p(b: [u8; 4]) -> usize { u32::from_be_bytes(b) as usize }\\n' > \"$p\"; . scripts/plan-binary-probe.sh; out=$(\"$(resolve_plan_binary)\" script run scripts/lua/check-framing-raw-decodes.lua 2>&1); rc=$?; rm -f \"$p\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -qE '^blocked:framing-ratchet-new-site:' && echo 'ok: new-site-refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 20000
     expected_behavior: "ok: new-site-refused"
 
   - step: "NEGATIVE CONTROL — a count ABOVE a file's recorded ceiling is refused"
-    command: "b=scripts/framing-raw-decode-baseline.tsv; t=$(mktemp); cp \"$b\" \"$t\"; awk -F'\\t' 'BEGIN{OFS=\"\\t\"} $1 ~ /^[0-9]+$/ && $1 > 1 { $1 = $1 - 1 } { print }' \"$t\" > \"$b\"; out=$(scripts/check-framing-raw-decodes.sh 2>&1); rc=$?; cp \"$t\" \"$b\"; rm -f \"$t\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -qE '^blocked:framing-ratchet-regressed:' && echo 'ok: regression-refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    command: "b=scripts/framing-raw-decode-baseline.tsv; t=$(mktemp); cp \"$b\" \"$t\"; awk -F'\\t' 'BEGIN{OFS=\"\\t\"} $1 ~ /^[0-9]+$/ && $1 > 1 { $1 = $1 - 1 } { print }' \"$t\" > \"$b\"; . scripts/plan-binary-probe.sh; out=$(\"$(resolve_plan_binary)\" script run scripts/lua/check-framing-raw-decodes.lua 2>&1); rc=$?; cp \"$t\" \"$b\"; rm -f \"$t\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -qE '^blocked:framing-ratchet-regressed:' && echo 'ok: regression-refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 20000
     expected_behavior: "ok: regression-refused"
 
   - step: "NEGATIVE CONTROL — a ceiling left STALE after a slice landed is refused too; a one-directional ratchet would let the recorded state drift above the truth forever (884-hfsj)"
-    command: "b=scripts/framing-raw-decode-baseline.tsv; t=$(mktemp); cp \"$b\" \"$t\"; awk -F'\\t' 'BEGIN{OFS=\"\\t\"} $1 ~ /^[0-9]+$/ { $1 = $1 + 1 } { print }' \"$t\" > \"$b\"; out=$(scripts/check-framing-raw-decodes.sh 2>&1); rc=$?; cp \"$t\" \"$b\"; rm -f \"$t\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -qE '^blocked:framing-ratchet-stale:' && echo 'ok: stale-ceiling-refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    command: "b=scripts/framing-raw-decode-baseline.tsv; t=$(mktemp); cp \"$b\" \"$t\"; awk -F'\\t' 'BEGIN{OFS=\"\\t\"} $1 ~ /^[0-9]+$/ { $1 = $1 + 1 } { print }' \"$t\" > \"$b\"; . scripts/plan-binary-probe.sh; out=$(\"$(resolve_plan_binary)\" script run scripts/lua/check-framing-raw-decodes.lua 2>&1); rc=$?; cp \"$t\" \"$b\"; rm -f \"$t\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -qE '^blocked:framing-ratchet-stale:' && echo 'ok: stale-ceiling-refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 20000
     expected_behavior: "ok: stale-ceiling-refused"
 
   - step: "NEGATIVE CONTROL — an absent baseline fails closed rather than reporting a clean tree"
-    command: "b=scripts/framing-raw-decode-baseline.tsv; t=$(mktemp); cp \"$b\" \"$t\"; rm -f \"$b\"; out=$(scripts/check-framing-raw-decodes.sh 2>&1); rc=$?; cp \"$t\" \"$b\"; rm -f \"$t\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -qE '^blocked:framing-ratchet-no-baseline$' && echo 'ok: fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    command: "b=scripts/framing-raw-decode-baseline.tsv; t=$(mktemp); cp \"$b\" \"$t\"; rm -f \"$b\"; . scripts/plan-binary-probe.sh; out=$(\"$(resolve_plan_binary)\" script run scripts/lua/check-framing-raw-decodes.lua 2>&1); rc=$?; cp \"$t\" \"$b\"; rm -f \"$t\"; [ \"$rc\" != 0 ] && printf '%s' \"$out\" | grep -qE '^blocked:framing-ratchet-no-baseline$' && echo 'ok: fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 20000
     expected_behavior: "ok: fails-closed"
 
@@ -77,7 +77,7 @@ observability:
   log_fields:
     spec: "vsock-transport"
     test: "one-length-delimited-framing-impl"
-    artifact: "scripts/check-framing-raw-decodes.sh + scripts/framing-raw-decode-baseline.tsv"
+    artifact: "scripts/lua/check-framing-raw-decodes.lua + scripts/framing-raw-decode-baseline.tsv"
 
 rollback:
   on_failure: >
@@ -91,4 +91,4 @@ rollback:
     A site that genuinely cannot migrate becomes a `keep` row with its reason
     recorded both in the baseline and at the site, never a silently raised
     ceiling.
-  command: "scripts/check-framing-raw-decodes.sh; grep -v '^#' scripts/framing-raw-decode-baseline.tsv"
+  command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/check-framing-raw-decodes.lua; grep -v '^#' scripts/framing-raw-decode-baseline.tsv"

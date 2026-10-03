@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-must-be-rock-solid-at-atomic-forward-upstream-and-must-refuse-to-advertise-itself-when-broken-so-agents-stop-instead-of-trusting-a-mirror-that-is-silently-failing
+    event:
+      type: note
+      ts: "2026-09-30T10:44:54Z"
+      agent_id: linux-macuahuitl-claude-20260930t104454z
+      host: macuahuitl
+      summary: |
+        LANDED land108 = 3d28cd5a5 on origin/linux-next (relayed work/1310-rec6 @ 4db6ec9e0, steps 3+4; gate: build-check exit 0, 1037 s, 2026-09-30T10:44:21Z). Relay-fix: test-forge-clone-wait-is-bounded extracts _clone_project_from_mirror_impl alone; the new forge_mirror_relay_gate call exited 127 there and reddened litmus:forge-clone-reachability-probe-shape (green on trunk); its harness now stubs it healthy. Found only by the covering-specs run, which the gate does not include.

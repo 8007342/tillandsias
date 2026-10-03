@@ -1,0 +1,35 @@
+# @trace order:1506-nvqt, openspec/changes/fleet-messaging-poc/specs/fleet-messaging/spec.md
+#
+# Pins the fleet message bus's LOCAL store (1506-nvqt): `tillandsias-plan msg`
+# over a temp XDG_STATE_HOME. Bound under ci-release so a gate actually
+# executes it; the fleet-messaging capability is still an unsynced change
+# (openspec/changes/fleet-messaging-poc/), so it has no spec_id of its own yet.
+name: litmus:fleet-msg-store-shape
+spec: ci-release
+phase: pre-build
+description: >
+  send refuses over-budget and secret-shaped bodies, out-of-bounds TTLs and
+  replies to a broadcast, and prints the receipt id at once; a repeated id is
+  skipped; recv is local bookkeeping that never touches the sender's receipt
+  and drops expired messages; status reads receipts (pending, acked + via,
+  undelivered); a seq gap is flagged; whoami refuses without a lane; the
+  capability probe sees msg and there is no ack verb.
+severity: critical
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-fleet-msg-store.sh
+  - workspace contains crates/tillandsias-plan/src/msg_store.rs
+  - workspace contains crates/tillandsias-plan/src/msg_shape.rs
+  - a built tillandsias-plan (resolved by scripts/plan-binary-probe.sh)
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-fleet-msg-store.sh && test -x scripts/test-fleet-msg-store.sh && echo 'ok: fleet-msg-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: fleet-msg-fixture-parses"
+
+  - step: "twelve arms: shape, secret (with the LAX negative control), duplicate, queued, recv, status, ttl, expiry, reply, gap, no-lane, surface"
+    command: "out=$(bash scripts/test-fleet-msg-store.sh); rc=$?; case \"$out\" in (*'ok:fleet-msg-store:12/12'*) [ \"$rc\" = 0 ] && echo 'ok: fleet-msg-store 12/12' ;; (*) printf '%s\\n' \"$out\"; exit 1 ;; esac"
+    timeout_ms: 60000
+    expected_behavior: "ok: fleet-msg-store 12/12"
