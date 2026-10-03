@@ -43,6 +43,9 @@ bad() { echo "  FAIL  $*"; fail=$((fail + 1)); }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/killed-probe.XXXXXX")" || exit 2
 trap 'rm -rf "$W"' EXIT
+# The guard's nested probes may emit timing records. Confine them to this
+# fixture's scratch area, not the host-wide /tmp fallback (1204-3s2s).
+export TILLANDSIAS_TIMING_LOG="$W/timing.jsonl"
 
 # One grammar line, and ONLY one. Anchored at the start so a diagnostic
 # sentence that happens to contain a verdict word is not counted as a verdict.

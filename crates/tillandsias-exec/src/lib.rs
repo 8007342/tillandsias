@@ -711,6 +711,81 @@ impl Command {
             argv: self.argv,
         })
     }
+
+    /// Start an intentionally detached child. Unlike `spawn`, this transfers
+    /// lifetime ownership to the operating system: dropping the Tokio command
+    /// handle must not kill the child. Unix starts a new session with stdio
+    /// disconnected (or appended to `log`); Windows uses detached/new-process-
+    /// group creation flags. The returned identity names the fresh spawn.
+    pub async fn spawn_detached(self, log: Option<PathBuf>) -> Result<RunId, ExecError> {
+        let Some((program, rest)) = self.argv.split_first() else {
+            return Err(ExecError::EmptyArgv);
+        };
+        protect_parent_std_handles();
+        let mut cmd = tokio::process::Command::new(program);
+        cmd.args(rest).stdin(Stdio::null()).kill_on_drop(false);
+        if let Some(d) = &self.cwd {
+            cmd.current_dir(d);
+        }
+        if self.env_clear {
+            cmd.env_clear();
+        }
+        for (k, v) in &self.envs {
+            cmd.env(k, v);
+        }
+        let (stdout, stderr) = match log {
+            Some(path) => {
+                let stdout = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&path)
+                    .map_err(|source| ExecError::Io {
+                        argv: self.argv.clone(),
+                        source,
+                    })?;
+                let mut stderr_path = path.into_os_string();
+                stderr_path.push(".stderr");
+                let stderr = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(PathBuf::from(stderr_path))
+                    .map_err(|source| ExecError::Io {
+                        argv: self.argv.clone(),
+                        source,
+                    })?;
+                (Stdio::from(stdout), Stdio::from(stderr))
+            }
+            None => (Stdio::null(), Stdio::null()),
+        };
+        cmd.stdout(stdout).stderr(stderr);
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            // SAFETY: setsid is async-signal-safe and touches no Rust state.
+            unsafe {
+                cmd.as_std_mut().pre_exec(|| {
+                    if libc::setsid() == -1 {
+                        Err(std::io::Error::last_os_error())
+                    } else {
+                        Ok(())
+                    }
+                });
+            }
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            use windows::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS};
+            cmd.as_std_mut()
+                .creation_flags(CREATE_NEW_PROCESS_GROUP.0 | DETACHED_PROCESS.0);
+        }
+        let run = RunId::new();
+        cmd.spawn().map_err(|source| ExecError::Spawn {
+            argv: self.argv,
+            source,
+        })?;
+        Ok(run)
+    }
 }
 
 /// A Windows job object that owns one child and everything it starts
