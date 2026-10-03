@@ -246,12 +246,12 @@ Correction to research B §1: it reported "1505-m63i referenced but not filed". 
 fragment.
 
 ### Defect: `is_ipv6_functional` always returns false
-- [S] `crates/tillandsias-headless/src/main.rs:8746-8760` parses the unbracketed strings
+- [S] `crates/tillandsias-headless/src/main.rs` `is_ipv6_functional` parses the unbracketed strings
   `"2001:4860:4860::8888:53"` and `"2606:4700:4700::1111:53"` as `SocketAddr`.
 - [M] A scratch rustc probe returned `Err(AddrParseError(Socket))`; the bracketed form returns
   `Ok`.
-- `main.rs:9105` therefore always calls the `--ipv4-only` injector.
-- [M] `~/.config/containers/containers.conf:3` on yoga reads `pasta_options = ["--ipv4-only"]`.
+- `main.rs` `auto_detect_and_configure_ipv6_workaround` therefore always calls the `--ipv4-only` injector.
+- [M] `/usr/bin/grep -n ipv4-only ~/.config/containers/containers.conf` on yoga (2026-10-03) printed line 3: `pasta_options = ["--ipv4-only"]`.
   Rootless containers have no IPv6 on every Linux host.
 - Fixing the brackets alone yields a coin flip on this LAN (the ECMP blackhole above). The
   repair must probe every default router. Packet 1548-mhyk.
@@ -293,7 +293,7 @@ Guests can therefore be clients, but not service holders, until a host-side forw
 - [S] The signed SSH-CA design (order 322), D1–D10:
   `plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md:62,77,91,187,204,217,757-790`.
 - [S] The per-host Vault mounts `ssh-client-signer` and `ssh-host-signer`:
-  `crates/tillandsias-headless/src/vault_bootstrap.rs:5752-5754`.
+  `crates/tillandsias-headless/src/vault_bootstrap.rs` `SSH_CLIENT_SIGNER_MOUNT`, `SSH_HOST_SIGNER_MOUNT`.
 - [S] Packet 1506-32k5, a per-host X25519 identity pinned in `plan/fleet/peers/`:
   `openspec/changes/fleet-messaging-poc/design.md:125-140`.
 - [M] `ls plan/fleet` → "No such file". The directory does not exist yet.
@@ -530,7 +530,7 @@ needs"), updated so the relay is hosted on `tlatoani.net`:
      the Worker secret `CF_DNS_TOKEN` (`wrangler secret put`). No host ever holds it.
 7. **Hand the implementers:**
    - the `client_id` (public, embeddable like `GITHUB_APP_CLIENT_ID`; today `CLOUDFLARE_APP_CLIENT_ID`
-     is a placeholder, [S] `crates/tillandsias-headless/src/cloudflare_oauth.rs:68-84`);
+     is a placeholder, [S] `crates/tillandsias-headless/src/cloudflare_oauth.rs` `CLOUDFLARE_APP_CLIENT_ID`);
    - the registered redirect URLs exactly as entered;
    - the team name;
    - the chosen `workers.dev` subdomain.
