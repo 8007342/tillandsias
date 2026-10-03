@@ -205,6 +205,44 @@ and64 after typed receipts and the after binary hash are retained separately;
 no failing stream was overwritten. This is observer conformance evidence,
 not a substitute for the forced integrated/landing gates still pending.
 
+The corrected source then passed the complete parent forced gate at
+`402dbd1e7d7b77eb827ee2aa97bcc2ee1023457a`: actual run
+`a0b6a642-95e9-4994-a6f8-87ce4e3ebbef` exited0/ok=true,1079307ms including
+targeted preparation; phases1007s, workspace2892/new-red0/tolerated0/stale0.
+The45-test CLI target and all previous targeted controls passed. Only a plan
+fragment was subsequently merged; source checkpoint
+`a992d8e08e53df189a5d521d6276f290d6d8552e` was pushed and remote-verified.
+Fresh required preflight actual `f48e5611-254a-46bb-b649-5404a54ed7ad` exited0
+in57924ms, explicitly PARTIAL:ran207/declared-skip8/deadline-skip9/
+could-not-run0/refused0/sum224/session-isolation/wall54s. It does not vouch
+for the9 deadline-skipped guards. READY was renewed for this corrected source;
+actual serialized landing and remote ancestry still decide closure.
+
+## Parent launcher timeout: absent result, owned recovery
+
+The next landing launcher was accidentally given a120000ms harness timeout,
+despite the run door's explicit5400000ms bound. The harness stopped its
+launcher at two minutes and left an EMPTY status file, not a typed gate
+result. The queue and toolbox gate survived in owned process groups1530562
+and1532937, UID1000, this exact checkout. Candidate
+`190c952fa16aaf5c57e82f7dbff983ad08b4b3cc` was still unlanded at base1eefbeb19.
+Parent froze the queue before killing only those verified owned groups,
+retained the partial gate stream/source/process snapshot/empty status, and
+verified no named owners or cargo/rustc/plan binaries remained. The clean
+tree returned normally to linux-next, without resetting/restoring user files;
+the unrelated old Claude watcher was untouched. The checkout lock read free
+after cleanup and was reacquired on the same harnessPID6538; this alone does
+not establish a lock defect.
+
+This absence is parent launcher misuse and measurable overhead, not a
+production queue/runtime defect or a completed red/green gate. The partial
+stream stops during source-agreement compilation. No code, gate or landing
+policy repair followed. The next retry uses background harness timeout0 and
+the door's explicit90-minute bound, after confirming no survivor. Wrapper
+success is not landing evidence: its post-queue check must prove actual
+candidate ancestry on origin/linux-next. Native, tracing and parent obligations
+remain open until their separate receipts exist.
+
 Broader plan-library verification initially passed425 tests and failed two
 legacy read/memo fixtures because they wrote under the worktree's `target`
 symlink, outside its repository root. The filesystem refusal was correct.
