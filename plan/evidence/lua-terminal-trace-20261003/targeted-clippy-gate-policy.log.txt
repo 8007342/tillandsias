@@ -1,0 +1,7 @@
+   Compiling tillandsias-core v56.9.27 (/home/tlatoani/codex/tillandsias-lua-work/1539-dt84/crates/tillandsias-core)
+    Checking tillandsias-logging v0.1.260513 (/home/tlatoani/codex/tillandsias-lua-work/1539-dt84/crates/tillandsias-logging)
+   Compiling tillandsias-plan v0.1.0 (/home/tlatoani/codex/tillandsias-lua-work/1539-dt84/crates/tillandsias-plan)
+    Checking tillandsias-exec v0.1.0 (/home/tlatoani/codex/tillandsias-lua-work/1539-dt84/crates/tillandsias-exec)
+    Checking tillandsias-msg v0.1.0 (/home/tlatoani/codex/tillandsias-lua-work/1539-dt84/crates/tillandsias-msg)
+    Checking tillandsias-podman v56.9.27 (/home/tlatoani/codex/tillandsias-lua-work/1539-dt84/crates/tillandsias-podman)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.10s

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /home/tlatoani/codex/tillandsias-lua-work/1539-dt84
+cargo clippy -p tillandsias-plan --all-targets -- -D warnings -A clippy::double_must_use > /tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/targeted-clippy-gate-policy.log 2>&1
+cargo fmt --all --check > /tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/format-after.log 2>&1
