@@ -1,0 +1,14 @@
+# Gate step 1384-bqhy (fixture) — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. tillandsias-plan script run is the one Lua decider runner:
+# verdict.ok and verdict.refused retain their stdout/stderr and exit contracts,
+# a script without a verdict cannot silently pass, timeouts remain distinct,
+# STEP_LUA gate steps run while missing/both declarations refuse, timing stays
+# in its configured log, and one exit-code classifier serves gate and door.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking tillandsias-plan script run's Lua verdict, timeout, gate-step, timing, and classifier contracts (1384-bqhy)"
+STEP_SCRIPT="scripts/test-script-run-verb.sh"
+STEP_ERROR="tillandsias-plan script run no longer preserves its Lua verdict, timeout, gate-step, timing, or classifier contracts (1384-bqhy); see which arm failed above"
+STEP_OK="tillandsias-plan script run preserves its Lua verdict and classifier contracts"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-03 darwin script-run-verb: 7 passed, 0 failed"
