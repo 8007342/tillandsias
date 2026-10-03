@@ -243,6 +243,29 @@ success is not landing evidence: its post-queue check must prove actual
 candidate ancestry on origin/linux-next. Native, tracing and parent obligations
 remain open until their separate receipts exist.
 
+## Bounded landing and closure
+
+PR212 landed on linux-next as `f4f106c73400197364f1a6e17723bbdd439d3e99`
+on2026-10-03T20:32:39Z. The serialized queue read base14a5db889 and exact
+published head `10d2890ed708e144cd7aa194425338246bedd1ea`, forced tier=full,
+reported gate=green and landed1/evicted0/requeued0/skipped0. Actual typed
+run `552a1054-eb79-43ee-833f-0172ba659164` exited0/ok=true in1073429ms;
+the launching wrapper itself fetched trunk and verified candidate ancestry.
+Parent independently fetched origin, rechecked that exact ancestry and PR's
+MERGED state, then fast-forwarded its primary linux-next checkout. The current
+plan binary's content guard and startup worktree boundary both passed.
+
+This closes only1538's managed composition and preserved Linux streaming/
+lifetime conformance. Test ownership is released so the Mac observer packet
+1543-f44v can take the old outer Unix test, and native composition children
+1543-ffhg/1544-cnae can claim their disjoint native files after pulling this
+source. Native green, whole1539 trace, parent1384 closure, composite OpenSpec
+4.2, capture-contract reconciliation, preflight1520, and1547's unreadable-scan
+contract correction are NOT established by this landing. The complete queue
+gate's temporary log is removed by the queue; its genuine summary/typed
+receipt and complete workspace transcript are retained, not an invented full
+log. All prior raw diagnostics/negative controls remain byte-exact evidence.
+
 Broader plan-library verification initially passed425 tests and failed two
 legacy read/memo fixtures because they wrote under the worktree's `target`
 symlink, outside its repository root. The filesystem refusal was correct.

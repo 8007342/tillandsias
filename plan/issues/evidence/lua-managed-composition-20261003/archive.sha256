@@ -155,6 +155,8 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  plan/evidence/
 0461d96b331248d24b10cf5bacffc981f15ef762296ca0093e9ea9548ee7d589  plan/evidence/lua-managed-composition-20261003/interrupted-queue.log
 e93a5bf1301cb871af993f7f44ee9c453752e660f4c2ef7c83fcf6c42acdd3be  plan/evidence/lua-managed-composition-20261003/interrupted-queue-owned-processes.txt
 3930f850e12f503a8a339068681f9413101bfa921543180f9ba82ae9a5985ac5  plan/evidence/lua-managed-composition-20261003/interrupted-queue-partial-gate.log
+f94054638d2e62225f2a76f88d0e238d260d752376bc3fb53a30d65db28da9ec  plan/evidence/lua-managed-composition-20261003/landed-actual-queue.log
+ebcdbd1a5c50a69177d236176c38c4df6f4718f7f773f420db7fef7e993da32b  plan/evidence/lua-managed-composition-20261003/landed-workspace-gate.log
 9b444ff82297794702dbe531b7497bbb105182726a3d55edb5eb8629e47efb6d  plan/evidence/lua-managed-composition-20261003/landing-workspace-cleanup-red.log
 9a29295c697497d541afdf27cdcf8d80817b51f33f1ad399eca59366cacfaca8  plan/evidence/lua-managed-composition-20261003/long-capture-after-repair-passed.log
 254699cb279b23fb444726a7b54eb921535f6d061bc7d4dbf965f766393aaa26  plan/evidence/lua-managed-composition-20261003/long-capture-before-repair-failed.log
