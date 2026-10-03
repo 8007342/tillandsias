@@ -1,0 +1,12 @@
+2a5666ef98a90421c9ecbba267a4283e9979335bc1b42f1c3ab017239d920462  plan/issues/evidence/lua-managed-composition-20261003/baseline-16-failed.log
+cf88472bced7582ecbfec887b6bd88dcec28cfbb53b2d112e710deba6e90ab71  plan/issues/evidence/lua-managed-composition-20261003/baseline-18-failed.log
+11f06c4ebf6c623ca62170adeee1209140fccdec6d06ca534b994ab6b44ddfe0  plan/issues/evidence/lua-managed-composition-20261003/final-44-cli-tests.log
+79f76c0fbf45ac169caae79d5810529463e53f56562101900b887859f0f286d0  plan/issues/evidence/lua-managed-composition-20261003/final-dispatch-units.log
+eb0f0cc3251bf3c81955b61746d946c7ae3a6001050ecf3e480fa2b2809887f6  plan/issues/evidence/lua-managed-composition-20261003/final-executor-tests.log
+f55aabfbac7b6c5c4e5f17aa2cbd938549857ff49a2b0b59494d7975ad2b2c04  plan/issues/evidence/lua-managed-composition-20261003/final-package-clippy.log
+64a064853bd32c57368d8c96bc22529b362f5127b52dbbd2d3ff468e39a88ed3  plan/issues/evidence/lua-managed-composition-20261003/final-plan-library.log
+17f1e10e1a3b58d5c60fbba8e41956e37a09aece1350d2b93a8d8c53ad9b4927  plan/issues/evidence/lua-managed-composition-20261003/initial-42-tests.log
+79b4af5154b1b77e2cece0b33463f58d2c4f578bce70b258542d65615828ec39  plan/issues/evidence/lua-managed-composition-20261003/initial-dispatch-units.log
+9a29295c697497d541afdf27cdcf8d80817b51f33f1ad399eca59366cacfaca8  plan/issues/evidence/lua-managed-composition-20261003/long-capture-after-repair-passed.log
+ab9d1b4c41811b48a4d33e2fce4fb98b8a2d89aaca114b3d85d561e52eefa98c  plan/issues/evidence/lua-managed-composition-20261003/long-capture-before-repair-failed.log
+f98e0e0d75bfcf059b0ead044f14a9269d92a9e14f73ab1dafc6261c2b76d488  plan/issues/evidence/lua-managed-composition-20261003/pre-gate-library-fixture-path-failures.log
