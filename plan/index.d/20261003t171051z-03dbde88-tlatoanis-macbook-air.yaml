@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    event:
+      type: note
+      ts: "2026-10-03T17:10:51Z"
+      agent_id: macos-tlatoanis-macbook-air-opencode-20261003t171051z
+      host: tlatoanis-macbook-air
+      summary: |
+        Native second-regime receipt is published on work/1375-amye @b41ba2b7a2c0dd3f6b013b777e513a7932622de7; PR196 remains DRAFT until applicable gate readiness is established. Pinned original source dac5f5c3e93ac258ed2a4287a98514072b076a7b: release plan build PASS, Darwin fixture ok:plan-run-verb:5; setsid-to-setpgid(0,0) mutation exits1 at detached session equals caller session. Actual STEP_SECOND_REGIME added750. Raw native/mutant output, exact mutation and host/toolchain retained under plan/issues/evidence/1375-amye-darwin-20261003 on published ref. After merging trunk, release plan rebuilt and fixture5/5 passed again; regimes153, cargo fmt, refusal-affordance/source-pin/exec-bits/added-fragments/bash-dialect/sigpipe/probe-usage/litmus-pins deciders passed. Full merged build --check attempted and exited101 at known trunk nonminimal_bool lua_predicate.rs1080; Linux1538 accepted repair in its owned unpublished checkpoint. No full-green READY or closure claimed. Next_action: recheck native strict lint against eventual pinned repair, coordinate applicable gate/landing and only then make PR196 ready. Separate1519 receipt is draft PR210, not an integrated STEP_OK claim.
