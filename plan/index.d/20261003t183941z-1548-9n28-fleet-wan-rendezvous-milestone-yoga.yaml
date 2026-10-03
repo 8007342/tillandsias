@@ -145,6 +145,8 @@ packets:
       the record exists and the fragment carrying the operator's signature
       events on 563, 564 and 595-6y8b is on linux-next; a reviewer can map
       each of the 14 exit criteria to a section heading by name.
+    unscoreable: |
+      a decision record signed by the operator. Its closure is a human signature event on 563, 564 and 595-6y8b, which no litmus can produce or check.
     depends_on: []
     next_action: >
       Write the record from the design note; send it to the operator for
@@ -192,6 +194,8 @@ packets:
       script prints one line per arm and refuses to print reachable when the
       premise guard fails (a run with the Mesh sidecar stopped prints
       unmeasured:not-via-mesh, proving the guard is reached).
+    unscoreable: |
+      a per-substrate MEASUREMENT recorded as one of five named outcomes from a second host over the LAN and the Mesh sidecar; the outcome is data, not a pass/fail property a fixture can assert.
     depends_on:
       - fleet-vpn-join-leave-status-launches-the-warp-sidecar-beside-the-router-from-secret-cloudflare-mesh-on-linux-and-inside-the-macos-and-windows-guests-so-no-host-os-ever-runs-a-cloudflare-daemon
     next_action: >
@@ -836,6 +840,8 @@ packets:
     verifiable_closure: |
       a closing event quotes ip -6 route show default and the eight pinned
       pings from a LAN host, both measured after the change on the Pi.
+    unscoreable: |
+      an OPERATOR action on the DMZ Raspberry Pi (router-advertisement configuration); no repository code changes, so nothing in the tree can score it. Evidence is the per-router egress measurement of 1548-mhyk run on a LAN host after the change.
     depends_on: []
     next_action: >
       Operator edits the Pi's dnsmasq/radvd configuration; any agent then
@@ -877,6 +883,8 @@ packets:
       the instrument's premise-guard arm prints inbound=unmeasured
       reason=same-prefix when run between two LAN hosts (asserted once),
       and the findings note cites both ends' lines.
+    unscoreable: |
+      a GOAL research packet for a later release; its deliverable is a measured recommendation from an off-prefix peer, not code a litmus can pin.
     depends_on: []
     next_action: >
       Not before the v1 milestone closes; the operator decides when metered
@@ -915,6 +923,8 @@ packets:
     verifiable_closure: |
       the child packets exist in the ledger with this row in their
       depends_on or release_target.
+    unscoreable: |
+      a far-off GOAL (Pi on Fedora 44 aarch64); it needs an aarch64 build and hardware the fleet does not yet run, so no litmus can be named now.
     depends_on:
       - every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
     next_action: >
@@ -958,6 +968,8 @@ packets:
     verifiable_closure: |
       tillandsias-plan status on the four ids prints the new statuses, and
       each completed event quotes its closure script's rc on trunk.
+    unscoreable: |
+      a bookkeeping finding: its closure is completion events on four existing rows, each backed by those rows own closure scripts run on trunk; it adds no testable property of its own.
     depends_on: []
     next_action: >
       The row author (macuahuitl) or any Linux host runs the four closure
@@ -997,6 +1009,8 @@ packets:
     verifiable_closure: |
       the fixture passes on the fixed tree and fails on today's tree with
       the quoted violation text.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The defect is in plan_answer citation spans for statuses set by later fragments; no fixture yet asks plan_answer about an obsoleted row. FUTURE LITMUS FILENAME: scripts/test-plan-answer-cites-status-setting-fragment.sh, written in the same commit as the fix (1136-n8sh).
     depends_on: []
     next_action: >
       Locate where plan_answer selects the citation span for a folded
