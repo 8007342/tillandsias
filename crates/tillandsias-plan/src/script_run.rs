@@ -857,6 +857,64 @@ fn emit_timing(name: &str, line: &str, code: i32, elapsed: Duration) {
     }
 }
 
+/// ORDER 1551-n45s. A runner terminated from OUTSIDE takes what it started
+/// with it.
+///
+/// Every script-owned child lives in its OWN process group — that is what lets
+/// a deadline kill a whole guard — so a TERM, INT or HUP delivered to the
+/// runner, or to the runner's group (which is how the preflight door stops a
+/// guard that outlived its deadline), reached none of them. MEASURED before
+/// this handler: `kill -TERM -<runner group>` ended the runner and left its
+/// child alive and re-parented for the rest of its own sleep.
+///
+/// The handler closes the scope (bounded by the executor's CLEANUP_BOUND) and
+/// exits 128+signal, the status a caller would have read from the unhandled
+/// signal. It is installed BEFORE any script code runs and the caller waits
+/// for that, so there is no window in which a child exists and the default
+/// disposition still applies. Unix only: on Windows the job object owns this.
+#[cfg(unix)]
+fn reap_on_termination(host: crate::lua_predicate::script_process::Host) {
+    use tokio::signal::unix::{SignalKind, signal};
+    let (installed, wait) = std::sync::mpsc::channel::<()>();
+    let spawned = std::thread::Builder::new()
+        .name("script-signal".into())
+        .spawn(move || {
+            let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            else {
+                return;
+            };
+            let signo = rt.block_on(async {
+                let (Ok(mut term), Ok(mut int), Ok(mut hup)) = (
+                    signal(SignalKind::terminate()),
+                    signal(SignalKind::interrupt()),
+                    signal(SignalKind::hangup()),
+                ) else {
+                    return None;
+                };
+                let _ = installed.send(());
+                Some(tokio::select! {
+                    _ = term.recv() => libc::SIGTERM,
+                    _ = int.recv() => libc::SIGINT,
+                    _ = hup.recv() => libc::SIGHUP,
+                })
+            });
+            let Some(signo) = signo else {
+                return;
+            };
+            if let Err(e) = host.scope.cleanup() {
+                eprintln!("{e}");
+            }
+            std::process::exit(128 + signo);
+        });
+    if spawned.is_ok() {
+        // A failed install drops the sender, which ends this wait at once; the
+        // runner then behaves as it did before (default dispositions).
+        let _ = wait.recv_timeout(Duration::from_secs(1));
+    }
+}
+
 /// `script run <file.lua> [--timeout <dur>] [--trace] [-- args...]`. Exits.
 pub fn cli_run(args: &[String]) -> ! {
     let mut file: Option<String> = None;
@@ -913,6 +971,8 @@ pub fn cli_run(args: &[String]) -> ! {
     let t0 = Instant::now();
     let deadline = timeout.and_then(|d| t0.checked_add(d));
     let host = crate::lua_predicate::script_process::Host::new(deadline);
+    #[cfg(unix)]
+    reap_on_termination(host.clone());
     let (line, detail, code) = match timeout {
         None => run_to_verdict(&path, &src, &rest, host.clone()),
         Some(d) => {

@@ -764,15 +764,32 @@ impl Host {
         }
     }
     // A single VM thread calls this while the main coroutine is suspended.
-    fn pump(&self, lua: &Lua) -> LuaResult<()> {
+    // Returns whether any event was dispatched, so a waiter knows whether to
+    // come straight back or to sleep (1551-sprq).
+    fn pump(&self, lua: &Lua) -> LuaResult<bool> {
         let result = self.pump_inner(lua);
         if result.is_err() {
             self.scope.close();
         }
         result
     }
-    fn pump_inner(&self, lua: &Lua) -> LuaResult<()> {
+    // ORDER 1551-sprq. A waiter used to sleep 1 ms after EVERY pump, including
+    // one that had just dispatched a full batch, which capped line delivery
+    // near 40-50 thousand lines a second and charged that to the child's own
+    // `timeout_ms`: `proc.spawn{seq 1 400000, timeout_ms=3000}` was measured
+    // `timed_out` with 156114 lines delivered, where `proc.run` on the same
+    // argv exited in 10 ms. While events are flowing the waiter now only
+    // yields; it sleeps when the queue was empty.
+    async fn idle(progressed: bool) {
+        if progressed {
+            tokio::task::yield_now().await;
+        } else {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+    }
+    fn pump_inner(&self, lua: &Lua) -> LuaResult<bool> {
         self.check_failures()?;
+        let mut progressed = false;
         for _ in 0..128 {
             self.open()?;
             let event = self.dispatch.lock().unwrap().events.try_recv();
@@ -784,6 +801,7 @@ impl Host {
                     return Err(error("script-stream-closed"));
                 }
             };
+            progressed = true;
             match event {
                 Event::Line { process, fd, bytes } => {
                     let callback = self
@@ -815,18 +833,19 @@ impl Host {
             }
             self.completions(lua)?;
         }
-        self.completions(lua)
+        self.completions(lua)?;
+        Ok(progressed)
     }
     async fn wait(&self, lua: Lua, state: Arc<HandleState>) -> LuaResult<LuaTable> {
         self.outside_callback()?;
         loop {
-            self.pump(&lua)?;
+            let progressed = self.pump(&lua)?;
             if state.delivered.load(Ordering::Acquire) {
                 self.open()?;
                 return state.result(&lua);
             }
             // Yield fairly across every managed producer, not only the waited id.
-            tokio::time::sleep(Duration::from_millis(1)).await;
+            Self::idle(progressed).await;
         }
     }
     fn track(&self, process: Process, argv: Vec<String>, started: Instant) -> Arc<HandleState> {
@@ -1019,7 +1038,7 @@ impl Host {
                     )
                 };
                 loop {
-                    host.pump(&lua)?;
+                    let progressed = host.pump(&lua)?;
                     host.open()?;
                     let first = handles
                         .iter()
@@ -1042,7 +1061,7 @@ impl Host {
                     if deadline.is_some_and(|d| Instant::now() >= d) {
                         return Ok((None, Some("timed_out".to_owned())));
                     }
-                    tokio::time::sleep(Duration::from_millis(1)).await;
+                    Host::idle(progressed).await;
                 }
             }
         })?;
@@ -1179,20 +1198,12 @@ impl Host {
             }
             let timeout: Option<u64> = spec.get("timeout_ms")?;
             host.outside_callback()?;
-            if let Some(d) = super::policy_gate(&argv, None, "sh.run") {
-                return Err(error(format!(
-                    "{}\n  why: {}\n  remedy: {}",
-                    d.token,
-                    d.why.unwrap_or_default(),
-                    d.remedy.unwrap_or_default()
-                )));
-            }
+            // 1551-nyzb: one cwd for the policy decision and the child, the
+            // base environment, and the default deadline — the same rules as
+            // proc.run. This door used to inherit cwd and environment and to
+            // run with no deadline at all.
+            let command = super::prepare_shell(argv, timeout)?.group(true);
             host.outside_callback()?;
-            // These legacy doors historically inherit the environment.
-            let mut command = tillandsias_exec::Command::new(argv).group(true);
-            if let Some(ms) = timeout {
-                command = command.timeout(Duration::from_millis(ms));
-            }
             let out = host.scope.run(command).map_err(error)?;
             shell_result_to_lua(lua, out)
         })?;

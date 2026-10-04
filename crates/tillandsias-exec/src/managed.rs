@@ -579,6 +579,14 @@ async fn supervise(
             source,
         }),
         None => {
+            // ORDER 1551-mkr9. A capture abandoned by a kill or a scope close
+            // is NOT a whole capture, and must not look like one. Measured:
+            // `seq 1 2000` had exited 0 while its lines were still queued for
+            // delivery; `kill()` then returned status=exited code=0 with an
+            // EMPTY stdout and truncated=false, so `ok` was true. A deadline
+            // is a different, already typed outcome (`timed_out`), so it is
+            // left alone.
+            let abandoned = !timed_out && drained.is_none();
             let (stdout, stderr, dropped) = match (timed_out, drained) {
                 (false, Some(capture)) => capture,
                 _ => (Vec::new(), Vec::new(), 0),
@@ -594,7 +602,7 @@ async fn supervise(
                 stdout,
                 stderr,
                 dropped,
-                truncated: dropped > 0,
+                truncated: dropped > 0 || abandoned,
                 argv: command.argv.clone(),
                 run: RunId::new(),
             })
@@ -687,6 +695,45 @@ mod tests {
         let failure = published(&process).await.unwrap_err();
         assert!(failure.contains("proc-line-too-long"), "{failure}");
         only_finished(&mut events, process.id);
+        scope.cleanup().unwrap();
+    }
+
+    // ORDER 1551-mkr9. The child has exited 0, its lines are still queued
+    // because nobody drains the 32-slot event channel, and the handle is then
+    // killed. That capture was abandoned, and the result has to say so.
+    #[tokio::test]
+    async fn a_kill_after_exit_with_undelivered_lines_is_not_a_whole_capture() {
+        // The receiver stays alive and unread: dropping it would turn parked
+        // delivery into a stream error, which is a different outcome.
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_secs(5)));
+        // 200 lines: more than the queue holds, far less than a pipe buffer,
+        // so `cat` exits at once while the reader is parked on line delivery.
+        let process = scope.spawn(cat(b"line\n".repeat(200)), true).unwrap();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        // PREMISE, asserted before the verdict is read: nothing published yet.
+        assert!(
+            process.result().is_none(),
+            "premise: line delivery must still be parked"
+        );
+        process.kill();
+        // The Finished receipt queues behind the parked lines, exactly as it
+        // does for the Lua host, which keeps pumping while it waits.
+        let output = tokio::time::timeout(Duration::from_secs(4), async {
+            loop {
+                while events.try_recv().is_ok() {}
+                if let Some(result) = process.result() {
+                    return result;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("managed result was not published")
+        .unwrap();
+        // Exited(0), not Signaled: the child had finished before the kill.
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert!(output.stdout.is_empty());
+        assert!(output.truncated, "an abandoned capture looked whole");
         scope.cleanup().unwrap();
     }
 

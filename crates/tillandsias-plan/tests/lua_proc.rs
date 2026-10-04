@@ -70,14 +70,16 @@ mod managed_script {
             std::fs::write(&path, body).unwrap();
             lua_path(&path)
         }
-        fn run(&self, body: &str, timeout: &str) -> std::process::Output {
-            let script = self.write("probe.lua", body);
+        // The runner with this fixture's policy environment and NO arguments
+        // beyond `script run <file>`: callers add --timeout, a cwd, or spawn it.
+        fn runner(&self, script: &str) -> std::process::Command {
             // Read-only red/green evidence can exercise the identical regression
             // against the pre-fix binary snapshot without rebuilding old source.
             let binary = std::env::var_os("TILLANDSIAS_LUA_PROC_TEST_BIN")
                 .unwrap_or_else(|| env!("CARGO_BIN_EXE_tillandsias-plan").into());
-            std::process::Command::new(binary)
-                .args(["script", "run", &script, "--timeout", timeout])
+            let mut command = std::process::Command::new(binary);
+            command
+                .args(["script", "run", script])
                 .env("TILLANDSIAS_REPO_ROOT", self.dir.path())
                 .env_remove("TILLANDSIAS_POLICY_SEED")
                 .env_remove("TILLANDSIAS_CONSENT_TOKEN")
@@ -86,20 +88,189 @@ mod managed_script {
                 .env_remove("TILLANDSIAS_DESTRUCTIVE_RESET_OK")
                 .env("TILLANDSIAS_POLICY_REGIME", "interactive")
                 .env("TILLANDSIAS_CONSENT_DIR", self.dir.path().join("consent"))
-                .current_dir(self.dir.path())
+                .current_dir(self.dir.path());
+            command
+        }
+        fn run(&self, body: &str, timeout: &str) -> std::process::Output {
+            let script = self.write("probe.lua", body);
+            self.runner(&script)
+                .args(["--timeout", timeout])
                 .output()
                 .unwrap()
+        }
+    }
+
+    // ORDER 1551-geib. Every child program these tests supervise is a mode of
+    // ONE Rust helper, tests/support/fixture_child.rs. They used to be Python
+    // sources written into the fixture directory and run with python3, which
+    // the project bans; each call site names the mode that replaced its
+    // program, and the helper's header says why the guard never saw them.
+    fn fixture_child() -> String {
+        lua_path(std::path::Path::new(env!(
+            "CARGO_BIN_EXE_tillandsias-plan-fixture-child"
+        )))
+    }
+
+    // ORDER 1551-nyzb. The runner is started OUTSIDE the repository root, which
+    // is the only regime where "authorised against the root, executed in the
+    // inherited cwd" is visible: with cwd == root the two are one directory
+    // and every earlier door test passed.
+    #[test]
+    fn the_legacy_shell_door_runs_where_it_was_authorised_from_the_base_environment() {
+        let f = ScriptFixture::new();
+        let elsewhere = tempfile::Builder::new()
+            .prefix("sol-1551-cwd-")
+            .tempdir()
+            .unwrap();
+        // Only the INHERITED cwd holds a victim. The door now judges and runs in
+        // the root, where there is none, so `rm` must fail there and touch
+        // nothing here. Before the fix it was judged against the root (allowed)
+        // and then ran here: exit 0, directory gone.
+        std::fs::create_dir(elsewhere.path().join("victim")).unwrap();
+        let script = f.write(
+            "probe.lua",
+            r#"
+            local a = proc.run{argv={'pwd'}}
+            local b = sh.run{'pwd'}
+            assert(a.ok and b.ok and a.stdout == b.stdout, 'sh.run ran in '..b.stdout..' but proc.run in '..a.stdout)
+            local r = sh.run{'rm','-r','victim'}
+            assert(r.status == 'exited' and r.code ~= 0, 'rm acted outside the directory it was judged in')
+            assert(sh.run{'printenv','AUDIT_PROBE_SECRET'}.stdout == '', 'the caller environment reached the child')
+            local z = sh.run{'true', timeout_ms=0}
+            assert(z.status == 'exited' and z.ok, 'timeout_ms=0 must mean no deadline, got '..tostring(z.status))
+            assert(expert.shell == sh.run)
+            verdict.ok('door')
+        "#,
+        );
+        let out = f
+            .runner(&script)
+            .args(["--timeout", "20s"])
+            .env("AUDIT_PROBE_SECRET", "hunter2")
+            .current_dir(elsewhere.path())
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(
+            elsewhere.path().join("victim").is_dir(),
+            "the door acted in the inherited cwd"
+        );
+    }
+
+    // ORDER 1551-pemw, 1551-8gkg. What the instruction hook cannot follow, and
+    // what no restriction survives, is not in the environment at all.
+    #[test]
+    fn script_code_has_no_coroutines_and_cannot_load_bytecode() {
+        let f = ScriptFixture::new();
+        let out = f.run(
+            r#"
+            -- `yield` has to stay (the async doors are built from it); nothing
+            -- that CREATES a coroutine may.
+            for name in pairs(coroutine) do
+                assert(name == 'yield', 'coroutine.'..name..' is reachable')
+            end
+            coroutine.yield('a bare yield is resumed at once by the driver')
+            assert(string.dump == nil, 'string.dump is reachable')
+            local chunk, why = load('\27Lua')
+            assert(chunk == nil and tostring(why):find('binary'), tostring(why))
+            assert(load('return 41 + 1')() == 42)
+            -- the mode argument cannot widen it, and an explicit env is honoured
+            assert(load('return x', 'chunk', 'b', {x = 7})() == 7)
+            -- an ABSENT env stays absent: the chunk still sees the globals
+            assert(load('return type(verdict)')() == 'table')
+            verdict.ok('stdlib')
+        "#,
+            "10s",
+        );
+        assert!(
+            out.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let out = f.run(
+            "-- @class cacheable\nassert(coroutine == nil and load == nil and string.dump == nil); verdict.ok('pure')",
+            "10s",
+        );
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    // ORDER 1551-n45s. The door shape: no --timeout, and a TERM from outside.
+    #[test]
+    fn a_terminated_runner_takes_its_script_owned_child_with_it() {
+        let f = ScriptFixture::new();
+        let pidfile = f.dir.path().join("child.pid");
+        let child = fixture_child();
+        let script = f.write(
+            "probe.lua",
+            &format!(
+                r#"local p = proc.spawn{{argv={{"{child}","pid-sleep","child.pid"}}, timeout_ms=0}}; p:wait(); verdict.ok("unreachable")"#
+            ),
+        );
+        let mut runner = f
+            .runner(&script)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let end = Instant::now() + Duration::from_secs(10);
+        let pid: libc::pid_t = loop {
+            if let Some(pid) = std::fs::read_to_string(&pidfile)
+                .ok()
+                .and_then(|s| s.trim().parse().ok())
+            {
+                break pid;
+            }
+            assert!(Instant::now() < end, "the script-owned child never started");
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        // PREMISE, before any verdict is read: the child is alive, and it is
+        // NOT in the runner's process group (so a group signal cannot reach it).
+        assert_eq!(unsafe { libc::kill(pid, 0) }, 0, "premise: child alive");
+        assert_ne!(
+            unsafe { libc::getpgid(pid) },
+            unsafe { libc::getpgid(runner.id() as libc::pid_t) },
+            "premise: the child must be in its own group"
+        );
+        assert_eq!(
+            unsafe { libc::kill(runner.id() as libc::pid_t, libc::SIGTERM) },
+            0
+        );
+        let end = Instant::now() + Duration::from_secs(10);
+        let status = loop {
+            if let Some(status) = runner.try_wait().unwrap() {
+                break status;
+            }
+            assert!(Instant::now() < end, "the runner ignored SIGTERM");
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(status.code(), Some(128 + libc::SIGTERM), "{status:?}");
+        let end = Instant::now() + Duration::from_secs(5);
+        while unsafe { libc::kill(pid, 0) } == 0 {
+            assert!(
+                Instant::now() < end,
+                "script-owned child {pid} survived its runner"
+            );
+            std::thread::sleep(Duration::from_millis(10));
         }
     }
 
     #[test]
     fn live_spawn_delivers_10000_ordered_lines_per_fd_before_wait_and_preserves_cr() {
         let f = ScriptFixture::new();
-        let producer = f.write("producer.py", "import os\nfor i in range(10000):\n os.write(1, ('%d\\r\\n'%i).encode()); os.write(2, ('E%d\\r\\n'%i).encode())\nos.write(1,b'last')\n");
+        let child = fixture_child();
         let out = f.run(
             &format!(
                 r#"
-        local p = proc.spawn{{argv={{"python3", "{producer}"}}, capture_bytes=17}}
+        local p = proc.spawn{{argv={{"{child}", "lines"}}, capture_bytes=17}}
         local n, e, last = 0, 0, false
         p:on_line("stdout", function(line)
             if n == 10000 then assert(line == "last"); last=true
@@ -129,27 +300,12 @@ mod managed_script {
     #[test]
     fn live_callback_acknowledgement_and_two_producers_prove_scope_wide_dispatch() {
         let f = ScriptFixture::new();
-        let producer = f.write(
-            "live.py",
-            r#"import os,sys,time
-n=sys.argv[1]
-open('started-'+n,'w').write('started')
-end=time.monotonic()+3
-while not (os.path.exists('started-1') and os.path.exists('started-2')):
- if time.monotonic()>end: sys.exit(8)
- time.sleep(.005)
-os.write(1,('READY'+n+'\n').encode())
-while not os.path.exists('ack-'+n):
- if time.monotonic()>end: sys.exit(9)
- time.sleep(.005)
-os.write(1,('DONE'+n+'\n').encode())
-"#,
-        );
+        let child = fixture_child();
         let out = f.run(
             &format!(
                 r#"
-        local a = proc.spawn{{argv={{"python3", "{producer}", "1"}}}}
-        local b = proc.spawn{{argv={{"python3", "{producer}", "2"}}}}
+        local a = proc.spawn{{argv={{"{child}", "live", "1"}}}}
+        local b = proc.spawn{{argv={{"{child}", "live", "2"}}}}
         local ready, done = 0, 0
         local function line(s)
             local n = s:match("^READY([12])$")
@@ -174,22 +330,9 @@ os.write(1,('DONE'+n+'\n').encode())
         assert_eq!(String::from_utf8_lossy(&out.stdout), "ok:live-overlap\n");
     }
 
-    // This producer acknowledges BOTH processes before the outer timer fires.
-    // Its long-deadline control proves delayed markers would appear without cleanup.
-    const OWNED_PRODUCER: &str = r#"import os,sys,time,subprocess,json
-def identity():
- return {'pid':os.getpid(),'pgid':os.getpgrp(),'start':open('/proc/self/stat').read().split()[21]}
-if len(sys.argv)>1:
- open('grandchild-ack','w').write(json.dumps(identity()))
- time.sleep(1.1); open('grandchild-marker','w').write('survived')
- sys.exit(0)
-p=subprocess.Popen([sys.executable,__file__,'grandchild'])
-while not os.path.exists('grandchild-ack'): time.sleep(.005)
-open('child-ack','w').write(json.dumps(identity()))
-os.write(1,b'READY\n')
-time.sleep(1.1); open('child-marker','w').write('survived')
-p.wait()
-"#;
+    // The `owned` mode of the fixture child acknowledges BOTH processes before
+    // the outer timer fires; its long-deadline control proves the delayed
+    // markers would appear without cleanup.
 
     // SIGKILL plus direct-child wait is not a waitpid of the grandchild. A
     // /proc read may catch its final R -> Z transition, or the Linux X (dead)
@@ -252,23 +395,9 @@ p.wait()
             }
         }
         let f = ScriptFixture::new();
-        let producer = f.write(
-            "observer.py",
-            r#"import os,sys,time,subprocess,json
-def identity():
- return {'pid':os.getpid(),'pgid':os.getpgrp(),'start':open('/proc/self/stat').read().split()[21]}
-if len(sys.argv)>1:
- open('grandchild-ack','w').write(json.dumps(identity()))
-else:
- subprocess.Popen([sys.executable,__file__,'grandchild'])
- while not os.path.exists('grandchild-ack'): time.sleep(.001)
- open('child-ack','w').write(json.dumps(identity()))
-while True: time.sleep(1)
-"#,
-        );
         let group = OwnedGroup(
-            std::process::Command::new("python3")
-                .arg(producer)
+            std::process::Command::new(env!("CARGO_BIN_EXE_tillandsias-plan-fixture-child"))
+                .arg("observer")
                 .current_dir(f.dir.path())
                 .stdout(std::process::Stdio::null())
                 .process_group(0)
@@ -317,11 +446,11 @@ while True: time.sleep(1)
     fn outer_deadline_cancels_acknowledged_legacy_and_streaming_groups_with_positive_control() {
         for door in ["proc.run", "sh.run", "expert.shell", "proc.spawn"] {
             let f = ScriptFixture::new();
-            let producer = f.write("owned.py", OWNED_PRODUCER);
+            let child = fixture_child();
             let call = if door == "sh.run" || door == "expert.shell" {
-                format!(r#"{door}{{"python3", "{producer}", timeout_ms=4000}}"#)
+                format!(r#"{door}{{"{child}", "owned", timeout_ms=4000}}"#)
             } else {
-                format!(r#"{door}{{argv={{"python3", "{producer}"}},timeout_ms=4000}}"#)
+                format!(r#"{door}{{argv={{"{child}", "owned"}},timeout_ms=4000}}"#)
             };
             let script = if door == "proc.spawn" {
                 format!("local p={call}; p:wait(); verdict.ok('survived')")
@@ -340,8 +469,8 @@ while True: time.sleep(1)
             assert_acknowledged_tasks_stopped(&f);
         }
         let f = ScriptFixture::new();
-        let producer = f.write("owned.py", OWNED_PRODUCER);
-        let out = f.run(&format!(r#"assert(proc.run{{argv={{"python3","{producer}"}},timeout_ms=4000}}.ok); verdict.ok("control")"#), "3500ms");
+        let child = fixture_child();
+        let out = f.run(&format!(r#"assert(proc.run{{argv={{"{child}","owned"}},timeout_ms=4000}}.ok); verdict.ok("control")"#), "3500ms");
         assert!(
             out.status.success(),
             "{}",
@@ -362,14 +491,14 @@ while True: time.sleep(1)
             "pcall(verdict.ok,'caught'); while true do end",
         ] {
             let f = ScriptFixture::new();
-            let producer = f.write("owned.py", OWNED_PRODUCER);
+            let child = fixture_child();
             let script = format!(
                 r#"
-            local p=proc.spawn{{argv={{"python3","{producer}"}}}}
+            local p=proc.spawn{{argv={{"{child}","owned"}}}}
             p:on_line("stdout", function(s) assert(s=="READY"); error("ack-stop") end)
             -- An acknowledged start without consuming the callback: legacy run
             -- blocks only Lua, while independent supervisors keep moving.
-            proc.run{{argv={{"python3","-c","import os,time;\nwhile not os.path.exists('child-ack'): time.sleep(.005)"}}}}
+            proc.run{{argv={{"{child}","wait-for","child-ack"}}}}
             {ending}
         "#
             );
@@ -416,14 +545,19 @@ while True: time.sleep(1)
     #[test]
     fn caught_advisory_cpu_loop_preserves_bytes_and_cleans_acknowledged_groups_promptly() {
         let f = ScriptFixture::new();
-        let producer = f.write("owned.py", OWNED_PRODUCER);
+        let child = fixture_child();
         let t0 = Instant::now();
-        let out = f.run(&format!(r#"
-            local p=proc.spawn{{argv={{"python3","{producer}"}}}}
-            proc.run{{argv={{"python3","-c","import os,time;\nwhile not os.path.exists('child-ack'): time.sleep(.005)"}}}}
+        let out = f.run(
+            &format!(
+                r#"
+            local p=proc.spawn{{argv={{"{child}","owned"}}}}
+            proc.run{{argv={{"{child}","wait-for","child-ack"}}}}
             pcall(verdict.advisory,"scope-probe (advisory)")
             while true do end
-        "#), "2s");
+        "#
+            ),
+            "2s",
+        );
         let elapsed = t0.elapsed();
         assert_acknowledged_tasks_stopped(&f);
         assert_eq!(out.status.code(), Some(0));
@@ -437,12 +571,12 @@ while True: time.sleep(1)
     #[test]
     fn caught_callback_advisory_cancels_acknowledged_groups_and_preserves_bytes() {
         let f = ScriptFixture::new();
-        let producer = f.write("owned.py", OWNED_PRODUCER);
+        let child = fixture_child();
         let t0 = Instant::now();
         let out = f.run(
             &format!(
                 r#"
-            local p=proc.spawn{{argv={{"python3","{producer}"}}}}
+            local p=proc.spawn{{argv={{"{child}","owned"}}}}
             p:on_line("stdout",function(s)
                 assert(s=="READY")
                 pcall(verdict.advisory,"callback scope-probe (advisory)")
@@ -491,18 +625,15 @@ while True: time.sleep(1)
             "verdict.ok('callback-verdict')",
         ] {
             let f = ScriptFixture::new();
-            let producer = f.write(
-                "callback.py",
-                "import os,time\nos.write(1,b'READY\\n')\ntime.sleep(30)\n",
-            );
+            let child = fixture_child();
             let out = f.run(
                 &format!(
                     r#"
-            local p=proc.spawn{{argv={{"python3","{producer}"}}}}
+            local p=proc.spawn{{argv={{"{child}","ready-sleep"}}}}
             p:on_line("stdout", function(s) {action} end)
             pcall(function() p:wait() end)
             -- Closure must survive catching the callback's raised error.
-            proc.spawn{{argv={{"python3","-c","open('escaped','w').write('bad')"}}}}
+            proc.spawn{{argv={{"{child}","write-file","escaped","bad"}}}}
             verdict.ok("wrong")
         "#
                 ),
@@ -542,14 +673,11 @@ while True: time.sleep(1)
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        let producer = f.write(
-            "busy.py",
-            "import os\nwhile True: os.write(1,b'x\\n'*8192)\n",
-        );
+        let child = fixture_child();
         let out = f.run(
             &format!(
                 r#"
-            local p=proc.spawn{{argv={{'python3','{producer}'}}}}
+            local p=proc.spawn{{argv={{'{child}','busy'}}}}
             -- Fill the delivery queue while Lua is synchronously elsewhere.
             proc.run{{argv={{'sleep','0.1'}}}}
             local n=0; p:on_line('stdout',function(s) assert(s=='x'); n=n+1 end)
@@ -564,8 +692,13 @@ while True: time.sleep(1)
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        let producer = f.write("huge.py", "import os\nos.write(1,b'x'*1048577)\n");
-        let out = f.run(&format!(r#"local p=proc.spawn{{argv={{"python3","{producer}"}}}}; p:wait(); verdict.ok('wrong')"#), "3s");
+        let child = fixture_child();
+        let out = f.run(
+            &format!(
+                r#"local p=proc.spawn{{argv={{"{child}","huge"}}}}; p:wait(); verdict.ok('wrong')"#
+            ),
+            "3s",
+        );
         assert_eq!(out.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&out.stderr).contains("proc-line-too-long"));
     }
@@ -584,11 +717,11 @@ while True: time.sleep(1)
             "while true do end",
         ] {
             let f = ScriptFixture::new();
-            let producer = f.write("owned.py", OWNED_PRODUCER);
+            let child = fixture_child();
             let out = f.run(
                 &format!(
                     r#"
-            local p=proc.spawn{{argv={{"python3","{producer}"}}}}
+            local p=proc.spawn{{argv={{"{child}","owned"}}}}
             p:on_line("stdout",function(s) assert(s=='READY'); {action} end)
             pcall(function() p:wait() end)
             while true do end
@@ -615,14 +748,11 @@ while True: time.sleep(1)
     #[test]
     fn streaming_keeps_default_8mib_prefix_and_byte_exact_empty_binary_lines() {
         let f = ScriptFixture::new();
-        let producer = f.write(
-            "bytes.py",
-            "import os\nos.write(1,b'\\n\\r\\nA\\x00\\xff\\r\\nlast')\nos.write(2,b'E\\n')\n",
-        );
+        let child = fixture_child();
         let out = f.run(
             &format!(
                 r#"
-        local p=proc.spawn{{argv={{"python3","{producer}"}}}}
+        local p=proc.spawn{{argv={{"{child}","bytes"}}}}
         local expected={{"", "\r", "A"..string.char(0,255).."\r", "last"}}
         local i=0
         p:on_line('stdout',function(s) i=i+1; assert(s==expected[i]) end)
@@ -637,14 +767,11 @@ while True: time.sleep(1)
             "{}",
             String::from_utf8_lossy(&out.stderr)
         );
-        let producer = f.write(
-            "cap.py",
-            "import os\nfor i in range(9216): os.write(1,b'X'*1023+b'\\n')\n",
-        );
+        let child = fixture_child();
         let out = f.run(
             &format!(
                 r#"
-        local p=proc.spawn{{argv={{"python3","{producer}"}}}}
+        local p=proc.spawn{{argv={{"{child}","cap"}}}}
         local n=0
         p:on_line('stdout',function(s) assert(#s==1023); n=n+1 end)
         local c=p:wait()
@@ -666,12 +793,12 @@ while True: time.sleep(1)
     #[test]
     fn scoped_spawn_preserves_fixed_environment_stdin_and_cacheable_process_absence() {
         let f = ScriptFixture::new();
-        let producer = f.write("env.py", "import os,sys\nassert os.environ['LC_ALL']=='C' and os.environ['LANG']=='C' and os.environ['TZ']=='UTC'\nassert os.environ['GIT_TERMINAL_PROMPT']=='0' and os.environ['EXPLICIT']=='yes'\nos.write(1,sys.stdin.buffer.read())\n");
+        let child = fixture_child();
         let out = f.run(
             &format!(
                 r#"
         local bytes='stdin'..string.char(0,255)..'\r\n'
-        local p=proc.spawn{{argv={{'python3','{producer}'}},env={{EXPLICIT='yes'}},stdin=bytes}}
+        local p=proc.spawn{{argv={{'{child}','env-stdin'}},env={{EXPLICIT='yes'}},stdin=bytes}}
         local c=p:wait(); assert(c.ok and c.stdout==bytes)
         assert(p:wait().run_id==c.run_id)
         verdict.ok('env-stdin')
@@ -688,7 +815,7 @@ while True: time.sleep(1)
         let out=f.run(&format!(r#"
             for _,door in ipairs({{proc.run,proc.spawn}}) do
                 local reads=0
-                local spec=setmetatable({{argv={{'python3','-c','import os; print(os.getcwd())'}}}},{{__index=function(_,key)
+                local spec=setmetatable({{argv={{'{child}','cwd'}}}},{{__index=function(_,key)
                     if key=='cwd' then reads=reads+1; if reads==1 then return '{root}' else return '{root}/.git' end end
                 end}})
                 local p=door(spec)
@@ -1008,11 +1135,11 @@ printf '%s' "$id"
     #[test]
     fn composition_select_zero_has_no_own_deadline_and_outer_deadline_stops_owned_child() {
         let f = ScriptFixture::new();
-        let producer = f.write("select-zero-owned.py", OWNED_PRODUCER);
+        let child = fixture_child();
         let out = f.run(
             &format!(
                 r#"
-            local p=proc.spawn{{argv={{'python3','{producer}'}}}}
+            local p=proc.spawn{{argv={{'{child}','owned'}}}}
             p:on_line('stdout',function(s) assert(s=='READY'); fs.write('zero-ack','yes') end)
             proc.select{{p,timeout_ms=0}}
             verdict.ok('wrong')
@@ -1134,7 +1261,7 @@ printf '%s' "$id"
             ),
         ] {
             let f = ScriptFixture::new();
-            let producer = f.write("chain-owned.py", OWNED_PRODUCER);
+            let child = fixture_child();
             let gate = f.write(
                 "chain-terminal-gate.sh",
                 "#!/bin/sh\nwhile [ ! -f child-ack ]; do sleep .01; done\n",
@@ -1144,7 +1271,7 @@ printf '%s' "$id"
                 &format!(
                     r#"
                 assert(type(proc.chain)=='function')
-                local p=proc.spawn{{argv={{'python3','{producer}'}}}}
+                local p=proc.spawn{{argv={{'{child}','owned'}}}}
                 local gate=proc.spawn{{argv={{'sh','{gate}'}}}}
                 gate:on_exit(function()
                   fs.write('terminal-callback-entered','yes')
