@@ -1,0 +1,106 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+     Running tests/lua_proc_trace.rs (target/debug/deps/lua_proc_trace-9707566f61bf340d)
+
+running 12 tests
+test trace_truncated_capture_retains_actual_exited_status_and_code ... FAILED
+test trace_does_not_capture_stdin_environment_or_child_fd_payloads ... FAILED
+test trace_json_argv_is_redacted_without_mutating_returned_argv ... FAILED
+test trace_run_success_and_nonzero_correlate_to_actual_results ... FAILED
+test trace_exit_callback_mutation_does_not_change_host_record ... FAILED
+test trace_observed_terminal_survives_exit_callback_error ... FAILED
+test trace_signaled_completion_does_not_invent_an_exit_code ... FAILED
+test trace_no_child_controls_invent_neither_terminal_identity_nor_code ... ok
+test trace_waited_spawn_records_once_across_repeated_waits ... FAILED
+test trace_off_on_preserves_exact_stdout_and_exit_for_success_and_refusal ... FAILED
+test trace_deadline_has_actual_timed_out_status_and_explicit_null_code ... FAILED
+test trace_outer_timeout_preserves_stdout_and_exit_without_claiming_cleanup_records ... ok
+
+failures:
+
+---- trace_truncated_capture_retains_actual_exited_status_and_code stdout ----
+
+thread 'trace_truncated_capture_retains_actual_exited_status_and_code' (223297) panicked at crates/tillandsias-plan/tests/lua_proc_trace.rs:400:5:
+assertion `left == right` failed: Output { status: ExitStatus(unix_wait_status(0)), stdout: "result:{\"argv\":[\"printf\",\"abcdef\"],\"code\":0,\"dropped\":3,\"ok\":false,\"run_id\":\"abfb3efe-8b61-4c24-9239-f71c1ba32e29\",\"status\":\"exited\",\"stderr\":\"\",\"stdout\":\"abc\",\"truncated\":true,\"wall_ms\":0}\nok:trace-clipped\n", stderr: "[script-run] probe: ok:trace-clipped exit=0 1ms\n" }
+  left: 0
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- trace_does_not_capture_stdin_environment_or_child_fd_payloads stdout ----
+
+thread 'trace_does_not_capture_stdin_environment_or_child_fd_payloads' (223287) panicked at crates/tillandsias-plan/tests/lua_proc_trace.rs:336:5:
+assertion `left == right` failed: Output { status: ExitStatus(unix_wait_status(0)), stdout: "result:{\"argv\":[\"bash\",\"/tmp/opencode/lua-proc-trace-NziMAA/payload.sh\"],\"code\":0,\"dropped\":0,\"ok\":true,\"run_id\":\"d8dabf0a-ef1c-4905-9c2b-d520379b4afb\",\"status\":\"exited\",\"stderr\":\"private-stderr-private-env\",\"stdout\":\"private-stdout-private-stdin\",\"truncated\":false,\"wall_ms\":1}\nok:trace-payload-exclusion\n", stderr: "[script-run] probe: ok:trace-payload-exclusion exit=0 2ms\n" }
+  left: 0
+ right: 1
+
+---- trace_json_argv_is_redacted_without_mutating_returned_argv stdout ----
+
+thread 'trace_json_argv_is_redacted_without_mutating_returned_argv' (223289) panicked at crates/tillandsias-plan/tests/lua_proc_trace.rs:255:5:
+assertion `left == right` failed: terminal records: []
+  left: 0
+ right: 1
+
+---- trace_run_success_and_nonzero_correlate_to_actual_results stdout ----
+
+thread 'trace_run_success_and_nonzero_correlate_to_actual_results' (223294) panicked at crates/tillandsias-plan/tests/lua_proc_trace.rs:121:5:
+assertion `left == right` failed: Output { status: ExitStatus(unix_wait_status(0)), stdout: "result:{\"argv\":[\"printf\",\"literal %s\",\"a b*c\"],\"code\":0,\"dropped\":0,\"ok\":true,\"run_id\":\"379e7e38-05c6-42bd-8f01-8cc0ba9c3bfe\",\"status\":\"exited\",\"stderr\":\"\",\"stdout\":\"literal a b*c\",\"truncated\":false,\"wall_ms\":0}\nresult:{\"argv\":[\"false\"],\"code\":1,\"dropped\":0,\"ok\":false,\"run_id\":\"e5a6b85a-c414-4b5f-b57e-fbf4d41e846c\",\"status\":\"exited\",\"stderr\":\"\",\"stdout\":\"\",\"truncated\":false,\"wall_ms\":0}\nok:trace-run\n", stderr: "[script-run] probe: ok:trace-run exit=0 1ms\n" }
+  left: 0
+ right: 2
+
+---- trace_exit_callback_mutation_does_not_change_host_record stdout ----
+
+thread 'trace_exit_callback_mutation_does_not_change_host_record' (223288) panicked at crates/tillandsias-plan/tests/lua_proc_trace.rs:177:5:
+assertion `left == right` failed: Output { status: ExitStatus(unix_wait_status(0)), stdout: "result:{\"argv\":[\"printf\",\"original\\n\"],\"code\":0,\"dropped\":0,\"ok\":true,\"run_id\":\"e31144c9-7d6d-4448-9312-048d30123524\",\"status\":\"exited\",\"stderr\":\"\",\"stdout\":\"original\\n\",\"truncated\":false,\"wall_ms\":2}\nok:trace-immutable\n", stderr: "[script-run] probe: ok:trace-immutable exit=0 3ms\n" }
+  left: 0
+ right: 1
+
+---- trace_observed_terminal_survives_exit_callback_error stdout ----
+
+thread 'trace_observed_terminal_survives_exit_callback_error' (223291) panicked at crates/tillandsias-plan/tests/lua_proc_trace.rs:199:5:
+assertion `left == right` failed: Output { status: ExitStatus(unix_wait_status(256)), stdout: "result:{\"argv\":[\"true\"],\"code\":0,\"dropped\":0,\"ok\":true,\"run_id\":\"104cc1f2-5e37-4408-908c-5d0edd3b06f1\",\"status\":\"exited\",\"stderr\":\"\",\"stdout\":\"\",\"truncated\":false,\"wall_ms\":3}\nrefused:script-error:probe\n", stderr: "[script-run] probe: refused:script-error:probe exit=1 3ms\nruntime error: [string \"/tmp/opencode/lua-proc-trace-0B95vI/probe.lua...\"]:5: trace-callback-error\nstack traceback:\n\t[C]: in ?\n\t[C]: in function 'error'\n\t[string \"/tmp/opencode/lua-proc-trace-0B95vI/probe.lua...\"]:5: in function <[string \"/tmp/opencode/lua-proc-trace-0B95vI/probe.lua...\"]:3>\n\t[C]: in local 'poll'\n\t[string \"?\"]:4: in main chunk\n\t(...tail calls...)\n\t[string \"/tmp/opencode/lua-proc-trace-0B95vI/probe.lua...\"]:7: in main chunk\nstack traceback:\n\t[C]: in local 'poll'\n\t[string \"?\"]:4: in main chunk\n\t(...tail calls...)\n\t[string \"/tmp/opencode/lua-proc-trace-0B95vI/probe.lua...\"]:7: in main chunk\n\n" }
+  left: 0
+ right: 1
+
+---- trace_signaled_completion_does_not_invent_an_exit_code stdout ----
+
+thread 'trace_signaled_completion_does_not_invent_an_exit_code' (223295) panicked at crates/tillandsias-plan/tests/lua_proc_trace.rs:309:5:
+assertion `left == right` failed: Output { status: ExitStatus(unix_wait_status(0)), stdout: "result:{\"argv\":[\"bash\",\"/tmp/opencode/lua-proc-trace-VbFcTm/signal.sh\"],\"dropped\":0,\"ok\":false,\"run_id\":\"d5c384cb-be21-48ae-aa93-8c1e094cc6bb\",\"signal\":15,\"status\":\"signaled\",\"stderr\":\"\",\"stdout\":\"\",\"truncated\":false,\"wall_ms\":2}\nok:trace-signal\n", stderr: "[script-run] probe: ok:trace-signal exit=0 3ms\n" }
+  left: 0
+ right: 1
+
+---- trace_waited_spawn_records_once_across_repeated_waits stdout ----
+
+thread 'trace_waited_spawn_records_once_across_repeated_waits' (223300) panicked at crates/tillandsias-plan/tests/lua_proc_trace.rs:151:5:
+assertion `left == right` failed: Output { status: ExitStatus(unix_wait_status(0)), stdout: "result:{\"argv\":[\"printf\",\"spawned\\n\"],\"code\":0,\"dropped\":0,\"ok\":true,\"run_id\":\"cdcae47a-22d6-43ae-a97a-04a187226dd0\",\"status\":\"exited\",\"stderr\":\"\",\"stdout\":\"spawned\\n\",\"truncated\":false,\"wall_ms\":0}\nresult:{\"argv\":[\"false\"],\"code\":1,\"dropped\":0,\"ok\":false,\"run_id\":\"d018f77c-e4aa-4f75-ac8d-a7a656e1312b\",\"status\":\"exited\",\"stderr\":\"\",\"stdout\":\"\",\"truncated\":false,\"wall_ms\":2}\nok:trace-waited-spawn\n", stderr: "[script-run] probe: ok:trace-waited-spawn exit=0 3ms\n" }
+  left: 0
+ right: 2
+
+---- trace_off_on_preserves_exact_stdout_and_exit_for_success_and_refusal stdout ----
+
+thread 'trace_off_on_preserves_exact_stdout_and_exit_for_success_and_refusal' (223292) panicked at crates/tillandsias-plan/tests/lua_proc_trace.rs:374:9:
+assertion `left == right` failed: Output { status: ExitStatus(unix_wait_status(0)), stdout: "stable-output\nok:invariant\n", stderr: "[script-run] probe: ok:invariant exit=0 3ms\n" }
+  left: 0
+ right: 2
+
+---- trace_deadline_has_actual_timed_out_status_and_explicit_null_code stdout ----
+
+thread 'trace_deadline_has_actual_timed_out_status_and_explicit_null_code' (223286) panicked at crates/tillandsias-plan/tests/lua_proc_trace.rs:283:5:
+assertion `left == right` failed: Output { status: ExitStatus(unix_wait_status(0)), stdout: "result:{\"argv\":[\"sleep\",\"1\"],\"dropped\":0,\"ok\":false,\"run_id\":\"b66da76e-f585-4551-b521-eddccc604f2c\",\"status\":\"timed_out\",\"stderr\":\"\",\"stdout\":\"\",\"truncated\":false,\"wall_ms\":21}\nresult:{\"argv\":[\"sleep\",\"1\"],\"dropped\":0,\"ok\":false,\"run_id\":\"8d30ba8c-8535-4594-9423-08b22a8fba61\",\"status\":\"timed_out\",\"stderr\":\"\",\"stdout\":\"\",\"truncated\":false,\"wall_ms\":22}\nok:trace-process-deadline\n", stderr: "[script-run] probe: ok:trace-process-deadline exit=0 45ms\n" }
+  left: 0
+ right: 2
+
+
+failures:
+    trace_deadline_has_actual_timed_out_status_and_explicit_null_code
+    trace_does_not_capture_stdin_environment_or_child_fd_payloads
+    trace_exit_callback_mutation_does_not_change_host_record
+    trace_json_argv_is_redacted_without_mutating_returned_argv
+    trace_observed_terminal_survives_exit_callback_error
+    trace_off_on_preserves_exact_stdout_and_exit_for_success_and_refusal
+    trace_run_success_and_nonzero_correlate_to_actual_results
+    trace_signaled_completion_does_not_invent_an_exit_code
+    trace_truncated_capture_retains_actual_exited_status_and_code
+    trace_waited_spawn_records_once_across_repeated_waits
+
+test result: FAILED. 2 passed; 10 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+error: test failed, to rerun pass `-p tillandsias-plan --test lua_proc_trace`

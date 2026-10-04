@@ -1,4 +1,4 @@
-// @trace order:1384-bqhy
+// @trace order:1384-bqhy, order:1539-dt84
 //
 // script_run.rs — `tillandsias-plan script run <file.lua>`: the ONE runner for a
 // Lua decider, and `classify`, the ONE classifier of a decider's outcome.
@@ -947,6 +947,9 @@ pub fn cli_run(args: &[String]) -> ! {
         }
     };
     if trace {
+        for record in host.terminal_trace() {
+            eprintln!("trace:proc:{record}");
+        }
         eprintln!(
             "[script-run] {name}: {line} exit={code} {}ms",
             t0.elapsed().as_millis()

@@ -1,0 +1,1 @@
+Linux macuahuitl.ayahuitlcalpan.com 7.2.8-200.fc44.x86_64 #1 SMP PREEMPT_DYNAMIC Fri Sep 25 21:05:44 UTC 2026 x86_64 GNU/Linux

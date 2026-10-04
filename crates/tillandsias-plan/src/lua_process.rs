@@ -1,4 +1,4 @@
-// @trace order:1534-puyz, order:1538-pwdr, spec:command-runtime
+// @trace order:1534-puyz, order:1538-pwdr, order:1539-dt84, spec:command-runtime
 //! Lua-side dispatch only. Executor supervisors never access this VM.
 use super::{PreparedProc, authorize_proc, proc_result_to_lua, shell_result_to_lua, validate_proc};
 use mlua::prelude::*;
@@ -12,6 +12,12 @@ struct Completed {
     output: tillandsias_exec::Output,
     wall_ms: u64,
     order: u64,
+}
+
+#[derive(Default)]
+struct TerminalTrace {
+    run_ids: BTreeSet<String>,
+    records: Vec<serde_json::Value>,
 }
 
 #[cfg(all(test, unix))]
@@ -106,6 +112,8 @@ mod tests {
         let f = Fixture::new();
         let (_, a, mut output_a) = f.handle("a");
         let (_, b, output_b) = f.handle("b");
+        let a_run = output_a.run.as_str().to_owned();
+        let b_run = output_b.run.as_str().to_owned();
         output_a.stdout = b"original\0\xff".to_vec();
         publish(&b, output_b);
         f.lua
@@ -139,6 +147,9 @@ mod tests {
         f.host.pump(&f.lua).unwrap();
         assert!(!a.delivered.load(Ordering::Acquire));
         assert!(!b.delivered.load(Ordering::Acquire));
+        // Finished is only a receipt. A terminal record must wait for the
+        // authentic published Output, even when a later result is already ready.
+        assert!(f.host.terminal_trace().is_empty());
         let wall_ms = f
             .host
             .dispatch
@@ -162,6 +173,14 @@ mod tests {
             wall_ms
         );
         assert!(f.host.dispatch.lock().unwrap().handlers.is_empty());
+        let records = f.host.terminal_trace();
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0]["run_id"], a_run);
+        assert_eq!(records[1]["run_id"], b_run);
+        assert_eq!(records[0]["wall_ms"], wall_ms);
+        assert_eq!(records[0]["kind"], "process_terminal");
+        assert_eq!(records[0]["status"], "exited");
+        assert_eq!(records[0]["code"], 0);
         f.eval(
             r#"
             assert(table.concat(trace, ',') == 'line-a:one,line-b:two,exit-a,exit-b')
@@ -177,6 +196,9 @@ mod tests {
             assert(all[2].stdout == 'original\0\255' and #trace == 4)
         "#,
         );
+        // Lua callbacks and repeated readers only see copies; neither can
+        // rewrite or duplicate the immutable terminal receipt.
+        assert_eq!(f.host.terminal_trace(), records);
     }
 
     #[test]
@@ -198,6 +220,21 @@ mod tests {
         assert!(!b.delivered.load(Ordering::Acquire));
         assert!(a.completed.lock().unwrap().is_none());
         assert!(b.completed.lock().unwrap().is_none());
+        assert!(f.host.terminal_trace().is_empty());
+    }
+
+    #[test]
+    fn terminal_trace_deduplicates_real_run_id_and_survives_callback_release() {
+        let f = Fixture::new();
+        let (_, _, output) = f.handle("a");
+        f.host.record_terminal(&output, 7);
+        f.host.clone().record_terminal(&output, 99);
+        let records = f.host.terminal_trace();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["run_id"], output.run.as_str());
+        assert_eq!(records[0]["wall_ms"], 7);
+        f.host.release_callbacks();
+        assert_eq!(f.host.terminal_trace(), records);
     }
 
     #[test]
@@ -503,6 +540,7 @@ pub(crate) struct Host {
     identities: Arc<Mutex<Option<LuaTable>>>,
     callback: Arc<AtomicBool>,
     validating: Arc<AtomicBool>,
+    terminal_trace: Arc<Mutex<TerminalTrace>>,
 }
 
 fn error(message: impl ToString) -> LuaError {
@@ -557,7 +595,44 @@ impl Host {
             identities: Arc::new(Mutex::new(None)),
             callback: Arc::new(AtomicBool::new(false)),
             validating: Arc::new(AtomicBool::new(false)),
+            terminal_trace: Arc::new(Mutex::new(TerminalTrace::default())),
         }
+    }
+    fn terminal_record(output: &tillandsias_exec::Output, wall_ms: u64) -> serde_json::Value {
+        let (status, code, signal) = match &output.completion {
+            tillandsias_exec::Completion::Exited(code) => ("exited", Some(*code), None),
+            tillandsias_exec::Completion::Signaled(signal) => ("signaled", None, Some(*signal)),
+            tillandsias_exec::Completion::TimedOut { .. } => ("timed_out", None, None),
+        };
+        let mut record = serde_json::json!({
+            "kind": "process_terminal",
+            "run_id": output.run.as_str(),
+            "argv": output.argv.iter().map(|arg| {
+                crate::command_policy::redact(&arg.to_string_lossy())
+            }).collect::<Vec<_>>(),
+            "wall_ms": wall_ms,
+            "status": status,
+            "code": code,
+            "truncated": output.truncated,
+        });
+        if let Some(signal) = signal {
+            record["signal"] = serde_json::json!(signal);
+        }
+        record
+    }
+    fn record_terminal(&self, output: &tillandsias_exec::Output, wall_ms: u64) {
+        self.push_terminal(Self::terminal_record(output, wall_ms));
+    }
+    fn push_terminal(&self, record: serde_json::Value) {
+        // Only terminal_record constructs these values, using actual Output.run.
+        let run_id = record["run_id"].as_str().unwrap().to_owned();
+        let mut trace = self.terminal_trace.lock().unwrap();
+        if trace.run_ids.insert(run_id) {
+            trace.records.push(record);
+        }
+    }
+    pub(crate) fn terminal_trace(&self) -> Vec<serde_json::Value> {
+        self.terminal_trace.lock().unwrap().records.clone()
     }
     fn open(&self) -> LuaResult<()> {
         if self.scope.stopped() {
@@ -665,14 +740,19 @@ impl Host {
                 let pending = dispatch.pending.pop_front().unwrap();
                 let handler = dispatch.handlers.get_mut(&id).unwrap();
                 handler.exit_started = true;
+                let record = Self::terminal_record(&output, pending.wall_ms);
                 *handler.state.completed.lock().unwrap() = Some(Completed {
                     output,
                     order: pending.order,
                     wall_ms: pending.wall_ms,
                 });
-                (id, handler.state.clone(), handler.exit.take())
+                // This is the sole async terminal transition. Keep the receipt's
+                // frozen duration and immutable executor output, before Lua can
+                // mutate its result table or run an exit callback.
+                (id, handler.state.clone(), handler.exit.take(), record)
             };
-            let (id, state, callback) = ready;
+            let (id, state, callback, record) = ready;
+            self.push_terminal(record);
             if let Some(callback) = callback {
                 self.invoke(callback, LuaValue::Table(state.result(lua)?))?;
             }
@@ -1078,7 +1158,11 @@ impl Host {
                         host.outside_callback()?;
                         let started = Instant::now();
                         let result = host.scope.run(command);
-                        proc_result_to_lua(lua, &argv, result, started.elapsed().as_millis() as u64)
+                        let wall_ms = started.elapsed().as_millis() as u64;
+                        if let Ok(output) = &result {
+                            host.record_terminal(output, wall_ms);
+                        }
+                        proc_result_to_lua(lua, &argv, result, wall_ms)
                     }
                 }
             })?,
