@@ -264,6 +264,15 @@ follow-up.
 - The supervisor test for F3 first waited for publication without draining
   the event queue, and never saw it: the `Finished` receipt queues behind the
   parked lines. The test now drains while it waits, as the Lua host does.
+- The first land gate failed in 45 seconds at the ledger integrity step:
+  `cargo run -p tillandsias-plan -- check` answered "could not determine
+  which binary to run", because the crate now has two `[[bin]]` targets and
+  twelve callers name none. `default-run = "tillandsias-plan"` restores every
+  one of them. The full preflight roster had passed; it does not run that
+  step. A second binary changes how the first is resolved.
+- The first findings fragment carried event timestamps composed by hand,
+  about an hour ahead of the clock; `check-fragment-ts-skew` refused it. They
+  are now the value read from `date -u`.
 - The files touched also include `crates/tillandsias-plan/Cargo.toml` (the
   fixture `[[bin]]`), `crates/tillandsias-plan/tests/support/fixture_child.rs`
   and `crates/tillandsias-policy/src/main.rs` (the widened guard).

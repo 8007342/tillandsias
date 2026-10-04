@@ -12,6 +12,12 @@ license = "GPL-3.0-or-later"
 authors = ["Tlatoani"]
 description = "Deterministic query/validation engine for the Tillandsias plan ledger"
 publish = false
+# ORDER 1551-geib. The crate has a second [[bin]] (the test fixture child), and
+# twelve callers — build.sh's ledger integrity step among them — run
+# `cargo run -p tillandsias-plan -- …` with no --bin. Without this line cargo
+# refuses ("could not determine which binary to run"); measured as the first
+# land gate of 1551 failing at that step, 2026-10-04.
+default-run = "tillandsias-plan"
 
 [[bin]]
 name = "tillandsias-plan"
