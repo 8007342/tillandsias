@@ -2,6 +2,18 @@
 
 @trace order:1539-dt84, order:1384-aixy
 
+## Outcome
+
+PR [213](https://github.com/8007342/tillandsias/pull/213) merged at
+`1630531e5d7f58b2b72adfdc80e54b93679b7f7f` on2026-10-04T00:26:45Z.
+The parent independently verified published work head
+`cbafa30a1fd1992a7456b3d55c03e7f1be96bcab` as an ancestor of refreshed
+origin/linux-next. The serialized queue actually exited0 in1091021ms and
+reported `landed=1 evicted=0 requeued=0 skipped=0`; PR state/merge identity and
+ancestry, not queue success alone, establish integration. This completes only
+the approved first slice. The unfinished1539 claim is released to ready;
+parent1384, preflight1520, OpenSpec4.2 and native obligations remain open.
+
 ## Scope and authority
 
 This is a partial slice of `lua-script-run-trace-records-every-managed-process-terminal-outcome`,
@@ -52,8 +64,12 @@ Parent independently compiled and measured585 distinct tests, all passing:
 12 new trace controls,428 plan-library tests (including10 dispatcher units),
 46 CLI tests,45 existing Lua proc controls,22 predicate-class tests, and32
 executor tests. There were no cfg-skipped native selections in this Linux
-measurement. Full candidate gating and landing remain pending. The rebuilt
-pre-trace binary's SHA-256 is
+measurement. The forced candidate gate actually exited0 in1010755ms on
+`cbafa30a1fd1992a7456b3d55c03e7f1be96bcab`; its workspace baseline measured
+2921 tests, zero new reds, zero tolerated failures and zero stale entries.
+A separately forced landing gate passed on the actual merged candidate with
+the same2921/0/0/0 workspace result. Native stubs/zero-test selections do not
+count as native conformance. The rebuilt pre-trace binary's SHA-256 is
 `7c147a5d86c7320caea4dc9f525575f98038fd6ab09ab38ea61f3a306c3143c1`.
 A real baseline probe returned successful proc.run and waited-spawn results,
 but stderr contained only the old script summary and no process records.
@@ -150,6 +166,34 @@ ready/dependency-unblocked but not measured by Linux.1547-ynn5 and1545-qdb5,
 native preflight, remaining capture-contract reconciliation, parent1384 and
 preflight1520 remain open. No unattended scheduler was armed.
 
-Next action: parent runs and archives independent controls, gates the frozen
-candidate, opens a partial-slice PR, and checkpoints via serialized landing;
-then releases the unfinished row with the exact remaining coverage above.
+## Unmeasured follow-on design
+
+Astra's second read-only audit proposes a <=2h registered-async-handle slice:
+collect authentic published successful outputs after `Scope::cleanup` and
+before `Host::release_callbacks`, without pumping the closed dispatcher or
+invoking callbacks, then expose those records in the outer-timeout trace
+branch. Preserve `Completed`/pending receipt durations; otherwise report
+launch-request-to-host-collection elapsed time, not exact OS lifetime. Reuse
+actual RunId deduplication and redaction, and serialize collector/release.
+`Err`/`None` must not become fabricated terminal records.
+
+Public `Process::result` is non-consuming, and retained handlers cover dropped
+Lua handles. However, successful host registration can follow executor setup;
+blocking `Scope::run` has its own post-result recording race; and job assignment,
+reader/stdin/wait, final reap and setup-handshake failures may leave no intact
+Output identity or public process enumeration. These remain explicit gaps.
+No follow-on implementation or test coverage is asserted by this research;
+any executor observation/identity/registration API needs coordinated ownership.
+The complete research handoff is preserved as
+`plan/evidence/lua-terminal-trace-20261003/follow-on-trace-research.md.txt`.
+
+The cycle used three completed delegates (two Astra research, one Terra
+implementation); parent verification is independent. Token instrumentation
+reported `source=absent`, meaning unknown spend rather than zero. UTC rollover
+maintenance is recorded separately with cache/peer-runtime GC deferred, not
+silently performed during this scoped pass.
+
+Next action: claim another bounded registered-async cleanup/timeout trace
+slice under1539's existing contract, preserve the remaining registration,
+identity, legacy/native gaps, and checkpoint through a separately verified PR.
+Do not close the whole trace or parent from this partial Linux evidence.
