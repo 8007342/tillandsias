@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: killing-a-lua-process-handle-whose-child-already-exited-with-lines-still-undelivered-returns-ok-true-with-an-empty-capture-and-truncated-false
+    field: status
+    value: completed
+    ts: "2026-10-04T21:05:00Z"
+    host: yoga
+
+events:
+  - packet_id: killing-a-lua-process-handle-whose-child-already-exited-with-lines-still-undelivered-returns-ok-true-with-an-empty-capture-and-truncated-false
+    event:
+      type: completed
+      ts: "2026-10-04T21:05:00Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3044da4ca + land gate ./build.sh --check green on 3044da4ca at 2026-10-04T21:04Z (2381 s), test a_kill_after_exit_with_undelivered_lines_is_not_a_whole_capture ok there; red with the one-line change in supervise reverted
+  - packet_id: killing-a-lua-process-handle-whose-child-already-exited-with-lines-still-undelivered-returns-ok-true-with-an-empty-capture-and-truncated-false
+    event:
+      type: note
+      ts: "2026-10-04T21:05:00Z"
+      host: yoga
+      summary: |-
+        fixed in the landing that filed the row; closed from the landed tree
