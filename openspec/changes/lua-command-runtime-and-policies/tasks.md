@@ -117,3 +117,26 @@ retirement, Lua land rewrite or draft-spec activation is implied.
       `active` after L1 verification (methodology/spec-system.yaml
       `draft_to_active_requires_L1_verification`); do not re-add the draft
       requirements.
+
+## 6. Audit of the managed-process slices (2026-10-04, orders 1551-*)
+
+Independent audit requested by the operator; findings and measurements in
+`plan/issues/lua-runtime-audit-2026-10-04.md`. The `command-runtime` draft
+and its delta here gained three requirements and one addition with these
+fixes; before them the spec had no requirement about script-owned processes.
+
+- [x] 6.1 `1551-nyzb` `sh.run` / `expert.shell` judge and run in one cwd,
+      from the base environment, under the default deadline.
+- [x] 6.2 `1551-n45s` the runner reaps script-owned children on TERM / INT /
+      HUP and exits 128+signal (Unix).
+- [x] 6.3 `1551-mkr9` an abandoned capture is `truncated`.
+- [x] 6.4 `1551-pemw`, `1551-8gkg` no coroutine creation, no `string.dump`,
+      text-only `load`.
+- [x] 6.5 `1551-geib` the Python child programs in `tests/lua_proc.rs` are a
+      Rust helper; the no-Python guard scans Rust integration tests.
+- [ ] 6.6 `1551-sprq` a process deadline that also bounds line delivery (the
+      pump no longer sleeps while events flow; the timer rule is open).
+- [ ] 6.7 `1551-af3e` one child's pipe anomaly or the process limit closes
+      the whole scope; `proc.run` raises it.
+- [ ] 6.8 `1551-333i` (plausible) spawn setup bound; `1551-7hyq` (plausible)
+      a dead worker reported as a timeout.
