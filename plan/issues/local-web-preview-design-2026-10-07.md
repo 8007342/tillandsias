@@ -314,6 +314,35 @@ integration test. Signal the documented stop file after acceptance. This is a
 fixture route around the named normal-launcher version prerequisite, not a
 change to the production downgrade guard.
 
+### Full-gate blocker and narrow test-observer repair
+
+The complete 30-minute-allowance `./build.sh --check` run reached the workspace
+suite and failed one of 2,933 tests:
+`lua_proc::managed_script::cleanup_observer_rejects_acknowledged_live_group_before_accepting_its_stop`.
+Its `/proc` read returned Linux ESRCH after the acknowledged process exited;
+the observer recognized only ENOENT/NotFound as absence. The file was unchanged
+from origin/linux-next, confirmed by a scoped git diff. This is a measured gate
+blocker, not an accepted known-red and not evidence that preview behavior failed.
+
+Parent made a narrow test-only repair under the existing `spec:ci-release`
+trace: classify ESRCH and ENOENT as absent, while retaining fatal handling of
+permission/I/O errors and the existing PID-start identity/live-group controls.
+Added deterministic ENOENT/ESRCH positive and EACCES/EIO negative controls.
+No production Lua behavior, test baseline, skip list or gate policy is changed.
+Run the whole lua_proc target and full gate again before push; the prior full
+run is failed, not green. Work checkpoint `d74d07f4b` is local-only pending gate.
+The first isolated lua_proc rerun compiled the pre-repair 48-test target: the
+original observer test passed, but
+`a_terminated_runner_takes_its_script_owned_child_with_it` failed on runner exit
+1 instead of expected SIGTERM exit 143. The test suppresses stderr, so no cause
+is claimed from that observation alone. A fresh whole-target rerun with the
+ESRCH regression controls is underway. Do not weaken the SIGTERM assertion,
+accept a new known-red, or change production Lua behavior to force publication.
+The post-repair whole lua_proc rerun passed **49/49**, including the new
+ESRCH/ENOENT versus EACCES/EIO controls, the original live-group observer and
+the unchanged strict SIGTERM exit assertion. No test was skipped or baseline
+entry added. Full repository gate must still pass before remote publication.
+
 ## Parent checkpoint — 2026-10-07T18:33:24Z
 
 Design accepted; Sol `ses_ee8603d90ffeSAKCT1FPJTL6Qu` started core/runtime.
