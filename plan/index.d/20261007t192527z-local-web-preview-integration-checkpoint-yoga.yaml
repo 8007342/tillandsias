@@ -1,13 +1,19 @@
-packets:
+status:
   - packet_id: local-web-preview-live-acceptance
-    order: 1552-e3wf
-    status: in_progress
-    next_action: >
+    field: status
+    value: in_progress
+    ts: "2026-10-07T19:25:27Z"
+    host: yoga
+  - packet_id: local-web-preview-live-acceptance
+    field: next_action
+    value: >
       Checkpoint the implemented feature after the full local gate; keep the
       draft unactivated and complete failure-injection, abrupt listener death,
       normal-launcher version compatibility and source-mechanism spec evidence.
       Read plan/issues/local-web-preview-design-2026-10-07.md for actual passes
       and remaining obligations; no browser trust installation is approved.
+    ts: "2026-10-07T19:25:27Z"
+    host: yoga
 events:
   - packet_id: local-web-preview-live-acceptance
     event:

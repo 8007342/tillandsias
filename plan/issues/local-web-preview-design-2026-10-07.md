@@ -342,6 +342,17 @@ The post-repair whole lua_proc rerun passed **49/49**, including the new
 ESRCH/ENOENT versus EACCES/EIO controls, the original live-group observer and
 the unchanged strict SIGTERM exit assertion. No test was skipped or baseline
 entry added. Full repository gate must still pass before remote publication.
+The next complete gate passed workspace and tray/listen-vsock tests (the latter
+executed 957 tests) then refused duplicate open order declarations in two of our
+new correction fragments. Original packet IDs/orders are not duplicates; the
+corrections had used `packets:` where the ledger requires its `status:` LWW
+channel for field updates. Repaired those unpublished correction encodings to
+LWW entries, preserving the original design packet declarations and every event.
+No renumber, compaction of unrelated fragments, production policy change or
+test-baseline exception is needed. Re-run order policy and full gate before push.
+After the encoding repair, `cargo run -p tillandsias-policy -- plan-orders`
+passed: 1,471 packets, 740 fragment packets, zero duplicate groups. Strict
+fragment/schema/reference validation also passed. Whitespace check passed.
 
 ## Parent checkpoint — 2026-10-07T18:33:24Z
 

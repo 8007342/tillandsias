@@ -1,26 +1,33 @@
-# Append-only correction; original design fragment remains immutable.
-packets:
+# Field corrections use LWW; the original packet declarations remain immutable.
+# Encoding repaired before remote publication; original events are preserved.
+status:
   - packet_id: local-web-preview-runtime
-    order: 1552-238z
-    unscoreable: >
+    field: unscoreable
+    value: >
       unpinnable-until-the-guard-exists: future
       openspec/litmus-tests/litmus-local-web-preview.yaml will bind the
       lifecycle/live-source/TLS evidence. Add and bind it with implementation;
       no existing executable preview guard is claimed.
+    ts: "2026-10-07T18:33:24Z"
+    host: yoga
   - packet_id: local-web-preview-image-mcp
-    order: 1552-mqvf
-    unscoreable: >
+    field: unscoreable
+    value: >
       unpinnable-until-the-guard-exists: future
       openspec/litmus-tests/litmus-local-web-preview.yaml will bind managed
       Wrangler and MCP contract evidence. Add and bind it with implementation;
       no existing executable preview guard is claimed.
+    ts: "2026-10-07T18:33:24Z"
+    host: yoga
   - packet_id: local-web-preview-live-acceptance
-    order: 1552-e3wf
-    unscoreable: >
+    field: unscoreable
+    value: >
       unpinnable-until-the-guard-exists: future
       openspec/litmus-tests/litmus-local-web-preview.yaml is this packet's
       integration deliverable. Bind the implemented guard before activation
       or closure; a future filename is not a passing litmus pin.
+    ts: "2026-10-07T18:33:24Z"
+    host: yoga
 events:
   - packet_id: local-web-preview-runtime
     event:
