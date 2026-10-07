@@ -359,6 +359,10 @@ actually executed, the unpublished original packet closures name
 `litmus:local-web-preview` directly, explicitly retaining additional negative
 controls/Worker/compatibility criteria. This is not a future or invented pin and
 does not claim complete draft coverage. Packet identities/orders remain intact.
+The full gate subsequently reached litmus binding enforcement and found that
+the new live guard's unquoted step name was valid YAML but not extractable by
+the runner. Quoted the step scalar; this changes no command or acceptance
+criteria. Verify with run-litmus-test.sh --parse-only before another full gate.
 
 ## Parent checkpoint — 2026-10-07T18:33:24Z
 

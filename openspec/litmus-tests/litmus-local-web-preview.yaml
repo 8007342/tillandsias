@@ -9,8 +9,8 @@ preconditions:
   - No WEB preview is already running for the lane; the test refuses to disturb one.
   - Cargo build environment, host Podman, curl and trust are available; var/html is the target's asset directory.
 critical_path:
-  - step: Exercise MCP start, two uncommitted edits, repeated publish, runtime reload, stop twice and restart through CA-verified HTTPS.
-    command: cargo test -p tillandsias-headless --features tray --test local_web_preview_e2e live_forge_assets_https_mcp_lifecycle -- --ignored --exact --nocapture
+  - step: "Exercise MCP start, two uncommitted edits, repeated publish, runtime reload, stop twice and restart through CA-verified HTTPS."
+    command: "cargo test -p tillandsias-headless --features tray --test local_web_preview_e2e live_forge_assets_https_mcp_lifecycle -- --ignored --exact --nocapture"
     timeout_ms: 900000
     expected_behavior: "ok:local-web-preview:live-assets-watch-reload-stop-ca-verified; host-browser-trust=unverified"
 postconditions:
