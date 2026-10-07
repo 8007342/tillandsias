@@ -353,6 +353,12 @@ test-baseline exception is needed. Re-run order policy and full gate before push
 After the encoding repair, `cargo run -p tillandsias-policy -- plan-orders`
 passed: 1,471 packets, 740 fragment packets, zero duplicate groups. Strict
 fragment/schema/reference validation also passed. Whitespace check passed.
+The next fast refusal showed that the source-only scorable-obligation guard
+does not consume LWW field corrections. Now that the live guard exists and was
+actually executed, the unpublished original packet closures name
+`litmus:local-web-preview` directly, explicitly retaining additional negative
+controls/Worker/compatibility criteria. This is not a future or invented pin and
+does not claim complete draft coverage. Packet identities/orders remain intact.
 
 ## Parent checkpoint — 2026-10-07T18:33:24Z
 

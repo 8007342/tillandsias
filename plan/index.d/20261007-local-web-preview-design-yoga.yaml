@@ -27,6 +27,9 @@ packets:
       - Publish/status/stop/reload share one lifecycle with truthful readiness and error classification.
       - Returned HTTPS URL verifies against existing local CA with correct hostname and loopback ingress; no trust-store mutation.
     verifiable_closure: >
+      litmus:local-web-preview supplies the executed basic live MCP/TLS path;
+      failure-injection and full launch/isolation criteria remain additional
+      closure obligations, not implied by that positive test alone.
       Record passing behavioral source/lifecycle/router tests and acceptance
       matrix A/C/D in plan/issues/local-web-preview-design-2026-10-07.md;
       contrast against the pre-fix HTTP/host-root behavior. Browser trust
@@ -61,6 +64,9 @@ packets:
       - Existing MCP registry advertises optional runtime selection and service_reload and dispatches authenticated lane context.
       - Static image and existing tool calls remain compatible; no arbitrary command or caller-selected path is accepted.
     verifiable_closure: >
+      litmus:local-web-preview supplies the executed target image/MCP path;
+      separate Worker, remote-binding and compatibility evidence is required
+      before full closure.
       Record image runtime and MCP behavioral test commands/results for
       acceptance B/C/E in plan/issues/local-web-preview-design-2026-10-07.md;
       fail controls include no-main assets config, bad runtime type and remote binding.
@@ -98,6 +104,8 @@ packets:
       - Host-browser trust is measured separately and no host trust-store or tray UI changes occur.
       - New draft is activated only after executable binding and required evidence; prior HTTP/static contracts reconciled narrowly.
     verifiable_closure: >
+      litmus:local-web-preview executes the basic real-lane acceptance;
+      its passing result alone does not cover every A-E negative control.
       Execute the A-E matrix from plan/issues/local-web-preview-design-2026-10-07.md
       through the existing MCP socket and host HTTPS ingress; attach commands,
       artifacts and per-criterion pass/fail. Run bound preview coverage and
