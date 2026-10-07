@@ -1,0 +1,18 @@
+events:
+  - packet_id: local-web-preview-runtime
+    event:
+      type: decision
+      ts: "2026-10-07T19:23:18Z"
+      host: yoga
+      summary: >
+        Operator explicitly approves the small contained and documented
+        JavaScript adapter to the pinned Wrangler npm configuration parser.
+        Scope is local-web-preview only, network-none inspector and private
+        effective config handoff to Rust; not generic JS execution, new adapter
+        npm dependencies, package scripts, production deploy, host trust or UX.
+        A Lua-only alternative may be evaluated later. Approval resolves the
+        runtime-language exception pending in the parent design handoff.
+      next_action: >
+        Keep CONFIG_INSPECTOR confined and documented in local_web_preview;
+        preserve pinned dependency/image identity and no-network parsing.
+        Run full gates, record remaining acceptance gaps and checkpoint.

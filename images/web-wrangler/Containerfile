@@ -1,0 +1,42 @@
+# @trace spec:local-web-preview
+# Deliberately separate from images/web: that BusyBox image remains the small
+# static compatibility profile; this is only the managed local Wrangler profile.
+# workerd's Linux distribution is glibc-linked; Alpine's musl loader cannot
+# execute it. Keep the Node release pinned while using the supported Debian base.
+FROM docker.io/library/node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90
+
+LABEL io.tillandsias.web-runtime="wrangler-local"
+LABEL io.tillandsias.wrangler.version="4.42.0"
+
+WORKDIR /opt/tillandsias/wrangler
+
+# No npx and no launch-time package installation. `npm ci` consumes the
+# committed transitive dependency/integrity lock; the companion descriptor
+# records the vendor compatibility evidence and participates in image identity.
+COPY package.json package-lock.json wrangler.lock.json ./
+# Wrangler and Miniflare resolve generated state relative to the project cwd,
+# not the Wrangler installation. These symlinks direct it to private /tmp at
+# runtime while leaving selected project source mounts read-only.
+RUN npm ci --omit=dev --no-audit --no-fund \
+    && ./node_modules/.bin/wrangler --version \
+    && ln -s /tmp/wrangler-miniflare node_modules/.mf \
+    && mkdir -p /srv/preview/node_modules \
+    && ln -s /tmp/wrangler-miniflare /srv/preview/node_modules/.mf \
+    && ln -s /tmp/wrangler-project /srv/preview/.wrangler
+
+COPY entrypoint.sh /usr/local/bin/tillandsias-wrangler
+RUN chmod 0755 /usr/local/bin/tillandsias-wrangler
+
+# The runner receives only explicit read-only project mounts at /srv/preview.
+# Mutable Wrangler/Miniflare state belongs in a container-private /tmp tmpfs.
+ENV WRANGLER_HOME=/tmp/wrangler \
+    TMPDIR=/tmp \
+    XDG_CACHE_HOME=/tmp/wrangler/cache \
+    XDG_CONFIG_HOME=/tmp/wrangler/config \
+    XDG_STATE_HOME=/tmp/wrangler/state
+
+EXPOSE 8080
+
+WORKDIR /srv/preview
+ENTRYPOINT ["/usr/local/bin/tillandsias-wrangler"]
+CMD ["dev", "--local", "--ip", "0.0.0.0", "--port", "8080"]

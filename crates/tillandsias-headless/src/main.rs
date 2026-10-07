@@ -88,7 +88,7 @@ mod container_deps;
 mod control_dispatch;
 #[cfg(target_os = "linux")]
 mod forge_swap;
-#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+// RAM-only source-volume identity is needed by default CLI launchers too.
 mod local_projects;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 pub mod remote_projects;
@@ -6242,7 +6242,7 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
         let _ = std::fs::write(&dyn_file, "");
     }
 
-    vec![
+    let mut args = vec![
         "--detach".into(),
         "--rm".into(),
         // Order 387: relaunch while an exited container holds the name must
@@ -6311,8 +6311,25 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
             certs_dir.join("intermediate.crt").display()
         ),
-        image.into(),
-    ]
+    ];
+    // @trace spec:local-web-preview — additive listener, never expose admin.
+    // Only leaf keys/certs are shared; the CA signing key stays on the host.
+    if let Ok(text) = std::fs::read_to_string(dyn_dir.join("preview-tls-port"))
+        && let Ok(port) = text.trim().parse::<u16>()
+        && port >= 1024
+    {
+        args.extend([
+            "-p".into(),
+            format!("127.0.0.1:{port}:8443"),
+            "--mount".into(),
+            format!(
+                "type=bind,source={},target=/etc/tillandsias/preview,readonly=true",
+                dyn_dir.join("preview-tls").display()
+            ),
+        ]);
+    }
+    args.push(image.into());
+    args
 }
 
 /// Reload Caddy's configuration via the admin API.
@@ -6680,6 +6697,10 @@ struct RouterRoute {
     /// @trace spec:subdomain-routing-via-reverse-proxy, spec:enclave-service-catalog
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     public: bool,
+    /// Additive explicit TLS site using a host-signed exact-hostname leaf.
+    /// @trace spec:local-web-preview
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    preview_tls: bool,
 }
 
 impl RouterRoute {
@@ -6690,6 +6711,7 @@ impl RouterRoute {
             port,
             root_redirect: None,
             public: false,
+            preview_tls: false,
         }
     }
 
@@ -6767,6 +6789,9 @@ fn write_router_routes(routes: &[RouterRoute], debug: bool) -> Result<(), String
 }
 
 fn upsert_router_route(route: RouterRoute, debug: bool) -> Result<(), String> {
+    // @trace spec:local-web-preview — share the registry mutation lock with
+    // preview publication so an unrelated authenticated route isn't lost.
+    let _routes_lock = resource_lock::acquire("preview-router", Duration::from_secs(120), debug)?;
     let mut routes = read_router_routes(debug)?;
     routes.retain(|existing| existing.subdomain != route.subdomain);
     routes.push(route);
@@ -6830,6 +6855,12 @@ fn generate_dynamic_caddyfile(routes_to_render: &[RouterRoute]) -> String {
 reverse_proxy {upstream_host}:{port}\n\
 }}\n\n"
             ));
+            if route.preview_tls {
+                let preview_project = subdomain.strip_prefix("www.").unwrap_or(project_label);
+                routes.push_str(&format!(
+                    "https://{subdomain}.localhost:8443 {{\n    tls /etc/tillandsias/preview/{preview_project}.crt /etc/tillandsias/preview/{preview_project}.key\n    header X-Tillandsias-Preview {upstream_host}\n    reverse_proxy {upstream_host}:{port}\n}}\n\n"
+                ));
+            }
             continue;
         }
 
@@ -8338,6 +8369,11 @@ fn build_opencode_forge_args(
         args.extend([
             "-v".into(),
             format!(
+                "{}:/home/forge/src:rw,z",
+                forge_ram_workspace_volume(project_name)
+            ),
+            "-v".into(),
+            format!(
                 "{}:/home/forge/src-host/{project_name}:ro",
                 project_path.display()
             ),
@@ -8386,6 +8422,11 @@ fn build_opencode_forge_args(
         // clone_project_from_mirror. Order 659-8faj: the VALUE is the
         // per-project mirror identity the guest addresses over git://.
         args.extend([
+            "-v".into(),
+            format!(
+                "{}:/home/forge/src:rw,z",
+                forge_ram_workspace_volume(project_name)
+            ),
             "--env".into(),
             format!(
                 "TILLANDSIAS_GIT_SERVICE={}",
@@ -15389,6 +15430,11 @@ fn run_opencode_mode(
         let _diag_logs_handle: Option<tillandsias_podman::DiagnosticsHandle> = None;
 
         let diagnostics = std::env::args().any(|a| a == "--diagnostics");
+        let _source_guard = prepare_forge_ram_workspace(
+            project_name,
+            forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+            debug,
+        )?;
         let opencode_args = build_opencode_forge_args(
             &project_path_resolved,
             // 1119-w2rj: the real checkout or None — never the bare name.
@@ -15414,6 +15460,7 @@ fn run_opencode_mode(
             delegated.as_ref(),
         )
         .await;
+        cleanup_forge_ram_workspace(project_name, debug)?;
         cleanup_shared_stack_if_no_running_forge(
             &client,
             project_name,
@@ -16640,6 +16687,11 @@ pub(crate) fn run_opencode_web_mode(
         // unambiguous even when the user passed "." or another relative
         // path on the CLI. Podman resolves bind sources against its own cwd,
         // which is not the user's shell cwd.
+        let _source_guard = prepare_forge_ram_workspace(
+            project_name,
+            forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+            debug,
+        )?;
         let opencode_args = build_opencode_forge_args(
             &project_path_resolved,
             // 1119-w2rj: the real checkout or None — never the bare name.
@@ -17572,6 +17624,188 @@ fn forge_hot_src_tmpfs(project_name: &str) -> String {
     format!("/home/forge/src:size={budget}m,mode=0777")
 }
 
+// @trace spec:local-web-preview — RAM-only shared backing, never HOST/src.
+fn forge_ram_workspace_volume(project: &str) -> String {
+    let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "default".into());
+    crate::local_projects::ram_workspace_volume(project, instance.trim())
+}
+
+fn prepare_forge_ram_workspace(
+    project: &str,
+    host_mount: bool,
+    debug: bool,
+) -> Result<Option<resource_lock::ResourceLockGuard>, String> {
+    if host_mount {
+        return Ok(None);
+    }
+    let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "default".into());
+    let instance = instance.trim();
+    let volume = crate::local_projects::ram_workspace_volume(project, instance);
+    let _source_lock = resource_lock::acquire(&volume, Duration::from_secs(120), debug)?;
+    let cap = forge_hot_src_tmpfs(project);
+    let expected_options = cap
+        .split_once(':')
+        .expect("HOT source specification")
+        .1
+        .to_string();
+    // Source backing is per-lane and reused only by a still-running forge.
+    // Failed/finished launches do not retain source across the next clone.
+    let names = podman_command_output(
+        {
+            let mut cmd = podman_command();
+            cmd.args(["ps", "--format", "{{.Names}}"]);
+            cmd
+        },
+        false,
+    )?;
+    let expected = [
+        ForgeAgentMode::OpenCode,
+        ForgeAgentMode::Claude,
+        ForgeAgentMode::Codex,
+        ForgeAgentMode::Antigravity,
+        ForgeAgentMode::Maintenance,
+    ]
+    .map(|mode| {
+        forge_container_name_for_mode_with_instance(
+            project,
+            mode,
+            if instance == "default" {
+                None
+            } else {
+                Some(instance)
+            },
+        )
+    });
+    if !names.lines().any(|name| expected.iter().any(|n| n == name)) {
+        // A preview must not keep a departed forge's source mount alive across
+        // launches. Remove only a recorded preview belonging to THIS lane.
+        #[cfg(feature = "tray")]
+        local_web_preview::cleanup_departed_lane(project, instance, debug)?;
+        remove_source_volume_if_present(&volume, debug)?;
+        let mut create = podman_command();
+        create.args([
+            "volume",
+            "create",
+            "--driver",
+            "local",
+            "--opt",
+            "type=tmpfs",
+            "--opt",
+            "device=tmpfs",
+            "--opt",
+        ]);
+        create.arg(format!("o={expected_options}"));
+        create.args([
+            "--label",
+            &format!("tillandsias.source.options={expected_options}"),
+        ]);
+        create.args([
+            "--label",
+            &format!(
+                "tillandsias.source.launch={}",
+                chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+            ),
+        ]);
+        create.args(["--label", "tillandsias.source=ram-only", &volume]);
+        run_podman_command_silent(create, debug)?;
+    }
+    // Never let `-v name:/home/forge/src` auto-create a plain disk volume if
+    // the expected RAM source is missing or an old forge uses private tmpfs.
+    let mut verify = podman_command();
+    verify.args(["volume", "inspect", &volume]);
+    let text = podman_command_output(verify, false).map_err(
+        |_| "live_worktree_unavailable: bounded source volume missing; recreate the old forge",
+    )?;
+    let rows: Vec<serde_json::Value> = serde_json::from_str(&text)
+        .map_err(|_| "live_worktree_unavailable: invalid source volume metadata")?;
+    let row = rows
+        .first()
+        .ok_or("live_worktree_unavailable: missing source volume metadata")?;
+    if row["Options"]["type"] != "tmpfs"
+        || row["Options"]["device"] != "tmpfs"
+        || row["Labels"]["tillandsias.source"] != "ram-only"
+        || row["Options"]["o"] != expected_options
+        || row["Labels"]["tillandsias.source.options"] != expected_options
+    {
+        return Err(
+            "live_worktree_unavailable: source must be explicitly bounded RAM-only tmpfs".into(),
+        );
+    }
+    #[cfg(feature = "tray")]
+    tray::start_mcp_socket_server_for_lane(project, instance)
+        .map_err(|e| format!("runtime_unavailable: per-lane MCP listener failed: {e}"))?;
+    #[cfg(not(feature = "tray"))]
+    if debug {
+        eprintln!(
+            "[tillandsias] local preview MCP requires a host binary built with --features tray"
+        );
+    }
+    let _ = debug;
+    Ok(Some(_source_lock))
+}
+
+fn cleanup_forge_ram_workspace(project: &str, debug: bool) -> Result<(), String> {
+    let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "default".into());
+    let instance = instance.trim();
+    let volume = crate::local_projects::ram_workspace_volume(project, instance);
+    // Caller still holds the source guard from prepare through this teardown.
+    let names = podman_command_output(
+        {
+            let mut cmd = podman_command();
+            cmd.args(["ps", "--format", "{{.Names}}"]);
+            cmd
+        },
+        false,
+    )?;
+    let expected = [
+        ForgeAgentMode::OpenCode,
+        ForgeAgentMode::Claude,
+        ForgeAgentMode::Codex,
+        ForgeAgentMode::Antigravity,
+        ForgeAgentMode::Maintenance,
+    ]
+    .map(|mode| {
+        forge_container_name_for_mode_with_instance(
+            project,
+            mode,
+            if instance == "default" {
+                None
+            } else {
+                Some(instance)
+            },
+        )
+    });
+    if names.lines().any(|name| expected.iter().any(|n| n == name)) {
+        return Ok(());
+    }
+    #[cfg(feature = "tray")]
+    local_web_preview::cleanup_departed_lane(project, instance, debug)?;
+    remove_source_volume_if_present(&volume, debug)
+}
+
+fn remove_source_volume_if_present(volume: &str, debug: bool) -> Result<(), String> {
+    let mut list = podman_command();
+    list.args(["volume", "ls", "--format", "{{.Name}}"]);
+    if podman_command_output(list, false)?
+        .lines()
+        .any(|name| name == volume)
+    {
+        let mut remove = podman_command();
+        remove.args(["volume", "rm", volume]);
+        run_podman_command_silent(remove, debug)?;
+    }
+    Ok(())
+}
+
 /// The project mirror's object store in KiB (packs PLUS loose objects), or 0
 /// when it cannot be read.
 ///
@@ -17821,7 +18055,13 @@ fn build_forge_agent_run_args_with_vault(
         // has bind-mounted the host checkout at /home/forge/src/<project>, and
         // a tmpfs over its parent would mask it.
         // @trace order:997-e4v2, spec:forge-hot-cold-split
-        spec.tmpfs(forge_hot_src_tmpfs(project_name))
+        // Shared RAM backing lets an authenticated sibling bind only public
+        // config/assets/Worker subsets while keeping .git and credentials out.
+        spec.volume(
+            forge_ram_workspace_volume(project_name),
+            "/home/forge/src".to_string(),
+            MountMode::ReadWrite,
+        )
     };
     let spec = spec
         // Persistent per-project tool/package cache (order 179). lib-common points
@@ -18202,7 +18442,17 @@ fn build_forge_agent_run_args_with_vault(
     //
     // @trace plan/issues/forge-github-token-injection (order 359, REVERSED)
 
-    spec.build_run_args()
+    let mut args = spec.build_run_args();
+    if !host_mount {
+        let source = format!(
+            "{}:/home/forge/src:rw",
+            forge_ram_workspace_volume(project_name)
+        );
+        if let Some(arg) = args.iter_mut().find(|arg| **arg == source) {
+            arg.push_str(",z");
+        }
+    }
+    args
 }
 
 /// Build the full host-terminal command for an interactive tray launch.
@@ -18437,6 +18687,11 @@ fn run_forge_agent_cli_mode(
         .filter(|s| !s.is_empty());
     let project_remote_url =
         resolve_project_remote_url(canonical_path.as_deref(), cloud_env_remote_url.as_deref());
+    let _source_guard = prepare_forge_ram_workspace(
+        project_name,
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+        debug,
+    )?;
     let forge_args = build_forge_agent_run_args_with_vault(
         effective_path,
         canonical_path.as_deref(),
@@ -18488,6 +18743,7 @@ fn run_forge_agent_cli_mode(
             delegated.as_ref(),
         )
         .await;
+        cleanup_forge_ram_workspace(project_name, debug)?;
         cleanup_shared_stack_if_no_running_forge(
             &client,
             project_name,
@@ -18656,6 +18912,10 @@ mod metrics_server;
 
 #[cfg(feature = "tray")]
 mod tray;
+
+// @trace spec:local-web-preview
+#[cfg(feature = "tray")]
+mod local_web_preview;
 
 /// Spawn a terminal-launcher child and reap it on a detached thread.
 ///
@@ -20353,93 +20613,13 @@ pub(crate) async fn publish_local_service(
         ));
     }
 
-    // Order 505: project label MUST be validated by EQUALITY against the known
-    // project set (never sanitized) before use in paths or container names.
-    // 1031-q4pb: the inline form here skipped validation entirely when the
-    // enumeration was empty, which is every fresh install. One helper now, so
-    // the sites cannot drift apart again, and it FAILS CLOSED.
-    crate::local_projects::validate_project_label(project_name)?;
-
-    crate::container_deps::ensure_service_catalog(debug)?;
-
-    let image = "tillandsias-web";
-    let client = tillandsias_podman::PodmanClient::new();
-    let container_name = format!("tillandsias-{project_name}-web");
-    let worktree = crate::local_projects::host_project_root().join(project_name);
-
-    let _ = client.stop_container(&container_name, 1).await;
-    let _ = client.remove_container(&container_name).await;
-
-    let mut args = vec![
-        "--detach".into(),
-        "--rm".into(),
-        "--name".into(),
-        container_name.clone(),
-        "--hostname".into(),
-        format!("web-{project_name}"),
-        "--network".into(),
-        "tillandsias-enclave".into(),
-        "-v".into(),
-        format!("{}:/var/www:ro,Z", worktree.display()),
-    ];
-    args.push(image.into());
-
-    client
-        .run_container_observed("web", &container_name, &args, debug)
-        .await
-        .map_err(|e| format!("Failed to start web container: {e}"))?;
-
-    // Order 364: the router is what actually serves the friendly URL. The
-    // publish path assumes it is up (the tray's forge-launch brings it up),
-    // but the standalone CLI path must ensure it explicitly so curl reaches
-    // the container through the reverse proxy.
-    let certs_dir = crate::ensure_ca_bundle(debug)?;
-    let router_image = crate::versioned_image_tag("router", VERSION.trim());
-    let router_host_port = match crate::existing_router_host_port(&client, debug).await? {
-        Some(port) => port,
-        None => crate::select_router_host_port(None, debug)?,
-    };
-    crate::ensure_router_running(
-        &client,
-        &certs_dir,
-        &router_image,
-        VERSION.trim(),
-        router_host_port,
-        debug,
-    )
-    .await?;
-
-    let mut routes = read_router_routes(debug)?;
-    routes.retain(|r| r.subdomain != format!("www.{project_name}"));
-
-    let mut new_route = RouterRoute::new(format!("www.{project_name}"), &container_name, 8080);
-    new_route.public = true;
-    routes.push(new_route);
-
-    write_router_routes(&routes, debug)?;
-    caddy_reload_routes(debug).await?;
-
-    // The router publishes its listener on loopback :8080 over plain HTTP
-    // (no TLS termination on the loopback ingress), so the locally-served
-    // URL is http on the router's host port.
-    Ok(format!(
-        "http://www.{project_name}.localhost:{router_host_port}"
-    ))
-}
-
-#[cfg(feature = "tray")]
-pub(crate) async fn service_status(project_name: &str) -> Result<String, String> {
-    // Order 505 label validation, fail-closed via the shared helper (1031-q4pb).
-    crate::local_projects::validate_project_label(project_name)?;
-
-    let client = tillandsias_podman::PodmanClient::new();
-    let container_name = format!("tillandsias-{project_name}-web");
-
-    if let Ok(inspect) = client.inspect_container(&container_name).await {
-        Ok(inspect.state.clone())
-    } else {
-        Ok("stopped".to_string())
-    }
+    // @trace spec:local-web-preview — CLI must resolve a UNIQUE live lane.
+    let instance = local_web_preview::unique_live_instance(project_name)?;
+    let result = local_web_preview::publish(project_name, &instance, "auto", debug).await?;
+    result["url"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| "router_not_ready: publication did not return a ready URL".into())
 }
 
 #[cfg(feature = "tray")]
@@ -20455,24 +20635,8 @@ pub(crate) async fn service_stop(
         ));
     }
 
-    // Order 505 label validation, fail-closed via the shared helper (1031-q4pb).
-    crate::local_projects::validate_project_label(project_name)?;
-
-    let client = tillandsias_podman::PodmanClient::new();
-    let container_name = format!("tillandsias-{project_name}-web");
-
-    let _ = client.stop_container(&container_name, 1).await;
-    let _ = client.remove_container(&container_name).await;
-
-    let mut routes = read_router_routes(debug)?;
-    let initial_len = routes.len();
-    routes.retain(|r| r.subdomain != format!("www.{project_name}"));
-
-    if routes.len() < initial_len {
-        write_router_routes(&routes, debug)?;
-        caddy_reload_routes(debug).await?;
-    }
-
+    let instance = local_web_preview::unique_live_instance(project_name)?;
+    local_web_preview::stop(project_name, &instance, debug).await?;
     Ok(())
 }
 
@@ -30742,8 +30906,10 @@ esac
         let window = source_window(source, "fn build_forge_agent_run_args_with_vault(");
 
         let call = window
-            .find("forge_hot_src_tmpfs(project_name)")
-            .expect("the clone-only lane must emit the /home/forge/src tmpfs");
+            .find("forge_ram_workspace_volume(project_name)")
+            .expect(
+                "the clone-only lane must emit the bounded shared /home/forge/src tmpfs volume",
+            );
         let host_mount_bind = window
             .find("format!(\"/home/forge/src/{project_name}\")")
             .expect("the host-mount lane must still bind the host checkout");

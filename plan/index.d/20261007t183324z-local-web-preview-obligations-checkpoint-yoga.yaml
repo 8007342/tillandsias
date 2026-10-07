@@ -1,0 +1,68 @@
+# Append-only correction; original design fragment remains immutable.
+packets:
+  - packet_id: local-web-preview-runtime
+    order: 1552-238z
+    unscoreable: >
+      unpinnable-until-the-guard-exists: future
+      openspec/litmus-tests/litmus-local-web-preview.yaml will bind the
+      lifecycle/live-source/TLS evidence. Add and bind it with implementation;
+      no existing executable preview guard is claimed.
+  - packet_id: local-web-preview-image-mcp
+    order: 1552-mqvf
+    unscoreable: >
+      unpinnable-until-the-guard-exists: future
+      openspec/litmus-tests/litmus-local-web-preview.yaml will bind managed
+      Wrangler and MCP contract evidence. Add and bind it with implementation;
+      no existing executable preview guard is claimed.
+  - packet_id: local-web-preview-live-acceptance
+    order: 1552-e3wf
+    unscoreable: >
+      unpinnable-until-the-guard-exists: future
+      openspec/litmus-tests/litmus-local-web-preview.yaml is this packet's
+      integration deliverable. Bind the implemented guard before activation
+      or closure; a future filename is not a passing litmus pin.
+events:
+  - packet_id: local-web-preview-runtime
+    event:
+      type: claimed
+      ts: "2026-10-07T18:33:24Z"
+      agent_id: ses_ee8603d90ffeSAKCT1FPJTL6Qu
+      host: yoga
+      summary: >
+        Parent assigned Sol and reports core/runtime implementation started.
+        agent_id here is the supplied actual OpenCode session ID, not a minted
+        fleet identity. Local assignment only: parent owns work-ref, claim
+        publication and confirmation; no remote lease win is asserted.
+      next_action: >
+        Sol implements authenticated live-source lifecycle and additive TLS
+        using the agreed local_web_preview async JSON seam; incorporate Terra's
+        rootless live-tmpfs sharing proof before selecting source export.
+  - packet_id: local-web-preview-image-mcp
+    event:
+      type: claimed
+      ts: "2026-10-07T18:33:24Z"
+      agent_id: ses_ee860f82effeDX5Ffp1sqrdbJ9
+      host: yoga
+      summary: >
+        Parent assigned Terra; currently read-only probing live tmpfs export
+        feasibility on rootless Podman, then implementing image/MCP scope.
+        agent_id is the supplied actual session ID. No invented fleet identity,
+        lease token, expiry or remote claim confirmation.
+      next_action: >
+        Report proof or precise refusal for actual live tmpfs sharing to Sol;
+        then implement managed image and tray MCP seam. Do not substitute host
+        checkout, touch unrelated ollama, or lift tray feature gating.
+  - packet_id: local-web-preview-live-acceptance
+    event:
+      type: note
+      ts: "2026-10-07T18:33:24Z"
+      host: yoga
+      summary: >
+        Parent reserves integration/acceptance after both prerequisites. Parent
+        session/fleet identity was not supplied, so no invented agent_id or lease
+        is recorded. Waiting dependencies, not an active execution claim.
+        Parent confirms fetched HEAD equals origin/linux-next 95350b0c8.
+      next_action: >
+        Parent records its actual identity when claiming execution, publishes
+        local assignments through normal protocol, integrates Sol/Terra and
+        binds future preview guard before A-E acceptance and draft activation.

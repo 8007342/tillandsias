@@ -1,0 +1,74 @@
+packets:
+  - packet_id: local-web-preview-live-acceptance
+    order: 1552-e3wf
+    status: in_progress
+    next_action: >
+      Checkpoint the implemented feature after the full local gate; keep the
+      draft unactivated and complete failure-injection, abrupt listener death,
+      normal-launcher version compatibility and source-mechanism spec evidence.
+      Read plan/issues/local-web-preview-design-2026-10-07.md for actual passes
+      and remaining obligations; no browser trust installation is approved.
+events:
+  - packet_id: local-web-preview-live-acceptance
+    event:
+      type: claimed
+      ts: "2026-10-07T19:25:27Z"
+      agent_id: ses_ee869e2e5ffe9cYnHKi1h0AhiF
+      host: yoga
+      summary: >
+        Parent integration ran against both implemented prerequisites under
+        operator direction, before their formal closure. Actual parent session
+        ID obtained from OpenCode; work ref work/1552-e3wf. This is an execution
+        checkpoint, not a fabricated remote lease confirmation.
+      next_action: >
+        Publish a gated work checkpoint and resume remaining acceptance cases;
+        keep source-runtime and image/MCP rows open until scoped closure evidence.
+  - packet_id: local-web-preview-live-acceptance
+    event:
+      type: note
+      ts: "2026-10-07T19:25:27Z"
+      agent_id: ses_ee869e2e5ffe9cYnHKi1h0AhiF
+      host: yoga
+      summary: >
+        Parent independently passed the real tillandsias.org authenticated MCP
+        live-assets HTTPS lifecycle test in 21.64 seconds: two uncommitted edits,
+        publish/reload/stop/restart, CA/SNI verification and unchanged HEAD/trust
+        anchors. Also 10 preview unit tests and 15 MCP tests passed, plus Codex
+        registration fixture. Fixture stop-file signalled; named mirror/forge
+        no longer present in subsequent Podman listing. Other workloads preserved.
+        JS parser adapter explicitly approved, contained and documented. Full
+        gate pending; browser-specific trust unknown; draft remains inactive.
+      next_action: >
+        Record final gate and commit/push evidence. Complete injected cleanup
+        and timeout failures, abrupt listener death and normal-launcher version
+        compatibility; do not confuse fixture proof with installed-launcher pass.
+  - packet_id: local-web-preview-runtime
+    event:
+      type: note
+      ts: "2026-10-07T19:25:27Z"
+      host: yoga
+      summary: >
+        Sol repaired B1/B2 dotted target and parser path, pins effective config
+        per publication to close B3 remote-edit races, reports B4 cleanup retries
+        and B8 bounded commands implemented, B5 exact cap/mode0777 validation,
+        B7 explicit reload diagnostics, and scanner-visible enclave builder.
+        Live parent asset acceptance and 10 core tests pass. Failure-injection
+        controls and abrupt death coverage remain open; no full closure claimed.
+      next_action: >
+        Add injected Caddy-reload/cleanup and stalled-command controls; prove
+        whole launch-generation cleanup and canonical bounded-source exception.
+  - packet_id: local-web-preview-image-mcp
+    event:
+      type: note
+      ts: "2026-10-07T19:25:27Z"
+      host: yoga
+      summary: >
+        Pinned Debian Node/Wrangler image serves assets-only and Worker fixtures
+        under readonly mounts/private tmpfs with live edits and restart. Exact
+        pinned config parser invocation passed. B6 listener registry now uses
+        tuple identity, registers after successful bind and preserves live
+        sockets; parent 15 MCP tests and Codex registration fixture pass.
+        Static image unchanged; no deployment or host trust mutation.
+      next_action: >
+        Preserve pinned image/lock and narrow adapter boundary; attach final
+        gate/work checkpoint, then close only with scoped verifiable evidence.
