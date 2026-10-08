@@ -18,4 +18,4 @@ STEP_DESC="Checking the plan run verb's timeout, detach, argv and lock contracts
 STEP_SCRIPT="scripts/test-plan-run-verb.sh"
 STEP_ERROR="the plan run verb contract failed (1375-amye); see which arm failed above"
 STEP_OK="plan run verb: timeout, argv, detach and lock contracts hold"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-03 darwin ok:plan-run-verb:5"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-08 darwin ok:plan-run-verb:5"
