@@ -833,14 +833,27 @@ fn ",
     /// clears Credential Manager and removes the cache.
     #[test]
     fn reset_state_is_soft_on_windows() {
-        let soft = notify_fn_body("pub fn reset_state_once() -> i32 {", "pub fn reset_guest_once()");
-        for forbidden in ["wipe_guest(", "clear_guest_vault_credentials(", "remove_dir_all("] {
+        let soft = notify_fn_body(
+            "pub fn reset_state_once() -> i32 {",
+            "pub fn reset_guest_once()",
+        );
+        // `soft_wipe_guest(` contains `wipe_guest(`; take the allowed call out
+        // before looking for the forbidden one, or the pin reds on its own fix.
+        let without_soft = soft.replace("soft_wipe_guest(", "");
+        for forbidden in [
+            "wipe_guest(",
+            "clear_guest_vault_credentials(",
+            "remove_dir_all(",
+        ] {
             assert!(
-                !soft.contains(forbidden),
+                !without_soft.contains(forbidden),
                 "SOFT reset must not call {forbidden}: it destroys operator data"
             );
         }
-        assert!(soft.contains("soft_wipe_guest("), "SOFT wipes derived state inside the guest");
+        assert!(
+            soft.contains("soft_wipe_guest("),
+            "SOFT wipes derived state inside the guest"
+        );
         assert!(soft.contains("reset: SOFT"), "SOFT must announce its kind");
     }
 

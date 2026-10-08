@@ -1383,6 +1383,186 @@ pub fn provision_once() -> i32 {
     })
 }
 
+/// What a Windows SOFT reset announces about the Vault store, from what
+/// Credential Manager answered (order 1437-3iux; the three tokens are
+/// host-state-lifecycle's, an interface, shared with the Linux SOFT reset).
+/// "Verified" here means Credential Manager answered and holds a non-empty
+/// share; whether that share opens the store is the guest's to judge at
+/// delivery (890-y72v, `DeliverCredentialsOutcome::Rejected`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SoftResetDisposition {
+    VerifiedKeep,
+    UnverifiedKeep,
+    AbsentReinitAtInit,
+}
+
+impl SoftResetDisposition {
+    pub(crate) fn from_share_read(read: &Result<Option<String>, String>) -> Self {
+        match read {
+            Ok(Some(share)) if !share.trim().is_empty() => Self::VerifiedKeep,
+            Ok(_) => Self::AbsentReinitAtInit,
+            Err(_) => Self::UnverifiedKeep,
+        }
+    }
+
+    pub(crate) fn token(self) -> &'static str {
+        match self {
+            Self::VerifiedKeep => "Verified:KEEP",
+            Self::UnverifiedKeep => "Unverified:KEEP",
+            Self::AbsentReinitAtInit => "Absent:REINIT-AT-INIT",
+        }
+    }
+}
+
+/// The two announced sets of a Windows SOFT reset (order 1437-3iux). Pure, so
+/// the split is tested directly: the store, every Credential Manager target,
+/// the distro and the downloads are on the PRESERVED side under every
+/// disposition, because a SOFT reset deletes no store.
+pub(crate) fn soft_reset_plan(disposition: SoftResetDisposition) -> (Vec<String>, Vec<String>) {
+    use crate::installation_uuid::{TARGET_NAME, VAULT_ROOT_TOKEN_TARGET, VAULT_SHARE_TARGET};
+    let destroyed = vec![
+        "inside the distro: every podman container, image, volume, secret and network (podman system reset --force)".to_string(),
+        "inside the distro: the build markers init-build-state.json and cache_version".to_string(),
+    ];
+    let store_next = match disposition {
+        SoftResetDisposition::VerifiedKeep => "your sign-ins survive the reset",
+        SoftResetDisposition::UnverifiedKeep => {
+            "kept; Credential Manager could not be asked, so it unseals at the next init if the share is there"
+        }
+        SoftResetDisposition::AbsentReinitAtInit => {
+            "kept by this reset, but no share is in Credential Manager, so the next init re-initialises it"
+        }
+    };
+    let preserved = vec![
+        format!(
+            "the {DISTRO} distro and its disk (no wsl --unregister)",
+            DISTRO = crate::wsl_lifecycle::DISTRO_NAME
+        ),
+        format!(
+            "the Vault store inside the distro \u{2014} {}, {store_next}",
+            disposition.token()
+        ),
+        format!(
+            "Credential Manager {VAULT_SHARE_TARGET} and {VAULT_ROOT_TOKEN_TARGET} \u{2014} never cleared by a SOFT reset"
+        ),
+        format!("Credential Manager {TARGET_NAME} \u{2014} the installation anchor"),
+        "the download cache".to_string(),
+    ];
+    (destroyed, preserved)
+}
+
+/// The pre-flight both reset bodies share (1286-4437): refuse before
+/// destroying anything when this executable, the reprovisioner, is gone.
+fn reprovision_path_present() -> bool {
+    match std::env::current_exe() {
+        Ok(exe) if exe.is_file() => true,
+        Ok(exe) => {
+            eprintln!(
+                "{} {}",
+                tillandsias_core::reset_state::RESET_NO_REPROVISION_PATH,
+                exe.display()
+            );
+            false
+        }
+        Err(err) => {
+            eprintln!(
+                "{} could not resolve this executable: {err}",
+                tillandsias_core::reset_state::RESET_NO_REPROVISION_PATH
+            );
+            false
+        }
+    }
+}
+
+/// `--reset-state` is the SOFT reset on Windows (order 1437-3iux S1;
+/// host-state-lifecycle "Windows SOFT reset keeps the distro, the store and
+/// the downloads"; operator ruling 2026-09-27). The distro is KEPT; inside it,
+/// only derived state is wiped (`WslLifecycle::soft_wipe_guest`); the Vault
+/// store, every Credential Manager target and the download cache are kept;
+/// then the same recipe path re-provisions, which reconciles the guest binary
+/// to this tray's version, restarts the daemon and delivers the share before
+/// the vault bootstraps. No prompt, ever: SOFT is pre-authorised (1443-bs9z).
+pub fn reset_state_once() -> i32 {
+    use crate::provision_console::{PhaseConsole, process_tier, render_line};
+
+    init_tracing();
+    let tier = process_tier();
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(err) => {
+            eprintln!("[reset-state] failed to build tokio runtime: {err}");
+            return 1;
+        }
+    };
+    if !reprovision_path_present() {
+        return 1;
+    }
+
+    let wipe = tillandsias_core::reset_state::destructive_reset_allowed();
+    if wipe {
+        let disposition = SoftResetDisposition::from_share_read(
+            &crate::installation_uuid::read_credential_string(
+                crate::installation_uuid::VAULT_SHARE_TARGET,
+            ),
+        );
+        eprintln!("[tillandsias] reset: SOFT");
+        let (destroyed, preserved) = soft_reset_plan(disposition);
+        let destroyed: Vec<&str> = destroyed.iter().map(String::as_str).collect();
+        let preserved: Vec<&str> = preserved.iter().map(String::as_str).collect();
+        tillandsias_core::reset_state::announce_reset_plan(&destroyed, &preserved);
+        eprintln!("[tillandsias] reset disposition={}", disposition.token());
+    } else {
+        eprintln!("{}", tillandsias_core::reset_state::RESET_SKIPPED_LINE);
+    }
+
+    runtime.block_on(async {
+        let lifecycle = WslLifecycle::new();
+        if wipe {
+            if let Err(err) = lifecycle.soft_wipe_guest().await {
+                eprintln!(
+                    "{}",
+                    render_line(tier, "reset-state", &format!("RESULT: FAILED \u{2014} soft wipe: {err}"))
+                );
+                tracing::error!(%err, "reset-state soft wipe failed");
+                return 1;
+            }
+            reset_crashloop_state();
+            println!(
+                "{}",
+                render_line(
+                    tier,
+                    "reset-state",
+                    "derived state wiped (SOFT) \u{2014} store and sign-ins kept; reprovisioning\u{2026}"
+                )
+            );
+        }
+        let console = std::sync::Arc::new(PhaseConsole::for_process("reset-state"));
+        match lifecycle.provision_via_recipe(console.clone()).await {
+            Ok(()) => {
+                console.finish_ok();
+                println!(
+                    "{}",
+                    console.line("RESULT: VM Ready \u{2014} control wire up \u{2713}")
+                );
+                tracing::info!("reset-state (SOFT): VM Ready");
+                0
+            }
+            Err(err) => {
+                console.finish_err(&err);
+                eprintln!(
+                    "{}",
+                    console.line(&format!("RESULT: FAILED \u{2014} provision: {err}"))
+                );
+                tracing::error!(%err, "reset-state (SOFT) provision failed");
+                1
+            }
+        }
+    })
+}
+
 /// `--reset-guest` CLI verb (windows-260717-4): intentional EPHEMERAL RESET —
 /// wipe the guest (bounded stop + `wsl --unregister`, deleting the VHDX and
 /// the in-VM vault) and reprovision from scratch through the exact same
@@ -1414,8 +1594,13 @@ pub fn provision_once() -> i32 {
 /// opt-out. When it says no we still provision, because an installer that
 /// declines to destroy must still leave a working install.
 ///
+/// ORDER 1437-3iux S1: THIS IS NOW THE HARD BODY, reached only by
+/// `--reset-guest`. `--reset-state` became SOFT (`reset_state_once` above),
+/// per the operator's SOFT/HARD ruling of 2026-09-27 (host-state-lifecycle).
+/// The per-run approval and the `reset: HARD` announcement are S2.
+///
 /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
-pub fn reset_state_once() -> i32 {
+pub fn reset_guest_once() -> i32 {
     use crate::provision_console::{PhaseConsole, process_tier, render_line};
 
     init_tracing();
@@ -1450,23 +1635,8 @@ pub fn reset_state_once() -> i32 {
     // from a file that no longer exists. macneo measured the macOS shape of it
     // (the .app gone while 1.2 GiB of VM state survived). A repair tool that
     // assumes the thing it repairs with is present is not a repair tool.
-    match std::env::current_exe() {
-        Ok(exe) if exe.is_file() => {}
-        Ok(exe) => {
-            eprintln!(
-                "{} {}",
-                tillandsias_core::reset_state::RESET_NO_REPROVISION_PATH,
-                exe.display()
-            );
-            return 1;
-        }
-        Err(err) => {
-            eprintln!(
-                "{} could not resolve this executable: {err}",
-                tillandsias_core::reset_state::RESET_NO_REPROVISION_PATH
-            );
-            return 1;
-        }
+    if !reprovision_path_present() {
+        return 1;
     }
 
     let wipe = tillandsias_core::reset_state::destructive_reset_allowed();
@@ -1580,12 +1750,6 @@ pub fn reset_state_once() -> i32 {
             }
         }
     })
-}
-
-/// Alias kept for the name operators and scripts already use. It delegates
-/// rather than duplicating, so the two cannot drift.
-pub fn reset_guest_once() -> i32 {
-    reset_state_once()
 }
 
 /// Structured `--status-once` report. Mirrors the JSON shape of the `wire`
@@ -4658,6 +4822,75 @@ fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ORDER 1437-3iux S1. Credential Manager's answer maps to the three
+    /// host-state-lifecycle tokens: a share present is Verified:KEEP, an
+    /// absent or empty one is Absent:REINIT-AT-INIT, and an unreachable store
+    /// is Unverified:KEEP. Never a deletion.
+    #[test]
+    fn soft_reset_disposition_follows_credential_manager() {
+        use SoftResetDisposition as D;
+        assert_eq!(
+            D::from_share_read(&Ok(Some("c2hhcmU=".into()))),
+            D::VerifiedKeep
+        );
+        assert_eq!(
+            D::from_share_read(&Ok(Some("  ".into()))),
+            D::AbsentReinitAtInit
+        );
+        assert_eq!(D::from_share_read(&Ok(None)), D::AbsentReinitAtInit);
+        assert_eq!(
+            D::from_share_read(&Err("CredReadW failed".into())),
+            D::UnverifiedKeep
+        );
+        assert_eq!(D::VerifiedKeep.token(), "Verified:KEEP");
+        assert_eq!(D::UnverifiedKeep.token(), "Unverified:KEEP");
+        assert_eq!(D::AbsentReinitAtInit.token(), "Absent:REINIT-AT-INIT");
+    }
+
+    /// ORDER 1437-3iux S1. Under EVERY disposition the store, all three
+    /// Credential Manager targets, the distro and the downloads are on the
+    /// PRESERVED side, and nothing preserved is also destroyed.
+    #[test]
+    fn soft_reset_plan_keeps_operator_data_under_every_disposition() {
+        use crate::installation_uuid::{TARGET_NAME, VAULT_ROOT_TOKEN_TARGET, VAULT_SHARE_TARGET};
+        for d in [
+            SoftResetDisposition::VerifiedKeep,
+            SoftResetDisposition::UnverifiedKeep,
+            SoftResetDisposition::AbsentReinitAtInit,
+        ] {
+            let (destroyed, preserved) = soft_reset_plan(d);
+            let kept = preserved.join("\n");
+            for must in [
+                VAULT_SHARE_TARGET,
+                VAULT_ROOT_TOKEN_TARGET,
+                TARGET_NAME,
+                "Vault store",
+                "download cache",
+                "no wsl --unregister",
+                d.token(),
+            ] {
+                assert!(
+                    kept.contains(must),
+                    "{d:?}: preserved set must name {must}: {kept}"
+                );
+            }
+            let gone = destroyed.join("\n");
+            for never in [
+                VAULT_SHARE_TARGET,
+                VAULT_ROOT_TOKEN_TARGET,
+                TARGET_NAME,
+                "Vault store",
+                "download cache",
+                "unregister",
+            ] {
+                assert!(
+                    !gone.contains(never),
+                    "{d:?}: SOFT must not destroy {never}: {gone}"
+                );
+            }
+        }
+    }
 
     /// ORDER 731-eupn, exit criterion 4: "confirmed-empty renders (no repos);
     /// failed-fetch does NOT."

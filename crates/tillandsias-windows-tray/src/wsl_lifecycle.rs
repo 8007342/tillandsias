@@ -329,6 +329,15 @@ const EMBEDDED_HEADLESS_AARCH64: &[u8] =
 /// bridge and the tray can never drift to different distros.
 pub const DISTRO_NAME: &str = tillandsias_vm_layer::wsl::DEFAULT_WSL_DISTRO;
 
+/// The derived-state wipe a SOFT reset runs inside the guest (order 1437-3iux).
+/// It matches the Linux SOFT reset's destroyed set without its trailing init;
+/// see `WslLifecycle::soft_wipe_guest` for why the init is left to
+/// provisioning. The `podman system reset` exit status decides the result; the
+/// stops and the marker removal are best-effort.
+pub const SOFT_GUEST_WIPE: &str = "systemctl stop tillandsias-headless-ready.service tillandsias-headless.service 2>/dev/null; \
+     podman system reset --force && \
+     rm -f /root/.cache/tillandsias/init-build-state.json /root/.cache/tillandsias/cache_version";
+
 /// Attempts for the control-wire connect loop (see `connect_with_backoff`).
 /// With `connect_backoff_delay`'s 1,2,4,8,16,30…30s capped-exponential
 /// schedule this keeps the historical ~3-minute total budget.
@@ -1278,6 +1287,30 @@ impl WslLifecycle {
         }
         let _ = tokio::fs::remove_file(Self::import_complete_marker_path()).await;
         Ok(())
+    }
+
+    /// The SOFT reset's guest half (order 1437-3iux, host-state-lifecycle
+    /// "Windows SOFT reset keeps the distro, the store and the downloads").
+    /// DERIVED state only: stop the daemon and its readiness unit, `podman
+    /// system reset --force`, and remove the build markers. The distro, its
+    /// VHDX and the Vault store (a host directory bind-mounted at /vault/data,
+    /// which the podman reset cannot reach) are kept.
+    ///
+    /// It deliberately does NOT run the guest's own `--reset-state`. That one
+    /// ends in an init, and an init that runs before the tray has delivered
+    /// the Credential Manager share meets the "store without its share is
+    /// rebuilt" guard, which would destroy the very store SOFT keeps. The
+    /// caller re-provisions instead: the daemon restarts, the tray delivers the
+    /// share, and only then does the vault bootstrap.
+    pub async fn soft_wipe_guest(&self) -> Result<(), String> {
+        if !self.runtime.is_registered().await {
+            tracing::info!(
+                distro = self.distro_name(),
+                "soft reset: no registered distro — nothing to reset; provisioning imports one"
+            );
+            return Ok(());
+        }
+        self.wsl_root_sh(SOFT_GUEST_WIPE).await
     }
 
     /// Discard the damaged guest: `wsl --shutdown`-free targeted unregister
