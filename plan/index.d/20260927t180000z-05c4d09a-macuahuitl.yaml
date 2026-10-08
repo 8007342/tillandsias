@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-vault-store-and-download-cache-are-host-persistent-across-reset
+    field: title
+    value: 'Windows: --reset-state is a SOFT reset (distro kept, headless binary injected, containers wiped and re-initialised inside, Vault store and downloads kept, Credential Manager share kept); --reset-guest stays the HARD reset (wsl --unregister, store and share cleared, announced); models move host-side to ~/.tillandsias/downloads/models shared into the distro (the one measurement left); install-windows.ps1 runs SOFT for updates and HARD only on request; Windows legacy roots migrate'
+    ts: "2026-09-27T18:00:00Z"
+    host: macuahuitl
+
+events:
+  - packet_id: windows-vault-store-and-download-cache-are-host-persistent-across-reset
+    event:
+      type: note
+      ts: "2026-09-27T18:00:00Z"
+      host: macuahuitl
+      summary: |-
+        operator SOFT/HARD ruling 2026-09-27 (1438-pk9j); the dropped line is my own 1437-8c6p title, superseded

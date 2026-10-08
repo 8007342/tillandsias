@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    event:
+      type: progress
+      ts: "2026-09-28T03:07:29Z"
+      agent_id: linux-lenovinha-claude-20260928t030728z
+      host: lenovinha
+      summary: |
+        ALIGNMENT SLICE on work/1437-qza3 at 516323436 (a fast-forward over the landed 7bf46265e): the dispositions are the spec tokens Verified:KEEP / Unverified:KEEP / Absent:REINIT-AT-INIT, each announcing the spec line verbatim before anything is destroyed (a test checks the spec file verbatim). A SOFT reset deletes no store under any disposition, which reverses 7bf46265e clearing the store and fallbacks on a keyring-less host; Absent defers to the next init partial-init guard. The keyring is asked alone and the fallback file decides nothing. Linux --reset-guest announces the same and deletes no store; the HARD-unreachable refusal is scoped to guest regimes (macOS/Windows trays: 1437-av8u, 1437-3iux) per the spec. Tests: headless 807 passed; contract ARM8 PASS; clippy rc=0; preflight ran=129 refused=0. Full gate running.

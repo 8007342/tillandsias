@@ -44,6 +44,14 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: trap covers PIPE"
 
+  # 1244-9dx3 + 1426-cb6g: stopping a running tray before the swap goes through
+  # routes that DRAIN its VM (quit Apple event by bundle id, then SIGTERM), and
+  # SIGKILL cannot fire before the tray's drain bound has elapsed.
+  - step: "the installer stops a running tray by its bundle id and never SIGKILLs it inside the VM drain bound"
+    command: "bash scripts/test-install-macos-tray-stop.sh 2>&1 | tail -1"
+    timeout_ms: 10000
+    expected_behavior: "ok:install-macos-tray-stop:4"
+
 observability:
   traces:
     - "@trace spec:ci-release"

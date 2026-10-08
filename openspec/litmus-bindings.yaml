@@ -151,9 +151,20 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:script-run-verb
+  - litmus:release-preflight-latest-read-bounded
+  - litmus:pilot-lua-ports
+  - litmus:shell-ratchet
+  - litmus:source-agreement-lua-cutover
+  - litmus:pre-push-trailer-states-what-it-saw
+  - litmus:land-refusals-carry-affordance
+  - litmus:plan-fragments-lane-refusals-carry-affordance
+  - litmus:decider-retirement-shape
   - litmus:cosign-arrives-verified
   - litmus:scorable-obligation-splitter
+  - litmus:census-enforced-reachability-split
   - litmus:added-test-is-referenced-shape
+  - litmus:verify-closure-shape
   - litmus:reset-flags-accepted
   - litmus:tool-materialization
   - litmus:metrics-log-fallback-is-loud
@@ -169,6 +180,16 @@ specs:
   # only because a binding names it; without this line the land-verdict fixture
   # would be a file rather than a gate.
   - litmus:land-verdict-through-a-pipe
+  - litmus:deciders-within-door-deadline
+  - litmus:groundtruth-regime-fails-closed
+  - litmus:spec-script-paths
+  - litmus:smoke-consecutive-lanes-shape
+  - litmus:github-token-auto-rotation
+  - litmus:mirror-upstream-auth-overwrite
+  - litmus:exit-pause-host-hold
+  - litmus:covering-relay-scope-shape
+  - litmus:relay-preflight-shape
+  - litmus:command-policy-evaluator-shape
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
   - litmus:smoke-release-channel-shape
@@ -208,6 +229,23 @@ specs:
   - litmus:gate-stamp-portable-digest
   - litmus:macos-portability-residuals
   - litmus:sidecar-arch-derivation
+  # 1505-svve / 1505-kyx8. No cloudflare-auth spec_id exists yet (the
+  # openspec/changes/cloudflare-login-and-fleet-vpn/ change has not been
+  # archived into openspec/specs/), so these bind here per the fallback
+  # scripts/check-added-test-is-referenced.sh names: a script's basename
+  # must appear in a bound litmus yaml or it cannot fail a gate.
+  - litmus:fake-cloudflare
+  - litmus:cloudflare-oauth-core
+  - litmus:cloudflare-token-rotation
+  - litmus:cloudflare-login
+  # 1506-nvqt. Same fallback: the fleet-messaging capability lives in the
+  # unsynced openspec/changes/fleet-messaging-poc/ change.
+  - litmus:fleet-msg-store-shape
+  # 1506-q7ab. Same fallback: the same-host mover (--msg-serve).
+  - litmus:fleet-msg-same-host
+  # 1506-ssb5. Same fallback: the forge-plan MCP msg_* tools and the Codex /
+  # OpenCode entrypoints' pending-mail-at-session-start line.
+  - litmus:fleet-msg-mcp
   coverage_ratio: 75
   last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher
@@ -251,7 +289,9 @@ specs:
 - spec_id: default-image
   status: active
   litmus_tests:
+  - litmus:forge-localization-staged-shape
   - litmus:opencode-render-probe-shape
+  - litmus:forge-project-trust-seeds-shape
   - litmus:forge-standalone-traceability
   - litmus:forge-tool-affordances
   - litmus:forge-diagnostics-e2e
@@ -393,7 +433,9 @@ specs:
 - spec_id: forge-environment-discoverability
   status: active
   litmus_tests:
+  - litmus:mcp-plan-resolver-pinning-shape
   - litmus:forge-environment-discoverability-shape
+  - litmus:forge-entrypoints-source-agent-profile
   - litmus:lane-observed-startup-log
   - litmus:onboarding-cold-start-discovery
   - litmus:forge-environment-discoverability-install-shape
@@ -491,13 +533,17 @@ specs:
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
+  - litmus:forge-seed-branch-resolution-shape
   - litmus:initialize-bare-metal-host-idempotent
   - litmus:bare-metal-lane-command-is-runnable
   - litmus:mirror-sync-state-readable
   - litmus:git-mirror-fetch-reconcile
   - litmus:git-mirror-dns-identity
+  - litmus:git-mirror-seed-failure-surfaced-shape
   - litmus:forge-clone-reachability-probe-shape
   - litmus:forge-seeds-from-salvage-ref
+  - litmus:mirror-relay-state
+  - litmus:mirror-refuses-to-advertise-when-broken
   - litmus:running-image-freshness
   - litmus:git-mirror-no-anonymous-http-write
   - litmus:git-mirror-no-anonymous-daemon-write
@@ -605,6 +651,7 @@ specs:
   - litmus:init-command-shape
   - litmus:image-build-convergence-shape
   - litmus:windows-host-lane-refusal
+  - litmus:ipv6-probe-per-router-shape
   coverage_ratio: 75
   last_verified: '2026-06-02'
 - spec_id: init-incremental-builds
@@ -650,7 +697,9 @@ specs:
   - litmus:fake-podman-direct-invocation-safety
   - litmus:litmus-parse-instruments-agree
   - litmus:litmus-podman-preflight-diagnosis-shape
+  - litmus:fake-backend-under-remote-podman-shape
   - litmus:podman-mock-refuses-unknown-invocations
+  - litmus:podman-mock-secret-lifecycle
   coverage_ratio: 100
   last_verified: '2026-08-18'
 - spec_id: macos-native-tray
@@ -672,8 +721,10 @@ specs:
   - litmus:join-the-fleet-idempotent
   - litmus:claims-fleet-visible
   - litmus:release-freeze-holds-code
+  - litmus:pre-push-deletion-only
   - litmus:expire-claims-reads-the-status-write
   - litmus:a-claim-names-a-workstation
+  - litmus:claim-wip-limit-shape
   - litmus:fragment-keys-are-read
   - litmus:gate-step-prefix-allocation
   - litmus:methodology-accountability-shape
@@ -709,6 +760,7 @@ specs:
 - spec_id: meta-orchestration
   status: active
   litmus_tests:
+  - litmus:claims-refusals-carry-affordance
   - litmus:forge-expert-base-guard-shape
   - litmus:e2e-eligibility-probe-shape
   - litmus:credential-channel-check-shape
@@ -720,8 +772,11 @@ specs:
   - litmus:forge-e2e-rate-limit-shape
   - litmus:codex-e2e-launch-parity
   - litmus:smoke-lock-fd-isolation-shape
+  - litmus:smoke-agent-watch-shape
+  - litmus:landed-but-open-shape
   - litmus:meta-orchestration-dirty-tree-safety
   - litmus:meta-orchestration-opsx-sync-merge
+  - litmus:openspec-cli-pin-shape
   - litmus:build-cache-sweep-trigger
   - litmus:issue-citation-convention
   - litmus:long-running-view-agreement
@@ -950,6 +1005,7 @@ specs:
 - spec_id: spec-traceability
   status: active
   litmus_tests:
+  - litmus:no-fixture-writes-live-ledger-shape
   - litmus:spec-traceability-shape
   - litmus:spec-traceability-usage-shape
   - litmus:litmus-runner-backslash-escaping-shape
@@ -977,6 +1033,12 @@ specs:
   - litmus:browser-isolation-e2e
   coverage_ratio: 60
   last_verified: '2026-05-14'
+- spec_id: local-web-preview
+  status: draft
+  litmus_tests:
+  - litmus:local-web-preview
+  coverage_ratio: 0
+  last_verified: null
 - spec_id: tools-overlay-fast-reuse
   status: obsolete
   litmus_tests: []
@@ -1219,6 +1281,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:secure-control-wire-guest-responder-shape
+  - litmus:exec-transcript-capped-in-every-driver
   - litmus:psk-input-parity-shape
   - litmus:host-guest-no-cfg-transport-selection
   - litmus:macos-vsock-inference-closure
@@ -1245,6 +1308,7 @@ specs:
   - litmus:vsock-exec-heartbeat
   - litmus:vsock-unauthenticated-peer-rejected
   - litmus:one-length-delimited-framing-impl
+  - litmus:headless-keepalive
   coverage_ratio: 100
   last_verified: '2026-07-14'
 - spec_id: expert-serve-grounded-pipeline
@@ -1255,3 +1319,33 @@ specs:
   - litmus:expert-serve-endpoint-shape
   coverage_ratio: 100
   last_verified: '2026-08-28'
+- spec_id: command-runtime
+  status: draft
+  litmus_tests:
+  - litmus:run-verb-agent-door-shape
+  coverage_ratio: 0
+  last_verified: '2026-09-27'
+- spec_id: command-policies
+  status: draft
+  litmus_tests:
+  - litmus:pretooluse-command-policy-shape
+  - litmus:command-policy-audit-shape
+  - litmus:command-policy-consent-shape
+  - litmus:fixture-git-dir-scope-shape
+  - litmus:host-kind-evidence-not-from-workspace
+  - litmus:smoke-skill-reset-env-matches-policy
+  coverage_ratio: 0
+  last_verified: '2026-09-27'
+- spec_id: branch-discipline
+  status: draft
+  litmus_tests:
+  - litmus:discipline-install-hooks-shape
+  - litmus:land-discipline-probe-shape
+  coverage_ratio: 0
+  last_verified: '2026-09-27'
+- spec_id: forge-git-identity-anonymization
+  status: active
+  litmus_tests:
+  - litmus:forge-git-identity-source
+  coverage_ratio: 1
+  last_verified: '2026-09-28'

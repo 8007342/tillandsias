@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: salvage-920-cluster-forge-20260916-232039-holds-eight-rows-marked-implemented-that-trunk-still-offers-as-ready-relay-it-hunk-by-hunk
+    field: status
+    value: completed
+    ts: "2026-09-27T14:27:22Z"
+    host: yoga
+
+events:
+  - packet_id: salvage-920-cluster-forge-20260916-232039-holds-eight-rows-marked-implemented-that-trunk-still-offers-as-ready-relay-it-hunk-by-hunk
+    event:
+      type: completed
+      ts: "2026-09-27T14:27:22Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 18d97f6f2 (land69 on origin/linux-next; work/1425-t9v9 896f872d9 an ancestor): hunk-level relay of fdafd13d5 — relayed/fixed/declined per hunk (recorded at 638f30d43); 13 event-only fragments, the 8 implemented writes NOT relayed; relay checks headless 848 under tray,listen-vsock with the closure tests selected, plan 455, dispatch-reap 11/11, capability-row 9 + 6; the eight rows re-verified against trunk: 920-eqjr and 926-3vs6 closed, six left ready with named gaps
+  - packet_id: salvage-920-cluster-forge-20260916-232039-holds-eight-rows-marked-implemented-that-trunk-still-offers-as-ready-relay-it-hunk-by-hunk
+    event:
+      type: note
+      ts: "2026-09-27T14:27:22Z"
+      host: yoga
+      summary: |-
+        relayed and each row dispositioned; the hot-paths negative control stays unmeasured (needs root)

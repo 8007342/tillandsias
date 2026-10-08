@@ -1,0 +1,113 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# T4 scoped covering litmus per relay: two packets. Design: plan/issues/efficiency-trims-design-2026-09-27.md
+packets:
+  - packet_id: litmus-covering-specs-relay-scope-partition
+    order: 1437-yfuh
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [litmus, coordination, relay, bash]
+    estimated_hours: 5
+    depends_on: []
+    owned_files: [scripts/litmus-covering-specs.sh, scripts/test-litmus-covering-relay-scope.sh, openspec/litmus-tests/litmus-covering-relay-scope-shape.yaml]
+    verifiable_closure: |
+      bash scripts/test-litmus-covering-relay-scope.sh prints
+      ok:covering-relay-scope:6/6 and exits 0, where, over a scratch litmus
+      corpus and bindings file: arm 1: --relay-scope <base> over a diff
+      touching scripts/x.sh prints every bound spec with a declared match on
+      that path as run:declared:<spec>; arm 2: a bound command-match spec of
+      size instant or quick prints run:command:<spec>; arm 3: a command-match
+      spec of size long, large or e2e prints deferred:size:<spec>; arm 4: a
+      spec whose phase is not pre-build prints deferred:phase:<spec>; arm 5:
+      when more than 15 specs qualify for run, the 16th and later (ordered
+      declared first, then spec name) print deferred:cap:<spec>, and
+      --all-covering moves them back to run; arm 6 NEGATIVE CONTROL: an
+      unbound spec is never in run (binding:unbound as today), and a path no
+      spec references yields an empty run set, exit 0, no warning. Two runs
+      on the same diff print byte-identical output. PRE-FIX RESULT: FAILS —
+      --relay-scope is not a mode of scripts/litmus-covering-specs.sh; the
+      only run-set today is every covering spec (37-52 per relay on
+      2026-09-27).
+    title: |
+      `litmus-covering-specs.sh --relay-scope <base>`: a deterministic run/deferred partition of the covering set (declared matches and instant/quick command matches run; long, non-pre-build and over-cap specs are named and deferred to the daily cut)
+    context: |
+      T4 of the 2026-09-27 trims. The --check gate runs no litmus (748-tkjx)
+      and the daily cut's check:litmus-pre-build runs the whole pre-build
+      suite (37 min, 11 runs in 7 days). The per-relay covering run is the
+      only pre-build litmus a change sees before the cut, and today it is
+      every covering spec, ~30 min per relay. What must survive: declared
+      coverage over touched fixtures (found the swallowed && and the second
+      ground-truth pin) and the deciders (stale pins). What can defer: long
+      and e2e command-mention matches, non-pre-build phases, and the tail of
+      an over-cap set, all named on stderr so the coordinator can opt in.
+      The daily cut is autonomous (operator 2026-09-26), so deferral is to a
+      run that happens. Output grammar per line:
+      <run|deferred>:<declared|command|size|phase|cap>:<spec>\t<path>\t<size>.
+      The memo tier (deferred:memo) is the sibling row 1437-v3gb.
+    next_action: >
+      Add the mode beside --changed: compute the covering rows as today,
+      partition by the four rules, sort, cap, print; keep the existing
+      default output untouched (the land tool's NOTICE reads it). Fixture
+      over a scratch corpus with the six arms; bind the litmus under the
+      ci-release spec.
+    notes: |
+      size: L
+      implementer_tier: opus
+      A wrong partition lets a red spec reach the cut unseen; the selection
+      is a gate-integrity decision even though the script is advisory.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from the
+      day's relay transcripts (37-52 specs per covering run).
+
+  - packet_id: covering-litmus-memo-skips-a-spec-that-passed-on-identical-bytes-and-inputs
+    order: 1437-v3gb
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: any
+    capability_tags: [litmus, memo, metrics, bash]
+    estimated_hours: 4
+    depends_on: [litmus-covering-specs-relay-scope-partition]
+    owned_files: [scripts/litmus-covering-specs.sh, scripts/run-litmus-test.sh, scripts/test-litmus-covering-memo.sh]
+    verifiable_closure: |
+      bash scripts/test-litmus-covering-memo.sh prints ok:covering-memo:4/4
+      and exits 0, where, over a scratch timing log and corpus: arm 1: a spec
+      with a status=pass record from this host within 24 h whose digest,
+      spec_digest and inputs_digest equal the current values prints
+      deferred:memo:<spec>; arm 2: the same spec with a status=fail record
+      prints run:… (a fail never memoises); arm 3: a record older than 24 h
+      or from another host does not memoise; arm 4: a change to any file the
+      spec's declared preconditions name changes inputs_digest and the spec
+      runs. PRE-FIX RESULT: FAILS — run-litmus-test.sh records digest and
+      spec_digest (1395-88tp) but no inputs_digest, and nothing reads the
+      records back; litmus:preflight-front-door was re-run four times on
+      2026-09-27 at 243 s each on identical digest and spec_digest.
+    title: |
+      A covering-litmus memo: skip a spec whose litmus bytes, spec bytes and declared inputs all match a pass recorded on this host within 24 h; a fail never memoises
+    context: |
+      T4 of the 2026-09-27 trims, the memo tier. The timing log already
+      names the bytes a litmus ran against (digest of the litmus file,
+      spec_digest of the spec) but not the inputs it read, so a record is a
+      bound rather than a memo (agent-observability.yaml
+      skippable_candidates.honest_limit names this exact next rung). Adding
+      inputs_digest (sha256 over the declared preconditions' workspace paths,
+      by git blob id plus working-tree diff) makes exact repeats measurable.
+      Fails are never skipped so a standing red keeps being seen until fixed.
+    next_action: >
+      Emit inputs_digest on litmus timing records in run-litmus-test.sh;
+      read the host's timing log in --relay-scope and demote a matching pass
+      to deferred:memo with its record ts; fixture with the four arms over a
+      scratch log.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Two scripts and a fixture; the key is fully specified. Depends on the
+      partition row landing first.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from the
+      timing log's four identical preflight-front-door records of that day.

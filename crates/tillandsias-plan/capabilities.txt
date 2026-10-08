@@ -26,6 +26,7 @@ capabilities
 #      capabilities` prints this file, embedded at compile time via
 capability-matrix
 carry-forward-check
+carry-forward-check-batch
 check
 # close: order 531 ran a forge whose checkout was a pre-expert `main` snapshot,
 closure-evidence-check
@@ -36,6 +37,9 @@ declared-closures
 declared-closures-check
 decompose
 dependencies-of
+# discipline: order 1443-w79y — branch-discipline seed (show|target|check-ref);
+#   order 1446-xqi6 adds install-hooks|raise|hook (per-project hook templates).
+discipline
 expert-serve
 experts-probe
 expire-claims
@@ -64,6 +68,8 @@ methodology
 methodology-ask
 methodology-index
 metrics-log-path
+# msg: order 1506-nvqt — the fleet message bus's local lane store (no ack verb).
+msg
 next
 next-order
 # One filename, two readers, so the "available now" and "available after a
@@ -71,14 +77,22 @@ next-order
 parked-blocks
 pipeline
 plan-events
+# policy: order 1443-isrk — command policy evaluator (eval|show).
+policy
 predicate
 query
 # reader.
 ready
 # "ready" only ever meant "the build finished", never "the binary can answer".
 # relaunch" sets can never drift apart the way a hardcoded list in the wrapper
+# run: order 1443-8pur — the agent door (argv through the policy engine, then tillandsias-exec).
+run
 score-checks
+# script: order 1384-bqhy — `script run <file.lua>` (Lua decider runner) and `script classify`.
+script
 select-rows
+# session-tokens: order 1437-3pj7 — billed tokens from the harness transcript.
+session-tokens
 set-field
 source-revision
 spec-envelope

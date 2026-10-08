@@ -13,7 +13,7 @@ HUMAN/OPERATOR-ONLY SUPERVISOR
   /advance-work-from-plan directly for their bounded work cycles.
 
 Usage:
-  ./repeat --prompt "<prompt>" [--times <n>] [--wait <duration>] [--timeout <duration>] [--agent <agents>] [--model <provider/model-or-id>]
+  ./repeat --prompt "<prompt>" [--times <n>] [--wait <duration>] [--timeout <duration>] [--agent <agents>] [--model <provider/model-or-id>] [--effort <level>]
 
 Options:
   --prompt <prompt>      Required prompt for every fresh agent cycle.
@@ -29,7 +29,10 @@ Options:
                          skip a harness that is down. One agent is chosen at
                          random per cycle. Default: random.
   --model <model>       Optional model override (e.g. openai/gpt-4o, claude-sonnet-4-5).
-                         Passed as -m to codex and opencode; ignored for other agents.
+                         Passed as -m to codex and opencode, --model to claude;
+                         ignored for other agents.
+  --effort <level>      Optional effort override (low, medium, high, xhigh, max).
+                         Passed as --effort to claude; ignored for other agents.
   --help, -h            Show this help.
 
 Resilience: a failed or silent cycle (non-zero exit, timeout, or an exit-0 run
@@ -53,6 +56,7 @@ WAIT_INTERVAL="45m"
 TIMEOUT_INTERVAL="90m"
 AGENT="random"
 MODEL=""
+EFFORT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -85,6 +89,11 @@ while [[ $# -gt 0 ]]; do
     --model)
       [[ $# -ge 2 ]] || die "--model requires a value"
       MODEL="$2"
+      shift 2
+      ;;
+    --effort)
+      [[ $# -ge 2 ]] || die "--effort requires a value"
+      EFFORT="$2"
       shift 2
       ;;
     --help|-h)
@@ -138,6 +147,17 @@ cd "$REPO_ROOT"
 MODEL_FLAG=()
 if [[ -n "$MODEL" ]]; then
   MODEL_FLAG=(-m "$MODEL")
+fi
+
+# claude uses long-flag spellings distinct from codex/opencode's -m.
+CLAUDE_MODEL_FLAG=()
+if [[ -n "$MODEL" ]]; then
+  CLAUDE_MODEL_FLAG=(--model "$MODEL")
+fi
+
+CLAUDE_EFFORT_FLAG=()
+if [[ -n "$EFFORT" ]]; then
+  CLAUDE_EFFORT_FLAG=(--effort "$EFFORT")
 fi
 
 duration_to_seconds() {
@@ -279,7 +299,7 @@ run_agent() {
       ;;
     claude)
       bin="$(resolve_bin CLAUDE_BIN claude)" || return $?
-      run_in_pty "$bin" --print --output-format text --dangerously-skip-permissions "$PROMPT" --add-dir "$REPO_ROOT"
+      run_in_pty "$bin" --print --output-format text --dangerously-skip-permissions "${CLAUDE_MODEL_FLAG[@]}" "${CLAUDE_EFFORT_FLAG[@]}" "$PROMPT" --add-dir "$REPO_ROOT"
       ;;
     opencode)
       bin="$(resolve_bin OPENCODE_BIN opencode)" || return $?

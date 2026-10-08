@@ -152,6 +152,11 @@ COPY config-overlay/mcp/ /home/forge/.config-overlay/mcp/
 # Claude keeps OAuth and project state in ~/.claude.json, so its entrypoint
 # merges this forge-only MCP manifest rather than replacing that file.
 COPY config-overlay/claude/mcp.json /home/forge/.config-overlay/claude/mcp.json
+# @trace order:1443-we89
+# The Bash-tool bridge (PreToolUse hook), merged into ~/.claude/settings.json at
+# launch by seed_claude_pretooluse_hook so every forge session on any project
+# runs it (operator ruling 1, 2026-09-27).
+COPY config-overlay/claude/settings.json /home/forge/.config-overlay/claude/settings.json
 
 # ── Shell configs ──────────────────────────────────────────────
 RUN mkdir -p /etc/skel/.config/fish
@@ -169,6 +174,10 @@ RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
 # ── Help system (locale-aware) ─────────────────────────────────
 # @trace spec:help-system-localization
 COPY help.sh /usr/local/share/tillandsias/help.sh
+# 792-7bt5: help.sh dispatches to help-${LOCALE}.sh; the translations now live
+# beside it in the build context and are staged here (they were in scripts/,
+# outside the context, and staged by nothing).
+COPY help-de.sh help-es.sh help-fr.sh help-ja.sh /usr/local/share/tillandsias/
 RUN chmod +x /usr/local/share/tillandsias/help*.sh || true
 RUN ln -sf /usr/local/share/tillandsias/help.sh /usr/local/bin/tillandsias-help
 

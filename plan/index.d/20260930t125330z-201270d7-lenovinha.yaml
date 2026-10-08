@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: test-preflight-front-door-plants-guards-and-edits-build-sh-in-the-live-checkout-while-it-runs-so-a-concurrent-gate-or-boundary-snapshot-sees-them
+    field: status
+    value: completed
+    ts: "2026-09-30T12:53:30Z"
+    host: lenovinha
+
+events:
+  - packet_id: test-preflight-front-door-plants-guards-and-edits-build-sh-in-the-live-checkout-while-it-runs-so-a-concurrent-gate-or-boundary-snapshot-sees-them
+    event:
+      type: completed
+      ts: "2026-09-30T12:53:30Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 0bf167343
+  - packet_id: test-preflight-front-door-plants-guards-and-edits-build-sh-in-the-live-checkout-while-it-runs-so-a-concurrent-gate-or-boundary-snapshot-sees-them
+    event:
+      type: note
+      ts: "2026-09-30T12:53:30Z"
+      host: lenovinha
+      summary: |-
+        landed in land109 as 0bf167343; follow-up: _live sha256sum lacks macOS dispatch

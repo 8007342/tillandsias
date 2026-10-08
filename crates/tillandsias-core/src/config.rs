@@ -201,6 +201,30 @@ pub fn parse_size_pack_kb(count_objects_output: &str) -> u64 {
     0
 }
 
+/// The repository's object store in KiB from `git count-objects -v` (WITHOUT
+/// `-H`): `size-pack` PLUS `size`, the loose objects (order 1445-7u63).
+///
+/// `size-pack` alone under-counts a live mirror badly. Measured on lenovinha
+/// 2026-09-27, the tillandsias mirror reported `size: 92168` beside
+/// `size-pack: 169437`, so a third of the store was loose. A forge clones all
+/// of it, so the budget has to cover all of it.
+///
+/// Returns 0 when neither line parses (for example `-H` output, whose "165.47
+/// MiB" is not a KiB integer), which `compute_hot_budget` clamps up to the
+/// floor, exactly as for an empty mirror.
+pub fn parse_repo_size_kb(count_objects_output: &str) -> u64 {
+    let mut total = 0u64;
+    for line in count_objects_output.lines() {
+        let trimmed = line.trim();
+        for prefix in ["size:", "size-pack:"] {
+            if let Some(rest) = trimmed.strip_prefix(prefix) {
+                total = total.saturating_add(rest.trim().parse::<u64>().unwrap_or(0));
+            }
+        }
+    }
+    total
+}
+
 /// Compute the `/home/forge/src` tmpfs budget (in MB) for a forge
 /// launch, given the project's git mirror pack size in KiB.
 ///
@@ -953,6 +977,32 @@ hot_path_inflation = 6
         let parsed_custom: GlobalConfig = toml::from_str(custom).unwrap();
         assert_eq!(parsed_custom.forge.hot_path_max_mb, 2048);
         assert_eq!(parsed_custom.forge.hot_path_inflation, 6);
+    }
+
+    /// Order 1445-7u63: the tillandsias mirror's real `count-objects -v`
+    /// output, measured on lenovinha 2026-09-27. Loose objects count too, so
+    /// the store is 261605 KiB, not the 169437 of size-pack alone, and the
+    /// budget clears the 256M floor that a 167M .git filled to 100%.
+    #[test]
+    fn repo_size_counts_loose_objects_and_packs() {
+        let measured = "count: 5157\nsize: 92168\nin-pack: 118445\npacks: 4\n\
+                        size-pack: 169437\nprune-packable: 50\ngarbage: 0\nsize-garbage: 0\n";
+        assert_eq!(parse_repo_size_kb(measured), 92168 + 169437);
+        let budget = compute_hot_budget(parse_repo_size_kb(measured), &ForgeConfig::default());
+        assert!(
+            budget > 256,
+            "the measured repo must clear the floor, got {budget}"
+        );
+        assert_eq!(budget, (261605 / 1024) * 4);
+    }
+
+    /// `-H` output is not KiB, and must not be misread as a size: it yields 0
+    /// (the floor) rather than a wrong number. This is how the pre-fix probe
+    /// read the mirror.
+    #[test]
+    fn repo_size_ignores_human_readable_output() {
+        let human = "size: 90.01 MiB\nsize-pack: 165.47 MiB\nsize-garbage: 0 bytes\n";
+        assert_eq!(parse_repo_size_kb(human), 0);
     }
 
     // @trace spec:forge-hot-cold-split (Requirement: Per-launch project

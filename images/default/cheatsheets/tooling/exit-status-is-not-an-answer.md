@@ -109,7 +109,7 @@ behaves. It fails only on the platform nobody ran it on, and it fails SILENTLY
 there, so the first symptom is a wrong answer somewhere downstream rather than
 an error.
 
-`scripts/check-bash-dialect.sh` catches the `date -d` family in about a second
+`scripts/lua/check-bash-dialect.lua` catches the `date -d` family in about a second
 and is wired into the gate. It is a source scan: run it before a SHA, not after
 a refusal.
 

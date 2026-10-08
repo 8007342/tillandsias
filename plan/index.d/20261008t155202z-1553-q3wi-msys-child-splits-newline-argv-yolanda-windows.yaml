@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-argv-entry-with-an-embedded-newline-reaches-an-msys-child-on-native-windows-split-into-several-arguments-breaking-the-one-argv-entry-arrives-unaltered-contract
+    order: 1553-q3wi
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [exec, windows, argv, msys]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-exec/src/lib.rs
+      - crates/tillandsias-exec/tests/executor_contract.rs
+    title: |
+      On native Windows, tillandsias-exec passes an argv entry that contains an embedded newline to an MSYS child (Git's usr/bin printf) as SEVERAL arguments, so Command::new(["printf", "beta\nalpha\ngamma\n"]) prints only "beta"
+    context: |
+      MEASURED on yolanda-windows 2026-10-08 while fixing 1386-iubj (native
+      cargo test -p tillandsias-exec --test verbs, Debug of the PipelineOutput):
+        argv: ["printf", "beta\nalpha\ngamma\n"]  completion: Exited(0)
+        stdout: "beta"
+        stderr: "printf: warning: ignoring excess arguments, starting with 'alpha'"
+      Nothing in the exec layer splits it. Windows has no argv, only one
+      command line, which the child re-parses. Rust std's Windows quoting
+      wraps an argument in quotes only for a space, a tab or an empty string,
+      so the newline goes out unquoted, and the MSYS runtime's parser treats
+      the newline as a separator. 1386-iubj's original "beta\r\n" from
+      System32 sort.exe came from this too: sort was only ever fed "beta".
+      executor_contract one_argv_entry_arrives_unaltered (CRITERION 4,
+      1252-fg9e) passes because its hostile literal has spaces, quotes and a
+      glob but NO newline. The contract is wider than its test.
+      WHY IT MATTERS: the scripting runtime makes argv-only the norm (no
+      shell strings), and a multi-line argument (a commit message, a fragment
+      body, a replacement text) silently arrives truncated on Windows with
+      exit 0.
+      The 1386-iubj test was moved off this path (printf expands the escapes
+      itself); this row is the executor fix.
+    exit_criteria:
+      - 'a test in executor_contract passes an argv entry containing LF (and CRLF) to printf %s and asserts it arrives byte-identical; pre-fix it FAILS natively on Windows with the measured "ignoring excess arguments" split'
+      - 'the fix quotes such entries on Windows (e.g. CommandExt::raw_arg with quoting forced for any whitespace) and the existing CRITERION 4 hostile literal still arrives unaltered'
+      - 'green natively on Windows and on Linux'
+    verifiable_closure: |
+      cargo test -p tillandsias-exec --test executor_contract, natively on
+      Windows and on Linux. Pre-fix: the newline case FAILS on Windows
+      (yolanda-windows 2026-10-08, evidence above).
+    events:
+      - type: filed
+        ts: "2026-10-08T15:53:00Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request; found while fixing 1386-iubj.
+          The pre-fix evidence is the measured printf warning above.

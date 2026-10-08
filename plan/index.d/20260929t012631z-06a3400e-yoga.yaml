@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: opencode-segfault-reproduced-with-a-host-side-coredump
+    field: notes
+    value: |-
+      SEPARATE FINDING, do not fold in: `coredumpctl` also lists THREE squid SIGSEGVs (2026-08-01 18:59, 2026-08-01 21:50, 2026-08-03 17:41). squid is the enclave proxy. Nobody has been watching that, and it is not part of the opencode story — it wants its own packet after someone confirms whether the proxy silently restarted or degraded.
+
+
+      [2026-09-29T01:26:31Z yoga] REPRO VEHICLE for the consecutive-lane dimension (767-qrbv, yoga 2026-09-29, work/767-qrbv 1faa1e06f): `scripts/smoke-consecutive-lanes.sh [--gap SECONDS]` runs two forge lanes against the SAME stack, both forced to the smoke prompt (never the full-meta budget), and passes only when lane 2 exits green, carries no fail:harness-crashed verdict from the harness supervisor, and the shared stack containers kept their ids. Incident 1's shape is `--gap 1200` (the second lane ~20 min after a clean first). Opt-in: nothing in the gate calls it. Logs land in target/smoke-consecutive-lanes/. Not yet run live on any host.
+    ts: "2026-09-29T01:26:31Z"
+    host: yoga
+
+events:
+  - packet_id: opencode-segfault-reproduced-with-a-host-side-coredump
+    event:
+      type: progress
+      ts: "2026-09-29T01:26:31Z"
+      host: yoga
+      summary: |-
+        status 'SEPARATE FINDING, do not fold in: `coredumpctl` also lists THREE squid SIGSEGVs (2026-08-01 18:59, 2026-08-01 21:50, 2026-08-03 17:41). squid is the enclave proxy. Nobody has been watching that, and it is not part of the opencode story — it wants its own packet after someone confirms whether the proxy silently restarted or degraded.
+        
+        
+        [2026-09-29T01:26:31Z yoga] REPRO VEHICLE for the consecutive-lane dimension (767-qrbv, yoga 2026-09-29, work/767-qrbv 1faa1e06f): `scripts/smoke-consecutive-lanes.sh [--gap SECONDS]` runs two forge lanes against the SAME stack, both forced to the smoke prompt (never the full-meta budget), and passes only when lane 2 exits green, carries no fail:harness-crashed verdict from the harness supervisor, and the shared stack containers kept their ids. Incident 1's shape is `--gap 1200` (the second lane ~20 min after a clean first). Opt-in: nothing in the gate calls it. Logs land in target/smoke-consecutive-lanes/. Not yet run live on any host.' (not terminal) with evidence_refs: 1faa1e06f
+  - packet_id: opencode-segfault-reproduced-with-a-host-side-coredump
+    event:
+      type: note
+      ts: "2026-09-29T01:26:31Z"
+      host: yoga
+      summary: |-
+        wire the 767-qrbv consecutive-lane variant into the repro notes

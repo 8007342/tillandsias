@@ -1,0 +1,41 @@
+packets:
+  - packet_id: observing-lua-stdlib-cannot-bypass-rooted-filesystem-capabilities
+    order: 1532-u9en
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [lua, rust, filesystem, policy, tests]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/src/script_run.rs
+      - crates/tillandsias-plan/tests/lua_observing_boundary.rs
+    title: "Observing Lua cannot bypass rooted filesystem verbs through stdlib or an initial walk symlink"
+    context: |
+      MEASURED 2026-10-02 on 7cbc38c1b: observing lua -e type probes return
+      function for os.remove, os.rename, io.lines, io.tmpfile, package.loadlib.
+      These unmanaged filesystem/native-library paths bypass the rooted fs
+      capability surface; Cacheable already has an allow-list. Initial fs.walk
+      symlink escape is a source-review hypothesis to reproduce, not yet proof.
+      User's 12-hour plan assigns Sol policy/filesystem hardening. Coordinate
+      after 1528-gxzf (script_run.rs) and 1531-ae4a (lua_predicate.rs) to avoid
+      concurrent edits. Do not broaden the trusted --unsandboxed opt-in.
+    outcome: "Both sandboxed classes withhold unmanaged filesystem/native-loader stdlib entrypoints; rooted fs.walk refuses an outside-root initial symlink."
+    exit_criteria:
+      - "Sandboxed observing and cacheable classes cannot access io.lines/io.tmpfile, os.remove/os.rename, package.loadlib or equivalent unmanaged filesystem/native-loader paths; approved deterministic helpers and declared observing capabilities remain usable."
+      - "Scratch outside-root read/write/rename/delete controls fail through stdlib while approved rooted fs APIs still work, including fixture-scope restrictions."
+      - "Reproduce or refute the initial fs.walk symlink hypothesis; if reproduced, fix it and pin outside-root start and descendant controls without dropping approved traversal behavior."
+      - "Lua runtime, proc and script regression suites remain green; no claim that arbitrary spawned children are filesystem-sandboxed is introduced."
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test lua_observing_boundary, plus existing
+      Lua runtime/proc/script suites; scratch fixtures never touch real user data.
+    unscoreable: "pinned-by-its-own-fixture: crates/tillandsias-plan/tests/lua_observing_boundary.rs"
+    next_action: "After advisory and policy slices land, let Sol reproduce and implement the observing allow-list and rooted walk checks with positive/negative controls."
+    notes: |
+      size: L
+      implementer_tier: opus
+      Does not promise a sandbox for arbitrary child processes or activate default-deny.
+    provenance: "Operator-approved 12-hour plan; independent Sol source review; parent type probe on 2026-10-02."

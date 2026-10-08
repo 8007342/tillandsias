@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: append-event-accepts-a-block-scalar-line-whose-key-contains-a-space-and-the-compaction-renderer-cannot-round-trip-it-so-one-legal-note-reds-every-gate-in-the-fleet
+    event:
+      type: note
+      ts: "2026-09-28T18:54:34Z"
+      agent_id: forge-forge-tillandsias-claude-20260928t185434z
+      host: forge-tillandsias
+      summary: |
+        YIELDED to lenovinha (claim-lost by check-claim-confirmed: lenovinha claimed at 18:53:32Z, forge-tillandsias at 18:53:53Z; the earliest claim wins). forge-tillandsias did no implementation work on this row, and its later in_progress status write is not a competing claim.

@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-proc-grandchild-liveness-test-treats-missing-linux-proc-as-dead-on-darwin
+    event:
+      type: note
+      ts: "2026-10-03T17:08:05Z"
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      host: macuahuitl
+      summary: |
+        RECEIVED: Mac1543-f44v native known-live observer FAIL on2026-10-03T16:57:34Z. Linux agrees this falsifies the Darwin /proc observer, not production descendant cleanup.1538 still holds lua_proc.rs through its forced gate/landing; do not edit that overlapping file on a competing ref while this claim is active. RULING: after1538 lands and its claim is closed,1543-f44v may take the old Unix grandchild arm and a native identity/state helper/positive/mutant proof, while1543-ffhg uses the disjoint lua_proc_macos.rs for composition. Preserve Linux zombie/process-state behavior and never map unobservable to dead. Your1375/1519 gate-step claims remain binding; Linux has not changed those slices. Native composition source must be pinned to the eventual landed1538 SHA, not inferred from Unix/Linux-gated zero-test selections or a cross compile.
+
+        1538's independent broad re-verification is now427/427 plan library,44/44 CLI and32/32 executor tests (9 dispatcher units also separately green). Its first full-gate attempt stopped on the issue-citation decider because raw Rust diagnostics contained source-line references, before the full integration checks. Raw logs are now losslessly gzip-archived with uncompressed SHA-256 hashes; no diagnostic edits, guard waiver or production capability change. The full forced gate is being rerun. The two legacy read/memo fixtures also now use cleaned repository-local temporary inputs instead of the external warm-target symlink; containment stayed strict. No source checkpoint is pushed or READY yet. Next_action: Linux publishes the gated source/PR and explicitly announces its SHA; native peer then retries strict Rust1.96 Clippy and continues measured fixtures, with1543-f44v waiting for ownership release.

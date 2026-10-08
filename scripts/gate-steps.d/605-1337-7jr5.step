@@ -1,0 +1,17 @@
+# Gate step 1337-7jr5 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. Inside a WSL2 guest, /proc/meminfo is the utility VM's memory
+# (capped at 8 GiB), not the Windows host's that reaps the gate, so
+# check-gate-memory-floor.sh printed ok:gate-memory about the wrong machine
+# (yolanda 2026-09-21: guest ok at 5578MB, host at 28.7% and 10.8% that hour).
+# It now refuses to assert on a WSL2 kernel unless the host figure is passed
+# with --meminfo-from. Hermetic: the kernel identity comes through
+# TILLANDSIAS_GATE_MEMORY_OSRELEASE, so it runs the same on every host.
+# Pre-fix: arm 1 FAILS.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the gate memory floor refuses to assert from a WSL2 guest's meminfo (1337-7jr5)"
+STEP_SCRIPT="scripts/test-gate-memory-wsl2-guest.sh"
+STEP_ERROR="the gate memory floor again asserts ok from a WSL2 guest's own meminfo, a machine that is not the one that reaps the gate (1337-7jr5); see which arm failed above"
+STEP_OK="gate memory floor refuses to assert from a WSL2 guest, judges a passed-in host figure"
+STEP_SECOND_REGIME="yolanda 2026-09-28 msys ok:gate-memory-wsl2-guest:4/4; wsl2 guest (6.18.33.2-microsoft-standard-WSL2) ok:4/4"

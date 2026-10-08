@@ -6,6 +6,34 @@
 # way it can lie has to be pinned.
 set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; cd "$ROOT" || exit 1
+# ORDER 1516-wru4: NEVER PLANT IN THE LIVE CHECKOUT. The arms below plant
+# guards and gate steps and append to build.sh; run in place, a concurrent gate
+# or boundary snapshot in this checkout saw them. So the fixture re-execs itself
+# inside a detached scratch worktree (target/ is ignored, so the live status
+# does not move), overlaid with the live tracked files so uncommitted edits are
+# still what is tested. A sampler watches the live tree the whole run and the
+# outer half refuses if its status or build.sh moved.
+if [ -z "${FRONT_DOOR_SCRATCH:-}" ]; then
+    mkdir -p "$ROOT/target/plan-scratch"
+    SCR="$(mktemp -d "$ROOT/target/plan-scratch/front-door.XXXXXX")"
+    git worktree add -q --detach "$SCR" HEAD >/dev/null 2>&1 || { echo "FAIL: cannot create scratch worktree"; exit 1; }
+    git diff --name-only -z HEAD | while IFS= read -r -d '' f; do
+        if [ -e "$f" ]; then mkdir -p "$SCR/$(dirname "$f")"; cp -p "$f" "$SCR/$f"; else rm -f "$SCR/$f"; fi
+    done
+    _live() { git -C "$ROOT" status --porcelain; sha256sum "$ROOT/build.sh"; }
+    before="$(_live)"
+    ( while :; do [ "$(_live)" = "$before" ] || { [ -e "$SCR.moved" ] || { date +%T; diff <(printf '%s\n' "$before") <(_live); } > "$SCR.moved"; }; sleep 1; done ) & sampler=$!
+    ( cd "$SCR" && FRONT_DOOR_SCRATCH=1 bash scripts/test-preflight-front-door.sh ); rc=$?
+    kill "$sampler" 2>/dev/null; wait "$sampler" 2>/dev/null
+    moved=0; [ "$(_live)" = "$before" ] || moved=1
+    [ -e "$SCR.moved" ] && { moved=1; sed 's/^/        /' "$SCR.moved"; }
+    git worktree remove --force "$SCR" >/dev/null 2>&1; rm -rf "$SCR" "$SCR.moved"
+    if [ "$moved" -ne 0 ]; then
+        echo "  [FAIL] the live checkout moved while the door ran (status or build.sh changed) — 1516-wru4"; exit 1
+    fi
+    echo "  [OK]   the live checkout's status and build.sh never moved during the run (1516-wru4)"
+    exit "$rc"
+fi
 pass=0; fail=0
 # Orphan baseline BEFORE this fixture runs the door: a host may have background
 # work of its own, and an arm that counts globally would blame this door for it.
@@ -45,6 +73,15 @@ fi
 # Plant a roster entry that is neither run nor named and the door must not
 # silently ignore it. This is what keeps enumeration from decaying into
 # curation by another name.
+# ORDER 1496-w25b: RUN THE DOOR ON THE HOST'S OWN podman. Under the litmus
+# runner PATH starts with its podman shim (target/litmus-runtime/bin), and on a
+# toolbox host build.sh re-execs through `toolbox run`, whose `podman exec`
+# then went through that shim and was killed at the shim's 120 s diagnostics
+# budget: no planted guard, no wall= line, and an orphaned exec session left
+# running in the toolbox. This fixture tests the front door, not podman calls.
+PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/target/litmus-runtime/bin$' | paste -sd: -)"
+export PATH
+
 PLANT=scripts/check-zz-1305-planted.sh
 cat > "$PLANT" <<'PL'
 #!/usr/bin/env bash
@@ -62,13 +99,161 @@ if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'zz-1305-planted'; then
 else
     bad "a newly wired guard was invisible to the front door (rc=$rc)"
 fi
+# ── ARM 2b (1515-iwb3, 1247-amcu criterion 5): THE REFUSAL'S REMEDY RUNS ─────
+# The per-guard refusal must say why and name the command that reruns that
+# guard alone, and that command, EXECUTED, must reproduce the guard's own
+# verdict: a remedy that names a command which does not exist or does not
+# reach the guard would be confidently wrong.
+remedy_cmd="$(grep -A1 'the guard check-zz-1305-planted refused' <<<"$out" | sed -n 's/.*confirm with the guard alone: \(bash [^ ]*\).*/\1/p' | head -n 1)"
+if grep -q '  why: the guard check-zz-1305-planted refused this tree' <<<"$out" && [ -n "$remedy_cmd" ]; then
+    again="$($remedy_cmd 2>&1)"; again_rc=$?
+    if [ "$again_rc" -ne 0 ] && grep -q 'violation:planted-guard' <<<"$again"; then
+        ok "the refusal names its why and a remedy command that, executed ($remedy_cmd), reproduces the guard's verdict"
+    else bad "the remedy command '$remedy_cmd' did not reproduce the guard (rc=$again_rc)"; fi
+else bad "the per-guard refusal carries no why/remedy with a runnable command"; fi
 cleanup; trap - EXIT INT TERM HUP PIPE
+
+# ── ARM 2c: A GUARD THE GATE RUNS INLINE IS A ROSTER ENTRY (1499-m9fj) ──────
+# MEASURED: 48 deciders build.sh runs as `_run bash .../check-X.sh` were in none
+# of the three rosters, so the door passed trees the gate refused. Plant one in
+# a never-called function of build.sh: the door must run it and refuse.
+# AND IN THE GATE'S MODE: a second plant refuses ONLY when given the argument
+# the gate passes it, so a door that drops arguments (the first draft of this
+# row, which made check-mcp-live-build refuse a tree the gate passes) sees a
+# pass there and this arm fails.
+PLANT=scripts/check-zz-1499-planted.sh
+PLANT_ARGS=scripts/check-zz-1499-args.sh
+cat > "$PLANT_ARGS" <<'PL'
+#!/usr/bin/env bash
+if [ "${1:-}" = zzmode ] && [ "${2:-}" = second ]; then
+    echo "violation:planted-mode-guard: refuses only in the gate's mode"
+    exit 1
+fi
+echo "ok:planted-mode-guard: no mode given (argv: $*)"
+PL
+chmod +x "$PLANT_ARGS"
+cat > "$PLANT" <<'PL'
+#!/usr/bin/env bash
+echo "violation:planted-inline-guard: this guard exists and refuses"
+exit 1
+PL
+chmod +x "$PLANT"
+_bs_backup="$(mktemp "${TMPDIR:-/tmp}/build-sh-1499.XXXXXX")"
+cp -p build.sh "$_bs_backup"
+cleanup() { rm -f "$PLANT" "$PLANT_ARGS"; [ -s "$_bs_backup" ] && cp -p "$_bs_backup" build.sh; rm -f "$_bs_backup"; }
+trap cleanup EXIT INT TERM HUP PIPE
+printf '\n_zz_1499_never_called() {\n    _run bash "$SCRIPT_DIR/scripts/check-zz-1499-planted.sh"\n    _run bash "$SCRIPT_DIR/scripts/check-zz-1499-args.sh" zzmode second 2>&1\n}\n' >> build.sh
+out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"; rc=$?
+if [ "$rc" -ne 0 ] && grep -q 'zz-1499-planted' <<< "$out"; then
+    ok "a guard build.sh runs inline is picked up and refuses (1499-m9fj)"
+else
+    bad "a guard the gate runs inline was invisible to the front door (rc=$rc)"
+fi
+if grep -q '^refused:preflight:check-zz-1499-args\[zzmode second\]$' <<< "$out" \
+    && grep -q 'violation:planted-mode-guard' <<< "$out"; then
+    ok "the door runs an inline guard in the gate's mode, with the gate's arguments (1499-m9fj)"
+else
+    bad "the door ran an inline guard without the arguments the gate passes it"
+fi
+cleanup; trap - EXIT INT TERM HUP PIPE
+
+# ── ARM 2b: A SELF-DECLARED GATE-ONLY GUARD (1496-w25b) ─────────────────────
+# A fixture that declares `# preflight: gate-only — <reason>` is reported as a
+# DECLARED skip by name, counted, and NOT run (it would leave a marker). The
+# NEGATIVE CONTROLS: the same plant with NO reason runs, and a check-* (a push
+# decider) that declares it runs, each with a note saying why.
+GO_MARK="$(mktemp -u "${TMPDIR:-/tmp}/gate-only-ran.XXXXXX")"
+plant_go() { # plant_go <script path> <declaration line>
+    printf '#!/usr/bin/env bash\n%s\ntouch "%s.$(basename "$0")"\nexit 0\n' "$2" "$GO_MARK" > "$1"
+    chmod +x "$1"
+}
+GO_A=scripts/test-zz-1496-gate-only.sh
+GO_B=scripts/test-zz-1496-gate-only-bare.sh
+GO_C=scripts/check-zz-1496-gate-only-decider.sh
+GO_STEP=scripts/gate-steps.d/999-zz-1496-gate-only.step
+plant_go "$GO_A" '# preflight: gate-only — runs the planted fixture harness end to end'
+plant_go "$GO_B" '# preflight: gate-only'
+plant_go "$GO_C" '# preflight: gate-only — a decider claiming it'
+{ for p in "$GO_A" "$GO_B" "$GO_C"; do
+    printf 'STEP_DESC="planted"\nSTEP_SCRIPT="%s"\nSTEP_ERROR="planted"\nSTEP_OK="planted"\n' "$p"; done; } > "$GO_STEP"
+go_cleanup() { rm -f "$GO_A" "$GO_B" "$GO_C" "$GO_STEP" "$GO_MARK".*; }
+trap go_cleanup EXIT INT TERM HUP PIPE
+out="$(TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight 2>&1)"
+if grep -q '^skip:preflight:test-zz-1496-gate-only:gate-only — runs the planted fixture harness end to end$' <<<"$out" \
+    && [ ! -e "$GO_MARK.test-zz-1496-gate-only.sh" ]; then
+    ok "a declared gate-only fixture is a named declared skip and is not run"
+else
+    bad "a declared gate-only fixture was run, or not reported by name as a declared skip"
+fi
+if [ -e "$GO_MARK.test-zz-1496-gate-only-bare.sh" ] \
+    && grep -q 'test-zz-1496-gate-only-bare:gate-only-without-a-reason' <<<"$out"; then
+    ok "NEGATIVE CONTROL: a declaration with no reason is not honoured; the guard runs"
+else
+    bad "a reasonless gate-only declaration was honoured"
+fi
+if [ -e "$GO_MARK.check-zz-1496-gate-only-decider.sh" ] \
+    && grep -q 'check-zz-1496-gate-only-decider:gate-only-ignored' <<<"$out"; then
+    ok "NEGATIVE CONTROL: a push decider cannot declare itself gate-only; it runs"
+else
+    bad "a check-* push decider was allowed to skip the door"
+fi
+go_cleanup; trap - EXIT INT TERM HUP PIPE
+
+# ── ARM 2d: A SERIAL GUARD RUNS WITH NOTHING BESIDE IT (1499-m9fj) ──────────
+# The door runs guards concurrently; a guard declaring `# preflight: serial —
+# <reason>` writes shared state and must run ALONE. Three plants log start and
+# end to one file: A declares serial, B and C do not. PREMISE FIRST: B and C
+# must overlap each other, or this run proves nothing about concurrency. Then
+# no line may fall between A's start and A's end.
+SER_LOG="$(mktemp "${TMPDIR:-/tmp}/serial-1499.XXXXXX")"
+plant_ser() { # plant_ser <path> <tag> <header line or empty>
+    printf '#!/usr/bin/env bash\n%s\necho "%s start" >> "%s"\nsleep 2\necho "%s end" >> "%s"\n' \
+        "$3" "$2" "$SER_LOG" "$2" "$SER_LOG" > "$1"
+    chmod +x "$1"
+}
+SER_A=scripts/test-zz-1499-serial-a.sh
+SER_B=scripts/test-zz-1499-serial-b.sh
+SER_C=scripts/test-zz-1499-serial-c.sh
+SER_STEP=scripts/gate-steps.d/999-zz-1499-serial.step
+plant_ser "$SER_A" A '# preflight: serial — planted: writes the shared log alone'
+plant_ser "$SER_B" B ''
+plant_ser "$SER_C" C ''
+{ for p in "$SER_A" "$SER_B" "$SER_C"; do
+    printf 'STEP_DESC="planted"\nSTEP_SCRIPT="%s"\nSTEP_ERROR="planted"\nSTEP_OK="planted"\n' "$p"; done; } > "$SER_STEP"
+ser_cleanup() { rm -f "$SER_A" "$SER_B" "$SER_C" "$SER_STEP" "$SER_LOG"; }
+trap ser_cleanup EXIT INT TERM HUP PIPE
+TILLANDSIAS_PREFLIGHT_JOBS=3 TILLANDSIAS_PREFLIGHT_TIMEOUT=5 ./build.sh --preflight >/dev/null 2>&1
+ser="$(tr '\n' ' ' < "$SER_LOG")"
+# overlaps <X> <Y>: 1 when X starts while Y is running or Y starts while X is.
+# An interval test, not a string pattern: B and C can overlap without their
+# start lines being adjacent (measured: `B start A end C start B end`).
+overlaps() {
+    awk -v x="$1" -v y="$2" '
+        $2 == "start" { if (($1 == x && open[y]) || ($1 == y && open[x])) o = 1; open[$1] = 1 }
+        $2 == "end"   { open[$1] = 0 }
+        END { print o + 0 }' "$SER_LOG"
+}
+if [ "$(overlaps B C)" = 1 ]; then
+    ok "PREMISE: undeclared plants B and C ran concurrently ($ser)"
+else
+    bad "PREMISE: B and C did not overlap, so this run cannot show exclusivity ($ser)"
+fi
+if [ "$(overlaps A B)" = 0 ] && [ "$(overlaps A C)" = 0 ] && grep -q '^A end$' "$SER_LOG"; then
+    ok "a guard declaring serial ran with nothing beside it"
+else
+    bad "a serial guard shared its run with another guard ($ser)"
+fi
+ser_cleanup; trap - EXIT INT TERM HUP PIPE
 
 # ── ARM 3: A NAMED SKIP IS NOT A REFUSAL (1273-4mak, 1309-fhxb) ─────────────
 # MEASURED: test-uninstall-matcher-spares-bystanders prints skip:not-darwin and
 # exits non-zero, and this door called it `refused` — 1309-fhxb's shape inside
 # the fix for 1305, written by the host that filed 1309-fhxb the same evening.
-if grep -qE "grep -qE '\^skip:'" build.sh; then
+# 1384-bqhy: the door no longer greps for ^skip: itself; it asks the one
+# classifier (script classify, whose precedence puts a named skip first) and
+# books its `skip` kind as a declared skip.
+if grep -q '_pf_kind="$(_pf_classify "$_pf_rc" "$_pf_tmp")"' build.sh \
+   && grep -qE '^[[:space:]]+skip\)$' build.sh && grep -q '_pf_declskip=$((_pf_declskip + 1)) ;;' build.sh; then
     ok "a skip: line is treated as a skip whatever the guard exits with"
 else
     bad "the door does not recognise a named skip"

@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+#
+# Filed by yoga at macuahuitl's request (2026-09-27), from the v56.9.27.2 Linux
+# curl-install smoke.
+packets:
+  - packet_id: status-check-exits-zero-and-prints-completed-while-vault-is-down-and-launches-the-git-mirror-credential-less
+    order: 1437-dypk
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [status-check, vault, git-mirror, fail-loud, smoke]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    unscoreable: "unpinnable-until-the-guard-exists: the closure is a test (or smoke arm) that runs --status-check with the Vault container NOT running and asserts EITHER a non-zero exit OR a machine-readable degraded-state token in the verdict (not only a WARNING prose line), AND that the git mirror is not started credential-less without the verdict saying so. Pre-fix result: FAILS — measured on yoga 2026-09-27 (below): rc=0, 'status-check completed', two WARNING lines, mirror launched credential-less. NEGATIVE CONTROL: with Vault up the same run exits 0 with a clean verdict (measured: rc=0, 0 warnings)."
+    title: |
+      `tillandsias --status-check` exits 0 and prints "status-check completed" while warning that the Vault container is not running, and launches the git mirror credential-less — a green verdict over a degraded stack, the fail-loud class
+    context: |
+      MEASURED on yoga 2026-09-27 during the v56.9.27.2 Linux curl-install smoke,
+      right after `install.sh` (reset opted out, so reprovision ran through plain
+      --init, which builds images and does NOT bring the enclave up):
+
+        tillandsias --status-check   -> rc=0 (17 s), last line "status-check completed"
+          [tillandsias] WARNING: status-check mirror service-identity provisioning skipped: Vault container is not running
+          [tillandsias] WARNING: status-check mirror launching credential-less: vault AppRole auto-auth mint for the git-mirror relay credential failed: Vault container is not running
+
+      Then `tillandsias --ensure-enclave` (rc=0, "ok:enclave-ensured:proxy=running",
+      Vault bootstrap complete) and `--status-check` again -> rc=0, 0 warnings — the
+      negative control: the same command is clean when Vault is up.
+
+      Source (by reading, origin/linux-next at the time of filing): the
+      warnings print at crates/tillandsias-headless/src/main.rs ~:10410 and
+      ~:10421; the verdict "status-check completed" at ~:1084 / ~:1109 is
+      unconditional with respect to them. An existing test (~:20822) asserts the
+      WARNING text is present — i.e. the degraded path is pinned as a warning,
+      not as a verdict.
+
+      WHY IT MATTERS: a smoke or an operator reading rc and the last line sees a
+      pass while the mirror runs with no credential; the degraded state is only
+      visible to a reader who greps prose. Whether the right answer is a
+      non-zero exit or a named degraded verdict token is the implementer's call;
+      either satisfies the criterion, silence does not.

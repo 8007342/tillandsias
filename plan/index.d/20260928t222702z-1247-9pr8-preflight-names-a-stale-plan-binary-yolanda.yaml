@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: preflight-refuses-a-stale-plan-binary-by-name-instead-of-letting-four-unrelated-fixtures-refuse-downstream
+    order: 1247-9pr8
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    parent_order: 1247-amcu
+    pickup_role: any
+    capability_tags: [affordance, preflight, plan-binary, fail-loud]
+    estimated_hours: 2
+    owned_files: [build.sh]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixture that presents a stub plan binary answering stale and asserts ONE named refusal and zero guard runs is written in the same commit as the change.
+    title: |
+      ./build.sh --preflight with a stale plan binary refused four unrelated fixtures (bsd-count-shapes, json-query-jq-parity, lua-determinism, plan-hash-time-verbs; 1462-trch) with no shared cause named, sending a reader down four wrong paths. The binary answers its own currency in 0.3s (validator-surface-hash --check); ask it once, up front.
+    verifiable_closure: |
+      With a resolved plan binary whose validator-surface-hash --check answers stale, ./build.sh --preflight prints ONE refused:preflight:stale-plan-binary line carrying why and the rebuild remedy, runs no guards, and exits nonzero. With a current binary, or none, or one too old to answer, preflight behaves exactly as before. Pre-fix: measured on yolanda 2026-09-28, four fixture refusals and no mention of the binary.
+    events:
+      - type: filed
+        ts: "2026-09-28T22:27:02Z"
+        host: yolanda
+        summary: Filed and claimed by yolanda-windows; the coordinator assigned this follow-up to 1462-trch.

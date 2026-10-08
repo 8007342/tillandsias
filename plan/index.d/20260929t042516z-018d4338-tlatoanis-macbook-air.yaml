@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-macos-guest-disk-starts-at-20-gib-and-grows-in-10-gib-steps-to-a-50-gib-cap-instead-of-a-250-gib-sparse-disk
+    field: status
+    value: completed
+    ts: "2026-09-29T04:25:16Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-macos-guest-disk-starts-at-20-gib-and-grows-in-10-gib-steps-to-a-50-gib-cap-instead-of-a-250-gib-sparse-disk
+    event:
+      type: completed
+      ts: "2026-09-29T04:25:16Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: 8522fca2b (land88)
+  - packet_id: the-macos-guest-disk-starts-at-20-gib-and-grows-in-10-gib-steps-to-a-50-gib-cap-instead-of-a-250-gib-sparse-disk
+    event:
+      type: note
+      ts: "2026-09-29T04:25:16Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        LANDED in land88 at 8522fca2b (real gate 1060 s). Re-measured there on tlatoanis-macbook-air (darwin, env -u CARGO_TARGET_DIR): vz.rs carries GUEST_DISK_SIZE_GIB = 20 and GUEST_DISK_MAX_GIB = 50; the vm-layer guest_disk tests (guest_disk_grows_in_steps_to_the_cap_and_never_shrinks, wsl provisioning_asserts_guest_disk_headroom) pass. Criterion 1 (a fresh qcow2 provision gives 20 GiB apparent / 731 MB allocated, with the guest / btrfs spanning 21.4 GB) and criterion 3 (grown 20 -> 30 GiB, followed by the guest on the next boot) were measured on real boots and are recorded on this row.

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-script-run-trace-records-every-managed-process-terminal-outcome
+    event:
+      type: progress
+      ts: "2026-10-08T06:37:13Z"
+      agent_id: linux-macuahuitl-opus5-20261008t063710z
+      host: macuahuitl
+      summary: |
+        PROGRESS (not completion; row stays open). Second bounded Linux slice on work/1539-dt84 at b8ff09994 (base trunk f34001cab): post-cleanup collection of registered async handles plus outer-timeout trace rendering.
+
+        Delivered: Host::collect_terminals / Host::collect_locked record the authentic published Ok(Output) of every still-registered async handle after Scope::cleanup, without pumping the closed dispatcher, invoking callbacks, setting delivered or waiting on supervisors. Err/None publications produce no record. Host::release_callbacks collects under the same dispatch lock before clearing, so collector and release are serialized; RunId dedup and redaction are reused through push_terminal/terminal_record. Completed or pending Finished receipts keep their frozen wall_ms (wall_basis=finished_receipt); otherwise wall_ms is launch-request-to-host-collection, labelled wall_basis=launch_request_to_host_collection (not OS lifetime). cli_run's outer-timeout branch now renders trace:proc records on stderr under --trace; stdout, refusal line and exit 124 unchanged.
+
+        Red before (unfixed trunk): trace_outer_timeout_renders_collected_outstanding_async_terminals, trace_dropped_unwaited_handle_is_collected_on_verdict_and_on_error and strengthened trace_outer_timeout_preserves_stdout_and_exit_and_renders_held_records FAILED (zero records on outer timeout; dropped handle absent); 12 other trace controls green. Green after: lua_proc_trace 15/15 (three repeat runs), lua_proc 49/49, script_process unit 11/11 incl. new cleanup_collection_keeps_receipts_labels_fallback_and_never_fabricates (Err/None absence, preserved pending receipt, no callbacks); mutation ignoring pending receipts made it fail (31 vs 1 ms). cargo test -p tillandsias-exec green; cargo fmt --check clean; strict clippy (-D warnings -A clippy::double_must_use, plan+exec, all targets) clean. No ./build.sh gate was run for this checkpoint.
+
+        Remaining: late registration after executor setup; blocking proc.run post-result race under outer timeout; identity-less executor errors; chain/select/all comprehensiveness and legacy/standalone doors; native Mac/Windows conformance. No executor API was changed. Next_action: put work/1539-dt84 through an independently verified PR/landing, then pick the next bounded gap under the existing contract; do not close 1539 or parent from this partial evidence.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-bounds-how-many-packets-one-host-holds-in-progress-so-hosts-climbed-to-six-to-ten-concurrent-claims-and-the-fleet-ended-a-week-with-most-work-open
+    event:
+      type: note
+      ts: "2026-09-30T15:29:24Z"
+      agent_id: linux-macuahuitl-claude-20260930t152923z
+      host: macuahuitl
+      summary: |
+        FINDING (coordinator, 2026-09-30, first real use after land111): the WIP limit counts live claims PER HOST, but several agents share a host. On macuahuitl, the coordinator's first claim after landing was refused 3/3 by claims held by Codex (1448-2vth, 1469-vhuk) and by the exited operator forge (1381-za6b), none of them the coordinator's to release; it claimed with --over-wip and a reason. Candidate refinement (not filed as a row yet, operator's call): count per agent identity (the claim's agent_id) rather than per host, or exempt claims whose agent_id belongs to a ledger-only peer. The override worked exactly as designed.

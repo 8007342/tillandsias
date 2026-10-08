@@ -30,7 +30,21 @@ TILLANDSIAS_HOST_PROJECT_ROOT=$HOME/claudia \
 `--ensure-enclave` is the documented restore path after a reboot or a stopped
 proxy. The second command launches a lane, which brings up the **per-project**
 mirror `tillandsias-git-<project>` (order 659-8faj: mirrors do not share an
-alias). It opens an interactive shell; exiting it leaves the stack running.
+alias). It opens an interactive shell.
+
+**The mirror lives only while a lane of that project is open** (order
+1448-yt96). Exiting the LAST lane of a project tears down the project half of
+the stack, the mirror included; the lane log says so in one line:
+`no active lane containers; cleaning project + shared stack for <project>
+(... keeping application-lifetime: tillandsias-vault, tillandsias-proxy,
+tillandsias-router, ...)`. Vault, proxy and router survive; the mirror does
+not, so §2's checker answers `todo:initialize-bare-metal-host:mirror` again
+the moment you leave the shell. This is the refcounted teardown in
+`crates/tillandsias-headless/src/main.rs` working as designed (a sibling
+launch in flight keeps the stack), not a failure. Keep a lane open for as
+long as you need the mirror: pushes through it, a forge, or a §2 reading.
+MEASURED on yoga 2026-09-27: exited at once, `mirror=` todo; held open, the
+checker answered `ok:bare-metal-host:… mirror=up … github=seeded`.
 
 `TILLANDSIAS_HOST_PROJECT_ROOT` defaults to `$HOME/src`. Set it to the parent of
 your checkout.
@@ -129,7 +143,21 @@ git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/origin | sort > /tm
 comm -23 /tmp/m.txt /tmp/o.txt        # refs the mirror holds that origin lacks; empty == relayed
 ```
 
-Fixing the noise is 1310-rec6's job; until then this command is the answer.
+**The noise was the health probe, not the relay, and a current image no
+longer makes it** (1310-rec6). The sweep logs a relay's output only when that
+relay FAILS; the `hung up` lines came from git-daemon logging every
+half-finished connection the old `nc` HEALTHCHECK opened every 2 s. The
+healthcheck now checks for a listening socket and never connects. Measured on
+lenovinha 2026-09-30, both images run for 60 s on the same seed with their own
+HEALTHCHECK: v56.9.27.2 logged 21 `hung up` fatals; an image built from trunk
+logged 0, and was healthy.
+
+So on a mirror **built from an image at or above 1310-rec6**, a `fatal:` line
+in its log is a real failure. On an older image the lines above are still
+probe noise: rebuild the mirror (it is yours to restart, §4), or keep using
+the outcome check. For whether the relay itself is working, read the verdict
+the mirror publishes, `refs/tillandsias/relay-state/<ok|degraded|broken>/…`;
+a `broken` mirror refuses pushes with the remedy (1310-rec6 steps 2-4).
 
 ### A container name is held by a running container
 
@@ -232,6 +260,16 @@ TILLANDSIAS_HOST_PUSH_HOST=$(hostname -s) \
 
 Exiting the shell leaves the stack up. `RC=124` from a `timeout` wrapper is the
 interactive shell being cut off, not a failure.
+
+**ALL THREE VARIABLES, EVERY LAUNCH — the push identity is re-minted only then.**
+The host's AppRole document (`~/.config/tillandsias/host-push/<host>.approle.json`)
+is written by a lane launch that carries `TILLANDSIAS_HOST_PUSH_HOST` (with
+`TILLANDSIAS_MIRROR_SSHD=1`). A plain `tillandsias --bash <project>` brings the
+mirror up but leaves that document as it was, and once its secret is no longer
+valid the 6.2 mint answers `fail:host-push-cert:approle-login-refused`.
+Measured on lenovinha 2026-09-29: the document was two days old after a soft
+reset and a plain lane; relaunching with all three variables re-minted it and
+the cert mint and push worked at once.
 
 **CORRECTED 2026-09-21 — THE BINARY IS FINE; THE MEASUREMENT WAS NOT.** This
 paragraph used to say, on yoga's report, that `tillandsias --bash <name>
@@ -345,6 +383,36 @@ A `[pre-receive] Push rejected: configured upstream did not durably accept the
 ref transaction` means the relay failed and **refused rather than stranding your
 ref** — that is correct behaviour. Read the `[relay]` line above it for the
 cause; it names the layer.
+
+### 6.3a — Testing an UNCOMMITTED edit inside a forge (1350-8hmy)
+
+A forge clones a fresh tree from THIS host's mirror; it never sees your
+working copy. The sequence, with the commands verbatim, because you meet it
+when something is already broken:
+
+```bash
+# 1. put the edit on a ref (from the REPO ROOT)
+scripts/salvage-dirty-worktree.sh <slug>          # a tree you cannot gate
+#    or: git switch -c work/<order> && git commit … # work in progress
+# 2. make the mirror current, then push the ref THROUGH THIS LANE (6.2 + 6.3)
+tillandsias --sync <project>                       # ok:sync:<project>:linux-next:heads-current
+scripts/tillandsias-host-push-cert.sh              # a fresh 30-minute cert
+GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=$KH -o StrictHostKeyChecking=yes \
+  -o HostKeyAlias=$ALIAS -o BatchMode=yes -o IdentitiesOnly=yes -i $K -p 2223" \
+  git push "ssh://git@127.0.0.1/srv/git/<project>" <ref>:refs/heads/<ref>
+# 3. launch the forge (6.1's three variables) and, inside it:
+git checkout <ref>
+```
+
+`receive-pack` writes the ref into the mirror as the push happens, so step 3
+finds it without waiting for a reconcile tick. A ref that reached GitHub some
+OTHER way (another host's) is in your mirror after the next tick or after
+`tillandsias --sync <project>`.
+
+The pinned proof is `litmus:forge-seeds-from-salvage-ref`: a sentinel placed
+on a `salvage/*` ref is read back out of the seeded forge tree, not merely a
+seed that exited 0, and a never-pushed seed stays fail-soft and loud. The same
+sequence is summarised for workers in skills/join-the-fleet section 3.
 
 ### 6.4 — The three acceptance legs, and their artifacts
 

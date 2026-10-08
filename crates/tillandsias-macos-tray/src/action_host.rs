@@ -126,7 +126,12 @@ fn apply_status_text_main_thread(
     let mtm = unsafe { MainThreadMarker::new_unchecked() };
     let label = NSString::from_str(text);
     if let Some(handle) = status_menu_item.lock().unwrap().as_ref() {
-        unsafe { handle.0.setTitle(&label) };
+        // 1420-v3zt: an attributed title (the progress bar) outranks the plain
+        // one, so clear it or the row would freeze on the last bar.
+        unsafe {
+            handle.0.setAttributedTitle(None);
+            handle.0.setTitle(&label);
+        }
     }
     if let Some(handle) = status_item.lock().unwrap().as_ref()
         && let Some(button) = unsafe { handle.0.button(mtm) }
@@ -140,6 +145,74 @@ fn apply_status_text_main_thread(
             text
         ));
         unsafe { button.setToolTip(Some(&tooltip)) };
+    }
+}
+
+/// 1420-v3zt: paint `segments` (see `provision_progress::menu_bar_segments`)
+/// beside the menu-bar icon and, followed by `label`, as the status row. An
+/// empty `segments` clears the menu-bar title (the icon stands alone again);
+/// the row is then left to the next `set_status_text`. Main thread only.
+fn apply_menu_bar_progress_main_thread(
+    segments: &[crate::provision_progress::BarSegment],
+    label: &str,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+) {
+    use objc2::runtime::AnyObject;
+    use objc2_app_kit::{NSColor, NSForegroundColorAttributeName};
+    use objc2_foundation::{NSAttributedString, NSDictionary, NSMutableAttributedString, NSString};
+    let mtm = unsafe { MainThreadMarker::new_unchecked() };
+    let build = |prefix: &str, suffix: &str| {
+        let out = NSMutableAttributedString::from_nsstring(&NSString::from_str(prefix));
+        let mut out = out;
+        for seg in segments {
+            let text = NSString::from_str(&seg.text);
+            let piece = match seg.rgb {
+                Some((r, g, b)) => {
+                    let colour = unsafe {
+                        NSColor::colorWithSRGBRed_green_blue_alpha(
+                            f64::from(r) / 255.0,
+                            f64::from(g) / 255.0,
+                            f64::from(b) / 255.0,
+                            1.0,
+                        )
+                    };
+                    let colour: objc2::rc::Retained<AnyObject> =
+                        unsafe { objc2::rc::Retained::cast(colour) };
+                    let attrs = NSDictionary::from_vec(
+                        &[unsafe { NSForegroundColorAttributeName }],
+                        vec![colour],
+                    );
+                    unsafe { NSAttributedString::new_with_attributes(&text, &attrs) }
+                }
+                None => NSAttributedString::from_nsstring(&text),
+            };
+            unsafe { out.appendAttributedString(&piece) };
+        }
+        unsafe {
+            out.appendAttributedString(&NSAttributedString::from_nsstring(&NSString::from_str(
+                suffix,
+            )))
+        };
+        out
+    };
+    if let Some(handle) = status_item.lock().unwrap().as_ref()
+        && let Some(button) = unsafe { handle.0.button(mtm) }
+    {
+        if segments.is_empty() {
+            unsafe { button.setTitle(&NSString::from_str("")) };
+        } else {
+            unsafe { button.setAttributedTitle(&build(" ", "")) };
+        }
+    }
+    if !segments.is_empty()
+        && let Some(handle) = status_menu_item.lock().unwrap().as_ref()
+    {
+        unsafe {
+            handle
+                .0
+                .setAttributedTitle(Some(&build("", &format!("  {label}"))))
+        };
     }
 }
 
@@ -942,6 +1015,130 @@ pub struct TrayActionHostIvars {
     project_launches: ProjectLaunchSet,
 }
 
+/// ORDERS 1426-cb6g + 1244-9dx3 — THE ONE GRACEFUL QUIT.
+///
+/// The menu's Quit drained the VM (in-VM shutdown request, then `vz.stop()`,
+/// which also removes the per-launch `vm-swap.img`) and exited. Nothing else
+/// did: SIGTERM — install-macos.sh's own stop escalation — killed the process
+/// with no handler, and a quit Apple event reached AppKit's default
+/// `terminate:`, which exits without draining. MEASURED on the v56.9.27.1 smoke:
+/// after `pkill -TERM` the VM was torn down by the XPC service, but vm-swap.img
+/// survived, while the graceful path removed it.
+///
+/// So the drain lives here, reachable without the (main-thread-only) action
+/// host object: the menu Quit, a SIGTERM listener, and the app delegate's
+/// `applicationShouldTerminate:` all call [`request_graceful_quit`], and it
+/// runs at most once however many of them fire.
+struct QuitDrain {
+    runtime: Arc<tokio::runtime::Runtime>,
+    vm: Arc<Mutex<Option<Arc<VzRuntime>>>>,
+    vm_busy: Arc<Mutex<bool>>,
+}
+
+static QUIT_DRAIN: OnceLock<QuitDrain> = OnceLock::new();
+static QUIT_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Start the graceful drain-then-exit. Returns `true` when a drain is (now or
+/// already) in progress, `false` when the tray has no action host yet — the
+/// caller should then let the process terminate the ordinary way.
+pub(crate) fn request_graceful_quit(source: &str) -> bool {
+    let Some(q) = QUIT_DRAIN.get() else {
+        return false;
+    };
+    if QUIT_STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        eprintln!("[tillandsias-tray] Quit ({source}): a drain is already in progress");
+        return true;
+    }
+    // Take the live VM out of the slot so a stray retry click can't
+    // double-stop. With no VM (quit before boot completes) we still exit:
+    // Quit must always terminate the app.
+    let vm_taken = q.vm.lock().unwrap().take();
+    // Mark busy so concurrent click paths skip out fast; exit(0) ends it.
+    *q.vm_busy.lock().unwrap() = true;
+    eprintln!(
+        "[tillandsias-tray] Quit ({source}): draining (timeout={}s)",
+        VM_STOP_DRAIN.as_secs()
+    );
+    let runtime_for_stop = q.runtime.clone();
+    q.runtime.spawn(async move {
+        if let Some(vm) = vm_taken {
+            // Two-step graceful shutdown (mirrors windows-tray 80eceb0b Q2):
+            // the wire-level VmShutdownRequest lets the in-VM headless drain
+            // its containers first (bounded), then VZ.requestStop with its own
+            // VM_STOP_DRAIN deadline, escalating to force-stop.
+            // BOUND THE WHOLE REQUEST, not just the connect. request_vm_shutdown
+            // bounds only its 3 s connect; the handshake and the reply were
+            // unbounded, so a guest that never answers (the in-VM handler for
+            // VmShutdownRequest does not exist yet) parked Quit FOREVER and
+            // vm.stop never ran. MEASURED on the 1426-cb6g live arm: a SIGTERM
+            // drain logged "draining" and nothing else for 4+ minutes, both
+            // tokio workers idle (one parked, one in kevent). The guest has no
+            // handler for this request today, so waiting the full drain budget
+            // only delays the real stop: the live arm took 131 s (65 s here, then
+            // 60 s of requestStop) against the installer's 150 s before SIGKILL.
+            // A short bound keeps Quit well inside it; VZ.requestStop below still
+            // gives the guest VM_STOP_DRAIN to shut down.
+            let budget = Duration::from_secs(10);
+            match tokio::time::timeout(budget, request_vm_shutdown(&vm, VM_STOP_DRAIN)).await {
+                Ok(Ok(())) => eprintln!("[tillandsias-tray] Quit: in-VM headless acked shutdown request"),
+                Ok(Err(e)) => eprintln!(
+                    "[tillandsias-tray] Quit: in-VM shutdown request: {e} (proceeding to VZ.requestStop)"
+                ),
+                Err(_) => eprintln!(
+                    "[tillandsias-tray] Quit: in-VM shutdown request got no reply within {}s \
+                     (proceeding to VZ.requestStop)",
+                    budget.as_secs()
+                ),
+            }
+            // VZ.requestStop ON THE MAIN THREAD. The VM lives on the main
+            // dispatch queue, and VzRuntime::stop calls requestStopWithError and
+            // then pumps the CALLING thread's CFRunLoop. Called from this tokio
+            // worker it hit dispatch_assert_queue and the process died with
+            // SIGTRAP (crash report tillandsias-tray-2026-09-26-211531.ips,
+            // frame -[VZVirtualMachine requestStopWithError:]) before it could
+            // remove vm-swap.img — the real reason no tray quit ever did.
+            // --exec-guest stops cleanly because it calls stop() from the CLI's
+            // main thread. The main thread is not a tokio thread, so block_on is
+            // allowed there, and blocking it is fine: the app is exiting.
+            let rt = runtime_for_stop;
+            crate::main_thread::dispatch_to_main_thread(move || {
+                match rt.block_on(vm.stop(VM_STOP_DRAIN)) {
+                    Ok(()) => eprintln!("[tillandsias-tray] Quit: VM drained cleanly"),
+                    Err(e) => eprintln!("[tillandsias-tray] Quit: drain failed: {e}"),
+                }
+                // Bypass AppKit cleanup: the VM drain is the only critical
+                // shutdown step; NSApplication owns nothing we must flush.
+                std::process::exit(0);
+            });
+        } else {
+            eprintln!("[tillandsias-tray] Quit: no live VM, skipping drain");
+            std::process::exit(0);
+        }
+    });
+    true
+}
+
+/// Register the shared quit and start the SIGTERM listener (1426-cb6g). Once
+/// tokio installs its handler, SIGTERM no longer kills the process outright; it
+/// runs the same drain as the menu Quit. A second SIGTERM during the drain is
+/// absorbed; `pkill -KILL` remains the operator's hard stop.
+fn install_graceful_quit(q: QuitDrain) {
+    let runtime = q.runtime.clone();
+    if QUIT_DRAIN.set(q).is_err() {
+        return;
+    }
+    runtime.spawn(async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut term) => {
+                while term.recv().await.is_some() {
+                    let _ = request_graceful_quit("SIGTERM");
+                }
+            }
+            Err(e) => eprintln!("[tillandsias-tray] could not install the SIGTERM handler: {e}"),
+        }
+    });
+}
+
 declare_class!(
     /// AppKit responder for Tillandsias tray menu actions. Lives on
     /// the main thread; receives selector dispatch from `NSMenuItem`.
@@ -1012,78 +1209,15 @@ declare_class!(
 
         #[method(quitWithDrain:)]
         fn quit_with_drain(&self, _sender: Option<&AnyObject>) {
-            let ivars = self.ivars();
-
             // User-visible feedback: chip immediately flips to Stopping.
             // The tooltip mirrors so even with the menu closed the
             // menubar icon hover surface reflects the drain.
             self.set_status_text("\u{1F534} Stopping\u{2026}");
 
-            // Take the live VM out of the slot so a stray retry click
-            // can't double-stop. If there's no VM (e.g. user quits
-            // before boot completes), we still proceed to exit(0) —
-            // Quit must always terminate the app.
-            let vm_taken = ivars.vm.lock().unwrap().take();
-
-            // Mark busy so concurrent click paths skip out fast — the
-            // drain task never clears this; exit(0) ends the process.
-            *ivars.vm_busy.lock().unwrap() = true;
-
-            let runtime = ivars.runtime.clone();
-
-            eprintln!(
-                "[tillandsias-tray] Quit: draining (timeout={}s)",
-                VM_STOP_DRAIN.as_secs()
-            );
-            runtime.spawn(async move {
-                if let Some(vm) = vm_taken {
-                    // Two-step graceful shutdown (mirrors windows-tray
-                    // 80eceb0b Q2). Step 1: wire-level
-                    // VmShutdownRequest so the in-VM headless gets a
-                    // chance to drain podman containers + their
-                    // sessions BEFORE VZ tears down the VM. Bounded
-                    // 3s wire RTT so a wedged headless can't delay
-                    // Quit indefinitely; we then fall through to
-                    // VZ.requestStop which carries its own
-                    // VM_STOP_DRAIN deadline. On vsock today the
-                    // in-VM dispatcher routes per the matrix but no
-                    // inner VmShutdownRequest handler exists yet, so
-                    // the reply is Error{Unsupported} which we log at
-                    // info as expected. When linux adds the vsock
-                    // inner arm this auto-upgrades with NO tray code
-                    // change.
-                    match request_vm_shutdown(&vm, VM_STOP_DRAIN).await {
-                        Ok(()) => eprintln!(
-                            "[tillandsias-tray] Quit: in-VM headless acked shutdown request"
-                        ),
-                        Err(e) => eprintln!(
-                            "[tillandsias-tray] Quit: in-VM shutdown request: {e} \
-                             (proceeding to VZ.requestStop)"
-                        ),
-                    }
-                    // Step 2: VZ-level stop (existing path). Drains
-                    // VM_STOP_DRAIN waiting for state=Stopped then
-                    // escalates to force-stop.
-                    match vm.stop(VM_STOP_DRAIN).await {
-                        Ok(()) => {
-                            eprintln!("[tillandsias-tray] Quit: VM drained cleanly")
-                        }
-                        Err(e) => {
-                            eprintln!("[tillandsias-tray] Quit: drain failed: {e}")
-                        }
-                    }
-                } else {
-                    eprintln!("[tillandsias-tray] Quit: no live VM, skipping drain");
-                }
-                // Bypass AppKit cleanup — the only critical shutdown
-                // step for v0.0.1 is the VM drain above. NSApplication
-                // doesn't own state we need to flush; the Tokio
-                // runtime is fine to abandon (we're about to call
-                // exit(0) anyway). Future revisions can route this
-                // through NSApplicationDelegate::applicationShouldTerminate
-                // + NSTerminateLater for a cleaner AppKit handshake.
-                std::process::exit(0);
-            });
+            // 1426-cb6g / 1244-9dx3: the ONE graceful quit, shared with SIGTERM and
+            // the quit Apple event, so every way of asking the tray to stop drains
+            // the VM (vz stop() removes vm-swap.img) before exit.
+            let _ = request_graceful_quit("menu Quit");
         }
 
         #[method(openShell:)]
@@ -1484,6 +1618,8 @@ async fn run_start(
     image_root: PathBuf,
     vm_slot: Arc<Mutex<Option<Arc<VzRuntime>>>>,
     on_phase: &(dyn Fn(&str) + Send + Sync),
+    // 1420-v3zt: typed first-provision progress, painted as the menu-bar bar.
+    on_progress: &(dyn Fn(&tillandsias_control_wire::ProgressEvent) + Send + Sync),
 ) -> Result<(), String> {
     match stage_embedded_guest_binary() {
         Ok(Some(dest)) => {
@@ -1498,7 +1634,10 @@ async fn run_start(
             );
         }
         Err(err) => {
-            return Err(format!("stage embedded guest binary: {err}"));
+            return Err(crate::provision_error::failure_text(
+                crate::provision_error::Stage::GuestBinary,
+                &format!("stage embedded guest binary: {err}"),
+            ));
         }
     }
     let vz = Arc::new(VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root));
@@ -1571,25 +1710,38 @@ async fn run_start(
             vz.rootfs_image_path().display()
         );
         let manifest = tillandsias_vm_layer::recipe::Manifest::from_toml(BUNDLED_MANIFEST_TOML)
-            .map_err(|e| format!("bundled manifest parse: {e}"))?;
-        vz.fetch_fedora_cloud_image(&manifest, on_phase)
-            .await
             .map_err(|e| {
-                // NO LONGER TELLS THE OPERATOR TO INSTALL QEMU (980-xcaf).
-                // That advice could never have worked from a GUI launch: the
-                // tray's PATH is /usr/bin:/bin:/usr/sbin:/sbin, so a
-                // Homebrew-installed qemu-img was never reachable, and the
-                // operator who followed it hit the identical failure and
-                // reasonably concluded the install had not taken. Conversion
-                // is in-process now, so any failure here is ours.
-                format!(
-                    "Fedora Cloud image fetch failed: {e}\n\n\
+                crate::provision_error::failure_text(
+                    crate::provision_error::Stage::ImageSetup,
+                    &format!("bundled manifest parse: {e}"),
+                )
+            })?;
+        // 1420-x6rz: the chip's percent comes from the typed event's own
+        // fraction, not from a formatted string vm-layer used to build.
+        vz.fetch_fedora_cloud_image(
+            &manifest,
+            on_phase,
+            // 1420-v3zt: the bar (menu bar + status row) is painted from the
+            // event itself; the plain chip no longer carries the percent.
+            &|ev: tillandsias_control_wire::ProgressEvent| on_progress(&ev),
+        )
+        .await
+        .map_err(|e| {
+            // NO LONGER TELLS THE OPERATOR TO INSTALL QEMU (980-xcaf).
+            // That advice could never have worked from a GUI launch: the
+            // tray's PATH is /usr/bin:/bin:/usr/sbin:/sbin, so a
+            // Homebrew-installed qemu-img was never reachable, and the
+            // operator who followed it hit the identical failure and
+            // reasonably concluded the install had not taken. Conversion
+            // is in-process now, so any failure here is ours.
+            format!(
+                "Fedora Cloud image fetch failed: {e}\n\n\
                      This is a download or disk-space problem, not a missing \
                      tool — image conversion no longer needs anything \
                      installed on the host. Check connectivity and free space, \
                      then retry Start VM."
-                )
-            })?;
+            )
+        })?;
         eprintln!("[tillandsias-tray] Start VM: Fedora Cloud image ready");
     }
 
@@ -1613,8 +1765,18 @@ async fn run_start(
         let handle = tokio::runtime::Handle::current();
         tokio::task::spawn_blocking(move || handle.block_on(vz.start()))
             .await
-            .map_err(|e| format!("VM start task panicked: {e}"))?
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| {
+                crate::provision_error::failure_text(
+                    crate::provision_error::Stage::VmStart,
+                    &format!("VM start task panicked: {e}"),
+                )
+            })?
+            .map_err(|e| {
+                crate::provision_error::failure_text(
+                    crate::provision_error::Stage::VmStart,
+                    &e.to_string(),
+                )
+            })?;
     }
     on_phase("Connecting");
     *vm_slot.lock().unwrap() = Some(vz);
@@ -1661,6 +1823,11 @@ impl TrayActionHost {
         // SAFETY: `mtm` proves main-thread; allocation + init is the
         // standard ObjC two-step. `set_ivars` populates the declared
         // class ivars before init runs.
+        install_graceful_quit(QuitDrain {
+            runtime: ivars.runtime.clone(),
+            vm: ivars.vm.clone(),
+            vm_busy: ivars.vm_busy.clone(),
+        });
         let this = mtm.alloc::<Self>().set_ivars(ivars);
         unsafe { msg_send_id![super(this), init] }
     }
@@ -1700,12 +1867,22 @@ impl TrayActionHost {
                 // parent if the file isn't yet written). Best-effort:
                 // shell out to `open` so the user's default text editor
                 // takes over. Mirrors Windows's `open_log_file`.
-                if let Some(home) = std::env::var_os("HOME") {
-                    let log_dir = std::path::PathBuf::from(home).join("Library/Logs/Tillandsias");
-                    let _ = std::fs::create_dir_all(&log_dir);
+                // 1420-inak: the tray now WRITES tray.log (tray_log.rs), so open
+                // the file itself; before, this opened a directory nothing wrote.
+                if let Some(log) = crate::tray_log::tray_log_path() {
+                    let target = if log.exists() {
+                        log
+                    } else {
+                        let dir = log
+                            .parent()
+                            .map(std::path::Path::to_path_buf)
+                            .unwrap_or(log);
+                        let _ = std::fs::create_dir_all(&dir);
+                        dir
+                    };
                     let mut command = std::process::Command::new("/usr/bin/open");
-                    command.arg(&log_dir);
-                    spawn_and_reap(command, "open log directory");
+                    command.arg(&target);
+                    spawn_and_reap(command, "open log");
                 }
             }
             MenuAction::OpenObservatorium
@@ -1995,8 +2172,51 @@ impl TrayActionHost {
             });
         });
 
+        // 1420-v3zt: typed download/expand events -> palette bar beside the
+        // icon and in the status row, repainted once per whole percent.
+        let bar_status_item = status_item_slot.clone();
+        let bar_status_menu_item = status_menu_item_slot.clone();
+        let bar_gate = Arc::new(Mutex::new(crate::provision_progress::PercentGate::default()));
+        let on_progress: Box<dyn Fn(&tillandsias_control_wire::ProgressEvent) + Send + Sync> =
+            Box::new(move |ev| {
+                let segments = match ev.kind {
+                    tillandsias_control_wire::ProgressKind::Done
+                    | tillandsias_control_wire::ProgressKind::Failed { .. } => Vec::new(),
+                    ref kind => match kind.fraction() {
+                        Some(f) if bar_gate.lock().unwrap().changed(&ev.task, f) => {
+                            crate::provision_progress::menu_bar_segments(f, 10)
+                        }
+                        _ => return,
+                    },
+                };
+                let label = ev.label.clone();
+                let status_item = bar_status_item.clone();
+                let status_menu_item = bar_status_menu_item.clone();
+                dispatch_to_main_thread(move || {
+                    apply_menu_bar_progress_main_thread(
+                        &segments,
+                        &label,
+                        &status_item,
+                        &status_menu_item,
+                    );
+                });
+            });
+        let bar_clear_item = status_item_slot.clone();
+        let bar_clear_menu_item = status_menu_item_slot.clone();
+
         runtime.spawn(async move {
-            let result = run_start(image_root, vm_slot.clone(), on_phase.as_ref()).await;
+            let result = run_start(
+                image_root,
+                vm_slot.clone(),
+                on_phase.as_ref(),
+                on_progress.as_ref(),
+            )
+            .await;
+            // 1420-v3zt: whatever the outcome, the icon stands alone again; the
+            // chip below carries the result.
+            dispatch_to_main_thread(move || {
+                apply_menu_bar_progress_main_thread(&[], "", &bar_clear_item, &bar_clear_menu_item);
+            });
 
             // On success, snapshot the Arc<VzRuntime> for the poller
             // BEFORE handing ownership to the dispatch closure. On
@@ -2358,6 +2578,51 @@ fn push_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
     ]
 }
 
+/// 1420-4grt: throttles guest `ProgressPush` events into tray.log lines —
+/// one per task per whole-ten-percent step, plus every terminal or
+/// indeterminate transition, so a 500-step build writes ~10 lines, not 500.
+#[derive(Default)]
+struct ProgressLog {
+    last_decile: std::collections::HashMap<String, u8>,
+}
+
+impl ProgressLog {
+    fn observe(&mut self, ev: &tillandsias_control_wire::ProgressEvent) -> Option<String> {
+        use tillandsias_control_wire::ProgressKind;
+        match &ev.kind {
+            ProgressKind::Done => {
+                self.last_decile.remove(&ev.task);
+                Some(format!("progress {}: done", ev.label))
+            }
+            ProgressKind::Failed { reason } => {
+                self.last_decile.remove(&ev.task);
+                Some(format!("progress {}: FAILED — {reason}", ev.label))
+            }
+            kind => match kind.fraction() {
+                Some(f) => {
+                    let decile = (f * 10.0).floor() as u8;
+                    if self.last_decile.get(&ev.task) == Some(&decile) {
+                        return None;
+                    }
+                    self.last_decile.insert(ev.task.clone(), decile);
+                    Some(format!(
+                        "progress {}: {}%",
+                        ev.label,
+                        u32::from(decile) * 10
+                    ))
+                }
+                None => {
+                    if self.last_decile.contains_key(&ev.task) {
+                        return None;
+                    }
+                    self.last_decile.insert(ev.task.clone(), u8::MAX);
+                    Some(format!("progress {}: working", ev.label))
+                }
+            },
+        }
+    }
+}
+
 /// Map a `GithubLoginStatusReply`/`LoginStatePush` payload to the menu's
 /// login state. Shared by the fallback poll and the push listener (order 155
 /// slice 2) so both surfaces stay byte-identical.
@@ -2654,10 +2919,12 @@ fn apply_vm_status(
     status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
     status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
 ) -> bool {
+    let mut phase_changed = false;
     {
         let mut logged = last_logged_phase.lock().unwrap();
         if *logged != Some(phase) {
             *logged = Some(phase);
+            phase_changed = true;
             eprintln!(
                 "[tillandsias-tray] vm-status: phase={phase:?} podman_ready={podman_ready}{}",
                 last_event
@@ -2666,7 +2933,29 @@ fn apply_vm_status(
             );
         }
     }
-    let base = vm_phase_status_text(phase, podman_ready);
+    let mut base = vm_phase_status_text(phase, podman_ready);
+    // 1420-inak: a guest that FAILED provisioning used to render a bare
+    // "🔴 VM failed". The guest's own record names the failing step; read it
+    // only on Failed (a file read per status push would be wasteful) and put
+    // the step on the chip. The full text also goes to the tray log once.
+    if matches!(phase, tillandsias_control_wire::VmPhase::Failed) {
+        let record = std::fs::read_to_string(crate::diagnose::provision_state_path())
+            .map(|t| crate::diagnose::provision_record_from(&t));
+        if let Ok(crate::diagnose::ProvisionRecord::Failed { line, rc, cmd, .. }) = record {
+            let full = crate::provision_error::failure_text(
+                crate::provision_error::Stage::GuestProvisioning,
+                &crate::provision_error::guest_failure_detail(
+                    line.as_deref(),
+                    rc.as_deref(),
+                    cmd.as_deref(),
+                ),
+            );
+            if phase_changed {
+                eprintln!("[tillandsias-tray] {full}");
+            }
+            base = clamp_tray_status_chip(format!("\u{1F534} {full}"));
+        }
+    }
     let text_for_dispatch = compose_chip_text(&base, last_event);
     let mut rebuild_needed = false;
     {
@@ -2837,8 +3126,13 @@ async fn run_push_listener(
             let sub = ControlEnvelope {
                 wire_version: WIRE_VERSION,
                 seq: client.allocate_seq(),
+                // 1420-4grt: Progress is added ONLY when this guest advertised
+                // CAP_PROGRESS_PUSH_V1; an old guest never sees the topic.
                 body: ControlMessage::Subscribe {
-                    topics: push_subscribe_topics(),
+                    topics: tillandsias_control_wire::subscription_topics(
+                        &push_subscribe_topics(),
+                        client.server_caps(),
+                    ),
                 },
             };
             let reply = client
@@ -2916,6 +3210,7 @@ async fn run_push_listener(
             continue;
         }
 
+        let mut progress_log = ProgressLog::default();
         loop {
             match client.next_envelope().await {
                 Ok(env) => match env.body {
@@ -3027,6 +3322,14 @@ async fn run_push_listener(
                             );
                         }
                     }
+                    // 1420-4grt: guest image-build progress. Logged (tray.log)
+                    // at whole-ten-percent steps per task; the menu bar/menu
+                    // rendering of the same events is 1420-v3zt.
+                    ControlMessage::ProgressPush { event, .. } => {
+                        if let Some(line) = progress_log.observe(&event) {
+                            eprintln!("[tillandsias-tray] {line}");
+                        }
+                    }
                     other => {
                         tracing::debug!("push stream: ignoring frame {}", other.kind());
                     }
@@ -3069,6 +3372,109 @@ fn heartbeat_status_line(status_text: &str) -> String {
     }
 }
 
+/// The VM whose clock the next wake corrects (1503-qrgz). Replaced on every
+/// boot, so a re-provisioned guest is the one that gets the host's time.
+static WAKE_CLOCK_VM: Mutex<Option<Arc<VzRuntime>>> = Mutex::new(None);
+
+/// Tell the guest the host's wall clock every time the Mac wakes (1503-qrgz).
+///
+/// MEASURED 2026-09-29: the VM does not run while the Mac sleeps, so its clock
+/// falls behind by the sleep, and chrony then takes about 3.5 min to re-acquire
+/// and hours to slew (see `ControlMessage::HostClockSync`). The host knows the
+/// right time at wake; this carries it.
+///
+/// EVENT-DRIVEN, NO POLLING: one NSWorkspace did-wake observer, registered once
+/// per process. Its block only forwards the event to a channel; a tokio task
+/// does the connect, handshake and request. The observer is kept for the life
+/// of the process (the tray never stops caring about wakes).
+fn spawn_host_clock_sync_on_wake(vz: Arc<VzRuntime>) {
+    *WAKE_CLOCK_VM.lock().unwrap() = Some(vz);
+    static REGISTERED: OnceLock<()> = OnceLock::new();
+    if REGISTERED.set(()).is_err() {
+        return;
+    }
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    let block = block2::RcBlock::new(
+        move |_note: std::ptr::NonNull<objc2_foundation::NSNotification>| {
+            let _ = tx.send(());
+        },
+    );
+    // SAFETY: the shared workspace and its notification centre are process-wide
+    // singletons; the observer token is leaked deliberately (see above).
+    unsafe {
+        let center = objc2_app_kit::NSWorkspace::sharedWorkspace().notificationCenter();
+        let token = center.addObserverForName_object_queue_usingBlock(
+            Some(objc2_app_kit::NSWorkspaceDidWakeNotification),
+            None,
+            None,
+            &block,
+        );
+        std::mem::forget(token);
+    }
+    tokio::spawn(async move {
+        while rx.recv().await.is_some() {
+            let Some(vz) = WAKE_CLOCK_VM.lock().unwrap().clone() else {
+                continue;
+            };
+            match send_host_clock_once(&vz).await {
+                Ok(()) => eprintln!(
+                    "[tillandsias-tray] wake: sent the host clock to the guest (1503-qrgz)"
+                ),
+                Err(e) => eprintln!(
+                    "[tillandsias-tray] wake: could not send the host clock to the guest: {e}"
+                ),
+            }
+        }
+    });
+}
+
+/// One `HostClockSync` over a fresh control-wire connection.
+///
+/// MIXED VERSIONS. The host↔guest PSK is derived from the SHA-256 of the guest
+/// binary shipped with THIS tray build (`channel_psk_for_guest`) plus the build
+/// and wire versions (`derive_psk`), so a guest from another build fails the
+/// handshake closed and never sees this variant. Every step is time-bounded
+/// and there is no retry: a mismatched or wedged guest costs one logged
+/// failure per wake, never a hang or a storm.
+async fn send_host_clock_once(vz: &VzRuntime) -> Result<(), String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let stream =
+        open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5)).await?;
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    tokio::time::timeout(Duration::from_secs(5), client.handshake())
+        .await
+        .map_err(|_| "control-wire handshake: no answer within 5 s".to_string())?
+        .map_err(|e| format!("control-wire handshake: {e}"))?;
+    let host_unix_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("host clock before 1970: {e}"))?
+        .as_millis() as u64;
+    let seq = client.allocate_seq();
+    let env = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::HostClockSync { seq, host_unix_ms },
+    };
+    let reply = tokio::time::timeout(Duration::from_secs(5), client.request(&env))
+        .await
+        .map_err(|_| "no reply within 5 s".to_string())?
+        .map_err(|e| format!("HostClockSync: {e}"))?;
+    match reply.body {
+        ControlMessage::IssueAck { .. } => Ok(()),
+        ControlMessage::Error { message, .. } => Err(message),
+        other => Err(format!("unexpected reply {}", other.kind())),
+    }
+}
+
 fn spawn_vm_status_poller(
     vz: Arc<VzRuntime>,
     status_text: Arc<Mutex<String>>,
@@ -3097,6 +3503,7 @@ fn spawn_vm_status_poller(
     // — the burst intent is served push-natively (login-transition
     // CloudRefreshRequest); see the comment at the wait site.
     let poll_request = tokio::sync::Notify::new();
+    spawn_host_clock_sync_on_wake(vz.clone());
     tokio::spawn(run_push_listener(
         vz.clone(),
         status_text.clone(),
@@ -3322,6 +3729,86 @@ fn dispatch_rebuild(
 
 #[cfg(test)]
 mod tests {
+
+    /// 1426-cb6g / 1244-9dx3. Before an action host exists there is nothing to
+    /// drain, so the shared quit must report "not handled" and let the caller
+    /// terminate normally — never swallow a quit it cannot perform. (Unit tests
+    /// never construct the AppKit host, so QUIT_DRAIN is unset here.)
+    #[test]
+    fn a_quit_before_the_host_exists_is_not_swallowed() {
+        assert!(!super::request_graceful_quit("test"));
+    }
+
+    /// The three quit routes share ONE drain. Pinned by source because two of
+    /// them (SIGTERM, the quit Apple event) cannot be driven without AppKit and
+    /// a signed VM; the live arm is recorded on 1426-cb6g.
+    #[test]
+    fn every_quit_route_reaches_the_shared_drain() {
+        let host = include_str!("action_host.rs");
+        let delegate = include_str!("app_delegate.rs");
+        let run = include_str!("status_item.rs");
+        let new_body = host
+            .split("    pub fn new(")
+            .nth(1)
+            .expect("TrayActionHost::new");
+        let new_body = &new_body[..new_body.find("\n    }\n").expect("end of new()")];
+        assert!(
+            new_body.contains("install_graceful_quit("),
+            "new() must register the shared quit"
+        );
+        assert!(
+            host.contains("SignalKind::terminate()")
+                && host.contains("request_graceful_quit(\"SIGTERM\")"),
+            "SIGTERM must route into the shared drain"
+        );
+        let menu = host
+            .split("fn quit_with_drain(")
+            .nth(1)
+            .expect("quit_with_drain");
+        let menu = &menu[..menu.find("\n        }\n").expect("end of quit_with_drain")];
+        assert!(
+            menu.contains("request_graceful_quit(\"menu Quit\")"),
+            "the menu Quit uses the shared drain"
+        );
+        assert!(
+            delegate.contains("applicationShouldTerminate:")
+                && delegate.contains("request_graceful_quit(\"quit Apple event\")")
+                && delegate.contains("NSTerminateCancel"),
+            "a quit Apple event must cancel AppKit's immediate terminate and drain instead"
+        );
+        assert!(
+            run.contains("app_delegate::install(mtm, &app)"),
+            "run() must install the delegate"
+        );
+        // The drain is the one that removes vm-swap.img: it must call vm.stop.
+        let drain = host
+            .split("pub(crate) fn request_graceful_quit(")
+            .nth(1)
+            .expect("drain fn");
+        let drain = &drain[..drain.find("\n}\n").expect("end of drain fn")];
+        assert!(
+            drain.contains("vm.stop(VM_STOP_DRAIN)"),
+            "the shared drain must stop the VM"
+        );
+        // And the in-VM request before it must be BOUNDED as a whole: an unbounded
+        // reply parked Quit forever in the live arm and vm.stop never ran.
+        assert!(
+            drain.contains("tokio::time::timeout(budget, request_vm_shutdown("),
+            "the in-VM shutdown request must be bounded as a whole, or a silent guest wedges Quit"
+        );
+        // And vm.stop must run on the MAIN thread: VZ traps (SIGTRAP in
+        // dispatch_assert_queue) when requestStopWithError comes from a worker.
+        let main_hop = drain
+            .find("dispatch_to_main_thread(")
+            .expect("the stop must hop to the main thread");
+        let stop_at = drain
+            .find("vm.stop(VM_STOP_DRAIN)")
+            .expect("the drain must stop the VM");
+        assert!(
+            main_hop < stop_at,
+            "vm.stop must be called inside the main-thread dispatch"
+        );
+    }
 
     /// Order 690-w94k criterion 2. `VzRuntime::start` pumps CFRunLoop on the
     /// CALLING thread for up to 30s, and says so in its own body: "the caller
@@ -3595,6 +4082,51 @@ mod tests {
                 tillandsias_control_wire::SubscriptionTopic::LoginState,
                 tillandsias_control_wire::SubscriptionTopic::CloudProjects,
             ]
+        );
+    }
+
+    /// 1420-4grt: Progress rides the subscription only for a capable guest.
+    #[test]
+    fn progress_topic_is_opt_in_by_guest_capability() {
+        use tillandsias_control_wire::{
+            CAP_PROGRESS_PUSH_V1, SubscriptionTopic, subscription_topics,
+        };
+        assert_eq!(
+            subscription_topics(&push_subscribe_topics(), &[]),
+            push_subscribe_topics()
+        );
+        let with = subscription_topics(
+            &push_subscribe_topics(),
+            &[CAP_PROGRESS_PUSH_V1.to_string()],
+        );
+        assert_eq!(with.last(), Some(&SubscriptionTopic::Progress));
+    }
+
+    /// 1420-4grt: one tray.log line per whole-ten-percent step, not per event.
+    #[test]
+    fn progress_log_throttles_to_deciles() {
+        use tillandsias_control_wire::{ProgressEvent, ProgressKind, ProgressUnit};
+        let ev = |kind| ProgressEvent {
+            task: "image/forge".into(),
+            parent: None,
+            label: "Build forge image".into(),
+            kind,
+            ts_unix_ms: 0,
+        };
+        let step = |done| ProgressKind::Determinate {
+            done,
+            total: Some(100),
+            unit: ProgressUnit::Steps,
+        };
+        let mut log = ProgressLog::default();
+        let lines: Vec<_> = (0..=100)
+            .filter_map(|d| log.observe(&ev(step(d))))
+            .collect();
+        assert_eq!(lines.len(), 11, "{lines:?}");
+        assert_eq!(lines[3], "progress Build forge image: 30%");
+        assert_eq!(
+            log.observe(&ev(ProgressKind::Done)).as_deref(),
+            Some("progress Build forge image: done")
         );
     }
 
@@ -4439,7 +4971,7 @@ mod tests {
     async fn run_start_full_e2e() {
         let tmp = tempfile::tempdir().unwrap();
         let vm_slot = Arc::new(Mutex::new(None));
-        let result = run_start(tmp.path().to_path_buf(), vm_slot.clone(), &|_| {}).await;
+        let result = run_start(tmp.path().to_path_buf(), vm_slot.clone(), &|_| {}, &|_| {}).await;
         match result {
             Err(err) => {
                 assert!(

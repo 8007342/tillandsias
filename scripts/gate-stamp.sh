@@ -224,12 +224,79 @@ STAMP_FILE="$GIT_DIR/tillandsias-gate-stamp"
 # It lives in $GIT_DIR, never the worktree: a manifest inside the tree would be
 # enumerated by the very walk that writes it.
 STAMP_MANIFEST="$GIT_DIR/tillandsias-gate-stamp-manifest"
+
+# ORDER 1442-22d2. A BORROWED STAMP IS NOBODY'S EVIDENCE.
+# scripts/test-gate-stamp-memoization.sh has to mint a full-scope stamp in the
+# real git dir, because what it tests is the real build.sh reading one. It
+# snapshots the checkout's gate files into this directory first and restores
+# them when it exits. While the directory exists, the stamp in place was minted
+# by a fixture, not earned by a gate. Only the fixture's own children, which
+# carry its owner token, may read it. Everyone else (the pre-push hook, the land
+# tool, a build.sh memo outside the fixture) is refused. This also covers the
+# one exit no trap sees: a SIGKILLed fixture leaves the directory behind, and
+# its stamp stays refused until the next fixture run restores the snapshot.
+# Four relay lands on 2026-09-27 adopted a fixture stamp and ran no gate.
+GATE_FIXTURE_SNAPSHOT="$GIT_DIR/tillandsias-gate-fixture-snapshot"
+refuse_borrowed_stamp() {
+    [[ -d "$GATE_FIXTURE_SNAPSHOT" ]] || return 0
+    local owner
+    owner="$(cat "$GATE_FIXTURE_SNAPSHOT/owner" 2>/dev/null)"
+    if [[ -n "$owner" && "${TILLANDSIAS_GATE_FIXTURE_OWNER:-}" == "$owner" ]]; then
+        return 0
+    fi
+    echo "stale:fixture-borrowed-stamp"
+    exit 1
+}
 # Cleared unconditionally so an INHERITED value cannot turn manifest emission on
 # during `verify`. Only the write path's inline assignment enables it; without
 # this line an exported variable would silently make a verify rewrite the
 # manifest to describe the tree being checked instead of the tree that was
 # stamped — the one the refusal must diff against.
 GATE_STAMP_EMIT_MANIFEST=""
+
+# ORDER 1276-mugq. The paths recorded as executable in the digest, one per line,
+# C-sorted — the exec bit compute() folds in and movers compares.
+#
+# TRACKED paths: the INDEX mode, exactly as before (887-bz88, 889-8tcb, and the
+# pins in test-mode-only-regression-887-bz88.sh): what a commit carries is the
+# index, a staged or `update-index --chmod` mode change moves the stamp, and an
+# unstaged chmod does not (the worktree arm of check-script-exec-bits.sh refuses
+# that one at gate time).
+#
+# UNTRACKED paths used to be a constant `-`, and THAT was the defect. Measured
+# by macneo on 2026-09-20, reversible both ways: a NEW executable stamped while
+# untracked recorded `-`, `git add` wrote 100755 into the index, and the digest
+# moved with zero content change — so the sequence the skills teach (gate, then
+# add, then push) staled the stamp of every slice that adds a test script and
+# paid a second full gate (~34 minutes there), and no instrument could name it:
+# movers compared content only. An untracked path now records the mode
+# `git add` WILL give it, so adding it is invisible:
+#   core.fileMode=true, and the bits are git's own truth: the worktree's
+#     user-execute bit (git's rule, st_mode & S_IXUSR), by ONE batched
+#     `find -perm -0100` over the untracked set, never a fork per path;
+#   anywhere two sides of one checkout can see different bits — core.fileMode
+#     false, an MSYS/MinGW/Cygwin shell, or a checkout under a drvfs mount
+#     (/mnt/<drive>/), where WSL sees every file executable and Git Bash sees
+#     real bits (the lock-out compute() documents) — `-`, which is also what git
+#     records for a new file under core.fileMode=false. The Windows regime's
+#     digest therefore does not move at all.
+# On a tree with no untracked executable, the list is the index list and every
+# existing stamp stays valid.
+gate_stamp_exec_paths() {
+    local fm
+    fm="$(git -C "$REPO_ROOT" config --bool core.fileMode 2>/dev/null)" || fm=true
+    case "$(uname -s 2>/dev/null)" in MINGW* | MSYS* | CYGWIN*) fm=false ;; esac
+    case "$REPO_ROOT" in /mnt/[a-zA-Z]/*) fm=false ;; esac
+    {
+        git -C "$REPO_ROOT" ls-files -s 2>/dev/null \
+            | LC_ALL=C sed -n 's/^100755 [0-9a-f]* [0-9]*\t//p'
+        if [[ "$fm" != false ]]; then
+            ( cd "$REPO_ROOT" && git ls-files -z --others --exclude-standard 2>/dev/null \
+                | LC_ALL=C xargs -0 -r sh -c 'find "$@" -maxdepth 0 -type f -perm -0100 -print 2>/dev/null' sh )
+        fi
+    } | LC_ALL=C sort -u
+    return 0
+}
 
 compute() {
     # Hash the CONTENT of every tracked and untracked file in the worktree.
@@ -265,10 +332,14 @@ compute() {
     # Including the bit closes 2: any chmod now goes stale, the gate re-runs,
     # and by then the mode IS staged, so blind spot 1's guard sees it too.
     #
-    # So: staging is invisible, committing is invisible, editing is not. A
-    # deleted file drops its line and therefore changes the stamp, which is
-    # correct. The path list is folded in explicitly so a deletion cannot be
-    # confused with an unreadable file.
+    # So: staging is invisible, committing is invisible, editing is not. (For
+    # the MODE, with one deliberate exception: a TRACKED file's bit is its
+    # index record, so staging a chmod of it — the change a commit will carry —
+    # moves the stamp, per 887-bz88. Staging a NEW file became invisible only
+    # with 1276-mugq, which records an untracked path's bit as the one `git
+    # add` will give it.) A deleted file drops its line and therefore changes
+    # the stamp, which is correct. The path list is folded in explicitly so a
+    # deletion cannot be confused with an unreadable file.
     #
     # Cost is ~60ms over ~4000 files — cheap enough that the hook can do this on
     # every push, which is the whole reason the stamp exists instead of re-running
@@ -315,8 +386,10 @@ compute() {
     # stamp goes stale once, and the next `./build.sh --check` on each host
     # writes a current one. That is a single re-run per host, it is self-healing,
     # and it is the price of the stamp no longer lying about st_mode.
-    # ORDER 889-8tcb. The index modes, as a SORTED LIST consumed in lockstep —
-    # not an associative array. `local -A` is bash 4 and macOS ships bash 3.2
+    # ORDER 889-8tcb. The exec modes, as a SORTED LIST consumed in lockstep —
+    # not an associative array. (Since 1276-mugq the list also carries the
+    # untracked paths `git add` will record as executable: gate_stamp_exec_paths.)
+    # `local -A` is bash 4 and macOS ships bash 3.2
     # (761-g36m); the gate caught it, which is the gate working. And not a
     # per-path lookup either: order 675-dkif established that a fork per file
     # turns this into a ~20-minute pre-push hook on Windows, which is precisely
@@ -331,9 +404,7 @@ compute() {
     local _xline
     while IFS= read -r _xline; do
         [ -n "$_xline" ] && _gs_xpaths+=("$_xline")
-    done < <(git -C "$REPO_ROOT" ls-files -s 2>/dev/null \
-             | LC_ALL=C sed -n 's/^100755 [0-9a-f]* [0-9]*\t//p' \
-             | LC_ALL=C sort)
+    done < <(gate_stamp_exec_paths)
     local _gs_xi=0 _gs_xn=${#_gs_xpaths[@]}
 
     local -a paths=() kinds=() execbits=() file_digests=() symlink_digests=()
@@ -420,9 +491,14 @@ compute() {
             # is untouched and still refuses at GATE time, which is the guard
             # that actually caught the original regression.
             #
-            # Untracked files have no index entry and record `-`: constant and
-            # portable, and an untracked file's bit is not part of what a commit
-            # would carry. Staging it gives it a real mode.
+            # UNTRACKED paths, AMENDED BY 1276-mugq (gate_stamp_exec_paths).
+            # They used to record a constant `-`, and that is what made `git
+            # add` of a new executable move the digest with zero content
+            # change: gate-then-add-then-push paid a second full gate. They now
+            # record the mode `git add` will give them — the worktree bit where
+            # bits are git's own truth, `-` under core.fileMode=false, MSYS or
+            # drvfs — so the Windows regime is byte-for-byte unchanged, and a
+            # tree with no untracked executable digests exactly as before.
             # Advance past every executable path that sorts BEFORE this one,
             # then test for equality. Linear over both lists, zero forks.
             # `[[ < ]]` is a bash builtin comparison — no subshell. The first
@@ -716,8 +792,9 @@ case "${1:-verify}" in
         echo "ok:gate-stamped"
         ;;
     movers)
-        # ORDER 970-7fqk. Print the paths whose CONTENT differs from the stamped
-        # tree, one per line, as `<state>\t<path>`: modified | added | deleted.
+        # ORDER 970-7fqk. Print the paths whose CONTENT (or, since 1276-mugq, exec
+        # MODE) differs from the stamped
+        # tree, one per line, as `<state>\t<path>`: modified | added | deleted | mode.
         #
         # THIS IS THE QUESTION THE STALENESS DECISION ACTUALLY ASKS. The refusal
         # used to answer a different one — `[ "$f" -nt "$stamp" ]`, pure mtime —
@@ -798,22 +875,35 @@ case "${1:-verify}" in
                 printf '%s\t%s\n' "$(readlink "$REPO_ROOT/$_lp" | "${GATE_STAMP_SHA256[@]}" | cut -d' ' -f1)" "$_lp"
             done < "$_mv_tmp/links.z"
         } > "$_mv_tmp/now"
-        # Manifest is `<kind>\t<execbit>\t<digest>\t<path>`; reduce to digest+path.
-        cut -f3,4 "$STAMP_MANIFEST" > "$_mv_tmp/then" 2>/dev/null || true
-        LC_ALL=C sort -t"$(printf '\t')" -k2 "$_mv_tmp/now"  -o "$_mv_tmp/now"
-        LC_ALL=C sort -t"$(printf '\t')" -k2 "$_mv_tmp/then" -o "$_mv_tmp/then"
+        # Manifest is `<kind>\t<execbit>\t<digest>\t<path>`.
+        #
+        # ORDER 1276-mugq — THE MODE IS NAMED TOO. compute() folds the exec bit
+        # into the digest, so a stale verdict whose cause is a mode had no path
+        # to name: this printed nothing and the refusal said "no path's content
+        # differs", true and useless (macneo, 2026-09-20: staging a new
+        # executable staled the stamp and every instrument answered "nothing").
+        # A path whose bytes match but whose bit differs is now `mode`, read
+        # from the SAME gate_stamp_exec_paths list compute uses.
+        cut -f2,3,4 "$STAMP_MANIFEST" > "$_mv_tmp/then" 2>/dev/null || true
+        gate_stamp_exec_paths > "$_mv_tmp/exec"
         awk -F'\t' '
-            NR==FNR { then_d[$2]=$1; next }
-            { now_d[$2]=$1 }
+            FILENAME == ARGV[1] { ex[$0] = 1; next }
+            FILENAME == ARGV[2] { then_x[$3] = $1; then_d[$3] = $2; next }
+            { now_d[$2] = $1 }
             END {
-                for (p in now_d)  if (!(p in then_d))            print "added\t"   p
-                                  else if (now_d[p]!=then_d[p])  print "modified\t" p
-                for (p in then_d) if (!(p in now_d))             print "deleted\t"  p
+                for (p in now_d) {
+                    if (!(p in then_d))              print "added\t"    p
+                    else if (now_d[p] != then_d[p])  print "modified\t" p
+                    else if (then_x[p] != "-" && then_x[p] != "x") {}
+                    else if (((p in ex) ? "x" : "-") != then_x[p]) print "mode\t" p
+                }
+                for (p in then_d) if (!(p in now_d)) print "deleted\t"  p
             }
-        ' "$_mv_tmp/then" "$_mv_tmp/now" | LC_ALL=C sort -k2
+        ' "$_mv_tmp/exec" "$_mv_tmp/then" "$_mv_tmp/now" | LC_ALL=C sort -k2
         exit 0
         ;;
     verify)
+        refuse_borrowed_stamp
         if [[ ! -f "$STAMP_FILE" ]]; then
             echo "stale:never-run"
             exit 1
@@ -842,6 +932,7 @@ case "${1:-verify}" in
         echo "ok:gate-fresh"
         ;;
     scope)
+        refuse_borrowed_stamp
         if [[ ! -f "$STAMP_FILE" ]]; then
             echo "stale:never-run"
             exit 1
@@ -880,6 +971,7 @@ case "${1:-verify}" in
             echo "stale:memo-check-needs-a-dispatch"
             exit 2
         fi
+        refuse_borrowed_stamp
         if [[ ! -f "$STAMP_FILE" ]]; then
             echo "stale:never-run"
             exit 1

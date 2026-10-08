@@ -1,0 +1,12 @@
+# Gate step 1454-ssg3 — data, not code (order 1072-b7eq).
+#
+# BSD count shapes (grep -lc prints file:N AND file; wc -l left-pads) are
+# reproduced by stubs on EVERY host, so a gate count cannot regress on darwin
+# while Linux runs stay green.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking gate counts survive the BSD grep/wc shapes on any host (1454-ssg3)"
+STEP_SCRIPT="scripts/test-bsd-count-shapes.sh"
+STEP_ERROR="a gate count no longer survives BSD grep -lc or padded wc -l, so a darwin gate would read it wrong (1454-ssg3) — see the verdict line above"
+STEP_OK="BSD count shapes passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:bsd-count-shapes:4/4"

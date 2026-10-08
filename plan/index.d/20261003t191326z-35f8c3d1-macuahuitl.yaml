@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: progress
+      ts: "2026-10-03T19:13:26Z"
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      host: macuahuitl
+      summary: |
+        Observer correction independently measured: the identical64-trial/8-process callback cleanup stress now reports64 actual exited0,0 exited101 and0 other/absent outcomes. The new real acknowledged known-live child+grandchild control independently passed1/1: neither live identity is accepted during its100ms observation bound, then both are accepted only after the fixture's actual group kill and direct-child wait. The original delayed-marker negatives and long-deadline positive control remain intact; only the Linux test observer changed. Production cleanup and all process/runtime/policy behavior are unchanged. The two real before failures (R->Z after3.955us, X->absent after1.681us) remain archived separately from all64 after receipts, along with binary hashes and byte-exact measurement sources. This is a measured observer repair, not a suppressed runtime leak or green-by-retry.
+
+        No READY/landing/closure yet. The corrected candidate's targeted package suites and complete forced gate are running serially against the shared warm target. PR212 stays DRAFT until that source, required partial-preflight report, and a new serialized target+candidate gate pass; remote ancestry must prove the landing. The scratch launching wrapper now checks candidate ancestry after queue completion so queue exited0 cannot be mistaken for landed1 again; no production queue/landing implementation changed. Native packets1543-ffhg/1544-cnae and Mac1543-f44v stay dependency/ownership gated. Tracing1539, parent1384 and1547 contract review remain open. No ninth delegate, no UX/defaultflip/destructiveE2E/release, no weakening of guard/capture/fs/memory/landing policy.

@@ -21,6 +21,15 @@ use std::path::PathBuf;
 
 use tillandsias_control_wire::LocalProjectEntry;
 
+/// A per-lane bounded tmpfs volume, never a disk-backed source volume. Hash the
+/// tuple (not a concatenated label) so project/instance hyphens cannot alias.
+/// @trace spec:local-web-preview, spec:forge-hot-cold-split
+pub(crate) fn ram_workspace_volume(project: &str, instance: &str) -> String {
+    use sha2::Digest;
+    let digest = sha2::Sha256::digest(format!("{project}\0{instance}"));
+    format!("tillandsias-source-{:x}", digest)
+}
+
 #[cfg(feature = "tray")]
 pub const HOST_PROJECT_ROOT_ENV: &str = "TILLANDSIAS_HOST_PROJECT_ROOT";
 
@@ -277,11 +286,9 @@ mod tests {
     // === ORDER 505 FAIL-CLOSED VALIDATION (1031-q4pb) ==========================
     //
     // ENV IS PROCESS-GLOBAL AND CARGO RUNS TESTS IN THREADS, so these tests
-    // serialize on one mutex. Without it they pass alone and fail in a full run,
-    // which is the flaky-test shape that gets a suite ignored rather than fixed.
-    #[cfg(feature = "tray")]
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
+    // serialize on the crate-wide lock (crate::test_support::env_lock,
+    // 1437-5czv). Without it they pass alone and fail in a full run, which is
+    // the flaky-test shape that gets a suite ignored rather than fixed.
     #[cfg(feature = "tray")]
     struct EnvScope {
         _g: std::sync::MutexGuard<'static, ()>,
@@ -304,7 +311,7 @@ mod tests {
     /// confirmed-cloud cache.
     #[cfg(feature = "tray")]
     fn scoped(locals: &[&str], cloud: Option<&[&str]>) -> EnvScope {
-        let g = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let g = crate::test_support::env_lock();
         let tmp = std::env::temp_dir().join(format!(
             "tillandsias-1031-{}-{:?}",
             std::process::id(),

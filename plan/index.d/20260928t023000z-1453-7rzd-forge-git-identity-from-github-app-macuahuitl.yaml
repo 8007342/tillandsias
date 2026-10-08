@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator request 2026-09-28 (typed in macuahuitl-forge, relayed to the
+# coordinator): derive the forge git identity from the GitHub App login.
+packets:
+  - packet_id: forge-git-identity-derives-from-the-github-app-login-plus-host-and-a-tillandsia-name-written-as-config-not-exported-env
+    order: 1453-7rzd
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [git-identity, forge, github-app, attribution, fleet-activity]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - images/default/lib-common.sh
+      - scripts/fleet-activity.sh
+      - openspec/changes/forge-git-identity-from-github-app/
+    title: |
+      Forge git identity from the GitHub App login (operator 2026-09-28): name and email from the authenticated user, plus the host and a Tillandsia-species name, written as guest git CONFIG — not the host's gitconfig, not exported GIT_AUTHOR_* env
+    context: |
+      OPERATOR, verbatim (relayed by macuahuitl-forge): "Ask Macuahuitl to
+      redesign how the git identity get derived, now that we login with a
+      GitHub app we should have access to the user's name and email. We just
+      need to juggle host names, and append some tillandsias names for
+      randomness".
+      TODAY: read_git_identity_defaults (crates/tillandsias-headless) reads the
+      HOST's global gitconfig and passes it as exported GIT_AUTHOR_*/
+      GIT_COMMITTER_* env; configure_git_identity (images/default/
+      lib-common.sh) re-exports it. That contradicts the live requirement
+      "The guest never inherits the host's git identity" (spec
+      forge-git-identity-anonymization), makes identity shape depend on each
+      host's setup (Tlatoani <bulloncito@gmail.com> in macuahuitl-forge,
+      tlatoani@macuahuitl.<domain> elsewhere), and — because it is EXPORTED —
+      overrides -c user.name in every scratch-repo fixture inside a forge
+      (test-discipline-derive 4/5 red in every forge; 1446-xqi6's fixture).
+      Spec delta and consumer list: openspec/changes/
+      forge-git-identity-from-github-app/.
+      DEFAULTS (coordinator; the operator may override any of them in the
+      change's open questions): display name `<GitHub name> (<host> ·
+      tillandsia-<species>)`; email `<id>+<login>@users.noreply.github.com`;
+      host ALSO in a `Tillandsias-Host: <host>` trailer written by the
+      existing prepare-commit-msg hook, which fleet-activity.sh and discipline
+      derive read before falling back to the email domain; species name
+      chosen once per forge (stable for its life). No App login: a
+      project-scoped identity, never the host gitconfig.
+      CHECK FIRST: whether the stored App token can read /user name and the
+      noreply id without a new scope; if the email needs /user/emails, the
+      noreply form avoids the scope.
+    verifiable_closure: |
+      A fixture (scripts/test-forge-git-identity-source.sh) against a scratch
+      HOME: (1) with a planted host ~/.gitconfig naming "Host Person
+      <host@example.test>" and a stubbed App user {name: "App User", id: 7,
+      login: "appuser"}, the forge env/args the binary builds carry NO
+      GIT_AUTHOR_*/GIT_COMMITTER_* and no "Host Person"; (2) configure_git_identity
+      run in a scratch repo writes user.name "App User (<host> · tillandsia-*)"
+      and user.email 7+appuser@users.noreply.github.com; (3) in that shell,
+      `git -c user.name=fixture -c user.email=f@x commit` authors as fixture
+      <f@x>; (4) a commit made through the trailer hook carries
+      Tillandsias-Host: <host>, and scripts/fleet-activity.sh attributes it to
+      that host; (5) NEGATIVE CONTROL: with no App user stubbed, the identity
+      is project-scoped and still contains nothing from the host gitconfig.
+      PRE-FIX RESULT: FAILS at (1) — the binary exports the host gitconfig.
+    unscoreable: "unpinnable-until-the-guard-exists: the deliverable includes litmus-forge-git-identity-source.yaml wrapping scripts/test-forge-git-identity-source.sh, written in the same commit as the fix (1136-n8sh)"
+    next_action: >
+      Read the change's open questions; if the operator has not answered,
+      implement the stated defaults. Replace read_git_identity_defaults with
+      the App-user source, stop exporting GIT_* env, add the Tillandsias-Host
+      trailer, teach fleet-activity.sh and discipline derive to read it, then
+      archive the change into the spec.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Filed by the coordinator from macuahuitl-forge's relay; the fixture
+      unset-workaround rides on work/1446-xqi6 and becomes unnecessary here.

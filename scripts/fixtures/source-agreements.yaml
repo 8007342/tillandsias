@@ -1,0 +1,77 @@
+# @trace order:1475-j9kv
+# Explicit fixed inputs for the shadow-only Lua source-agreement evaluator.
+# `expected` is test data; the evaluator never trusts it to choose a verdict.
+version: 1
+cases:
+  - id: tray-live
+    operation: tray_process_naming
+    source: crates/tillandsias-macos-tray/src/diagnose.rs
+    expected: { exit: 0, verdict: "ok:tray-process-naming:3 checked", stderr: null }
+  - id: tray-old-field
+    operation: tray_process_naming
+    source: scripts/fixtures/source-agreements/tray-old-field.rs
+    expected:
+      exit: 1
+      verdict: "violation:tray-process-naming:1"
+      stderr: "  scripts/fixtures/source-agreements/tray-old-field.rs: declares 'pub vm_owner_live:' — the field observes a PROCESS, not a VM owner (980-ja2m)"
+  - id: tray-removed-new-field
+    operation: tray_process_naming
+    source: scripts/fixtures/source-agreements/tray-removed-new-field.rs
+    expected:
+      exit: 1
+      verdict: "violation:tray-process-naming:1"
+      stderr: "  scripts/fixtures/source-agreements/tray-removed-new-field.rs: does not declare 'pub tray_process_running: bool,' — deleting the field is not the fixed state (980-ja2m)"
+  - id: tray-prose-only
+    operation: tray_process_naming
+    source: scripts/fixtures/source-agreements/tray-prose-only.rs
+    expected: { exit: 0, verdict: "ok:tray-process-naming:3 checked", stderr: null }
+  - id: tray-crlf-space-path
+    operation: tray_process_naming
+    source: "scripts/fixtures/source agreements/tray-crlf.rs"
+    expected: { exit: 0, verdict: "ok:tray-process-naming:3 checked", stderr: null }
+  - id: dev-model-live
+    operation: dev_embed_model_agreement
+    hook: images/default/config-overlay/mcp/lib-dev-env.sh
+    ensure: scripts/dev-inference-ensure.sh
+    expected: { exit: 0, verdict: "ok:dev-embed-model-agreement:nomic-embed-text", stderr: null }
+  - id: dev-model-changed
+    operation: dev_embed_model_agreement
+    hook: scripts/fixtures/source-agreements/dev-hook-model-a.sh
+    ensure: scripts/fixtures/source-agreements/dev-ensure-model-b.sh
+    expected: { exit: 1, verdict: "violation:dev-embed-model-mismatch:hook=model-a ensure=model-b", stderr: null }
+  - id: dev-model-missing-declaration
+    operation: dev_embed_model_agreement
+    hook: scripts/fixtures/source-agreements/dev-hook-missing.sh
+    ensure: scripts/fixtures/source-agreements/dev-ensure-model-b.sh
+    expected: { exit: 1, verdict: "violation:dev-embed-model-mismatch:could not read a default (hook='' ensure='model-b')", stderr: null }
+  - id: inference-live
+    operation: inference_container_name_agreement
+    script: scripts/dev-inference-ensure.sh
+    probe: crates/tillandsias-headless/src/accel_probe.rs
+    expected: { exit: 0, verdict: "ok:inference-container-name-agreement:tillandsias-dev-inference", stderr: null }
+  - id: inference-renamed-container
+    operation: inference_container_name_agreement
+    script: scripts/fixtures/source-agreements/inference-script-renamed.sh
+    probe: scripts/fixtures/source-agreements/inference-probe-product.rs
+    expected:
+      exit: 1
+      verdict: "violation:inference-container-name-drift:creates=tillandsias-dev-inference:candidates=tillandsias-inference,tillandsias-prod-inference"
+      stderr: "  scripts/fixtures/source-agreements/inference-script-renamed.sh creates the container 'tillandsias-dev-inference'.\n  scripts/fixtures/source-agreements/inference-probe-product.rs will only try: tillandsias-inference,tillandsias-prod-inference\n  A probe that never names the running container reports the BOTTOM of\n  the accel-proof scale on a host whose lane works — indistinguishable\n  from a machine with no accelerator (967-6ax6, measured on yoga).\n  Fix: add 'tillandsias-dev-inference' to INFERENCE_CONTAINER_CANDIDATES, or rename\n  DEV_CONTAINER to a name already in that list. Do not add a THIRD\n  literal elsewhere; the env hook TILLANDSIAS_INFERENCE_CONTAINER is\n  the override, not a substitute for these two agreeing."
+  - id: inference-prose-only-match
+    operation: inference_container_name_agreement
+    script: scripts/fixtures/source-agreements/inference-script-prose-only.sh
+    probe: scripts/fixtures/source-agreements/inference-probe-prose-only.rs
+    expected:
+      exit: 1
+      verdict: "violation:inference-container-name-drift:creates=tillandsias-totally-different:candidates=tillandsias-inference,tillandsias-dev-inference"
+      stderr: "  scripts/fixtures/source-agreements/inference-script-prose-only.sh creates the container 'tillandsias-totally-different'.\n  scripts/fixtures/source-agreements/inference-probe-prose-only.rs will only try: tillandsias-inference,tillandsias-dev-inference\n  A probe that never names the running container reports the BOTTOM of\n  the accel-proof scale on a host whose lane works — indistinguishable\n  from a machine with no accelerator (967-6ax6, measured on yoga).\n  Fix: add 'tillandsias-totally-different' to INFERENCE_CONTAINER_CANDIDATES, or rename\n  DEV_CONTAINER to a name already in that list. Do not add a THIRD\n  literal elsewhere; the env hook TILLANDSIAS_INFERENCE_CONTAINER is\n  the override, not a substitute for these two agreeing."
+  - id: inference-missing-declaration
+    operation: inference_container_name_agreement
+    script: scripts/fixtures/source-agreements/inference-script-missing.sh
+    probe: scripts/fixtures/source-agreements/inference-probe-product.rs
+    expected: { exit: 2, verdict: "blocked:no-dev-container-assignment-in:scripts/fixtures/source-agreements/inference-script-missing.sh", stderr: null }
+  - id: inference-missing-file
+    operation: inference_container_name_agreement
+    script: scripts/fixtures/source-agreements/does-not-exist.sh
+    probe: scripts/fixtures/source-agreements/inference-probe-product.rs
+    expected: { exit: 2, verdict: "blocked:script-unreadable:scripts/fixtures/source-agreements/does-not-exist.sh", stderr: null }

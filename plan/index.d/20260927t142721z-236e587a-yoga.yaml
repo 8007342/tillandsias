@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-check-and-release-flag-combination-hard-fails
+    field: next_action
+    value: '2026-09-27 yoga, re-verified at 18d97f6f2: the CODE is in trunk (build.sh withholds TILLANDSIAS_GIT_SHA_OVERRIDE/BUILD_COMMIT_SHA_OVERRIDE under --release). MISSING: both criteria are runs — ./build.sh --check --release reaching the release phase with real provenance, and the negative control (a caller-exported override still hard-fails --release). Not run on yoga. Stays ready.'
+    ts: "2026-09-27T14:27:21Z"
+    host: yoga
+
+events:
+  - packet_id: build-check-and-release-flag-combination-hard-fails
+    event:
+      type: progress
+      ts: "2026-09-27T14:27:21Z"
+      host: yoga
+      summary: |-
+        status '2026-09-27 yoga, re-verified at 18d97f6f2: the CODE is in trunk (build.sh withholds TILLANDSIAS_GIT_SHA_OVERRIDE/BUILD_COMMIT_SHA_OVERRIDE under --release). MISSING: both criteria are runs — ./build.sh --check --release reaching the release phase with real provenance, and the negative control (a caller-exported override still hard-fails --release). Not run on yoga. Stays ready.' (not terminal) with evidence_refs: 18d97f6f2
+  - packet_id: build-check-and-release-flag-combination-hard-fails
+    event:
+      type: note
+      ts: "2026-09-27T14:27:21Z"
+      host: yoga
+      summary: |-
+        re-verified against trunk after the 1425-t9v9 relay

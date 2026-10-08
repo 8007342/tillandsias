@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-forge-launch-runs-openspec-init-against-the-checkout-with-an-unpinned-latest-cli-so-every-openspec-release-rewrites-tracked-files-and-the-forge-starts-dirty
+    field: status
+    value: in_progress
+    ts: "2026-09-27T16:30:33Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: a-forge-launch-runs-openspec-init-against-the-checkout-with-an-unpinned-latest-cli-so-every-openspec-release-rewrites-tracked-files-and-the-forge-starts-dirty
+    event:
+      type: note
+      ts: "2026-09-27T16:30:33Z"
+      host: forge-tillandsias
+      summary: |-
+        claimed by macuahuitl-forge on coordinator (macuahuitl-fedora) assignment 2026-09-27; work ref work/1422-w3p8

@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-uninstall-flag-on-every-binary-removes-everything-manifest-driven
+    field: notes
+    value: |-
+      size: L  implementer_tier: opus
+      Destructive deletion of credentials and operator data across three platforms — opus.
+      1401-p3k7's lesson applies verbatim: a faked HOME does not sandbox an absolute path; seam
+      every root and fail closed when a seam is missing. Never run the real --uninstall on the
+      host you are developing on. The macOS and Windows dispatch may be landed by a platform
+      host as a follow-up slice if the linux implementer cannot build them; say so in the
+      closure event and file the slice.
+
+
+      [2026-09-28T00:36:25Z yoga-silverblue] yoga-silverblue 2026-09-27 - CONTRACT FROM 1448-kmyn, for whoever implements --uninstall. `tillandsias --swap off` removes the per-launch swap service through ONE list, swap_cmd::removal_paths() in crates/tillandsias-headless/src/swap_cmd.rs (work/1448-kmyn 85ce6c8ad, relaying): the helper /usr/local/libexec/tillandsias-swap, the three units under /etc/systemd/system (tillandsias-swap@.service, tillandsias-swap-gc.service, tillandsias-swap-gc.timer), /etc/polkit-1/rules.d/50-tillandsias-swap.rules and /etc/tillandsias/swap.conf, plus the tillandsias-* swapfiles under SWAP_DIR and the tillandsias group when no rule still refers to it. --uninstall MUST call that same removal (swap_cmd's off path), not a second list: a second list is how an installed path outlives uninstall. PROOF the list is complete - scripts/test-forge-swap-service.sh arm 11: after --swap on then --swap off under --prefix, the only file left in the scratch root is the one the test planted. 1448-kmyn's criterion 4 ("--uninstall's removal plan lists every --swap-installed path") stays open until this row calls it.
+    ts: "2026-09-28T00:36:25Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: tillandsias-uninstall-flag-on-every-binary-removes-everything-manifest-driven
+    event:
+      type: progress
+      ts: "2026-09-28T00:36:25Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'size: L  implementer_tier: opus
+        Destructive deletion of credentials and operator data across three platforms — opus.
+        1401-p3k7's lesson applies verbatim: a faked HOME does not sandbox an absolute path; seam
+        every root and fail closed when a seam is missing. Never run the real --uninstall on the
+        host you are developing on. The macOS and Windows dispatch may be landed by a platform
+        host as a follow-up slice if the linux implementer cannot build them; say so in the
+        closure event and file the slice.
+        
+        
+        [2026-09-28T00:36:25Z yoga-silverblue] yoga-silverblue 2026-09-27 - CONTRACT FROM 1448-kmyn, for whoever implements --uninstall. `tillandsias --swap off` removes the per-launch swap service through ONE list, swap_cmd::removal_paths() in crates/tillandsias-headless/src/swap_cmd.rs (work/1448-kmyn 85ce6c8ad, relaying): the helper /usr/local/libexec/tillandsias-swap, the three units under /etc/systemd/system (tillandsias-swap@.service, tillandsias-swap-gc.service, tillandsias-swap-gc.timer), /etc/polkit-1/rules.d/50-tillandsias-swap.rules and /etc/tillandsias/swap.conf, plus the tillandsias-* swapfiles under SWAP_DIR and the tillandsias group when no rule still refers to it. --uninstall MUST call that same removal (swap_cmd's off path), not a second list: a second list is how an installed path outlives uninstall. PROOF the list is complete - scripts/test-forge-swap-service.sh arm 11: after --swap on then --swap off under --prefix, the only file left in the scratch root is the one the test planted. 1448-kmyn's criterion 4 ("--uninstall's removal plan lists every --swap-installed path") stays open until this row calls it.' (not terminal) with evidence_refs: 85ce6c8ad
+  - packet_id: tillandsias-uninstall-flag-on-every-binary-removes-everything-manifest-driven
+    event:
+      type: note
+      ts: "2026-09-28T00:36:25Z"
+      host: yoga-silverblue
+      summary: |-
+        removal_paths contract from 1448-kmyn

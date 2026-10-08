@@ -1,0 +1,54 @@
+   Compiling tillandsias-plan v0.1.0 (/home/tlatoani/codex/tillandsias-lua-work/1539-dt84/crates/tillandsias-plan)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.68s
+     Running unittests src/main.rs (target/debug/deps/tillandsias_plan-ccd00865307007a8)
+
+running 46 tests
+test next_order_filed_since_tests::a_row_with_no_filed_event_is_not_attributed ... ok
+test next_order_filed_since_tests::the_filer_match_is_segment_exact ... ok
+test next_order_filed_since_tests::nothing_filed_since_reports_an_empty_list_not_the_whole_ledger ... ok
+test next_order_filed_since_tests::next_order_reports_rows_filed_since ... ok
+test next_order_filed_since_tests::the_baseline_is_the_callers_own_last_filing_not_any_hosts ... ok
+test set_field_list_guard_tests::scalar_fields_are_not_refused ... ok
+test set_field_list_guard_tests::an_absent_field_is_not_a_list ... ok
+test set_field_list_guard_tests::set_field_refuses_a_list_valued_field ... ok
+test tests::a_blank_next_action_is_not_a_carry_forward ... ok
+test tests::a_misplaced_definition_is_not_counted_as_a_touch ... ok
+test tests::a_failing_envelope_is_downgraded_to_unsupported_naming_the_violations ... ok
+test tests::a_pure_closure_fragment_has_no_carry_forward_gaps ... ok
+test tests::dependency_clearance_treats_unknown_ids_as_blocking ... ok
+test tests::a_claim_event_without_a_status_is_reported_but_not_resolved ... ok
+test tests::claimability_excludes_milestone_criteria_holders ... ok
+test tests::carry_forward_reads_the_top_level_event_and_lww_channels ... ok
+test tests::carry_forward_names_open_touches_and_exempts_closures ... ok
+test tests::a_siblings_note_no_longer_refreshes_someone_elses_lease ... ok
+test tests::citation_root_is_carried_and_derivable ... ok
+test tests::a_claim_is_answered_by_a_typed_release_and_never_by_prose ... ok
+test tests::manifest_drift_reports_arms_a_synthetic_manifest_omits ... ok
+test tests::role_a_specific_host_does_not_satisfy_a_sibling_requirement ... ok
+test tests::role_a_specific_host_satisfies_a_general_requirement ... ok
+test tests::role_any_is_universal_but_only_as_a_whole_field ... ok
+test tests::a_status_entry_is_a_lease_whatever_the_reason_text_says ... ok
+test tests::role_matching_stops_at_a_token_boundary ... ok
+test tests::role_separators_are_normalised ... ok
+test tests::terminal_statuses_still_emit_a_completion_event ... ok
+test tests::live_claims_name_the_claiming_host_and_fail_closed_without_one ... ok
+test tests::query_json_projection_includes_lease_field ... ok
+test tests::every_dispatch_arm_is_documented_in_usage ... ok
+test tests::evidence_event_type_follows_the_status_being_written ... ok
+test tests::every_declared_capability_is_documented_in_usage ... ok
+test tests::an_event_nested_next_action_does_not_satisfy_carry_forward ... ok
+test tests::the_capability_manifest_is_a_sorted_unique_shell_safe_token_list ... ok
+test tests::host_label_alphabet_874_idnt ... ok
+test tests::query_constraint_parser_refuses_missing_unknown_and_invalid_values ... ok
+test tests::the_missing_agent_refusal_names_the_subcommand_not_just_the_file ... ok
+test tests::urgency_ranks_explicit_priority_then_kind_then_unscored ... ok
+test tests::expire_claims_partitions_stale_fresh_and_unknown_age ... ok
+test tests::utc_now_iso_produces_non_empty_utc_format ... ok
+test tests::writer_agent_refuses_absence_and_the_literal_unknown ... ok
+test tests::writer_host_default_is_the_compiled_platform_never_a_fabricated_linux ... ok
+test tests::writer_agent_refuses_noncanonical_ids_874_idnt ... ok
+test tests::query_packets_reproduces_plan_query_filter_semantics ... ok
+test tests::projection_carries_size_and_implementer_tier ... ok
+
+test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

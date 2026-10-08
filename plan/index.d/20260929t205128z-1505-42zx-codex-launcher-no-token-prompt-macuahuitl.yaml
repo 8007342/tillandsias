@@ -1,0 +1,34 @@
+packets:
+  - packet_id: codex-host-launcher-must-not-offer-rejected-github-token-seeding
+    order: 1505-42zx
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [codex, security, github-auth, forge]
+    estimated_hours: 2
+    owned_files: [scripts/configure-codex.sh, scripts/test-configure-codex.sh]
+    title: |
+      Remove the rejected interactive GitHub-token seed mode from the Codex host launcher
+    context: |
+      Operator relay from the fleet coordinator, 2026-09-29: PR #197 added
+      --seed-github-token to scripts/configure-codex.sh. The interactive
+      GitHub-token prompt was deliberately removed in 777-kyjp; a new
+      launcher must not revive it. This row owns the correction and the
+      currently unfiled launcher work. No token is read or copied by this
+      task. The old work/configure-codex-host-20260929 ref is unsanctioned
+      by the work/<order> landing protocol; make work/1505-42zx the landing
+      ref and close PR #197 after the replacement is ready.
+    exit_criteria:
+      - scripts/configure-codex.sh exposes only check, launch, and login-codex modes; --seed-github-token is rejected without prompting.
+      - A fixture demonstrates the removed mode cannot reach a credential-writing command or read stdin.
+      - The launcher retains its no-sudo, namespaced forge-launch and device-login behavior.
+      - A fresh merged work/1505-42zx passes ./build.sh --check and its changed fixture twice, including the namespaced builder toolbox.
+    verifiable_closure: |
+      bash scripts/test-configure-codex.sh proves --seed-github-token exits
+      with usage before any read or credential command, and checks the
+      check/launch/login-codex dispatch shape. Pre-fix negative control:
+      scripts/configure-codex.sh --help advertises --seed-github-token and
+      its mode contains a read -s token plus --github-login --with-token.
+    observed_by: macuahuitl

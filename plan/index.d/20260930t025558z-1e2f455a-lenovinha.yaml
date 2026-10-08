@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: affordance-slice-credential-channel-every-blocked-verdict-of-check-credential-channel-says-why-and-what-clears-it-and-the-most-hit-remedy-is-executed
+    field: status
+    value: completed
+    ts: "2026-09-30T02:55:58Z"
+    host: lenovinha
+
+events:
+  - packet_id: affordance-slice-credential-channel-every-blocked-verdict-of-check-credential-channel-says-why-and-what-clears-it-and-the-most-hit-remedy-is-executed
+    event:
+      type: completed
+      ts: "2026-09-30T02:55:58Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: adc9d4b76 (land99 relay of work/1497-ahmd 5c1e8ca64) + scripts/test-credential-channel-affordances.sh 3/3 (step 670, darwin regime): 0 bare, no remedy instructs gh re-auth, executed remedy clears interactive-credential-helper
+  - packet_id: affordance-slice-credential-channel-every-blocked-verdict-of-check-credential-channel-says-why-and-what-clears-it-and-the-most-hit-remedy-is-executed
+    event:
+      type: note
+      ts: "2026-09-30T02:55:58Z"
+      host: lenovinha
+      summary: |-
+        landed in land99

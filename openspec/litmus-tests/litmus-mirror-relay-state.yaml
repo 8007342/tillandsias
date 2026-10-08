@@ -1,0 +1,47 @@
+# @trace spec:git-mirror-service
+name: litmus:mirror-relay-state
+spec: git-mirror-service
+phase: pre-build
+description: The git mirror decides BROKEN in its own terms after the tick's fetch, by the layer that failed, with two-tick hysteresis; a rejected ref never makes it broken but a persistently rejected one is published as stuck
+severity: high
+size: instant
+inputs:
+  - images/git/publish-relay-state.sh
+  - scripts/test-mirror-relay-state.sh
+
+# Order 1310-rec6 step 2 (spec accepted by the coordinator 2026-09-30, on the
+# row). A mirror that silently fails to relay is worse than one that is loudly
+# down, and the first step (1310-rec6 step 1) removed the healthcheck noise
+# that made a healthy log indistinguishable from a failing one. This pins the
+# verdict the next steps act on.
+#
+# THE NEGATIVE CONTROL IS A MEASUREMENT, not a guess: on lenovinha a head
+# pushed through the host lane sat one commit ahead of its tracking ref until
+# the next fetch, because the relay updates GitHub first. Judged on that stale
+# tracking ref every successful push would read as unrelayed, so arm 1 builds
+# exactly that state and requires ok.
+#
+# Falsified by mutating the REAL publisher: removing the hysteresis turns the
+# first failing tick into broken (arm 2 RED); counting a rejection as a mirror
+# fault makes a rejected ref break the mirror (arm 4 RED). Hermetic and offline:
+# scratch bare repositories and a stub relay, host git only.
+
+preconditions:
+  - images/git/publish-relay-state.sh is present
+
+critical_path:
+  - step: "stale tracking is not broken; transport is degraded then broken then restored; an auth refusal is credential; a rejected ref is never broken and is stuck after 3 ticks"
+    command: "bash scripts/test-mirror-relay-state.sh"
+    timeout_ms: 120000
+    expected_behavior: "PASS: mirror-relay-state (1310-rec6)"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "mirror relay-state: broken decided after the tick's fetch, by failing layer, with hysteresis; rejection per-ref and stuck after 3 ticks"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "mirror-relay-state"
+
+rollback:
+  on_failure: "restore images/git/publish-relay-state.sh from git history"

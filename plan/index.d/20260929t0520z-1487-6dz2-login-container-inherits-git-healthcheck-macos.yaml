@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-one-shot-github-login-container-inherits-the-git-service-healthcheck-and-fails-it-every-three-seconds-for-its-whole-life
+    order: 1487-6dz2
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [podman, headless, logging]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      The one-shot tillandsias-github-login-* container runs from the tillandsias-git image and inherits its HEALTHCHECK, which cannot pass there: 24 unhealthy results (a systemd unit failing every 3 s) in a ~100 s login fill every guest journal read
+    context: |
+      MEASURED 2026-09-29 on a macOS guest (tlatoanis-macbook-air) during a
+      device-flow login: container tillandsias-github-login-73518 (image
+      localhost/tillandsias-git:v56.9.27.2) went health_status=starting 11
+      times and unhealthy 24 times between uptime 3814 and 3913, each with
+      "<id>-<hash>.service: Main process exited, code=exited,
+      status=1/FAILURE" / "Failed with result 'exit-code'".
+      Split out of 1486-y67a at the coordinator's direction: it is NOT the
+      cause of that row's 13 s gap (nothing in the login flow waits on
+      container health; the gap was the git-identity prompts). It is still
+      noise in every journal a debugger reads during a login.
+    exit_criteria:
+      - 'the github-login container is created with --no-healthcheck (or a health check that can pass in it), and a device-flow login leaves no "status=1/FAILURE" healthcheck units for that container in the guest journal (pre-fix result: FAILS — 24 in ~100 s)'
+      - 'the long-running git service container keeps its own HEALTHCHECK unchanged (negative control)'
+    unscoreable: |
+      the pin is a unit test on the login container's podman run argv
+      (--no-healthcheck present) plus one journal read after a real login.

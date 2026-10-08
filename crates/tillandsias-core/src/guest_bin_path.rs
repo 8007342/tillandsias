@@ -111,7 +111,7 @@ mod tests {
         // as a literal — a hard-coded root here would be the very copy this
         // module was changed to remove, sitting in the test that proves it was
         // removed. It also means this file needs no exemption from
-        // scripts/check-state-root-literals.sh, which is that guard's own
+        // scripts/lua/check-state-root-literals.lua, which is that guard's own
         // accidental test: an exemption here would mean the derivation was
         // abandoned.
         let want = format!(

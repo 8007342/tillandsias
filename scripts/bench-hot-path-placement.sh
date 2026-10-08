@@ -2,7 +2,7 @@
 # @trace order:329, spec:forge-hot-cold-split
 # bash-dialect: dual (probed fallback) — the clock probes GNU date's %N and
 # falls back to timing a REPEAT LOOP at 1-second resolution; both paths report
-# correct per-op milliseconds. Marker consumed by scripts/check-bash-dialect.sh
+# correct per-op milliseconds. Marker consumed by scripts/lua/check-bash-dialect.lua
 # (761-g36m). A naive fallback is NOT acceptable here: at 1 s resolution a
 # single 80 ms operation reads as 0, so the fallback amortises instead.
 #

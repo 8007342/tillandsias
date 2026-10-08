@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-headless-does-not-compile-without-default-features-and-no-gate-builds-that-feature-set-so-the-error-count-grows-unseen
+    field: title
+    value: '`cargo test -p tillandsias-headless --no-default-features` fails to compile (39 errors on trunk, first: container_deps.rs referencing crate::vault_bootstrap, which is cfg''d out without the vault feature); no gate builds that feature set, so it grew from 35 errors (noted 2026-09-15) unseen'
+    ts: "2026-09-29T05:45:10Z"
+    host: macos
+    replaces_sha256: "1eb3b9da2affb87cb4e08e767dbe1bde904a8b395b1b05fafd92011899b406d1"
+
+events:
+  - packet_id: tillandsias-headless-does-not-compile-without-default-features-and-no-gate-builds-that-feature-set-so-the-error-count-grows-unseen
+    event:
+      type: progress
+      ts: "2026-09-29T05:45:10Z"
+      host: macos
+      summary: |-
+        status '`cargo test -p tillandsias-headless --no-default-features` fails to compile (39 errors on trunk, first: container_deps.rs referencing crate::vault_bootstrap, which is cfg'd out without the vault feature); no gate builds that feature set, so it grew from 35 errors (noted 2026-09-15) unseen' (not terminal) with evidence_refs: self-correction
+  - packet_id: tillandsias-headless-does-not-compile-without-default-features-and-no-gate-builds-that-feature-set-so-the-error-count-grows-unseen
+    event:
+      type: note
+      ts: "2026-09-29T05:45:10Z"
+      host: macos
+      summary: |-
+        the filing heredoc was unquoted, so the backticked cargo command was executed and dropped from the title; restoring the intended text

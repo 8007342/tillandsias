@@ -215,6 +215,53 @@ pub fn malformed(index: &Path) -> Vec<PathBuf> {
     bad
 }
 
+/// Top-level keys the fold actually reads, per channel. Add a key here the
+/// moment a new channel lands; a fragment whose only top-level keys are NOT in
+/// this set cannot contribute a single folded row or event.
+const FOLD_CHANNELS: &[&str] = &["packets", "events", "fields", "status", "capabilities"];
+
+/// ORDER 920-eqjr — fragments the fold can read NOTHING from.
+///
+/// A fragment that parses as YAML yet contributes zero foldable rows and zero
+/// events passes every gate silently: [`malformed`] names files that do not
+/// parse and [`overlay_coverage_gaps`] (order 866-pvsx) names packet/event
+/// ENTRIES the fold dropped, but a file that simply talks past the fold —
+/// freestyle top-level keys with no `packets:` / `events:` / `fields:` /
+/// `status:` / `capabilities:` channel at all — is invisible to both. Two
+/// Antigravity prose fragments were lost exactly this way (filed 2026-08-28;
+/// re-emitted canonically after the osx-next merge surfaced them).
+///
+/// Classified inert when it:
+///   1. parses (a parse failure is `malformed:`, a different verdict), and
+///   2. declares NO recognized fold channel key — even an EMPTY one, because a
+///      `packets: []` fixture is documentation, not a loss, and
+///   3. still has at least one top-level key — a pure comment header parses to
+///      an empty (null) document and is not a lost finding.
+///
+/// Verdict token is `inert-fragment: <path>`, distinct from `malformed:` so a
+/// caller can branch on the class.
+pub fn inert_fragments(index: &Path) -> Vec<PathBuf> {
+    let mut inert: Vec<PathBuf> = load_all(index)
+        .into_iter()
+        .filter(|frag| {
+            let Some(doc) = frag.doc.as_mapping() else {
+                return false; // empty/null doc = comment header — not a loss
+            };
+            if doc
+                .keys()
+                .filter_map(|k| k.as_str())
+                .any(|k| FOLD_CHANNELS.contains(&k))
+            {
+                return false; // an explicit channel (even empty) is on the record
+            }
+            !doc.is_empty()
+        })
+        .map(|frag| frag.path)
+        .collect();
+    inert.sort();
+    inert
+}
+
 /// ORDER 606-h9vy — the 1-indexed INCLUSIVE line span of the list item under
 /// the top-level `section:` key whose block contains `packet_id: <packet_id>`
 /// and every needle in `must_contain`. This is how winning-source spans are
@@ -838,6 +885,48 @@ pub fn set_field_fragment_body(
     body
 }
 
+/// ORDER 1367-2sbc — insert `story: <id>` into the FIRST status entry of a
+/// set-field body, right after its `host:` line, so a claim records the story it
+/// was made under. The fold ignores the key; the claim path's WIP guard reads it
+/// back from the winning entry's span.
+pub fn with_claim_story(body: &str, story: &str) -> String {
+    let mut out = String::with_capacity(body.len() + 40);
+    let mut in_status = false;
+    let mut done = false;
+    for line in body.split_inclusive('\n') {
+        out.push_str(line);
+        if line.starts_with("status:") {
+            in_status = true;
+        } else if in_status && !done && line.starts_with("    host: ") {
+            out.push_str(&format!("    story: {story}\n"));
+            done = true;
+        }
+    }
+    out
+}
+
+/// ORDER 1458-8y85 — insert `replaces_sha256: "<hex>"` into the FIRST status
+/// entry of a set-field body (the one row set-field writes), right after its
+/// `host:` line. The fold ignores the key; check-append-vs-origin-fold.sh reads it.
+pub fn with_replace_acknowledgement(body: &str, sha256: &str) -> String {
+    if sha256.is_empty() {
+        return body.to_string();
+    }
+    let mut out = String::with_capacity(body.len() + 90);
+    let mut in_status = false;
+    let mut done = false;
+    for line in body.split_inclusive('\n') {
+        out.push_str(line);
+        if line.starts_with("status:") {
+            in_status = true;
+        } else if in_status && !done && line.starts_with("    host: ") {
+            out.push_str(&format!("    replaces_sha256: \"{sha256}\"\n"));
+            done = true;
+        }
+    }
+    out
+}
+
 /// ORDER 775-b4qz, exit criterion 2 — the write-time half of the malformed-
 /// fragment defence. Re-parse a just-written fragment with the SAME parser the
 /// fold uses ([`load_all`]'s `serde_yaml::from_str`) and confirm the LWW row
@@ -958,10 +1047,11 @@ impl FoldedIdentities {
 }
 
 /// Thin wrapper preserving the original signature for one-shot callers.
-fn fragment_coverage_gaps(result: &Value, frag: &Fragment) -> Vec<String> {
-    fragment_coverage_gaps_in(result, &FoldedIdentities::of(result), frag)
-}
-
+// 1476-5dfy: the convenience wrapper that rebuilt FoldedIdentities on every
+// call is GONE. 964-tzmp hoisted the index for `check` and left compact_text
+// calling the wrapper once per fragment, which cost ~45 s of every live-ledger
+// compaction. With no wrapper, a caller must build the index itself, so it
+// cannot be rebuilt per fragment by accident.
 /// `result` is still taken for the CHEAP top-level lookups (`capabilities`);
 /// only the packet walk, which is the expensive part, comes from `known`.
 fn fragment_coverage_gaps_in(
@@ -1516,9 +1606,13 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
     // (including a base `events:`) but AHEAD of events contributed by
     // fragments. Pushing events first put every newly-seen field on the wrong
     // side of them.
-    for (pid, ev) in &new_events {
-        candidate = crate::edit::push_event(&candidate, pid, &render_list_item(ev, 8))?;
-    }
+    // 1476-5dfy: one pass for every new event, not one full re-render each
+    // (push_event per event was O(events x text), ~10 s on the live ledger).
+    let blocks: Vec<(String, String)> = new_events
+        .iter()
+        .map(|(pid, ev)| (pid.clone(), render_list_item(ev, 8)))
+        .collect();
+    candidate = crate::edit::push_events(&candidate, &blocks)?;
 
     let mut lines: Vec<String> = candidate.lines().map(String::from).collect();
     for (pid, field, value, ts) in &lww_wins {
@@ -1662,8 +1756,14 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
         .map_err(|e| format!("compaction candidate does not parse: {e}"))?;
     let mut consumed = Vec::new();
     let mut refused = Vec::new();
+    // 1476-5dfy: index the written document ONCE. The old wrapper rebuilt
+    // FoldedIdentities over the whole candidate per call, and this
+    // loop runs once per fragment: on the live ledger (~3,000 fragments, a
+    // 5.9 MB base) that was ~45 s of a ~58 s compaction. Same answer; the
+    // index is a pure function of `written`.
+    let known = FoldedIdentities::of(&written);
     for f in &fragments {
-        let gaps = fragment_coverage_gaps(&written, f);
+        let gaps = fragment_coverage_gaps_in(&written, &known, f);
         if gaps.is_empty() {
             consumed.push(f.path.clone());
         } else {
@@ -2778,6 +2878,49 @@ packets:
             doc: serde_yaml::from_str(yaml).expect("fragment parses"),
             raw: yaml.to_string(),
         }
+    }
+
+    /// 920-eqjr. The inert-fragment class, exercised against a temp index dir:
+    /// a comment header and a valid-empty channel are NOT losses, a freestyle
+    /// prose fragment with a finding in it is, and a capabilities-channel
+    /// fragment is a recognized channel (order 843-624y / 846-idhn).
+    #[test]
+    fn inert_fragments_only_flags_freestyle_prose() {
+        let dir = std::env::temp_dir().join(format!(
+            "plan-inert-fragments-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("index.d")).expect("create index.d");
+        let index = dir.join("index.yaml");
+        std::fs::write(&index, "packets: []\n").expect("write base index");
+
+        let comment_only = dir.join("index.d/aa-comment-only.yaml");
+        let empty_channel = dir.join("index.d/bb-empty-channel.yaml");
+        let capabilities = dir.join("index.d/cc-capabilities.yaml");
+        let freestyle = dir.join("index.d/dd-freestyle-prose.yaml");
+
+        std::fs::write(&comment_only, "# just notes\n").expect("comment fixture");
+        std::fs::write(&empty_channel, "packets: []\n").expect("empty channel fixture");
+        std::fs::write(
+            &capabilities,
+            "capabilities:\n  - ts: \"2026-01-01T00:00:00Z\"\n    host: windows\n",
+        )
+        .expect("capabilities fixture");
+        std::fs::write(
+            &freestyle,
+            "fragment_type: probe\ncontent: a finding\nsummary: lost\n",
+        )
+        .expect("freestyle fixture");
+
+        let inert = inert_fragments(&index);
+        assert_eq!(
+            inert,
+            vec![freestyle.clone()],
+            "only the freestyle prose fragment is inert"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn packet_ids(doc: &Value) -> Vec<String> {
@@ -4242,7 +4385,152 @@ plan_index:
         crate::collect_packets(&cand_doc, &mut cp);
         let mut mp = Vec::new();
         crate::collect_packets(&merged, &mut mp);
-        assert_eq!(cp, mp, "the rendered text must fold to the same state");
+        if let Some(diff) = first_fold_divergence(&cp, &mp) {
+            panic!("the rendered text must fold to the same state: {diff}");
+        }
+    }
+
+    /// ORDER 1330-j5is. Name the FIRST divergence (packet, field, and the two
+    /// values) instead of `assert_eq!` over both whole ledger states: that panic
+    /// was 22.5 MB and opened on whichever packet sorted first, which read as
+    /// evidence against the packet that actually diverged.
+    fn first_fold_divergence(cand: &[Value], merged: &[Value]) -> Option<String> {
+        let id = |p: &Value| {
+            p.get("packet_id")
+                .and_then(Value::as_str)
+                .unwrap_or("<no packet_id>")
+                .to_string()
+        };
+        let clip = |v: Option<&Value>| {
+            let s = v.map_or("<absent>".to_string(), |v| {
+                serde_yaml::to_string(v).unwrap_or_default()
+            });
+            if s.len() > 400 {
+                format!("{}…", &s[..s.floor_char_boundary(400)])
+            } else {
+                s
+            }
+        };
+        if cand.len() != merged.len() {
+            return Some(format!(
+                "packet count differs: rendered {} vs fold {}",
+                cand.len(),
+                merged.len()
+            ));
+        }
+        for (c, m) in cand.iter().zip(merged) {
+            if c == m {
+                continue;
+            }
+            if id(c) != id(m) {
+                return Some(format!(
+                    "packet order differs: rendered {} vs fold {}",
+                    id(c),
+                    id(m)
+                ));
+            }
+            let (Some(cm), Some(mm)) = (c.as_mapping(), m.as_mapping()) else {
+                return Some(format!("packet {} is not a mapping on one side", id(c)));
+            };
+            let mut keys: Vec<&Value> = cm.keys().chain(mm.keys()).collect();
+            keys.dedup();
+            for k in keys {
+                if cm.get(k) != mm.get(k) {
+                    return Some(format!(
+                        "packet {} field {}: rendered {} vs fold {}",
+                        id(c),
+                        k.as_str().unwrap_or("?"),
+                        clip(cm.get(k)),
+                        clip(mm.get(k))
+                    ));
+                }
+            }
+            return Some(format!("packet {} differs in key order only", id(c)));
+        }
+        None
+    }
+
+    #[test]
+    fn a_fold_divergence_names_the_packet_and_field_not_both_ledgers() {
+        let a: Vec<Value> =
+            serde_yaml::from_str("- {packet_id: aa, status: ready}\n- {packet_id: zz, title: x}")
+                .unwrap();
+        let b: Vec<Value> =
+            serde_yaml::from_str("- {packet_id: aa, status: ready}\n- {packet_id: zz, title: y}")
+                .unwrap();
+        let d = first_fold_divergence(&a, &b).expect("diverges");
+        assert!(
+            d.contains("packet zz field title"),
+            "names the diverging packet, not the first: {d}"
+        );
+        assert!(!d.contains("aa"), "does not dump the agreeing packet: {d}");
+        assert!(
+            first_fold_divergence(&a, &a).is_none(),
+            "equal states report nothing"
+        );
+    }
+
+    /// ORDER 1330-j5is. A line inside a block-scalar SUMMARY shaped
+    /// `<multi-word label>: <value BEGINNING with an ISO-8601 timestamp>` must
+    /// survive fold -> render -> fold. The shape is COMPOSED at run time and
+    /// never written literally in this file: carried literally in a ledger
+    /// fragment it redded every host's gate (d0ceea5b4, excised 6c372ed26).
+    #[test]
+    fn a_timestamp_valued_label_line_in_a_summary_survives_compaction() {
+        let ts = ["2026", "-09-20", "T17:37:30Z"].concat();
+        let spaced = ["2026", "-09-20 ", "17:37:30"].concat();
+        let label = ["Modify", " time"].concat();
+        let tail = " 1234567 -rw-r--r-- 1 lenovinha lenovinha /var/tmp/x";
+        let variants: Vec<String> = vec![
+            format!("first line\n  {label}: {ts}\nlast line"),
+            format!("first line\n  {label}: {ts}{tail}\nlast line"),
+            format!("first line\n{label}: {spaced}{tail}\nlast line"),
+            format!("first line \n  {label}: {ts}{tail}\nlast line"),
+            format!("first line\n  {label}: {ts}\tx\nlast line"),
+            format!("  leading indent\n{label}: {ts}\nlast line"),
+        ];
+        for (i, summary) in variants.iter().enumerate() {
+            let d = scratch(&format!("j5is-{i}"));
+            let index = d.join("plan/index.yaml");
+            let mut ev = serde_yaml::Mapping::new();
+            ev.insert("type".into(), "note".into());
+            ev.insert("ts".into(), "2026-09-28T00:00:00Z".into());
+            ev.insert("host".into(), "lenovinha".into());
+            ev.insert("summary".into(), summary.as_str().into());
+            let mut wrap = serde_yaml::Mapping::new();
+            wrap.insert("packet_id".into(), "alpha".into());
+            wrap.insert("event".into(), Value::Mapping(ev));
+            let mut doc = serde_yaml::Mapping::new();
+            doc.insert("events".into(), Value::Sequence(vec![Value::Mapping(wrap)]));
+            std::fs::write(
+                d.join(format!("plan/index.d/20260928t00000{i}z-j5is-h.yaml")),
+                serde_yaml::to_string(&Value::Mapping(doc)).expect("serializes"),
+            )
+            .expect("fragment");
+            let candidate = compact_text(&index)
+                .unwrap_or_else(|e| panic!("variant {i}: compaction refused: {e}"))
+                .candidate;
+            let cand: Value = serde_yaml::from_str(&candidate)
+                .unwrap_or_else(|e| panic!("variant {i}: rendered base does not parse: {e}"));
+            let mut ps = Vec::new();
+            crate::collect_packets(&cand, &mut ps);
+            let got = ps
+                .iter()
+                .filter(|p| p.get("packet_id").and_then(Value::as_str) == Some("alpha"))
+                .flat_map(|p| {
+                    p.get("events")
+                        .and_then(Value::as_sequence)
+                        .cloned()
+                        .unwrap_or_default()
+                })
+                .filter_map(|e| e.get("summary").and_then(Value::as_str).map(str::to_string))
+                .find(|s| s.contains("first line") || s.contains("leading indent"));
+            assert_eq!(
+                got.as_deref(),
+                Some(summary.as_str()),
+                "variant {i}: the summary line `{label}: <timestamp>...` did not survive compaction"
+            );
+        }
     }
 
     #[test]
@@ -4431,6 +4719,35 @@ plan_index:
             "refusal must name the bad anchor: {err}"
         );
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// 1476-5dfy: push_events must be BYTE-IDENTICAL to push_event applied
+    /// once per entry, in order. Covers a packet that already has events, one
+    /// with none (so `events:` is created), several events for one packet
+    /// interleaved with another's, and a packet that is the item's LAST field
+    /// versus one followed by further fields.
+    #[test]
+    fn push_events_equals_sequential_push_event() {
+        let base = "plan_index:\n  steps:\n    - packet_id: alpha\n      order: 1\n      events:\n        - type: filed\n          ts: \"2026-01-01T00:00:00Z\"\n      title: a\n    - packet_id: beta\n      order: 2\n      status: ready\n    - packet_id: gamma\n      order: 3\n      events:\n        - type: filed\n          ts: \"2026-01-02T00:00:00Z\"\n";
+        let ev = |t: &str| format!("        - type: note\n          summary: {t}\n");
+        let entries: Vec<(String, String)> = vec![
+            ("beta".into(), ev("b1")),
+            ("alpha".into(), ev("a1")),
+            ("beta".into(), ev("b2")),
+            ("gamma".into(), ev("g1")),
+            ("alpha".into(), ev("a2")),
+            ("beta".into(), ev("b3")),
+        ];
+        let mut sequential = base.to_string();
+        for (pid, b) in &entries {
+            sequential = crate::edit::push_event(&sequential, pid, b).expect("sequential push");
+        }
+        let batched = crate::edit::push_events(base, &entries).expect("batched push");
+        assert_eq!(
+            batched, sequential,
+            "push_events must equal push_event applied in order"
+        );
+        assert!(crate::edit::push_events(base, &[("nope".into(), ev("x"))]).is_err());
     }
 
     #[test]
@@ -5515,6 +5832,33 @@ plan_index:
 /// left to re-derive the higher rung from.
 #[cfg(test)]
 mod closure_ladder_compaction_tests {
+    /// ORDER 1458-8y85: the acknowledgement lands on the status row, after
+    /// `host:`, and nowhere in the events block that follows.
+    #[test]
+    fn replace_acknowledgement_goes_on_the_status_row_only() {
+        let body = set_field_fragment_body(
+            "p",
+            "next_action",
+            "new text",
+            "2026-09-28T00:00:00Z",
+            "h",
+            &[("note".to_string(), "why".to_string())],
+        );
+        let acked = with_replace_acknowledgement(&body, "abc123");
+        assert_eq!(acked.matches("replaces_sha256:").count(), 1);
+        let status_host = acked.find("    host: h\n").unwrap();
+        let ack = acked.find("    replaces_sha256: \"abc123\"\n").unwrap();
+        assert_eq!(ack, status_host + "    host: h\n".len());
+        assert!(ack < acked.find("events:").unwrap());
+        assert_eq!(with_replace_acknowledgement(&body, ""), body);
+        let doc: Value = serde_yaml::from_str(&acked).unwrap();
+        assert_eq!(
+            lww_entries(&doc).len(),
+            1,
+            "the fold still reads one LWW row"
+        );
+    }
+
     use super::*;
 
     const BASE: &str = "\

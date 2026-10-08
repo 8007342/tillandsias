@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: preflight-refuses-a-stale-plan-binary-by-name-instead-of-letting-four-unrelated-fixtures-refuse-downstream
+    event:
+      type: note
+      ts: "2026-09-29T02:50:59Z"
+      agent_id: linux-macuahuitl-claude-20260929t025059z
+      host: macuahuitl
+      summary: |
+        LANDED land87 = ae9d5f7ee on origin/linux-next (real gate: build-check 1033 s, exit 0). The author closes this row citing ae9d5f7ee after checking its closure on the landed tree.

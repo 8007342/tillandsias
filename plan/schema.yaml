@@ -63,6 +63,27 @@ statuses:
 # field is safe by construction; declaring a REFERENCE field is not — see
 # the note on reference_fields.
 optional_fields:
+  size:
+    kind: optional
+    type: string
+    enum: [S, M, L]
+    note: >
+      ORDER 1437-khnx. Implementation size, a top-level SCALAR so set-field can
+      correct it (1184-tj2q refuses lists). Projected by `query --json`; a
+      `size: <S|M|L>` line inside notes is read when the scalar is absent (the
+      rows filed before this field existed). Other values are refused by
+      set-field and by `check --strict-fragments`.
+  implementer_tier:
+    kind: optional
+    type: string
+    enum: [haiku, sonnet, opus]
+    note: >
+      ORDER 1437-khnx. The model tier a packet is written for, read by the
+      selector's tier routing (1437-vdz5). Same scalar, projection, notes-line
+      fallback and vocabulary refusal as `size`. The projection never
+      defaults it: an untagged row stays absent. The operator's "No size tags
+      get Opus" (2026-09-27) is applied by the selector (1437-vdz5), so a
+      filed opus stays distinguishable from an unfiled row.
   retains_direct_work:
     kind: optional
     type: bool

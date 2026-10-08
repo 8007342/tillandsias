@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-forge-launch-runs-openspec-init-against-the-checkout-with-an-unpinned-latest-cli-so-every-openspec-release-rewrites-tracked-files-and-the-forge-starts-dirty
+    event:
+      type: note
+      ts: "2026-09-27T16:30:50Z"
+      agent_id: forge-forge-tillandsias-claude-20260927t163026z
+      host: forge-tillandsias
+      summary: |
+        MEASUREMENT (macuahuitl-forge, second live specimen, t=0 of session started 2026-09-27 ~16:15Z, linux-next bd1e14a77; dirt left untouched in the main checkout as the specimen).
+        DIRTY PATHS (git status --porcelain), 18, all ' M':
+          .claude/commands/opsx/{archive,bulk-archive,continue,explore,ff,onboard,verify}.md (7)
+          .claude/skills/openspec-{apply-change,archive-change,bulk-archive-change,continue-change,explore,ff-change,new-change,onboard,propose,sync-specs,verify-change}/SKILL.md (11)
+          18 files changed, 204 insertions(+), 105 deletions(-).
+        VERSIONS: forge `openspec --version` = 1.13.2 (/home/forge/.cache/tillandsias-project/npm/global/bin/openspec, npm @latest). Committed .claude/ set says generatedBy "1.13.1" (last .claude chore(opsx) sync: 6c7498357, 2026-09-02; then carried by salvage 2bfaeb859). Committed .opencode/ set says generatedBy "1.13.2".
+        ENTRYPOINT LINES that run init: images/default/entrypoint-forge-claude.sh:117 (`"$OS_BIN" init --tools claude`), entrypoint-forge-opencode.sh ~124 (--tools opencode), entrypoint-forge-opencode-web.sh ~110 (--tools opencode), entrypoint-terminal.sh ~95 (bare init). OS_BIN from require_openspec -> _require_harness (lib-common.sh:3291); @latest refresh in lib-common.sh ensure_forge_harnesses (`npm install -g "$pkg@latest"`, ~line 2705).
+        SECOND RECURRENCE: 64cceb25d (2026-09-27 13:26:33Z, Generated-By: tool=opencode) committed a regenerated .opencode/ opsx set to trunk — the old order-540 "commit the sync" workaround, which the 2026-09-27 ruling reverses. That commit is why .opencode/ now reads 1.13.2 while .claude/ reads 1.13.1: the two loci now disagree on trunk.

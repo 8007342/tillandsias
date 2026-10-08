@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-mirror-reads-the-branch-discipline-seed-from-head-first-and-head-is-the-default-branch-which-lacks-the-seed-so-a-live-level-2-project-publishes-level-0-and-enforces-nothing
+    order: 1490-zw87
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [mirror, branch-discipline, git, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - images/git/pre-receive-hook.sh
+      - images/git/publish-discipline.sh
+      - images/git/entrypoint.sh
+      - scripts/test-mirror-discipline.sh
+    title: |
+      1443-uit6's mirror reads the discipline seed from HEAD first, and on the live tillandsias mirror HEAD is main, which has no seed yet (the seed is on linux-next), so the mirror publishes level 0 advised and enforces nothing while the project's seed says level 2
+    context: |
+      MEASURED LIVE on lenovinha 2026-09-29, the first run of 1443-uit6
+      (landed in land86 eced00b48) on a real mirror: tillandsias-git-tillandsias
+      has HEAD -> refs/heads/main; main lacks .tillandsias/branch-discipline.yaml;
+      refs/heads/linux-next has it (level 2, default_branch enforced). The
+      published ref reads refs/tillandsias/discipline/0/advised/unknown/none/<epoch>.
+
+      CAUSE (the author's own, lenovinha): discipline_load and describe() read
+      the seed at HEAD to LEARN the integration branch, and only then read the
+      seed on that branch. When HEAD has no seed, they stop at "no seed". The
+      hermetic fixture seeded main AND linux-next with the same seed, so it
+      never modelled the real state: a seed that has reached the integration
+      branch but not yet the default branch, which is the NORMAL state of a
+      level-2 project between releases.
+
+      FAILS SAFE, NOT LOUD: nothing is refused wrongly (level 0 refuses
+      nothing), but enforcement is dormant until main catches up, and
+      1443-z3vb reads digest none. A checkout WITH a seed then reads mirror
+      disagreement where the intent was agreement.
+
+      FIX DIRECTION, no branch constants in hook code
+      (litmus:git-mirror-yaml-gate-shape, order-462 class): the entrypoint
+      exports the candidate ref(s) to read the seed from (for example
+      TILLANDSIAS_DISCIPLINE_SEED_REFS, defaulting to this project's integration
+      branch beside the other conventions), and hook plus publisher try those
+      before HEAD.
+    exit_criteria:
+      - 'a fixture arm with the seed ONLY on the integration branch (the default branch has none) publishes the seed level, strictest enforcement and full digest, and an enforced default-branch push is rejected (pre-fix: FAILS, publishes 0/advised/none and accepts the push)'
+      - 'the hook and the publisher name no branch in code; the candidate refs come from entrypoint config, and litmus:git-mirror-yaml-gate-shape stays green'
+      - 'the live tillandsias mirror on lenovinha publishes level 2 after the fix is deployed'
+    verifiable_closure: |
+      bash scripts/test-mirror-discipline.sh passes with the new arm, which
+      fails against the pre-fix hook and publisher.
+    events:
+      - type: filed
+        ts: "2026-09-29T06:30:00Z"
+        agent_id: linux-lenovinha-claude-20260929t063000z
+        host: lenovinha
+        summary: |-
+          Filed by the author of 1443-uit6 after its first live run on the
+          lenovinha mirror published level 0 for a level-2 project.

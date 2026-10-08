@@ -1,0 +1,56 @@
+# Append-only completion of the source investigation, not adoption of its design.
+status:
+  - packet_id: research-modern-stockfish-techniques-for-centicolon-evidence-and-convergence
+    field: status
+    value: completed
+    ts: "2026-09-28T17:01:22Z"
+    host: macuahuitl
+  - packet_id: research-modern-stockfish-techniques-for-centicolon-evidence-and-convergence
+    field: next_action
+    value: >
+      Operator: choose the evidence-contract and report-only pilot scope in
+      1447-9sne. Implementation remains a separately authorized program.
+    ts: "2026-09-28T17:01:22Z"
+    host: macuahuitl
+events:
+  - packet_id: research-modern-stockfish-techniques-for-centicolon-evidence-and-convergence
+    event:
+      type: completed
+      ts: "2026-09-28T17:01:22Z"
+      agent_id: codex-stockfish-review-20260928
+      host: macuahuitl
+      summary: |
+        evidence_refs: d2b670d1d;
+        plan/issues/stockfish-centicolon-lessons-research-2026-09-28.md;
+        plan/issues/centicolon-transient-work-scope-research-2026-09-27.md.
+        Source investigation delivered: Stockfish 19 pinned to edb0d9db6731;
+        official release, WDL, TT, NNUE/search and Fishtest sources. Proposed
+        transfers and non-transfers, evidence envelope, falsifiable pilots
+        and a six-stage implementation program are recorded. No tournament,
+        policy experiment, production change or enforcement bar raise claimed.
+        Initial git diff --check and strict-fragment ledger check passed.
+        Full build check attempted: sandbox Podman unavailable, normal builder
+        ran and failed the existing parse-only fixture ARM 6 (460 -> 459).
+        The log cannot identify the missing file or cause. Current trunk is
+        merged at 1afa99781; a full check is running again. Publication gate
+        outcome will be recorded separately; this event closes research only.
+  - packet_id: research-whether-the-centicolon-uncertainty-metric-must-also-count-transient-work-bug-fixes-and-regressions-that-should-produce-a-preventing-spec-requirement
+    event:
+      type: note
+      ts: "2026-09-28T17:01:22Z"
+      agent_id: codex-stockfish-review-20260928
+      host: macuahuitl
+      summary: |
+        Codex complements Antigravity on work/1447-9sne; retains both original
+        positions and coordinator baseline. Endorse obligations/evidence/work
+        separation, challenge enforcement as written. Pure evaluation alone
+        does not establish evidence attribution or semantic adequacy. Record
+        four executed grader counterexamples separately from source-reviewed
+        cache hypotheses; require immutable subject/assertion/regime evidence,
+        per-obligation non-regression and durable baseline. A measured residual
+        may plateau; finite-time zero needs a separate bounded-progress premise.
+        Stockfish research 1453-p9gb is complete. Parent remains open for the
+        operator's choice. Three Antigravity spec clauses remain verbatim
+        proposals in the research document, not adopted durable requirements.
+        BigPickle's website update b3f3091 is now available; authorized website
+        follow-up is a separate repository change, not runtime implementation.

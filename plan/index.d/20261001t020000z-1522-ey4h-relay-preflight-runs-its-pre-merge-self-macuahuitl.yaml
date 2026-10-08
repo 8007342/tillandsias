@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by the coordinator on 2026-10-01 relaying 1384-ddua.
+packets:
+  - packet_id: relay-preflight-runs-the-trunk-copy-of-itself-so-a-ref-that-ports-or-deletes-a-decider-is-refused-for-a-script-the-merged-tree-no-longer-has
+    order: 1522-ey4h
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [relay, preflight, lua-migration, deciders]
+    estimated_hours: 2
+    owned_files:
+      - scripts/relay-preflight.sh
+      - scripts/test-relay-preflight.sh
+    title: |
+      scripts/relay-preflight.sh reads its decider list and its _run_decider body from the copy that STARTED the run (trunk's), then merges the refs; relaying 1384-ddua, which deletes check-bash-dialect.sh and repoints the tool to the .lua, was refused with "bash: scripts/check-bash-dialect.sh: No such file or directory" although the merged tree is green
+    context: |
+      MEASURED 2026-10-01 on macuahuitl: relay-preflight origin/work/1384-ddua
+      from a checkout on linux-next refused at decider check-bash-dialect,
+      exit 2, "No such file or directory". lenovinha's run of the same ref
+      passed the deciders because it started from the ddua checkout, whose
+      copy of the tool is the merged one. The coordinator's workaround: put
+      the checkout on a branch that already contains the merge, then run.
+      That relies on bash having read the function bodies before the tool's
+      own checkout swaps the file on disk, which is luck, not design. Every
+      Lua-migration rung that ports or retires a decider (1384-bxhk next,
+      then the 1384 and 1520-z95v rungs) meets this.
+    outcome: |
+      A relay that changes the decider set or the tool itself is judged by
+      the merged tree's tool, every time, from any starting checkout.
+    exit_criteria:
+      - "A fixture arm whose work ref deletes a decider script and repoints the tool's decider list: relay-preflight run from a checkout on the BASE branch reaches an ok: verdict (pre-fix: refused at that decider, 'No such file or directory' — FAILS)."
+      - "The existing seven arms stay green."
+    verifiable_closure: |
+      bash scripts/test-relay-preflight.sh prints ok:relay-preflight:8/8 in
+      the plain, env -u and toolbox regimes; the new arm is red on the
+      pre-fix tool. Update litmus relay-preflight-shape's pinned count.
+    unscoreable: "pinned-by-its-own-fixture: the new arm of scripts/test-relay-preflight.sh, bound by litmus relay-preflight-shape"
+    next_action: >
+      After the merge succeeds, if scripts/relay-preflight.sh differs from
+      the copy that is running, re-exec the merged copy with the same
+      arguments and a marker env var so it does not re-merge (the decider
+      and fixture phases then run from the merged tree's tool).
+    notes: |
+      size: S
+      implementer_tier: sonnet

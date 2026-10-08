@@ -74,6 +74,21 @@ if [ "\${1:-}" = "push" ]; then
             "$REAL_GIT" -C "$d/other" push -q origin linux-next
             echo " ! [rejected]        linux-next -> linux-next (fetch first)" >&2
             exit 1 ;;
+        hook-after-move)
+            # ORDER 1524-7gn7: origin moves, then the PRE-PUSH HOOK refuses in
+            # its own words, none of git's race phrasings among them (land120,
+            # 2026-10-01).
+            echo passthrough > "$d/mode"
+            "$REAL_GIT" clone -q -b linux-next "$d/origin.git" "$d/other" 2>/dev/null
+            "$REAL_GIT" -C "$d/other" -c user.email=o@o -c user.name=o commit -q --allow-empty -m "plan-only push from another host"
+            "$REAL_GIT" -C "$d/other" push -q origin linux-next
+            echo "✗ pre-push refused: the gate stamp is scoped to 'build-scripts,specs' but refs/heads/linux-next has no usable local base to diff against" >&2
+            echo "error: failed to push some refs to '$d/origin.git'" >&2
+            exit 1 ;;
+        hook-unmoved)
+            echo "✗ pre-push refused: a decider refused this tree" >&2
+            echo "error: failed to push some refs to '$d/origin.git'" >&2
+            exit 1 ;;
         auth)
             echo "fatal: could not read Username for 'https://github.com': terminal prompts disabled" >&2
             exit 128 ;;
@@ -181,5 +196,34 @@ grep -q 'cause:land:relative-credential-store-in-linked-worktree:.git/.gh-creden
     || bad "ARM 4: cause not named: $(grep -m2 -E 'refused|cause' "$d/err.txt" | tr '\n' ' ')"
 rm -rf "$d"
 
+
+# ARM 6 (1524-7gn7): origin moves and the PRE-PUSH HOOK refuses in its own
+# words. A moved origin is a lost race whatever the text says, so the tool
+# re-integrates and lands. Pre-fix: exit 6 "not a lost race" (land120).
+d="$(scratch hook-after-move)"
+G -C "$d/w" commit -q --allow-empty -m "work that loses a race to a plan-only push"
+run_land "$d" "$d/w"
+head_now="$(G -C "$d/w" rev-parse HEAD)"
+if grep -q 'not a lost race' "$d/err.txt"; then
+    bad "ARM 6: a hook refusal after origin moved was called 'not a lost race' (rc=$(cat "$d/rc"))"
+elif [ "$(origin_head "$d")" = "$head_now" ] && grep -q '^ok:land:' "$d/out.txt"; then
+    ok "ARM 6: a hook refusal while origin moved is a lost race; the tool re-integrates and lands"
+else
+    bad "ARM 6: did not land (rc=$(cat "$d/rc")) $(tail -2 "$d/err.txt" | tr '\n' ' ')"
+fi
+rm -rf "$d"
+
+# ARM 7 (CONTROL for ARM 6): the same hook-shaped refusal with origin UNMOVED
+# is not a race and still stops; ancestry must not turn every refusal into a
+# retry.
+d="$(scratch hook-unmoved)"
+G -C "$d/w" commit -q --allow-empty -m "work a decider refuses"
+run_land "$d" "$d/w"
+if [ "$(cat "$d/rc")" = 6 ] && [ "$(wc -l < "$d/pushes" | tr -d ' ')" = 1 ]; then
+    ok "ARM 7 CONTROL: a hook refusal with origin unmoved stops after one push (rc 6)"
+else
+    bad "ARM 7 CONTROL: rc=$(cat "$d/rc") pushes=$(wc -l < "$d/pushes" | tr -d ' ')"
+fi
+rm -rf "$d"
 echo "land-push-classification fixture: ${passes} passed, ${fails} failed"
 [ "$fails" -eq 0 ] && { echo "ok:land-push-classification:${passes}/${passes}"; exit 0; } || exit 1

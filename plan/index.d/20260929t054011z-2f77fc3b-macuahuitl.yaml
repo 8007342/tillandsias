@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    event:
+      type: progress
+      ts: "2026-09-29T05:40:11Z"
+      agent_id: linux-macuahuitl-codex-20260929t054011z
+      host: macuahuitl
+      summary: |
+        Implemented the run-door timeout parser, detached-session executor path, advisory lock lifetime, and a CLI acceptance fixture. The executor changes were required because the existing executor did not yet support detached sessions or session creation. The full gate caught SIGPIPE-sensitive verdict pipelines in the fixture; those are fixed and the focused checks now pass. Next: rerun ./build.sh --check, then audit the Lua sh.run and build.sh preflight callers for shared-run-door integration.

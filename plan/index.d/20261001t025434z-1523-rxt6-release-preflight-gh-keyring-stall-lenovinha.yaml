@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: release-preflight-spends-two-minutes-in-one-gh-call-blocked-on-the-host-credential-store-so-release-gates-run-locally-step-1-times-out-on-a-host-whose-preflight-is-green
+    order: 1523-rxt6
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [release, preflight, litmus, timing, credentials]
+    estimated_hours: 2
+    owned_files: [scripts/release-preflight.sh]
+    title: |
+      release-preflight.sh spends 120 of its 122 s in ONE gh api call blocked on the host credential store, so litmus:release-gates-run-locally STEP 1 (60 s) times out on lenovinha while the preflight itself answers ok:release-preflight
+    context: |
+      MEASURED on lenovinha 2026-10-01, trunk 5c419a98f (and the 1384-ddua tree dbc1d2c1a), nothing else running.
+      - scripts/release-preflight.sh: 122 s (ddua) and 123 s (trunk), BOTH ok:release-preflight. A budget problem, not a red: litmus:release-gates-run-locally STEP 1 (60 s budget) times out on this host.
+      - Per-line trace (PS4=$EPOCHREALTIME): 120.5 s of the 122 s is ONE command, release-preflight.sh:296: gh api 'repos/{owner}/{repo}/releases/latest' --jq .tag_name. Everything else is about 2 s.
+      - Alone, that gh call takes 120,422 ms and then succeeds (v56.9.27.2). gh auth status hangs past 60 s. An unauthenticated curl of the same public endpoint returns 200 in 356 ms.
+      - So gh blocks on this host's credential store (the gnome-keyring hangs this host has had) before falling back. The cost is the HOST'S CREDENTIAL HELPER, not the script and not the network.
+      THE MEASUREMENT PICKS "make it faster", not "budget per regime": the stable-vs-latest check reads a PUBLIC release, which needs no credential, and the script already books an unreadable answer as a note ("NOT a disagreement, the check could not run"). Bound the gh call (a timeout of a few seconds, booked as that note), or read the public endpoint without auth. Raising the step budget to 130 s would hide a 2-minute keyring stall from every host that has one.
+    exit_criteria:
+      - 'release-preflight.sh on lenovinha (the regime that measured 122 s) finishes under 15 s, three runs, with the same ok:release-preflight verdict (pre-fix: 122-123 s, FAILS STEP 1)'
+      - 'with gh made to hang (a stub gh that sleeps 300 s), the stable-vs-latest check is booked as its existing could-not-run note within the bound, never a disagreement and never a hang'
+      - 'the check still reports a REAL stable-vs-latest disagreement when the release is readable (keep or add an arm that plants one)'
+      - 'the step-1 budget is NOT raised: a budget fitted to the slowest host would hide a two-minute keyring stall from every host that has one'
+    events:
+      - type: filed
+        ts: "2026-10-01T02:54:34Z"
+        agent_id: "linux-lenovinha-claude-20261001t025434z"
+        host: lenovinha
+        summary: |-
+          Filed on the coordinator's routing after the 1384-ddua relay-preflight red. The measurement picks "make it faster" over "budget per regime". macuahuitl adds its wall time as the second regime.

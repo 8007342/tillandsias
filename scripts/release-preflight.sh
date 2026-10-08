@@ -33,11 +33,16 @@
 
 set -uo pipefail
 
+# ORDER 1505-hedu (1247-amcu): every blocked: verdict says the rule that
+# refused and what clears it, in the fleet's why/remedy shape.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+    _afford "release preflight reads VERSION history, the plan ledger and workflows from a git checkout, and none was found" "run it from inside the Tillandsias checkout (scripts/release-preflight.sh from the repo root)"
     echo "blocked:not-a-git-repo"
     exit 2
 }
-cd "$REPO_ROOT" || { echo "blocked:cannot-enter-repo-root"; exit 2; }
+cd "$REPO_ROOT" || { _afford "git named a repository root this shell cannot enter" "check the checkout's path and permissions (git rev-parse --show-toplevel), then re-run"; echo "blocked:cannot-enter-repo-root"; exit 2; }
 
 verbose=false
 [[ "${1:-}" == "--verbose" || "${1:-}" == "-v" ]] && verbose=true
@@ -52,11 +57,13 @@ if [[ -x scripts/verify-version-monotonic.sh || -f scripts/verify-version-monoto
     if ! out="$(bash scripts/verify-version-monotonic.sh 2>&1)"; then
         fail "VERSION monotonicity FAILED:"
         fail "$out"
+        _afford "the VERSION being cut is not greater than the last released one, so it would shadow or collide with a published release" "bump VERSION past the last release (the verify-version-monotonic output above names both), commit, then re-run"
         echo "blocked:version-not-monotonic"
         exit 1
     fi
     note "version monotonic"
 else
+    _afford "the monotonicity check scripts/verify-version-monotonic.sh is absent, so the version cannot be proven new" "restore it from the trunk (git checkout origin/linux-next -- scripts/verify-version-monotonic.sh), then re-run"
     echo "blocked:version-monotonic-script-missing"
     exit 1
 fi
@@ -90,6 +97,7 @@ if [[ -n "$bin" ]]; then
     if grep -qE -- "$RETIRED_RE" <<<"$help_out"; then
         fail "binary $bin still advertises a retired flag in --help:"
         grep -oE -- "$RETIRED_RE" <<<"$help_out" | sort -u | sed 's/^/    /' >&2
+        _afford "the built binary's --help still offers a retired flag, so the release would advertise a removed option" "remove the flag from the CLI help (the flags are listed above), rebuild the binary, then re-run"
         echo "blocked:retired-flag-advertised"
         exit 1
     fi
@@ -107,6 +115,7 @@ else
         | grep -E -- '--without-vault|--legacy-keyring-secrets' \
         | grep -vqiE 'REMOVED|retired|no longer|error'; then
         fail "a retired flag appears in help-rendering source in main.rs"
+        _afford "main.rs help-rendering source still prints a retired flag without marking it removed" "delete it from the usage text, or mark it REMOVED/retired in that line, then rebuild and re-run"
         echo "blocked:retired-flag-in-usage-text"
         exit 1
     fi
@@ -190,6 +199,7 @@ if [[ -n "$_plan_bin" ]]; then
             fail "plan ledger is INCOMPLETE — the fold could not read part of the corpus:"
             fail "$out"
             fail "repair the fragment before cutting; a release records counts over the whole plan"
+            _afford "a plan fragment does not parse, so every count the release records would cover less than the whole plan" "repair the fragment named above until tillandsias-plan check --strict-fragments exits 0, then re-run"
             echo "blocked:plan-ledger-incomplete"
             exit 1
         fi
@@ -197,6 +207,7 @@ if [[ -n "$_plan_bin" ]]; then
     if [[ $rc -ne 0 ]]; then
         fail "plan ledger check FAILED:"
         fail "$out"
+        _afford "the plan ledger check refused (the complaint is above), so the release provenance would be wrong" "fix what tillandsias-plan check --strict-fragments names, commit, then re-run"
         echo "blocked:plan-ledger-invalid"
         exit 1
     fi
@@ -206,6 +217,7 @@ if [[ -n "$_plan_bin" ]]; then
     if printf '%s' "$out" | grep -q 'does not parse and was SKIPPED'; then
         fail "plan ledger is INCOMPLETE and this binary predates --strict-fragments:"
         printf '%s' "$out" | grep 'does not parse and was SKIPPED' >&2
+        _afford "a plan fragment does not parse, so every count the release records would cover less than the whole plan" "repair the fragment named above until tillandsias-plan check --strict-fragments exits 0, then re-run"
         echo "blocked:plan-ledger-incomplete"
         exit 1
     fi
@@ -248,6 +260,7 @@ if [[ -d .github/workflows ]]; then
     if [[ -n "$unexpected" ]]; then
         fail "unsanctioned workflow(s) present — only release.yml may consume cloud minutes:"
         sed 's/^/    /' <<<"$unexpected" >&2
+        _afford "only release.yml may consume cloud CI minutes, and another workflow file is present" "remove the workflow files listed above (git rm .github/workflows/<name>), or run that work locally, then re-run"
         echo "blocked:unsanctioned-workflow"
         exit 1
     fi
@@ -277,12 +290,33 @@ fi
 _stable_remote="$(git ls-remote origin 'refs/tags/stable^{}' 2>/dev/null | awk '{print $1}' | head -1)"
 if [[ -z "$_stable_remote" ]]; then
     note "stable-vs-latest: could not read refs/tags/stable from origin — not checked"
-elif ! command -v gh >/dev/null 2>&1; then
-    note "stable-vs-latest: gh absent — not checked"
+elif ! command -v curl >/dev/null 2>&1 || [[ -z "${_plan_bin:-}" ]]; then
+    note "stable-vs-latest: curl or a runnable tillandsias-plan is absent — not checked"
 else
-    _latest_tag="$(gh api 'repos/{owner}/{repo}/releases/latest' --jq .tag_name 2>/dev/null)" || _latest_tag=""
+    # ORDER 1523-rxt6 — AN ANONYMOUS, BOUNDED READ OF A PUBLIC ENDPOINT. This
+    # used `gh api …/releases/latest`, and gh consults the login keyring for
+    # its token: on a host whose keyring is LOCKED it waited ~120 s before
+    # falling back (measured on lenovinha 120,422 ms and on macuahuitl 127 s
+    # vs 2 s unlocked, 2026-10-01), which timed out release-gates-run-locally
+    # STEP 1 (60 s) on whichever host had locked. The latest-release tag is
+    # public, so the read needs no credential: curl, anonymously, bounded twice
+    # (curl's own --max-time, and tillandsias-plan run's deadline as the outer
+    # bound that holds even if curl hangs before its timer starts).
+    _origin_url="$(git remote get-url origin 2>/dev/null)"
+    _origin_url="${_origin_url%.git}"
+    case "$_origin_url" in
+        https://github.com/*) _slug="${_origin_url#https://github.com/}" ;;
+        git@github.com:*)     _slug="${_origin_url#git@github.com:}" ;;
+        *)                    _slug="" ;;
+    esac
+    _latest_tag=""
+    if [[ -n "$_slug" ]]; then
+        _latest_json="$("$_plan_bin" run --timeout-ms 15000 -- curl -fsS --max-time 10 "https://api.github.com/repos/$_slug/releases/latest" 2>/dev/null)" || _latest_json=""
+        [[ -n "$_latest_json" ]] && _latest_tag="$("$_plan_bin" json get -r .tag_name <<<"$_latest_json" 2>/dev/null)" || true
+        [[ "$_latest_tag" == "null" ]] && _latest_tag=""
+    fi
     if [[ -z "$_latest_tag" ]]; then
-        note "stable-vs-latest: /releases/latest unreadable (gh unauthenticated or offline) — NOT a disagreement, the check could not run"
+        note "stable-vs-latest: /releases/latest unreadable (offline, rate-limited, or the bounded read timed out) — NOT a disagreement, the check could not run"
     else
         _latest_commit="$(git ls-remote origin "refs/tags/${_latest_tag}^{}" 2>/dev/null | awk '{print $1}' | head -1)"
         if [[ -z "$_latest_commit" ]]; then

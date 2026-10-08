@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: macos-vault-store-and-download-cache-are-host-persistent-across-reset
+    order: 1437-av8u
+    parent_order: 1437-8c6p
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [vault, credentials, reset, macos, virtualization-framework, keychain]
+    estimated_hours: 10
+    owned_files:
+      - crates/tillandsias-macos-tray/src/reset_state.rs
+      - crates/tillandsias-macos-tray/src/diagnose.rs
+      - crates/tillandsias-vm-layer/src/vz.rs
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - scripts/test-macos-reset-keeps-vault-store.sh
+      - openspec/litmus-tests/litmus-reset-keeps-models-macos.yaml
+    title: |
+      macOS: the Vault store lives on the host side (virtiofs share or evacuate/rehydrate around the guest wipe), `--reset-state`/`--reset-guest` keep it, keep `~/Library/Caches/tillandsias` unconditionally and keep the Keychain share; the reprovisioned guest's fresh Vault reads the pre-reset secrets
+    context: |
+      Spec: tillandsias-vault "Guest regimes keep the store off the guest disk" and "The Vault
+      store and its unseal material survive every destructive reset"; host-state-lifecycle
+      "macOS reset preserves downloads and the Vault store"; inference-container "Models survive
+      every destructive reset on every platform".
+
+      Today: the store is /root/.cache/tillandsias/vault-data INSIDE rootfs.img
+      (plan/issues/macos-vault-data-guest-local-not-upgrade-persistent-2026-07-24.md);
+      VzRuntime::wipe_provisioned_artifacts deletes rootfs.img; the tray's run_reset_state
+      additionally clears Keychain items vault-shamir-share-v1 and vault-root-token-v1
+      (CLEARED_CREDENTIALS), removes ~/Library/Caches/tillandsias unless
+      TILLANDSIAS_RESET_KEEP_MODELS=1, and removes cache_root()/vault-data on the host (a path
+      that is not the store on this platform). The only virtiofs shares are home-src, guest-bin,
+      model-cache and the provision-state share.
+
+      Do: choose and MEASURE one of (a) a `vault-store` virtiofs share from
+      ~/Library/Application Support/tillandsias/vault-data (or ~/Library/Caches — the spec names
+      Application Support for the store) mounted in the guest where vault_bootstrap resolves
+      init_cache_dir()/vault-data — Vault's file backend on virtiofs must pass a write/reboot/read
+      cycle and a `vault operator init` on a fresh share; or (b) evacuate the store to the host
+      before wipe_provisioned_artifacts and rehydrate it after provision, with a digest check.
+      Record the measurement in the fixture header. Then: run_reset_state stops clearing the
+      Keychain items, stops removing the caches directory (keep-models becomes a no-op with one
+      stderr line), announces the preserved set; retire litmus-reset-keeps-models-macos and its
+      fixture with a one-line note citing 2026-09-27 (they encode the superseded contract — a
+      reset that needs a variable to keep models); keep PRESERVED_ANCHOR and fix its name
+      (the tray stores the anchor as tillandsias-vm-uuid, reset_state.rs preserves
+      installation-uuid-v1 — a name mismatch the audit found).
+    exit_criteria:
+      - 'scripts/test-macos-reset-keeps-vault-store.sh on a Mac: a sentinel KV secret written before --reset-state is read back after the reprovision from a freshly created Vault container (pre-fix result: FAILS — the store dies with rootfs.img and the Keychain share is cleared)'
+      - 'after --reset-state, ~/Library/Caches/tillandsias/models is byte-identical with TILLANDSIAS_RESET_KEEP_MODELS unset (pre-fix result: FAILS — removed)'
+      - 'scripts/test-reset-state-contract.sh clearer-free arm (from 1437-qza3) passes for the macOS body (pre-fix result: FAILS — CLEARED_CREDENTIALS is cleared in run_reset_state)'
+      - 'the chosen mechanism and its measured write/reboot/read result are stated in the fixture header'
+    verifiable_closure: |
+      bash scripts/test-macos-reset-keeps-vault-store.sh prints ok on a Mac after the change; bash scripts/test-reset-state-contract.sh passes its macOS arms; pre-fix: both FAIL.
+    depends_on:
+      - linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    notes: |
+      size: L  implementer_tier: opus
+      Credentials + unseal path + destructive deletion + a VM-layer storage decision — opus.
+      Open operator question 2 (share vs evacuate) is in the plan/issues file; if unanswered when
+      picked up, measure (a) first and fall back to (b). The Mac that runs this must be a smoke
+      Mac, not the operator's daily machine, for the live arm.
+    next_action: 'measure Vault file backend on a virtiofs share (write, reboot guest, read); if it passes, add the vault-store share to VzRuntime and point the guest cache dir at it'
+    provenance: |
+      Filed by macuahuitl (linux-macuahuitl-claude-20260927t163835z), 2026-09-27, under umbrella 1437-8c6p.
+    events:
+      - type: filed
+        ts: "2026-09-27T16:38:35Z"
+        agent_id: "linux-macuahuitl-claude-20260927t163835z"
+        host: macuahuitl
+        summary: |-
+          macOS half of "credentials and downloads survive wipes": store off the guest disk, caches and Keychain untouched by reset.

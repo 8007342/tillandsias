@@ -1,0 +1,44 @@
+## Astra follow-on audit (read-only, unmeasured)
+
+Source: frozen work/1539-dt84 candidate after first-slice implementation;
+research by Astra, no edits, compiler work, or tests. MCP fallback unavailable.
+The first slice is intentional partial progress, not a failed whole-row closure.
+
+Smallest proposed <=2h next slice: collect only authentic successful outputs
+for already-registered managed async handles after Scope::cleanup and before
+Host::release_callbacks, and expose those existing records in the outer-timeout
+branch without changing stdout/refusal/exit124. A callback-free Host collector
+can read retained HandleState/Process results, preserve Completed or pending
+receipt-time duration, and otherwise use launch-request-to-host-collection
+elapsed time. Reuse actual Output.run deduplication/redaction. Do not pump the
+closed dispatcher, invoke callbacks, set delivered, invent receipt order, or
+manufacture results for Err/None. Serialize collector/release against handler
+retirement and never wait for supervisors while holding dispatch/trace locks.
+
+Evidence seams: Process::result is non-consuming; Scope::cleanup waits for
+supervisors/direct-child reaping but exposes no terminal metadata or process
+enumeration. Host::track retains HandleState even when a Lua handle is dropped.
+The supervisor can suppress Finished during scope close yet publish its result.
+The source symbols are in tillandsias-exec managed.rs and plan lua_process.rs;
+script_run run_file_worker and cli_run own normal/timeout teardown.
+
+Explicitly omitted obligations: successful handle registration can follow
+executor scope registration/setup, so a cleanup snapshot cannot recover every
+late launch. Blocking proc.run timeout has a separate post-result-recording
+race. Windows job assignment, reader/stdin/wait failures, final reap failure,
+and failed setup handshake can occur after actual child launch with no intact
+Output or Finished; public APIs supply neither an authentic terminal RunId nor
+enumeration for all of these. Process.id is not Output.run. Cleanup cancellation
+must not be mislabeled timed_out, and fallback duration is not exact OS lifetime.
+Any registration/identity/executor observation API needs coordinated ownership
+before widening the packet's files, per its existing missing-seam rule.
+
+Suggested parent controls: dropped live handle on verdict/error; multiple
+registered handles on outer timeout with trace off/on stdout+124 invariance;
+already-traced plus outstanding handle without duplicate/duration replacement;
+published output without Finished; Err/None without fabricated records;
+collector/release concurrency without callbacks/deadlock. Native verification
+remains native and separate. Parent has not accepted these as measured coverage.
+
+Next_action: finish and land the first-slice checkpoint before considering this
+bounded registered-async-handle extension. Keep1539/1384/preflight1520 open.

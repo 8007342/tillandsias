@@ -1,0 +1,59 @@
+# bootstrap-shell-allowlist.txt — the shell that MUST stay shell (order 1443-xkwb).
+#
+# Source: plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md §6.5,
+# "What stays shell", resolved to the tracked paths it names. Everything else
+# under scripts/ migrates to scripts/lua; as it does, each bash decider's
+# population shrinks toward this list, and scripts/check-decider-retirement.sh
+# prints retire:<decider> when a decider's population EQUALS its bootstrap count.
+#
+# One repo-relative path per line; `#` starts a comment. Every entry must exist
+# on disk: check-decider-retirement.sh refuses a dangling one. Do not add a
+# path here to make a decider retire; add it only if §6.5 says it cannot move.
+#
+# Runs before any of our binaries exist: installers, the curl-install path, and
+# every PowerShell script (§6.5 row 1).
+scripts/install.sh
+scripts/install-macos.sh
+scripts/build-and-install-windows-local.ps1
+scripts/build-windows-tray.ps1
+scripts/clear-vault-host-credentials.ps1
+scripts/diagnose-windows.ps1
+scripts/install-windows.ps1
+scripts/measure-sc11-idle-cpu.ps1
+scripts/sign-windows-artifact.ps1
+scripts/test-sign-windows-artifact.ps1
+scripts/tray-diagnose.ps1
+launch.sh
+# The cargo bootstrap: the binary cannot build itself (§6.5 row 2).
+build.sh
+# Git execs hooks with sh; each becomes a one-line stub, but stays shell (§6.5 row 3).
+scripts/hooks/post-commit-dashboard-refresh.sh
+scripts/hooks/post-commit-expert-refresh.sh
+scripts/hooks/pre-commit-openspec.sh
+scripts/hooks/pre-push-linux-next-merged.sh
+scripts/hooks/pre-push-local-gate.sh
+scripts/hooks/pre-push-main-branch-affordance.sh
+scripts/hooks/pre-push-no-stale-base-revert.sh
+scripts/hooks/pre-push-version-guard.sh
+# The Claude Code harness execs its PreToolUse hook through a shell, the same
+# shape as row 3; it retires with the bridge itself (1443-we89's retirement
+# condition), not by migrating to Lua.
+scripts/hooks/claude-pretooluse-command-policy.sh
+# Container entrypoints, until the image ships the plan binary (§6.5 row 4).
+images/default/entrypoint-forge-antigravity.sh
+images/default/entrypoint-forge-claude.sh
+images/default/entrypoint-forge-codex.sh
+images/default/entrypoint-forge-opencode-web.sh
+images/default/entrypoint-forge-opencode.sh
+images/default/entrypoint-terminal.sh
+images/default/entrypoint.sh
+images/git/entrypoint.sh
+images/inference/entrypoint.sh
+images/proxy/entrypoint.sh
+images/router/entrypoint.sh
+images/vault/entrypoint.sh
+images/warp/entrypoint.sh
+images/web/entrypoint.sh
+images/web-wrangler/entrypoint.sh
+# Creates the toolbox that carries the tools (§6.5 row 5).
+scripts/ensure_toolbox.sh

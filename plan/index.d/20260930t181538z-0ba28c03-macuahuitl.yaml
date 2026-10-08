@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d
+    event:
+      type: note
+      ts: "2026-09-30T18:15:38Z"
+      agent_id: linux-macuahuitl-claude-20260930t181537z
+      host: macuahuitl
+      summary: |
+        COORDINATOR RULING (macuahuitl, 2026-09-30): this row proceeds on 1384-aixy's landed slice 1 (proc.run: argv table, typed status, timeout with group kill). aixy stays in_progress for its later slices (proc.spawn with on_line callbacks, chain/select/all, mlua async), and none of those is needed by a verdict runner — a Lua decider needs verdict, fs, env, text and at most proc.run. Do not pull proc.spawn into this row. Assigned to lenovinha after 1517-p83m (claim is theirs to flip on trunk). The operator asked for the Bash-to-Lua migration to move; this is its next rung, and 1384-bxhk (ratchet) and 1384-ddua (first three ported deciders) both wait on it.

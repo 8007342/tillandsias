@@ -24,6 +24,9 @@
 # Grammar: `ok:credential-store-worktree:<n> arms` (rc 0) or
 #          `FAIL:credential-store-worktree:<n> failed` (rc 1).
 set -u
+# The pre-fix arm matches git's English "Not a directory"; a localized git
+# (yoga: "N'est pas un dossier") failed it on trunk too (1004-8p76 sweep).
+export LC_ALL=C
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECKER="$ROOT/scripts/check-credential-channel.sh"

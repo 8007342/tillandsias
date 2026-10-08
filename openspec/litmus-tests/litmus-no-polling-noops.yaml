@@ -28,7 +28,7 @@ preconditions:
 
 critical_path:
   - step: "the tray's status refreshes are single-shot over a persistent client"
-    command: "scripts/check-tray-refresh-no-polling.sh"
+    command: "$(. scripts/plan-binary-probe.sh && resolve_plan_binary) script run scripts/lua/check-tray-refresh-no-polling.lua"
     timeout_ms: 20000
     expected_behavior: "ok:tray-refresh-no-polling"
 
@@ -38,7 +38,7 @@ critical_path:
   - step: "MUTATION CONTROL: the guard catches a lost static, an unbacked accessor, a retry loop and a sleep"
     command: "scripts/test-tray-refresh-no-polling.sh"
     timeout_ms: 60000
-    expected_behavior: "tray-refresh-no-polling: 6 passed, 0 failed"
+    expected_behavior: "tray-refresh-no-polling: 10 passed, 0 failed"
 
 observability:
   traces:

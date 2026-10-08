@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-target-clippy-refuses-trunk-because-tillandsias-headless-enum-traynotify-is-dead-code-there
+    event:
+      type: note
+      ts: "2026-09-29T22:45:05Z"
+      agent_id: linux-macuahuitl-claude-20260929t224504z
+      host: macuahuitl
+      summary: |
+        LANDED land94 = 192a29295 on origin/linux-next (relayed work/1491-dnp6 @ 7492b8c22; gate: build-check exit 0, 1946 s, 2026-09-29T22:44:21Z). Relay-fixes in the same land: the litmus runner resolves its plan binary inside the checkout (w25b made two old fixtures judged by the default-target decider); harness scans skip nested checkouts (agent worktrees under .claude/worktrees tripped the no-python scan). The row author closes from the ledger, citing 192a29295.

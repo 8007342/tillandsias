@@ -1,0 +1,290 @@
+{
+  "utc": "2026-10-02T17:07:54.953377+00:00",
+  "copy": {
+    "copied_from": "/home/tlatoani/codex/tillandsias-lua-work/1534-puyz/target/debug/tillandsias-plan",
+    "snapshot": "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative/plan",
+    "sha256": "fc91226e1a1568a4e883bb15ac9252c8814e7ad5b868373586c70f5c22876765",
+    "source_head": "94c4ed67ff38aa02f1befa053ac1f1279ed12ad7",
+    "source_status": "",
+    "baseline_receipt": "plan/issues/evidence/lua-script-deadline-20261002/receipts.json",
+    "fixture_note": "Byte-identical original deadline harness, producer, Lua probe and minimal index; only candidate binary and fresh scratch paths change."
+  },
+  "build_id": "0.1.0+105c5fb1cdebf210",
+  "plan_sha256": "fc91226e1a1568a4e883bb15ac9252c8814e7ad5b868373586c70f5c22876765",
+  "fixture_hashes": {
+    "repo/producer.py": "227d17843062737ffea57490d14db52ea899684ace709f2f047cfd7127226644",
+    "repo/probe.lua": "fa90f81a99ba6e6ad7c1302ad2dc6be9cf7bb5a745d998d9636a683dca4025ac",
+    "reproduce.py": "5c199a47d585d55ae39254c0deb4267b98143c72d77bd2c348d5e560245bae61"
+  },
+  "subreaper": true,
+  "timing_note": "outer timer begins at script start; ACK is verified before deadline fires, not a separately armed timer",
+  "trials": [
+    {
+      "label": "short-outer",
+      "argv": [
+        "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative/plan",
+        "script",
+        "run",
+        "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative/repo/probe.lua",
+        "--timeout",
+        "700ms",
+        "--",
+        "/usr/bin/python3",
+        "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative/repo/producer.py",
+        "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative/runs/short-outer"
+      ],
+      "environment": {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative",
+        "TMPDIR": "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative",
+        "LC_ALL": "C",
+        "LANG": "C",
+        "TZ": "UTC",
+        "TILLANDSIAS_REPO_ROOT": "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative/repo"
+      },
+      "outer_timeout": "700ms",
+      "process_timeout_ms": 4000,
+      "plan_pid": 1515262,
+      "ack": {
+        "child": {
+          "pid": 1515265,
+          "start_ticks": 4301598,
+          "pgid": 1515265,
+          "ppid": 1515262
+        },
+        "grandchild": {
+          "pid": 1515266,
+          "start_ticks": 4301600,
+          "pgid": 1515265,
+          "ppid": 1515265
+        },
+        "monotonic_ns": 43016019551901
+      },
+      "ack_after_start_ms": 36.616788,
+      "at_ack": {
+        "child": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1515262,
+          "pgid": 1515265,
+          "start_ticks": 4301598
+        },
+        "grandchild": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1515265,
+          "pgid": 1515265,
+          "start_ticks": 4301600
+        }
+      },
+      "exit": 124,
+      "wall_ms": 704.349408,
+      "stdout": "status=timed_out\nproc-stdout:\nrefused:timed-out:probe\n",
+      "stderr": "proc-stderr:\n  why: /tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative/repo/probe.lua did not reach a verdict within 700ms\n  remedy: find what it waits on (run it with --trace), or raise --timeout if the work is genuinely that long\n",
+      "stdout_sha256": "bb0bfb75db4c0bb183d8ddc9caee10d30873080e660d4ad5ebc2affdd703567f",
+      "stderr_sha256": "a256d5fa94225634e67260ee9f65959065efae9fbdbd40dcd695ca50dbfdc315",
+      "after_outer_exit": {
+        "child": {
+          "exists": false,
+          "same_identity": false,
+          "running": false
+        },
+        "grandchild": {
+          "exists": true,
+          "same_identity": true,
+          "state": "Z",
+          "running": false,
+          "ppid": 1515260,
+          "pgid": 1515265,
+          "start_ticks": 4301600
+        }
+      },
+      "markers_at_outer_exit": {
+        "child": false,
+        "grandchild": false
+      },
+      "delayed_markers": {
+        "child": null,
+        "grandchild": null
+      },
+      "reaped_by_harness": [
+        {
+          "pid": 1515266,
+          "start_ticks": 4301600,
+          "exit": -9
+        }
+      ],
+      "forced_cleanup": [],
+      "final_tasks": [
+        {
+          "identity": {
+            "pid": 1515265,
+            "start_ticks": 4301598,
+            "pgid": 1515265,
+            "ppid": 1515262
+          },
+          "observed": {
+            "exists": false,
+            "same_identity": false,
+            "running": false
+          }
+        },
+        {
+          "identity": {
+            "pid": 1515266,
+            "start_ticks": 4301600,
+            "pgid": 1515265,
+            "ppid": 1515265
+          },
+          "observed": {
+            "exists": false,
+            "same_identity": false,
+            "running": false
+          }
+        }
+      ],
+      "all_owned_tasks_gone": true
+    },
+    {
+      "label": "positive-long-outer",
+      "argv": [
+        "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative/plan",
+        "script",
+        "run",
+        "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative/repo/probe.lua",
+        "--timeout",
+        "3500ms",
+        "--",
+        "/usr/bin/python3",
+        "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative/repo/producer.py",
+        "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative/runs/positive-long-outer"
+      ],
+      "environment": {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative",
+        "TMPDIR": "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative",
+        "LC_ALL": "C",
+        "LANG": "C",
+        "TZ": "UTC",
+        "TILLANDSIAS_REPO_ROOT": "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative/repo"
+      },
+      "outer_timeout": "3500ms",
+      "process_timeout_ms": 4000,
+      "plan_pid": 1515293,
+      "ack": {
+        "child": {
+          "pid": 1515296,
+          "start_ticks": 4301669,
+          "pgid": 1515296,
+          "ppid": 1515293
+        },
+        "grandchild": {
+          "pid": 1515297,
+          "start_ticks": 4301670,
+          "pgid": 1515296,
+          "ppid": 1515296
+        },
+        "monotonic_ns": 43016726733568
+      },
+      "ack_after_start_ms": 39.036631,
+      "at_ack": {
+        "child": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1515293,
+          "pgid": 1515296,
+          "start_ticks": 4301669
+        },
+        "grandchild": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1515296,
+          "pgid": 1515296,
+          "start_ticks": 4301670
+        }
+      },
+      "exit": 0,
+      "wall_ms": 1861.133991,
+      "stdout": "proc-stdout:child-ack-both-running\ngrandchild-running\n\nok:producer:exited:0\n",
+      "stderr": "proc-stderr:child-stderr\ngrandchild-stderr\n\n",
+      "stdout_sha256": "23053686f46bafa9b28aecbc5415ca7e8bd071037d13676b6d18f638b2e8e5ed",
+      "stderr_sha256": "9cd761a8eeee498ebaa11e9f85c7f79c7f1f63127d0a9fd12ea9e481a22ae572",
+      "after_outer_exit": {
+        "child": {
+          "exists": false,
+          "same_identity": false,
+          "running": false
+        },
+        "grandchild": {
+          "exists": false,
+          "same_identity": false,
+          "running": false
+        }
+      },
+      "markers_at_outer_exit": {
+        "child": true,
+        "grandchild": true
+      },
+      "delayed_markers": {
+        "child": {
+          "pid": 1515296,
+          "start_ticks": 4301669,
+          "pgid": 1515296,
+          "ppid": 1515293,
+          "monotonic_ns": 43017927088434
+        },
+        "grandchild": {
+          "pid": 1515297,
+          "start_ticks": 4301670,
+          "pgid": 1515296,
+          "ppid": 1515296,
+          "monotonic_ns": 43017928033436
+        }
+      },
+      "reaped_by_harness": [],
+      "forced_cleanup": [],
+      "final_tasks": [
+        {
+          "identity": {
+            "pid": 1515296,
+            "start_ticks": 4301669,
+            "pgid": 1515296,
+            "ppid": 1515293
+          },
+          "observed": {
+            "exists": false,
+            "same_identity": false,
+            "running": false
+          }
+        },
+        {
+          "identity": {
+            "pid": 1515297,
+            "start_ticks": 4301670,
+            "pgid": 1515296,
+            "ppid": 1515296
+          },
+          "observed": {
+            "exists": false,
+            "same_identity": false,
+            "running": false
+          }
+        }
+      ],
+      "all_owned_tasks_gone": true,
+      "grandchild_reaped_by_producer": {
+        "pid": 1515297,
+        "start_ticks": 4301670,
+        "exit": 0
+      }
+    }
+  ]
+}

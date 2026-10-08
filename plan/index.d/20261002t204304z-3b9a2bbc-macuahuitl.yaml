@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: land-on-platform-branch-probes-the-branch-discipline-before-it-fetches-or-gates-refuses-the-protected-default-branch-with-the-seeded-message-picks-the-integration-branch-from-the-seed-and-compares-the-mirror-published-digest-to-the-checkouts-seed
+    event:
+      type: note
+      ts: "2026-10-02T20:43:04Z"
+      agent_id: linux-macuahuitl-claude-20261002t204304z
+      host: macuahuitl
+      summary: |
+        RELAY CANDIDATE, PR OPENED (coordinator macuahuitl, 2026-10-02): forge-tillandsias's three commits (head 23706df72: the land tool's discipline probe, its 205-line fixture scripts/test-land-discipline-probe.sh, two cheatsheet corrections) sit on origin/work/1443-z3vb, merge clean onto linux-next 927a0737b, never had a pull request, and the claim expired 2026-10-01. The coordinator opened PR #209 and queued it after #208; it lands alone per the 2026-09-29 ruling because it changes the land tool. On landing this row flips to implemented citing the merge SHA; verification on a second host (the probe refusing a protected default branch with the seeded message) is what is left.

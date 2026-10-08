@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: relay-preflight-one-command-merge-deciders-fmt-fixtures-crates-covering
+    field: context
+    value: |-
+      T2 of the 2026-09-27 trims. Every relay pass hand-types ~15 commands
+      (fetch, merge, cycle-preflight, ~10 deciders by rc, cargo fmt --check,
+      the touched fixtures and crates, litmus-covering-specs.sh --run over
+      every covering spec). The hand-typed set omitted
+      check-issue-citation-convention.sh on 2026-09-21 and cost a 20-minute
+      gate; the brief's check-preflight-fixtures-default-target.sh does not
+      exist under that name (it is scripts/preflight-fixtures-default-target.sh).
+      Phases and the exact decider list are in the design note section T2;
+      the diff-scoped deciders take their base through their existing env
+      seams (TILLANDSIAS_SIGPIPE_BASE, TILLANDSIAS_FRAGMENT_PARSE_BASE,
+      TILLANDSIAS_ADDED_TEST_BASE, TILLANDSIAS_DEFAULT_TARGET_BASE), never a
+      re-implementation. The litmus phase consumes litmus-covering-specs.sh
+      --relay-scope (T4, 1437-yfuh). Timing is emitted through timing_emit
+      as step relay-preflight so recur: sees the lane's cost. The script
+      never pushes; it leaves relay/<utc> for scripts/land-on-platform-branch.sh.
+
+
+      [2026-09-27T17:57:34Z macuahuitl] NOTE 2026-09-27 (coordinator): the operator wants
+      scripts/land-on-platform-branch.sh redesigned in Lua with branch discipline
+      seeded from runtime facilities; that design belongs to a separate Fable
+      agent and this row must NOT redesign the land tool. This script may be
+      superseded by that design; until it lands, implement the phases as
+      separately callable functions (one per phase, one verdict each) so the
+      Lua tool can adopt them or call this script as a unit. Its litmus phase
+      takes its set from the integration-layer classification (1443-hbgt) once
+      that lands, and from 1437-yfuh's --relay-scope until then.
+    ts: "2026-09-27T17:57:34Z"
+    host: macuahuitl
+
+events:
+  - packet_id: relay-preflight-one-command-merge-deciders-fmt-fixtures-crates-covering
+    event:
+      type: note
+      ts: "2026-09-27T17:57:34Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-09-27 relayed by the coordinator (efficiency trims 1437-62g8)

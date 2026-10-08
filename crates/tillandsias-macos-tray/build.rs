@@ -89,6 +89,18 @@ fn main() {
     println!("cargo:rerun-if-changed=../../VERSION");
     println!("cargo:rustc-env=WORKSPACE_VERSION={workspace_version}");
 
+    // 1238-b825: the operator-facing label for `--version` ONLY. When the
+    // build's clock is past VERSION's encoded date, scripts/build-macos-tray.sh
+    // passes `<VERSION>+built.<today>` here; WORKSPACE_VERSION above stays
+    // VERSION exactly, because the guest skew check and the control channel
+    // compare it for equality (see scripts/lib-build-version.sh).
+    println!("cargo:rerun-if-env-changed=TILLANDSIAS_BUILD_VERSION_LABEL");
+    let label = std::env::var("TILLANDSIAS_BUILD_VERSION_LABEL")
+        .ok()
+        .filter(|l| l.starts_with(&workspace_version))
+        .unwrap_or_else(|| workspace_version.clone());
+    println!("cargo:rustc-env=BUILD_VERSION_LABEL={label}");
+
     println!("cargo:rustc-env=TILLANDSIAS_GIT_SHA={sha_full}");
     println!("cargo:rustc-env=TILLANDSIAS_BUILD_TIME={build_time}");
 

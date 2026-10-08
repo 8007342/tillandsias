@@ -21,19 +21,31 @@ preconditions:
 
 critical_path:
   - step: "Req: the gate exists, is executable, and emits its pinned verdict grammar"
-    command: "test -x scripts/check-build-cache-sweep.sh && scripts/check-build-cache-sweep.sh | grep -qE '^(ok:build-cache-sweep-not-due|due:build-cache-sweep):bytes=[0-9]+:gib=[0-9]+:marker=[^:]+:reason=[a-z0-9-]+$' && echo 'ok: grammar pinned'"
+    # 1428-v4tt: in a forge the gate answers skip:forge-exempt (exit 0) by
+    # design; the pipe into grep -q hid that line, so the runner saw a silent
+    # non-zero and scored FAIL. Echo the named skip so the runner records a
+    # question NOT asked (1309-fhxb); any other answer must match the grammar.
+    # `;` not `&&` after the capture: the gate EXITS 1 when a sweep is due
+    # (due:build-cache-sweep:...), so `&&` silenced exactly the answer this
+    # step pins (relay-fix, macuahuitl 2026-09-27: 50 GiB cache, rc=1).
+    command: "test -x scripts/check-build-cache-sweep.sh && out=$(scripts/check-build-cache-sweep.sh); case \"$out\" in (skip:forge-exempt) echo \"$out\" ;; (*) grep -qE '^(ok:build-cache-sweep-not-due|due:build-cache-sweep):bytes=[0-9]+:gib=[0-9]+:marker=[^:]+:reason=[a-z0-9-]+$' <<<\"$out\" && echo 'ok: grammar pinned' ;; esac"
     expected_behavior: "ok: grammar pinned"
     timeout_ms: 30000
 
   - step: "NOT DUE: under the size threshold with a fresh marker is a no-op (exit 0)"
+    # 1428-v4tt: steps 2-15 (except 13, which tests the forge exemption
+    # itself) clear TILLANDSIAS_HOST_KIND for the probe. They test the sweep's
+    # DECISION on scratch dirs, which is regime-independent; left set, a forge
+    # short-circuits to skip:forge-exempt before the logic under test runs.
+    # Bare metal has it unset, so nothing changes there.
     # The steady state. If this ever goes red the fleet starts paying a full
     # rebuild every cycle, which is the failure the rarity rule exists to stop.
-    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; printf 'date=%s utc=x host=t action=cargo-clean:done\\n' \"$(date +%Y-%m-%d)\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:build-cache-sweep-not-due:' && echo 'ok: fresh and small is a no-op'"
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; printf 'date=%s utc=x host=t action=cargo-clean:done\\n' \"$(date +%Y-%m-%d)\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:build-cache-sweep-not-due:' && echo 'ok: fresh and small is a no-op'"
     expected_behavior: "ok: fresh and small is a no-op"
     timeout_ms: 30000
 
   - step: "DUE by SIZE: over the threshold fires even when the marker is fresh"
-    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; printf 'date=%s utc=x host=t action=cargo-clean:done\\n' \"$(date +%Y-%m-%d)\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" TILLANDSIAS_BUILD_CACHE_MAX_GIB=0 scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q ':reason=over-size$' && echo 'ok: size wins over a fresh marker'"
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; printf 'date=%s utc=x host=t action=cargo-clean:done\\n' \"$(date +%Y-%m-%d)\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" TILLANDSIAS_BUILD_CACHE_MAX_GIB=0 TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q ':reason=over-size$' && echo 'ok: size wins over a fresh marker'"
     expected_behavior: "ok: size wins over a fresh marker"
     timeout_ms: 30000
 
@@ -45,7 +57,7 @@ critical_path:
     # was ALWAYS 0 — a 14 GiB target/ reported `bytes=0:gib=0` — and the suite
     # went green on both a working and a broken host. Write a file of known
     # size and demand the count reflect it; this fails on BSD without `du -sk`.
-    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 2097152 /dev/zero > \"$d/t/x\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/absent\" scripts/check-build-cache-sweep.sh); rm -rf \"$d\"; b=$(printf '%s' \"$out\" | sed -n 's/^[a-z:-]*:bytes=\\([0-9]*\\):.*$/\\1/p'); [ -n \"$b\" ] && [ \"$b\" -ge 1048576 ] && echo 'ok: the byte count tracks real content'"
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 2097152 /dev/zero > \"$d/t/x\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/absent\" TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh); rm -rf \"$d\"; b=$(printf '%s' \"$out\" | sed -n 's/^[a-z:-]*:bytes=\\([0-9]*\\):.*$/\\1/p'); [ -n \"$b\" ] && [ \"$b\" -ge 1048576 ] && echo 'ok: the byte count tracks real content'"
     expected_behavior: "ok: the byte count tracks real content"
     timeout_ms: 30000
 
@@ -55,7 +67,7 @@ critical_path:
     # every macOS run since it landed — unnoticed because the packet that
     # closed it reported 8/8 from a Linux host. A suite that can only pass on
     # one platform is not a fleet gate.
-    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; old=$(date -v-30d +%Y-%m-%d 2>/dev/null || date -d '30 days ago' +%Y-%m-%d); printf 'date=%s utc=x host=t action=cargo-clean:done\\n' \"$old\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -qE ':reason=stale-[0-9]+d$' && echo 'ok: staleness fires on its own'"
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; old=$(date -v-30d +%Y-%m-%d 2>/dev/null || date -d '30 days ago' +%Y-%m-%d); printf 'date=%s utc=x host=t action=cargo-clean:done\\n' \"$old\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -qE ':reason=stale-[0-9]+d$' && echo 'ok: staleness fires on its own'"
     expected_behavior: "ok: staleness fires on its own"
     timeout_ms: 30000
 
@@ -63,7 +75,7 @@ critical_path:
     # The 801-qasc lesson applied here: an unreadable marker is indistinguishable
     # from a never-swept host, so it must fire. The reason must still name what
     # was found, or the reader goes looking for a file that is right there.
-    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; printf 'garbage\\n' > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q ':marker=unreadable:reason=unreadable-marker$' && echo 'ok: corrupt marker is due and named'"
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; printf 'garbage\\n' > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q ':marker=unreadable:reason=unreadable-marker$' && echo 'ok: corrupt marker is due and named'"
     expected_behavior: "ok: corrupt marker is due and named"
     timeout_ms: 30000
 
@@ -74,7 +86,7 @@ critical_path:
     # that had never been written. Initialising also closes a real gap: a
     # never-stamped marker has no age, so the 14-day trigger could never fire
     # for a host sitting just under the size threshold.
-    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; wrote=no; [ -f \"$d/c/m\" ] && wrote=yes; body=$(cat \"$d/c/m\" 2>/dev/null); rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && [ \"$wrote\" = yes ] && printf '%s' \"$out\" | grep -q ':reason=no-marker-initialised-under-threshold$' && printf '%s' \"$body\" | grep -q 'NO-SWEEP-PERFORMED' && echo 'ok: initialised, not swept, and the marker says so'"
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh); rc=$?; wrote=no; [ -f \"$d/c/m\" ] && wrote=yes; body=$(cat \"$d/c/m\" 2>/dev/null); rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && [ \"$wrote\" = yes ] && printf '%s' \"$out\" | grep -q ':reason=no-marker-initialised-under-threshold$' && printf '%s' \"$body\" | grep -q 'NO-SWEEP-PERFORMED' && echo 'ok: initialised, not swept, and the marker says so'"
     expected_behavior: "ok: initialised, not swept, and the marker says so"
     timeout_ms: 30000
 
@@ -82,7 +94,7 @@ critical_path:
     # Without this leg, "initialise on no-marker" could be implemented as
     # "always initialise", which would disable the size trigger and silently
     # start the staleness clock on a genuinely bloated host.
-    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" TILLANDSIAS_BUILD_CACHE_MAX_GIB=0 scripts/check-build-cache-sweep.sh); rc=$?; wrote=no; [ -f \"$d/c/m\" ] && wrote=yes; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && [ \"$wrote\" = no ] && printf '%s' \"$out\" | grep -q ':reason=over-size$' && echo 'ok: bloat still fires and no clock was started'"
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" TILLANDSIAS_BUILD_CACHE_MAX_GIB=0 TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh); rc=$?; wrote=no; [ -f \"$d/c/m\" ] && wrote=yes; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && [ \"$wrote\" = no ] && printf '%s' \"$out\" | grep -q ':reason=over-size$' && echo 'ok: bloat still fires and no clock was started'"
     expected_behavior: "ok: bloat still fires and no clock was started"
     timeout_ms: 30000
 
@@ -102,7 +114,7 @@ critical_path:
     # verdict `ok:...not-due:...reason=under-threshold-0d`. The sweep could not
     # fire by age, and the host reported green while carrying ~106 GB.
     # Removed; every invocation below is hermetic.
-    command: "d=$(mktemp -d); TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/m\" TZ=Pacific/Kiritimati scripts/check-build-cache-sweep.sh stamp --host t --action 'cargo-clean:done' >/dev/null; md=$(sed -n 's/^date=\\([0-9-]*\\) .*/\\1/p' \"$d/m\"); mu=$(sed -n 's/.* utc=\\([0-9-]*\\)T.*/\\1/p' \"$d/m\"); rm -rf \"$d\"; [ -n \"$md\" ] && [ \"$md\" = \"$mu\" ] && [ \"$md\" = \"$(date -u +%Y-%m-%d)\" ] && echo 'ok: date= is UTC and matches utc='"
+    command: "d=$(mktemp -d); TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/m\" TZ=Pacific/Kiritimati TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh stamp --host t --action 'cargo-clean:done' >/dev/null; md=$(sed -n 's/^date=\\([0-9-]*\\) .*/\\1/p' \"$d/m\"); mu=$(sed -n 's/.* utc=\\([0-9-]*\\)T.*/\\1/p' \"$d/m\"); rm -rf \"$d\"; [ -n \"$md\" ] && [ \"$md\" = \"$mu\" ] && [ \"$md\" = \"$(date -u +%Y-%m-%d)\" ] && echo 'ok: date= is UTC and matches utc='"
     expected_behavior: "ok: date= is UTC and matches utc="
     timeout_ms: 30000
 
@@ -111,7 +123,7 @@ critical_path:
     # stamp on a UTC+14 host carries tomorrow's UTC date; naive subtraction
     # gives age=-1, which this script reports as unreadable-marker — a good
     # marker called corrupt and a full sweep prescribed for it.
-    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; ahead=$(date -u -v+1d +%Y-%m-%d 2>/dev/null || date -u -d '1 day' +%Y-%m-%d); printf 'date=%s utc=x host=legacy action=cargo-clean:done\\n' \"$ahead\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:build-cache-sweep-not-due:' && echo 'ok: legacy one-day-ahead marker is fresh'"
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; ahead=$(date -u -v+1d +%Y-%m-%d 2>/dev/null || date -u -d '1 day' +%Y-%m-%d); printf 'date=%s utc=x host=legacy action=cargo-clean:done\\n' \"$ahead\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:build-cache-sweep-not-due:' && echo 'ok: legacy one-day-ahead marker is fresh'"
     expected_behavior: "ok: legacy one-day-ahead marker is fresh"
     timeout_ms: 30000
 
@@ -119,7 +131,7 @@ critical_path:
     # The clamp above must cover exactly the one-day timezone case and no more.
     # Accepting an arbitrary future date would disable the staleness trigger
     # for any host with a badly wrong clock.
-    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; far=$(date -u -v+10d +%Y-%m-%d 2>/dev/null || date -u -d '10 days' +%Y-%m-%d); printf 'date=%s utc=x host=bad action=cargo-clean:done\\n' \"$far\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q ':reason=unreadable-marker$' && echo 'ok: a far-future marker is still refused'"
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; far=$(date -u -v+10d +%Y-%m-%d 2>/dev/null || date -u -d '10 days' +%Y-%m-%d); printf 'date=%s utc=x host=bad action=cargo-clean:done\\n' \"$far\" > \"$d/c/m\"; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q ':reason=unreadable-marker$' && echo 'ok: a far-future marker is still refused'"
     expected_behavior: "ok: a far-future marker is still refused"
     timeout_ms: 30000
 
@@ -132,7 +144,7 @@ critical_path:
     #
     # Snapshots the real marker (or its absence), runs every stamping scenario
     # in this file, and asserts the marker is byte-identical afterwards.
-    command: "M=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/.last-build-cache-sweep\"; before=$(cat \"$M\" 2>/dev/null || echo ABSENT); d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" scripts/check-build-cache-sweep.sh stamp --host t --action 'cargo-clean:done' >/dev/null 2>&1; TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/absent\" scripts/check-build-cache-sweep.sh >/dev/null 2>&1; after=$(cat \"$M\" 2>/dev/null || echo ABSENT); rm -rf \"$d\"; [ \"$before\" = \"$after\" ] && echo 'ok: real marker untouched' || echo \"FAIL: the suite mutated the production marker: [$before] -> [$after]\""
+    command: "M=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/.last-build-cache-sweep\"; before=$(cat \"$M\" 2>/dev/null || echo ABSENT); d=$(mktemp -d); mkdir -p \"$d/t\" \"$d/c\"; head -c 1000 /dev/zero > \"$d/t/x\"; TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/m\" TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh stamp --host t --action 'cargo-clean:done' >/dev/null 2>&1; TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/c/absent\" TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh >/dev/null 2>&1; after=$(cat \"$M\" 2>/dev/null || echo ABSENT); rm -rf \"$d\"; [ \"$before\" = \"$after\" ] && echo 'ok: real marker untouched' || echo \"FAIL: the suite mutated the production marker: [$before] -> [$after]\""
     expected_behavior: "ok: real marker untouched"
     timeout_ms: 30000
 
@@ -145,13 +157,13 @@ critical_path:
     # Same rule as check-daily-maintenance.sh's --steps. A marker saying
     # "something happened" moves the unobservability up one level instead of
     # removing it.
-    command: "d=$(mktemp -d); TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/m\" scripts/check-build-cache-sweep.sh stamp --host t >/dev/null 2>&1; rc=$?; present=no; [ -f \"$d/m\" ] && present=yes; rm -rf \"$d\"; [ \"$rc\" -eq 2 ] && [ \"$present\" = no ] && echo 'ok: actionless stamp refused and wrote nothing'"
+    command: "d=$(mktemp -d); TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/m\" TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh stamp --host t >/dev/null 2>&1; rc=$?; present=no; [ -f \"$d/m\" ] && present=yes; rm -rf \"$d\"; [ \"$rc\" -eq 2 ] && [ \"$present\" = no ] && echo 'ok: actionless stamp refused and wrote nothing'"
     expected_behavior: "ok: actionless stamp refused and wrote nothing"
     timeout_ms: 15000
 
   - step: "ROUND TRIP: a stamped marker flips the verdict to not-due"
     # Without this the refusals above could be satisfied by a stamp that never
     # writes anything a later check can read.
-    command: "d=$(mktemp -d); mkdir -p \"$d/t\"; head -c 1000 /dev/zero > \"$d/t/x\"; TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/m\" scripts/check-build-cache-sweep.sh stamp --host t --action 'cargo-clean:done' >/dev/null; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/m\" scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:build-cache-sweep-not-due:' && echo 'ok: stamp round-trips'"
+    command: "d=$(mktemp -d); mkdir -p \"$d/t\"; head -c 1000 /dev/zero > \"$d/t/x\"; TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/m\" TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh stamp --host t --action 'cargo-clean:done' >/dev/null; out=$(TILLANDSIAS_BUILD_CACHE_DIR=\"$d/t\" TILLANDSIAS_BUILD_CACHE_SWEEP_MARKER=\"$d/m\" TILLANDSIAS_HOST_KIND= scripts/check-build-cache-sweep.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -q '^ok:build-cache-sweep-not-due:' && echo 'ok: stamp round-trips'"
     expected_behavior: "ok: stamp round-trips"
     timeout_ms: 30000

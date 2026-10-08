@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-lua-process-tests-wrote-thirteen-python-programs-to-temp-files-and-ran-them-with-python3-and-the-no-python-guard-reported-ok-because-it-never-scanned-rust-test-sources-or-argv-strings
+    field: status
+    value: completed
+    ts: "2026-10-04T21:05:03Z"
+    host: yoga
+
+events:
+  - packet_id: the-lua-process-tests-wrote-thirteen-python-programs-to-temp-files-and-ran-them-with-python3-and-the-no-python-guard-reported-ok-because-it-never-scanned-rust-test-sources-or-argv-strings
+    event:
+      type: completed
+      ts: "2026-10-04T21:05:03Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3044da4ca + land gate ./build.sh --check green on 3044da4ca at 2026-10-04T21:04Z (2381 s), test flags_python_as_an_argv_entry_or_a_source_file_in_rust_tests ok there; check-no-python-scripts ok on the landed tree, and the unit test asserts the old matcher saw none of the landed lines
+  - packet_id: the-lua-process-tests-wrote-thirteen-python-programs-to-temp-files-and-ran-them-with-python3-and-the-no-python-guard-reported-ok-because-it-never-scanned-rust-test-sources-or-argv-strings
+    event:
+      type: note
+      ts: "2026-10-04T21:05:03Z"
+      host: yoga
+      summary: |-
+        fixed in the landing that filed the row; closed from the landed tree

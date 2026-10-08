@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: metrics-log-path-writer-and-reader-disagree-in-a-linked-worktree-because-the-rust-root-rule-requires-git-to-be-a-directory
+    event:
+      type: progress
+      ts: "2026-09-28T05:42:50Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t054250z
+      host: macos
+      summary: |
+        Implementation complete on work/1455-d7hc at 995e3e32a, STACKED ON work/1454-ssg3 (the same find_repo_root family; relay after ssg3). Closure measured on darwin in the gate regime: test-metrics-log-path-agreement.sh gives ok:metrics-log-path-agreement:18 in a linked worktree, in the main checkout, AND in a brand-new checkout with no .cache directory. THREE causes, not one. (1) The Rust metrics_default_log kept is_dir on `.git`, and its comment said the shell tested -d, but since 1268-m2ir (2026-09-20) the shell tests `[ -e .git ]`. In a linked worktree the writer went to /tmp and the reader to the checkout. Fixed with exists(), and the stale premise is corrected. (2) Arm 3 (890-t9pu, 2026-08-25) simulated "outside a checkout" by naming a nonexistent root while sourcing the library from this checkout. Since 1268-m2ir the shell deliberately falls back to its own library's checkout, so the arm failed in EVERY checkout from 2026-09-20, including the main one. It now sources a copy of the library from outside any checkout. (3) cycle-metrics.sh read an absent timing log with `wc -l < LOG 2>/dev/null`; the redirections apply left to right, so "No such file" reached stderr ahead of the violation verdict. The split arm failed in every FRESH checkout and passed only where an earlier run had left a log (I caught it only by re-running in a brand-new checkout). The fixture was bound to NO gate, which is why it stayed red unseen; it is now gate step 279 with its darwin regime. Fresh checkout: 12 deciders rc=0; token-instrument 15/0 and cycle-flow-emit-idempotency 8 unaffected; crate 475/0. Please relay after ssg3; close after landing.

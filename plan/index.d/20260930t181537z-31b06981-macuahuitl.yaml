@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    event:
+      type: note
+      ts: "2026-09-30T18:15:37Z"
+      agent_id: linux-macuahuitl-claude-20260930t181537z
+      host: macuahuitl
+      summary: |
+        COORDINATOR REVIEW of 6b2c17b05 (macuahuitl, 2026-09-30). RULING items 2 and 3 of MSG codex-2026-09-29-02 are met: fs2 is a root workspace dependency, and the plan binary reports getsid(0) itself; the detached arm asserts sid == child pid and != caller sid, which a setpgid-only spawn fails. Item 1 was declined (the step stayed inline in build.sh); the ruling stands, because inline it bypassed check-gate-step-regimes and its Darwin arm has never executed on a Mac.
+        RELAY-FIX dac5f5c3e pushed to work/1375-amye (fast-forward): the step moves to scripts/gate-steps.d/750-1375-amye.step; the fixture's $SECONDS bounds (detach < 1 s, timeout < 2 s, both flaky across a second boundary) now state the property (under the child's own 3 s / 5 s sleep); the lock arm runs 24 concurrent runs with a 50 ms section instead of 100 runs. Linux 3/3 green ~7 s; mutations: dropping --lock fails "interleaved" 3/3, dropping --detach fails "detach returned in 3s".
+        LEFT (blocked by macOS runner): run `bash scripts/test-plan-run-verb.sh` on a Mac with this tree's plan binary (TILLANDSIAS_PLAN_BIN=<built binary>) and put the result in the step as STEP_SECOND_REGIME="<host> <date> darwin <verdict>". check-gate-step-regimes refuses the land until then. Nothing on the Lua path depends on this row, so holding it costs the migration nothing.

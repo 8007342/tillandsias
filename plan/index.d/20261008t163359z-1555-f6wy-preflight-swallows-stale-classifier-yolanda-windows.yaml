@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-preflight-door-swallows-a-stale-plan-binary-classifier-as-no-classifier-and-the-wsl-re-exec-runs-a-guest-plan-binary-whose-validator-surface-has-moved
+    order: 1555-f6wy
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [preflight, windows, wsl2, plan-binary, fail-loud]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+      - scripts/with-wsl2-builder.sh
+    title: |
+      On a Windows host, ./build.sh --preflight re-execs into the WSL2 builder, which ran a STALE guest tillandsias-plan without the `script` subcommand; build.sh _pf_classify calls `script classify ... 2>/dev/null || true`, so every non-zero guard (103 of 224) was reported could-not-run:no-classifier and the run vouched for nothing
+    context: |
+      MEASURED on yolanda-windows 2026-10-08, preflight of work/1553-5x9x:
+        stale guest binary:  partial:preflight:ran=114 declared-skip=7 skipped-by-deadline=0
+                             could-not-run=103 refused=0 sum=224 wall=691s
+                             (rc tally of the 103: 85x 124, 4x 1, 2x 2, 2x 3)
+        probe, in the guest: tillandsias-plan script classify --rc 124 --file x
+                             -> error: unknown subcommand 'script' ... the ARTIFACT is stale
+        after `cargo build --release -p tillandsias-plan` in the guest:
+                             refused:preflight:ran=140 declared-skip=9 skipped-by-deadline=74
+                             could-not-run=0 refused=1 sum=224 wall=182s
+      So the stale classifier was the whole could-not-run=103. With a current
+      binary the 9p deadline overruns are typed (skip:...:deadline) as designed.
+      THE INSTRUMENT LESSON: before the rebuild, check-plan-binary-current run
+      in the guest printed only `ok:plan-binary-write-is-opt-in+role-satisfies`
+      and no `stamped:` line. I read that as "current"; the coordinator relayed
+      the same reading. That ok line answers a question nobody asked (is the
+      write opt-in?), and it hid the stale binary. After the rebuild the same
+      script printed `stamped:plan-binary-validator-surface:...`. A probe whose
+      ok line covers a different question than the one being asked reads as
+      a pass.
+      The door's own remedy text ("rebuild it") was right; the defect is that
+      a failed CLASSIFIER CALL and "no classifier configured" print the same
+      unvouched line, and nothing upstream rebuilt or refused the guest binary.
+    exit_criteria:
+      - 'when _pf_classify''s own call fails (non-zero, or an unknown-subcommand answer), the preflight door refuses by name with `classifier stale` (e.g. refused:preflight:classifier-stale:<binary>) instead of booking each guard as could-not-run:no-classifier; pre-fix evidence is the guest probe above'
+      - 'the WSL2 re-exec (scripts/with-wsl2-builder.sh) rebuilds or refuses the guest plan binary when its validator-surface hash differs from the checkout''s, before running a door that depends on it'
+      - 'a fixture plants a plan binary without `script classify` and asserts the door''s refusal names classifier-stale'
+    verifiable_closure: |
+      The fixture named in exit_criteria 3, plus a measured Windows preflight
+      showing the classifier-stale refusal against a planted stale guest
+      binary and a normal run once it is current.
+      unscoreable: unpinnable-until-the-guard-exists — the fixture is the
+      deliverable and lands in the same commit as the door change.
+    events:
+      - type: filed
+        ts: "2026-10-08T16:33:59Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request with the two exit criteria it
+          ruled. Root cause measured, not assumed: drvfs was my first (wrong)
+          reading, corrected on PRs 226/227/228.

@@ -1,0 +1,7 @@
+{
+  "scope": "parent independent caught advisory execution control after c9ec8a03",
+  "scratch": "/tmp/opencode/parent-advisory-scope-after.yCAsid",
+  "stdout": "scope-probe (advisory)\n",
+  "stderr": "",
+  "escaped_after_advisory": false
+}

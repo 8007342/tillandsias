@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-tray-does-not-subscribe-to-guest-progress-over-hvsocket-so-guest-install-progress-never-renders-on-windows
+    event:
+      type: note
+      ts: "2026-09-27T23:25:34Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        LIVE SMOKE PASS, yolanda 2026-09-27: a local tray built from work/1439-p853 with a guest headless built from trunk (carries progress.push@v1), cold GUI provision. After Ready, tray.log: "guest progress vault: in progress (overall 70%)" then "guest progress vault: done (overall 100%)". So the guest advertised the cap, the tray's Subscribe included Progress, and ProgressPush rendered through the 9vpk PlainSink as ASCII lines. Old-guest byte-identity stays pinned by the unit test.

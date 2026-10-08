@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lua-port-guest-hardening-tray-refresh-and-podman-budget-deciders
+    field: status
+    value: completed
+    ts: "2026-10-02T16:55:29Z"
+    host: macuahuitl
+
+events:
+  - packet_id: lua-port-guest-hardening-tray-refresh-and-podman-budget-deciders
+    event:
+      type: completed
+      ts: "2026-10-02T16:55:29Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 4e29ecca29d4949eebf9e93a9a5c5a0953eb9bbc + forced ./build.sh --check PASS; PR #206 MERGED; independent parent fixtures guest3/3,tray10/10,Podman11/11; real immutable Bash-v-Lua15/15core byte tuples,7/8supplementary exact plus exact repaired root-link tuple
+  - packet_id: lua-port-guest-hardening-tray-refresh-and-podman-budget-deciders
+    event:
+      type: note
+      ts: "2026-10-02T16:55:29Z"
+      host: macuahuitl
+      summary: |-
+        Closed by linux-macuahuitl-opencode-20261002t053211z after Lua-authoritative atomic deletions/callers/floor review, spoof/root-link/CRLF negatives, fixture SIGPIPE repair without waivers, forced integration status exited0 and remote ancestry. Sole supplementary diagnostic difference is intentional function-identity improvement with same refusal/status. Raw outputs unchanged by narrowly annotated capture provenance; no native/platform/performance/process-count/all-litmus claim. Gate reports24 unexercised spec litmus.

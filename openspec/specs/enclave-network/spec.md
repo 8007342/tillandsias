@@ -9,7 +9,7 @@ active
 
 Internal podman network that isolates every Tillandsias-managed container. Only the proxy is dual-homed for external access; all other members communicate exclusively through the enclave.
 
-The membership set is NOT enumerated here in prose. It is defined by the run-argument builders listed under *Container attachment to enclave network* below, and `scripts/check-enclave-membership-documented.sh` refuses any attach site those do not name. A hand-maintained prose list went stale by SIX members between 2026-07 and 2026-08-30 (order 245 P8) — it still said "forge, git, inference, and proxy" after vault, the router, the nix cache, the catalog service, the observatorium web and the ssh-lane sidecar had all joined. The sixth was found by the guard, not by the hand audit that preceded it, because the enclave is named by THREE constants (`ENCLAVE_NET`, `ENCLAVE_ONLY_NET`, `ENCLAVE_EGRESS_NETS`) and a manual sweep covered two.
+The membership set is NOT enumerated here in prose. It is defined by the run-argument builders listed under *Container attachment to enclave network* below, and `scripts/lua/check-enclave-membership-documented.lua` refuses any attach site those do not name. A hand-maintained prose list went stale by SIX members between 2026-07 and 2026-08-30 (order 245 P8) — it still said "forge, git, inference, and proxy" after vault, the router, the nix cache, the catalog service, the observatorium web and the ssh-lane sidecar had all joined. The sixth was found by the guard, not by the hand audit that preceded it, because the enclave is named by THREE constants (`ENCLAVE_NET`, `ENCLAVE_ONLY_NET`, `ENCLAVE_EGRESS_NETS`) and a manual sweep covered two.
 
 ## Requirements
 
@@ -60,8 +60,19 @@ The attach sites are these run-argument builders, named by SYMBOL so the list su
 - `main.rs` `fn build_forge_agent_run_args_with_vault`
 - `main.rs` `fn build_stack_common_args` — the shared prefix, not a service of its own
 - `vault_bootstrap.rs` `fn launch_vault_container`
+- `local_web_preview.rs` `fn build_local_preview_run_args` — enclave-only local
+  preview runtime; candidate and published sibling share this builder
 
-A new enclave member MUST be added to this list in the same commit that attaches it; `scripts/check-enclave-membership-documented.sh` refuses the divergence in both directions.
+The local preview configuration-inspector container in `source_mounts` uses
+`--network=none`
+deliberately: it parses untrusted configuration without starting a network
+service and is not an enclave member.
+
+The preview builder uses the guard-supported `build_` symbol population. Its
+former `run_args` spelling and the discovered scanning gap are recorded in
+`plan/issues/local-web-preview-core-review-2026-10-07.md`.
+
+A new enclave member MUST be added to this list in the same commit that attaches it; `scripts/lua/check-enclave-membership-documented.lua` refuses the divergence in both directions.
 
 @trace spec:enclave-network
 

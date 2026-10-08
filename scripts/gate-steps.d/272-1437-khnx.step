@@ -1,0 +1,12 @@
+# Gate step 1437-khnx — data, not code (order 1072-b7eq).
+#
+# size and implementer_tier must be projected (or they are writable and
+# unreadable, the must_ship lesson), read from notes on older rows, stay absent
+# when untagged (the untagged=opus rule is the selector's, 1437-vdz5), and refuse unknown spellings.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the plan binary projects size and implementer_tier (1437-khnx)"
+STEP_SCRIPT="scripts/test-packet-tier-fields.sh"
+STEP_ERROR="size/implementer_tier stopped projecting, lost the notes fallback, began defaulting untagged rows, or began accepting unknown vocabulary (1437-khnx) — see the verdict line above"
+STEP_OK="Packet tier fields passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:packet-tier-fields:4/4"

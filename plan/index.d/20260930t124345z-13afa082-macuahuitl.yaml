@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: test-preflight-front-door-plants-guards-and-edits-build-sh-in-the-live-checkout-while-it-runs-so-a-concurrent-gate-or-boundary-snapshot-sees-them
+    event:
+      type: note
+      ts: "2026-09-30T12:43:45Z"
+      agent_id: linux-macuahuitl-claude-20260930t124345z
+      host: macuahuitl
+      summary: |
+        LANDED land109 = 0bf167343 on origin/linux-next (relayed work/1516-wru4 @ ae80377c3; gate: build-check exit 0, 794 s, 2026-09-30T12:43:12Z). Verified here before landing: the fixture ran with the live tree unchanged and its witness line green. Follow-up (not blocking): _live uses sha256sum, absent on macOS, so the witness is vacuous there; use the sha256sum-or-shasum dispatch. The row author closes from the ledger, citing 0bf167343.

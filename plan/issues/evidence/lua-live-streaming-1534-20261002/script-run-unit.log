@@ -1,0 +1,12 @@
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+   Compiling tillandsias-plan v0.1.0 (/home/tlatoani/codex/tillandsias-lua-work/1534-puyz/crates/tillandsias-plan)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.28s
+     Running unittests src/lib.rs (target/debug/deps/tillandsias_plan-641045884b0dc9d6)
+
+running 3 tests
+test script_run::tests::classify_follows_the_doors_precedence ... ok
+test script_run::tests::durations_parse ... ok
+test script_run::tests::header_declares_class_and_env ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 415 filtered out; finished in 0.00s
+

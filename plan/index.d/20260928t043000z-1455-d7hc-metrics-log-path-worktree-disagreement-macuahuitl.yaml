@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by macbookair-macos 2026-09-28 while fixing 1454-ssg3 #5 (the same
+# linked-worktree family: `.git` is a FILE in a linked worktree).
+packets:
+  - packet_id: metrics-log-path-writer-and-reader-disagree-in-a-linked-worktree-because-the-rust-root-rule-requires-git-to-be-a-directory
+    order: 1455-d7hc
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [metrics, worktree, repo-root, fixture]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-metrics-log-path-agreement.sh
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      scripts/test-metrics-log-path-agreement.sh fails 2/18 in ANY linked worktree on trunk: the Rust metrics-log-path root rule keeps is_dir on `.git` while the shell rule accepts a worktree's `.git` FILE, so writer and reader resolve different logs there
+    context: |
+      Reported by macbookair-macos (2026-09-28) alongside 1454-ssg3, whose #5
+      was the same shape in find_repo_root (a linked worktree's `.git` is a
+      file; fixed there with .exists()). Pre-exists on trunk and is not
+      platform-specific. The Rust side keeps is_dir "by design" per its
+      comment; the fix must decide which rule is right and make both sides
+      agree, since the fixture exists precisely to pin writer == reader
+      (890-t9pu). Hosts that land or gate from linked worktrees (subagent
+      worktrees, relocated cycles) write metrics nobody reads.
+    verifiable_closure: |
+      bash scripts/test-metrics-log-path-agreement.sh prints its ok summary
+      with 18/18 when run from a linked worktree (git worktree add) as well as
+      from the main checkout. PRE-FIX RESULT: FAILS — 16/18 in a linked
+      worktree on trunk (macbookair, 2026-09-28).
+    unscoreable: "the closure is the existing fixture run in a second checkout regime (a linked worktree); no separate litmus pin"
+    next_action: >
+      In a linked worktree, run the fixture and read the two failing arms;
+      change the Rust root rule to accept a `.git` file (as 1454-ssg3 did
+      for find_repo_root) unless its is_dir comment names a reason that
+      still holds, then add a worktree arm to the fixture.
+    notes: |
+      size: S
+      implementer_tier: haiku

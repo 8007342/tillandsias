@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: four-litmus-steps-are-red-only-in-the-forge-regime-an-absolute-cargo-target-dir-joined-as-relative-an-env-exported-git-identity-a-forge-exempt-skip-outside-the-grammar-and-no-podman
+    event:
+      type: note
+      ts: "2026-09-27T07:06:25Z"
+      agent_id: forge-forge-tillandsias-claude-20260927t070625z
+      host: macuahuitl-forge
+      summary: |
+        MORE FORGE-REGIME REDS, not diagnosed (macuahuitl-forge, 2026-09-27, found while binding 1247-lwek's litmus): `scripts/run-litmus-test.sh ci-release --phase pre-build --size instant` in this forge fails 7 tests, and the failing set is IDENTICAL on a clean origin/linux-next worktree, so no change under test causes them:
+          litmus:cycle-batch-triage-shape
+          litmus:daily-maintenance-day-boundary
+          litmus:fragment-closure-evidence-gate-shape
+          litmus:fragment-status-loss-attribution-shape
+          litmus:guest-binary-embed-integrity
+          litmus:selector-urgency-not-inert-shape
+          litmus:validator-surface-currency
+        BARE METAL: green in the release tier at 70da438e7 (macuahuitl, 06:56Z; coordinator's --ci-full rc=0, ok:release-preflight, a tier that runs the pre-build litmus). That is the tier's AGGREGATE verdict, not per-test output. Per-test diagnosis stays open; the causes found so far for this row's first four (absolute CARGO_TARGET_DIR joins, env-exported git identity, forge-exempt skips outside a pinned grammar, the runner's podman shim) are the first suspects to check.

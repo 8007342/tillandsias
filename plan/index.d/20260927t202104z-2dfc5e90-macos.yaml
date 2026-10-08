@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: pre-push-main-branch-affordance-is-the-first-hook-ported-to-lua-on-the-sandboxed-lua-cli-with-a-stub-that-fails-closed-without-a-binary-and-a-remedy-read-from-the-discipline-seed-instead-of-a-hardcoded-branch
+    event:
+      type: progress
+      ts: "2026-09-27T20:21:04Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t202104z
+      host: macos
+      summary: |
+        Implementation complete on work/1443-sb9b at 86dfc6206, stacked on work/1443-w79y (7ebf29f32) and merged over origin/linux-next. It depends on w79y and must relay after it. The hook is scripts/lua/pre-push-main-branch-affordance.lua on the sandboxed `tillandsias-plan lua`. It asks `discipline check-ref` per pushed ref, blocks only on default-branch-protected, and recommends `discipline target` for the platform with source=seed. A 14-line stub fails closed (no-plan-binary; and discipline-unanswered from the Lua). DEVIATION from the packet's literal "execs": the sandboxed lua CLI has no os.exit and prints return values, so an exec'd script cannot set the hook's exit status. The stub captures the single verdict line and exits 0 only on exactly ok:main-branch-affordance, which is still fail-closed. A small os.exit-or-status channel in the lua CLI would allow a true exec later. FIXED ALONG THE WAY: the shell original refused main even in a project with no seed, violating the level-0 floor; fixture arm 4 pins that. Evidence, from a clean checkout of the ref: fixture 5/5 (the original hook scores 1/5, only the negative control); 11 deciders all rc=0, including the jq ratchet at 344/344, gate-step-regimes 118 and sigpipe-added; ratchet fixture 6/6; test-branch-discipline-verb 6/6; test-pre-push-plan-lane-fails-closed-without-binary 5/0; allocator no-collision (step 274, with STEP_SECOND_REGIME); litmus-covering 10 specs. BASH 3.2 EVENT (macOS, /bin/bash 3.2.57, the requested regime): refs/heads/linux-next gives ok:main-branch-affordance rc 0; refs/heads/main gives blocked:main-branch-affordance rc 1; the fixture passes 5/5 under stock PATH. LIVE: the push of this ref ran the new hook through the installed pre-push chain on real git input and printed ok:main-branch-affordance. FLEET NOTE: after this lands, a host whose plan binary predates the `discipline` verb is blocked on every push (discipline-unanswered) until it rebuilds. That is fail-closed by design, and the remedy line says so.

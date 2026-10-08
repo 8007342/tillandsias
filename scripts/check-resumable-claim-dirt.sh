@@ -3,7 +3,7 @@
 # bash-dialect: pure-3.2 — no mapfile, no ${var,,} on arrays; the mtime
 # comparison uses the test builtin's -nt against a TZ=UTC touch anchor, so no
 # GNU/BSD stat or date probing is needed. Marker consumed by
-# scripts/check-bash-dialect.sh (761-g36m).
+# scripts/lua/check-bash-dialect.lua (761-g36m).
 #
 # check-resumable-claim-dirt.sh — deterministic detector for the SECOND known
 # dirt class: this host's OWN in-flight claimed work, left uncommitted when a
@@ -15,12 +15,13 @@
 # refuses identically, the finished work never lands, the packets stay
 # double-invisible (641-e2qa), and expire-claims eventually launders the CLAIM
 # away while doing nothing about the DIFF — so the next host reimplements it
-# (814-iyu7 by a second route). Order 540 solved this shape once for
-# launch-generated opsx dirt (check-opsx-generated-dirt.sh); this is the
-# analogous detector for claim dirt.
+# (814-iyu7 by a second route). Order 540 once answered this shape for
+# launch-generated opsx dirt by committing it (check-opsx-generated-dirt.sh;
+# since 1440-w8g8 that dirt is refused instead); this is the detector for
+# claim dirt, which a cycle may review and land.
 #
 # WHAT A PASS MEANS — AND DOES NOT MEAN. `resumable:` says "safe for THIS cycle
-# to review and land under the order-540 re-snapshot sequence". It is NOT
+# to review and land, then re-anchor with the guard's re-snapshot". It is NOT
 # auto-commit: proving an edit IMPLEMENTS the packet it sits beside is an agent
 # judgment, not a machine fact, and a detector claiming otherwise would be the
 # order-531 shape. What the detector removes is the deadlock, not the review.

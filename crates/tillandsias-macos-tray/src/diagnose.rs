@@ -1356,31 +1356,85 @@ pub fn reset_guest_main() -> i32 {
     provision_main()
 }
 
+/// ORDER 1420-q2ba. The oldest macOS first provisioning supports — the same
+/// floor install-macos.sh enforces and LSMinimumSystemVersion declares.
+pub(crate) const MIN_MACOS_MAJOR: u32 = 14;
+
+/// `Some(refusal)` when `product_version` (`kern.osproductversion`, e.g.
+/// "13.6.1") is below [`MIN_MACOS_MAJOR`]; `None` to proceed. An unreadable or
+/// unparsable version proceeds: refusing on "cannot tell" would block a host
+/// whose sysctl output this cannot parse.
+pub(crate) fn macos_version_refusal(product_version: Option<&str>) -> Option<String> {
+    let v = product_version?.trim();
+    let major: u32 = v.split('.').next()?.parse().ok()?;
+    (major < MIN_MACOS_MAJOR).then(|| {
+        format!(
+            "Tillandsias requires macOS {MIN_MACOS_MAJOR}.0 or later to provision its VM \
+             (this host runs macOS {v}); update macOS, then retry."
+        )
+    })
+}
+
 pub fn provision_main() -> i32 {
+    // 1420-83vf: machine output only when asked for.
+    let json = std::env::args().any(|a| a == "--json");
+    // 1420-q2ba: the MANUAL path. LaunchServices refuses the .app below
+    // LSMinimumSystemVersion (14.0) and install-macos.sh refuses before it
+    // installs, but exec'ing this binary directly is decided by the Mach-O's
+    // own minimum, which is 11.0 (`vtool -show-build`: minos 11.0), so on
+    // macOS 11-13 a cold provision would run and fail somewhere deep with no
+    // explanation. Refuse loudly first.
+    let product_version = std::process::Command::new("/usr/sbin/sysctl")
+        .args(["-n", "kern.osproductversion"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+    if let Some(refusal) = macos_version_refusal(product_version.as_deref()) {
+        if json {
+            let escaped = serde_json::to_string(&refusal).unwrap_or_else(|_| "\"\"".to_string());
+            println!("{{\"error\":{escaped}}}");
+        } else {
+            eprintln!("Provisioning refused: {refusal}");
+        }
+        return 1;
+    }
     if let Err(err) = stage_embedded_guest_binary() {
-        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        if json {
+            eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        } else {
+            eprintln!("Provisioning failed: stage guest binary: {err}");
+        }
         return 1;
     }
     let image_root = image_root();
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root);
 
     if vz.is_provisioned() {
-        println!(
-            "{{\"status\":\"already_provisioned\",\"path\":\"{}\"}}",
-            vz.rootfs_image_path().display()
-        );
+        if json {
+            println!(
+                "{{\"status\":\"already_provisioned\",\"path\":\"{}\"}}",
+                vz.rootfs_image_path().display()
+            );
+        } else {
+            println!("Already provisioned: {}", vz.rootfs_image_path().display());
+        }
         return 0;
     }
 
     let manifest = match tillandsias_vm_layer::recipe::Manifest::from_toml(BUNDLED_MANIFEST_TOML) {
         Ok(m) => m,
         Err(e) => {
-            let escaped =
-                serde_json::to_string(&e.to_string()).unwrap_or_else(|_| format!("\"{e}\""));
-            println!(
-                "{{\"error\":\"manifest parse: {}\",\"detail\":{}}}",
-                e, escaped
-            );
+            if json {
+                let escaped =
+                    serde_json::to_string(&e.to_string()).unwrap_or_else(|_| format!("\"{e}\""));
+                println!(
+                    "{{\"error\":\"manifest parse: {}\",\"detail\":{}}}",
+                    e, escaped
+                );
+            } else {
+                eprintln!("Provisioning failed: bundled manifest parse: {e}");
+            }
             return 1;
         }
     };
@@ -1388,17 +1442,38 @@ pub fn provision_main() -> i32 {
     let rt = match tokio::runtime::Runtime::new() {
         Ok(r) => r,
         Err(e) => {
-            println!("{{\"error\":\"tokio runtime: {e}\"}}");
+            if json {
+                println!("{{\"error\":\"tokio runtime: {e}\"}}");
+            } else {
+                eprintln!("Provisioning failed: async runtime: {e}");
+            }
             return 1;
         }
     };
+
+    // 1420-83vf: JSON lines are for machines. `--json` keeps them exactly as
+    // before; otherwise progress goes through the tillandsia renderer on
+    // stderr — bars on a terminal, one clean line per state change on a pipe,
+    // `TERM=dumb`, `NO_COLOR` or CI — and stdout carries one plain result line.
+    // This is also what `--reset-state` (the curl installer's reprovision)
+    // shows the person running the installer.
+    if !json {
+        return provision_rendered(vz, manifest, rt);
+    }
 
     let on_phase = |phase: &str| {
         let escaped = serde_json::to_string(phase).unwrap_or_else(|_| format!("\"{}\"", phase));
         println!("{{\"phase\":{}}}", escaped);
     };
 
-    match rt.block_on(vz.fetch_fedora_cloud_image(&manifest, &on_phase)) {
+    // 1420-x6rz: typed progress for machines, one JSON object per event.
+    let on_event = |ev: tillandsias_control_wire::ProgressEvent| {
+        if let Ok(j) = serde_json::to_string(&ev) {
+            println!("{{\"progress\":{j}}}");
+        }
+    };
+
+    match rt.block_on(vz.fetch_fedora_cloud_image(&manifest, &on_phase, &on_event)) {
         Ok(()) => {
             println!(
                 "{{\"status\":\"provisioned\",\"path\":\"{}\"}}",
@@ -1409,6 +1484,68 @@ pub fn provision_main() -> i32 {
         Err(e) => {
             let escaped = serde_json::to_string(&e).unwrap_or_else(|_| format!("\"{}\"", e));
             println!("{{\"error\":{}}}", escaped);
+            1
+        }
+    }
+}
+
+/// ORDER 1420-83vf. The human-facing arm of `--provision`: the image fetch
+/// runs as a task and reports phases over a channel, and THIS thread feeds
+/// them to the tillandsia renderer (a `Box<dyn Sink>` is not `Sync`, while
+/// vm-layer's phase callback must be). The sink picks itself from the
+/// environment: bars on a terminal; one plain line per state change on a pipe,
+/// `TERM=dumb`, `NO_COLOR` or CI. stdout gets one plain result line.
+fn provision_rendered(
+    vz: tillandsias_vm_layer::vz::VzRuntime,
+    manifest: tillandsias_vm_layer::recipe::Manifest,
+    rt: tokio::runtime::Runtime,
+) -> i32 {
+    use tillandsias_progress_tty::{EnvView, TaskState, Tier, sink_for};
+
+    let vz = std::sync::Arc::new(vz);
+    let env = EnvView::from_process();
+    // Bars leave the cursor on their last line; end it before the result so
+    // "Provisioned: …" does not run on after the bar. Plain mode is line-based.
+    let drew_bars = Tier::detect(&env) != Tier::Plain;
+    let mut sink = sink_for(&env, 40);
+    // 1420-x6rz: typed ProgressEvents over the channel (vm-layer no longer
+    // folds bytes/percent into prose); milestone phases are not drawn.
+    let (tx, rx) = std::sync::mpsc::channel::<tillandsias_control_wire::ProgressEvent>();
+    let fetch_vz = vz.clone();
+    let task = rt.spawn(async move {
+        let on_event = move |ev: tillandsias_control_wire::ProgressEvent| {
+            let _ = tx.send(ev);
+        };
+        fetch_vz
+            .fetch_fedora_cloud_image(&manifest, &|_: &str| {}, &on_event)
+            .await
+    });
+    // The channel closes when the task drops its sender, i.e. when the fetch
+    // is over, however it ended.
+    for ev in rx {
+        let (task_name, state) = crate::provision_progress::event_to_task(&ev);
+        let _ = sink.update(&task_name, state);
+    }
+    let result = match rt.block_on(task) {
+        Ok(r) => r,
+        Err(e) => Err(format!("provisioning task failed: {e}")),
+    };
+    match result {
+        Ok(()) => {
+            let _ = sink.finish();
+            if drew_bars {
+                eprintln!();
+            }
+            println!("Provisioned: {}", vz.rootfs_image_path().display());
+            0
+        }
+        Err(e) => {
+            let _ = sink.update("Provisioning", TaskState::Failed { reason: e.clone() });
+            let _ = sink.finish();
+            if drew_bars {
+                eprintln!();
+            }
+            eprintln!("Provisioning failed: {e}");
             1
         }
     }
@@ -2917,6 +3054,52 @@ mod tests {
         assert!(
             export_at < first_use,
             "HOME must be exported before the CA path that expands it: {p}"
+        );
+    }
+
+    /// 1420-q2ba: the manual `--provision` path on an unsupported macOS refuses
+    /// loudly (the Mach-O's minos is 11.0, so dyld does not stop it on 11-13).
+    #[test]
+    fn provisioning_refuses_below_macos_14_and_names_both_versions() {
+        use super::macos_version_refusal;
+        for old in ["11.7.10", "12.7", "13.6.1", "13"] {
+            let r = macos_version_refusal(Some(old)).unwrap_or_else(|| panic!("{old} must refuse"));
+            assert!(
+                r.contains("macOS 14.0 or later") && r.contains(old.trim()),
+                "{r}"
+            );
+        }
+        assert_eq!(macos_version_refusal(Some("14.0")), None);
+        assert_eq!(macos_version_refusal(Some("27.0\n")), None, "this host");
+        assert_eq!(
+            macos_version_refusal(None),
+            None,
+            "unreadable sysctl proceeds"
+        );
+        assert_eq!(
+            macos_version_refusal(Some("garbage")),
+            None,
+            "unparsable proceeds"
+        );
+    }
+
+    /// The refusal must run BEFORE staging or downloading anything.
+    #[test]
+    fn the_macos_version_refusal_runs_first_in_provision_main() {
+        let src = include_str!("diagnose.rs");
+        let body = src
+            .split("pub fn provision_main() -> i32 {")
+            .nth(1)
+            .expect("provision_main");
+        let refusal = body
+            .find("macos_version_refusal(")
+            .expect("provision_main must check the OS");
+        let staging = body
+            .find("stage_embedded_guest_binary()")
+            .expect("provision_main stages");
+        assert!(
+            refusal < staging,
+            "the OS refusal must precede staging and the download"
         );
     }
 

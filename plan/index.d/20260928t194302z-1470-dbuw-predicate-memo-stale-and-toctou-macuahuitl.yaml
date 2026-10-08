@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator 2026-09-28: fix the defects the CentiColon research found.
+packets:
+  - packet_id: the-lua-predicate-memo-returns-a-stale-verdict-after-a-predicate-is-re-registered-and-digests-its-inputs-after-evaluation-so-a-file-changed-mid-read-authenticates-bytes-never-read
+    order: 1470-dbuw
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [lua, predicate, memo, cache, rust, centicolon, plan-only-peer-ok]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+    title: |
+      PredicateRegistry's memo (crates/tillandsias-plan/src/lua_predicate.rs) keys a cached verdict on (name, arg) only, so re-registering a predicate with DIFFERENT source returns the old verdict; and it digests the read files AFTER evaluation, so a file changed during the read is recorded with bytes the predicate never saw
+    context: |
+      Found by Codex (1453-p9gb, "Typed cache entries" in
+      plan/issues/stockfish-centicolon-lessons-research-2026-09-28.md) as a
+      source observation; CONFIRMED by the coordinator reading the code on
+      2026-09-28: `PredicateRegistry::register` inserts the new Predicate and
+      never touches `self.cache`; the evaluate path builds
+      `key = (name, arg)` (no source identity) and, after `f.call(...)`,
+      computes `file_digest` for each logged read and inserts the entry.
+      Consequences: (a) a re-registered predicate whose input files did not
+      change answers from the OLD source's cached verdict; (b) a file
+      modified between the predicate's read and the post-evaluation digest
+      is recorded with its NEW digest, so the cache later validates bytes
+      the verdict was never computed from. Also noted: a cache hit returns
+      only the Boolean, while an uncached run can emit structured JSON via
+      log_info — Pilot B (1471) owns that half; do not widen this fix into it.
+      Plan-only peers: follow methodology/multi-host-development.yaml ->
+      plan_only_peers.
+    verifiable_closure: |
+      cargo test -p tillandsias-plan passes with new unit tests in
+      lua_predicate.rs: (1) register predicate P with source S1 that returns
+      true, evaluate (cached), re-register P with source S2 that returns
+      false over the SAME unchanged input file, evaluate -> false (no stale
+      hit); (2) a predicate whose read file is rewritten DURING evaluation
+      (the predicate writes nothing; the test swaps the file between the
+      read and the return via a hook or by reading twice) is either not
+      memoised or memoised against the digest of the bytes actually read,
+      so a later evaluation re-runs; (3) NEGATIVE CONTROL: an unchanged
+      source over unchanged inputs still hits the cache (cache_hits
+      increments). PRE-FIX RESULT: FAILS (1) — the old verdict is returned.
+    unscoreable: "a Rust unit-test closure; no litmus pin names these tests"
+    next_action: >
+      Add the source (or its digest) to the memo key and clear a name's
+      entries on re-register; digest each input at READ time (the ReadLog
+      records the digest of the bytes returned), not after evaluation.
+      Tests first, watch (1) fail.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Open to plan-only peers. Pilot B (1471) builds on this.

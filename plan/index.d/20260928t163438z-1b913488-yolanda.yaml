@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-cheatsheet-index-regenerator-reorders-unrelated-lines-when-run-on-windows-so-a-one-sheet-change-becomes-a-22-line-diff
+    event:
+      type: finding
+      ts: "2026-09-28T16:34:38Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        MEASURED (yolanda, 2026-09-28). CAUSE 1, fixed on work/1459-b5fh (not yet pushed): tillandsias-policy spawns `sort` in three places (sort -u twice, sort -z once, main.rs ~2933/3364/4922) to match the shell's collation. On Windows, Command::new("sort") goes through CreateProcess, which searches the SYSTEM directory before PATH, so it ran C:\Windows\System32\sort.exe: it rejects -z ("The system cannot find the file specified") and the code fell back to byte order. The fix resolves GNU sort.exe from PATH outside the Windows directory (Git Bash coreutils), else keeps the byte fallback.
+        CAUSE 2, NOT fixable that way, and it decides the row: with real GNU sort, the order still depends on the host's C LIBRARY, not only its locale. Regenerating on Windows against trunk's INDEX.md: no LANG (C order) -> 22 changed lines; LC_ALL=C.UTF-8 -> 22; LC_ALL=en_US.UTF-8 -> 10, of which 1 is a genuinely missing entry (forge-memory-tmpfs-swap.md: trunk's INDEX is stale) and 9 are glibc-vs-Cygwin collation: glibc en_US ignores punctuation on the first pass (podman-control-plane.md before podman.md; curl-http.md after curl.md is the reverse here), the MSYS/Cygwin runtime does not. So byte-identical output across hosts is impossible while the generator delegates collation to the platform's sort.
+        DECISION NEEDED (the subsystem's, not this row's to take quietly): (A) accept locale-dependent order and regenerate INDEX only on Linux (declare Windows regeneration unsupported by name); or (B) sort in Rust with an explicit key (byte order) on every platform: deterministic everywhere, one-time reorder of the Linux INDEX, and the same helper also serves two other outputs whose parity must be re-checked. Recommend (B).

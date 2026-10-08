@@ -1,0 +1,46 @@
+# @trace spec:branch-discipline
+name: litmus:discipline-install-hooks-shape
+spec: branch-discipline
+phase: pre-build
+description: >
+  Order 1446-xqi6 (operator ruling 7). The plan binary embeds one Lua hook
+  template per client event and installs them on demand per project with
+  `tillandsias-plan discipline install-hooks`, at the level the project's seed
+  names: level 0 is advisory only and pushes to main pass; `discipline raise`
+  moves the level forward only, and from level 1 the pre-push refuses the
+  default branch with the affordance naming the integration branch and the
+  skill. A project override in .tillandsias/hooks/<event>.lua wins; the stubs
+  never fall back to shell logic; a global core.hooksPath is refused; the
+  forge installs them for every non-Tillandsias checkout.
+severity: normal
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-discipline-install-hooks.sh
+  - workspace contains crates/tillandsias-plan/hooks/pre-push.lua
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-discipline-install-hooks.sh && test -x scripts/test-discipline-install-hooks.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "install-hooks, raise, advisories, override, fail-closed stubs, forge wiring, and the idempotent / not-ours NEGATIVE CONTROL"
+    command: "bash scripts/test-discipline-install-hooks.sh 2>&1 | tail -n 1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: discipline-install-hooks"
+
+observability:
+  traces:
+    - "@trace spec:branch-discipline"
+  expected_log: "PASS: discipline-install-hooks"
+  log_fields:
+    spec: "branch-discipline"
+    test: "discipline-install-hooks-shape"
+    artifact: "tillandsias-plan discipline install-hooks|raise|hook + crates/tillandsias-plan/hooks/*.lua"
+
+rollback:
+  on_failure: >
+    A hook that refuses a level-0 project's push to main violates the floor:
+    restore level-0 pre-push to never refusing before anything else.
+  command: "bash scripts/test-discipline-install-hooks.sh"

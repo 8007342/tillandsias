@@ -1,0 +1,48 @@
+# @trace spec:branch-discipline
+name: litmus:land-discipline-probe-shape
+spec: branch-discipline
+phase: pre-build
+description: >
+  Order 1443-z3vb. scripts/land-on-platform-branch.sh runs the discipline probe
+  BEFORE any fetch or gate: the target is the named branch or the seed's
+  integration branch for this platform (a project with no seed lands on its
+  default branch, never refused); `discipline check-ref` decides against the
+  effective level (a seed ahead of reality warns); the mirror's published seed
+  digest is compared to the checkout's. Refusals are
+  refused:land:discipline:<reason> with the seed's remedy and exit 9; the new
+  tokens land:target:<branch>:from=<seed|default>:level=<n> and
+  land:discipline:<mirror-silent|mirror-agrees|seed-ahead-of-reality|…> are
+  additions, and every existing verdict line is unchanged.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-land-discipline-probe.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-land-discipline-probe.sh && test -x scripts/test-land-discipline-probe.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "protected default refused before fetch, level-0 floor, seed-named target, mirror digest compare, grammar refusal, probe-unavailable fallback"
+    command: "bash scripts/test-land-discipline-probe.sh"
+    timeout_ms: 180000
+    expected_behavior: "PASS: land-discipline-probe"
+
+observability:
+  traces:
+    - "@trace spec:branch-discipline"
+  expected_log: "PASS: land-discipline-probe"
+  log_fields:
+    spec: "branch-discipline"
+    test: "land-discipline-probe-shape"
+    artifact: "scripts/land-on-platform-branch.sh (the discipline probe block)"
+
+rollback:
+  on_failure: >
+    A land tool that lands a work ref as trunk, refuses a bare project's
+    default branch, or learns a protected branch only from the remote after
+    the gate is the defect: restore the probe's order (target, check-ref,
+    mirror digest) ahead of the attempt loop.
+  command: "bash scripts/test-land-discipline-probe.sh"

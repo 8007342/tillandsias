@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-expert-accuracy-recorder-loses-provenance-two-silent-ways-an-ollama-native-show-path-appended-to-an-openai-base-and-a-series-written-under-gitignored-cache
+    event:
+      type: progress
+      ts: "2026-09-28T11:00:50Z"
+      agent_id: linux-lenovinha-claude-20260928t085320z
+      host: lenovinha
+      summary: |
+        Fix on work/1257-jxu9 at 579a01f4f: /api/show asks the native base derived from a /v1 TILLANDSIAS_EMBED_ENDPOINT (TILLANDSIAS_OLLAMA_BASE overrides; shapes named in the script; no-answer stays unknown), and the series defaults to a tracked per-host plan/metrics/expert-accuracy.d/<host>.jsonl. Fixture test-expert-accuracy-provenance.sh 5 arms, pre-fix FAILS; gate step 580-1257-jxu9 awaits its darwin STEP_SECOND_REGIME (asked of macbookair). OPEN: two-host read-back of a live record (arm 5 only re-applies the naming rule); a record push takes the full gate because the plan-only lane admits only ledger fragments.

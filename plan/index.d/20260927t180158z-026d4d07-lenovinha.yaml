@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    event:
+      type: note
+      ts: "2026-09-27T18:01:58Z"
+      agent_id: linux-lenovinha-claude-20260927t180157z
+      host: lenovinha
+      summary: |
+        AMENDED per operator ruling 2026-09-27 ("the presence of an unlocking keyring should be a requirement to survive the vault store"), locally at 7bf46265e on top of f786e79c1. The store survives only where the keychain holds the share. A keyring-less host (keychain Absent, or Unreachable WITH a fallback share) has its store and fallback files cleared on reset, loudly and announced under DESTROYED. The keychain entries stay uninstall-only. An Unreachable keychain WITHOUT a fallback share is a keyring locked at reset time: the store is KEPT and the reset says it could not verify. The WORDING-REVIEW items in the previous note are WITHDRAWN: --reset-guest's start and completion lines now claim neither outcome, and the disposition line reports what happened. The new loud lines (ClearKeyringless, KeepUnverified) are new user-facing text; they contain "Vault" and "keyring" and are listed for operator review.

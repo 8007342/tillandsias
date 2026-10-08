@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    event:
+      type: progress
+      ts: "2026-09-28T16:02:10Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260928t160209z
+      host: macos
+      summary: |
+        MEASURED by lenovinha-silverblue, 2026-09-28, in the tillandsias-builder toolbox on origin/linux-next: `cargo clippy -p tillandsias-macos-tray --target aarch64-apple-darwin --all-targets -- -D warnings` gives rc=101 in ring v0.17.14's build script. cc-rs calls GNU cc with Apple flags, and gcc rejects -arch, -mmacosx-version-min=11.0 and -gfull while compiling crypto/curve25519/curve25519.c. The retry with CC=clang --target=arm64-apple-macos11 also gives rc=101 ("failed to find tool clang"): the builder has no clang. lzma-sys was never reached.
+        So the gate cannot lint darwin today, and per the ruling the fallback applies: scripts/attest-native-lint.sh is the only writer of the attestation, the attestation is bound to the linted content, and the relay refusal names the limitation ("attested by <host>, not re-run here"). Still open, and a separate question: whether clang with --target clears ring without an SDK. That needs clang in the builder.

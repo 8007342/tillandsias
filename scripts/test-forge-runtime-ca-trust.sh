@@ -20,7 +20,10 @@ if ! podman image exists "$IMAGE"; then
     fi
 fi
 
-for command in openssl gcc git curl node; do
+# ORDER 1495-p7ek: HOST tools only. node runs solely INSIDE the forge
+# container (the NODE_USE_SYSTEM_CA fetch probe below), so demanding it on the
+# host refused a correct host (yoga, no node) before any container arm ran.
+for command in openssl gcc git curl; do
     command -v "$command" >/dev/null || {
         echo "FAIL: required host command is absent: $command" >&2
         exit 1
@@ -109,6 +112,7 @@ podman run --rm \
         url="https://127.0.0.1:'"$port"'"
         curl -fsS "$url/upstream.git/HEAD" >/dev/null
         git ls-remote "$url/upstream.git" HEAD >/dev/null
+        command -v node >/dev/null || { echo "FAIL: the forge image carries no node, so the NODE_USE_SYSTEM_CA probe cannot run (1495-p7ek)" >&2; exit 1; }
         node -e "fetch(process.argv[1]).then(r => { if (!r.ok) throw Error(String(r.status)); return r.text(); }).then(t => process.stdout.write(t)).catch(e => { console.error(e); process.exit(1); })" "$url/upstream.git/HEAD"
     '
 

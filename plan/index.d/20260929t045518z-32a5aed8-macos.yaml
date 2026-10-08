@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: after-github-grants-the-device-flow-token-the-guest-is-silent-for-13-seconds-before-the-tray-shows-the-handle
+    event:
+      type: progress
+      ts: "2026-09-29T04:55:18Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t045518z
+      host: macos
+      summary: |
+        STEP NAMED (criterion 1). From the guest journal's podman exec events on the login container (bdb5992f…, uptime -> epoch mapped through the proxy lines) plus a source-read of the login flow in crates/tillandsias-headless/src/main.rs:
+          04:50:11.186  exec_died   device-poll script (device_poll_script: Vault writes + gh auth login, then exit 0)
+          04:50:11.358-11.666  exec  gh auth status --hostname github.com (the api.github.com call)
+          04:50:11.833-11.918  exec  vault-cli.sh read (vault_verify)
+          -- 13.1 s --
+          04:50:25.063-25.333  exec  gh api user --jq .login (the username; the api.github.com calls)
+          04:50:25.47 died, 25.67 removed; then login_transition_sentinel written -> tray 04:50:28.5
+        BETWEEN vault_verify and `gh api user` the code runs notify_tray_github_login_stored (connect to an in-guest tray socket, which does not exist on macOS: fails immediately, with 2 s read and write timeouts at most) and then prompt_and_store_git_identity(), which ALWAYS prompts in the login terminal for "Git author name" and "Git author email" (with defaults) when no stdin identity was given. The gap is therefore the OPERATOR ANSWERING TWO PROMPTS, not a timeout and not the healthcheck (the coordinator's lead is ruled out: nothing in the flow waits on container health).
+        THE REAL DEFECT IS ORDER: the tray learns of the login only after the identity prompts and the username exec, because login_transition_sentinel_path is written at the very end. The token is in Vault ~13 s (human time) earlier.
+        PROPOSED FIX (for the coordinator or operator to accept): write the login-transition sentinel (and so notify the tray) right after vault_verify succeeds, BEFORE prompt_and_store_git_identity; and default the two prompts from the GitHub profile (`gh api user` name, plus the primary noreply email) so the common answer is Enter.
+        Criterion 2's "<5 s" is then measured as token -> handle with the prompts still open.
+        TO CONFIRM with the operator: were you asked for a git name and email after approving?

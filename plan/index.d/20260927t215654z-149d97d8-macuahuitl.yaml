@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tool-materialize-arm-0-accepts-the-subjects-own-loaded-host-skip-line
+    field: status
+    value: completed
+    ts: "2026-09-27T21:56:54Z"
+    host: macuahuitl
+
+events:
+  - packet_id: tool-materialize-arm-0-accepts-the-subjects-own-loaded-host-skip-line
+    event:
+      type: completed
+      ts: "2026-09-27T21:56:54Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 9e0a6a8ce
+  - packet_id: tool-materialize-arm-0-accepts-the-subjects-own-loaded-host-skip-line
+    event:
+      type: note
+      ts: "2026-09-27T21:56:54Z"
+      host: macuahuitl
+      summary: |-
+        landed in land77 at 9e0a6a8ce; ARM 0 accepts the loaded-host skip line (LOADAVG=64 injection red pre-fix, green post-fix; garbage stub still rejected)

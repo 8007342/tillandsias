@@ -16,7 +16,8 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GUARD="$ROOT/scripts/check-tray-refresh-no-polling.sh"
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)"
+LUA="$ROOT/scripts/lua/check-tray-refresh-no-polling.lua"
 SRC="$ROOT/crates/tillandsias-windows-tray/src/notify_icon.rs"
 fail=0; pass=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
@@ -26,7 +27,7 @@ bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/tray-nopoll.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
-_rc() { bash "$GUARD" "$1" >/dev/null 2>&1; echo $?; }
+_rc() { TILLANDSIAS_TRAY_REFRESH_SOURCE="$1" "$PLAN" script run "$LUA" >/dev/null 2>&1; echo $?; }
 
 # ── 0. The real source passes, or every mutation arm is meaningless ────────
 [ "$(_rc "$SRC")" = "0" ] && ok "the real tray source passes the guard" \
@@ -83,6 +84,34 @@ awk -v fn='async fn refresh_vm_status' -v ins='    // this used to loop and slee
 ' "$SRC" > "$W/m5.rs"
 [ "$(_rc "$W/m5.rs")" = "0" ] && ok "a COMMENT naming a loop and a sleep does not trip the guard" \
     || bad "the guard counts mentions rather than actions"
+
+# ── 6. A comment cannot impersonate the named function ────────────────────
+{ printf '// async fn refresh_vm_status() { loop { break; } }\n'; cat "$SRC"; } > "$W/m6.rs"
+[ "$(_rc "$W/m6.rs")" = "0" ] && ok "a commented fake refresh function cannot hide the real body" \
+    || bad "the guard found a function signature inside a comment"
+
+# ── 7. Strings, nested comments, and raw braces are not Rust blocks ───────
+{ printf '/* outer /* async fn refresh_vm_status() { loop { break; } } */ */\nconst SPOOF: &str = r#"async fn refresh_vm_status() { loop { break; } }"#;\n'; cat "$SRC"; } > "$W/m7.rs"
+[ "$(_rc "$W/m7.rs")" = "0" ] && ok "nested comments and raw-string braces do not alter body scope" \
+    || bad "the guard treated comment or raw-string braces as Rust code"
+
+# ── 8. A real loop after spoof material is still refused ───────────────────
+awk -v fn='async fn refresh_vm_status' -v ins='    loop { break; }' '
+    { print }
+    !done && $0 ~ /^[[:space:]]*async fn refresh_vm_status/ && index($0, "{") { print ins; done = 1 }
+' "$W/m7.rs" > "$W/m8.rs"
+[ "$(_rc "$W/m8.rs")" != "0" ] && ok "a real loop is caught after comment and raw-string spoofing" \
+    || bad "the guard accepted a real loop after spoof material"
+
+# ── 9. CRLF source keeps the legacy diagnostic bytes ───────────────────────
+awk '{ printf "%s\r\n", $0 }' "$W/m3.rs" > "$W/m9-crlf.rs"
+if raw="$(TILLANDSIAS_TRAY_REFRESH_SOURCE="$W/m9-crlf.rs" "$PLAN" script run "$LUA" 2>&1)"; then
+    bad "CRLF polling source unexpectedly passed"
+elif grep -q "$(printf '\r')" <<<"$raw"; then
+    ok "CRLF polling diagnostic retains the matched source CR byte"
+else
+    bad "CRLF polling diagnostic normalized the matched source line"
+fi
 
 echo "tray-refresh-no-polling: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

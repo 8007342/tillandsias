@@ -69,15 +69,31 @@ _policy_bin="$(resolve_target_binary tillandsias-policy release "$REPO_ROOT")" \
     || _policy_bin="$(resolve_target_binary tillandsias-policy debug "$REPO_ROOT")" \
     || _policy_bin=""
 [ -n "$_policy_bin" ] && _validator="$_policy_bin validate-yaml"
+# ORDER 1454-ssg3. The plan binary parses YAML too (`validate-yaml`), and it is
+# the one binary every host that pushes plan fragments already has: the plan
+# lane refuses without it. macOS hosts build no tillandsias-policy and ship no
+# yq, so before this fallback the gate had no validator on darwin at all.
+if [ -z "$_validator" ]; then
+    _plan_bin="$(resolve_plan_binary 2>/dev/null)" || _plan_bin=""
+    case "$_plan_bin" in ./*) _plan_bin="$REPO_ROOT/${_plan_bin#./}" ;; esac
+    [ -n "$_plan_bin" ] && "$_plan_bin" capabilities 2>/dev/null | grep -qx 'validate-yaml' \
+        && _validator="$_plan_bin validate-yaml"
+fi
 if [ -z "$_validator" ] && command -v yq >/dev/null 2>&1; then
     _validator="yq ."
 fi
 if [ -z "$_validator" ]; then
-    # No validator available is NOT a pass: it is an unknown. Say so plainly and
-    # skip, rather than reporting a green that was never checked.
-    echo "ok:added-fragments-parse:0 checked"
-    echo "  note: no YAML validator available (build tillandsias-policy to enable this gate)" >&2
-    exit 0
+    # ORDER 1454-ssg3: REFUSE, never a green. This branch used to print
+    # `ok:added-fragments-parse:0 checked` and exit 0 while its comment said
+    # "not a pass". On darwin it was taken on EVERY run (no policy binary, no
+    # yq), so the plan-only lane accepted unparseable fragments
+    # AND unquoted timestamps unchecked: the bare-timestamp test below needs
+    # no validator, but this early exit skipped it too. A gate that cannot
+    # look must say so in its verdict.
+    echo "blocked:added-fragments-parse:no-validator"
+    echo "  no YAML validator resolves (tillandsias-policy, tillandsias-plan validate-yaml, yq)." >&2
+    echo "  remedy: cargo build --release -p tillandsias-plan" >&2
+    exit 1
 fi
 
 if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then

@@ -1,0 +1,44 @@
+packets:
+  - packet_id: litmus-parse-only-does-not-run-execution-preflights-or-rust-query-helpers
+    order: 1536-25ys
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [tests, gate, litmus, parser]
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/test-litmus-parse-only-duplicate-key.sh
+    estimated_hours: 2
+    size: M
+    implementer_tier: opus
+    title: "Parse-only mode cannot execute preflights or Rust-query helpers; corpus controls compare exact sets"
+    context: |
+      PR #201's fourth forced gate failed ARM 6 with accepted corpus counts
+      508 versus 507; its count-only output discarded the differing filename.
+      Astra froze all 512 files and observed identical live/neutral accepted
+      508-file sets and validate-yaml success for every file. The historical
+      failure's exact cause is therefore not proved. A controlled helper
+      refusal reproduces the same one-file loss for
+      litmus-podman-idiomatic-launch-routing.yaml: loader accepts, live and
+      neutral runners both refuse before duplicate detection. --parse-only
+      unexpectedly runs execution preflights and Rust queries, including a
+      possible Cargo fallback. This is a real mode-contract gap, not a reason
+      to weaken YAML loading or duplicate detection.
+    outcome: "Parse-only loads and extracts without running execution helpers; fixture diagnostics identify exact differing files."
+    exit_criteria:
+      - "Valid extractable Rust-query and Podman-preflight fixtures pass parse-only without invoking refusing marker helpers; normal execution still invokes/refuses those helpers."
+      - "Retain YAML loading, duplicate assert/timeout/command controls, extraction failures and scoped parse-only diagnostics."
+      - "Corpus comparison checks exact accepted filename sets, rejects equal-count/different-set controls and retains diagnostic output instead of attributing every difference to duplicate detection."
+      - "Targeted runner fixtures and the full forced integrated build gate pass; no runtime execution checks, policy rules or binary/format guards are relaxed."
+    verifiable_closure: "bash scripts/test-litmus-parse-only-duplicate-key.sh; applicable litmus parser/reader fixtures; ./build.sh --check forced on the integrated candidate."
+    unscoreable: "pinned-by-its-own-fixture: scripts/test-litmus-parse-only-duplicate-key.sh"
+    next_action: "Sol implements the bounded runner/fixture correction as a held PR #201 gate follow-up; parent reviews, independently verifies, then full-gates and lands."
+    notes: |
+      Investigation receipts: /tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/astra-parse-mismatch-rqdlru8u/.
+      controls-summary SHA256 dbe2b013bc08fd78591e9a1f5b05e995862a973e399675c11661fb981ca42f48.
+      No fourth implementation lease is claimed; this is a named gate follow-up
+      while 1531-ae4a awaits integration. The 508-to-507 historical mismatch
+      remains unproven, and the reproduced helper-refusal mechanism is separate.
+    provenance: "Astra's frozen-corpus and sentinel-helper investigation at parent 7f21f67fc; actual fourth gate receipt retained externally."

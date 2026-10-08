@@ -73,7 +73,7 @@ impl SecureWireMode {
 }
 
 /// The environment variable this module owns. Nothing else may read it; the
-/// gate refuses a second reader (see scripts/check-secure-wire-single-reader.sh).
+/// gate refuses a second reader (see scripts/lua/check-secure-wire-single-reader.lua).
 pub const SECURE_CONTROL_WIRE_ENV: &str = "TILLANDSIAS_SECURE_CONTROL_WIRE";
 
 /// Parse the mode from an already-read environment value.
@@ -105,7 +105,7 @@ pub fn parse_secure_wire_mode(
         // after the last of the six readers was converted — macbookair took the
         // two macOS readers (311aa27d5), yolanda took windows-tray/hvsocket.rs
         // (commit A, 7623213e2), and the ratchet
-        // scripts/check-secure-wire-single-reader.sh reads 0 of 3.
+        // scripts/lua/check-secure-wire-single-reader.lua reads 0 of 3.
         //
         // WHY NOT EARLIER. The flip was tried once with only the LISTENER
         // converted (e6a80609f, reverted at 08a7d3cc7): all four clients still

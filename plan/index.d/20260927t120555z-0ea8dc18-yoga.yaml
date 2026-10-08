@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: status-check-exits-zero-and-prints-completed-while-vault-is-down-and-launches-the-git-mirror-credential-less
+    field: status
+    value: completed
+    ts: "2026-09-27T12:05:55Z"
+    host: yoga
+
+events:
+  - packet_id: status-check-exits-zero-and-prints-completed-while-vault-is-down-and-launches-the-git-mirror-credential-less
+    event:
+      type: completed
+      ts: "2026-09-27T12:05:55Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 888548574 (bundle C on origin/linux-next; work/1437-dypk d5fc745dc an ancestor): --status-check prints status-check:ok | status-check:degraded:<reasons> before the unchanged 'status-check completed'; live on yoga Vault stopped -> degraded:mirror-identity-unprovisioned,mirror-credential-less, after --ensure-enclave -> ok with 0 warnings; the text pin extended on purpose; relay: headless 778 under tray,listen-vsock, 42 covering specs green bar the pre-existing preflight-front-door
+  - packet_id: status-check-exits-zero-and-prints-completed-while-vault-is-down-and-launches-the-git-mirror-credential-less
+    event:
+      type: note
+      ts: "2026-09-27T12:05:55Z"
+      host: yoga
+      summary: |-
+        landed and verified on trunk; a degraded status-check is now machine-readable (exit stays 0 by the criterion's token option)

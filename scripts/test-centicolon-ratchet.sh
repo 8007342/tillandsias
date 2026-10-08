@@ -24,12 +24,15 @@
 #                            -> retired=1, no warning
 #   8 a spec obsoleted with a registry tombstone -> retired=<its obligations>,
 #     no warning
-#   9 no spec corpus         -> "centicolon: blocked:…", rc 0, never R=0
+#   9 CRLF + mixed whitespace in last.txt still detects a state downgrade
+#  10 CRLF + mixed whitespace in last.txt remains monotone when state is equal
+#  11 successful grade with an empty grade.json -> old blocked advisory, rc 0
+#  12 no spec corpus         -> "centicolon: blocked:…", rc 0, never R=0
 # Pre-fix every arm FAILS: the script does not exist.
 
 set -uo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-RATCHET="$ROOT/scripts/check-centicolon-ratchet.sh"
+RATCHET="$ROOT/scripts/lua/check-centicolon-ratchet.lua"
 [ -f "$RATCHET" ] || { echo "fail:centicolon-ratchet:no-script:$RATCHET"; exit 1; }
 
 cd "$ROOT" || exit 1
@@ -66,7 +69,7 @@ green() {
     printf '{"ts":"2026-09-26T01:00:00Z","host":"fixture","step":"%s:a-file","status":"pass","digest":"%s"}\n' "$LP" \
         "$("${SHA[@]}" <"$H/openspec/litmus-tests/litmus-a.yaml" | cut -c1-64)" >"$WORK/log.jsonl"
 }
-run() { OUT="$(TILLANDSIAS_REPO_ROOT="$H" TILLANDSIAS_TIMING_LOG="$WORK/log.jsonl" bash "$RATCHET" "$@" 2>&1)"; RC=$?; LINE="$(grep '^centicolon:' <<<"$OUT")"; }
+run() { OUT="$(TILLANDSIAS_REPO_ROOT="$H" TILLANDSIAS_TIMING_LOG="$WORK/log.jsonl" "$PLAN" script run "$RATCHET" -- "$@" 2>&1)"; RC=$?; LINE="$(grep '^centicolon:' <<<"$OUT")"; }
 ID_A="cc:aaaa000a:$(printf 'Scenario a' | "${SHA[@]}" | cut -c1-8)"
 
 warns() { grep '^warn:centicolon-ratchet:' <<<"$OUT"; }
@@ -115,10 +118,34 @@ if grep -q ' retired=2 lost=0 .* regime=retired (advisory)$' <<<"$LINE" && [ -z 
     ok "8 spec obsoleted with a registry tombstone -> retired=2, no warning"
 else bad "8: [$LINE] $(warns)"; fi
 
+green; run
+: >"$WORK/log.jsonl"
+awk '{printf " \t%s\t%s  %s\t%s\r\n", $1, $2, $3, $4}' "$H/target/centicolon/last.txt" >"$WORK/last" && mv "$WORK/last" "$H/target/centicolon/last.txt"
+run --no-snapshot
+if [ "$(warns)" = "warn:centicolon-ratchet:lost=1:vanished=0,down=1:$ID_A" ] && grep -q ' regime=lost (advisory)$' <<<"$LINE"; then
+    ok "9 CRLF and mixed whitespace snapshot still detects a downgrade"
+else bad "9: [$LINE] $(warns)"; fi
+
+green; run
+awk '{printf "\t%s  %s\t%s %s\r\n", $1, $2, $3, $4}' "$H/target/centicolon/last.txt" >"$WORK/last" && mv "$WORK/last" "$H/target/centicolon/last.txt"
+run --no-snapshot
+if [ -z "$(warns)" ] && grep -q ' regime=monotone (advisory)$' <<<"$LINE"; then
+    ok "10 CRLF and mixed whitespace snapshot remains monotone when unchanged"
+else bad "10: [$LINE] $(warns)"; fi
+
+PORT="$WORK/port/scripts"; mkdir -p "$PORT/lua"
+cp "$RATCHET" "$PORT/lua/check-centicolon-ratchet.lua"
+printf '#!/usr/bin/env bash\nmkdir -p "$TILLANDSIAS_REPO_ROOT/target/centicolon"\n: > "$TILLANDSIAS_REPO_ROOT/target/centicolon/grade.json"\nprintf "ok:centicolon-grade:R=1 satisfied=1 denominator=1 declared=0 traced=0 positively_tested=1 records=1\\n"\n' >"$PORT/centicolon-grade.sh"
+chmod +x "$PORT/centicolon-grade.sh"
+OUT="$(TILLANDSIAS_REPO_ROOT="$H" "$PLAN" script run "$PORT/lua/check-centicolon-ratchet.lua" 2>&1)"; RC=$?; LINE="$(grep '^centicolon:' <<<"$OUT")"
+if [ "$RC" -eq 0 ] && [ "$LINE" = "centicolon: blocked:ok:centicolon-grade:R=1 satisfied=1 denominator=1 declared=0 traced=0 positively_tested=1 records=1 (advisory)" ]; then
+    ok "11 empty grade artifact preserves the shell's blocked advisory instead of parsing it"
+else bad "11: rc=$RC [$LINE]"; fi
+
 rm -rf "$H/openspec/specs"; run
-if [ "$RC" -eq 0 ] && grep -q '^centicolon: blocked:' <<<"$LINE" && ! grep -q 'R=0' <<<"$LINE"; then
-    ok "9 no corpus -> blocked, exit 0, never R=0"
-else bad "9: rc=$RC [$LINE]"; fi
+if [ "$RC" -eq 0 ] && grep -q '^centicolon: blocked:extractor:' <<<"$LINE" && ! grep -q 'R=0' <<<"$LINE"; then
+    ok "12 no corpus -> preserves the grade extractor suffix, exit 0, never R=0"
+else bad "12: rc=$RC [$LINE]"; fi
 
 if [ "$fail" -eq 0 ]; then echo "ok:centicolon-ratchet:$pass"; exit 0; fi
 echo "fail:centicolon-ratchet:$fail failed, $pass passed"; exit 1

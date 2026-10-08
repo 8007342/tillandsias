@@ -92,7 +92,7 @@ recorded.
 ## Litmus Tests
 
 The enumeration half of P5's proposed litmus already exists:
-`scripts/check-enclave-membership-documented.sh` (pinned by
+`scripts/lua/check-enclave-membership-documented.lua` (pinned by
 `litmus:enclave-membership-documented`) finds every enclave attach site and
 refuses any the enclave-network spec does not name. What it does NOT yet do is
 require each site to name a SCENARIO — that needs scenario constants in code,

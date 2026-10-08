@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lua-live-proc-spawn-streams-with-script-owned-cancellation-and-reaping
+    field: status
+    value: completed
+    ts: "2026-10-02T18:22:20Z"
+    host: macuahuitl
+
+events:
+  - packet_id: lua-live-proc-spawn-streams-with-script-owned-cancellation-and-reaping
+    event:
+      type: completed
+      ts: "2026-10-02T18:22:20Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 7b829b20583130067432069ecf0bc0586af4ce86 + forced ./build.sh --check PASS in1038.469s; PR #207 MERGED28c098393d234e67bedb118e0e97e93e1204fac1; parent default-parallel83Lua/policy+28executor+3scriptunit tests and7shell checks pass; independent ACK deadline exit124at705.949ms, directchildgone/descendantstopped/no late markers; advisory markertrue-to-false; liveCLI producer released by callback ACK
+  - packet_id: lua-live-proc-spawn-streams-with-script-owned-cancellation-and-reaping
+    event:
+      type: note
+      ts: "2026-10-02T18:22:20Z"
+      host: macuahuitl
+      summary: |-
+        Closed by linux-macuahuitl-opencode-20261002t053211z after source review, independent runtime/cleanup/advisory controls, behavior-preserving strict supervisor lint repair without new waivers, complete additive ledger fold, forced integration status exited0 and confirmed remote ancestry. Bounded same-thread callbacks are live, not capture replay; legacy script process doors share lifetime owner. Native Mac/Windows, composition1538, trace1539, deliberate group escapes and runner reaping of grandchildren are not claimed; 1384 remains open. Full gate is not all-litmus validation.

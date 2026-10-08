@@ -67,6 +67,7 @@ fn capability_tokens() -> Vec<&'static str> {
 /// order exists to surface.
 const DISPATCH_ARMS: &[&str] = &[
     "set-field",
+    "session-tokens",
     "append-event",
     "answer",
     "arrival-routing-check",
@@ -78,6 +79,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "capabilities",
     "capability-matrix",
     "carry-forward-check",
+    "carry-forward-check-batch",
     "check",
     "closure-evidence-check",
     "collect",
@@ -87,6 +89,8 @@ const DISPATCH_ARMS: &[&str] = &[
     "declared-closures-check",
     "dependencies-of",
     "decompose",
+    "discipline",
+    "policy",
     "expert-serve",
     "expire-claims",
     "plan-events",
@@ -107,6 +111,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "methodology-ask",
     "metrics-log-path",
     "methodology-index",
+    "msg",
     "next",
     "next-order",
     "validator-surface-hash",
@@ -232,6 +237,13 @@ const USAGE: &str = concat!(
     "                                     events block, so PROSE that quotes the marker inside a\n",
     "                                     block scalar is never read as a declaration. Backs the\n",
     "                                     closure-event pass of check-fragment-status-loss.sh.\n",
+    "           carry-forward-check-batch <fragment.yaml>...\n",
+    "                                     ORDER 1500-gu5r. carry-forward-check over MANY\n",
+    "                                     fragments in one process: one tab-separated line per\n",
+    "                                     result — `<path>\\tparsed`, `<path>\\tgap\\t<id>`,\n",
+    "                                     `<path>\\tunreadable\\t2`, `<path>\\tunparseable\\t3` —\n",
+    "                                     in argument order, exit 0. The per-file arm below is\n",
+    "                                     unchanged; a caller probes for this name and falls back.\n",
     "           carry-forward-check <fragment.yaml>\n",
     "                                     ORDER 831-ezea. Print the packet_ids this fragment\n",
     "                                     TOUCHED (has an event for) and LEFT OPEN (no terminal\n",
@@ -419,6 +431,40 @@ const USAGE: &str = concat!(
     "                                     then answer it. Unrouted questions are unsupported.\n",
     "           methodology-index [--root D]\n",
     "                                     every indexed path with its file:line (the query surface)\n",
+    "           session-tokens [--since <utc>] [--transcript <path>]\n",
+    "                                     ORDER 1437-3pj7. This session's BILLED tokens from the harness\n",
+    "                                     transcript (message.usage, deduplicated by message.id), plus the\n",
+    "                                     sub-agent totals; source=absent or absent:schema-drift:<field>\n",
+    "                                     with zeros when it cannot measure. Never a guess.\n",
+    "           discipline show [--json] | target --platform <p> | check-ref <ref> | derive [--json]  [--root D] [--seed F]\n",
+    "                                     ORDER 1446-664f: derive observes the project (origin HEAD, integration\n",
+    "                                     branches, work refs, author emails, PR merges, hooks) and prints\n",
+    "                                     derived=<n> seed=<n|none> effective=<n>; an enforced rule refuses only\n",
+    "                                     when its qualifier is observed, else warns :seed-ahead-of-reality.\n",
+    "                                     Observations read the checkout's refs as of its LAST FETCH:\n",
+    "                                     `git fetch origin` first (a note: line says when nothing was fetched).\n",
+    "                                     ORDER 1443-w79y. The branch-discipline seed\n",
+    "                                     (.tillandsias/branch-discipline.yaml): level, per-rule\n",
+    "                                     enforcement, integration branch per platform, ref grammar.\n",
+    "                                     No seed = level 0 advised: nothing is refused. check-ref exits\n",
+    "                                     1 only when an ENFORCED rule refuses the ref.\n",
+    "           policy eval [--host-kind bare-metal|forge|ci] [--regime R] [--caller C] [--cwd D]\n",
+    "                       [--root D] [--seed F] -- <argv...>  |  policy show [--root D] [--seed F]\n",
+    "                                     ORDER 1443-isrk. The command policy: allow | deny | consent for\n",
+    "                                     one argv, from a compiled-in floor (no-shell-strings,\n",
+    "                                     no-credential-mutation, soft-/hard-reset, workspace-destroy,\n",
+    "                                     force-push) plus .tillandsias/command-policies.yaml, which can\n",
+    "                                     only tighten it. Token on stdout, why:/remedy: on stderr;\n",
+    "                                     exit 0 allow, 1 deny, 4 consent.\n",
+    "           msg whoami|send|recv|list|status|lint|gc [--lane <lane>]\n",
+    "                                     ORDER 1506-nvqt. The fleet message bus's LOCAL store: send\n",
+    "                                     (body on stdin or --body-file, never argv) checks the 600-byte/\n",
+    "                                     8-line shape, refuses secret-shaped bodies and out-of-bounds\n",
+    "                                     --ttl (60..604800, default 86400), resolves --to lists and\n",
+    "                                     @groups from plan/fleet/, and prints ok:msg:queued:<id> at once;\n",
+    "                                     status reads the receipt (pending | acked:<mailbox>@<ts> +\n",
+    "                                     via:<rung> | undelivered:<reason>). There is no ack verb: the\n",
+    "                                     ack is the infrastructure's. `msg` alone prints the grammar.\n",
     "           metrics-log-path <basename> [repo-root]\n",
     "                                     ORDER 1125-92xa. Where THIS BINARY would put a metrics log:\n",
     "                                     <checkout>/.cache/metrics/<basename>, falling back to /tmp when\n",
@@ -970,6 +1016,57 @@ fn field_is_list(packet: &serde_yaml::Value, field: &str) -> bool {
         .is_some()
 }
 
+/// ORDER 1367-2sbc — the story a live claim was made under, read from the
+/// winning status entry's own span (`story:` beside its `host:`). Read lazily on
+/// the claim path rather than carried through the fold and its cache.
+fn claim_story_of(
+    ledger: &tillandsias_plan::Ledger,
+    frag_dir: &std::path::Path,
+    pid: &str,
+) -> Option<String> {
+    let src = ledger.field_source_of(pid, "status")?;
+    let text = std::fs::read_to_string(frag_dir.join(&src.fragment_name)).ok()?;
+    text.lines()
+        .skip(src.line_start.saturating_sub(1))
+        .take(src.line_end + 1 - src.line_start)
+        .find_map(|l| {
+            l.trim()
+                .strip_prefix("story:")
+                .map(|v| v.trim().to_string())
+        })
+        .filter(|v| !v.is_empty())
+}
+
+/// ORDER 1367-2sbc — the WIP limit lives in ONE place, the methodology rule
+/// (`packet_discipline.wip_limit`). Returned with where it came from, so a
+/// refusal on a scratch ledger that has no methodology says it used the default.
+fn wip_limit_of(index: &std::path::Path) -> (usize, String) {
+    const DEFAULT: usize = 3;
+    let rule = index
+        .parent()
+        .and_then(|plan| plan.parent())
+        .map(|root| root.join("methodology/distributed-work.yaml"));
+    let read = rule.as_ref().and_then(|p| {
+        let doc: serde_yaml::Value =
+            serde_yaml::from_str(&std::fs::read_to_string(p).ok()?).ok()?;
+        doc.get("distributed_work")
+            .unwrap_or(&doc)
+            .get("packet_discipline")?
+            .get("wip_limit")?
+            .as_u64()
+    });
+    match read {
+        Some(n) => (
+            n as usize,
+            "methodology/distributed-work.yaml packet_discipline.wip_limit".into(),
+        ),
+        None => (
+            DEFAULT,
+            "the built-in default; no packet_discipline.wip_limit was readable".into(),
+        ),
+    }
+}
+
 fn resolve_writer_host() -> String {
     writer_host_from(std::env::var("TILLANDSIAS_HOST_KIND").ok())
 }
@@ -1498,12 +1595,32 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
         // would report "no rows are marked" — the answer that looks like
         // success.
         "must_ship",
+        // ORDER 1443-qwpj. scripts/verify-closure.sh runs a packet's OWN
+        // closure command and compares the printed output — the acceptance
+        // an orchestrator runs instead of reading a delegate's "met". It
+        // needs the FOLDED closure (a set-field correction wins), and this
+        // projection is the only surface that folds; without the key the
+        // tool would have to re-implement the fold in shell.
+        "verifiable_closure",
     ] {
         if let Some(value) = packet.get(key) {
             obj.insert(
                 key.to_string(),
                 serde_json::to_value(value).unwrap_or(serde_json::Value::Null),
             );
+        }
+    }
+    // ORDER 1437-khnx. The tier-routing scalars, projected so the selector
+    // (1437-vdz5) can read them — the must_ship lesson above: a field a
+    // consumer reads must be HERE or it is writable and unreadable. Read via
+    // tier_field, so the notes-line shape of today's rows projects the same.
+    // NEVER DEFAULTED HERE (designer correction 2026-09-27): an untagged row
+    // stays absent, so a reader can tell a filed opus from an unfiled row.
+    // The operator's "No size tags get Opus" is applied by the selector
+    // (1437-vdz5), which is the only place a missing tier means anything.
+    for (field, _) in tillandsias_plan::TIER_FIELDS {
+        if let Some(value) = tillandsias_plan::tier_field(packet, field) {
+            obj.insert(field.to_string(), serde_json::Value::String(value));
         }
     }
     // ORDER 706-ddw6. Project active lease information directly.
@@ -2574,15 +2691,20 @@ pub fn metrics_default_log(basename: &str, repo_root: Option<&Path>) -> PathBuf 
     // Mirrors metrics_default_log() in scripts/metrics-log-path.sh: a writable
     // checkout wins, /tmp is the documented fallback for a forge or an
     // out-of-repo call. `.git` may be a directory (normal clone) or a file (a
-    // worktree or submodule), and the shell's `-d` test accepts only the first;
-    // `exists()` here would answer differently inside a linked worktree, so this
-    // deliberately matches the shell's is_dir check rather than improving on it.
+    // linked worktree or submodule).
+    //
+    // ORDER 1455-d7hc: the shell rule's predicate is `[ -e "$1/.git" ]`
+    // (_metrics_is_checkout, since 1268-m2ir), which ACCEPTS a worktree's `.git`
+    // file. This side used to say the shell tested `-d` and kept is_dir to match
+    // it; that premise went stale when the shell moved to -e, and from then on
+    // a linked worktree's writer went to /tmp while its reader read the
+    // checkout, so metrics written there were read by nobody.
     let root = match repo_root {
         Some(r) => Some(r.to_path_buf()),
         None => find_repo_root(),
     };
     if let Some(root) = root
-        && root.join(".git").is_dir()
+        && root.join(".git").exists()
     {
         let dir = root.join(".cache").join("metrics");
         if std::fs::create_dir_all(&dir).is_ok() {
@@ -2615,7 +2737,14 @@ fn find_repo_root() -> Option<PathBuf> {
     // .../<checkout>/target/{debug,release}/tillandsias-plan -> pop to the file's dir
     dir.pop();
     loop {
-        if dir.join(".git").is_dir() {
+        // ORDER 1454-ssg3: `.git` is a DIRECTORY in a clone and a FILE in a
+        // linked worktree ("gitdir: …"). Requiring a directory made every binary
+        // built in a worktree answer `unknown:validator-surface` (no checkout
+        // above it), so the currency probe could not run there on any platform;
+        // it presented as a darwin red only because that host measures in
+        // worktrees. metrics_default_log keeps its own is_dir test on purpose
+        // (it mirrors the shell's `-d`), so it still falls back to /tmp there.
+        if dir.join(".git").exists() {
             return Some(dir);
         }
         if !dir.pop() {
@@ -3596,6 +3725,33 @@ fn dispatch_fragment_only(subcommand: &str, args: &[String]) -> bool {
             // be pure waste (the same reason the fragment-* arms moved here).
             true
         }
+        "carry-forward-check-batch" => {
+            // ORDER 1500-gu5r. The per-file arm below, over many fragments in ONE
+            // process. scripts/check-carry-forward.sh used to spawn this binary
+            // once per fragment (3,300+): 13 s on yoga, over the preflight door's
+            // 5 s deadline. Same parse, same carry_forward_gaps, same verdict per
+            // file; the caller reconstructs its counts and messages from these
+            // lines, in argument order, so its output is unchanged.
+            for path in args.iter().skip(1) {
+                let raw = match std::fs::read_to_string(path) {
+                    Ok(r) => r,
+                    Err(_) => {
+                        println!("{path}\tunreadable\t2");
+                        continue;
+                    }
+                };
+                match serde_yaml::from_str::<serde_yaml::Value>(&raw) {
+                    Ok(doc) => {
+                        println!("{path}\tparsed");
+                        for id in carry_forward_gaps(&doc) {
+                            println!("{path}\tgap\t{id}");
+                        }
+                    }
+                    Err(_) => println!("{path}\tunparseable\t3"),
+                }
+            }
+            true
+        }
         "carry-forward-check" => {
             // ORDER 831-ezea. See [`carry_forward_gaps`] for the contract. This
             // arm is IO only: read, parse, print one packet_id per line, exit 0.
@@ -4084,11 +4240,38 @@ fn print_lua_returns(vals: mlua::MultiValue) {
     }
 }
 
+/// ORDER 1393-aa7v: put the C runtime's stdout in BINARY mode on Windows.
+///
+/// Lua's `print` and `io.write` write through C stdio, and on Windows the CRT
+/// opens stdout in TEXT mode, which turns every "\n" into "\r\n". So one script
+/// printed different bytes per platform (measured: "nil\ttrue\r\n" on native
+/// Windows against "nil\ttrue\n" on Linux), against the determinism rule that
+/// a script is one byte stream everywhere (1384-bp6t). Binary mode is a no-op
+/// for Rust's own writers, which go to the handle directly, so println! output
+/// was always LF and still is.
+#[cfg(windows)]
+fn lua_stdout_binary_mode() {
+    unsafe extern "C" {
+        fn _setmode(fd: i32, mode: i32) -> i32;
+    }
+    const STDOUT_FD: i32 = 1;
+    const O_BINARY: i32 = 0x8000;
+    // SAFETY: _setmode on the process's own stdout descriptor; a failure
+    // (-1, e.g. no stdout) leaves the mode unchanged and is harmless.
+    unsafe {
+        _setmode(STDOUT_FD, O_BINARY);
+    }
+}
+
+#[cfg(not(windows))]
+fn lua_stdout_binary_mode() {}
+
 fn run_lua_cli(args: &[String]) {
     if args.is_empty() {
         eprintln!("usage: tillandsias-plan lua <script.lua | -e code> [args...]");
         std::process::exit(2);
     }
+    lua_stdout_binary_mode();
 
     if std::env::var_os("TILLANDSIAS_PLAN_BIN").is_none()
         && let Ok(exe) = std::env::current_exe()
@@ -4331,6 +4514,803 @@ fn run_predicate_cli(args: &[String]) {
     }
 }
 
+/// ORDER 1443-w79y — `discipline show [--json] | target --platform <p> |
+/// check-ref <ref>`, each accepting `--root <dir>` and `--seed <path>`.
+/// Every answer names its source, level and the rule's enforcement. Exit 0
+/// on every answer except a check-ref the seed REFUSES (exit 1); 2 on usage.
+/// ORDER 1443-isrk. `policy eval [--host-kind k] [--regime r] [--caller c]
+/// [--cwd d] [--root dir] [--seed path] -- <argv...>` and `policy show`.
+///
+/// eval: the verdict token on stdout; for a deny or consent, `  why:` and
+/// `  remedy:` on stderr. Exit 0 allow, 1 deny, 4 consent, 2 usage. A refused
+/// seed is named on stderr (`refused:policy-seed:<reason>`) and the answer
+/// comes from the floor alone.
+/// ORDER 1443-8pur — `tillandsias-plan run [--cwd P] [--env K=V]…
+/// [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>`.
+///
+/// The policy decides on argv before anything spawns. In this (plain) form the
+/// child's stdout and stderr pass through byte for byte and the verb exits with
+/// the child's code: 124 for a deadline, 128+N for signal N, 127 when the
+/// program could not be started. A refusal prints refused:policy:<rule> (or
+/// consent:policy:<class>) with why:/remedy: on stderr and exits 1 (deny) or 4
+/// (consent); no child was spawned. A clipped capture is named on stderr.
+fn run_run_verb(args: &[String]) -> ! {
+    use tillandsias_plan::run_verb as rv;
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan run [--json] [--caller run|mcp] [--cwd P] [--env K=V]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>\n\
+             \x20 argv is argv: there is no command-string form and no --shell.\n\
+             \x20 --json prints one object (run_id,status,code,signal,ok,stdout,stderr,truncated,wall_ms,argv,policy) and\n\
+             \x20 exits 0 whenever a child ran, 1 for a policy refusal, 4 for consent, 2 for usage.\n\
+             \x20 WITHOUT --json the verb mirrors the child's exit code, so a refusal (1) and a child's own exit 1\n\
+             \x20 cannot be told apart by the code: a caller that must tell them apart uses --json.\n\
+             \x20 --timeout-ms defaults to 300000 (300 s); a long run (a full gate) MUST pass its own, or 0 for none.\n\
+             \x20 --caller names the door in the audit log: run (default) or mcp (project-info run_command).\n\
+             \x20 A child the verb kills (the deadline) is timed_out on every locus. {}: on Windows a child\n\
+             \x20 killed from OUTSIDE (MSYS kill) reads as exited with the MSYS code (2304 for SIGKILL), undecoded.",
+            rv::WINDOWS_EXTERNAL_KILL_LIMIT
+        );
+        std::process::exit(2);
+    };
+    let mut spec = rv::RunSpec::new(Vec::new());
+    let mut json = false;
+    let mut caller = "run";
+    let mut i = 0;
+    let mut saw_dd = false;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--" {
+            if !spec.argv.is_empty() && i + 1 < args.len() {
+                eprintln!("error: argv came from --argv-json; do not also pass it after --");
+                std::process::exit(2);
+            }
+            if spec.argv.is_empty() {
+                spec.argv = args[i + 1..].to_vec();
+            }
+            saw_dd = true;
+            break;
+        }
+        if a == "--json" {
+            json = true;
+            i += 1;
+            continue;
+        }
+        // Slice 3: `--argv-json -` reads argv as a JSON array of strings on
+        // stdin, so NO argument is on the command line for MSYS or wsl.exe to
+        // convert (1425-8wir's `\.` → `/.`, the smoke-e2e poweroff).
+        if a == "--argv-json" {
+            if args.get(i + 1).map(String::as_str) != Some("-") {
+                eprintln!("error: --argv-json takes `-` (the array is read from stdin)");
+                std::process::exit(2);
+            }
+            let mut input = String::new();
+            let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input);
+            let parsed: Result<Vec<String>, _> = serde_json::from_str(&input);
+            match parsed {
+                Ok(v) if !v.is_empty() => spec.argv = v,
+                _ => {
+                    eprintln!(
+                        "error: --argv-json - expects a non-empty JSON array of strings on stdin, e.g. [\"git\",\"status\"]"
+                    );
+                    std::process::exit(2);
+                }
+            }
+            saw_dd = true;
+            i += 2;
+            continue;
+        }
+        let Some(v) = args.get(i + 1) else { usage() };
+        match a {
+            // The door's name in the audit (1443-r4cj ruling): a CLOSED set, so no
+            // caller can pass as the Bash bridge (pretooluse) whose count retires it.
+            "--caller" => match v.as_str() {
+                "run" => caller = "run",
+                "mcp" => caller = "mcp",
+                _ => usage(),
+            },
+            "--cwd" => spec.cwd = Some(PathBuf::from(v)),
+            "--env" => {
+                let Some((k, val)) = v.split_once('=') else {
+                    usage()
+                };
+                if k.is_empty() {
+                    usage();
+                }
+                spec.env.push((k.to_string(), val.to_string()));
+            }
+            "--timeout-ms" => spec.timeout_ms = v.parse().unwrap_or_else(|_| usage()),
+            "--capture-bytes" => {
+                let n: usize = v.parse().unwrap_or_else(|_| usage());
+                if n == 0 {
+                    usage();
+                }
+                spec.capture_bytes = Some(n);
+            }
+            "--stdin-file" => match std::fs::read(v) {
+                Ok(b) => spec.stdin = Some(b),
+                Err(e) => {
+                    eprintln!("error: --stdin-file {v}: {e}");
+                    std::process::exit(2);
+                }
+            },
+            _ => usage(),
+        }
+        i += 2;
+    }
+    if !saw_dd || spec.argv.is_empty() {
+        usage();
+    }
+    let outcome = rv::execute(&spec, caller);
+    if json {
+        let (value, code) = rv::outcome_json(&spec, &outcome);
+        println!("{value}");
+        std::process::exit(code);
+    }
+    match outcome {
+        rv::RunOutcome::Refused(d) => {
+            eprintln!("{}", d.token);
+            if let Some(w) = &d.why {
+                eprintln!("why: {w}");
+            }
+            if let Some(r) = &d.remedy {
+                eprintln!("remedy: {r}");
+            }
+            std::process::exit(d.exit_code());
+        }
+        rv::RunOutcome::SpawnFailed { error, .. } => {
+            eprintln!("error: {error}");
+            std::process::exit(127);
+        }
+        // Started, but no status could be collected: 125, never a child code.
+        rv::RunOutcome::NoStatus { reason, .. } => {
+            eprintln!("no_status: {reason}");
+            std::process::exit(125);
+        }
+        rv::RunOutcome::Ran { output, .. } => {
+            use std::io::Write;
+            let _ = std::io::stdout().write_all(&output.stdout);
+            let _ = std::io::stderr().write_all(&output.stderr);
+            if output.truncated {
+                eprintln!(
+                    "note:run:truncated dropped={} (raise --capture-bytes; --json reports truncated:true and ok:false)",
+                    output.dropped
+                );
+            }
+            std::process::exit(match output.completion {
+                tillandsias_exec::Completion::Exited(c) => c,
+                tillandsias_exec::Completion::Signaled(s) => 128 + s,
+                tillandsias_exec::Completion::TimedOut { .. } => 124,
+            });
+        }
+    }
+}
+
+/// ORDER 1443-we89 — `policy classify-bash`: the Bash-tool bridge.
+///   --hook       read Claude Code's PreToolUse JSON on stdin and answer in its
+///                contract: deny = exit 2 with the refusal on stderr; ask =
+///                stdout {"hookSpecificOutput":{…"permissionDecision":"ask"…}};
+///                allow = exit 0, silent. TILLANDSIAS_PRETOOLUSE_HOOK=off allows
+///                everything and logs kill_switch=1.
+///   --status     decisions=<deny>/<ask>/<allow> and the retirement condition
+///   --command C  classify C directly: the verdict line (and why:/remedy:),
+///                exit 0 allow, 1 deny, 4 ask. [--cwd D] [--host-kind K]
+fn run_classify_bash(args: &[String]) -> ! {
+    use tillandsias_plan::bash_policy as bp;
+    use tillandsias_plan::command_policy as cp;
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan policy classify-bash --hook | --status | --command <cmd> [--cwd dir] [--host-kind bare-metal|forge|ci]"
+        );
+        std::process::exit(2);
+    };
+    match args.first().map(String::as_str) {
+        Some("--status") => {
+            let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let root = tillandsias_plan::branch_discipline::find_root(&cwd).unwrap_or(cwd);
+            let (d, a, al, k) = bp::status_counts(&root);
+            println!("decisions={d}/{a}/{al} (deny/ask/allow) kill_switch_uses={k}");
+            println!("log: {} (caller=pretooluse)", bp::log_path(&root).display());
+            println!("retirement condition (all three):");
+            for line in bp::RETIREMENT_CONDITION {
+                println!("  {line}");
+            }
+            std::process::exit(0);
+        }
+        Some("--hook") => {
+            let mut input = String::new();
+            let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input);
+            let v: serde_json::Value = serde_json::from_str(&input).unwrap_or_default();
+            let tool = v.get("tool_name").and_then(|x| x.as_str()).unwrap_or("");
+            let cmd = v
+                .pointer("/tool_input/command")
+                .and_then(|x| x.as_str())
+                .unwrap_or("");
+            let cwd = v
+                .get("cwd")
+                .and_then(|x| x.as_str())
+                .map(PathBuf::from)
+                .or_else(|| std::env::current_dir().ok())
+                .unwrap_or_else(|| PathBuf::from("."));
+            let ctx = bp::context_for(&cwd);
+            if std::env::var("TILLANDSIAS_PRETOOLUSE_HOOK").as_deref() == Ok("off") {
+                bp::log_decision(&ctx, cmd, "allow", "kill-switch", true);
+                std::process::exit(0);
+            }
+            // Anything that is not a Bash command is not this bridge's business.
+            if tool != "Bash" || cmd.is_empty() {
+                std::process::exit(0);
+            }
+            let c = bp::classify(cmd, &ctx);
+            bp::log_decision(&ctx, cmd, c.verdict.as_str(), &c.rule, false);
+            match c.verdict {
+                bp::Verdict::Allow => std::process::exit(0),
+                bp::Verdict::Deny => {
+                    eprintln!("{}", c.token);
+                    if let Some(w) = &c.why {
+                        eprintln!("why: {w}");
+                    }
+                    if let Some(r) = &c.remedy {
+                        eprintln!("remedy: {r}");
+                    }
+                    std::process::exit(2);
+                }
+                bp::Verdict::Ask => {
+                    let reason = format!(
+                        "{} — {} — {}",
+                        c.token,
+                        c.why.unwrap_or_default(),
+                        c.remedy.unwrap_or_default()
+                    );
+                    println!(
+                        "{}",
+                        serde_json::json!({"hookSpecificOutput": {
+                            "hookEventName": "PreToolUse",
+                            "permissionDecision": "ask",
+                            "permissionDecisionReason": reason,
+                        }})
+                    );
+                    std::process::exit(0);
+                }
+            }
+        }
+        Some("--command") => {
+            let Some(cmd) = args.get(1) else { usage() };
+            let mut cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let mut host: Option<cp::HostKind> = None;
+            let mut i = 2;
+            while i < args.len() {
+                let Some(v) = args.get(i + 1) else { usage() };
+                match args[i].as_str() {
+                    "--cwd" => cwd = PathBuf::from(v),
+                    "--host-kind" => host = cp::HostKind::parse(v).or_else(|| usage()),
+                    _ => usage(),
+                }
+                i += 2;
+            }
+            let mut ctx = bp::context_for(&cwd);
+            if let Some(h) = host {
+                ctx.host_kind = h;
+            }
+            let c = bp::classify(cmd, &ctx);
+            println!("{}", c.token);
+            if let Some(w) = &c.why {
+                println!("why: {w}");
+            }
+            if let Some(r) = &c.remedy {
+                println!("remedy: {r}");
+            }
+            std::process::exit(match c.verdict {
+                bp::Verdict::Allow => 0,
+                bp::Verdict::Deny => 1,
+                bp::Verdict::Ask => 4,
+            });
+        }
+        _ => usage(),
+    }
+}
+
+fn run_policy(args: &[String]) -> ! {
+    use tillandsias_plan::command_policy as cp;
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan policy eval [--host-kind bare-metal|forge|ci] [--regime interactive|gate|fixture|hook|relay] [--caller c] [--cwd dir] [--root dir] [--seed path] -- <argv...>\n       tillandsias-plan policy show [--root dir] [--seed path]\n       tillandsias-plan policy audit [--since 24h|7d|30m] [--caller c] [--root dir]\n       tillandsias-plan policy consent grant <soft-reset|hard-reset|workspace-destroy|force-push> [--ttl 30m] [--root dir] -- <argv...>   (the OPERATOR, on the host)\n       tillandsias-plan policy classify-bash --hook | --status | --command <cmd>"
+        );
+        std::process::exit(2);
+    };
+    let Some(verb) = args.first() else { usage() };
+    if verb == "classify-bash" {
+        run_classify_bash(&args[1..]);
+    }
+    // ORDER 1443-w9hf — `policy audit [--since 24h|7d|…] [--caller c] [--root dir]`:
+    // one line per (rule_id, decision) with its count, then the total. With no
+    // log: ok:policy-audit:empty, exit 0.
+    if verb == "audit" {
+        let mut since: Option<chrono::Duration> = None;
+        let mut caller: Option<String> = None;
+        let mut root: Option<PathBuf> = None;
+        let mut i = 1;
+        while i < args.len() {
+            let Some(v) = args.get(i + 1) else { usage() };
+            match args[i].as_str() {
+                "--since" => since = Some(cp::parse_since(v).unwrap_or_else(|| usage())),
+                "--caller" => caller = Some(v.clone()),
+                "--root" => root = Some(PathBuf::from(v)),
+                _ => usage(),
+            }
+            i += 2;
+        }
+        let root = root
+            .or_else(|| {
+                std::env::current_dir()
+                    .ok()
+                    .and_then(|c| tillandsias_plan::branch_discipline::find_root(&c))
+            })
+            .unwrap_or_else(|| PathBuf::from("."));
+        let path = cp::audit_log_path(&root);
+        match cp::audit_summary(&path, since, caller.as_deref()) {
+            None => {
+                println!("ok:policy-audit:empty");
+                eprintln!("  no audit log at {}", path.display());
+            }
+            Some(rows) if rows.is_empty() => println!("ok:policy-audit:empty"),
+            Some(rows) => {
+                let mut total = 0;
+                for ((rule, decision), n) in &rows {
+                    println!("{n} {rule} {decision}");
+                    total += n;
+                }
+                println!("total={total}");
+            }
+        }
+        std::process::exit(0);
+    }
+    // ORDER 1443-9f5w — `policy consent grant <class> [--ttl 30m] [--root dir]
+    // -- <argv…>`: the OPERATOR approves ONE run of exactly that argv on this
+    // host. Refused in a forge or CI (the variable or the evidence), and for an
+    // argv that is not of that class here.
+    if verb == "consent" {
+        if args.get(1).map(String::as_str) != Some("grant") {
+            usage()
+        }
+        let Some(class) = args.get(2).cloned() else {
+            usage()
+        };
+        let mut ttl = chrono::Duration::seconds(cp::CONSENT_DEFAULT_TTL_SECS);
+        let mut root: Option<PathBuf> = None;
+        let mut argv: Vec<String> = Vec::new();
+        let mut i = 3;
+        while i < args.len() {
+            let a = args[i].as_str();
+            if a == "--" {
+                argv = args[i + 1..].to_vec();
+                break;
+            }
+            let Some(v) = args.get(i + 1) else { usage() };
+            match a {
+                "--ttl" => match cp::parse_since(v) {
+                    Some(d)
+                        if d.num_seconds() > 0 && d.num_seconds() <= cp::CONSENT_MAX_TTL_SECS =>
+                    {
+                        ttl = d
+                    }
+                    _ => {
+                        eprintln!("error: --ttl takes 1s..24h, e.g. 30m");
+                        std::process::exit(2);
+                    }
+                },
+                "--root" => root = Some(PathBuf::from(v)),
+                _ => usage(),
+            }
+            i += 2;
+        }
+        if !cp::CONSENT_CLASSES.contains(&class.as_str()) {
+            println!("refused:consent:unknown-class:{class}");
+            eprintln!("  classes: {}", cp::CONSENT_CLASSES.join(", "));
+            std::process::exit(1);
+        }
+        if argv.is_empty() {
+            println!("refused:consent:no-argv");
+            eprintln!(
+                "  a token approves ONE run of an exact argv: tillandsias-plan policy consent grant {class} -- <argv…>"
+            );
+            std::process::exit(1);
+        }
+        let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let root = root
+            .or_else(|| tillandsias_plan::branch_discipline::find_root(&here))
+            .unwrap_or_else(|| here.clone());
+        let ctx = cp::ConsentCtx::from_env(&root);
+        let env_kind = std::env::var("TILLANDSIAS_HOST_KIND").ok();
+        if let Some(r) = cp::grant_refusal(env_kind.as_deref(), ctx.evidence) {
+            println!("{r}");
+            eprintln!(
+                "  why: a consent token is the operator's approval on the host; a forge or CI cannot commit operator spend (operator ruling 3, 2026-09-27)"
+            );
+            std::process::exit(1);
+        }
+        // The argv must be of this class HERE, so a token cannot be minted for
+        // something the floor would not ask about.
+        let protected = cp::protected_refs(&root);
+        let (loaded, load) = cp::load_seed(&root, None, &protected);
+        let req = cp::Request {
+            argv: argv.clone(),
+            cwd: here,
+            workspace: root,
+            host_kind: cp::HostKind::BareMetal,
+            regime: "interactive".into(),
+            caller: "consent-grant".into(),
+        };
+        let d = cp::decide_loaded(&req, loaded.as_ref(), &load, &protected);
+        if d.strictness != cp::Strictness::Consent || d.rule_id != class {
+            println!("refused:consent:argv-not-in-class:{class}");
+            eprintln!("  this argv answers {} here, not consent:{class}", d.token);
+            std::process::exit(1);
+        }
+        match cp::consent_grant(&ctx, &class, &argv, ttl.num_seconds()) {
+            Ok((path, until)) => {
+                println!(
+                    "ok:consent:{class}:until={}",
+                    until.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+                );
+                eprintln!("  token: {}", path.display());
+                eprintln!(
+                    "  approves ONE run of exactly this argv on {}; spent by the first matching run, deleted if it expires unused",
+                    ctx.host
+                );
+                std::process::exit(0);
+            }
+            Err(e) => {
+                println!("refused:consent:store:{}", e.kind());
+                eprintln!("  {}: {e}", ctx.dir.display());
+                std::process::exit(1);
+            }
+        }
+    }
+    let mut host_kind: Option<cp::HostKind> = None;
+    let mut regime = "interactive".to_string();
+    let mut caller = "cli".to_string();
+    let mut cwd: Option<PathBuf> = None;
+    let mut root: Option<PathBuf> = None;
+    let mut seed: Option<PathBuf> = None;
+    let mut argv: Vec<String> = Vec::new();
+    let mut i = 1;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if a == "--" {
+            argv = args[i + 1..].to_vec();
+            break;
+        }
+        let Some(v) = args.get(i + 1) else { usage() };
+        match a {
+            "--host-kind" => match cp::HostKind::parse(v) {
+                Some(k) => host_kind = Some(k),
+                None => usage(),
+            },
+            "--regime" => {
+                if !cp::REGIMES.contains(&v.as_str()) {
+                    usage()
+                }
+                regime = v.clone();
+            }
+            "--caller" => caller = v.clone(),
+            "--cwd" => cwd = Some(PathBuf::from(v)),
+            "--root" => root = Some(PathBuf::from(v)),
+            "--seed" => seed = Some(PathBuf::from(v)),
+            _ => usage(),
+        }
+        i += 2;
+    }
+    let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let root = root
+        .or_else(|| tillandsias_plan::branch_discipline::find_root(&here))
+        .unwrap_or_else(|| here.clone());
+    let protected = cp::protected_refs(&root);
+    let (loaded, load) = cp::load_seed(&root, seed.as_deref(), &protected);
+    match verb.as_str() {
+        "show" => {
+            println!("{}", load.verdict());
+            for r in cp::FLOOR_RULES {
+                println!("floor:{r}");
+            }
+            if let Some(s) = &loaded {
+                let d = match &s.default {
+                    cp::DefaultPolicy::Allow => "allow".to_string(),
+                    cp::DefaultPolicy::Deny => "deny".to_string(),
+                    cp::DefaultPolicy::DenyAfterQuietDays(n) => format!(
+                        "deny_after_quiet_days={n} (not active: the flip reads the audit, 1443-w9hf)"
+                    ),
+                };
+                println!("default:{d}");
+                for r in &s.rules {
+                    println!("seed:{}", r.id);
+                }
+            }
+            std::process::exit(if matches!(load, cp::SeedLoad::Refused(_)) {
+                1
+            } else {
+                0
+            });
+        }
+        "eval" => {
+            if argv.is_empty() {
+                usage()
+            }
+            if let cp::SeedLoad::Refused(_) = load {
+                eprintln!("{}", load.verdict());
+            }
+            let reading = match host_kind {
+                Some(k) => cp::HostKindReading {
+                    kind: k,
+                    source: "flag",
+                    disagreement: None,
+                },
+                None => cp::read_host_kind(&root),
+            };
+            if let Some(dis) = &reading.disagreement {
+                eprintln!("  host_kind: {} ({dis})", reading.kind.as_str());
+            }
+            let req = cp::Request {
+                argv,
+                cwd: cwd.unwrap_or(here),
+                workspace: root,
+                host_kind: reading.kind,
+                regime,
+                caller,
+            };
+            let d = cp::decide_loaded(&req, loaded.as_ref(), &load, &protected);
+            cp::audit_decision(&req, &d, None);
+            println!("{}", d.token);
+            if let Some(w) = &d.why {
+                eprintln!("  why: {w}");
+            }
+            if let Some(r) = &d.remedy {
+                eprintln!("  remedy: {r}");
+            }
+            std::process::exit(d.exit_code());
+        }
+        _ => usage(),
+    }
+}
+
+/// ORDER 1506-nvqt — `tillandsias-plan msg <verb>`. The verbs live in
+/// `msg_store::run` so every one is testable against a temp store; this shim
+/// only gathers the environment and decides whether stdin is a body.
+fn run_msg(args: &[String], index: &Path) -> ! {
+    use tillandsias_plan::msg_store;
+    let fleet_dir = root_for(index).join("plan").join("fleet");
+    let env = msg_store::MsgEnv::from_process(fleet_dir);
+    // A terminal on stdin is not a body: reading it would block an agent that
+    // forgot the pipe, so it reads as empty and the shape check refuses.
+    let wants_body = matches!(args.first().map(String::as_str), Some("send" | "lint"))
+        && !args.iter().any(|a| a == "--body-file");
+    let mut empty: &[u8] = &[];
+    let mut stdin = std::io::stdin();
+    let reader: &mut dyn std::io::Read = if wants_body && !stdin_is_terminal() {
+        &mut stdin
+    } else {
+        &mut empty
+    };
+    let o = msg_store::run(args, &env, reader, chrono::Utc::now());
+    if !o.out.is_empty() {
+        print!("{}", o.out);
+    }
+    if !o.err.is_empty() {
+        eprint!("{}", o.err);
+    }
+    std::process::exit(o.code);
+}
+
+fn stdin_is_terminal() -> bool {
+    use std::io::IsTerminal;
+    std::io::stdin().is_terminal()
+}
+
+fn run_discipline(args: &[String], index: Option<&Path>) -> ! {
+    use tillandsias_plan::branch_discipline as bd;
+    use tillandsias_plan::discipline_hooks as dh;
+    let usage = || -> ! {
+        eprintln!(
+            "usage: tillandsias-plan discipline show [--json] | target --platform <linux|forge|windows|macos> | check-ref <ref> | derive [--json]\n\
+             \x20      | install-hooks | raise --to <1|2> [--integration <branch>]   [--root <dir>] [--seed <path>]\n\
+             \x20      | hook <event> [git hook args...]   (run by the installed hook stubs, order 1446-xqi6)\n\
+             \x20 derive and check-ref observe the checkout's refs as of its last fetch: run `git fetch origin` first."
+        );
+        std::process::exit(2);
+    };
+    // ORDER 1446-xqi6. `hook` is what an installed stub execs; its arguments are
+    // git's, passed through untouched, so it is dispatched before flag parsing.
+    if args.first().map(String::as_str) == Some("hook") {
+        let Some(event) = args.get(1) else { usage() };
+        let root = std::env::current_dir()
+            .ok()
+            .and_then(|cwd| bd::find_root(&cwd))
+            .unwrap_or_else(|| PathBuf::from("."));
+        std::process::exit(dh::run_hook(&root, event, &args[2..]));
+    }
+    let mut root: Option<PathBuf> = None;
+    let mut seed: Option<PathBuf> = None;
+    let mut platform: Option<String> = None;
+    let mut raise_to: Option<String> = None;
+    let mut integration: Option<String> = None;
+    let mut json = false;
+    let mut positional: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--root" | "--seed" | "--platform" | "--to" | "--integration" => {
+                let Some(v) = args.get(i + 1) else { usage() };
+                match args[i].as_str() {
+                    "--root" => root = Some(PathBuf::from(v)),
+                    "--seed" => seed = Some(PathBuf::from(v)),
+                    "--to" => raise_to = Some(v.clone()),
+                    "--integration" => integration = Some(v.clone()),
+                    _ => platform = Some(v.clone()),
+                }
+                i += 2;
+            }
+            "--json" => {
+                json = true;
+                i += 1;
+            }
+            other if other.starts_with("--") => usage(),
+            other => {
+                positional.push(other.to_string());
+                i += 1;
+            }
+        }
+    }
+    let root = root
+        .or_else(|| {
+            index
+                .and_then(|ix| ix.parent().and_then(Path::parent))
+                .map(|p| {
+                    if p.as_os_str().is_empty() {
+                        PathBuf::from(".")
+                    } else {
+                        p.to_path_buf()
+                    }
+                })
+        })
+        .or_else(|| {
+            std::env::current_dir()
+                .ok()
+                .and_then(|cwd| bd::find_root(&cwd))
+        })
+        .unwrap_or_else(|| PathBuf::from("."));
+    let d = bd::load(&root, seed.as_deref());
+    if let Some(r) = &d.refusal {
+        // The refusal is named on stderr and the answer comes from the floor,
+        // so a malformed seed never refuses anyone's push.
+        eprintln!(
+            "{r} ({}); answering from the built-in default",
+            d.seed_path
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default()
+        );
+    }
+    match positional.first().map(String::as_str) {
+        Some("show") if positional.len() == 1 => {
+            if json {
+                println!("{}", d.to_json());
+            } else {
+                println!("discipline: {}", d.provenance(None));
+                println!("default_branch: {}", d.default_branch);
+                for (p, b) in &d.integration {
+                    println!("integration.{p}: {b}");
+                }
+                for (r, e) in &d.enforcement {
+                    println!("enforcement.{r}: {e}");
+                }
+                println!("work_ref: {}", d.work_ref.as_deref().unwrap_or("-"));
+                println!("salvage_ref: {}", d.salvage_ref.as_deref().unwrap_or("-"));
+                println!("digest: {}", d.digest.as_deref().unwrap_or("-"));
+            }
+            std::process::exit(0);
+        }
+        Some("target") if positional.len() == 1 => {
+            let Some(p) = platform.filter(|p| bd::PLATFORMS.contains(&p.as_str())) else {
+                usage()
+            };
+            println!("{} {}", d.target(&p), d.provenance(None));
+            std::process::exit(0);
+        }
+        Some("derive") if positional.len() == 1 => {
+            // ORDER 1446-664f — the discipline the project's history shows,
+            // beside the seed, and the drift between them.
+            let r = bd::derive(&root, &d);
+            let (lines, j) = bd::derive_report(&d, r.as_ref());
+            if json {
+                println!("{j}");
+            } else {
+                for l in lines {
+                    println!("{l}");
+                }
+            }
+            std::process::exit(0);
+        }
+        Some("check-ref") if positional.len() == 2 => {
+            // ORDER 1446-664f — an enforced rule refuses only where the seed
+            // and the observed qualifier agree.
+            let reality = if d.level > 0 {
+                bd::derive(&root, &d)
+            } else {
+                None
+            };
+            let a = bd::check_ref_observed(&d, &positional[1], reality.as_ref());
+            println!("{}", a.verdict);
+            if let Some(w) = &a.why {
+                println!("why: {w}");
+            }
+            if let Some(r) = &a.remedy {
+                println!("remedy: {r}");
+            }
+            println!("{}", d.provenance(a.rule));
+            std::process::exit(if a.refused { 1 } else { 0 });
+        }
+        // ORDER 1446-xqi6 — install the level's hook stubs for this project.
+        Some("install-hooks") if positional.len() == 1 => match dh::install(&root, d.level) {
+            Ok(done) => {
+                for (event, path) in &done.not_ours {
+                    eprintln!(
+                        "skip:discipline:hook-not-ours:{event} ({}) — left untouched",
+                        path.display()
+                    );
+                }
+                eprintln!(
+                    "  hooks dir {} (core.hooksPath, repo-local); {} written this run",
+                    done.dir.display(),
+                    done.changed
+                );
+                println!(
+                    "ok:discipline:hooks-installed:level={}:{} hooks",
+                    done.level,
+                    done.ours.len()
+                );
+                std::process::exit(0);
+            }
+            Err(verdict) => {
+                println!("{verdict}");
+                std::process::exit(3);
+            }
+        },
+        // ORDER 1446-xqi6 — move the level forward, then reinstall its hooks.
+        Some("raise") if positional.len() == 1 => {
+            let Some(to) = raise_to.as_deref().and_then(|t| t.parse::<u8>().ok()) else {
+                usage()
+            };
+            match dh::raise(&root, to, integration.as_deref()) {
+                Ok(verdict) => {
+                    println!("{verdict}");
+                    let d = bd::load(&root, None);
+                    match dh::install(&root, d.level) {
+                        Ok(done) => println!(
+                            "ok:discipline:hooks-installed:level={}:{} hooks",
+                            done.level,
+                            done.ours.len()
+                        ),
+                        Err(v) => println!("{v}"),
+                    }
+                    std::process::exit(0);
+                }
+                Err(verdict) => {
+                    println!("{verdict}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        _ => usage(),
+    }
+}
+
+/// ORDER 1458-8y85 — the acknowledgement hash a deliberate `--replace` writes:
+/// sha256 of the replaced value exactly as `field-get` prints it once a shell
+/// command substitution has stripped its trailing newlines.
+fn replace_ack_sha256(replaced: &str) -> String {
+    tillandsias_plan::host_verbs::sha256_hex_reader(replaced.trim_end_matches('\n').as_bytes())
+        .unwrap_or_default()
+}
+
 fn main() {
     let start_time = std::time::Instant::now();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -4375,6 +5355,64 @@ fn main() {
     // Optional second argument is the repo root, mirroring the shell rule's
     // second parameter, so the fixture can ask about a root that is NOT the cwd
     // (that is how the outside-a-checkout negative control is driven).
+    // ORDER 1437-3pj7 — a session's billed token spend from its transcript.
+    // Early: it reads the harness transcript, never the ledger.
+    if args[0] == "session-tokens" {
+        let mut since = std::env::var("TILLANDSIAS_CYCLE_START_TS")
+            .ok()
+            .filter(|s| !s.is_empty());
+        let mut transcript: Option<PathBuf> = None;
+        let mut i = 1;
+        while i < args.len() {
+            match (args[i].as_str(), args.get(i + 1)) {
+                ("--since", Some(v)) => since = Some(v.clone()),
+                ("--transcript", Some(v)) => transcript = Some(PathBuf::from(v)),
+                _ => {
+                    eprintln!(
+                        "usage: tillandsias-plan session-tokens [--since <utc>] [--transcript <path>]"
+                    );
+                    std::process::exit(2);
+                }
+            }
+            i += 2;
+        }
+        let config = std::env::var("CLAUDE_CONFIG_DIR")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .map(|h| PathBuf::from(h).join(".claude"))
+            })
+            .unwrap_or_default();
+        let session = std::env::var("CLAUDE_CODE_SESSION_ID").ok();
+        let path = tillandsias_plan::session_tokens::resolve_transcript(
+            transcript.as_deref(),
+            session.as_deref(),
+            &config,
+        );
+        let answer = tillandsias_plan::session_tokens::measure(path.as_deref(), since.as_deref());
+        println!("{}", answer.line());
+        std::process::exit(0);
+    }
+    // ORDER 1506-nvqt — the fleet message bus's local store. Early: it reads the
+    // lane store and plan/fleet, never the ledger, and opens no socket.
+    if args[0] == "msg" {
+        run_msg(&args[1..], &index);
+    }
+    // ORDER 1443-w79y — branch discipline. Early, beside metrics-log-path: it
+    // reads the seed and the git dir, never the ledger, so it answers on a
+    // checkout whose ledger is broken. Root: --root, else the --index's
+    // checkout, else the nearest ancestor of the cwd holding .git.
+    if args[0] == "discipline" {
+        run_discipline(&args[1..], index_explicit.then_some(index.as_path()));
+    }
+    // ORDER 1443-isrk — the command policy evaluator. Early, like discipline: it
+    // reads a seed and the host's evidence, never the ledger.
+    if args[0] == "policy" {
+        run_policy(&args[1..]);
+    }
     if args[0] == "metrics-log-path" {
         let base = args.get(1).map(String::as_str).unwrap_or("");
         if base.is_empty() {
@@ -4393,6 +5431,27 @@ fn main() {
     if args[0] == "lua" {
         run_lua_cli(&args[1..]);
         return;
+    }
+
+    // ORDER 1384-bqhy — `script run <file.lua>`, the ONE runner for a Lua
+    // decider, and `script classify`, the ONE classifier the gate loop and the
+    // preflight door both call. Early: neither reads the ledger.
+    if args[0] == "script" {
+        match args.get(1).map(String::as_str) {
+            Some("run") => tillandsias_plan::script_run::cli_run(&args[2..]),
+            Some("classify") => tillandsias_plan::script_run::cli_classify(&args[2..]),
+            _ => {
+                eprintln!(
+                    "usage: tillandsias-plan script run <file.lua> [--timeout <dur>] [--trace] [-- args...]\n       tillandsias-plan script classify --rc <n> [--status <s>] [--file <path>]"
+                );
+                std::process::exit(2);
+            }
+        }
+    }
+
+    // ORDER 1443-8pur — the agent door. Early: it reads no ledger.
+    if args[0] == "run" {
+        run_run_verb(&args[1..]);
     }
 
     if args[0] == "predicate" {
@@ -6041,6 +7100,20 @@ fn main() {
             for s in ledger.validate_against_schema(&schema) {
                 eprintln!("advisory (schema drift): {s}");
             }
+            // ORDER 1437-khnx — unlike general schema drift, an out-of-vocabulary
+            // tier scalar is REFUSED under --strict-fragments: it would route no
+            // packet, and the selector could not tell it from an untagged row.
+            let tier_violations = ledger.tier_vocabulary_violations();
+            for v in &tier_violations {
+                eprintln!("refused:tier-vocabulary: {v}");
+            }
+            if strict_fragments && !tier_violations.is_empty() {
+                eprintln!(
+                    "refusing (--strict-fragments): {} tier field(s) outside the vocabulary (1437-khnx)",
+                    tier_violations.len()
+                );
+                std::process::exit(1);
+            }
             // 686-7qcm — the invisible-block report. A dependent waiting on a
             // PARKED packet (implemented / needs_clarification / blocked /
             // failed) is otherwise silently stuck: `ready` skips it and
@@ -6106,6 +7179,21 @@ fn main() {
                 for gap in gaps {
                     emit(&format!("dropped-entry: {}: {gap}", path.display()));
                 }
+            }
+            // ORDER 920-eqjr. A fragment the fold can read NOTHING from is the
+            // fourth authoring failure mode the ledger README warns about, and
+            // the only one with no reporter: `malformed:` names files that do
+            // not PARSE, `dropped-entry:` names entries the fold DROPPED, and a
+            // freestyle fragment (no packets/events/fields/status/capabilities
+            // channel at all) is invisible to both while every gate answers ok.
+            // Two Antigravity prose findings were lost this way (refiled
+            // canonically after the osx-next merge surfaced them). Same posture
+            // as `malformed:` — named always, refused only by a caller that
+            // opted into a partial-corpus refusal — because the same 699-dycj
+            // rationale applies: build.sh runs this on every host.
+            let inert = tillandsias_plan::fragments::inert_fragments(&index);
+            for path in &inert {
+                emit(&format!("inert-fragment: {}", path.display()));
             }
             if !report.violations.is_empty() && !skipped.is_empty() {
                 // WHY THIS CAVEAT IS NOT DECORATION: a `depends_on` whose
@@ -7962,6 +9050,8 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 "--evidence",
                 "--reopen-evidence",
                 "--value-file",
+                "--story",
+                "--over-wip",
             ];
             const BOOL_FLAGS: &[&str] = &["--append", "--replace", "--backfill"];
 
@@ -7985,6 +9075,7 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                                  \n\
                                  set-field accepts:\n\
                                    with a value: --ts --host --reason --evidence --reopen-evidence --value-file\n\
+                                                 --story --over-wip\n\
                                    on their own: --append --replace --backfill\n\
                                  \n\
                                  For long prose use --value-file <path>, so no shell ever sees the text."
@@ -8093,6 +9184,25 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 std::process::exit(1);
             };
 
+            // ORDER 1431-k6s7 — the write-side twin of append-event's 896-f8ti.
+            // `resolve()` falls through to the ARCHIVE last, which is right for
+            // reads and wrong for a write: a set-field on an archived order
+            // printed ok: and filed a fragment the live fold drops ("dropped-entry
+            // … NO SUCH PACKET"), caught only by the release preflight as
+            // plan-ledger-incomplete (yoga: `set-field 606-um5s next_action
+            // --append …`). Refuse before any write, naming it archived, with its
+            // own remedy — the reference is right; the target is finished. No
+            // archived-reopen path exists, so this removes nothing that worked.
+            if ledger.is_archived(&pid) {
+                eprintln!(
+                    "error: {target} resolves to {pid}, which is ARCHIVED (completed work, in \
+                     plan/archive/) — REFUSED before any write. A field set here lands in a \
+                     fragment no reader folds. Your reference is not a typo; the target is \
+                     finished. If this work is genuinely continuing, file a new packet citing {pid}."
+                );
+                std::process::exit(1);
+            }
+
             // ORDER 1201-hsf9 — A CLAIM MUST NAME A WORKSTATION.
             //
             // `status: in_progress` is the one write whose whole purpose is to
@@ -8166,6 +9276,126 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                     std::process::exit(2);
                 }
             }
+            // ORDER 1367-2sbc — A HOST FINISHES OR RELEASES BEFORE IT STARTS MORE.
+            //
+            // Operator, 2026-09-23: "we have started a lot of plan work at the
+            // same time and now they're all incomplete". Measured over
+            // 2026-09-13..23: median concurrent claims per host was 1, but hosts
+            // climbed to 10, 8 and 6, and filing outran closing six days running.
+            // The rule (methodology/distributed-work.yaml packet_discipline) was
+            // prose; this makes it the claim path's own refusal.
+            //
+            // A claim is `status in_progress`. The host's LIVE claims are the
+            // packets whose winning status write is in_progress AND names this
+            // host (the 1065-4t7t lease). Packets claimed with `--story <id>`
+            // count as ONE unit; the cap (packet_discipline.wip_limit, read, not
+            // restated) bounds the loose ones. A new story is refused while any
+            // member of another held story is still in_progress.
+            //
+            // THE OVERRIDE IS NAMED AND RECORDED: `--over-wip "<why>"` admits the
+            // claim and writes the reason and the held orders as an event, so a
+            // coordinator can see every time the limit was set aside and by whom.
+            let claim_story = flagged("--story");
+            let over_wip = flagged("--over-wip");
+            let mut wip_override_note: Option<String> = None;
+            if let Some(ref s) = claim_story
+                && (s.is_empty()
+                    || !s
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'))
+            {
+                eprintln!(
+                    "error: --story '{s}' — a story id is lowercase letters, digits and '-' \
+                     (it is written into the claim's own entry) — REFUSED before any write"
+                );
+                std::process::exit(2);
+            }
+            if claim_story.is_some() && !(field == "status" && value == "in_progress") {
+                eprintln!(
+                    "error: --story applies only to a claim (status in_progress) — REFUSED before any write"
+                );
+                std::process::exit(2);
+            }
+            if field == "status" && value == "in_progress" {
+                let claim_host = flagged("--host").unwrap_or_else(resolve_writer_host);
+                let frag_dir = fragments::fragment_dir(&index);
+                let (cap, cap_source) = wip_limit_of(&index);
+                let mut loose: Vec<String> = Vec::new();
+                let mut stories: std::collections::BTreeMap<String, Vec<String>> =
+                    std::collections::BTreeMap::new();
+                for p in &ledger.packets {
+                    let Some(other) = str_field(p, "packet_id") else {
+                        continue;
+                    };
+                    if other == pid || str_field(p, "status") != Some("in_progress") {
+                        continue;
+                    }
+                    let Some((h, _)) = ledger.status_lease_of(other) else {
+                        continue;
+                    };
+                    if h != claim_host {
+                        continue;
+                    }
+                    let order = str_field(p, "order").unwrap_or(other).to_string();
+                    match claim_story_of(&ledger, &frag_dir, other) {
+                        Some(st) => stories.entry(st).or_default().push(order),
+                        None => loose.push(order),
+                    }
+                }
+                let other_story = claim_story.as_ref().and_then(|s| {
+                    stories
+                        .iter()
+                        .find(|(k, _)| *k != s)
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                });
+                let refusal = if let Some((open, members)) = other_story {
+                    Some(format!(
+                        "refused:set-field:story-open:{open} — {claim_host} still holds story \
+                         '{open}' ({}), and a new story waits until every member of the last \
+                         one is terminal or released (1367-2sbc).",
+                        members.join(", ")
+                    ))
+                } else if claim_story.is_none() && loose.len() >= cap {
+                    Some(format!(
+                        "refused:set-field:wip-limit:{}/{cap} — {claim_host} already holds {} \
+                         in_progress packet(s) outside a story: {} (1367-2sbc; the limit is \
+                         {cap}, from {cap_source}).",
+                        loose.len(),
+                        loose.len(),
+                        loose.join(", ")
+                    ))
+                } else {
+                    None
+                };
+                if let Some(why) = refusal {
+                    match over_wip {
+                        Some(ref r) if !r.trim().is_empty() => {
+                            wip_override_note = Some(format!(
+                                "wip-override by {claim_host}: {} — admitted past: {why}",
+                                r.replace('\n', " ")
+                            ));
+                        }
+                        _ => {
+                            eprintln!(
+                                "{why}\n\
+                                 \n\
+                                 WHY: hosts that claimed without finishing climbed to ten open \
+                                 packets each, and the fleet ended a week with most work open \
+                                 (operator, 2026-09-23; methodology packet_discipline).\n\
+                                 \n\
+                                 REMEDY: close or release one of the packets named above \
+                                 (set-field <order> status completed --evidence <sha>, or \
+                                 status ready with a next_action saying what is left), then \
+                                 claim again. Packets claimed together as one batch share \
+                                 --story <id> and count as one. If this claim genuinely must \
+                                 go past the limit, pass --over-wip \"<why>\"; the reason and \
+                                 the held orders are recorded on the row."
+                            );
+                            std::process::exit(2);
+                        }
+                    }
+                }
+            }
             // ORDER 1184-tj2q — A LIST IS NOT AN UNSET SCALAR, AND TREATING IT
             // AS ONE MAKES THE ROW VANISH.
             //
@@ -8196,6 +9426,12 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             // this order owns. The refusal names the field and the paths that
             // CAN edit a list, so the caller is redirected rather than merely
             // blocked.
+            // ORDER 1437-khnx — a tier scalar outside its vocabulary would be
+            // written, projected and then silently match no tier filter.
+            if let Some(reason) = tillandsias_plan::tier_vocabulary_refusal(&field, &value) {
+                eprintln!("refused:set-field:tier-vocabulary — {pid}.{reason} (1437-khnx)");
+                std::process::exit(2);
+            }
             if field_is_list(packet, &field) {
                 eprintln!(
                     "refused:set-field:list-valued-field — {pid}.{field} is a LIST, and set-field writes scalars only (1184-tj2q)."
@@ -8565,8 +9801,29 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             if !reason.is_empty() {
                 event_blocks.push(("note".to_string(), reason.replace('\n', " ")));
             }
+            if let Some(note) = wip_override_note.take() {
+                event_blocks.push(("note".to_string(), note));
+            }
             let body =
                 fragments::set_field_fragment_body(&pid, &field, &value, &ts, &host, &event_blocks);
+            let body = match claim_story {
+                Some(ref st) => fragments::with_claim_story(&body, st),
+                None => body,
+            };
+            // ORDER 1458-8y85. A DELIBERATE --replace of long-form prose writes
+            // an acknowledgement into its own bytes: the sha256 of the exact
+            // folded value it read and replaced. check-append-vs-origin-fold.sh
+            // (1261-bn7v) admits the drop only when that hash equals ORIGIN's
+            // current fold of the field, so "I read these lines and drop them"
+            // is distinguishable from "I never saw them" (a peer's newer append
+            // that this host had not fetched still differs, and is still
+            // refused). Trailing newlines are trimmed on both sides: the guard
+            // reads origin's value through a shell command substitution.
+            let body = if want_replace && long_form && current != "<unset>" {
+                fragments::with_replace_acknowledgement(&body, &replace_ack_sha256(&current))
+            } else {
+                body
+            };
 
             if let Err(e) = std::fs::write(&path, body) {
                 eprintln!("error: write {}: {e}", path.display());
@@ -10947,6 +12204,33 @@ mod tests {
         let proj = query_json_projection(&val);
         assert!(proj.get("lease").is_some());
         assert_eq!(proj["lease"], serde_json::Value::Null);
+    }
+
+    /// ORDER 1437-khnx: both tier scalars reach the projection, from the
+    /// top-level field or, for rows filed before it, from a notes line; a
+    /// top-level scalar beats the note, and an out-of-vocabulary note is prose.
+    #[test]
+    fn projection_carries_size_and_implementer_tier() {
+        let proj = |raw: &str| query_json_projection(&serde_yaml::from_str(raw).unwrap());
+        let top = proj("packet_id: a\norder: 1\nsize: S\nimplementer_tier: haiku\n");
+        assert_eq!(top["size"], "S");
+        assert_eq!(top["implementer_tier"], "haiku");
+        let noted = proj(
+            "packet_id: b\norder: 2\nnotes: |\n  size: S\n  implementer_tier: haiku\n  prose\n",
+        );
+        assert_eq!(noted["size"], "S");
+        assert_eq!(noted["implementer_tier"], "haiku");
+        let both = proj(
+            "packet_id: c\norder: 3\nimplementer_tier: opus\nnotes: |\n  implementer_tier: haiku\n",
+        );
+        assert_eq!(both["implementer_tier"], "opus");
+        let prose = proj("packet_id: d\norder: 4\nnotes: |\n  size: XL\n");
+        assert!(prose.get("size").is_none());
+        // Untagged stays ABSENT: the untagged=opus rule is the selector's
+        // (1437-vdz5), never the projection's.
+        let untagged = proj("packet_id: e\norder: 5\n");
+        assert!(untagged.get("implementer_tier").is_none());
+        assert!(untagged.get("size").is_none());
     }
 
     #[test]

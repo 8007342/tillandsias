@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    field: status
+    value: completed
+    ts: "2026-09-28T16:00:21Z"
+    host: lenovinha
+
+events:
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: completed
+      ts: "2026-09-28T16:00:21Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 30175bb5d (operator ruling recorded) + ffa3bd86d (1456-ib6i host-push lane mitigation, test-credential-channel-host-push-lane.sh PASS)
+  - packet_id: gnome-keyring-daemon-sigabrts-on-a-secret-service-getproperty-on-two-fleet-hosts-taking-the-credential-channel-down-mid-gate
+    event:
+      type: note
+      ts: "2026-09-28T16:00:21Z"
+      host: lenovinha
+      summary: |-
+        won't-investigate, ratified by macuahuitl coordinator 2026-09-28 on the operator ruling: a gnome-keyring bug fixed upstream

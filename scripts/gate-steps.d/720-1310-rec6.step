@@ -1,0 +1,17 @@
+# Gate step 1310-rec6 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. The git mirror's container HEALTHCHECK used to be
+# `nc -w 1 127.0.0.1 9418` every 2 s; each probe made git-daemon log
+# `fatal: the remote end hung up unexpectedly` (23,209 in one lenovinha
+# container log, all healthcheck, none relay), so a healthy mirror's log could
+# not be told from a failing one. The probe now checks the daemon's LISTEN
+# socket and never connects. Runs in the tillandsias-git image (the only place
+# git-daemon exists here) with the image's own healthcheck disabled; skips by
+# name without podman or the image.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the git mirror's healthcheck writes nothing to the daemon log and still detects a dead daemon (1310-rec6)"
+STEP_SCRIPT="scripts/test-mirror-healthcheck-quiet.sh"
+STEP_ERROR="the git mirror healthcheck again writes to git-daemon's log (fatal: the remote end hung up) or no longer detects a dead daemon (1310-rec6)"
+STEP_OK="mirror healthcheck is silent and still a liveness check"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin skip:mirror-healthcheck-quiet:no-versioned-git-image (named skip at f81e095aa: the git image lives only in the macOS guest)"

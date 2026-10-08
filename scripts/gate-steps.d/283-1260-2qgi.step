@@ -1,0 +1,14 @@
+# Gate step 1260-2qgi — data, not code (order 1072-b7eq).
+#
+# A status carried by a channel is PRESERVED or DECLARED ABSENT, never a
+# substituted integer (methodology/convergence.yaml -> status_channel_policy).
+# The channel is the agent door, `tillandsias-plan run --json` (1443-8pur):
+# a killed child reads absent, a failed producer piped to tee reads red, and
+# exit 0 still reads green.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a status is preserved or declared absent through the agent door (1260-2qgi)"
+STEP_SCRIPT="scripts/test-status-channel-absent-is-first-class.sh"
+STEP_ERROR="the status channel substituted an integer for an absent status, or lost a real exit code (1260-2qgi) — see the FAIL lines above"
+STEP_OK="Status channel passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:status-channel:absent-distinct-from-zero:3/3 skipped=1"

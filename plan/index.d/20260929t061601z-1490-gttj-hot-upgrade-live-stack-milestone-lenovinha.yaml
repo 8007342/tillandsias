@@ -1,0 +1,118 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: soft-reset-is-a-hot-upgrade-of-the-host-and-guest-tillandsias-binaries-with-the-container-stack-vm-and-running-forges-kept
+    order: 1490-gttj
+    status: ready
+    kind: milestone
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lifecycle, upgrade, reset, forge, macos, windows, linux, control-wire, updater, podman]
+    estimated_hours: 6
+    owned_files:
+      - openspec/changes/hot-upgrade-live-stack/
+      - openspec/specs/host-state-lifecycle/spec.md
+    title: |
+      MILESTONE — the SOFT reset is a hot-upgrade of the HOST and GUEST tillandsias binaries with the containers, VM/distro, Vault store and running forges all KEPT; today every upgrade path stops every forge and the Linux SOFT body runs podman system reset --force
+    context: |
+      OPERATOR REQUEST (2026-09-29, verbatim): "The SOFT RESET should be a quick
+      upgrade of the HOST's tillandsias binary and the GUEST tillandsias binary,
+      we might not even need to relaunch the containers. Likely all our tray
+      binaries, windows, mac, and linux, would restart fine with their container
+      stacks and vms persisting, so updating our HOST binary and GUEST binary
+      from it should be a supported case, have a Fable agent investigate and file
+      specs and ./plan packets to officially support some form of hot-reload, and
+      hot-upgrade of the Tillandsias binary with a live guest and container
+      stack. This should allow us to re-launch some builds without messing up any
+      agents working in any forges. This should allow users to transparently
+      update their Tillandsias installations without even suspending their work
+      ;) this would also play nicely with something like tillandsias --update,
+      and/or a background check every 24 hours or so for updates, and silently
+      install them." Same session: "Consider updating the ./skills and build
+      scripts, to replace podman system reset, with merely cleaning up the stale
+      containers. This should save some time to the entire fleet."
+
+      MEASURED COST (lenovinha, 2026-09-29): a Linux SOFT reset
+      (tillandsias --reset-state, run_reset_state main.rs:10128, podman system
+      reset --force at main.rs:10172-10175) destroyed the two non-Tillandsias
+      fedora-toolbox containers tillandsias-builder and tillandsias-nix (they
+      share the name prefix) and every running forge. The Vault store survived
+      as host-state-lifecycle promises (Verified:KEEP; 134 files before and
+      after). The store is safe; the stack, the toolboxes and the agents are
+      not. This is the motivating measurement for label-keyed ownership.
+
+      SPEC STATE: openspec/specs/host-state-lifecycle/spec.md EXISTS (1437-8c6p,
+      amended 1438-pk9j, 1443-bs9z) and defines SOFT (--reset-state; both Linux
+      flags) vs HARD (--reset-guest on guest regimes), the Verified:KEEP /
+      Unverified:KEEP / Absent:REINIT-AT-INIT dispositions and the preserved
+      operator-data set. Its SOFT body still says "podman system reset --force
+      where the platform reset already uses it" and "wipe the previous
+      containers". The change openspec/changes/hot-upgrade-live-stack MODIFIES
+      that requirement so SOFT keeps the running stack (adopt), removes only
+      stale owned objects by label, and moves the full podman wipe to a Linux
+      HARD tier with the 1443-bs9z per-run approval. No new spec is invented.
+
+      INVESTIGATION (re-verified on origin/linux-next 3e4b7fb58, 2026-09-29;
+      full citations in the proposal). LINUX: a second instance SIGTERMs the
+      first through the singleton lock (crates/tillandsias-core/src/singleton.rs:134-146,
+      terminate_process :192); the first runs graceful_shutdown_async
+      (crates/tillandsias-headless/src/main.rs:19692) which stops every
+      container passing is_stack_managed_name (:7497); forges run --rm
+      (build_opencode_forge_args :8027) so the stop is the loss. Shared
+      containers are reused by NAME only (vault_bootstrap.rs:826, proxy
+      main.rs:3836, nix-cache :6419, catalog container_deps.rs:511); only
+      ensure_router_running (:6241) checks the image tag. Containers carry NO
+      ownership label — only images do (image_builder.rs:27-28,154,162); the
+      one container label is the proxy's tillandsias.ca-generation (:3713).
+      MACOS: the VM is created in the tray process (vz.rs:2884-2885);
+      quit_with_drain (action_host.rs:1211) sends VmShutdownRequest; the guest
+      binary is installed only at boot by tillandsias-headless-fetch.service
+      (vz.rs:1203) with a releases/latest fallback (vz.rs:1122); no KillMode=.
+      WINDOWS: Quit is graceful_shutdown (wsl_lifecycle.rs:665) -> wsl
+      --terminate (wsl.rs:1120); inject_stale_guest_wiring (:1083) stops the
+      headless unit (:1124) to overwrite the ELF (cat > path :2115) and
+      restarts (:1133); no KillMode= (:1875). WIRE: WIRE_VERSION=4
+      (control-wire lib.rs:86); mismatch fatal at vsock_server.rs:949,
+      pty_vsock_bridge.rs:229, vsock_client.rs:182; fixtures hard-code 2
+      (control_dispatch.rs:268,618). UPDATER: none; UpdatesConfig
+      (config.rs:328, default 6 h at :347) is read by nothing; update-system
+      spec is obsolete (1397-eppt).
+
+      DESIGN PRINCIPLES (binding on every child): running forges and their
+      agents are never disturbed; nothing without our owner label is ever
+      stopped or removed; skew is explicit (compatibility window, negotiated
+      wire, drain-then-swap); an unsafe hot upgrade falls back LOUDLY to the
+      relaunch path, never silently; the 24 h check is opt-out and never
+      interrupts; SOFT keeps the Vault store (Verified:KEEP, already true).
+
+      A previous draft of this milestone (branch work/1437-ngcf, e7f6112b2) was
+      filed from a stale base with orders 1437-* that collide with trunk; it
+      was not landed. Its research is reused here after re-verification.
+    children:
+      - 1490-nczm
+      - 1490-pguh
+      - 1490-52m5
+      - 1490-d45z
+      - 1490-acd5
+      - 1490-j6du
+      - 1490-cvqe
+      - 1490-aqc7
+    exit_criteria:
+      - 'openspec/specs/host-state-lifecycle/spec.md SOFT requirement says the running stack, VM/distro and forges are KEPT and podman system reset --force is not part of SOFT (pre-fix: the Linux SOFT body names podman system reset --force and the guest bodies wipe the previous containers)'
+      - 'on Linux, a forge with a live agent survives a host binary upgrade with an unchanged container id and PID (pre-fix: stopped by graceful_shutdown_async and lost because it runs --rm)'
+      - 'on Linux, a SOFT reset with tillandsias-builder and tillandsias-nix toolboxes running leaves both running (pre-fix: measured 2026-09-29, both destroyed)'
+      - 'on Windows, a guest headless upgrade leaves podman ps unchanged inside the distro (pre-fix: unmeasured; the unit is stopped before the ELF is overwritten)'
+      - 'on macOS, a guest headless upgrade lands in the running guest without a VM reboot (pre-fix: installed only by the boot-time fetch oneshot)'
+      - 'tillandsias --update exists and ends with one of upgraded / up-to-date / deferred / refused (pre-fix: unknown flag)'
+      - 'every child order is completed or superseded and the deltas are synced into openspec/specs/'
+    unscoreable: milestone-scored-by-its-children — this row owns no fixture of its own; each child names its scripts/test-*.sh or cargo test pin, and the row closes when every child is completed and the five deltas in openspec/changes/hot-upgrade-live-stack/ are synced. The nearest single mechanical proxy is scripts/test-host-upgrade-handoff.sh (1490-52m5).
+    provenance: |
+      Filed by a Fable agent on lenovinha at the operator's request, 2026-09-29,
+      on origin/linux-next 3e4b7fb58. Every citation was read in the cited span.
+    events:
+      - type: filed
+        ts: "2026-09-29T06:16:01Z"
+        agent_id: "claude-fable-lenovinha-20260929t061525z"
+        host: lenovinha
+        summary: |-
+          Milestone for hot-upgrade under a live stack; eight children filed alongside; supersedes the unlanded 1437-ngcf draft.

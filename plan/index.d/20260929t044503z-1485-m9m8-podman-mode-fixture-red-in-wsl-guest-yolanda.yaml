@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-podman-mode-gate-fixture-is-red-only-inside-the-wsl-builder-guest-because-the-podman-pin-bare-metal-has-does-not-reach-it
+    order: 1485-m9m8
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    parent_order: 1462-trch
+    pickup_role: windows
+    capability_tags: [windows, wsl2, podman, fixtures]
+    estimated_hours: 2
+    owned_files: [scripts/test-gate-podman-mode-configuration.sh]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix is proven by the existing litmus (litmus-gate-podman-mode-is-configuration-not-inference) going green inside the tillandsias-build guest; any new arm is written in the same commit.
+    title: |
+      scripts/test-gate-podman-mode-configuration.sh is red ONLY inside the WSL tillandsias-build guest: "explicit remote mode no longer reaches the wrapper branch: pinned-bin=[<unset>]" then "gate podman mode is not configuration-only". Trunk's unmodified copy PASSES on bare-metal Linux (macuahuitl, rc 0) and fails in the guest (yolanda, rc 1).
+    context: |
+      FIRST EVIDENCE, the contrast: the same unmodified trunk file passes on macuahuitl bare metal (rc=0, "PASS: gate podman mode is configuration, not inference (797-r6tc)") and fails in yolanda's tillandsias-build guest (6.18.33.2-microsoft-standard-WSL2, 2026-09-29, rc=1). The first two arms pass in the guest (explicit remote URL survives, local mode leaves TILLANDSIAS_PODMAN_BIN unset); the explicit-remote-mode arm sees pinned-bin unset.
+      HYPOTHESIS, not measured: the podman binary pin that bare metal resolves is absent in the guest (no podman there, or build.sh's pin path depends on something the wrapper does not forward). Measure which before changing anything; a guest that genuinely has no podman to pin is a can't-run-here case, not a broken tree.
+    next_action: |
+      In the guest, run the fixture with bash -x around the explicit-remote-mode arm and read which condition leaves TILLANDSIAS_PODMAN_BIN unset: command -v podman, the path build.sh pins, or an env var. Then either (a) skip by name when the guest has no podman to pin, or (b) fix the real cause. Record which.
+    verifiable_closure: |
+      Inside the tillandsias-build guest the fixture either passes or ends on a named skip: that states the missing precondition, and on bare-metal Linux it still passes. Pre-fix: rc 1 in the guest, rc 0 on macuahuitl.
+    events:
+      - type: filed
+        ts: "2026-09-29T04:45:04Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request, with macuahuitl's bare-metal PASS as the contrast.

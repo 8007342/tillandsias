@@ -52,6 +52,16 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "server-name-present"
 
+  - step: "project-info serves run_command over the run door: argv as JSON on stdin, a denial is a result (order 1443-r4cj)"
+    command: "bash scripts/test-mcp-run-command-tool.sh 2>&1 | tail -n 1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: mcp-run-command-tool"
+
+  - step: "OpenCode lane builder wires the per-lane MCP socket route (order-505/920-c3af)"
+    command: "cargo test -p tillandsias-headless opencode_lane_builder_mounts_only_per_lane_mcp_dir && echo 'opencode-lane-mcp-wiring-present'"
+    timeout_ms: 120000
+    expected_behavior: "opencode-lane-mcp-wiring-present"
+
 observability:
   traces:
     - "@trace spec:forge-environment-discoverability"

@@ -1,0 +1,32 @@
+# @trace order:1457-r8yi, spec:simplified-tray-ux
+#
+# A Linux lane that fails inside the container asks for ONE keypress: the host's
+# `tillandsias --hold-window` passes TILLANDSIAS_HOST_HOLDS_WINDOW=1 into the
+# forge by name and each entrypoint's exit_pause skips its own pause when it is
+# set, while still pausing when it is not (macOS/Windows lanes, an operator's
+# own terminal). Wraps scripts/test-exit-pause-host-hold.sh, which runs each of
+# the six real exit_pause functions on a pseudo-terminal.
+name: litmus:exit-pause-host-hold
+spec: ci-release
+phase: pre-build
+description: >
+  For all six forge entrypoints: held -> the error banner prints and no second
+  pause is asked for; unheld -> the pause still blocks (control).
+severity: medium
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-exit-pause-host-hold.sh
+  - workspace contains images/default/entrypoint-terminal.sh
+  - shell utilities (script, timeout, awk) are available in PATH
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-exit-pause-host-hold.sh && test -x scripts/test-exit-pause-host-hold.sh && echo 'ok: exit-pause-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: exit-pause-fixture-parses"
+
+  - step: "held skips the in-container pause, unheld still pauses, for all six entrypoints"
+    command: "out=$(bash scripts/test-exit-pause-host-hold.sh 2>&1); rc=$?; case \"$out\" in (*'ok:exit-pause-host-hold:6/6'*) [ \"$rc\" = 0 ] && echo 'ok: exit-pause 6/6' ;; (*) printf '%s\\n' \"$out\" | tail -7; exit 1 ;; esac"
+    timeout_ms: 120000
+    expected_behavior: "ok: exit-pause 6/6"

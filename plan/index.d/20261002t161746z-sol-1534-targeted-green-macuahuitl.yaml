@@ -1,0 +1,9 @@
+events:
+  - packet_id: lua-live-proc-spawn-streams-with-script-owned-cancellation-and-reaping
+    event:
+      type: progress
+      ts: "2026-10-02T16:17:46Z"
+      agent_id: linux-macuahuitl-opencode-20261002t053211z
+      host: macuahuitl
+      summary: |
+        Sol second checkpoint: targeted Lua/policy/filesystem suite green 78/78 (command_policy_doors6, lua_observing_boundary6, lua_predicate_classes22, lua_proc21, lua_source_agreements7, lua_std16), executor_contract11/11 green on Linux. Added raw-byte/empty-line/EOF tests, 8MiB default-prefix capture with callbacks continuing beyond capture, fixed env/stdin, Cacheable process absence, consent-preserving programmer validation and rejected seeds, one-use actual spawn consent, CPU-bound callbacks, caught errors/verdicts and explicit callback reentrancy refusal. Existing policy default-deny applies only to unmatched requests, so a test uses an explicit deny rule for classified rm rather than changing that established policy. All rm executables in consent fixtures are harmless marker writers in unique scratch roots. Hardened bounded launch handshake with registration before setup, tracked direct-child reap separately from process result, prevented kill from overwriting scope-close cancellation, and removed a condition-variable lost-wakeup race. Limits: 32 delivery events, 1MiB pending line, 64 active supervisors, 1s setup handshake, 2s explicit cleanup; setup/reap failure names cleanup incomplete, never successful Lua-thread join. Adjunct owned implementation helpers are crates/tillandsias-exec/src/managed.rs and crates/tillandsias-plan/src/lua_process.rs; raw evidence will live under plan/issues/evidence/lua-live-streaming-1534-20261002/. Still preparing old-binary live-delivery red receipts and post-fix source deadline receipt; no READY/full gate/landing/native closure yet.

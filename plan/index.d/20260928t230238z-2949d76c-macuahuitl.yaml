@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-source-agreement-consolidation-shadow-pilot
+    event:
+      type: progress
+      ts: "2026-09-28T23:02:38Z"
+      agent_id: linux-macuahuitl-codex-20260928t214907z
+      host: macuahuitl
+      summary: |
+        Research and shaped Terra/Sol shadow pilot are complete; no implementation or claim. Touched only the research report, 860-row inventory and plan fragments. Inventory verified 860/860; baseline guards and 3/3 plus 6/6 fixtures passed; full build workspace suite passed 2646 with zero new reds. Publication is blocked: fresh isolated ./build.sh --check exited 1 at test-litmus-parse-only-duplicate-key.sh ARM 6, corpus count 478 neutralised versus 477 live, blocked:litmus-parse-only-duplicate-key:1-failed-of-9. This is not a count of YAML-loader acceptances; root cause is not isolated. No scripts or runtime changed. Next checkpoint: reproduce that named fixture in the builder, compare corpus outputs, then rerun the full gate and publish work/1475-j9kv and this filing through the normal lanes. Pilot stays ready and unclaimed, not completed or leased; no remote publication claimed.

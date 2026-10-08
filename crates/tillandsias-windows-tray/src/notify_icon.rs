@@ -145,6 +145,8 @@ fn live_client_mutex()
 /// next paint reflects it.
 pub struct TrayProgress {
     hwnd: HwndHandle,
+    /// 1443-bgbs: repaint the icon strip and the menu row once per percent.
+    gate: std::sync::Mutex<crate::tray_phase_icon::PercentGate>,
 }
 
 #[derive(Clone, Copy)]
@@ -191,6 +193,7 @@ impl TrayProgress {
     pub fn new(hwnd: HWND) -> Self {
         Self {
             hwnd: HwndHandle(hwnd),
+            gate: std::sync::Mutex::new(crate::tray_phase_icon::PercentGate::default()),
         }
     }
 }
@@ -202,6 +205,8 @@ impl ProvisionProgress for TrayProgress {
         // how far provisioning got even when the tray UI is gone.
         // @trace spec:windows-event-logging
         tracing::info!(phase = phase.status_text(), "provisioning phase");
+        // 1443-bgbs: a new phase ends the previous step's progress strip.
+        self.clear_progress();
         update_status_text(phase.status_text(), self.hwnd.0);
     }
     fn report_message(&self, message: &str) {
@@ -214,6 +219,49 @@ impl ProvisionProgress for TrayProgress {
         // (slice 7, `f5443276`). Each subsequent `report_phase` call replaces
         // the chip with the next phase, so transitions are clean.
         update_status_text(message, self.hwnd.0);
+    }
+    /// ORDER 1443-bgbs (Windows half of 1420-v3zt): a typed step draws a
+    /// palette strip on the tray icon and turns the status chip into the menu
+    /// progress row ("<label> <bar> <n>%"), both once per whole percent, and
+    /// clears them when the step ends. A step with no known fraction keeps the
+    /// plain one-line summary the default adapter would have shown.
+    fn report_event(&self, event: &tillandsias_control_wire::ProgressEvent) {
+        use tillandsias_control_wire::ProgressKind;
+        tracing::debug!(summary = %event.summary_line(), "provisioning progress event");
+        if event.kind.is_terminal() {
+            if let ProgressKind::Failed { reason } = &event.kind {
+                tracing::warn!(task = %event.task, %reason, "provisioning step failed");
+            }
+            self.clear_progress();
+            return;
+        }
+        match event.kind.fraction() {
+            Some(f) => {
+                let repaint = self
+                    .gate
+                    .lock()
+                    .map(|mut g| g.changed(&event.task, f))
+                    .unwrap_or(true);
+                if repaint {
+                    crate::tray_phase_icon::apply_progress_icon(Some(f), self.hwnd.0);
+                    update_status_text(
+                        &crate::tray_phase_icon::menu_row_text(&event.label, f),
+                        self.hwnd.0,
+                    );
+                }
+            }
+            None => update_status_text(&event.summary_line(), self.hwnd.0),
+        }
+    }
+}
+
+impl TrayProgress {
+    /// 1443-bgbs: drop the icon strip and forget the last percent.
+    fn clear_progress(&self) {
+        if let Ok(mut g) = self.gate.lock() {
+            g.reset();
+        }
+        crate::tray_phase_icon::apply_progress_icon(None, self.hwnd.0);
     }
 }
 
@@ -358,6 +406,10 @@ fn reconcile_notify_icon_settings() {
                 refreshed += 1;
             }
             EntryAction::Prune => {
+                // 1450-23if: an approval must outlive the entry it lived in.
+                if read_reg_dword(sub, "IsPromoted") == Some(1) {
+                    set_promotion_marker();
+                }
                 let _ = unsafe { RegCloseKey(sub) };
                 let name_w = to_utf16(name);
                 let _ = unsafe { RegDeleteTreeW(root, PCWSTR(name_w.as_ptr())) };
@@ -378,6 +430,242 @@ fn reconcile_notify_icon_settings() {
         tooltip = %tooltip,
         "notify-icon reconcile complete"
     );
+}
+
+/// ORDER 1450-23if: where a pruned approval is remembered until a tray carries
+/// it: `HKCU\Software\Tillandsias`, value `TrayIconPromoted` (DWORD 1). The
+/// installer writes the same value when its install-time prune removes a
+/// promoted entry, because it prunes before the new tray has ever run.
+const PROMOTION_MARKER_KEY: &str = r"Software\Tillandsias";
+const PROMOTION_MARKER_VALUE: &str = "TrayIconPromoted";
+/// Set inside an entry this tray has promoted, so it is carried at most once.
+const PROMOTION_CARRIED_VALUE: &str = "TillandsiasPromotionCarried";
+
+/// Read a `REG_DWORD` value; `None` when absent, of another type, or unreadable.
+#[cfg(target_os = "windows")]
+fn read_reg_dword(key: windows::Win32::System::Registry::HKEY, value: &str) -> Option<u32> {
+    use windows::Win32::System::Registry::{REG_DWORD, RegQueryValueExW};
+    use windows::core::PCWSTR;
+
+    let name_w = to_utf16(value);
+    let mut kind = windows::Win32::System::Registry::REG_VALUE_TYPE::default();
+    let mut data = [0u8; 4];
+    let mut size: u32 = 4;
+    let rc = unsafe {
+        RegQueryValueExW(
+            key,
+            PCWSTR(name_w.as_ptr()),
+            None,
+            Some(&mut kind),
+            Some(data.as_mut_ptr()),
+            Some(&mut size),
+        )
+    };
+    if rc.is_err() || kind != REG_DWORD || size != 4 {
+        return None;
+    }
+    Some(u32::from_le_bytes(data))
+}
+
+/// Write a `REG_DWORD` value. Best-effort, like every write in this hive.
+#[cfg(target_os = "windows")]
+fn write_reg_dword(key: windows::Win32::System::Registry::HKEY, value: &str, data: u32) -> bool {
+    use windows::Win32::System::Registry::{REG_DWORD, RegSetValueExW};
+    use windows::core::PCWSTR;
+
+    let name_w = to_utf16(value);
+    let bytes = data.to_le_bytes();
+    unsafe { RegSetValueExW(key, PCWSTR(name_w.as_ptr()), 0, REG_DWORD, Some(&bytes)) }.is_ok()
+}
+
+/// Remember that a promoted Tillandsias entry was pruned (1450-23if).
+#[cfg(target_os = "windows")]
+fn set_promotion_marker() {
+    use windows::Win32::System::Registry::{
+        HKEY, HKEY_CURRENT_USER, KEY_ALL_ACCESS, REG_OPTION_NON_VOLATILE, RegCloseKey,
+        RegCreateKeyExW,
+    };
+    use windows::core::PCWSTR;
+
+    let key_w = to_utf16(PROMOTION_MARKER_KEY);
+    let mut key = HKEY::default();
+    let created = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(key_w.as_ptr()),
+            0,
+            PCWSTR::null(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_ALL_ACCESS,
+            None,
+            &mut key,
+            None,
+        )
+    };
+    if created.is_ok() {
+        write_reg_dword(key, PROMOTION_MARKER_VALUE, 1);
+        let _ = unsafe { RegCloseKey(key) };
+    }
+}
+
+/// Read and clear the pruned-approval marker (1450-23if).
+#[cfg(target_os = "windows")]
+fn take_promotion_marker() -> bool {
+    use windows::Win32::System::Registry::{
+        HKEY, HKEY_CURRENT_USER, KEY_ALL_ACCESS, RegCloseKey, RegDeleteValueW, RegOpenKeyExW,
+    };
+    use windows::core::PCWSTR;
+
+    let key_w = to_utf16(PROMOTION_MARKER_KEY);
+    let mut key = HKEY::default();
+    if unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            PCWSTR(key_w.as_ptr()),
+            0,
+            KEY_ALL_ACCESS,
+            &mut key,
+        )
+    }
+    .is_err()
+    {
+        return false;
+    }
+    let set = read_reg_dword(key, PROMOTION_MARKER_VALUE) == Some(1);
+    if set {
+        let name_w = to_utf16(PROMOTION_MARKER_VALUE);
+        let _ = unsafe { RegDeleteValueW(key, PCWSTR(name_w.as_ptr())) };
+    }
+    let _ = unsafe { RegCloseKey(key) };
+    set
+}
+
+/// ORDER 1450-23if: carry the operator's "show on the taskbar" approval into
+/// this tray's own `NotifyIconSettings` entry.
+///
+/// Windows creates the entry when the icon is first registered, keyed on the
+/// executable PATH, so a tray at a new path starts hidden in the overflow even
+/// though the operator approved Tillandsias before. Measured on yolanda: setting
+/// `IsPromoted = 1` on the live entry moves the icon onto the taskbar within
+/// seconds, so this runs AFTER `add_tray_icon`, on a background thread, and
+/// waits briefly for the entry to appear. The decision is
+/// `tray_registry::should_carry_promotion` (carry at most once per entry, never
+/// over an operator's later choice). Best-effort and silent on failure.
+#[cfg(target_os = "windows")]
+fn carry_notify_icon_promotion() {
+    use crate::tray_registry::{OwnPromotion, is_tillandsias_tray, should_carry_promotion};
+    use windows::Win32::System::Registry::{
+        HKEY, HKEY_CURRENT_USER, KEY_ALL_ACCESS, RegCloseKey, RegEnumKeyExW, RegOpenKeyExW,
+    };
+    use windows::core::PCWSTR;
+
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    let current_exe = exe
+        .to_string_lossy()
+        .to_ascii_lowercase()
+        .replace('/', "\\");
+    let root_w = to_utf16(r"Control Panel\NotifyIconSettings");
+
+    for _attempt in 0..20 {
+        let mut root = HKEY::default();
+        if unsafe {
+            RegOpenKeyExW(
+                HKEY_CURRENT_USER,
+                PCWSTR(root_w.as_ptr()),
+                0,
+                KEY_ALL_ACCESS,
+                &mut root,
+            )
+        }
+        .is_err()
+        {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            continue;
+        }
+        let mut own: Option<(String, OwnPromotion)> = None;
+        let mut another_promoted = false;
+        let mut idx: u32 = 0;
+        loop {
+            let mut buf = [0u16; 256];
+            let mut len = buf.len() as u32;
+            if unsafe {
+                RegEnumKeyExW(
+                    root,
+                    idx,
+                    windows::core::PWSTR(buf.as_mut_ptr()),
+                    &mut len,
+                    None,
+                    windows::core::PWSTR::null(),
+                    None,
+                    None,
+                )
+            }
+            .is_err()
+            {
+                break;
+            }
+            idx += 1;
+            let name = String::from_utf16_lossy(&buf[..len as usize]);
+            let sub_w = to_utf16(&name);
+            let mut sub = HKEY::default();
+            if unsafe { RegOpenKeyExW(root, PCWSTR(sub_w.as_ptr()), 0, KEY_ALL_ACCESS, &mut sub) }
+                .is_err()
+            {
+                continue;
+            }
+            let path = read_reg_string(sub, "ExecutablePath").unwrap_or_default();
+            let promoted = read_reg_dword(sub, "IsPromoted") == Some(1);
+            if path.to_ascii_lowercase().replace('/', "\\") == current_exe {
+                let carried = read_reg_dword(sub, PROMOTION_CARRIED_VALUE) == Some(1);
+                own = Some((
+                    name,
+                    OwnPromotion {
+                        is_promoted: promoted,
+                        carried,
+                    },
+                ));
+            } else if promoted && is_tillandsias_tray(&path) {
+                another_promoted = true;
+            }
+            let _ = unsafe { RegCloseKey(sub) };
+        }
+        if let Some((name, state)) = own {
+            let marker = take_promotion_marker();
+            if should_carry_promotion(state, another_promoted, marker) {
+                let sub_w = to_utf16(&name);
+                let mut sub = HKEY::default();
+                if unsafe {
+                    RegOpenKeyExW(root, PCWSTR(sub_w.as_ptr()), 0, KEY_ALL_ACCESS, &mut sub)
+                }
+                .is_ok()
+                {
+                    let ok = write_reg_dword(sub, "IsPromoted", 1)
+                        && write_reg_dword(sub, PROMOTION_CARRIED_VALUE, 1);
+                    let _ = unsafe { RegCloseKey(sub) };
+                    tracing::info!(
+                        ok,
+                        from_sibling = another_promoted,
+                        from_marker = marker,
+                        "notify-icon: carried the taskbar approval into this tray's entry"
+                    );
+                }
+            } else {
+                tracing::debug!(
+                    ?state,
+                    another_promoted,
+                    marker,
+                    "notify-icon: no approval to carry"
+                );
+            }
+            let _ = unsafe { RegCloseKey(root) };
+            return;
+        }
+        let _ = unsafe { RegCloseKey(root) };
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    tracing::debug!("notify-icon: own entry never appeared; nothing carried");
 }
 
 /// Read a `REG_SZ` value as a Rust string. Returns `None` for any other type,
@@ -419,8 +707,10 @@ fn read_reg_string(key: windows::Win32::System::Registry::HKEY, value: &str) -> 
         return None;
     }
     let wide: Vec<u16> = buf
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
         .take_while(|&c| c != 0)
         .collect();
     Some(String::from_utf16_lossy(&wide))
@@ -566,6 +856,9 @@ pub fn run() -> ! {
             eprintln!("failed to register notify icon: {err:?}");
             return 1;
         }
+        // 1450-23if: Windows has just created (or found) this tray's entry;
+        // carry an existing taskbar approval into it, off the UI thread.
+        std::thread::spawn(carry_notify_icon_promotion);
 
         // Initialise menu state; the WSL lifecycle task will mutate it.
         {
@@ -790,11 +1083,19 @@ pub(crate) fn init_tracing() {
 /// is logged at ERROR so it also lands in the Windows Event Log.
 /// @trace spec:windows-event-logging
 fn write_failure_diagnostics_bundle(reason: &str) -> Option<std::path::PathBuf> {
-    let dir = log_dir();
-    let _ = std::fs::create_dir_all(&dir);
+    write_failure_diagnostics_bundle_in(&log_dir(), reason)
+}
+
+/// The writer, with the log directory passed in (order 1417-t29c) so its test
+/// uses a temp dir instead of redirecting LOCALAPPDATA for the whole process.
+fn write_failure_diagnostics_bundle_in(
+    dir: &std::path::Path,
+    reason: &str,
+) -> Option<std::path::PathBuf> {
+    let _ = std::fs::create_dir_all(dir);
     let path = dir.join("launch-failure-diagnostics.json");
     let report = collect_report();
-    let log_tail: Vec<String> = std::fs::read_to_string(log_file_path())
+    let log_tail: Vec<String> = std::fs::read_to_string(dir.join("tray.log"))
         .map(|c| {
             let lines: Vec<&str> = c.lines().collect();
             lines
@@ -1018,18 +1319,12 @@ pub fn help_text() -> String {
 /// live-provision dress rehearsal. Does NOT hold a keepalive — it provisions to
 /// Ready, reports, and exits (the VM idles down normally afterward).
 pub fn provision_once() -> i32 {
-    struct ConsoleProgress;
-    impl ProvisionProgress for ConsoleProgress {
-        fn report_phase(&self, phase: ProvisionPhase) {
-            println!("[provision] phase: {}", phase.status_text());
-            tracing::info!(?phase, "provision phase");
-        }
-        fn report_message(&self, message: &str) {
-            println!("[provision] {message}");
-        }
-    }
+    use crate::provision_console::{PhaseConsole, process_tier, render_line};
 
     init_tracing();
+    // ORDER 1420-ev7i: phases drive the tillandsia renderer, coloured bars on a
+    // console and plain ASCII lines when piped (the installer's capture).
+    let tier = process_tier();
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -1040,15 +1335,24 @@ pub fn provision_once() -> i32 {
             return 1;
         }
     };
-    println!("[provision] starting recipe provisioning (live dress rehearsal)\u{2026}");
+    println!(
+        "{}",
+        render_line(
+            tier,
+            "provision",
+            "starting recipe provisioning (live dress rehearsal)\u{2026}"
+        )
+    );
     runtime.block_on(async {
         let lifecycle = WslLifecycle::new();
-        match lifecycle
-            .provision_via_recipe(std::sync::Arc::new(ConsoleProgress))
-            .await
-        {
+        let console = std::sync::Arc::new(PhaseConsole::for_process("provision"));
+        match lifecycle.provision_via_recipe(console.clone()).await {
             Ok(()) => {
-                println!("[provision] RESULT: VM Ready \u{2014} control wire up \u{2713}");
+                console.finish_ok();
+                println!(
+                    "{}",
+                    console.line("RESULT: VM Ready \u{2014} control wire up \u{2713}")
+                );
                 tracing::info!("provision-once: VM Ready");
                 // ORDER 1004-5f7p. Record that this installation reached Ready,
                 // because in about a minute it will stop being true and nothing
@@ -1067,7 +1371,11 @@ pub fn provision_once() -> i32 {
                 0
             }
             Err(err) => {
-                eprintln!("[provision] RESULT: FAILED \u{2014} {err}");
+                console.finish_err(&err);
+                eprintln!(
+                    "{}",
+                    console.line(&format!("RESULT: FAILED \u{2014} {err}"))
+                );
                 tracing::error!(%err, "provision-once failed");
                 1
             }
@@ -1108,18 +1416,12 @@ pub fn provision_once() -> i32 {
 ///
 /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
 pub fn reset_state_once() -> i32 {
-    struct ConsoleProgress;
-    impl ProvisionProgress for ConsoleProgress {
-        fn report_phase(&self, phase: ProvisionPhase) {
-            println!("[reset-state] phase: {}", phase.status_text());
-            tracing::info!(?phase, "reset-state provision phase");
-        }
-        fn report_message(&self, message: &str) {
-            println!("[reset-state] {message}");
-        }
-    }
+    use crate::provision_console::{PhaseConsole, process_tier, render_line};
 
     init_tracing();
+    // ORDER 1420-ev7i: see provision_once. The console itself is created only
+    // when provisioning starts, after the wipe's own lines.
+    let tier = process_tier();
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -1187,7 +1489,10 @@ pub fn reset_state_once() -> i32 {
         let lifecycle = WslLifecycle::new();
         if wipe {
             if let Err(err) = lifecycle.wipe_guest().await {
-                eprintln!("[reset-state] RESULT: FAILED \u{2014} wipe: {err}");
+                eprintln!(
+                    "{}",
+                    render_line(tier, "reset-state", &format!("RESULT: FAILED \u{2014} wipe: {err}"))
+                );
                 tracing::error!(%err, "reset-state wipe failed");
                 return 1;
             }
@@ -1244,19 +1549,32 @@ pub fn reset_state_once() -> i32 {
                     tracing::warn!(%err, "reset-state could not remove download cache");
                 }
             }
-            println!("[reset-state] state wiped \u{2014} reprovisioning from scratch\u{2026}");
+            println!(
+                "{}",
+                render_line(
+                    tier,
+                    "reset-state",
+                    "state wiped \u{2014} reprovisioning from scratch\u{2026}"
+                )
+            );
         }
-        match lifecycle
-            .provision_via_recipe(std::sync::Arc::new(ConsoleProgress))
-            .await
-        {
+        let console = std::sync::Arc::new(PhaseConsole::for_process("reset-state"));
+        match lifecycle.provision_via_recipe(console.clone()).await {
             Ok(()) => {
-                println!("[reset-state] RESULT: VM Ready \u{2014} control wire up \u{2713}");
+                console.finish_ok();
+                println!(
+                    "{}",
+                    console.line("RESULT: VM Ready \u{2014} control wire up \u{2713}")
+                );
                 tracing::info!("reset-state: VM Ready");
                 0
             }
             Err(err) => {
-                eprintln!("[reset-state] RESULT: FAILED \u{2014} provision: {err}");
+                console.finish_err(&err);
+                eprintln!(
+                    "{}",
+                    console.line(&format!("RESULT: FAILED \u{2014} provision: {err}"))
+                );
                 tracing::error!(%err, "reset-state provision failed");
                 1
             }
@@ -2009,12 +2327,12 @@ fn should_poll_vm_status(push_stream_healthy: bool) -> bool {
 /// wearing the name of one. It was kept until this commit deliberately — the
 /// pin and the fallback die WITH the variant, not before it, or the wire
 /// loses its guard while a consumer still exists.
+///
+/// ORDER 1439-p853: this is the BASE list. The listener subscribes to it plus
+/// `Progress` only when the guest advertises progress.push@v1, via
+/// `provision_console::push_subscribe_topics`; the list itself lives there.
 fn vm_status_subscribe_topics() -> Vec<tillandsias_control_wire::SubscriptionTopic> {
-    vec![
-        tillandsias_control_wire::SubscriptionTopic::VmStatus,
-        tillandsias_control_wire::SubscriptionTopic::LoginState,
-        tillandsias_control_wire::SubscriptionTopic::CloudProjects,
-    ]
+    crate::provision_console::base_push_topics()
 }
 
 /// SC-07 extension (order 154 slice 2): the slow-cadence
@@ -2215,7 +2533,7 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         // decode the topic list (postcard unknown-discriminant) may tear the
         // connection down rather than reply, so the fallback list must not
         // reuse the first stream.
-        let try_subscribe = |topics: Vec<tillandsias_control_wire::SubscriptionTopic>| async {
+        let try_subscribe = || async {
             let stream = crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT)
                 .await
                 .map_err(|e| format!("connect: {e}"))?;
@@ -2230,6 +2548,10 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
                 .handshake()
                 .await
                 .map_err(|e| format!("handshake: {e}"))?;
+            // ORDER 1439-p853: the topics come from the guest's HelloAck, so
+            // Progress is asked for only by a guest that advertised it; an
+            // older guest gets exactly the pre-change Subscribe.
+            let topics = crate::provision_console::push_subscribe_topics(client.server_caps());
             let seq = client.allocate_seq();
             let sub = ControlEnvelope {
                 wire_version: WIRE_VERSION,
@@ -2256,7 +2578,7 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         // identical list buys nothing and hides a real connect failure behind
         // a duplicate attempt. Reconnect is handled by the backoff loop below,
         // which is where it belonged all along.
-        let established = try_subscribe(vm_status_subscribe_topics()).await;
+        let established = try_subscribe().await;
 
         let mut client = match established {
             Ok(c) => c,
@@ -2288,6 +2610,11 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         refresh_github_login(hwnd).await;
         refresh_cloud_projects(hwnd).await;
 
+        // ORDER 1439-p853: guest progress through the 1420-9vpk renderer. The
+        // GUI tray has no console, so its sink is plain lines into tray.log;
+        // per connection, so a resubscribe starts a fresh task list.
+        let mut guest_progress = crate::provision_console::GuestProgress::to_tray_log();
+
         loop {
             match client.next_envelope().await {
                 Ok(env) => match env.body {
@@ -2313,6 +2640,9 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
                     ControlMessage::CloudProjectsPush { projects, .. } => {
                         let n = apply_cloud_projects(&projects, true);
                         tracing::debug!(count = n, "cloud projects pushed");
+                    }
+                    ControlMessage::ProgressPush { event, .. } => {
+                        guest_progress.observe(&event);
                     }
                     other => {
                         tracing::debug!("push stream: ignoring frame {}", other.kind());
@@ -4767,11 +5097,8 @@ mod tests {
     #[test]
     fn failure_bundle_writes_redacted_json() {
         let tmp = tempfile::tempdir().expect("tempdir");
-        // SAFETY: single-process test env mutation, as sibling tests do.
-        unsafe {
-            std::env::set_var("LOCALAPPDATA", tmp.path());
-        }
-        let path = write_failure_diagnostics_bundle(
+        let path = write_failure_diagnostics_bundle_in(
+            tmp.path(),
             "start failed; token ghp_16C7e42F292c6912E7710c838347Ae178B4a leaked",
         )
         .expect("bundle should be written");
@@ -4782,6 +5109,24 @@ mod tests {
         assert!(json["reason"].as_str().unwrap().contains("[REDACTED]"));
         assert!(!content.contains("ghp_16C7"), "no raw token in the bundle");
         assert!(json["diagnose"]["version"].is_string(), "diagnose embedded");
+    }
+
+    /// ORDER 1417-t29c. No code in this file may mutate LOCALAPPDATA: the
+    /// bundle test used to redirect it for the whole process while sibling
+    /// tests resolved log and state paths under it. Static, because the race
+    /// cannot be reproduced on demand; the needles are assembled at runtime
+    /// so this test does not match itself.
+    #[test]
+    fn no_test_mutates_localappdata() {
+        let src = include_str!("notify_icon.rs");
+        for verb in ["set_var", "remove_var"] {
+            let needle = format!("{verb}(\"{}\"", "LOCALAPPDATA");
+            assert!(
+                !src.contains(&needle),
+                "{needle} found: a test mutating this env races every sibling \
+                 test that resolves a path under it"
+            );
+        }
     }
 
     /// Order 154 slices 2+3: with the headless push sources landed (orders

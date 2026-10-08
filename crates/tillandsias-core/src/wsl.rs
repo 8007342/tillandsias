@@ -64,8 +64,8 @@ pub fn no_window_sync(cmd: &mut std::process::Command) -> &mut std::process::Com
 /// Build a `wsl.exe` command with `WSL_UTF8=1` already applied.
 ///
 /// The ONLY `Command::new("wsl.exe")` in the workspace, alongside its sync
-/// sibling. `scripts/check-wsl-exe-single-constructor.sh` fails the gate if a
-/// second one appears.
+/// sibling. `scripts/lua/check-wsl-exe-single-constructor.lua` fails the gate
+/// if a second one appears.
 /// @trace spec:cross-platform, spec:windows-native-tray
 pub fn wsl_command_async() -> tokio::process::Command {
     let mut cmd = tokio::process::Command::new("wsl.exe");

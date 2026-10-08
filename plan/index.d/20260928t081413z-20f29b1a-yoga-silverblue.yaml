@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-swap-on-off-installs-and-removes-the-forge-swap-service-from-the-binary-itself-so-a-host-without-a-checkout-can-enable-it-and-uninstall-leaves-no-trace
+    field: notes
+    value: |-
+      size: L
+      implementer_tier: opus
+      Touches root-owned system paths and a polkit rule: security-sensitive.
+
+
+      [2026-09-28T00:36:25Z yoga-silverblue] yoga-silverblue 2026-09-27 - CRITERION 4 OPEN, pointing at 1437-evzi. The binary has no --uninstall yet (1437-evzi, ready). 1448-kmyn ships swap_cmd::removal_paths() as the single removal list and arm 11 proves on+off leaves nothing; the contract that --uninstall must call it is recorded on 1437-evzi. Criteria 1, 2, 3 and 5 are arms 8, 9, 10 and 12 of scripts/test-forge-swap-service.sh.
+
+      [2026-09-28T08:14:13Z yoga-silverblue] yoga-silverblue 2026-09-28 - forge-regime red FIXED on work/1448-kmyn 98abdf157 and VERIFIED IN A FORGE: macuahuitl-forge reran scripts/test-forge-swap-service.sh there -> ok:forge-swap-service:32 arms (skipped=1: systemd-analyze, named), rc=0, 0 FAIL; it was 27/32 on trunk's fixture. Cause: arms 8-12 captured `2>&1` and exact-matched, and in a forge the binary warns on stderr on every call that /run/user/1000 cannot be set to 0700; the arms now read stdout only with a scratch XDG_RUNTIME_DIR. Criterion 4 remains open on 1437-evzi as before.
+    ts: "2026-09-28T08:14:13Z"
+    host: yoga-silverblue
+
+events:
+  - packet_id: tillandsias-swap-on-off-installs-and-removes-the-forge-swap-service-from-the-binary-itself-so-a-host-without-a-checkout-can-enable-it-and-uninstall-leaves-no-trace
+    event:
+      type: progress
+      ts: "2026-09-28T08:14:13Z"
+      host: yoga-silverblue
+      summary: |-
+        status 'size: L
+        implementer_tier: opus
+        Touches root-owned system paths and a polkit rule: security-sensitive.
+        
+        
+        [2026-09-28T00:36:25Z yoga-silverblue] yoga-silverblue 2026-09-27 - CRITERION 4 OPEN, pointing at 1437-evzi. The binary has no --uninstall yet (1437-evzi, ready). 1448-kmyn ships swap_cmd::removal_paths() as the single removal list and arm 11 proves on+off leaves nothing; the contract that --uninstall must call it is recorded on 1437-evzi. Criteria 1, 2, 3 and 5 are arms 8, 9, 10 and 12 of scripts/test-forge-swap-service.sh.
+        
+        [2026-09-28T08:14:13Z yoga-silverblue] yoga-silverblue 2026-09-28 - forge-regime red FIXED on work/1448-kmyn 98abdf157 and VERIFIED IN A FORGE: macuahuitl-forge reran scripts/test-forge-swap-service.sh there -> ok:forge-swap-service:32 arms (skipped=1: systemd-analyze, named), rc=0, 0 FAIL; it was 27/32 on trunk's fixture. Cause: arms 8-12 captured `2>&1` and exact-matched, and in a forge the binary warns on stderr on every call that /run/user/1000 cannot be set to 0700; the arms now read stdout only with a scratch XDG_RUNTIME_DIR. Criterion 4 remains open on 1437-evzi as before.' (not terminal) with evidence_refs: 98abdf157
+  - packet_id: tillandsias-swap-on-off-installs-and-removes-the-forge-swap-service-from-the-binary-itself-so-a-host-without-a-checkout-can-enable-it-and-uninstall-leaves-no-trace
+    event:
+      type: note
+      ts: "2026-09-28T08:14:13Z"
+      host: yoga-silverblue
+      summary: |-
+        forge-regime fix verified in a forge

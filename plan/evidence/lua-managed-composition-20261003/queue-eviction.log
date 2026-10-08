@@ -1,0 +1,3 @@
+land-queue: #212 work/1538-pwdr tier=full base=c78493e4a head=4db70d7d3
+evict:land-queue:212:gate-failed:rc=1
+ok:land-queue:1 landed=0 evicted=1 requeued=0 skipped=0

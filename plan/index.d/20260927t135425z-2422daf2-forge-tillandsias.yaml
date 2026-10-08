@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-groundtruth-grader-calls-the-frame-blind-verifier-so-a-span-that-merely-moved-is-graded-as-a-fabricated-citation
+    event:
+      type: blocked
+      ts: "2026-09-27T13:54:25Z"
+      agent_id: forge-forge-tillandsias-opencode-20260927t135319z
+      host: forge-tillandsias
+      summary: |
+        BLOCKED: four of five exit criteria verified hermetically on a forge with no spec
+        index (2026-09-27, groundtruth lib tests 29/29, the corpus-declaration fixture
+        green including the new graded-red arm and the no-index negative control);
+        criterion 3 needs an index-bearing host and cannot be produced here.
+
+          blocker   litmus:expert-groundtruth-harness must pass end to end against an index
+                    this host does not have. This forge reports spec_index=absent, so the
+                    spec-rung1 cases SKIP rather than grade, and the spec itself ENV-FAILs
+                    before step 1 on `podman ps` (the forge litmus runtime shim reports
+                    "podman is not on PATH") — see the note event on 1428-v4tt.
+          owner     macuahuitl. It is the only host the criterion names, and the selection
+                    note in the same file says the evidence must come from there.
+          next      run `scripts/run-litmus-test.sh forge-environment-discoverability` on
+                    macuahuitl and read STEP 30/31, OR — the cheaper form, and the one this
+                    criterion was really about — confirm that the offset-stale state itself
+                    is reproducible with the crate's own fixtures
+                    (`cargo test --release -p tillandsias-plan --lib groundtruth` runs both
+                    halves of it: a moved span grades STALE naming the commit it holds at,
+                    and a span wrong at its own commit stays a hard red).
+
+          WHY NOT completed: closing a packet requires checking its exit criteria against
+          the tree, and one of the five cannot be checked from here. Writing down the other
+          four and marking it done is the shape that leaves a release gate unverified with a
+          green ledger, which is worse than a red one.
+
+          WORTH AN OPERATOR RULING, not an agent's: criterion 3 as written asks for the
+          index published 2026-09-14 still in place "without rebuilding it". That index has
+          been republished since, so the criterion now depends on macuahuitl not having
+          rebuilt it — a property of the last thirteen days, not of this packet. If the
+          hermetic pair above is accepted as the closure, retire the criterion; if not, say
+          what the standing evidence is, because no future cycle can re-derive it.

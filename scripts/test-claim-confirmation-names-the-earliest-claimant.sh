@@ -96,6 +96,59 @@ out="$(check hosta)"; rc=$?
 [ "$rc" = 1 ] && [ "$out" = "refused:no-live-claim:9999-zzzz:hosta" ] \
     && ok "no claim is not a confirmation" || bad "no claim: rc=$rc out=$out"
 
+# ── arms 6-8 (1493-d93i): THE CLAIM MUST BE ON ORIGIN ──────────────────────
+# Each arm builds a scratch repository with a scratch bare origin; nothing
+# touches this checkout or the real origin. git config is written only with
+# -C into the scratch repos.
+repo_with_claim() {   # <name> <origin-url> [refuse]; commits a claim by hosta, tries to push
+    local r="$W/$1"
+    rm -rf "$r"; git init -q -b linux-next "$r"
+    git -C "$r" config user.email f@f; git -C "$r" config user.name f
+    mkdir -p "$r/plan/index.d"; cp "$W/plan/index.yaml" "$r/plan/index.yaml"
+    git -C "$r" add -A; git -C "$r" commit -qm base
+    git -C "$r" remote add origin "$2"
+    git -C "$r" push -q origin linux-next 2>/dev/null
+    git -C "$r" branch -q --set-upstream-to=origin/linux-next linux-next 2>/dev/null
+    if [ "${3:-}" = refuse ]; then   # origin refuses every push from here on
+        printf '#!/bin/sh\necho refused >&2\nexit 1\n' > "$2/hooks/pre-receive"; chmod +x "$2/hooks/pre-receive"
+        git -C "$2" config core.hooksPath "$2/hooks"
+    fi
+    cat > "$r/plan/index.d/20260929t120000z-hosta.yaml" <<EOF
+status:
+  - packet_id: $PID
+    field: status
+    value: in_progress
+    ts: "2026-09-29T12:00:00Z"
+    host: hosta
+EOF
+    git -C "$r" add -A; git -C "$r" commit -qm "claim"
+    git -C "$r" push -q origin linux-next 2>/dev/null
+    printf '%s' "$r"
+}
+check_in() { scripts/check-claim-confirmed.sh "$ORDER" --host hosta --plan-dir "$1/plan"; }
+fresh
+
+# arm 6: origin REFUSES the claim push, so the claim lives only in the checkout.
+git init -q --bare -b linux-next "$W/refusing.git"
+r="$(repo_with_claim refusing-clone "$W/refusing.git" refuse)"
+out="$(check_in "$r" 2>/dev/null)"; rc=$?
+[ "$rc" = 1 ] && grep -qF 'refused:claim-not-on-origin:9999-zzzz:hosta' <<<"$out" \
+    && ok "a claim whose push was REFUSED is not confirmed (claim-not-on-origin)" \
+    || bad "refused push: rc=$rc out=$out (pre-1493-d93i this printed ok:claim-confirmed)"
+
+# arm 7: NEGATIVE CONTROL, origin ACCEPTS the claim, so it is confirmed.
+git init -q --bare -b linux-next "$W/accepting.git"
+r="$(repo_with_claim accepting-clone "$W/accepting.git")"
+out="$(check_in "$r" 2>/dev/null)"; rc=$?
+[ "$rc" = 0 ] && grep -qF 'ok:claim-confirmed:9999-zzzz:hosta' <<<"$out" \
+    && ok "a claim that reached origin is still confirmed" || bad "accepted push: rc=$rc out=$out"
+
+# arm 8: origin cannot be asked: unknown, never a pass.
+r="$(repo_with_claim unreachable-clone "$W/does-not-exist.git")"
+out="$(check_in "$r" 2>/dev/null)"; rc=$?
+[ "$rc" = 3 ] && grep -qF 'unknown:claim-origin-unreachable:9999-zzzz:hosta' <<<"$out" \
+    && ok "an unreachable origin is unknown, not confirmed" || bad "unreachable origin: rc=$rc out=$out"
+
 total=$((pass + fail))
-if [ "$fail" = 0 ]; then echo "PASS: claim confirmation names the earliest claimant ${pass}/${total} (1370-tjme)"; exit 0; fi
+if [ "$fail" = 0 ]; then echo "PASS: claim confirmation names the earliest claimant ${pass}/${total} (1370-tjme, 1493-d93i)"; exit 0; fi
 echo "FAIL: claim confirmation ${pass}/${total} (1370-tjme)"; exit 1

@@ -8,6 +8,18 @@ multi_host_development:
     stable, zero-drift runtime enclave. `plan/` remains the durable inter-agent
     ledger for long-running work, failures, restarts, and idempotent recovery.
 
+  branch_discipline_seed:
+    file: .tillandsias/branch-discipline.yaml
+    rule: >
+      ORDER 1443-w79y. The seed is the MACHINE-READABLE PROJECTION of
+      branch_inventory and branch_namespaces below, not a second statement of
+      them: this prose stays canonical, and the seed is what the runtime
+      (`tillandsias-plan discipline show|target|check-ref`, forge-plan
+      `discipline_show`), the git mirror and the land tool READ, so the branch
+      model stops being a constant each tool hardcodes. A change to the branch
+      model changes both, in one commit. A project with no seed is level 0
+      advised and nothing refuses its pushes (operator ruling 2026-09-22,
+      1363-xp2v).
   branch_inventory:
     rule: >
       THE REMOTE CARRIES EXACTLY FOUR BRANCHES. Anything else is debris from a
@@ -574,11 +586,113 @@ multi_host_development:
         pushes when blocked by the main guard is intaken under this
         procedure (adopt/rename to salvage/<host>/..., triage, selective
         merge into osx-next or linux-next, archive+delete).
+    stranded_plan_write_triage: >
+      ASK THE FOLD, NEVER REASON FROM TIMESTAMPS (order 1232-av4p). A plan
+      fragment that exists only on a salvage/* or work/* ref is triaged with
+      scripts/check-stranded-plan-writes.sh, which folds it into a scratch copy
+      of trunk's ledger with the plan binary and says would-change or
+      superseded. The status fold is RANK-AWARE, not (ts, host) LWW:
+      status_entry_wins (crates/tillandsias-plan/src/fragments.rs) treats
+      implemented<completed<verified<done as a monotone ladder, so a rung
+      arriving over a WORKING state (ready/pending/in_progress/blocked) wins
+      REGARDLESS OF ITS TIMESTAMP, a lower rung loses, and only a `falsified`
+      event in the same fragment moves a row back down; plain LWW decides only
+      working-vs-working, equal rungs, and the lateral terminals
+      obsoleted/failed. CONSEQUENCE: relaying ANY stale implemented/completed
+      fragment flips its row UP, however old — so a ref's closure writes are
+      never relayed as-is; the row is re-verified against trunk and closed on
+      trunk evidence (1425-t9v9). MEASURED 2026-09-27 on 914-ahsy: a ref's
+      `implemented` at 2026-09-25T06:29:09Z folded over trunk's `ready` at
+      2026-09-26T03:27:03Z — the older write WON — while a triage reasoning
+      "older write loses" (1430-9227, since corrected at 802617d5e) said it
+      would lose.
     forge_branch_inheritance: >
       A forge-hosted agent inherits the branch its lane's mirror was seeded
       from — the host checkout's checked-out branch at launch; the container
       OS never selects the branch. (Closes
       plan/issues/forge-agent-branch-selection-clarification-2026-07-28.md.)
+  plan_only_peers:
+    purpose: >
+      Operator direction 2026-09-28: some agents (Antigravity, Codex, and any
+      harness without the cross-session messaging channel) join the fleet and
+      coordinate ONLY through the shared ./plan ledger on origin/linux-next.
+      This is their complete protocol. It is also valid for every other agent;
+      messaging is a convenience, the ledger is the record.
+    identity: >
+      agent_id comes from `scripts/agent-identity.sh id <backend>` (e.g.
+      codex, antigravity), never hand-composed; export it as
+      TILLANDSIAS_AGENT_ID so append-event can attribute you. host is the
+      machine's short hostname.
+    steps:
+      1_find: >
+        `git fetch origin && git switch linux-next && git pull --ff-only`.
+        Read the packet with `tillandsias-plan status <order>` (the FOLDED
+        row, never a raw fragment). The operator names your packets; rows open
+        to plan-only peers carry capability tag `plan-only-peer-ok`.
+      2_claim: >
+        `tillandsias-plan set-field <order> status in_progress --host <host>
+        --reason "claimed by <agent_id>"`, commit ONLY that fragment, push it:
+        `git push origin HEAD:linux-next` (the plan-only lane admits a
+        fragment-only commit with no gate stamp). Then
+        `bash scripts/check-claim-confirmed.sh <order>` MUST print a win; a
+        `refused:claim-lost:` means another agent holds it — append a note
+        that you yielded and pick another packet.
+      3_work: >
+        `git switch -c work/<order> origin/linux-next` (the ref name is
+        exactly work/<order>). Commit and push to it as often as you like:
+        `git push origin work/<order>` — no gate stamp, no trunk merge.
+        Never push code to linux-next, main or a platform branch; never
+        force-push; never rebase a pushed ref (merge origin/linux-next INTO
+        your ref instead).
+      4_verify: >
+        Before declaring ready: `git merge origin/linux-next` into the ref;
+        run the packet's verifiable_closure command and show it FAIL on the
+        pre-fix code and PASS after (a fixture that could harm the real
+        checkout must run in a scratch dir first — see
+        cheatsheets/test/litmus-fixture-writing.md); run
+        `./build.sh --preflight` and, for Rust, `cargo clippy --all-targets --
+        -D warnings` plus `cargo fmt --check`. A full `./build.sh --check`
+        is welcome but not required — the coordinator's relay gates the union.
+      5_ready: >
+        Record READY in the ledger, with the evidence, as a note event, and
+        push it through the plan lane (step 2's push):
+        `printf '%s\n' "READY: work/<order> @ <full sha> — <closure verdict
+        line>; preflight <summary line>; <what is NOT done>" |
+        tillandsias-plan append-event <order> note --summary-file - --ts
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)"`. The READY event is what the
+        coordinator acts on. Optionally also open a PR
+        (`gh pr create --base linux-next --head work/<order> --draft`, then
+        `gh pr ready`); if the token lacks pull-request permission, skip it —
+        the READY event is sufficient.
+      6_questions: >
+        When a decision is not yours (scope, design choice, an ambiguous
+        criterion), do not guess and do not stop silently: append a note
+        event whose summary starts `ASK:` with the question and the options
+        you see, push it, and continue with anything else in the packet that
+        does not depend on the answer. Before each work session, re-read the
+        row (`tillandsias-plan status <order>`): the coordinator answers with
+        a note event starting `RULING:` and may amend next_action (--append).
+      7_close: >
+        The coordinator relays READY refs into linux-next and records a note
+        event `LANDED land<N> = <sha>` on your row. Then close it:
+        `tillandsias-plan set-field <order> status completed --host <host>
+        --evidence "<landed sha on origin/linux-next>: <closure verdict>"
+        --reason "..."`, pushed through the plan lane. The evidence SHA is the
+        LANDED commit, never your work ref's SHA.
+    never: >
+      gh auth login/refresh (the credential is the operator's); sudo; editing
+      .claude/ or other harness settings; deleting or rewriting another
+      agent's ref; a status write that drops another agent's lines (use
+      --append on long-form fields); declaring READY without the pre-fix
+      FAIL / post-fix PASS evidence.
+    coordinator_duty: >
+      Each coordination pass, after `git fetch origin`, the coordinator lists
+      new READY and ASK events on linux-next (`git log --since=<last pass>
+      -p origin/linux-next -- plan/index.d | grep -E 'READY: work/|ASK:'`),
+      relays READY refs whose SHA matches origin/work/<order>, answers every
+      ASK with a `RULING:` note event on the row, and records `LANDED` on each
+      landed row. A plan-only peer's question is answered in the ledger or it
+      is not answered.
   host_identity:
     required_fields:
       - host_id
@@ -696,6 +810,67 @@ multi_host_development:
       - "Spec, methodology, and plan conflicts block until explicitly reconciled."
       - "Platform crate conflicts stay on the owning platform branch unless a shared API contract changed."
       - "Never resolve conflicts by deleting another host's plan notes; tombstone, supersede, or merge by stable ID."
+    relay_preflight:
+      authority: >
+        Operator-approved trims T2 and T4, 2026-09-27 (umbrella 1437-62g8;
+        design in plan/issues/efficiency-trims-design-2026-09-27.md). The
+        relay lane hand-typed ~15 commands per pass and ran EVERY covering
+        litmus spec (37-52 per relay, ~30 min) on 2026-09-27; one omitted
+        decider cost a 20-minute gate on 2026-09-21.
+      one_command: >
+        `scripts/relay-preflight.sh <ref>...` (1437-664a) is the relay
+        preflight: merge the refs in the order given onto a scratch
+        relay/<utc> branch from origin/linux-next, run
+        scripts/cycle-preflight.sh, the deciders (check-bash-dialect,
+        check-sigpipe-verdict-pipelines-added, check-plan-binary-probe-usage,
+        check-litmus-pin-claims, check-script-exec-bits,
+        check-added-fragments-parse, check-scorable-obligation-added,
+        check-gate-step-regimes, check-added-test-is-referenced,
+        check-jq-callsite-ratchet, preflight-fixtures-default-target,
+        check-issue-citation-convention, plus tillandsias-plan check
+        --strict-fragments and tillandsias-policy plan-orders when fragments
+        are added), `cargo fmt --check` when Rust is touched, every touched
+        scripts/test-*.sh and every fixture whose bytes name a touched
+        script, `cargo test -p` for each touched crate (plus the
+        tray,listen-vsock serial pass when tray/ is touched), and the scoped
+        covering litmus. ONE stdout line: ok:relay-preflight:<sha>:... or
+        refused:relay-preflight:<phase>:<item>; per-item lines on stderr.
+        `--plan` prints the selection without running and must be
+        byte-identical across two runs on the same merged SHA. The script
+        never pushes; scripts/land-on-platform-branch.sh lands. Until it
+        lands, the hand-typed list in skills/join-the-fleet section 3 is
+        the sequence, and check-issue-citation-convention is part of it.
+      scoped_covering_litmus: >
+        Per relay, `litmus-covering-specs.sh --relay-scope origin/linux-next`
+        (1437-yfuh) partitions the covering set deterministically: RUN every
+        bound spec with a DECLARED match on a touched path and every bound
+        command-mention match of size instant or quick; DEFER, by name and
+        reason, command-mention matches of size long, large or e2e
+        (deferred:size), non-pre-build phases (deferred:phase), specs past a
+        cap of 15 ordered declared-first then by name (deferred:cap), and a
+        spec whose litmus bytes, spec bytes and declared inputs all match a
+        status=pass record from this host within 24 h (deferred:memo,
+        1437-v3gb; a fail NEVER memoises). `--all-covering` restores the
+        full set. What this keeps: the deciders stay unconditional and
+        whole-tree (stale pins), declared coverage over touched fixtures
+        stays (the swallowed && and the duplicated ground-truth pin were
+        found there). What covers the deferred set: the daily cut's
+        check:litmus-pre-build and --ci-full, which are autonomous
+        (operator 2026-09-26). ./build.sh --check runs no litmus (748-tkjx),
+        so this scoped run is the only pre-build litmus a change sees
+        before the cut; the partition is a gate-integrity decision and its
+        rows are tiered opus.
+      rulings_2026_09_27: >
+        The operator confirmed the deferral ("defer e2e and other
+        integration tests to their corresponding integration layers") and
+        asked for the classification to be REVISITED per branch layer:
+        canonical table in methodology/ci.yaml -> integration_layers
+        (1443-b85g); the relay layer's litmus set IS --relay-scope's run set
+        (1437-yfuh), consumed not re-derived. The land tool itself
+        (scripts/land-on-platform-branch.sh) is being redesigned in Lua by
+        a separate design; relay-preflight.sh (1437-664a) may be superseded
+        by it and is written as separately callable phases so the Lua tool
+        can adopt them. Nothing here redesigns the land tool.
     pre_push_gate:
       rule: >
         NON-linux-next branches (windows-next, osx-next, any shared non-trunk
@@ -739,9 +914,11 @@ multi_host_development:
         (above) imports that VERSION and the pre-push VERSION guard then refuses
         the platform push (702-eusw, 2026-08-13: dd8fd63f swept a build-number
         bump into an unrelated security fix; osx-next and windows-next could not
-        push at all). RULE: a VERSION bump belongs on MAIN first (a
+        push at all). RULE: a RELEASE VERSION bump belongs on MAIN first (a
         release/version-bump-* PR, per PR #94/#95), never as a side effect of a
-        work commit on linux-next. Two guards enforce this: the pre-push VERSION
+        work commit on linux-next. A LOCAL BUILD-COUNTER bump committed alone
+        and strictly greater than every reference may push on any branch
+        (643-64bx, methodology/versioning.yaml monotonic_build_bump). Two guards enforce this: the pre-push VERSION
         guard treats a platform VERSION == origin/linux-next as a legitimate
         integration-branch CATCH-UP (643-64bx), and
         scripts/check-version-bump-isolation.sh (wired into ./build.sh --check,

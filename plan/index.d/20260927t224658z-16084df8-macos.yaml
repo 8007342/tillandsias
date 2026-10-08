@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-plan-discipline-derive-observes-the-projects-real-branching-facts-remote-head-integration-branches-committer-hosts-work-refs-installed-hooks-and-compares-them-to-the-seed-so-a-rule-refuses-only-where-seed-and-reality-agree-and-drift-is-reported-with-an-affordance
+    event:
+      type: progress
+      ts: "2026-09-27T22:46:58Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t224657z
+      host: macos
+      summary: |
+        Ratification applied at work/1446-664f ebf0d4a67 (fix 1bbaecdb0, fast-forward over 5b75054d7). (1) The committer qualifier now counts distinct committer HOSTS via scripts/fleet-activity.sh's rule (1223-wzc4): the email domain's first label is the host, and shared providers or domainless addresses are unattributed buckets, reported separately and never counted. SHARED_PROVIDERS is pinned to that script by the unit test shared_providers_match_fleet_activity. This repo derives {lenovinha, macuahuitl, yoga} plus 2 buckets. (2) Fetch first: stated in the verb's usage/help, and derive prints `note: no refs/remotes/origin/* here …` when origin was never fetched (fixture arm 1 pins this). (3) The mirror-source note is filed on 1443-uit6. Clean-checkout evidence: fixture 5/5; w79y 6/6; sb9b 5/5; all 11 deciders rc=0; ratchet 6/6; allocator no-collision; litmus 5 specs; crate 464/0; musl zigbuild rc=0. Please relay ebf0d4a67.

@@ -1373,6 +1373,1066 @@ pub fn refresh_github_token_in_vault(debug: bool) -> Result<RotationOutcome, Str
     Ok(outcome)
 }
 
+// ── Order 1461-8tyy: the token rotates itself before it expires ─────────────
+//
+// GitHub App user-to-server access tokens expire after 8 hours. The locked
+// exchange above existed, but its only caller was the explicit
+// `--refresh-github-token`, gated to a desktop session, so nothing ran it on a
+// schedule: every 8 hours every mirror push was refused upstream until the
+// operator re-seeded by hand (twice on 2026-09-28). The live spec
+// (gh-auth-script, "Token Rotation and Expiration Management") already requires
+// rotation within 30 minutes of expiry; this is the thing that runs it.
+
+/// Rotate when the access token has this long or less to live.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const GITHUB_ROTATION_WINDOW_SECS: u64 = 30 * 60;
+/// How often the resident scheduler asks.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const GITHUB_ROTATION_CHECK_EVERY: std::time::Duration =
+    std::time::Duration::from_secs(15 * 60);
+
+/// What one due-check did. Every variant is a verdict, never a silence.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DueCheck {
+    /// Rotated; the new access token expires at this time. The refresh token's
+    /// own expiry rides along for the 14-day warning.
+    Rotated {
+        expires_at: u64,
+        refresh_expires_at: Option<u64>,
+    },
+    /// The stored token has more than the window left.
+    NotDue {
+        expires_at: u64,
+        refresh_expires_at: Option<u64>,
+    },
+    /// A stored token with no expiry (a token-only login): nothing to schedule.
+    NoExpiry,
+    NoToken,
+    NoRefreshToken,
+    /// A forge never rotates: its policy cannot read the refresh token, and a
+    /// second rotating process would race the host's.
+    RefusedInForge,
+}
+
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+impl DueCheck {
+    pub fn verdict(&self) -> String {
+        match self {
+            DueCheck::Rotated { expires_at, .. } => {
+                format!("ok:github-token-rotation:rotated:expires_at={expires_at}")
+            }
+            DueCheck::NotDue { expires_at, .. } => {
+                format!("ok:github-token-rotation:not-due:expires_at={expires_at}")
+            }
+            DueCheck::NoExpiry => "ok:github-token-rotation:no-expiry".into(),
+            DueCheck::NoToken => "ok:github-token-rotation:no-token".into(),
+            DueCheck::NoRefreshToken => "ok:github-token-rotation:no-refresh-token".into(),
+            DueCheck::RefusedInForge => "skip:github-token-rotation:forge".into(),
+        }
+    }
+}
+
+/// Is a token that expires at `expires_at` due for rotation at `now`?
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_token_rotation_due(expires_at: u64, now: u64) -> bool {
+    expires_at.saturating_sub(now) <= GITHUB_ROTATION_WINDOW_SECS
+}
+
+/// The due-check: under the exclusive rotation lock, read the stored bundle,
+/// and exchange ONLY when it is inside the window.
+///
+/// THE DECISION IS MADE UNDER THE LOCK, which is what makes two concurrent
+/// checks spend the single-use refresh token once: the second waits, re-reads
+/// the winner's new `expires_at`, and finds nothing due. `lock_name` is a
+/// parameter so tests never contend with a live tray's scheduler.
+///
+/// There is NO desktop-session gate here, deliberately: this spends the refresh
+/// token only when the access token is due, and only under the host lock. The
+/// session gate stays on the explicit forced rotation.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn rotate_github_token_if_due(
+    store: &dyn GitHubTokenStore,
+    refresh: &dyn Fn(&str, &str) -> Result<GitHubRefreshResponse, String>,
+    now: u64,
+    host_is_forge: bool,
+    lock_name: &str,
+    lock_timeout: std::time::Duration,
+    debug: bool,
+) -> Result<DueCheck, String> {
+    if host_is_forge {
+        return Ok(DueCheck::RefusedInForge);
+    }
+    let _lock = crate::resource_lock::acquire(lock_name, lock_timeout, debug)
+        .map_err(|e| format!("github-token-rotation-failed:lock:{e}"))?;
+    let Some(bundle) = store
+        .read_bundle()
+        .map_err(|e| format!("github-token-rotation-failed:read:{e}"))?
+    else {
+        return Ok(DueCheck::NoToken);
+    };
+    if bundle.refresh_token.as_deref().is_none_or(str::is_empty) {
+        return Ok(DueCheck::NoRefreshToken);
+    }
+    let Some(expires_at) = bundle.expires_at else {
+        return Ok(DueCheck::NoExpiry);
+    };
+    if !github_token_rotation_due(expires_at, now) {
+        return Ok(DueCheck::NotDue {
+            expires_at,
+            refresh_expires_at: bundle.refresh_token_expires_at,
+        });
+    }
+    match rotate_github_token(store, refresh, now) {
+        Ok((RotationOutcome::Rotated, Some(b))) => Ok(DueCheck::Rotated {
+            expires_at: b.expires_at.unwrap_or(0),
+            refresh_expires_at: b.refresh_token_expires_at,
+        }),
+        Ok((RotationOutcome::NoToken, _)) => Ok(DueCheck::NoToken),
+        Ok((RotationOutcome::NoRefreshToken, _)) => Ok(DueCheck::NoRefreshToken),
+        Ok((RotationOutcome::Rotated, None)) => {
+            Err("github-token-rotation-failed:no-bundle-returned".into())
+        }
+        // The exchange's errors already name the cause without echoing any
+        // token (parse_github_refresh_response), and the old pair is intact
+        // because nothing is written before the exchange succeeds.
+        Err(e) => Err(format!("github-token-rotation-failed:{e}")),
+    }
+}
+
+/// The live due-check: Vault, GitHub's token endpoint, the real clock, and the
+/// host kind from the environment.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_token_due_check_live(debug: bool) -> Result<DueCheck, String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
+    let forge = std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge");
+    let store = VaultGitHubTokenStore { debug };
+    rotate_github_token_if_due(
+        &store,
+        &|client_id, refresh_token| perform_github_token_refresh(client_id, refresh_token, debug),
+        now,
+        forge,
+        GITHUB_ROTATION_LOCK,
+        std::time::Duration::from_secs(60),
+        debug,
+    )
+}
+
+/// The delay before the next check: the regular interval after a verdict, and
+/// a backoff after a failure (1 min doubling, capped at the interval), so a
+/// transient failure is retried well before the token dies.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_rotation_next_delay(
+    last: &Result<DueCheck, String>,
+    prev_backoff: std::time::Duration,
+) -> std::time::Duration {
+    match last {
+        Ok(_) => GITHUB_ROTATION_CHECK_EVERY,
+        Err(_) => {
+            let next = if prev_backoff.is_zero() {
+                std::time::Duration::from_secs(60)
+            } else {
+                prev_backoff * 2
+            };
+            next.min(GITHUB_ROTATION_CHECK_EVERY)
+        }
+    }
+}
+
+/// Warn this many days before the refresh token expires (gh-auth-script:
+/// "Fourteen days before refresh_token_expires_at the tray MUST tell the
+/// operator to run tillandsias --github-login").
+pub const GITHUB_REFRESH_WARN_DAYS: u64 = 14;
+
+/// Days left on the refresh token when it is inside the warning window, else
+/// None. An expired refresh token answers Some(0): only a new login fixes it.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_refresh_expiry_warning(refresh_expires_at: Option<u64>, now: u64) -> Option<u64> {
+    let exp = refresh_expires_at?;
+    let left = exp.saturating_sub(now);
+    (left <= GITHUB_REFRESH_WARN_DAYS * 86_400).then_some(left / 86_400)
+}
+
+/// The operator-facing line for the warning.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_refresh_expiry_message(days_left: u64) -> String {
+    if days_left == 0 {
+        "GitHub sign-in has EXPIRED: run `tillandsias --github-login` to keep pushes working".into()
+    } else {
+        format!(
+            "GitHub sign-in expires in {days_left} day(s): run `tillandsias --github-login` before then to keep pushes working"
+        )
+    }
+}
+
+/// True at most once per UTC day: the scheduler checks every 15 minutes and a
+/// warning every 15 minutes would be noise the operator learns to ignore.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn should_warn_today(last_warned_day: &mut Option<u64>, now: u64) -> bool {
+    let today = now / 86_400;
+    if *last_warned_day == Some(today) {
+        return false;
+    }
+    *last_warned_day = Some(today);
+    true
+}
+
+/// The accountability event the spec requires for every rotation
+/// (gh-auth-script "Token Rotation and Expiration Management" ->
+/// spec:gh-auth-script; secret-rotation is tombstoned, 1397-eppt). Its own
+/// operation name, so an audit can tell an automatic rotation from the
+/// explicit `github_token_refresh`.
+// @trace spec:gh-auth-script, order:1489-8qd6
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn audit_github_token_auto_rotation(outcome: &str) {
+    tracing::info!(
+        accountability = true,
+        category = "secrets",
+        spec = "gh-auth-script",
+        operation = "github_token_auto_rotation",
+        secret_name = "github-token",
+        outcome = outcome,
+        "GitHub token auto-rotation: {outcome}"
+    );
+}
+
+/// One scheduler per process (1461-8tyy): the tray starts it, and so does every
+/// lane launch through `ensure_enclave_for_project`; a long-lived tray that
+/// launches many lanes must not accumulate a thread per launch. Returns true
+/// exactly once per process.
+fn claim_github_rotation_scheduler_slot() -> bool {
+    static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    !STARTED.swap(true, std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Start the resident rotation scheduler on its own thread: a check at start,
+/// then per [`github_rotation_next_delay`]. Idempotent per process.
+///
+/// WHO STARTS IT, and why that covers every regime that pushes:
+/// - the Linux tray, at start;
+/// - the guest's resident service on macOS/Windows;
+/// - EVERY LANE LAUNCH (`ensure_enclave_for_project`), so a bare-metal Linux
+///   host with no tray — one that only runs `tillandsias --bash <project>` and
+///   the mirror — rotates too. The mirror lives only while a lane is open
+///   (1448-yt96), and the lane process lives exactly that long, so the thread
+///   is alive whenever something can push.
+///
+/// Concurrent schedulers (a tray plus lanes, several lanes) are safe: the
+/// due-check decides under the host-wide rotation lock, so one exchange
+/// happens per due window. Never effective in a forge (the check refuses and
+/// the thread ends).
+pub fn spawn_github_token_rotation_scheduler(
+    debug: bool,
+    on_refresh_expiring: Option<Box<dyn Fn(String) + Send + 'static>>,
+) {
+    if !claim_github_rotation_scheduler_slot() {
+        return;
+    }
+    let _ = std::thread::Builder::new()
+        .name("github-token-rotation".into())
+        .spawn(move || {
+            let mut backoff = std::time::Duration::ZERO;
+            let mut last_warned_day: Option<u64> = None;
+            loop {
+                let out = github_token_due_check_live(debug);
+                // The 14-day refresh-expiry warning, at most once a day.
+                if let Ok(
+                    DueCheck::Rotated {
+                        refresh_expires_at, ..
+                    }
+                    | DueCheck::NotDue {
+                        refresh_expires_at, ..
+                    },
+                ) = &out
+                {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    if let Some(days) = github_refresh_expiry_warning(*refresh_expires_at, now)
+                        && should_warn_today(&mut last_warned_day, now)
+                    {
+                        let msg = github_refresh_expiry_message(days);
+                        eprintln!("[tillandsias] warn:github-refresh-expiring:{days}d: {msg}");
+                        if let Some(cb) = &on_refresh_expiring {
+                            cb(msg);
+                        }
+                    }
+                }
+                match &out {
+                    Ok(DueCheck::RefusedInForge) => return,
+                    Ok(v @ DueCheck::Rotated { .. }) => {
+                        audit_github_token_auto_rotation("rotated");
+                        eprintln!("[tillandsias] {}", v.verdict());
+                    }
+                    Ok(v) if debug => eprintln!("[tillandsias] {}", v.verdict()),
+                    Ok(_) => {}
+                    Err(e) => {
+                        audit_github_token_auto_rotation("failed");
+                        eprintln!("[tillandsias] blocked:{e}");
+                    }
+                }
+                let delay = github_rotation_next_delay(&out, backoff);
+                backoff = if out.is_err() {
+                    delay
+                } else {
+                    std::time::Duration::ZERO
+                };
+                std::thread::sleep(delay);
+            }
+        });
+}
+
+// ── Order 1505-iysn: the Cloudflare OAuth bundle in Vault, and its rotation ──
+//
+// @trace order:1505-iysn, openspec/changes/cloudflare-login-and-fleet-vpn/design.md (Decision 2)
+// @trace openspec/changes/cloudflare-login-and-fleet-vpn/specs/cloudflare-auth/spec.md
+//
+// SIBLINGS of the GitHub items above, not a generalization of them (design
+// Decision 2): the GitHub code is under a live p0 and the two providers have
+// different lifetimes. What is REUSED is the machinery: the same Vault (root
+// token, stability lease, read-back verification), the same host-wide
+// advisory lock (`resource_lock`), the same "refresh record first" ordering
+// rule and the same three resident entry points (tray start, every lane
+// launch, the guest listener).
+//
+// What is STRICTER than the GitHub sibling, deliberately, because this is a
+// new credential with no legacy callers:
+// - The live store FAILS CLOSED: an unreachable, sealed or refusing Vault is a
+//   named error (`vault-unavailable`, `vault-sealed`, `vault-unauthorized`),
+//   never "no token", and a refresh-path read error is never read as "no
+//   refresh token". There is no file, keychain or plaintext fallback anywhere
+//   on this path.
+// - No error string, verdict or `Debug` output carries token bytes: Vault and
+//   OAuth failures are reduced to fixed reason tokens before they leave this
+//   block (`cloudflare_refresh_failure_reason`, `cloudflare_vault_reason`),
+//   and `CloudflareTokenBundle`'s `Debug` redacts both tokens.
+// - The token endpoint must be https (plain http only to loopback, which is
+//   where the fixtures' fake lives), so the refresh token is never sent in
+//   clear to a host a discovery document named.
+
+/// Where the Cloudflare OAuth credential lives in Vault. TWO PATHS for the
+/// GitHub reason: KV v2 policies are path-scoped, not field-scoped, so the
+/// long-lived refresh token gets a path no reader of the access token can be
+/// granted by accident. Only the host's resident process (root token; the
+/// `tray` policy's `secret/*`) reads the refresh path; no forge, mirror,
+/// inference or login-container policy names anything under
+/// `secret/data/cloudflare/` (asserted by
+/// `cloudflare_token_rotation_policies_keep_forges_out`).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const CLOUDFLARE_TOKEN_PATH: &str = "secret/cloudflare/token";
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const CLOUDFLARE_REFRESH_PATH: &str = "secret/cloudflare/refresh";
+
+/// The Cloudflare bundle as the two records hold it.
+///
+/// `expires_at` is `Some` only when Cloudflare reported `expires_in` (token
+/// lifetimes are undocumented, design Risks): a bundle without it is never
+/// rotated on a guess, and the surfaces say "expiry unknown".
+///
+/// NO `Display`, and a hand-written `Debug` that redacts both tokens: a bundle
+/// that reaches a log line, a panic message or an `{:?}` in an error must not
+/// carry a credential with it.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct CloudflareTokenBundle {
+    pub access_token: String,
+    pub expires_at: Option<u64>,
+    pub account_id: Option<String>,
+    pub client_id: String,
+    pub refresh_token: Option<String>,
+    pub refresh_token_expires_at: Option<u64>,
+}
+
+impl std::fmt::Debug for CloudflareTokenBundle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CloudflareTokenBundle")
+            .field("access_token", &"<redacted>")
+            .field("expires_at", &self.expires_at)
+            .field("account_id", &self.account_id)
+            .field("client_id", &self.client_id)
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| "<redacted>"),
+            )
+            .field("refresh_token_expires_at", &self.refresh_token_expires_at)
+            .finish()
+    }
+}
+
+/// The token-path record: `access_token`, `expires_at` (when known),
+/// `account_id` (when known), `client_id`. Never the refresh token.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_token_record(b: &CloudflareTokenBundle) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    map.insert("access_token".into(), b.access_token.clone().into());
+    if let Some(exp) = b.expires_at {
+        map.insert("expires_at".into(), exp.into());
+    }
+    if let Some(acct) = &b.account_id {
+        map.insert("account_id".into(), acct.clone().into());
+    }
+    map.insert("client_id".into(), b.client_id.clone().into());
+    serde_json::Value::Object(map)
+}
+
+/// The refresh-path record: `refresh_token`, `refresh_token_expires_at` (when
+/// reported), `client_id`. `None` for a bundle without a refresh token.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_refresh_record(b: &CloudflareTokenBundle) -> Option<serde_json::Value> {
+    let rt = b.refresh_token.as_ref().filter(|s| !s.is_empty())?;
+    let mut map = serde_json::Map::new();
+    map.insert("refresh_token".into(), rt.clone().into());
+    if let Some(rexp) = b.refresh_token_expires_at {
+        map.insert("refresh_token_expires_at".into(), rexp.into());
+    }
+    map.insert("client_id".into(), b.client_id.clone().into());
+    Some(serde_json::Value::Object(map))
+}
+
+/// Vault as the Cloudflare rotation sees it. A trait so the ordering, lock and
+/// failure rules are testable against an in-memory store; the only production
+/// implementation is [`VaultCloudflareTokenStore`], and nothing in production
+/// selects another one (no env switch, no fallback store).
+///
+/// Errors are REASON TOKENS (`vault-sealed`, `write-not-confirmed`, ...), never
+/// a Vault response body and never a record's contents.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub trait CloudflareTokenStore {
+    /// `Ok(None)` ONLY when Vault answered that the token record does not
+    /// exist. Unreachable, sealed or refusing is `Err`.
+    fn read_bundle(&self) -> Result<Option<CloudflareTokenBundle>, String>;
+    /// Write one record and CONFIRM it (read back and compare); `Ok` means the
+    /// record is durably in Vault.
+    fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String>;
+    /// Destroy one record, EVERY version (1505-kc5f `--cloudflare-logout`), and
+    /// CONFIRM it is gone. Idempotent: an absent record is `Ok`. Unreachable,
+    /// sealed or refusing is `Err` — never read as "already deleted".
+    fn delete_record(&self, path: &str) -> Result<(), String>;
+}
+
+/// Delete the Cloudflare bundle (1505-kc5f `--cloudflare-logout`): the
+/// long-lived REFRESH record first, then the token record, and NOTHING else —
+/// `secret/cloudflare/mesh` (the host's fleet-vpn service token) is not this
+/// bundle and is never touched here.
+///
+/// Errors name which record is still present:
+/// `refresh-record-delete-failed:<reason>` (both records remain) or
+/// `token-record-delete-failed:<reason>` (the refresh record is gone, so the
+/// remaining access token can no longer be renewed and dies at its expiry).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn delete_cloudflare_token_bundle(store: &dyn CloudflareTokenStore) -> Result<(), String> {
+    store
+        .delete_record(CLOUDFLARE_REFRESH_PATH)
+        .map_err(|e| format!("refresh-record-delete-failed:{e}"))?;
+    store
+        .delete_record(CLOUDFLARE_TOKEN_PATH)
+        .map_err(|e| format!("token-record-delete-failed:{e}"))
+}
+
+/// How many times the refresh-record write is attempted before the rotation
+/// gives up. Once Cloudflare has answered a refresh, the OLD refresh token is
+/// spent (refresh-token rotation) and the new one exists only in this
+/// process: a transient Vault hiccup at that moment must not cost the
+/// operator a login. The write is idempotent, so retrying it is safe.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+const CLOUDFLARE_REFRESH_WRITE_ATTEMPTS: u32 = 3;
+
+/// Write a bundle: the REFRESH record first, then the token record — the
+/// GitHub failure rule ([`store_github_token_bundle`]).
+///
+/// - Refresh write fails (after [`CLOUDFLARE_REFRESH_WRITE_ATTEMPTS`]):
+///   NOTHING in Vault changed; the old pair is intact. Error
+///   `refresh-record-write-failed:<reason>`.
+/// - Token write fails afterwards: Vault holds the NEW refresh token and the
+///   OLD access-token record, whose `expires_at` is still inside the window,
+///   so the next due-check rotates again with the new refresh token. At no
+///   point is neither credential stored. Error
+///   `token-record-write-failed:<reason>`.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn store_cloudflare_token_bundle(
+    store: &dyn CloudflareTokenStore,
+    bundle: &CloudflareTokenBundle,
+) -> Result<(), String> {
+    if bundle.access_token.is_empty() || bundle.client_id.is_empty() {
+        return Err("bundle-incomplete".into());
+    }
+    if let Some(refresh) = cloudflare_refresh_record(bundle) {
+        let mut last = String::new();
+        let mut stored = false;
+        for attempt in 1..=CLOUDFLARE_REFRESH_WRITE_ATTEMPTS {
+            match store.write_record(CLOUDFLARE_REFRESH_PATH, refresh.clone()) {
+                Ok(()) => {
+                    stored = true;
+                    break;
+                }
+                Err(e) => {
+                    last = e;
+                    if attempt < CLOUDFLARE_REFRESH_WRITE_ATTEMPTS {
+                        std::thread::sleep(std::time::Duration::from_millis(
+                            250 * u64::from(attempt),
+                        ));
+                    }
+                }
+            }
+        }
+        if !stored {
+            return Err(format!("refresh-record-write-failed:{last}"));
+        }
+    }
+    store
+        .write_record(CLOUDFLARE_TOKEN_PATH, cloudflare_token_record(bundle))
+        .map_err(|e| format!("token-record-write-failed:{e}"))
+}
+
+/// A Vault client error reduced to a fixed reason token. The variants' payloads
+/// (Vault response bodies, `missing data.data in response: {envelope}`) are
+/// DROPPED: an envelope can hold a record's contents.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_vault_reason(e: &VaultError) -> &'static str {
+    match e {
+        VaultError::Network(_) => "vault-unavailable",
+        VaultError::Unauthorized(_) => "vault-unauthorized",
+        VaultError::Sealed(_) => "vault-sealed",
+        VaultError::NotFound(_) => "vault-not-found",
+        VaultError::Other(_) => "vault-error",
+    }
+}
+
+/// The live store: the same Vault, root token, stability lease and client the
+/// GitHub store uses. Fails closed on every path (see [`CloudflareTokenStore`]).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub struct VaultCloudflareTokenStore {
+    pub debug: bool,
+}
+
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+impl VaultCloudflareTokenStore {
+    fn client(
+        &self,
+    ) -> Result<
+        (
+            crate::resource_lock::ResourceLockGuard,
+            crate::RuntimeOrHandle,
+            VaultClient,
+        ),
+        String,
+    > {
+        let debug = self.debug;
+        let stability = vault_stability_lease(debug).map_err(|_| "vault-lease".to_string())?;
+        let rt = tokio_runtime().map_err(|_| "vault-runtime".to_string())?;
+        let root_token = read_and_handover_root_token(debug)
+            .map_err(|_| "vault-root-token-unavailable".to_string())?;
+        let client = vault_client(&vault_api_base_url(), &root_token, debug)
+            .map_err(|_| "vault-unavailable".to_string())?;
+        Ok((stability, rt, client))
+    }
+}
+
+impl CloudflareTokenStore for VaultCloudflareTokenStore {
+    fn read_bundle(&self) -> Result<Option<CloudflareTokenBundle>, String> {
+        if !container_running(VAULT_CONTAINER_NAME) {
+            return Err("vault-unavailable".into());
+        }
+        let (_stability, rt, client) = self.client()?;
+        let token_rec = match rt.block_on(client.read_secret(CLOUDFLARE_TOKEN_PATH)) {
+            Ok(v) => v,
+            Err(VaultError::NotFound(_)) => return Ok(None),
+            Err(e) => return Err(cloudflare_vault_reason(&e).into()),
+        };
+        let access_token = token_rec["access_token"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .ok_or("token-record-malformed")?
+            .to_string();
+        // An absent refresh record is a legitimate state; any OTHER read
+        // failure is not "absent" and is reported.
+        let refresh_rec = match rt.block_on(client.read_secret(CLOUDFLARE_REFRESH_PATH)) {
+            Ok(v) => Some(v),
+            Err(VaultError::NotFound(_)) => None,
+            Err(e) => return Err(format!("refresh-{}", cloudflare_vault_reason(&e))),
+        };
+        let client_id = token_rec["client_id"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(crate::cloudflare_oauth::client_id);
+        Ok(Some(CloudflareTokenBundle {
+            access_token,
+            expires_at: token_rec["expires_at"].as_u64(),
+            account_id: token_rec["account_id"].as_str().map(str::to_string),
+            client_id,
+            refresh_token: refresh_rec
+                .as_ref()
+                .and_then(|r| r["refresh_token"].as_str())
+                .filter(|s| !s.is_empty())
+                .map(str::to_string),
+            refresh_token_expires_at: refresh_rec
+                .as_ref()
+                .and_then(|r| r["refresh_token_expires_at"].as_u64()),
+        }))
+    }
+
+    fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+        if !container_running(VAULT_CONTAINER_NAME) {
+            // Bring Vault itself up (the same idempotent path `--init` uses);
+            // if that fails the write is REFUSED. There is no other store.
+            ensure_vault_running(self.debug).map_err(|_| "vault-unavailable".to_string())?;
+        }
+        let (_stability, rt, client) = self.client()?;
+        rt.block_on(client.write_secret(path, value.clone()))
+            .map_err(|e| cloudflare_vault_reason(&e).to_string())?;
+        let read_back = rt
+            .block_on(client.read_secret(path))
+            .map_err(|e| format!("write-not-confirmed:{}", cloudflare_vault_reason(&e)))?;
+        if read_back != value {
+            return Err("write-not-confirmed:mismatch".into());
+        }
+        Ok(())
+    }
+
+    fn delete_record(&self, path: &str) -> Result<(), String> {
+        // No auto-start here: a Vault that is not running holds records this
+        // call cannot reach, so "deleted" would be a lie. Refuse instead.
+        if !container_running(VAULT_CONTAINER_NAME) {
+            return Err("vault-unavailable".into());
+        }
+        let (_stability, rt, client) = self.client()?;
+        rt.block_on(client.delete_secret_all_versions(path))
+            .map_err(|e| cloudflare_vault_reason(&e).to_string())?;
+        match rt.block_on(client.read_secret(path)) {
+            Err(VaultError::NotFound(_)) => Ok(()),
+            Ok(_) => Err("delete-not-confirmed:still-present".into()),
+            Err(e) => Err(format!(
+                "delete-not-confirmed:{}",
+                cloudflare_vault_reason(&e)
+            )),
+        }
+    }
+}
+
+/// A `cloudflare_oauth` refresh failure reduced to a reason token. The core's
+/// errors are shaped `refused:cloudflare-login:token-exchange-http-<status>:<code>`
+/// (code from the server's JSON), `...:token-response-parse:<serde error>` (a
+/// serde type error can QUOTE the offending value, e.g. a token sent as a
+/// number) or a transport error; only the status and a plain-identifier OAuth
+/// error code survive.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_refresh_failure_reason(err: &str) -> String {
+    const HTTP: &str = "refused:cloudflare-login:token-exchange-http-";
+    if let Some(rest) = err.strip_prefix(HTTP) {
+        let (status, code) = rest.split_once(':').unwrap_or((rest, ""));
+        let status =
+            if (1..=3).contains(&status.len()) && status.bytes().all(|b| b.is_ascii_digit()) {
+                status
+            } else {
+                "unknown"
+            };
+        let code = if !code.is_empty()
+            && code.len() <= 64
+            && code.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
+        {
+            code
+        } else {
+            "unrecognised-error-code"
+        };
+        return format!("refresh-refused:http-{status}:{code}");
+    }
+    if err.starts_with("refused:cloudflare-login:token-response-parse") {
+        return "refresh-response-unusable".into();
+    }
+    "refresh-transport".into()
+}
+
+/// May a refresh token be POSTed to this endpoint? https anywhere; plain http
+/// only to a loopback host (the fixtures' fake). A userinfo component
+/// (`http://127.0.0.1@elsewhere/`) is refused. The login (1505-kc5f) applies
+/// the same rule to every endpoint it sends a code, verifier or token to.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub(crate) fn cloudflare_token_endpoint_is_safe(endpoint: &str) -> bool {
+    if endpoint.starts_with("https://") {
+        return true;
+    }
+    let Some(rest) = endpoint.strip_prefix("http://") else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if authority.contains('@') {
+        return false;
+    }
+    let host = if let Some(v6) = authority.strip_prefix('[') {
+        v6.split(']').next().unwrap_or("")
+    } else {
+        authority.split(':').next().unwrap_or("")
+    };
+    matches!(host, "127.0.0.1" | "localhost" | "::1")
+}
+
+/// The token endpoint, read from the OpenID discovery document at `base_url`
+/// (design Decision 1: endpoints come from discovery, never a compiled path).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_token_endpoint(
+    http: &dyn crate::cloudflare_oauth::HttpClient,
+    base_url: &str,
+) -> Result<String, String> {
+    let url = format!(
+        "{}/.well-known/openid-configuration",
+        base_url.trim_end_matches('/')
+    );
+    let resp = http
+        .get(&url)
+        .map_err(|_| "discovery-unreachable".to_string())?;
+    if resp.status != 200 {
+        return Err(format!("discovery-http-{}", resp.status));
+    }
+    let doc: serde_json::Value =
+        serde_json::from_str(&resp.body).map_err(|_| "discovery-unusable".to_string())?;
+    let endpoint = doc["token_endpoint"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or("discovery-unusable:no-token-endpoint")?;
+    if !cloudflare_token_endpoint_is_safe(endpoint) {
+        return Err("token-endpoint-not-https".into());
+    }
+    Ok(endpoint.to_string())
+}
+
+/// One `grant_type=refresh_token` exchange through `cloudflare_oauth::refresh`
+/// against the endpoint discovery names. Errors are reason tokens only.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn perform_cloudflare_token_refresh(
+    http: &dyn crate::cloudflare_oauth::HttpClient,
+    base_url: &str,
+    client_id: &str,
+    refresh_token: &str,
+) -> Result<crate::cloudflare_oauth::Bundle, String> {
+    let endpoint = cloudflare_token_endpoint(http, base_url)?;
+    let mut bundle = crate::cloudflare_oauth::refresh(http, &endpoint, client_id, refresh_token)
+        .map_err(|e| cloudflare_refresh_failure_reason(&e))?;
+    if bundle.access_token.is_empty() {
+        return Err("refresh-response-unusable".into());
+    }
+    if bundle.refresh_token.as_deref() == Some("") {
+        bundle.refresh_token = None;
+    }
+    Ok(bundle)
+}
+
+/// The bundle a successful refresh produces. A response without a new refresh
+/// token (a server that does not rotate them) keeps the old one, per RFC 6749
+/// §6; a NEW refresh token's lifetime is not reported, so it is recorded as
+/// unknown rather than inherited from the old one.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_rotated_bundle(
+    old: &CloudflareTokenBundle,
+    resp: crate::cloudflare_oauth::Bundle,
+    now: u64,
+) -> CloudflareTokenBundle {
+    let (refresh_token, refresh_token_expires_at) = match resp.refresh_token {
+        Some(new) if !new.is_empty() => (Some(new), None),
+        _ => (old.refresh_token.clone(), old.refresh_token_expires_at),
+    };
+    CloudflareTokenBundle {
+        access_token: resp.access_token,
+        expires_at: resp.expires_in.map(|s| now.saturating_add(s)),
+        account_id: old.account_id.clone(),
+        client_id: old.client_id.clone(),
+        refresh_token,
+        refresh_token_expires_at,
+    }
+}
+
+/// Rotate when the access token has this long or less to live (design
+/// Decision 2: `expires_at - now <= 30 min`).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const CLOUDFLARE_ROTATION_WINDOW_SECS: u64 = 30 * 60;
+/// How often the resident scheduler asks.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const CLOUDFLARE_ROTATION_CHECK_EVERY: std::time::Duration =
+    std::time::Duration::from_secs(15 * 60);
+/// The host-wide advisory lock every Cloudflare rotation takes.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub const CLOUDFLARE_ROTATION_LOCK: &str = "cloudflare-token-rotation";
+
+/// What one Cloudflare due-check did. Every variant is a verdict.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CloudflareDueCheck {
+    /// Rotated; the new access token's expiry when Cloudflare reported one.
+    Rotated {
+        expires_at: Option<u64>,
+    },
+    NotDue {
+        expires_at: u64,
+    },
+    /// A stored token whose lifetime was never reported: never rotated on a
+    /// guess.
+    ExpiryUnknown,
+    NoToken,
+    NoRefreshToken,
+    /// A forge never rotates: no forge policy can read either path, and a
+    /// second rotating process would race the host's.
+    RefusedInForge,
+}
+
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+impl CloudflareDueCheck {
+    pub fn verdict(&self) -> String {
+        match self {
+            CloudflareDueCheck::Rotated {
+                expires_at: Some(e),
+            } => format!("ok:cloudflare-token-rotation:rotated:expires_at={e}"),
+            CloudflareDueCheck::Rotated { expires_at: None } => {
+                "ok:cloudflare-token-rotation:rotated:expiry-unknown".into()
+            }
+            CloudflareDueCheck::NotDue { expires_at } => {
+                format!("ok:cloudflare-token-rotation:not-due:expires_at={expires_at}")
+            }
+            CloudflareDueCheck::ExpiryUnknown => {
+                "ok:cloudflare-token-rotation:expiry-unknown".into()
+            }
+            CloudflareDueCheck::NoToken => "ok:cloudflare-token-rotation:no-token".into(),
+            CloudflareDueCheck::NoRefreshToken => {
+                "ok:cloudflare-token-rotation:no-refresh-token".into()
+            }
+            CloudflareDueCheck::RefusedInForge => "skip:cloudflare-token-rotation:forge".into(),
+        }
+    }
+}
+
+/// Is a token that expires at `expires_at` due for rotation at `now`?
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn cloudflare_token_rotation_due(expires_at: u64, now: u64) -> bool {
+    expires_at.saturating_sub(now) <= CLOUDFLARE_ROTATION_WINDOW_SECS
+}
+
+/// What the operator does about a failed rotation, by reason.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_rotation_remedy(reason: &str) -> &'static str {
+    if reason.starts_with("refresh-record-write-failed") {
+        "the new sign-in could not be stored in Vault and the old refresh token is spent: bring Vault up with `tillandsias --init`, then run `tillandsias --cloudflare-login`"
+    } else if reason.starts_with("token-record-write-failed") {
+        "the new refresh token IS stored; the access-token write is retried automatically"
+    } else if reason.starts_with("refresh-refused:") && reason.ends_with(":invalid_grant") {
+        "Cloudflare no longer accepts the stored sign-in: run `tillandsias --cloudflare-login`; both stored records were left untouched"
+    } else if reason.starts_with("read:") {
+        "Vault is unreachable, sealed or refused the host's token: run `tillandsias --init`; retried automatically"
+    } else if reason == "lock" {
+        "another rotation holds the host lock; retried automatically"
+    } else {
+        "nothing was written; retried automatically with backoff"
+    }
+}
+
+/// The named failure verdict: `cloudflare-token-rotation-failed:<reason>` plus
+/// the remedy. Callers print it as `blocked:<this>`.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn cloudflare_rotation_failure(reason: &str) -> String {
+    format!(
+        "cloudflare-token-rotation-failed:{reason} (remedy: {})",
+        cloudflare_rotation_remedy(reason)
+    )
+}
+
+/// The Cloudflare sibling of [`rotate_github_token_locked`]: take the
+/// exclusive host-wide lock, THEN read the stored bundle, decide, and exchange
+/// only when it is inside the window.
+///
+/// THE DECISION IS MADE UNDER THE LOCK: a second concurrent check waits, reads
+/// the winner's new `expires_at`, and finds nothing due, so a refresh token is
+/// spent once per window. Nothing is written before the exchange succeeds, so
+/// a refused exchange leaves both records exactly as they were.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn rotate_cloudflare_token_locked(
+    store: &dyn CloudflareTokenStore,
+    refresh: &dyn Fn(&str, &str) -> Result<crate::cloudflare_oauth::Bundle, String>,
+    now: u64,
+    lock_name: &str,
+    lock_timeout: std::time::Duration,
+    debug: bool,
+) -> Result<CloudflareDueCheck, String> {
+    let _lock = crate::resource_lock::acquire(lock_name, lock_timeout, debug)
+        .map_err(|_| cloudflare_rotation_failure("lock"))?;
+    let Some(bundle) = store
+        .read_bundle()
+        .map_err(|e| cloudflare_rotation_failure(&format!("read:{e}")))?
+    else {
+        return Ok(CloudflareDueCheck::NoToken);
+    };
+    let Some(old_refresh) = bundle.refresh_token.as_deref().filter(|s| !s.is_empty()) else {
+        return Ok(CloudflareDueCheck::NoRefreshToken);
+    };
+    let Some(expires_at) = bundle.expires_at else {
+        return Ok(CloudflareDueCheck::ExpiryUnknown);
+    };
+    if !cloudflare_token_rotation_due(expires_at, now) {
+        return Ok(CloudflareDueCheck::NotDue { expires_at });
+    }
+    let resp =
+        refresh(&bundle.client_id, old_refresh).map_err(|e| cloudflare_rotation_failure(&e))?;
+    let rotated = cloudflare_rotated_bundle(&bundle, resp, now);
+    store_cloudflare_token_bundle(store, &rotated).map_err(|e| cloudflare_rotation_failure(&e))?;
+    Ok(CloudflareDueCheck::Rotated {
+        expires_at: rotated.expires_at,
+    })
+}
+
+/// The due-check: a forge refuses BEFORE touching the lock or the store;
+/// anywhere else, [`rotate_cloudflare_token_locked`]. `lock_name` is a
+/// parameter so tests never contend with a live tray's scheduler.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn rotate_cloudflare_token_if_due(
+    store: &dyn CloudflareTokenStore,
+    refresh: &dyn Fn(&str, &str) -> Result<crate::cloudflare_oauth::Bundle, String>,
+    now: u64,
+    host_is_forge: bool,
+    lock_name: &str,
+    lock_timeout: std::time::Duration,
+    debug: bool,
+) -> Result<CloudflareDueCheck, String> {
+    if host_is_forge {
+        return Ok(CloudflareDueCheck::RefusedInForge);
+    }
+    rotate_cloudflare_token_locked(store, refresh, now, lock_name, lock_timeout, debug)
+}
+
+/// `TILLANDSIAS_HOST_KIND=forge` means this process runs inside a forge.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn host_kind_is_forge(host_kind: Option<&str>) -> bool {
+    host_kind == Some("forge")
+}
+
+/// The live due-check: Vault, the token endpoint discovery names at
+/// `TILLANDSIAS_CLOUDFLARE_BASE_URL` (default dash.cloudflare.com), the real
+/// clock, and the host kind from the environment.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn cloudflare_token_due_check_live(debug: bool) -> Result<CloudflareDueCheck, String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| cloudflare_rotation_failure("clock"))?
+        .as_secs();
+    let forge = host_kind_is_forge(std::env::var("TILLANDSIAS_HOST_KIND").ok().as_deref());
+    let store = VaultCloudflareTokenStore { debug };
+    let http = crate::cloudflare_oauth::ReqwestHttpClient::default();
+    let base_url = crate::cloudflare_oauth::base_url();
+    rotate_cloudflare_token_if_due(
+        &store,
+        &|client_id, refresh_token| {
+            perform_cloudflare_token_refresh(&http, &base_url, client_id, refresh_token)
+        },
+        now,
+        forge,
+        CLOUDFLARE_ROTATION_LOCK,
+        std::time::Duration::from_secs(60),
+        debug,
+    )
+}
+
+/// The regular interval after a verdict; after a failure, 1 min doubling,
+/// capped at the interval.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn cloudflare_rotation_next_delay(
+    failed: bool,
+    prev_backoff: std::time::Duration,
+) -> std::time::Duration {
+    if !failed {
+        return CLOUDFLARE_ROTATION_CHECK_EVERY;
+    }
+    let next = if prev_backoff.is_zero() {
+        std::time::Duration::from_secs(60)
+    } else {
+        prev_backoff * 2
+    };
+    next.min(CLOUDFLARE_ROTATION_CHECK_EVERY)
+}
+
+/// The accountability event for every automatic rotation. `outcome` is
+/// `rotated` or `failed` — never a reason string that could carry data.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn audit_cloudflare_token_auto_rotation(outcome: &'static str) {
+    tracing::info!(
+        accountability = true,
+        category = "secrets",
+        spec = "cloudflare-auth",
+        operation = "cloudflare_token_auto_rotation",
+        secret_name = "cloudflare-token",
+        outcome = outcome,
+        "Cloudflare token auto-rotation: {outcome}"
+    );
+}
+
+/// One Cloudflare scheduler per process (the tray and every lane launch both
+/// call the spawn). Returns true exactly once per process.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+fn claim_cloudflare_rotation_scheduler_slot() -> bool {
+    static STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    !STARTED.swap(true, std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Start the resident Cloudflare rotation scheduler on its own thread: a check
+/// at start, then per [`cloudflare_rotation_next_delay`]. Idempotent per
+/// process. Called from the SAME three entry points as
+/// [`spawn_github_token_rotation_scheduler`] — the Linux tray at start, every
+/// lane launch (`ensure_enclave_for_project`) and the guest listener
+/// (`maybe_spawn_vsock_listener`) — pinned by
+/// scripts/test-cloudflare-token-rotation.sh arm 6. Never effective in a
+/// forge (the check refuses and the thread ends).
+///
+/// A failure prints `blocked:cloudflare-token-rotation-failed:<reason> (remedy:
+/// ...)` when it first appears or changes (every time under `--debug`), is
+/// audited every time, and is retried with backoff.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn spawn_cloudflare_token_rotation_scheduler(debug: bool) {
+    if !claim_cloudflare_rotation_scheduler_slot() {
+        return;
+    }
+    let spawned = std::thread::Builder::new()
+        .name("cloudflare-token-rotation".into())
+        .spawn(move || {
+            let mut backoff = std::time::Duration::ZERO;
+            let mut last_failure: Option<String> = None;
+            loop {
+                let out = cloudflare_token_due_check_live(debug);
+                match &out {
+                    Ok(CloudflareDueCheck::RefusedInForge) => return,
+                    Ok(v @ CloudflareDueCheck::Rotated { .. }) => {
+                        audit_cloudflare_token_auto_rotation("rotated");
+                        eprintln!("[tillandsias] {}", v.verdict());
+                        last_failure = None;
+                    }
+                    Ok(v) => {
+                        if debug {
+                            eprintln!("[tillandsias] {}", v.verdict());
+                        }
+                        last_failure = None;
+                    }
+                    Err(e) => {
+                        audit_cloudflare_token_auto_rotation("failed");
+                        if debug || last_failure.as_deref() != Some(e.as_str()) {
+                            eprintln!("[tillandsias] blocked:{e}");
+                        }
+                        last_failure = Some(e.clone());
+                    }
+                }
+                let delay = cloudflare_rotation_next_delay(out.is_err(), backoff);
+                backoff = if out.is_err() {
+                    delay
+                } else {
+                    std::time::Duration::ZERO
+                };
+                std::thread::sleep(delay);
+            }
+        });
+    if spawned.is_err() {
+        eprintln!(
+            "[tillandsias] blocked:cloudflare-token-rotation-failed:thread-spawn (remedy: restart tillandsias; nothing rotates the Cloudflare token in this process)"
+        );
+    }
+}
+
 /// In-container address of the Vault TLS listener. The Vault server listens on
 /// the container loopback at :8200; `podman exec` does NOT inherit the
 /// entrypoint's environment, so every exec'd `vault` CLI call must set this (and
@@ -1888,6 +2948,117 @@ fn has_shamir_share_in_keyring() -> bool {
     false
 }
 
+/// What the OS keychain can say about the unseal share (order 1437-qza3).
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyringShare {
+    /// The keychain answered and holds a valid 32-byte share.
+    Present,
+    /// The keychain answered and has no valid share.
+    Absent,
+    /// The keychain could not be asked: no secret service, a locked keyring,
+    /// or a timeout. These cannot be told apart from here (1265-8qr6).
+    Unreachable,
+}
+
+/// Ask the keychain, and ONLY the keychain, for the unseal share. Unlike
+/// [`has_shamir_share_in_keyring`] this never consults the fallback file and
+/// keeps "no entry" apart from "could not ask", because the reset decision
+/// (see [`reset_vault_disposition`]) turns on exactly that difference.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[cfg(feature = "vault")]
+pub fn probe_keyring_share() -> KeyringShare {
+    use base64::Engine;
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let answer = match Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1) {
+            Err(_) => KeyringShare::Unreachable,
+            Ok(entry) => match entry.get_password() {
+                Ok(encoded) => {
+                    let valid = base64::engine::general_purpose::STANDARD
+                        .decode(encoded.trim())
+                        .map(|v| v.len() == 32)
+                        .unwrap_or(false);
+                    if valid {
+                        KeyringShare::Present
+                    } else {
+                        KeyringShare::Absent
+                    }
+                }
+                Err(keyring::Error::NoEntry) => KeyringShare::Absent,
+                Err(_) => KeyringShare::Unreachable,
+            },
+        };
+        let _ = tx.send(answer);
+    });
+    rx.recv_timeout(Duration::from_secs(2))
+        .unwrap_or(KeyringShare::Unreachable)
+}
+
+/// The reset's Vault disposition, one of the three named tokens in
+/// host-state-lifecycle (order 1437-qza3, aligned to 1443-bs9z). The tokens
+/// are an INTERFACE: fixtures and the tray read them, so do not respell them.
+///
+/// A SOFT reset never deletes the store under ANY disposition. The
+/// disposition only decides what the reset ANNOUNCES; for
+/// `AbsentReinitAtInit` the next `--init`'s partial-init guard is what
+/// re-initialises the store, with its own loud line.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResetVaultDisposition {
+    /// `Verified:KEEP` — the keyring answered and holds a 32-byte share.
+    VerifiedKeep,
+    /// `Unverified:KEEP` — the keyring could not be asked. Not evidence of an
+    /// absent share, so the store is kept unverified (operator 2026-09-27:
+    /// "Unverified:KEEP is ok for a soft reset").
+    UnverifiedKeep,
+    /// `Absent:REINIT-AT-INIT` — the keyring answered and holds no share, so
+    /// the store cannot be unsealed and is re-initialised at the next init.
+    AbsentReinitAtInit,
+}
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+impl ResetVaultDisposition {
+    /// The token, exactly as the spec spells it.
+    pub fn token(self) -> &'static str {
+        match self {
+            Self::VerifiedKeep => "Verified:KEEP",
+            Self::UnverifiedKeep => "Unverified:KEEP",
+            Self::AbsentReinitAtInit => "Absent:REINIT-AT-INIT",
+        }
+    }
+
+    /// The announcement line, verbatim from the host-state-lifecycle table.
+    pub fn announcement(self) -> &'static str {
+        match self {
+            Self::VerifiedKeep => {
+                "reset: Vault store kept (Verified:KEEP) — share vault-shamir-share-v1 present"
+            }
+            Self::UnverifiedKeep => {
+                "reset: keyring unreachable — Vault store kept unverified (Unverified:KEEP); it \
+                 unseals at next init if the share is there, else init re-initialises it and \
+                 says so"
+            }
+            Self::AbsentReinitAtInit => {
+                "reset: no unlocking keyring holds vault-shamir-share-v1 — the Vault store cannot \
+                 survive this reset and will be re-initialised at next init"
+            }
+        }
+    }
+}
+
+/// Operator ruling 2026-09-27: "the presence of an unlocking keyring should be
+/// a requirement to survive the vault store." Decided by asking the keyring
+/// alone: an unreachable keyring is not evidence of an absent share.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn reset_vault_disposition(keyring: KeyringShare) -> ResetVaultDisposition {
+    match keyring {
+        KeyringShare::Present => ResetVaultDisposition::VerifiedKeep,
+        KeyringShare::Unreachable => ResetVaultDisposition::UnverifiedKeep,
+        KeyringShare::Absent => ResetVaultDisposition::AbsentReinitAtInit,
+    }
+}
+
 /// The FALLBACK half of has_shamir_share_in_keyring: the whole predicate inside
 /// a guest, which has no keychain. Split out (1200-ih38 review) so a test can
 /// assert it hermetically: on a host whose own keyring holds a share, the full
@@ -2174,7 +3345,7 @@ pub fn mint_approle_secret_lease(
 ///
 /// Best-effort: errors are logged and continued past so a partial failure
 /// doesn't deadlock the shutdown path. The Vault container itself is
-/// preserved on disk (matches the `tillandsias-vault-data` volume
+/// preserved on disk (matches the `<cache>/vault-data` host directory
 /// contract).
 pub async fn revoke_pending_container_tokens(debug: bool) {
     let token_entries: Vec<(String, String)> = match revocation_registry().lock() {
@@ -2349,7 +3520,16 @@ fn build_vault_image(debug: bool) -> Result<String, String> {
 /// shapes, and it reaches for `podman unshare` and `libc::getuid`, neither of
 /// which exists on `x86_64-pc-windows-gnu`. The Windows and macOS equivalents
 /// clear Credential Manager and the keychain from their own trays.
+///
+/// UNINSTALL-ONLY (order 1437-qza3, operator directive 2026-09-27). No reset
+/// may call this: the store and the unseal material are operator data that
+/// survive every destructive reset (tillandsias-vault, host-state-lifecycle).
+/// Its caller is `--uninstall`, which lands with 1437-evzi; until then it has
+/// none, which is why dead code is allowed here rather than the function being
+/// deleted and rewritten. `scripts/test-reset-state-contract.sh` ARM 8 fails if
+/// a reset body calls it.
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
     let mut cleared: Vec<String> = Vec::new();
     let mut failed: Vec<String> = Vec::new();
@@ -2374,6 +3554,27 @@ pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
         }
     }
 
+    let (c, f) = clear_vault_store_and_fallbacks();
+    cleared.extend(c);
+    failed.extend(f);
+
+    if debug {
+        eprintln!("[tillandsias] cleared: {}", cleared.join(" "));
+        if !failed.is_empty() {
+            eprintln!("[tillandsias] FAILED: {}", failed.join(" "));
+        }
+    }
+    (cleared, failed)
+}
+
+/// The store half of the clear: the two fallback files and `<cache>/vault-data`,
+/// and NOTHING in the keychain. Split out (order 1437-qza3) because a reset on
+/// a keyring-less host clears exactly this set, per the operator ruling of
+/// 2026-09-27, while the keychain entries are cleared only by uninstall.
+#[cfg(target_os = "linux")]
+pub fn clear_vault_store_and_fallbacks() -> (Vec<String>, Vec<String>) {
+    let mut cleared: Vec<String> = Vec::new();
+    let mut failed: Vec<String> = Vec::new();
     let cache = match crate::init_cache_dir() {
         Ok(c) => c,
         Err(e) => {
@@ -2431,12 +3632,6 @@ pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
         }
     }
 
-    if debug {
-        eprintln!("[tillandsias] cleared: {}", cleared.join(" "));
-        if !failed.is_empty() {
-            eprintln!("[tillandsias] FAILED: {}", failed.join(" "));
-        }
-    }
     (cleared, failed)
 }
 
@@ -3051,6 +4246,18 @@ fn vault_selinux_label_opt(_debug: bool) -> Option<String> {
     None
 }
 
+/// The one line printed before the partial-init guard wipes the store
+/// (order 1437-qza3): the store path, the missing share's name, and that every
+/// credential in it is lost.
+fn partial_init_wipe_line(vault_dir: &std::path::Path) -> String {
+    format!(
+        "[tillandsias-vault] WIPING {}: the unseal share {VAULT_SHAMIR_SHARE_V1} is in neither \
+         the keyring nor its fallback file, so this store cannot be opened; every credential \
+         stored in it is lost and Vault will be initialised afresh",
+        vault_dir.display()
+    )
+}
+
 fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     let image_tag = canonical_vault_launch_tag(image_tag)?;
     let host_publish_arg = vault_host_publish_arg(is_running_in_vm());
@@ -3076,15 +4283,14 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // guard fixes. @trace spec:tillandsias-vault
     let is_partial_init = vault_data_volume_exists() && !has_shamir_share_in_keyring();
     if is_partial_init {
-        if debug {
-            eprintln!(
-                "[tillandsias-vault] removing stale partial-init data volume \
-                 (volume exists but no Shamir share in keychain)"
-            );
-        }
         let vault_dir = crate::init_cache_dir()
             .unwrap_or_else(|_| PathBuf::from("."))
             .join("vault-data");
+        // Order 1437-qza3: ALWAYS say this, not only under --debug. Since no
+        // reset clears the share any more, reaching this branch means the
+        // share went missing some other way, and the wipe below destroys every
+        // stored sign-in. The operator must be able to see that it happened.
+        eprintln!("{}", partial_init_wipe_line(&vault_dir));
         let _ = std::fs::remove_dir_all(vault_dir);
     } else if debug && vault_data_volume_exists() {
         eprintln!(
@@ -4387,9 +5593,9 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
 
     Err(
         "vault is initialized but no first-boot handover is present and the host \
-         keychain has no root token or fallback — the keychain and the data volume are out of \
-         sync. Reset with `podman volume rm tillandsias-vault-data` and re-run \
-         `tillandsias --init` to re-bootstrap."
+         keychain has no root token or fallback — the keychain and the data directory are out of \
+         sync. Reset by removing the `<cache>/vault-data` directory (this loses every credential) \
+         and re-run `tillandsias --init` to re-bootstrap."
             .to_string(),
     )
 }
@@ -5443,6 +6649,346 @@ mod tests {
         );
     }
 
+    // ── 1461-8tyy: the resident due-check (github_token_auto_rotation_*) ──
+
+    /// A Send + Sync store for the concurrency arm (FakeStore is RefCell).
+    struct SharedStore {
+        records: std::sync::Mutex<std::collections::BTreeMap<String, serde_json::Value>>,
+        writes: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl SharedStore {
+        fn with(b: &GitHubTokenBundle) -> Self {
+            let mut m = std::collections::BTreeMap::new();
+            m.insert(GITHUB_TOKEN_PATH.to_string(), github_token_record(b));
+            if let Some(r) = github_refresh_record(b) {
+                m.insert(GITHUB_REFRESH_PATH.to_string(), r);
+            }
+            Self {
+                records: std::sync::Mutex::new(m),
+                writes: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+        fn snapshot(&self) -> std::collections::BTreeMap<String, serde_json::Value> {
+            self.records.lock().unwrap().clone()
+        }
+    }
+
+    impl GitHubTokenStore for SharedStore {
+        fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String> {
+            let m = self.records.lock().unwrap();
+            let Some(t) = m.get(GITHUB_TOKEN_PATH) else {
+                return Ok(None);
+            };
+            let r = m.get(GITHUB_REFRESH_PATH);
+            Ok(Some(GitHubTokenBundle {
+                token: t["token"].as_str().unwrap_or_default().to_string(),
+                refresh_token: r
+                    .and_then(|r| r["refresh_token"].as_str())
+                    .map(String::from),
+                expires_at: t["expires_at"].as_u64(),
+                refresh_token_expires_at: r.and_then(|r| r["refresh_token_expires_at"].as_u64()),
+                client_id: t["client_id"].as_str().map(String::from),
+            }))
+        }
+        fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+            self.writes.lock().unwrap().push(path.to_string());
+            self.records.lock().unwrap().insert(path.to_string(), value);
+            Ok(())
+        }
+    }
+
+    const NOW: u64 = 1_000_000;
+
+    fn bundle_expiring_at(expires_at: u64) -> GitHubTokenBundle {
+        GitHubTokenBundle {
+            expires_at: Some(expires_at),
+            ..old_bundle()
+        }
+    }
+
+    /// A lock name no live process uses, unique per test.
+    fn test_lock(tag: &str) -> String {
+        format!("gh-rotation-test-{tag}-{}", std::process::id())
+    }
+
+    fn fresh_pair(_: &str, _: &str) -> Result<GitHubRefreshResponse, String> {
+        Ok(GitHubRefreshResponse {
+            access_token: "ghu_NEWACCESS".into(),
+            refresh_token: "ghr_NEWREFRESH".into(),
+            expires_in: 28_800,
+            refresh_token_expires_in: 15_811_200,
+        })
+    }
+
+    /// Arm 1: 20 minutes left -> ONE exchange, a later expiry, and the refresh
+    /// record written before the token record.
+    #[test]
+    fn github_token_auto_rotation_due_token_rotates_once_refresh_first() {
+        let store = SharedStore::with(&bundle_expiring_at(NOW + 20 * 60));
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let out = rotate_github_token_if_due(
+            &store,
+            &|c, r| {
+                calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                fresh_pair(c, r)
+            },
+            NOW,
+            false,
+            &test_lock("arm1"),
+            std::time::Duration::from_secs(5),
+            false,
+        )
+        .expect("a due token rotates");
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            out,
+            DueCheck::Rotated {
+                expires_at: NOW + 28_800,
+                refresh_expires_at: Some(NOW + 15_811_200),
+            }
+        );
+        assert_eq!(
+            *store.writes.lock().unwrap(),
+            vec![
+                GITHUB_REFRESH_PATH.to_string(),
+                GITHUB_TOKEN_PATH.to_string()
+            ],
+            "the scarce refresh token is persisted first"
+        );
+        assert_eq!(
+            store.snapshot()[GITHUB_TOKEN_PATH]["token"],
+            "ghu_NEWACCESS"
+        );
+    }
+
+    /// Arm 2: two concurrent due-checks spend the single-use refresh token
+    /// ONCE — the decision is made under the lock, so the loser sees the
+    /// winner's new expiry.
+    #[test]
+    fn github_token_auto_rotation_concurrent_checks_exchange_once() {
+        let store = std::sync::Arc::new(SharedStore::with(&bundle_expiring_at(NOW + 60)));
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let lock = test_lock("arm2");
+        let handles: Vec<_> = (0..2)
+            .map(|_| {
+                let store = std::sync::Arc::clone(&store);
+                let calls = std::sync::Arc::clone(&calls);
+                let lock = lock.clone();
+                std::thread::spawn(move || {
+                    rotate_github_token_if_due(
+                        &*store,
+                        &|c, r| {
+                            calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            // Widen the window a racing reader would slip into.
+                            std::thread::sleep(std::time::Duration::from_millis(200));
+                            fresh_pair(c, r)
+                        },
+                        NOW,
+                        false,
+                        &lock,
+                        std::time::Duration::from_secs(10),
+                        false,
+                    )
+                })
+            })
+            .collect();
+        let outs: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "exactly one exchange: {outs:?}"
+        );
+        let rotated = outs
+            .iter()
+            .filter(|o| matches!(o, Ok(DueCheck::Rotated { .. })))
+            .count();
+        let not_due = outs
+            .iter()
+            .filter(|o| matches!(o, Ok(DueCheck::NotDue { .. })))
+            .count();
+        assert_eq!((rotated, not_due), (1, 1), "{outs:?}");
+    }
+
+    /// Arm 3, NEGATIVE CONTROL: two hours left -> no exchange at all.
+    #[test]
+    fn github_token_auto_rotation_not_due_makes_no_exchange() {
+        let store = SharedStore::with(&bundle_expiring_at(NOW + 2 * 3600));
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let out = rotate_github_token_if_due(
+            &store,
+            &|c, r| {
+                calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                fresh_pair(c, r)
+            },
+            NOW,
+            false,
+            &test_lock("arm3"),
+            std::time::Duration::from_secs(5),
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            DueCheck::NotDue {
+                expires_at: NOW + 2 * 3600,
+                refresh_expires_at: Some(1_000_000),
+            }
+        );
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert!(store.writes.lock().unwrap().is_empty());
+        // The window boundary itself: exactly 30 min left is due, 30 min + 1 s is not.
+        assert!(github_token_rotation_due(NOW + 30 * 60, NOW));
+        assert!(!github_token_rotation_due(NOW + 30 * 60 + 1, NOW));
+    }
+
+    /// Arm 4: GitHub rejects the refresh token -> the old records are intact
+    /// and the error names github-token-rotation-failed.
+    #[test]
+    fn github_token_auto_rotation_rejected_refresh_keeps_the_old_pair() {
+        let store = SharedStore::with(&bundle_expiring_at(NOW + 60));
+        let before = store.snapshot();
+        let err = rotate_github_token_if_due(
+            &store,
+            &|_, _| Err("GitHub refused the token refresh (bad_refresh_token)".into()),
+            NOW,
+            false,
+            &test_lock("arm4"),
+            std::time::Duration::from_secs(5),
+            false,
+        )
+        .unwrap_err();
+        assert!(err.starts_with("github-token-rotation-failed:"), "{err}");
+        assert!(err.contains("bad_refresh_token"), "{err}");
+        assert_eq!(store.snapshot(), before, "a failed exchange writes nothing");
+        assert!(!err.contains("ghr_") && !err.contains("ghu_"), "{err}");
+    }
+
+    /// Arm 5: the due-check needs no desktop session (it takes no session
+    /// input and consults none — the gate stays on the explicit command), and
+    /// it refuses inside a forge without touching the store.
+    #[test]
+    fn github_token_auto_rotation_needs_no_session_and_refuses_in_a_forge() {
+        let store = SharedStore::with(&bundle_expiring_at(NOW + 60));
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let refuse = rotate_github_token_if_due(
+            &store,
+            &|c, r| {
+                calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                fresh_pair(c, r)
+            },
+            NOW,
+            true,
+            &test_lock("arm5f"),
+            std::time::Duration::from_secs(5),
+            false,
+        )
+        .unwrap();
+        assert_eq!(refuse, DueCheck::RefusedInForge);
+        assert_eq!(refuse.verdict(), "skip:github-token-rotation:forge");
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+        // Same store, bare metal, no session anywhere in the call: it rotates.
+        let ok = rotate_github_token_if_due(
+            &store,
+            &|c, r| {
+                calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                fresh_pair(c, r)
+            },
+            NOW,
+            false,
+            &test_lock("arm5b"),
+            std::time::Duration::from_secs(5),
+            false,
+        )
+        .unwrap();
+        assert!(matches!(ok, DueCheck::Rotated { .. }));
+        // The scheduler's own path never consults the session gate.
+        let src = include_str!("vault_bootstrap.rs");
+        let start = src
+            .find(&["pub fn github_token_due_check_", "live("].concat())
+            .unwrap();
+        let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
+        assert!(!body.contains(&["github_refresh_", "gate"].concat()));
+        assert!(!body.contains(&["has_graphical_", "session"].concat()));
+    }
+
+    /// One scheduler per process: the tray and every lane launch call the
+    /// spawn, and only the first may start a thread.
+    #[test]
+    fn github_token_auto_rotation_scheduler_starts_once_per_process() {
+        let first = claim_github_rotation_scheduler_slot();
+        let second = claim_github_rotation_scheduler_slot();
+        assert!(
+            first,
+            "the first claim in this process starts the scheduler"
+        );
+        assert!(!second, "a later claim must not start a second thread");
+        // And every lane launch reaches it: the call sits in the enclave
+        // funnel both the tray and the CLI lanes go through.
+        let main_src = include_str!("main.rs");
+        let start = main_src
+            .find(&["pub(crate) fn ensure_enclave_", "for_project("].concat())
+            .unwrap();
+        let body = &main_src[start..start + main_src[start..].find("\n}\n").unwrap()];
+        assert!(body.contains(&["spawn_github_token_", "rotation_scheduler("].concat()));
+    }
+
+    /// The 14-day refresh-expiry warning: fires inside the window (not
+    /// outside), says "expired" at zero, names the remedy, and fires at most
+    /// once per day however often the scheduler asks.
+    #[test]
+    fn github_token_auto_rotation_refresh_expiry_warns_once_a_day() {
+        let day = 86_400;
+        assert_eq!(
+            github_refresh_expiry_warning(Some(NOW + 15 * day), NOW),
+            None
+        );
+        assert_eq!(
+            github_refresh_expiry_warning(Some(NOW + 14 * day), NOW),
+            Some(14)
+        );
+        assert_eq!(
+            github_refresh_expiry_warning(Some(NOW + 3 * day + 5), NOW),
+            Some(3)
+        );
+        assert_eq!(github_refresh_expiry_warning(Some(NOW - 1), NOW), Some(0));
+        assert_eq!(github_refresh_expiry_warning(None, NOW), None);
+        assert!(github_refresh_expiry_message(3).contains("tillandsias --github-login"));
+        assert!(github_refresh_expiry_message(0).contains("EXPIRED"));
+        let mut last = None;
+        assert!(should_warn_today(&mut last, NOW));
+        assert!(
+            !should_warn_today(&mut last, NOW + 15 * 60),
+            "same day: silent"
+        );
+        assert!(
+            should_warn_today(&mut last, NOW + day),
+            "next day: warns again"
+        );
+    }
+
+    /// The scheduler backs off after a failure (1 min doubling, capped) and
+    /// returns to the regular interval after a verdict.
+    #[test]
+    fn github_token_auto_rotation_backoff_is_bounded() {
+        use std::time::Duration;
+        let fail: Result<DueCheck, String> = Err("x".into());
+        let d1 = github_rotation_next_delay(&fail, Duration::ZERO);
+        let d2 = github_rotation_next_delay(&fail, d1);
+        assert_eq!(
+            (d1, d2),
+            (Duration::from_secs(60), Duration::from_secs(120))
+        );
+        assert_eq!(
+            github_rotation_next_delay(&fail, Duration::from_secs(3600)),
+            GITHUB_ROTATION_CHECK_EVERY
+        );
+        assert_eq!(
+            github_rotation_next_delay(&Ok(DueCheck::NoToken), d2),
+            GITHUB_ROTATION_CHECK_EVERY
+        );
+    }
+
     /// Criterion 7, the other half: the token record the git-mirror service can
     /// read never carries the refresh token.
     #[test]
@@ -5478,8 +7024,6 @@ mod tests {
         let platform = keyring::Error::PlatformFailure("dbus gone".into());
         assert!(classify_keyring_delete(Err(platform)).is_err());
     }
-
-    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     // ---- order 803-49re: the self-heal's Shamir share sources ----
 
@@ -5747,12 +7291,12 @@ mod tests {
         own: Option<Vec<u8>>,
         tag: u32,
     ) -> (DeliverCredentialsOutcome, bool) {
-        let _serialized = ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
+        let _serialized = crate::test_support::env_lock();
         let cache_root =
             std::env::temp_dir().join(format!("tillandsias-1200-{}-{}", std::process::id(), tag));
         let _ = std::fs::remove_dir_all(&cache_root);
         std::fs::create_dir_all(&cache_root).expect("temp cache root");
-        // SAFETY: env mutation is serialized by ENV_LOCK for the whole call.
+        // SAFETY: env mutation is serialized by crate::test_support::env_lock() for the whole call.
         unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
         TEST_OWN_UNSEAL_SECRET.with(|s| *s.borrow_mut() = own);
         let outcome = set_in_vm_credentials(
@@ -5778,7 +7322,7 @@ mod tests {
     /// predicate false.
     #[test]
     fn a_mismatched_share_keeps_the_wipe_predicate_true() {
-        let _serialized = ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
+        let _serialized = crate::test_support::env_lock();
         let cache_root = std::env::temp_dir().join(format!(
             "tillandsias-1200-wipe-{}-{}",
             std::process::id(),
@@ -5786,7 +7330,7 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&cache_root);
         std::fs::create_dir_all(&cache_root).expect("temp cache root");
-        // SAFETY: env mutation is serialized by ENV_LOCK for the whole test.
+        // SAFETY: env mutation is serialized by crate::test_support::env_lock() for the whole test.
         unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
         // The GUEST's predicate is the fallback half alone (no keychain in a
         // guest); asserting through the full predicate was vacuous on a host
@@ -5871,7 +7415,7 @@ mod tests {
     /// verified where it runs" — reproduced in the test for the fix against it.
     #[test]
     fn host_delivered_share_is_persisted_not_only_the_token() {
-        let _serialized = ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
+        let _serialized = crate::test_support::env_lock();
 
         let cache_root = std::env::temp_dir().join(format!(
             "tillandsias-701-delivered-{}-{}",
@@ -5879,7 +7423,7 @@ mod tests {
             line!()
         ));
         std::fs::create_dir_all(&cache_root).expect("temp cache root");
-        // SAFETY: env mutation is serialized by ENV_LOCK for the whole test.
+        // SAFETY: env mutation is serialized by crate::test_support::env_lock() for the whole test.
         unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
 
         set_in_vm_credentials(
@@ -6284,7 +7828,7 @@ mod tests {
 
     #[test]
     fn vault_api_base_url_honors_env_override() {
-        let _guard = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let _guard = crate::test_support::env_lock();
         unsafe {
             std::env::set_var(VAULT_API_BASE_URL_ENV, vault_service_base_url());
         }
@@ -6871,10 +8415,15 @@ mod tests {
             env!("CARGO_MANIFEST_DIR"),
             "/src/vault_bootstrap.rs"
         ));
-        let window = source
+        // BOUNDED TO THE FUNCTION BODY (1461-8tyy). This window used to run to
+        // the END OF THE FILE, so any `thread::sleep` anywhere below the
+        // function failed an assertion that is about this function only —
+        // the GitHub token rotation scheduler's between-checks sleep did.
+        let after = source
             .split("fn wait_for_vault_ready(")
             .nth(1)
             .expect("wait_for_vault_ready source");
+        let window = &after[..after.find("\n}\n").expect("end of wait_for_vault_ready")];
         assert!(
             window.contains("PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME)"),
             "Vault readiness must use the idiomatic podman health layer"
@@ -7507,5 +9056,1088 @@ mod tests {
             !entrypoint.contains("sign/*"),
             "no sign/* wildcard may appear anywhere in the vault entrypoint"
         );
+    }
+
+    /// Order 1437-qza3: the partial-init wipe names the store, the missing
+    /// share and the loss, so the one path that still destroys credentials is
+    /// never silent.
+    #[test]
+    fn partial_init_wipe_line_names_store_share_and_loss() {
+        let line = partial_init_wipe_line(std::path::Path::new("/c/tillandsias/vault-data"));
+        assert!(line.contains("/c/tillandsias/vault-data"), "{line}");
+        assert!(line.contains(VAULT_SHAMIR_SHARE_V1), "{line}");
+        assert!(line.contains("every credential"), "{line}");
+    }
+
+    /// The line is printed unconditionally, not behind --debug: a source pin
+    /// on the guard, since the branch needs a real store to reach.
+    #[test]
+    fn partial_init_wipe_line_is_not_debug_gated() {
+        let src = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let start = src.find("if is_partial_init {").expect("guard");
+        let guard = &src[start..start + 900];
+        let print = guard
+            .find("partial_init_wipe_line(&vault_dir)")
+            .expect("the guard prints the line");
+        let wipe = guard.find("remove_dir_all(vault_dir)").expect("the wipe");
+        assert!(print < wipe, "announce before wiping");
+        assert!(
+            !guard[..print].contains("if debug"),
+            "the wipe line must not be gated on --debug"
+        );
+    }
+
+    /// Order 1437-qza3 aligned to 1443-bs9z: the keyring answer maps to
+    /// exactly one named disposition, and each token and line is the spec's,
+    /// verbatim. The tokens are an interface: this test fails on a respelling.
+    #[test]
+    fn reset_disposition_follows_the_keyring_ruling_and_spec_tokens() {
+        use KeyringShare::*;
+        use ResetVaultDisposition::*;
+        assert_eq!(reset_vault_disposition(Present), VerifiedKeep);
+        assert_eq!(reset_vault_disposition(Unreachable), UnverifiedKeep);
+        assert_eq!(reset_vault_disposition(Absent), AbsentReinitAtInit);
+        assert_eq!(VerifiedKeep.token(), "Verified:KEEP");
+        assert_eq!(UnverifiedKeep.token(), "Unverified:KEEP");
+        assert_eq!(AbsentReinitAtInit.token(), "Absent:REINIT-AT-INIT");
+        for d in [VerifiedKeep, UnverifiedKeep, AbsentReinitAtInit] {
+            assert!(d.announcement().starts_with("reset: "), "{d:?}");
+            assert!(
+                d.announcement().contains(d.token()) || d == AbsentReinitAtInit,
+                "{d:?}"
+            );
+        }
+        // The spec file carries each line verbatim, so a respelling on either
+        // side fails here instead of drifting.
+        let spec = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../openspec/specs/host-state-lifecycle/spec.md"
+        ));
+        let spec_flat = spec.split_whitespace().collect::<Vec<_>>().join(" ");
+        for d in [VerifiedKeep, UnverifiedKeep, AbsentReinitAtInit] {
+            let line = d
+                .announcement()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            assert!(
+                spec_flat.contains(&line),
+                "not in the spec verbatim: {line}"
+            );
+        }
+    }
+}
+
+// ── Order 1505-iysn: Cloudflare bundle + rotation (cloudflare_token_rotation_*) ──
+//
+// Every test here uses an in-memory store (no Vault) and either an injected
+// refresh closure or the real `tillandsias-fake-cloudflare` over loopback (no
+// real Cloudflare). The fake-driven tests are `#[ignore]`d so a plain
+// `cargo test` needs no fake binary; scripts/test-cloudflare-token-rotation.sh
+// builds the fake and runs them by name.
+#[cfg(test)]
+mod cloudflare_token_rotation_tests {
+    use super::*;
+    use std::collections::{BTreeMap, HashMap};
+    use std::io::{BufRead, BufReader, Write as _};
+    use std::path::{Path, PathBuf};
+    use std::process::{Child, Command, Stdio};
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+
+    const NOW: u64 = 1_000_000;
+    const ACCOUNT: &str = "0123456789abcdef0123456789abcdef";
+    const REDIRECT_URI: &str = "http://127.0.0.1:48631/tillandsias/cloudflare/callback";
+
+    // ── the in-memory Vault seam ──────────────────────────────────────────
+
+    /// Send + Sync fake Vault: records every write in order, can fail the
+    /// next N writes of a path, can widen the read window, and counts every
+    /// touch (the forge arm asserts zero).
+    #[derive(Default)]
+    struct MemStore {
+        records: Mutex<BTreeMap<String, serde_json::Value>>,
+        writes: Mutex<Vec<String>>,
+        fail_next: Mutex<HashMap<String, u32>>,
+        read_delay: Duration,
+        touched: AtomicUsize,
+    }
+
+    impl MemStore {
+        fn with(b: &CloudflareTokenBundle) -> Self {
+            let s = MemStore::default();
+            {
+                let mut m = s.records.lock().unwrap();
+                m.insert(CLOUDFLARE_TOKEN_PATH.into(), cloudflare_token_record(b));
+                if let Some(r) = cloudflare_refresh_record(b) {
+                    m.insert(CLOUDFLARE_REFRESH_PATH.into(), r);
+                }
+                m.insert(
+                    "secret/cloudflare/mesh".into(),
+                    serde_json::json!({ "client_id": "mesh-id", "team_name": "t" }),
+                );
+            }
+            s
+        }
+        fn failing(self, path: &str, times: u32) -> Self {
+            self.fail_next.lock().unwrap().insert(path.into(), times);
+            self
+        }
+        fn delayed(mut self, d: Duration) -> Self {
+            self.read_delay = d;
+            self
+        }
+        fn snapshot(&self) -> BTreeMap<String, serde_json::Value> {
+            self.records.lock().unwrap().clone()
+        }
+        fn writes(&self) -> Vec<String> {
+            self.writes.lock().unwrap().clone()
+        }
+    }
+
+    impl CloudflareTokenStore for MemStore {
+        fn read_bundle(&self) -> Result<Option<CloudflareTokenBundle>, String> {
+            self.touched.fetch_add(1, Ordering::SeqCst);
+            let out = {
+                let m = self.records.lock().unwrap();
+                let Some(t) = m.get(CLOUDFLARE_TOKEN_PATH) else {
+                    return Ok(None);
+                };
+                let r = m.get(CLOUDFLARE_REFRESH_PATH);
+                CloudflareTokenBundle {
+                    access_token: t["access_token"].as_str().unwrap_or_default().into(),
+                    expires_at: t["expires_at"].as_u64(),
+                    account_id: t["account_id"].as_str().map(String::from),
+                    client_id: t["client_id"].as_str().unwrap_or_default().into(),
+                    refresh_token: r
+                        .and_then(|r| r["refresh_token"].as_str())
+                        .map(String::from),
+                    refresh_token_expires_at: r
+                        .and_then(|r| r["refresh_token_expires_at"].as_u64()),
+                }
+            };
+            std::thread::sleep(self.read_delay);
+            Ok(Some(out))
+        }
+        fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+            self.touched.fetch_add(1, Ordering::SeqCst);
+            self.writes.lock().unwrap().push(path.into());
+            let mut f = self.fail_next.lock().unwrap();
+            if let Some(n) = f.get_mut(path)
+                && *n > 0
+            {
+                *n -= 1;
+                return Err("simulated-vault-write-failure".into());
+            }
+            self.records.lock().unwrap().insert(path.into(), value);
+            Ok(())
+        }
+        fn delete_record(&self, path: &str) -> Result<(), String> {
+            self.touched.fetch_add(1, Ordering::SeqCst);
+            self.records.lock().unwrap().remove(path);
+            Ok(())
+        }
+    }
+
+    fn bundle(access: &str, refresh: &str, expires_at: u64) -> CloudflareTokenBundle {
+        CloudflareTokenBundle {
+            access_token: access.into(),
+            expires_at: Some(expires_at),
+            account_id: Some(ACCOUNT.into()),
+            client_id: "fake-client".into(),
+            refresh_token: Some(refresh.into()),
+            refresh_token_expires_at: None,
+        }
+    }
+
+    fn test_lock(tag: &str) -> String {
+        format!("cf-rotation-test-{tag}-{}", std::process::id())
+    }
+
+    /// Every token string a test planted or the fake issued must be absent
+    /// from `text`.
+    fn assert_no_token_bytes(text: &str, tokens: &[&str]) {
+        for t in tokens {
+            assert!(t.len() >= 8, "probe token too short to mean anything: {t}");
+            assert!(!text.contains(t), "token bytes leaked into output: {text}");
+        }
+    }
+
+    // ── the real fake Cloudflare over loopback ────────────────────────────
+
+    struct FakeServer {
+        child: Child,
+        base_url: String,
+        ledger_path: PathBuf,
+    }
+
+    impl Drop for FakeServer {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
+    fn start_fake(name: &str) -> FakeServer {
+        let bin = std::env::var("TILLANDSIAS_FAKE_CLOUDFLARE_BIN")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../target/debug/tillandsias-fake-cloudflare")
+            });
+        assert!(
+            bin.exists(),
+            "fake-cloudflare binary not found at {bin:?}; run scripts/test-cloudflare-token-rotation.sh"
+        );
+        let dir =
+            std::env::temp_dir().join(format!("cf-token-rotation-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("work dir");
+        let ledger_path = dir.join("ledger.jsonl");
+        let mut child = Command::new(&bin)
+            .arg("--ledger")
+            .arg(&ledger_path)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn fake-cloudflare");
+        let mut line = String::new();
+        BufReader::new(child.stdout.take().expect("stdout"))
+            .read_line(&mut line)
+            .expect("port line");
+        let port: u16 = line.trim().parse().expect("fake printed a port");
+        FakeServer {
+            child,
+            base_url: format!("http://127.0.0.1:{port}"),
+            ledger_path,
+        }
+    }
+
+    /// `grant_type=refresh_token` requests the fake received.
+    fn refresh_exchanges(ledger: &Path) -> usize {
+        std::fs::read_to_string(ledger)
+            .unwrap_or_default()
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(|l| serde_json::from_str::<serde_json::Value>(l).expect("ledger JSON"))
+            .filter(|e| {
+                e["path"]
+                    .as_str()
+                    .unwrap_or("")
+                    .starts_with("/oauth2/token")
+                    && e["body"]
+                        .as_str()
+                        .unwrap_or("")
+                        .contains("grant_type=refresh_token")
+            })
+            .count()
+    }
+
+    /// The operator's click, test-only: GET the authorize URL with
+    /// `auto=approve` and read the redirect's `Location` without following it.
+    fn approve(authorize_url: &str) -> (String, String) {
+        let url = format!("{authorize_url}&auto=approve");
+        let rest = url.strip_prefix("http://").expect("http url");
+        let (authority, path) = rest.split_once('/').expect("path");
+        let mut s = std::net::TcpStream::connect(authority).expect("connect fake");
+        write!(
+            s,
+            "GET /{path} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\n\r\n"
+        )
+        .expect("write");
+        let mut buf = String::new();
+        s.read_to_string(&mut buf).expect("read");
+        let loc = buf
+            .lines()
+            .find_map(|l| {
+                l.strip_prefix("Location: ")
+                    .or_else(|| l.strip_prefix("location: "))
+            })
+            .expect("Location header")
+            .trim()
+            .to_string();
+        let q = loc
+            .split_once('?')
+            .map(|(_, q)| q)
+            .unwrap_or("")
+            .to_string();
+        let get = |k: &str| {
+            q.split('&')
+                .find_map(|p| {
+                    p.split_once('=')
+                        .filter(|(kk, _)| *kk == k)
+                        .map(|(_, v)| v.to_string())
+                })
+                .expect("query param")
+        };
+        (get("code"), get("state"))
+    }
+
+    /// A real pair issued by the fake, stored as a bundle expiring at `exp`.
+    fn logged_in_bundle(server: &FakeServer, exp: u64) -> CloudflareTokenBundle {
+        let http = crate::cloudflare_oauth::ReqwestHttpClient::default();
+        let pending = crate::cloudflare_oauth::begin(
+            &http,
+            &server.base_url,
+            "fake-client",
+            REDIRECT_URI,
+            &[],
+        )
+        .expect("begin");
+        let (code, state) = approve(&pending.authorize_url);
+        let b =
+            crate::cloudflare_oauth::exchange(&http, &pending, &state, &code).expect("exchange");
+        CloudflareTokenBundle {
+            access_token: b.access_token,
+            expires_at: Some(exp),
+            account_id: Some(ACCOUNT.into()),
+            client_id: "fake-client".into(),
+            refresh_token: b.refresh_token,
+            refresh_token_expires_at: None,
+        }
+    }
+
+    type RefreshFn<'a> = dyn Fn(&str, &str) -> Result<crate::cloudflare_oauth::Bundle, String> + 'a;
+
+    /// The PRODUCTION refresh path (`perform_cloudflare_token_refresh`) aimed
+    /// at the fake.
+    fn fake_refresh(
+        base: String,
+    ) -> impl Fn(&str, &str) -> Result<crate::cloudflare_oauth::Bundle, String> {
+        move |client_id, refresh_token| {
+            perform_cloudflare_token_refresh(
+                &crate::cloudflare_oauth::ReqwestHttpClient::default(),
+                &base,
+                client_id,
+                refresh_token,
+            )
+        }
+    }
+
+    fn due_check(
+        store: &dyn CloudflareTokenStore,
+        refresh: &RefreshFn<'_>,
+        forge: bool,
+        lock: &str,
+    ) -> Result<CloudflareDueCheck, String> {
+        rotate_cloudflare_token_if_due(
+            store,
+            refresh,
+            NOW,
+            forge,
+            lock,
+            Duration::from_secs(20),
+            false,
+        )
+    }
+
+    // ── ARM 1: 20 min left -> exactly one exchange, refresh record first ──
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    fn cloudflare_token_rotation_fake_due_token_rotates_once_refresh_first() {
+        let server = start_fake("arm1");
+        let old = logged_in_bundle(&server, NOW + 20 * 60);
+        let store = MemStore::with(&old);
+        let mesh_before = store.snapshot()["secret/cloudflare/mesh"].clone();
+        assert_eq!(refresh_exchanges(&server.ledger_path), 0);
+        let out = due_check(
+            &store,
+            &fake_refresh(server.base_url.clone()),
+            false,
+            &test_lock("arm1"),
+        )
+        .expect("a due token rotates");
+        assert_eq!(
+            refresh_exchanges(&server.ledger_path),
+            1,
+            "exactly one grant_type=refresh_token exchange at the fake"
+        );
+        assert_eq!(
+            out,
+            CloudflareDueCheck::Rotated {
+                expires_at: Some(NOW + 3600)
+            }
+        );
+        assert_eq!(
+            store.writes(),
+            vec![
+                CLOUDFLARE_REFRESH_PATH.to_string(),
+                CLOUDFLARE_TOKEN_PATH.to_string()
+            ],
+            "the refresh record is written first"
+        );
+        let new = store.read_bundle().unwrap().unwrap();
+        assert_ne!(new.access_token, old.access_token);
+        assert_ne!(new.refresh_token, old.refresh_token);
+        assert!(
+            new.expires_at.unwrap() > old.expires_at.unwrap(),
+            "later expiry"
+        );
+        assert_eq!(new.account_id, old.account_id, "account_id carried over");
+        assert_eq!(
+            store.snapshot()["secret/cloudflare/mesh"],
+            mesh_before,
+            "rotation never touches the mesh credential"
+        );
+        assert!(
+            store.snapshot()[CLOUDFLARE_TOKEN_PATH]
+                .get("refresh_token")
+                .is_none(),
+            "the token record never carries the refresh token"
+        );
+    }
+
+    // ── ARM 2: two concurrent due-checks -> ONE exchange at the fake ──────
+    fn concurrent_run(
+        tag: &str,
+        shared_lock: bool,
+    ) -> (usize, Vec<Result<CloudflareDueCheck, String>>) {
+        let server = start_fake(tag);
+        let store = std::sync::Arc::new(
+            MemStore::with(&logged_in_bundle(&server, NOW + 60))
+                .delayed(Duration::from_millis(300)),
+        );
+        let handles: Vec<_> = (0..2)
+            .map(|i| {
+                let store = std::sync::Arc::clone(&store);
+                let base = server.base_url.clone();
+                let lock = if shared_lock {
+                    test_lock(tag)
+                } else {
+                    test_lock(&format!("{tag}-{i}"))
+                };
+                std::thread::spawn(move || due_check(&*store, &fake_refresh(base), false, &lock))
+            })
+            .collect();
+        let outs = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        (refresh_exchanges(&server.ledger_path), outs)
+    }
+
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    fn cloudflare_token_rotation_fake_concurrent_checks_exchange_once() {
+        let (n, outs) = concurrent_run("arm2", true);
+        assert_eq!(n, 1, "one lock -> exactly one exchange: {outs:?}");
+        let rotated = outs
+            .iter()
+            .filter(|o| matches!(o, Ok(CloudflareDueCheck::Rotated { .. })))
+            .count();
+        let not_due = outs
+            .iter()
+            .filter(|o| matches!(o, Ok(CloudflareDueCheck::NotDue { .. })))
+            .count();
+        assert_eq!((rotated, not_due), (1, 1), "{outs:?}");
+        // NEGATIVE CONTROL: without mutual exclusion (distinct lock names) the
+        // same two checks both spend the refresh token, and the ledger count
+        // sees it — the count discriminates, and the LOCK is what makes it one.
+        let (n_ctl, outs_ctl) = concurrent_run("arm2ctl", false);
+        assert_eq!(
+            n_ctl, 2,
+            "control: unserialised checks exchange twice: {outs_ctl:?}"
+        );
+    }
+
+    // ── ARM 3: 2 h left -> no exchange, no write ─────────────────────────
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    fn cloudflare_token_rotation_fake_not_due_makes_no_exchange() {
+        let server = start_fake("arm3");
+        let store = MemStore::with(&logged_in_bundle(&server, NOW + 2 * 3600));
+        let before = store.snapshot();
+        let out = due_check(
+            &store,
+            &fake_refresh(server.base_url.clone()),
+            false,
+            &test_lock("arm3"),
+        )
+        .unwrap();
+        assert_eq!(
+            out,
+            CloudflareDueCheck::NotDue {
+                expires_at: NOW + 2 * 3600
+            }
+        );
+        assert_eq!(
+            out.verdict(),
+            format!(
+                "ok:cloudflare-token-rotation:not-due:expires_at={}",
+                NOW + 7200
+            )
+        );
+        assert_eq!(refresh_exchanges(&server.ledger_path), 0);
+        assert!(store.writes().is_empty());
+        assert_eq!(store.snapshot(), before);
+        // The window boundary: exactly 30 min left is due, 30 min + 1 s is not.
+        assert!(cloudflare_token_rotation_due(NOW + 30 * 60, NOW));
+        assert!(!cloudflare_token_rotation_due(NOW + 30 * 60 + 1, NOW));
+    }
+
+    // ── ARM 4: the fake refuses the refresh -> both old records intact ────
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    fn cloudflare_token_rotation_fake_refused_refresh_keeps_both_records() {
+        let server = start_fake("arm4");
+        // A refresh token the fake never issued: it answers 400 invalid_grant.
+        let old = bundle(
+            "cf-access-OLD-0123456789",
+            "cf-refresh-NEVER-ISSUED-0123456789",
+            NOW + 60,
+        );
+        let store = MemStore::with(&old);
+        let before = store.snapshot();
+        let err = due_check(
+            &store,
+            &fake_refresh(server.base_url.clone()),
+            false,
+            &test_lock("arm4"),
+        )
+        .unwrap_err();
+        assert_eq!(
+            refresh_exchanges(&server.ledger_path),
+            1,
+            "the arm must REACH the fake's refusal, not fail before it"
+        );
+        assert!(
+            err.starts_with(
+                "cloudflare-token-rotation-failed:refresh-refused:http-400:invalid_grant"
+            ),
+            "{err}"
+        );
+        assert!(
+            err.contains("remedy:") && err.contains("--cloudflare-login"),
+            "{err}"
+        );
+        assert_eq!(
+            store.snapshot(),
+            before,
+            "a refused exchange writes nothing"
+        );
+        assert!(store.writes().is_empty());
+        assert_no_token_bytes(
+            &format!("blocked:{err}"),
+            &[
+                "cf-access-OLD-0123456789",
+                "cf-refresh-NEVER-ISSUED-0123456789",
+            ],
+        );
+    }
+
+    // ── ARM 5: a forge never rotates (and never touches store or fake) ───
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    fn cloudflare_token_rotation_fake_forge_never_rotates() {
+        let server = start_fake("arm5");
+        let store = MemStore::with(&logged_in_bundle(&server, NOW + 60));
+        let touched_after_setup = store.touched.load(Ordering::SeqCst);
+        let out = due_check(
+            &store,
+            &fake_refresh(server.base_url.clone()),
+            true,
+            &test_lock("arm5f"),
+        )
+        .unwrap();
+        assert_eq!(out, CloudflareDueCheck::RefusedInForge);
+        assert_eq!(out.verdict(), "skip:cloudflare-token-rotation:forge");
+        assert_eq!(
+            store.touched.load(Ordering::SeqCst),
+            touched_after_setup,
+            "a forge never reads or writes Vault"
+        );
+        assert_eq!(refresh_exchanges(&server.ledger_path), 0);
+        // CONTROL: the same due store on bare metal DOES rotate.
+        let ok = due_check(
+            &store,
+            &fake_refresh(server.base_url.clone()),
+            false,
+            &test_lock("arm5b"),
+        )
+        .unwrap();
+        assert!(matches!(ok, CloudflareDueCheck::Rotated { .. }), "{ok:?}");
+        assert_eq!(refresh_exchanges(&server.ledger_path), 1);
+        // TILLANDSIAS_HOST_KIND=forge is exactly what sets the flag live.
+        assert!(host_kind_is_forge(Some("forge")));
+        for other in [None, Some(""), Some("host"), Some("Forge"), Some("forge ")] {
+            assert!(!host_kind_is_forge(other), "{other:?}");
+        }
+        let src = include_str!("vault_bootstrap.rs");
+        let start = src
+            .find(&["pub fn cloudflare_token_due_check_", "live("].concat())
+            .unwrap();
+        let body = &src[start..start + src[start..].find("\n}\n").unwrap()];
+        assert!(
+            body.contains(
+                &[
+                    "host_kind_is_forge(std::env::var(\"TILLANDSIAS_",
+                    "HOST_KIND\")"
+                ]
+                .concat()
+            ),
+            "the live check derives the forge flag from TILLANDSIAS_HOST_KIND"
+        );
+        assert!(
+            body.contains("        forge,\n"),
+            "the live check passes the flag through"
+        );
+    }
+
+    // ── Crash between the two writes: nothing is lost ────────────────────
+    #[test]
+    #[ignore = "drives tillandsias-fake-cloudflare; run via scripts/test-cloudflare-token-rotation.sh"]
+    fn cloudflare_token_rotation_fake_crash_between_writes_loses_nothing() {
+        let server = start_fake("crash");
+        let old = logged_in_bundle(&server, NOW + 60);
+        let store = MemStore::with(&old).failing(CLOUDFLARE_TOKEN_PATH, 1);
+        let base = server.base_url.clone();
+        let err = due_check(
+            &store,
+            &fake_refresh(base.clone()),
+            false,
+            &test_lock("crash1"),
+        )
+        .unwrap_err();
+        assert!(
+            err.starts_with("cloudflare-token-rotation-failed:token-record-write-failed:"),
+            "{err}"
+        );
+        let mid = store
+            .read_bundle()
+            .unwrap()
+            .expect("a bundle is still stored");
+        assert_eq!(
+            mid.access_token, old.access_token,
+            "old access token still stored"
+        );
+        assert!(
+            mid.refresh_token.is_some() && mid.refresh_token != old.refresh_token,
+            "the NEW refresh token is persisted (the old one is spent at the fake)"
+        );
+        // The next check (Vault healthy again) recovers with the persisted
+        // refresh token: the fake accepts it, which it would refuse had the
+        // stored token been the spent one (arm 2's control shows that refusal).
+        let ok =
+            due_check(&store, &fake_refresh(base), false, &test_lock("crash2")).expect("recovers");
+        assert!(matches!(ok, CloudflareDueCheck::Rotated { .. }), "{ok:?}");
+        assert_eq!(refresh_exchanges(&server.ledger_path), 2);
+        assert_no_token_bytes(
+            &err,
+            &[
+                old.access_token.as_str(),
+                old.refresh_token.as_deref().unwrap(),
+                mid.refresh_token.as_deref().unwrap(),
+            ],
+        );
+    }
+
+    // ── non-ignored unit arms (no fake, no network) ───────────────────────
+
+    /// No token bytes in Debug, verdicts or reasons. CONTROL: the substring
+    /// check itself sees a leak when one is planted, so its silence below is
+    /// not the silence of a check that cannot fire. (This control used to be
+    /// the core `cloudflare_oauth::Bundle`'s DERIVED Debug, which printed the
+    /// token; 1505-kc5f's prerequisite replaced it with a redacting impl, and
+    /// the core Bundle is now asserted leak-free here too.)
+    #[test]
+    fn cloudflare_token_rotation_never_prints_a_token() {
+        const A: &str = "cf-access-SECRET-abcdef012345";
+        const R: &str = "cf-refresh-SECRET-abcdef012345";
+        let b = bundle(A, R, NOW);
+        let dbg = format!("{b:?} {b:#?}");
+        assert_no_token_bytes(&dbg, &[A, R]);
+        assert!(
+            dbg.contains("<redacted>") && dbg.contains("fake-client"),
+            "{dbg}"
+        );
+        let core = crate::cloudflare_oauth::Bundle {
+            access_token: A.into(),
+            refresh_token: Some(R.into()),
+            expires_in: None,
+            token_type: None,
+        };
+        assert_no_token_bytes(&format!("{core:?} {core:#?}"), &[A, R]);
+        let planted = format!("a line that does carry {A}");
+        assert!(
+            std::panic::catch_unwind(|| assert_no_token_bytes(&planted, &[A])).is_err(),
+            "control: the substring check must fire on a planted token"
+        );
+        // Hostile core errors: a serde type error quoting a token, a token in
+        // the OAuth error field, a transport error naming a URL.
+        let hostile = [
+            (
+                format!("refused:cloudflare-login:token-response-parse:invalid type: string `{R}`"),
+                "refresh-response-unusable",
+            ),
+            (
+                format!("refused:cloudflare-login:token-exchange-http-400:{R}"),
+                "refresh-refused:http-400:unrecognised-error-code",
+            ),
+            (
+                "refused:cloudflare-login:token-exchange-http-400:invalid_grant".to_string(),
+                "refresh-refused:http-400:invalid_grant",
+            ),
+            (
+                format!("cloudflare_oauth: POST https://x/?t={R}: timeout"),
+                "refresh-transport",
+            ),
+        ];
+        for (raw, want) in hostile {
+            let r = cloudflare_refresh_failure_reason(&raw);
+            assert_eq!(r, want);
+            assert_no_token_bytes(&cloudflare_rotation_failure(&r), &[R]);
+        }
+        for v in [
+            CloudflareDueCheck::Rotated {
+                expires_at: Some(1),
+            },
+            CloudflareDueCheck::Rotated { expires_at: None },
+            CloudflareDueCheck::NotDue { expires_at: 1 },
+            CloudflareDueCheck::ExpiryUnknown,
+            CloudflareDueCheck::NoToken,
+            CloudflareDueCheck::NoRefreshToken,
+            CloudflareDueCheck::RefusedInForge,
+        ] {
+            assert!(
+                v.verdict().contains(":cloudflare-token-rotation:"),
+                "{}",
+                v.verdict()
+            );
+        }
+    }
+
+    /// The two records hold exactly the spec's fields; the token record never
+    /// carries the refresh token; a bundle without `expires_at` is never
+    /// rotated on a guess.
+    #[test]
+    fn cloudflare_token_rotation_records_keep_refresh_off_the_token_path() {
+        assert_eq!(CLOUDFLARE_TOKEN_PATH, "secret/cloudflare/token");
+        assert_eq!(CLOUDFLARE_REFRESH_PATH, "secret/cloudflare/refresh");
+        let b = bundle("A-access-token-xyz", "R-refresh-token-xyz", 42);
+        let t = cloudflare_token_record(&b);
+        let keys: std::collections::BTreeSet<_> = t.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(
+            keys.iter().map(String::as_str).collect::<Vec<_>>(),
+            vec!["access_token", "account_id", "client_id", "expires_at"]
+        );
+        assert!(!t.to_string().contains("R-refresh-token-xyz"));
+        let r = cloudflare_refresh_record(&b).unwrap();
+        let keys: std::collections::BTreeSet<_> = r.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(
+            keys.iter().map(String::as_str).collect::<Vec<_>>(),
+            vec!["client_id", "refresh_token"]
+        );
+        let mut unknown = b.clone();
+        unknown.expires_at = None;
+        assert!(
+            cloudflare_token_record(&unknown)
+                .get("expires_at")
+                .is_none()
+        );
+        let store = MemStore::with(&unknown);
+        let out = due_check(
+            &store,
+            &|_, _| panic!("never refresh on a guessed expiry"),
+            false,
+            &test_lock("noexp"),
+        )
+        .unwrap();
+        assert_eq!(out, CloudflareDueCheck::ExpiryUnknown);
+        assert!(store.writes().is_empty());
+    }
+
+    /// The refresh-record write is retried, and when it keeps failing the old
+    /// pair is intact and the verdict tells the operator the sign-in is spent.
+    #[test]
+    fn cloudflare_token_rotation_refresh_write_failure_keeps_old_pair() {
+        let rotated = || crate::cloudflare_oauth::Bundle {
+            access_token: "NEW-access-0123456789".into(),
+            refresh_token: Some("NEW-refresh-0123456789".into()),
+            expires_in: Some(3600),
+            token_type: None,
+        };
+        // Transient: one failure, then success.
+        let store = MemStore::with(&bundle(
+            "OLD-access-0123456789",
+            "OLD-refresh-0123456789",
+            NOW + 60,
+        ))
+        .failing(CLOUDFLARE_REFRESH_PATH, 1);
+        let ok = due_check(&store, &|_, _| Ok(rotated()), false, &test_lock("rw1")).unwrap();
+        assert!(matches!(ok, CloudflareDueCheck::Rotated { .. }));
+        assert_eq!(
+            store.snapshot()[CLOUDFLARE_REFRESH_PATH]["refresh_token"],
+            "NEW-refresh-0123456789"
+        );
+        // Persistent: every attempt fails -> nothing changed, never the token write.
+        let store = MemStore::with(&bundle(
+            "OLD-access-0123456789",
+            "OLD-refresh-0123456789",
+            NOW + 60,
+        ))
+        .failing(CLOUDFLARE_REFRESH_PATH, CLOUDFLARE_REFRESH_WRITE_ATTEMPTS);
+        let before = store.snapshot();
+        let err = due_check(&store, &|_, _| Ok(rotated()), false, &test_lock("rw2")).unwrap_err();
+        assert!(
+            err.starts_with("cloudflare-token-rotation-failed:refresh-record-write-failed:"),
+            "{err}"
+        );
+        assert!(err.contains("--cloudflare-login"), "{err}");
+        assert_eq!(store.snapshot(), before);
+        assert!(!store.writes().contains(&CLOUDFLARE_TOKEN_PATH.to_string()));
+        assert_no_token_bytes(
+            &err,
+            &[
+                "NEW-refresh-0123456789",
+                "OLD-refresh-0123456789",
+                "NEW-access-0123456789",
+            ],
+        );
+    }
+
+    /// A discovery document naming a plain-http, non-loopback token endpoint
+    /// is refused BEFORE the refresh token is sent anywhere.
+    #[test]
+    fn cloudflare_token_rotation_token_endpoint_must_be_https() {
+        struct Http {
+            token_endpoint: &'static str,
+            posts: AtomicUsize,
+        }
+        impl crate::cloudflare_oauth::HttpClient for Http {
+            fn get(&self, _: &str) -> Result<crate::cloudflare_oauth::HttpResponse, String> {
+                Ok(crate::cloudflare_oauth::HttpResponse {
+                    status: 200,
+                    body: serde_json::json!({
+                        "authorization_endpoint": "https://a/auth",
+                        "token_endpoint": self.token_endpoint,
+                    })
+                    .to_string(),
+                })
+            }
+            fn post_form(
+                &self,
+                _: &str,
+                _: &[(&str, &str)],
+            ) -> Result<crate::cloudflare_oauth::HttpResponse, String> {
+                self.posts.fetch_add(1, Ordering::SeqCst);
+                Ok(crate::cloudflare_oauth::HttpResponse {
+                    status: 200,
+                    body: r#"{"access_token":"n","expires_in":10}"#.into(),
+                })
+            }
+        }
+        for bad in [
+            "http://evil.example/oauth2/token",
+            "http://127.0.0.1@evil.example/t",
+            "ftp://x/t",
+        ] {
+            let http = Http {
+                token_endpoint: bad,
+                posts: AtomicUsize::new(0),
+            };
+            let err = perform_cloudflare_token_refresh(&http, "https://dash", "c", "R-secret")
+                .unwrap_err();
+            assert_eq!(err, "token-endpoint-not-https", "{bad}");
+            assert_eq!(
+                http.posts.load(Ordering::SeqCst),
+                0,
+                "{bad}: the refresh token was sent"
+            );
+        }
+        // CONTROL: https and loopback http do reach the POST.
+        for good in [
+            "https://dash.cloudflare.com/oauth2/token",
+            "http://127.0.0.1:4000/oauth2/token",
+            "http://localhost/t",
+            "http://[::1]:9/t",
+        ] {
+            let http = Http {
+                token_endpoint: good,
+                posts: AtomicUsize::new(0),
+            };
+            perform_cloudflare_token_refresh(&http, "https://dash", "c", "R").expect(good);
+            assert_eq!(http.posts.load(Ordering::SeqCst), 1, "{good}");
+        }
+    }
+
+    /// One scheduler per process; the failure backoff is bounded.
+    #[test]
+    fn cloudflare_token_rotation_scheduler_once_and_backoff_bounded() {
+        assert!(claim_cloudflare_rotation_scheduler_slot());
+        assert!(!claim_cloudflare_rotation_scheduler_slot());
+        let d1 = cloudflare_rotation_next_delay(true, Duration::ZERO);
+        let d2 = cloudflare_rotation_next_delay(true, d1);
+        assert_eq!(
+            (d1, d2),
+            (Duration::from_secs(60), Duration::from_secs(120))
+        );
+        assert_eq!(
+            cloudflare_rotation_next_delay(true, Duration::from_secs(3600)),
+            CLOUDFLARE_ROTATION_CHECK_EVERY
+        );
+        assert_eq!(
+            cloudflare_rotation_next_delay(false, d2),
+            CLOUDFLARE_ROTATION_CHECK_EVERY
+        );
+    }
+
+    // ── Criterion 2: no forge policy grants anything under secret/data/cloudflare/ ──
+
+    /// `(path pattern, capabilities)` per stanza; `#` comments dropped.
+    fn stanzas(hcl: &str) -> Vec<(String, Vec<String>)> {
+        let text: String = hcl
+            .lines()
+            .map(|l| l.split('#').next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut out = Vec::new();
+        let mut rest = text.as_str();
+        while let Some(i) = rest.find("path \"") {
+            let after = &rest[i + 6..];
+            let end = after.find('"').expect("closing quote");
+            let pattern = after[..end].to_string();
+            let body_start = after.find('{').expect("stanza body");
+            let body_end = after[body_start..].find('}').expect("stanza end") + body_start;
+            let body = &after[body_start..body_end];
+            let caps = body
+                .split_once('[')
+                .and_then(|(_, r)| r.split_once(']'))
+                .map(|(c, _)| {
+                    c.split(',')
+                        .map(|s| s.trim().trim_matches('"').to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default();
+            out.push((pattern, caps));
+            rest = &after[body_end..];
+        }
+        out
+    }
+
+    /// Vault path-pattern match: `+` is one segment, a trailing `*` a prefix.
+    fn pattern_matches(pattern: &str, path: &str) -> bool {
+        let (pat, glob) = match pattern.strip_suffix('*') {
+            Some(p) => (p, true),
+            None => (pattern, false),
+        };
+        let ps: Vec<&str> = pat.split('/').collect();
+        let xs: Vec<&str> = path.split('/').collect();
+        if (!glob && ps.len() != xs.len()) || ps.len() > xs.len() {
+            return false;
+        }
+        ps.iter().enumerate().all(|(i, p)| {
+            if *p == "+" {
+                true
+            } else if glob && i == ps.len() - 1 {
+                xs[i].starts_with(p)
+            } else {
+                *p == xs[i]
+            }
+        })
+    }
+
+    fn audit_policy_dir(dir: &Path) -> Vec<String> {
+        const PROBES: &[&str] = &[
+            "secret/data/cloudflare/token",
+            "secret/data/cloudflare/refresh",
+            "secret/data/cloudflare/mesh",
+            "secret/data/cloudflare/anything",
+            "secret/metadata/cloudflare/token",
+            "secret/metadata/cloudflare/refresh",
+        ];
+        let mut violations = Vec::new();
+        let mut files: Vec<_> = std::fs::read_dir(dir)
+            .expect("policy dir")
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|e| e == "hcl"))
+            .collect();
+        files.sort();
+        assert!(
+            files.len() >= 12,
+            "population: expected every shipped policy, found {} in {dir:?}",
+            files.len()
+        );
+        let mut saw_tray = false;
+        let mut saw_mirror = false;
+        for f in &files {
+            let name = f.file_name().unwrap().to_string_lossy().to_string();
+            let st = stanzas(&std::fs::read_to_string(f).unwrap());
+            if name == "tray.hcl" {
+                saw_tray = true;
+                for need in [
+                    "secret/data/cloudflare/token",
+                    "secret/data/cloudflare/refresh",
+                ] {
+                    if !st
+                        .iter()
+                        .any(|(p, c)| pattern_matches(p, need) && c.iter().any(|c| c == "read"))
+                    {
+                        violations.push(format!("tray.hcl (host resident) cannot read {need}"));
+                    }
+                }
+                continue;
+            }
+            if name == "git-mirror.hcl" {
+                saw_mirror = true;
+                let want = vec![
+                    (
+                        "secret/data/github/token".to_string(),
+                        vec!["read".to_string()],
+                    ),
+                    (
+                        "secret/metadata/github/token".to_string(),
+                        vec!["read".to_string()],
+                    ),
+                ];
+                if st != want {
+                    violations.push(format!("git-mirror.hcl grants changed: {st:?}"));
+                }
+            }
+            for probe in PROBES {
+                for (p, caps) in &st {
+                    if pattern_matches(p, probe) && caps.iter().any(|c| c != "deny") {
+                        violations.push(format!(
+                            "{name} grants {caps:?} on {probe} via path \"{p}\""
+                        ));
+                    }
+                }
+            }
+        }
+        if !saw_tray || !saw_mirror {
+            violations.push("tray.hcl or git-mirror.hcl missing from the policy dir".into());
+        }
+        violations
+    }
+
+    #[test]
+    fn cloudflare_token_rotation_policies_keep_forges_out() {
+        // Test-only: the fixture's negative control points this at a mutated
+        // COPY of the policy dir. Production never reads this variable.
+        let dir = std::env::var("TILLANDSIAS_TEST_POLICY_AUDIT_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../images/vault/policies")
+            });
+        // The matcher itself, both ways.
+        assert!(pattern_matches("secret/*", "secret/data/cloudflare/token"));
+        assert!(pattern_matches(
+            "secret/+/cloudflare/*",
+            "secret/data/cloudflare/refresh"
+        ));
+        assert!(pattern_matches(
+            "secret/data/cloud*",
+            "secret/data/cloudflare/token"
+        ));
+        assert!(!pattern_matches(
+            "secret/data/github/token",
+            "secret/data/cloudflare/token"
+        ));
+        assert!(!pattern_matches(
+            "secret/data/ca/proxy-cert",
+            "secret/data/cloudflare/token"
+        ));
+        let v = audit_policy_dir(&dir);
+        assert!(v.is_empty(), "policy violations:\n{}", v.join("\n"));
     }
 }

@@ -49,6 +49,10 @@ make_sandbox() {
     local sb="$TDIR/$name"
     mkdir -p "$sb/scripts" "$sb/bin"
     cp "$REAL_ROOT/scripts/build-guest-binaries.sh" "$sb/scripts/"
+    # build-guest-binaries.sh sources lib-build-version.sh since 1238-b825; a
+    # scratch copy without it dies at line 19 and every arm reads as the lane
+    # under test failing (land87 relay).
+    cp "$REAL_ROOT/scripts/lib-build-version.sh" "$sb/scripts/"
     printf '0.0.0\n' > "$sb/VERSION"
 
     {

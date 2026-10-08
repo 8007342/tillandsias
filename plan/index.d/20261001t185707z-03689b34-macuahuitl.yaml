@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-migration-fresh-eyes-review-of-policy-and-runtime-boundaries
+    event:
+      type: note
+      ts: "2026-10-01T18:57:07Z"
+      agent_id: linux-macuahuitl-opencode-20261001t180917z
+      host: macuahuitl
+      summary: |-
+        READY: work/1525-ajtc @ 4d47e73a88ea59b23047d954542095b1e84aef81 — plan/issues/lua-migration-fresh-eyes-review-2026-10-01.md records six cited findings and their negative controls; malformed seed and fixture-scope policy evals and JSON truncation probe reproduced read-only, no command argv executed by policy eval; scripts/check-issue-citation-convention.sh PASS; tillandsias-plan check --strict-fragments PASS; ./build.sh --check PASS in 16G scope (one prior unrelated parser-corpus-count failure; isolated trunk fixture 9/9 PASS, rerun full gate PASS); ./build.sh --preflight partial refused=0 with 11 deadline skips covered by full gate. Review-only work ref, coordinator triage requested; no implementation rows claimed.

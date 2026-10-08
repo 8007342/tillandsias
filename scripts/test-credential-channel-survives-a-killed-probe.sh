@@ -28,6 +28,9 @@
 # Usage: scripts/test-credential-channel-survives-a-killed-probe.sh
 
 set -uo pipefail
+# Order 1456-ib6i: this fixture pins the KEYRING path; keep the host's real
+# host-push lane (if one is wired here) from answering instead.
+export TILLANDSIAS_CCC_NO_LANE=1
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
 
@@ -161,7 +164,10 @@ fi
 # bounding tool makes the kill observable.
 if [ -z "$_BOUND" ]; then
     echo "  skip:no-timeout-tool — a killed probe cannot be distinguished from an answered one without a bounding tool; the not-missing property above still held"
-elif grep -qE '^(ok|unverified):(gh-credentials-store|gh-token-env|github-token-env)$' "$W/.out"; then
+elif grep -qE '^((ok|unverified|blocked):(gh-credentials-store|gh-token-env|github-token-env))(-push-(verified|refused)(-hook-refused|-refstate-refused)?)?$' "$W/.out"; then
+    # 1004-8p76: the store/env arms now PROBE, so they answer
+    # ok:<arm>-push-verified[...] or blocked:<arm>-push-refused as well as
+    # unverified:<arm>; every one is an answer about the store, not the kill.
     # THE ARM'S SECOND UNASSERTED PREMISE, measured on yoga 2026-09-22.
     # <git-dir>/.gh-credentials is the guard's HIGHEST-precedence channel, so on
     # a checkout that has one the guard answers about the store and never

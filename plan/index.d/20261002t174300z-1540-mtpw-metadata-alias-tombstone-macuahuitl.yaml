@@ -1,0 +1,37 @@
+packets:
+  - packet_id: lua-live-streaming-callbacks-and-managed-process-lifecycle
+    order: 1540-mtpw
+    status: obsolete
+    kind: bug
+    priority: p3
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [plan, metadata, correction]
+    estimated_hours: 0
+    owned_files: []
+    title: "Non-claimable tombstone for a misaddressed 1534 metadata-event alias"
+    context: |
+      Two pushed metadata-only events accidentally addressed this nonexistent
+      packet_id instead of the existing1534-puyz packet. The fragment fold
+      reported both entries dropped, so the corpus was incomplete. Neither
+      event declared a new implementation task, status or authority.
+    outcome: |
+      Preserve both original immutable fragments and attach their historical
+      metadata observations to this explicitly obsolete bookkeeping alias.
+      The canonical work and all future events belong only to
+      lua-live-proc-spawn-streams-with-script-owned-cancellation-and-reaping
+      (1534-puyz). This row is not a second runtime task or a completion claim.
+    exit_criteria:
+      - "Both original metadata fragments remain byte-identical to28c7636e6; the fold reports no dropped entries after this additive tombstone declaration."
+      - "A new canonical1534 progress event records the source-data and diagnostic-provenance repairs; no implementation status changes on this alias."
+    verifiable_closure: "tillandsias-plan check: complete corpus with no dropped entries; git diff28c7636e6 of the two original fragment paths is empty"
+    unscoreable: "obsolete-metadata-alias: canonical replacement is1534-puyz, not a new obligation"
+    next_action: "No work to claim. Read1534-puyz for the implementation and its current verification state."
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Correction follows distributed-work append-only history and tombstone
+      governance: no base edit, no fragment amendment, no guard weakening.
+      Original events are in20261002t173000z-1534-puyz-evidence-source-data-macuahuitl.yaml
+      and20261002t174500z-1534-puyz-diagnostic-citation-metadata-macuahuitl.yaml.
+    provenance: "Parent correction bylinux-macuahuitl-opencode-20261002t053211z after independent complete-fold verification on2026-10-02."

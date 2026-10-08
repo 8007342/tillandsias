@@ -9,9 +9,7 @@ source /usr/local/lib/tillandsias/lib-common.sh
 
 # @trace gap:ON-008
 # Load agent profile configuration from config overlay.
-if [ -f /opt/config-overlay/mcp/agent-profile.sh ]; then
-    source /opt/config-overlay/mcp/agent-profile.sh
-fi
+load_agent_profile   # lib-common; 1517-p83m (the /opt path never existed)
 
 # @trace spec:forge-git-identity-anonymization
 # Agent attribution for git commit trailers.
@@ -34,8 +32,14 @@ exit_pause() {
         echo "ERROR: forge agent launch failed (exit code: $exit_code)"
         echo "═══════════════════════════════════════════════════════"
         echo ""
-        echo "Press any key to exit..."
-        read -r -n 1 -s 2>/dev/null || true
+        # 1457-r8yi: when the host holds the window (tillandsias --hold-window
+        # passes TILLANDSIAS_HOST_HOLDS_WINDOW=1 by name), it asks for the one
+        # keypress; pausing here too asked for two. Other lanes (macOS, Windows,
+        # an operator's own terminal) do not set it and still pause here.
+        if [ "${TILLANDSIAS_HOST_HOLDS_WINDOW:-}" != 1 ]; then
+            echo "Press any key to exit..."
+            read -r -n 1 -s 2>/dev/null || true
+        fi
     fi
 }
 trap 'exit_pause' EXIT
@@ -75,6 +79,11 @@ export_project_env
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
+# @trace order:1447-nmq3
+# Trust the checked-out project in agy's settings.json (trustedWorkspaces), so
+# the "Do you trust the contents of this project?" dialog does not appear.
+# Forge-gated inside the function.
+seed_agy_workspace_trust "$PROJECT_DIR" || true
 
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme

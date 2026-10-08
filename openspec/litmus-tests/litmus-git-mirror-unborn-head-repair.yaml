@@ -68,7 +68,7 @@ critical_path:
   # Adding a fourth path stays green; removing either clone transport's tail
   # turns red, which is the regression this exists to catch.
   - step: "the common tail runs on BOTH clone transports (filesystem + network) so no transport keeps sticky-HEAD (repair B6)"
-    command: "b6=$(grep -A2 -F 'COMMON TAIL (order 501, B6)' images/default/lib-common.sh | grep -cE '^[[:space:]]+checkout_forge_seed_branch$'); all=$(grep -cE '^[[:space:]]+checkout_forge_seed_branch$' images/default/lib-common.sh); if [ \"$b6\" -eq 2 ] && [ \"$all\" -ge 2 ]; then echo 'ok: seed-tail-both-transports'; else echo \"b6_markers_with_tail=$b6 expected=2 total_call_sites=$all expected>=2\"; echo 'remedy: every clone transport must run checkout_forge_seed_branch under its COMMON TAIL (order 501, B6) marker'; fi"
+    command: "b6=$(grep -A2 -F 'COMMON TAIL (order 501, B6)' images/default/lib-common.sh | grep -cE '^[[:space:]]+checkout_forge_seed_branch( resolve)?$'); all=$(grep -cE '^[[:space:]]+checkout_forge_seed_branch( resolve)?$' images/default/lib-common.sh); if [ \"$b6\" -eq 2 ] && [ \"$all\" -ge 2 ]; then echo 'ok: seed-tail-both-transports'; else echo \"b6_markers_with_tail=$b6 expected=2 total_call_sites=$all expected>=2\"; echo 'remedy: every clone transport must run checkout_forge_seed_branch under its COMMON TAIL (order 501, B6) marker'; fi"
     timeout_ms: 5000
     expected_behavior: "ok: seed-tail-both-transports"
 

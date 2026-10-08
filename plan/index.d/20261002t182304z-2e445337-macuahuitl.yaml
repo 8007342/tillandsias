@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    field: next_action
+    value: Streaming child1534-puyz is landed through PR207 at7b829b205, independently reviewed and forced-gated. Next scheduled implementation is composition1538-pwdr (owned dispatcher list corrected; estimated3h including verification), then multi-cycle trace1539-dt84. Read plan/issues/remaining-composition-and-trace-handoff-2026-10-02.md and pin API ambiguities before coding. Obtain native Mac/changed Windows runtime evidence before closing this parent or unblocking preflight1520-z95v. Preserve8MiB-prefix/no-shell-strings; no default-deny/build-land rewrite/destructive E2E authorization. Scheduler remains due:not-installed; no timer was armed.
+    ts: "2026-10-02T18:23:04Z"
+    host: macuahuitl
+
+events:
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    event:
+      type: progress
+      ts: "2026-10-02T18:23:04Z"
+      host: macuahuitl
+      summary: |-
+        status 'Streaming child1534-puyz is landed through PR207 at7b829b205, independently reviewed and forced-gated. Next scheduled implementation is composition1538-pwdr (owned dispatcher list corrected; estimated3h including verification), then multi-cycle trace1539-dt84. Read plan/issues/remaining-composition-and-trace-handoff-2026-10-02.md and pin API ambiguities before coding. Obtain native Mac/changed Windows runtime evidence before closing this parent or unblocking preflight1520-z95v. Preserve8MiB-prefix/no-shell-strings; no default-deny/build-land rewrite/destructive E2E authorization. Scheduler remains due:not-installed; no timer was armed.' (not terminal) with evidence_refs: 7b829b20583130067432069ecf0bc0586af4ce86 + PR207 MERGED and forcedgate exited0; composition/trace remain ready/unclaimed with native boundaries
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    event:
+      type: note
+      ts: "2026-10-02T18:23:04Z"
+      host: macuahuitl
+      summary: |-
+        Parent linux-macuahuitl-opencode-20261002t053211z records measured1534 landing and shaped dependency-ordered follow-ups, not completion of1384 or native claims.

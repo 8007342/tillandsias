@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-tests-share-one-env-lock-so-the-mcp-browser-family-test-survives-a-parallel-run
+    field: status
+    value: in_progress
+    ts: "2026-09-28T00:28:37Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: tray-tests-share-one-env-lock-so-the-mcp-browser-family-test-survives-a-parallel-run
+    event:
+      type: note
+      ts: "2026-09-28T00:28:37Z"
+      host: forge-tillandsias
+      summary: |-
+        claiming: consolidate the 5 ENV_LOCK/ENV_LOCK2 mutexes into test_support::env_lock() and extend coverage to resource_lock.rs (1242-4x53 shares the same XDG_RUNTIME_DIR target)

@@ -1,0 +1,35 @@
+# @trace spec:ci-release
+# @trace order:1384-bqhy
+#
+# Order 1384-bqhy: `tillandsias-plan script run <file.lua>` is the one runner
+# for a Lua decider (a verdict module in the house grammar, and a script with no
+# verdict refused, so a silent green is unconstructible), and `script classify`
+# is the one outcome classifier the gate loop and the preflight door both call.
+# The gate loop runs STEP_LUA steps beside STEP_SCRIPT ones.
+name: litmus:script-run-verb
+spec: ci-release
+phase: pre-build
+description: >
+  verdict.ok/refused print the house grammar and exit 0/1; a verdict-less script
+  is refused:no-verdict; --timeout exits 124 with status=timed_out; build.sh's
+  own gate-steps loop, over a scratch root, runs a STEP_LUA step and refuses a
+  missing .lua and a step naming both; timing goes only to TILLANDSIAS_TIMING_LOG;
+  the four outcome kinds come from ONE Rust classifier reached by both build.sh
+  call sites and by Lua.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-script-run-verb.sh
+  - a runnable tillandsias-plan that knows `script`, or the fixture skips by name
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-script-run-verb.sh && test -x scripts/test-script-run-verb.sh && echo 'ok: script-run-verb-parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: script-run-verb-parses"
+
+  - step: "the seven arms of the row's verifiable_closure hold"
+    command: "bash scripts/test-script-run-verb.sh"
+    timeout_ms: 600000
+    expected_behavior: "script-run-verb: 7 passed, 0 failed"

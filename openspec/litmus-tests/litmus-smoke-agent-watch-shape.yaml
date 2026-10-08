@@ -1,0 +1,46 @@
+# @trace spec:meta-orchestration
+name: litmus:smoke-agent-watch-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Order 1275-ngrc. The curl-install smoke's forge lane detects its own central
+  failure mode: the in-forge agent hits a terminal error (retries exhausted, a
+  bad key, no such model), opencode idles instead of exiting, and every §4a
+  instrument reports health. scripts/smoke-agent-watch.sh decides from the
+  AGENT's log, never the clock: a terminal ERROR that stays the last
+  non-housekeeping line for the grace window yields
+  refused:smoke-forge-lane:agent-dead-process-idling, the agent log copied
+  host-side, and the forge container stopped so the lane returns; any agent
+  activity after the error resets it.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-smoke-agent-watch.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-smoke-agent-watch.sh && test -x scripts/test-smoke-agent-watch.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "the pirria shape is agent-error-idle; working, recovered and retrying logs are not; the watch issues the named verdict and stops the forge; a working agent is never killed"
+    command: "bash scripts/test-smoke-agent-watch.sh 2>&1 | tail -n 1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: smoke-agent-watch"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "PASS: smoke-agent-watch"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "smoke-agent-watch-shape"
+    artifact: "scripts/smoke-agent-watch.sh + skills/smoke-curl-install-and-test-e2e §4/§4a"
+
+rollback:
+  on_failure: >
+    A lane that runs for hours on a dead agent, or a watch that kills a working
+    one, is the defect. Never replace the watch with a timeout (the row's
+    negative control): restore the log-based classification first.
+  command: "bash scripts/test-smoke-agent-watch.sh"

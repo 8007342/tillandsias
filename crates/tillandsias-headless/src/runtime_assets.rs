@@ -258,6 +258,7 @@ fn image_context_rel(image_name: &str) -> Result<&'static str, String> {
         "git" => Ok("images/git"),
         "inference" => Ok("images/inference"),
         "web" => Ok("images/web"),
+        "web-wrangler" => Ok("images/web-wrangler"),
         "router" => Ok("images/router"),
         "chromium-core" | "chromium-framework" => Ok("images/chromium"),
         "vault" => Ok("images/vault"),
@@ -299,19 +300,12 @@ fn hex_digest(bytes: &[u8]) -> String {
 /// Process-wide lock for tests that mutate environment variables.
 ///
 /// `std::env::set_var` is process-global and unsound to race with `getenv`,
-/// so EVERY env-mutating test in this crate must serialise on the SAME lock.
-/// Two independent mutexes would not serialise anything — which is why this
-/// lives at module level rather than inside one test module (order 434).
+/// so EVERY env-mutating test in this crate must serialise on the SAME lock
+/// (order 434). Moved to `crate::test_support::env_lock` (order 1437-5czv) so
+/// every OTHER independent env mutex in the crate could be retired onto it
+/// too; re-exported here so this call site keeps working unchanged.
 #[cfg(test)]
-pub(crate) fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-    use std::sync::{Mutex, OnceLock};
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    // A poisoned lock only means some other env test panicked; the guard is
-    // still usable and failing here would mask the real failure.
-    LOCK.get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-}
+pub(crate) use crate::test_support::env_lock;
 
 /// Process-wide lock for tests that repoint the `TILLANDSIAS_PODMAN_BIN` seam.
 ///
@@ -362,6 +356,11 @@ mod tests {
             "images/default/Containerfile",
             "images/default/skills/advance-work-from-plan/SKILL.md",
             "images/proxy/allowlist.txt",
+            "images/web-wrangler/Containerfile",
+            "images/web-wrangler/package.json",
+            "images/web-wrangler/package-lock.json",
+            "images/web-wrangler/wrangler.lock.json",
+            "images/web-wrangler/entrypoint.sh",
             "images/router/tillandsias-router-sidecar",
             "scripts/manage-cache.sh",
         ] {
@@ -387,6 +386,7 @@ mod tests {
             ("images/git/Containerfile", "images/git"),
             ("images/inference/Containerfile", "images/inference"),
             ("images/web/Containerfile", "images/web"),
+            ("images/web-wrangler/Containerfile", "images/web-wrangler"),
             ("images/router/Containerfile", "images/router"),
             ("images/chromium/Containerfile.core", "images/chromium"),
             ("images/chromium/Containerfile.framework", "images/chromium"),

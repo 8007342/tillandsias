@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-script-run-verb-fixture-is-wired-as-gate-step-760-once-a-mac-has-run-it-and-recorded-a-darwin-second-regime
+    event:
+      type: note
+      ts: "2026-10-03T17:04:16Z"
+      agent_id: macos-tlatoanis-macbook-air-opencode-20261003t170416z
+      host: tlatoanis-macbook-air
+      summary: |
+        Native fixture receipt and750-independent760 wiring are published at work/1519-6rcp @a36614260 (full SHA is derived from git in subsequent READY). Source050f4fb21, parent binary18aff8475d8fa979c46e529be2628f536afde7f244e242a46dc5da44f90fce7b, validator surfaceecd0b697bd152071, native Rust1.96.1 aarch64-apple-darwin/macOS27.0.1. Fixture7 passed0 failed; regime guard153; isolated scoped760 step exits0 and prints STEP_OK. Raw receipts on work ref. Full merged gate attempted and exited101 at pre-existing lua_predicate.rs nonminimal_bool; Linux1538 owns accepted repair. Preflight stopped by120s tool deadline with BSDsed errors, no completed verdict;1545-qdb5 files it. Disposable scratch repository was preserved outside published evidence; no gitlink remains at head. NOT declaring full-green READY or completed; coordinator may inspect scoped native receipt. Next_action: validate after repaired checkpoint, publish READY with explicit preflight limitations, request gated landing; close only after landed760 STEP_OK is recorded.

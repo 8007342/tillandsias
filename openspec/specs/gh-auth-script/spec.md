@@ -150,7 +150,8 @@ Interactive GitHub Login MUST use GitHub App OAuth Device Authorization Grant (R
 - **WHEN** the user initiates interactive `--github-login`
 - **THEN** the flow MUST request a device code from GitHub using Client ID `Iv23liddVkg9ME6OB1K1`
 - **AND** the terminal MUST render a QR code containing `https://github.com/login/device?user_code=<user_code>`
-- **AND** the QR code MUST be formatted using Unicode block characters with ANSI high-contrast styling (`\x1b[47m\x1b[30m`) ensuring readability across both dark and light terminal emulators
+- **AND** the QR code MUST be formatted using Unicode block characters in a high-contrast module pair: on a colour terminal, the tillandsia palette's leaf-deepest (#1E4A32, xterm-256 22) on leaf-light (#9DBBA5, xterm-256 108), which reads on both dark and light terminal emulators (order 1420-2pav, replacing the hardcoded `\x1b[47m\x1b[30m`)
+- **AND** when `NO_COLOR` is set, `CI` is set, `TERM` is `dumb`, or stdout is not a terminal, the QR code and the one-time code MUST print with zero escape bytes (order 1420-2pav)
 - **AND** the flow MUST display the verification URL and user code as text fallback
 
 #### Scenario: Mobile authorization polling and persistence
@@ -170,7 +171,7 @@ Interactive GitHub Login MUST use GitHub App OAuth Device Authorization Grant (R
 
 GitHub App user-to-server access tokens expire after 8 hours. The system MUST persist and manage refresh tokens in Vault, supporting automatic and explicit token rotation.
 
-@trace spec:gh-auth-script, spec:secret-rotation, spec:tillandsias-vault
+@trace spec:gh-auth-script, spec:tillandsias-vault
 
 #### Scenario: Refresh token rotation
 - **WHEN** an access token nears expiration (within 30 minutes) or has expired
@@ -178,7 +179,15 @@ GitHub App user-to-server access tokens expire after 8 hours. The system MUST pe
 - **THEN** the system MUST exchange the refresh token at `https://github.com/login/oauth/access_token` for a new access token and rotated refresh token
 - **AND** the rotation MUST hold an exclusive lock from reading the stored refresh token until the new pair is written (refresh tokens are single-use)
 - **AND** the rotated refresh token MUST be written to `secret/github/refresh` BEFORE the new access token is written to `secret/github/token`, and a failed write MUST leave the previous records intact
-- **AND** an accountability audit event MUST be recorded under `spec:secret-rotation`
+- **AND** an accountability audit event MUST be recorded under `spec:gh-auth-script` (operation `github_token_auto_rotation` for the automatic path, `github_token_refresh` for the explicit one)
+
+#### Scenario: Every resident process keeps the token alive
+<!-- @trace order:1489-8qd6 -->
+- **WHEN** any of these processes is running on a host: the Linux tray (from its start-up), a lane of any kind (`--bash`, `--claude`, a project launch; every lane runs `ensure_enclave_for_project`), or the macOS/Windows guest's vsock listener
+- **THEN** that process MUST run the due-check at its start and periodically for its lifetime, so a host with a tray, a host with only CLI lanes, and a guest regime are each covered without the others
+- **AND** a token that expired while NO such process ran MUST be rotated by the next one to start (the "or has expired" branch above), not left expired
+- **AND** a forge MUST NOT rotate (it cannot reach the refresh token and must not try)
+- **AND** removing any one of these entry points MUST fail `scripts/test-github-token-rotation-entry-points.sh`
 
 #### Scenario: Explicit refresh is an operator action
 - **WHEN** `tillandsias --refresh-github-token` runs without a desktop session

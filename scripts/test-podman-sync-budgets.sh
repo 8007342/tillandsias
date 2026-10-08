@@ -10,15 +10,16 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GATE="$ROOT/scripts/check-podman-sync-budgets.sh"
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)"
+LUA="$ROOT/scripts/lua/check-podman-sync-budgets.lua"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
-[ -f "$GATE" ] || fail "gate not found: $GATE"
+[ -f "$LUA" ] || fail "gate not found: $LUA"
 
 # --- case 1: the live tree is bounded ----------------------------------------
-out="$(bash "$GATE")" || fail "case 1: live tree must pass, got '$out'"
+out="$("$PLAN" script run "$LUA")" || fail "case 1: live tree must pass, got '$out'"
 case "$out" in
     ok:podman-sync-bounded:*) ;;
     *) fail "case 1: unexpected verdict '$out'" ;;
@@ -33,7 +34,7 @@ fn probe() {
     let _ = cmd.arg("ps").output();
 }
 RS
-out="$(cd "$WORK" && PODMAN_SYNC_SEARCH_ROOT=crates bash "$GATE" 2>/dev/null)"
+out="$(TILLANDSIAS_REPO_ROOT="$WORK" PODMAN_SYNC_SEARCH_ROOT=crates "$PLAN" script run "$LUA" 2>/dev/null)"
 rc=$?
 [ "$rc" -ne 0 ] || fail "case 2: a direct podman Command must be refused"
 case "$out" in
@@ -48,7 +49,7 @@ cat > "$WORK/crates/fixture/src/hatch.rs" <<'RS'
 fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }
 fn b() { let _ = cmd.spawn_caller_owned_lifetime(); }
 RS
-out="$(cd "$WORK" && PODMAN_SYNC_SEARCH_ROOT=crates PODMAN_SYNC_ESCAPE_HATCHES=1 bash "$GATE" 2>/dev/null)"
+out="$(TILLANDSIAS_REPO_ROOT="$WORK" PODMAN_SYNC_SEARCH_ROOT=crates PODMAN_SYNC_ESCAPE_HATCHES=1 "$PLAN" script run "$LUA" 2>/dev/null)"
 rc=$?
 [ "$rc" -ne 0 ] || fail "case 3: a second caller-owned spawn must be refused"
 case "$out" in
@@ -58,7 +59,7 @@ esac
 echo "ok: case 3 — escape hatch counted, not merely allowed"
 
 # --- case 4: the reviewed count is what makes case 3 a decision --------------
-out="$(cd "$WORK" && PODMAN_SYNC_SEARCH_ROOT=crates PODMAN_SYNC_ESCAPE_HATCHES=2 bash "$GATE")" \
+out="$(TILLANDSIAS_REPO_ROOT="$WORK" PODMAN_SYNC_SEARCH_ROOT=crates PODMAN_SYNC_ESCAPE_HATCHES=2 "$PLAN" script run "$LUA")" \
     || fail "case 4: raising the reviewed count must allow it, got '$out'"
 [ "$out" = "ok:podman-sync-bounded:2" ] || fail "case 4: unexpected verdict '$out'"
 echo "ok: case 4 — raising the reviewed count is the sanctioned path"
@@ -74,7 +75,7 @@ fn probe(mut pipe: std::process::ChildStdout) {
     let _ = pipe.read_to_end(&mut buf);
 }
 RS
-out="$(cd "$WORK" && PODMAN_SYNC_SEARCH_ROOT=crates bash "$GATE" 2>/dev/null)"
+out="$(TILLANDSIAS_REPO_ROOT="$WORK" PODMAN_SYNC_SEARCH_ROOT=crates "$PLAN" script run "$LUA" 2>/dev/null)"
 rc=$?
 [ "$rc" -ne 0 ] || fail "case 5: an unbounded child-pipe capture must be refused"
 case "$out" in
@@ -104,7 +105,7 @@ fn test_only_wait(mut child: std::process::Child) {
     }
 }
 RS
-out="$(cd "$WORK" && PODMAN_SYNC_SEARCH_ROOT=crates bash "$GATE" 2>/dev/null)"
+out="$(TILLANDSIAS_REPO_ROOT="$WORK" PODMAN_SYNC_SEARCH_ROOT=crates "$PLAN" script run "$LUA" 2>/dev/null)"
 rc=$?
 [ "$rc" -ne 0 ] || fail "case 6: a sleeping child-wait poll must be refused"
 case "$out" in
@@ -115,4 +116,61 @@ rm "$WORK/crates/tillandsias-podman/src/busy_wait.rs"
 rm "$WORK/crates/tillandsias-podman/tests/allowed_poll.rs"
 echo "ok: case 6 — sleeping child-wait poll refused"
 
-echo "PASS: podman sync budgets (6/6)"
+# --- case 7: legacy absolute roots (including spaces) remain readable --------
+EXT="$WORK/external root"
+mkdir -p "$EXT/crates/fixture/src"
+cat > "$EXT/crates/fixture/src/bad.rs" <<'RS'
+fn probe() { let _ = std::process::Command::new("podman"); }
+RS
+out="$(PODMAN_SYNC_SEARCH_ROOT="$EXT/crates" "$PLAN" script run "$LUA" 2>/dev/null)"
+rc=$?
+[ "$rc" -ne 0 ] || fail "case 7: an external root direct command must be refused"
+case "$out" in
+    violation:direct-command:1) ;;
+    *) fail "case 7: external space-path verdict changed: '$out'" ;;
+esac
+echo "ok: case 7 — external root with spaces is scanned through typed listing"
+
+# --- case 8: malformed budgets fail loudly instead of defaulting to one ------
+out="$(TILLANDSIAS_REPO_ROOT="$WORK" PODMAN_SYNC_SEARCH_ROOT=crates PODMAN_SYNC_ESCAPE_HATCHES=wat "$PLAN" script run "$LUA" 2>/dev/null)"
+rc=$?
+[ "$rc" -eq 2 ] || fail "case 8: malformed escape budget must block, got rc=$rc out='$out'"
+[ "$out" = "blocked:podman-sync-bounded:invalid-escape-hatches:wat" ] \
+    || fail "case 8: malformed escape budget verdict changed: '$out'"
+echo "ok: case 8 — malformed escape budget is explicit"
+
+# --- case 9: CRLF hatch diagnostics retain the matched source bytes ----------
+mkdir -p "$WORK/crlf/crates/fixture/src"
+printf 'fn a() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\nfn b() { let _ = cmd.spawn_caller_owned_lifetime(); }\r\n' \
+    > "$WORK/crlf/crates/fixture/src/hatch.rs"
+if raw="$(TILLANDSIAS_REPO_ROOT="$WORK/crlf" PODMAN_SYNC_SEARCH_ROOT=crates PODMAN_SYNC_ESCAPE_HATCHES=1 "$PLAN" script run "$LUA" 2>&1)"; then
+    fail "case 9: CRLF escape hatch growth must be refused"
+elif grep -q "$(printf '\r')" <<<"$raw"; then
+    echo "ok: case 9 — CRLF hatch diagnostic retains matched source CR byte"
+else
+    fail "case 9: CRLF hatch diagnostic normalized the matched source line"
+fi
+
+# --- case 10: follow an absolute starting symlink, but not interior links ----
+ln -s "$EXT/crates" "$EXT/scan alias"
+out="$(PODMAN_SYNC_SEARCH_ROOT="$EXT/scan alias" "$PLAN" script run "$LUA" 2>/dev/null)"
+rc=$?
+[ "$rc" -ne 0 ] || fail "case 10: starting symlink must not hide a direct podman Command"
+case "$out" in
+    violation:direct-command:1) ;;
+    *) fail "case 10: starting symlink verdict changed: '$out'" ;;
+esac
+echo "ok: case 10 — absolute starting symlink is followed"
+
+# --- case 11: a broken external start cannot become a green empty scan --------
+ln -s "$EXT/missing" "$EXT/broken scan"
+out="$(PODMAN_SYNC_SEARCH_ROOT="$EXT/broken scan" "$PLAN" script run "$LUA" 2>/dev/null)"
+rc=$?
+[ "$rc" -eq 2 ] || fail "case 11: broken external root must block, got rc=$rc out='$out'"
+case "$out" in
+    blocked:podman-sync-bounded:search-root-unreadable:*) ;;
+    *) fail "case 11: broken external root verdict changed: '$out'" ;;
+esac
+echo "ok: case 11 — broken external root cannot report green"
+
+echo "PASS: podman sync budgets (11/11)"

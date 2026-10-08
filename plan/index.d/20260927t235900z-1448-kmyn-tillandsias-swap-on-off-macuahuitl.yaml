@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator request 2026-09-27 (at calmecacpilli, 8 GB RAM, no checkout):
+# `tillandsias --swap on|off` so a host without a repo checkout can enable
+# and remove the forge swap machinery, and --uninstall removes it too.
+packets:
+  - packet_id: tillandsias-swap-on-off-installs-and-removes-the-forge-swap-service-from-the-binary-itself-so-a-host-without-a-checkout-can-enable-it-and-uninstall-leaves-no-trace
+    order: 1448-kmyn
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [swap, forge, memory, uninstall, polkit, systemd, low-ram-hosts]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - scripts/install-forge-swap-service.sh
+      - scripts/forge-swap/
+      - scripts/test-forge-swap-service.sh
+    title: |
+      `tillandsias --swap on|off` (operator 2026-09-27): the binary embeds the forge-swap assets and, elevated once, installs or removes the per-launch swap service itself — a host with no repo checkout (calmecacpilli, 8 GB RAM) can enable it; --uninstall removes it
+    context: |
+      OPERATOR, verbatim: "I'm at Calmecacpilli, trying to launch forge
+      agents inside Tillandsias forge containers, this host only has 8GB of
+      Ram, and does not have a tillandsias checkout. How do I enable a large
+      24gb swap file like the one Macuahuitl has? Should our tillandsias
+      binary have an elevated tillandsias --swap on and tillandsias --swap
+      off to create and enable the swap file and services, and to remove the
+      file to reclaim the space and disable all services. Making sure it all
+      gets removed on uninstall as well."
+      TODAY: the machinery exists (1376-8zdz, 1380-zmpi; design
+      plan/issues/forge-memory-swap-architecture-design-2026-09-26.md) but
+      only as scripts/install-forge-swap-service.sh + scripts/forge-swap/*,
+      i.e. it needs a repo checkout: a curl-installed host has no way to run
+      it except fetching the files from GitHub by hand. Installed set: the
+      root helper /usr/local/libexec/tillandsias-swap, the per-launch
+      template tillandsias-swap@.service (never enabled), the lease-GC
+      timer, a polkit rule scoped to that template, /etc/tillandsias/
+      swap.conf (SWAP_TIERS_GB 8:16:24, reserve 20 GB), and group
+      "tillandsias". macuahuitl runs it (/var/swap/forge-live.swap, 24G).
+      DESIGN POINTS for the implementer: embed the assets in the binary
+      (include_str!) so the installed binary is the source; `--swap on`
+      elevates exactly once (pkexec, falling back to a printed `sudo`
+      command — the tray itself never runs sudo) and is idempotent;
+      `--swap off` stops any live lease, removes every installed path, the
+      polkit rule and the swap files under SWAP_DIR, and removes the group
+      only if it has no other use; `--swap status` reports installed/active
+      without root. --uninstall (1437-evzi, zero traces) calls the same
+      removal. Linux only here; macOS has per-launch vm-swap.img
+      (1377-hcnv) and Windows the .wslconfig swap keys — `--swap` on those
+      platforms prints what governs swap there instead of acting.
+    verifiable_closure: |
+      bash scripts/test-forge-swap-service.sh prints its ok verdict with new
+      arms, all against a --prefix scratch root (no root needed): (1) the
+      binary's `--swap on --prefix <scratch>` writes byte-identical files to
+      the ones scripts/install-forge-swap-service.sh --prefix writes (the
+      embedded assets cannot drift from scripts/forge-swap/); (2) a second
+      `--swap on` changes nothing; (3) `--swap off --prefix <scratch>` leaves
+      none of the installed paths and removes a planted swap file under the
+      scratch SWAP_DIR; (4) `--uninstall`'s removal plan lists every
+      --swap-installed path; (5) NEGATIVE CONTROL: `--swap off` on a
+      scratch root with nothing installed exits 0 and removes nothing else.
+      PRE-FIX RESULT: FAILS — the binary has no --swap verb.
+    next_action: >
+      Embed scripts/forge-swap/* and the installer's steps in the headless
+      binary behind `--swap on|off|status [--prefix DIR]`; reuse the
+      installer's paths verbatim; wire --uninstall to the off path.
+    notes: |
+      size: L
+      implementer_tier: opus
+      Touches root-owned system paths and a polkit rule: security-sensitive.

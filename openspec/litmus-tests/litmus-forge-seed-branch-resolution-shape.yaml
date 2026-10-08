@@ -1,0 +1,44 @@
+# @trace spec:git-mirror-service
+name: litmus:forge-seed-branch-resolution-shape
+spec: git-mirror-service
+phase: pre-build
+description: >
+  Order 1362-u8ww. A forge clone never takes its branch from the mirror's HEAD.
+  A cloud launch has no host checkout and injects no seed, and the clone used to
+  land on whatever the mirror's HEAD named (pirria 2026-09-22: work/1325-ygq5,
+  that host's own work branch). The clone transports now resolve an unset seed:
+  TILLANDSIAS_FORGE_SEED_BRANCH, else the discipline seed's integration branch,
+  else its default_branch, else main/master; the forge prints the choice and
+  its reason, and a host-mounted checkout is never switched.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-forge-seed-branch-resolution.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-forge-seed-branch-resolution.sh && test -x scripts/test-forge-seed-branch-resolution.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "two mirrors with different HEADs seed the same named branch; each fallback named; explicit seed wins; nothing-resolvable is loud and never fatal; host-mount untouched"
+    command: "bash scripts/test-forge-seed-branch-resolution.sh 2>&1 | tail -n 1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: forge-seed-branch-resolution"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "PASS: forge-seed-branch-resolution"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "forge-seed-branch-resolution-shape"
+    artifact: "images/default/lib-common.sh resolve_forge_seed_branch + checkout_forge_seed_branch resolve"
+
+rollback:
+  on_failure: >
+    A forge landing on the branch the mirror's HEAD names (another host's work
+    branch) is the defect: restore the resolution order in
+    resolve_forge_seed_branch and the `resolve` argument on the clone paths.
+  command: "bash scripts/test-forge-seed-branch-resolution.sh"

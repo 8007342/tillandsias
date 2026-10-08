@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: select-work-batch-and-next-honour-a-model-tier
+    field: verifiable_closure
+    value: |-
+      bash scripts/test-model-tier-routing.sh prints ok:model-tier-routing:6/6
+      and exits 0, where, over a scratch ledger with one haiku row, one sonnet
+      row, one opus row and one UNTAGGED row all claimable by role any and all
+      in one epic: arm 1: select-work-batch.sh any --tier haiku emits a batch
+      whose packet lines name ONLY the haiku row and whose batch: line carries
+      tier=haiku; arm 2: --tier haiku over a ledger with no haiku row prints
+      refused:no-tier-work:model-tier=haiku and exits 1 (never the general
+      queue); arm 3: --tier sonnet --budget 1 emits the sonnet row, and with
+      --budget 3 emits the sonnet row FIRST and the haiku row second, and never
+      the untagged or opus rows; arm 4: --tier opus --budget 2 emits the opus
+      row and the untagged row (an untagged row IS an opus row, operator ruling
+      2026-09-27 "No size tags get Opus") and never the haiku row before the
+      sonnet row is exhausted; arm 5: tillandsias-plan next any --tier haiku
+      lists the haiku row alone, so plan_next agrees with the selector; arm 6:
+      the batch: line carries tier_fallback=<n> counting rows taken from a lower
+      tier than the caller's, 0 when none. PRE-FIX RESULT: FAILS — --tier is an
+      unknown argument to both tools today and every arm's batch contains all
+      four rows.
+    ts: "2026-09-27T17:57:34Z"
+    host: macuahuitl
+
+events:
+  - packet_id: select-work-batch-and-next-honour-a-model-tier
+    event:
+      type: note
+      ts: "2026-09-27T17:57:34Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-09-27 relayed by the coordinator (efficiency trims 1437-62g8)

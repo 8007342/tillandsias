@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: every-podman-object-tillandsias-creates-carries-an-owner-label-and-the-ownership-predicates-key-on-it-not-on-the-name-prefix
+    order: 1490-nczm
+    parent_order: 1490-gttj
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [podman, labels, lifecycle, reset, linux]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-core/src/image_builder.rs
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/vault_bootstrap.rs
+      - crates/tillandsias-headless/src/remote_projects.rs
+      - crates/tillandsias-headless/src/container_deps.rs
+      - scripts/test-container-ownership-labels.sh
+    title: |
+      Containers, volumes and networks carry io.tillandsias.owner / version / role labels, and is_stack_managed_name, reset_guest_scope, shutdown_escalation_targets and the shutdown sweep decide by label with the name prefix as a logged fallback; a toolbox-labelled object is never owned
+    context: |
+      Today only IMAGES are labelled (io.tillandsias.image.* in
+      crates/tillandsias-core/src/image_builder.rs:27-28,154,162, applied at
+      main.rs:9807-9809). The one container label in the tree is the proxy's
+      tillandsias.ca-generation (main.rs:3712-3713, order 472) — a CA name,
+      not an owner. Every container/volume/network decision is a name test:
+      is_stack_managed_name (main.rs:7497; narrowed by 936-kdev after the
+      builder toolbox was killed at install-validation), shutdown_escalation_targets
+      (:7478), the list_containers("tillandsias-") sweeps in
+      graceful_shutdown_async (:19692), and reset_guest_scope (:10029 — the
+      bare "tillandsias-" prefix, which STILL matches tillandsias-builder and
+      tillandsias-nix). MEASURED 2026-09-29 on lenovinha: the Linux SOFT
+      reset's podman system reset destroyed both toolboxes and every forge.
+      Adoption after a hot upgrade (1490-52m5) and a safe stale cleanup
+      (1490-pguh) both need a label to key on, so this is the first slice.
+      Labels: io.tillandsias.owner=<installation-uuid-v1>,
+      io.tillandsias.version=<VERSION>, io.tillandsias.role=<forge|git|vault|
+      proxy|router|nix-cache|inference|browser|ssh-sidecar|observatorium|
+      status-check|web>. Run-arg builders to touch: forge main.rs:7986, proxy
+      :3678, git :4816, inference :5780, router :6073, nix-cache :6354, catalog
+      :3632, ssh sidecar :12751, web :19873, vault_bootstrap.rs, mirror
+      remote_projects.rs:291,761. An object carrying
+      com.github.containers.toolbox is never owned even with our label.
+      Design D2 in openspec/changes/hot-upgrade-live-stack/design.md.
+    exit_criteria:
+      - 'podman inspect on every container the headless launches shows the three io.tillandsias.* labels (pre-fix: no container carries an owner label)'
+      - 'is_stack_managed_name / reset_guest_scope / shutdown_escalation_targets accept an owner-labelled container with a foreign name and refuse a tillandsias-builder toolbox (pre-fix: decided by name; reset_guest_scope matches the toolbox)'
+      - 'a pre-label container matching the old name predicate is still managed and logged as legacy-unlabelled'
+    verifiable_closure: |
+      bash scripts/test-container-ownership-labels.sh exits 0: it launches one labelled container with a non-tillandsias name and one unlabelled toolbox-labelled container named tillandsias-builder-test, and asserts the sweep lists the first and refuses the second. Pre-fix: the script does not exist.
+    depends_on: []
+    notes: |
+      size: M  implementer_tier: any
+      Written in the same commit as the fixture it names (1136-n8sh). No behaviour change for existing unlabelled stacks beyond the legacy-unlabelled log line.
+    next_action: 'add the three label constants beside image_builder.rs:27 and thread them through build_forge_common_args first, then the shared-stack builders'
+    provenance: |
+      Filed by a Fable agent on lenovinha, 2026-09-29, from the hot-upgrade investigation (1490-gttj).
+    events:
+      - type: filed
+        ts: "2026-09-29T06:16:02Z"
+        agent_id: "claude-fable-lenovinha-20260929t061525z"
+        host: lenovinha
+        summary: |-
+          First slice of 1490-gttj: ownership by label.

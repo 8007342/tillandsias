@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: terminal-event-on-a-nonterminal-row-is-invisible
+    event:
+      type: note
+      ts: "2026-09-27T14:03:27Z"
+      agent_id: forge-forge-tillandsias-opencode-20260927t135319z
+      host: forge-tillandsias
+      summary: |
+        SECOND, AND MUCH MORE EXPENSIVE, INSTANCE — 2026-09-27 on forge-tillandsias, from
+        claiming 1229-2862. Filed as an event on the packet that already owns this shape
+        rather than as a new row: the shape is right, the bill is bigger than the original.
+
+        1229-2862's implementation landed on linux-next ELEVEN DAYS AGO — 7eeb03628, then
+        28cc49695, then 0b6e0c5d6 hardening the negative control after it — and its folded
+        status read `ready` for all eleven. It is a p1, so it was the `urgent=` head of
+        every host's batch, and the batch head is host-independent by construction (the
+        Worker Drain note says so by name), so the cost was not one host re-reading a
+        finished row: it was EVERY host, EVERY cycle, for eleven days, with the p1 that
+        was actually next behind it — 335-sda7 — never drained. The first instance of this
+        shape was a packet carrying a `completion` event and a `ready` status at the same
+        time, which is invisible. This instance is worse in the one way that matters for
+        detection: the row carries NO terminal event at all. It was offered as fresh work
+        while its fix sat in git history, so nothing in the ledger disagreed with anything
+        and the only way to notice was to run `git log` against the packet's commits before
+        claiming it — a step the claim protocol has no place to put.
+
+        Two observations about the detection surface, both offered as scope for whoever
+        takes this, neither claimed as the fix:
+
+          1. A packet's `files:` list is already the join key. 1229-2862's files are
+             crates/tillandsias-plan/src/groundtruth.rs and the corpus-declaration fixture;
+             the commits that closed it touch exactly those paths. Checking "has every
+             listed path been touched by a commit newer than the row's ready->claimed
+             transition" would have caught it on day one and costs no agent judgement. It
+             will produce false positives on a packet that legitimately re-touches a file
+             while still open, so the cheap form is to SURFACE it as a claim-time warning
+             ("this row's files moved in N commits since it was filed; the next action may
+             already be landed") and leave the claim standing. A warning nobody has to
+             un-ignore is worth more here than an automatic demotion that will be argued
+             with on day three.
+
+          2. A host that is about to spend a cycle on a p1 should be able to SEE that prior
+             work exists without leaving the selector. plan_next cannot know, and asking it
+             to would put git history in the selection hot path; the batch note's own
+             "a cycle learns this by reading commits; the ledger is what makes it cost
+             money" is the correct diagnosis and the ledger half of it is what this packet
+             should build.
+
+        Disposition of the row that produced it: 1229-2862 is now `blocked` (four of five
+        exit criteria verified hermetically; the fifth needs an index-bearing host), so it
+        is off the p1 head. That is a one-row patch, not a fix to this shape.

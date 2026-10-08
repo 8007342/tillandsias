@@ -124,10 +124,36 @@ low-end hosts made the CPU bottlenecks visible. Until the counter in
   refuters or fan-out.
 - **Refuters.** At most one per verdict, one tier below the verdict's author.
   Prefer one agent with a schema over N parallel ones when the items are cheap.
+- **Packets carry their tier too (trims 2026-09-27, umbrella 1437-62g8).**
+  Every filed packet declares `size: S|M|L` and `implementer_tier:
+  haiku|sonnet|opus` (as scalars once 1437-khnx lands; as two lines inside
+  `notes:` until then). S = mechanical, fully specified → haiku; M = a few
+  files, clear design → sonnet; L = cross-cutting, judgment, or
+  gate-integrity-sensitive → opus. Anything that changes what the land gate
+  or the pre-push hook refuses is at least sonnet, opus if it could let a
+  red tree land. An UNTAGGED row is opus (operator 2026-09-27: "No size
+  tags get Opus") and the tier is a floor. A session states its tier to the
+  selector (`scripts/select-work-batch.sh <role> --tier <t>`, 1437-vdz5)
+  and runs a cheaper packet through `scripts/claude-delegate.sh implement
+  <order>` (1437-yjf6) or a dedicated `./repeat --model haiku` session
+  (1437-m5yx); the host session keeps verify and commit. A host may also
+  run an all-day Haiku ORCHESTRATOR (`/haiku-orchestrate`, 1443-hbgt) that
+  delegates by tier and accepts only a closure it measured with
+  `scripts/verify-closure.sh` (1443-qwpj) — never a delegate's "met".
+  Canonical: `methodology/distributed-work.yaml` →
+  `cycle_batch_triage.model_tier_routing`.
+- **Messages to peers: budget ON HOLD** (operator question pending,
+  2026-09-27; 1437-arjg blocked). The shape in
+  `distributed-work.yaml` → `sibling_heads_up_protocol.size_budget` stays
+  written and is not enforced until the operator answers.
 - **Never delegate a read an expert answers.** `plan_status`, `plan_answer`,
   `methodology_ask` and the project-info tools cost nothing next to an agent.
-- **Report it, and LOG it.** `scripts/cycle-metrics.sh --emit-tokens` now
-  exists (1119-6wn6), so the attestation is recorded rather than only typed:
+- **Report it, and LOG it — from the instrument.** `scripts/cycle-metrics.sh
+  --emit-tokens` exists (1119-6wn6); with `--from-transcript` (1437-3pj7) it
+  reads this session's own harness transcript and fills `main_ctx`,
+  `main_ctx_cumulative`, `subagent_tokens`, `agents` and `by_model` itself,
+  or records `source=absent`. Hand-passed numbers remain accepted for a
+  harness with no transcript. The typed form was:
 
   ```
   scripts/cycle-metrics.sh --emit-tokens host=<h> cycle=<id> \
@@ -344,8 +370,8 @@ needs to know the copy does not exist before deciding what to do with the
 directory.
 
 **AN OPERATOR LICENCE CAN GO STALE, AND A CLEAN TREE IS HOW YOU KNOW.** When a
-prompt authorises you to land dirt — order 833-fpe7's `resumable:` verdict,
-order 540's opsx merge, or an operator sentence naming specific work to review
+prompt authorises you to land dirt — order 833-fpe7's `resumable:` verdict
+or an operator sentence naming specific work to review
 and land — CHECK THAT THE DIRT IS STILL THERE before acting on it. If
 `git status --porcelain --untracked-files=all` is empty, the premise of the
 licence is gone: answer **"the premise is gone"**, say what the licence expected
@@ -739,6 +765,17 @@ filing — not the prompt.
    compiles what it validates, and rebuilding everything on a schedule is a
    heavier decision than this step is making.
 
+   Confirm the rebuilt instrument is CURRENT before minting or writing, and
+   again after any merge that touches crates/tillandsias-plan/src (a relay of
+   a plan-binary change makes the binary you built an hour ago stale; the
+   next `next-order` then refuses with `stale-plan-binary`) (1513-pppk):
+
+   ```bash
+   bash scripts/check-plan-binary-current.sh
+   # -> ends ok:plan-binary-current; any stale:* or blocked:* line is a stop:
+   #    cargo build --release -p tillandsias-plan, then re-run
+   ```
+
    A `blocked:preflight:*` verdict means do not start the cycle — selecting work
    with an unverified instrument is the one failure the loop cannot reason its
    way out of, because the tool it would reason WITH is the stale thing. That is
@@ -749,6 +786,27 @@ filing — not the prompt.
    degraded, not broken. When inference cannot be established, the report
    segment reads `degraded:<reason>` (never `blocked:*` — the gate word is
    reserved for `blocked:preflight:*`); continue the cycle.
+
+0b. **Name yourself before the first ledger write** (orders 756-hn3a, 885-zvzu):
+
+   ```bash
+   agent_id="$(scripts/agent-identity.sh id <backend>)" || exit 1   # claude|codex|opencode|gemini
+   ```
+
+   Every `append-event`, `set-field` reason and loop-status entry this cycle
+   writes carries an `agent_id`, and the plan binary REFUSES a non-canonical
+   one (874-idnt): `<platform>-<workstation>-<backend>-<utc-timestamp>`,
+   sanitised to `[a-z0-9-]`. Never hand-compose it. The helper resolves it
+   from stable sources and itself refuses
+   (`refused:agent-identity:empty-<component>`, empty stdout) rather than mint
+   an incomplete id; on that refusal append, claim and push nothing.
+
+   WHY IT IS HERE: this skill is the whole bootstrap contract, and it never
+   named the helper. Measured on macuahuitl 2026-08-25: the first
+   `append-event` of a cycle driven by the documented prompt hand-wrote an id
+   and was refused, and the cycle recovered only by reading the error text.
+   Same class as the two gate variables in "How to invoke the gate", which
+   lived in operator prompt text for ten cycles.
 
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
    Report this host's scheduler posture in the same breath — it is one line and
@@ -868,33 +926,31 @@ filing — not the prompt.
    2026-08-24 a fresh clone is exactly what took it. The salvage cannot touch
    the worktree — temporary index and plumbing only — so it is safe to run on
    dirt you have just been forbidden to alter, and it must run BEFORE the two
-   detectors below: whether the dirt turns out to be `ok:opsx-only` or
-   `resumable:` changes what you may LAND, never whether a copy should exist.
-4. **Generated opsx sync merge (deterministic, order 540)**: before refusing on
-   startup dirt, run the deterministic detector:
+   detectors below: whether the dirt turns out to be `resumable:` changes what
+   you may LAND, never whether a copy should exist.
+4. **Launch-generated opsx dirt is a refusal (deterministic, order 1440-w8g8)**:
+   before refusing on startup dirt, name WHICH dirt it is:
    ```bash
    scripts/check-opsx-generated-dirt.sh
    ```
-   It prints exactly one line matching `^(ok:opsx-only|ok:clean-tree|non-opsx:.*)$`
-   and exits `0` only when every status-visible dirty path is exactly the
-   22-path opsx/openspec generated set (`.opencode/commands/opsx-*.md` +
-   `.opencode/skills/openspec-*/SKILL.md`) — the launch-generated artifact from
-   the installed openspec CLI (see
-   `plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md`). On
-   `ok:opsx-only`, the dirt is INTENDED versioned project content, not operator
-   work: commit it as its own sync change on the canonical branch before worker
-   drain, then re-anchor the startup boundary:
-   ```bash
-   git add .opencode/commands/opsx-*.md .opencode/skills/openspec-*/
-   git commit -m "chore(opsx): sync generated openspec commands and skills"
-   scripts/meta-orchestration-worktree-guard.sh re-snapshot "$boundary_dir"
-   ```
-   A `non-opsx:` verdict means real sibling/operator dirt — fall through to the
-   dirty-start refusal exactly as written; never commit, discard, or clean it.
-   An `ok:clean-tree` verdict means there is nothing to merge. The checker is a
-   falsifiable machine decision; do not substitute prose judgment for it.
+   It prints exactly one line matching
+   `^(ok:clean-tree|launch-dirt:opsx-only|non-opsx:.*)$`. `launch-dirt:opsx-only`
+   (exit 5) means every dirty path is the opsx/openspec command/skill set the
+   openspec CLI generates — a forge launch rewrote tracked files, which
+   1422-w3p8 made impossible. That is a REGRESSION to report, not content to
+   land: refuse the cycle exactly as for any dirty start (salvage first, as
+   above), name 1422-w3p8 and the verdict line in the handoff, and do not
+   commit, discard, restore or clean the dirt. Order 540 (2026-07-31) used to
+   commit it as a `chore(opsx)` sync; the operator reversed that on
+   2026-09-27 (the dirt "should not exist"), and 64cceb25d is what the old
+   step produced. Moving the generated set to a new openspec version is a
+   deliberate `openspec update` + commit under its own packet, never a cycle's
+   reaction to dirt. `non-opsx:` (exit 3) is real sibling/operator dirt: fall
+   through to 4b, then to the dirty-start refusal. `ok:clean-tree` (exit 4)
+   means there is nothing to name. The checker is a falsifiable machine
+   decision; do not substitute prose judgment for it.
 4b. **Resumable claim dirt (deterministic, order 833-fpe7)**: when the dirt is
-   NOT the opsx set, run the second detector before refusing:
+   `non-opsx:`, run the second detector before refusing:
    ```bash
    scripts/check-resumable-claim-dirt.sh
    ```
@@ -912,7 +968,7 @@ filing — not the prompt.
    `resumable:` is a licence to REVIEW AND LAND, never to auto-commit: read
    the diff against each named order's packet, land what implements it as its
    own commit(s) citing the orders, then re-anchor with the guard's
-   `re-snapshot` — the same sequence order 540 sanctions. Whether an edit
+   `re-snapshot` (scripts/meta-orchestration-worktree-guard.sh). Whether an edit
    IMPLEMENTS the packet beside it is the agent's judgment; the detector only
    removes the deadlock. Any `unattributable:` verdict falls through to the
    dirty-start refusal exactly as written. Pinned by
@@ -1319,6 +1375,9 @@ Any time a worker notices "welp, this isn't great" — an inefficiency, a rough
 edge, a fragile assumption, an advisory-only guard, a repeated manual step, a
 log warning, a deprecation notice — it MUST be filed before the cycle exits.
 
+Every capture is a ledger write, so it carries the `agent_id` from Start Of
+Cycle step 0b (`scripts/agent-identity.sh id <backend>`), never a hand-typed one.
+
 **CAPTURE IS MANDATORY. A NEW ROW IS NOT.** These are different acts and
 conflating them is what grew the ready queue to 410 rows against a service rate
 of ~19/day. Route every capture:
@@ -1687,8 +1746,17 @@ So a validation packet this loop writes should say, explicitly:
 
 ```bash
 scripts/check-stranded-in-progress.sh
+scripts/check-landed-but-open.sh
 scripts/archive-plan-packets.sh
 ```
+
+`check-landed-but-open.sh` (1367-emjg) is the other half of the same leak: it
+lists every order a CODE landing on trunk cites in its subject (default window
+ten days) whose row is still ready, pending, in_progress or implemented. On
+2026-09-23 that was 21 of 177 landed orders; on 2026-09-28 it found 920-tqhs a
+month after its relay landed. Plan-only commits are not landings; `--cite
+message` also reads commit bodies, which cite orders as context and triples the
+list. Report its `summary:landed-but-open:` line beside the stranded one.
 
 A packet in `in_progress` is invisible in BOTH directions: `ready` queries skip
 it so nobody claims it, and burndown does not count it so nobody notices it is
@@ -1782,16 +1850,33 @@ claims older than 24h so a dead host cannot strand work permanently. As of
 all, so every host is offered every packet, and on 2026-08-18 two hosts
 implemented 798-tk7b six minutes apart (order 814-iyu7, ~4h duplicated).
 
-So, before you implement anything from the batch:
+So, before you implement anything from the batch — and before a coordinator
+ROUTES a row to another host — ask whether a sibling branch already holds it
+(order 1513-pppk):
+
+```bash
+scripts/check-claims-across-branches.sh --batch <order>...
+# -> claimed-elsewhere:<order>:<branch> per held row, then ok:cross-branch-claims:<n>
+#    blocked:* means the fold could not be read: do not treat it as "free"
+```
+
+A trunk-only read cannot see a claim that sits on osx-next or windows-next
+until the relay, and on 2026-09-29 the coordinator nearly re-assigned a row
+another host had claimed that morning. Then claim:
 
 ```bash
 tillandsias-plan set-field <order> status in_progress \
     --host "$(hostname -s)" --reason "claimed for cycle <UTC ts>"
 git add plan/index.d && git commit -m "claim(<order>): <host>" && git push
+scripts/check-claim-confirmed.sh <order>
+# -> ok:claim-confirmed:<order> | refused:claim-not-on-origin | refused:claim-lost:<order>
+#    | unknown:claim-origin-unreachable (never a pass)
 ```
 
 Push the claim BEFORE the work, not with it — an unpushed claim separates
-nobody. Then:
+nobody, and a push that failed quietly (a locked keyring, 2026-09-29) looks
+exactly like one that landed until `check-claim-confirmed` asks origin
+(1493-d93i). Then:
 
 - **Losing the race is normal and cheap.** The ledger is a CRDT; two hosts can
   claim in the same window. On your next fetch, if another host's claim event
@@ -1969,6 +2054,36 @@ Only `linux_mutable` performs global coordination:
    evidence is current, and no release is already in flight.
 5. After a release succeeds, ensure the plan records the new latest release so
    immutable Linux hosts know to run curl-install e2e.
+6. **Move the project's openspec CLI forward deliberately (order 1441-myz3)**.
+   `openspec/cli-version` is the project's ONE openspec version. Forges install
+   exactly it (`ensure_openspec_pinned`, lib-common.sh) and never refresh it to
+   @latest, so a fresh forge's /opsx sets match the committed ones and launch
+   leaves the checkout clean. Keeping the pin current is the coordinator's
+   job, once per cycle and cheap when nothing is due. Run it on a CLEAN tree
+   based on `origin/linux-next` (a `work/<order>` ref or the coordinator's
+   own checkout), with npm on PATH (host or `tillandsias-builder`):
+   ```bash
+   scripts/openspec-pin.sh check    # ok:openspec-pin-current:<v> | due:openspec-bump:<pin>-><latest> | unknown:…
+   scripts/openspec-pin.sh bump     # only on due: (or `bump --to <v>` to re-level at the current pin)
+   scripts/openspec-pin.sh drift    # must print ok:openspec-generated-matches-pin before committing
+   ```
+   `bump` installs the new version into a version-keyed cache, runs
+   `openspec update --force` with an ISOLATED openspec config (the profile is
+   derived from the committed workflows, never from the machine running it),
+   writes the pin, and never commits. On `bumped:openspec:<old>-><new>:<n>-paths`,
+   commit everything it changed as ONE change, subject
+   `chore(openspec): bump CLI <old> -> <new>`, and land it like any work ref.
+   On `review:openspec-bump:…`, stop and read stderr. It names either
+   generated files that still disagree with the pin, or a superseded copy the
+   CLI left behind instead of overwriting (1.13.2: "Left 11 files in .codex/
+   that differ from the copy in .agents/"). Remove only the copy the CLI names
+   as superseded, re-run `drift` to ok, and commit that removal in the SAME
+   change. Paths outside the generated surface mean something unexpected
+   happened: do not commit, and file a packet. `unknown:` (registry
+   unreachable) waits for the next cycle. Changing the workflow profile is a
+   separate decision; it is never a side effect of a bump. This is the only
+   sanctioned way the generated /opsx sets move. Launch-generated dirt is
+   refused (step 4 of Start Of Cycle), never committed.
 
 ## Cycle Metrics (report before the handoff)
 
@@ -2225,9 +2340,12 @@ Before exit:
 
    On `blocked:credential-expired-mid-cycle` the credential WORKED and then
    stopped; that is distinct from never having had one, and the printed remedy
-   is `gh auth refresh`, not seeding a store. Do NOT discard the cycle's work to
-   get unstuck — salvage first (872-c9nd) and report blocked with the salvage
-   ref.
+   is the OPERATOR re-seeding the token (`tillandsias --github-login`), not
+   seeding a store. An agent never runs `gh auth refresh` or `gh auth login`
+   itself (1025-a896: a re-auth on one host evicts the token on every other;
+   1497-ahmd corrected the guard, which used to print it). Do NOT discard the
+   cycle's work to get unstuck — salvage first (872-c9nd) and report blocked
+   with the salvage ref.
 
 3c. **EVERY LEDGER WRITE HAPPENS BEFORE THE GATE, NOT AFTER IT** (yolanda,
    2026-09-02). The gate stamp hashes the CONTENT of every tracked and

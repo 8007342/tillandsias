@@ -133,10 +133,16 @@ work_lane_affordance() {
 # per-decider edit; a decider added later inherits the behaviour without its
 # author having to know this row exists.
 WORK_REF_LANE="${WORK_REF_LANE:-0}"
+# ORDER 1352-qbrd: every degraded refusal is COUNTED, so the trailer at the end
+# of the hook can say what it saw instead of claiming a clean gate.
+_PREPUSH_WARNED=0
+_PREPUSH_WARNED_NAMES=""
 
 refuse() {
     if [[ "$WORK_REF_LANE" == "1" ]]; then
         local _d="${TILLANDSIAS_HOOK_DECIDER:-pre-push}"
+        _PREPUSH_WARNED=$((_PREPUSH_WARNED + 1))
+        case ",${_PREPUSH_WARNED_NAMES}," in *",${_d},"*) ;; *) _PREPUSH_WARNED_NAMES="${_PREPUSH_WARNED_NAMES:+$_PREPUSH_WARNED_NAMES,}${_d}" ;; esac
         echo "warn:pre-push:${_d}: $1" >&2
         shift
         for line in "$@"; do echo "  $line" >&2; done
@@ -280,6 +286,34 @@ if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then
                "Mixed pushes: delete salvage refs in their own push, separate from rescues."
     fi
     echo "${GRN}✓ local gate: salvage ref — exempt by design (872-c9nd); a dirty-tree copy is not expected to build${RST}" >&2
+    exit 0
+fi
+
+# ORDER 1427-r2d2 — A DELETION TRANSFERS NO TREE. A push whose every ref is a
+# deletion (local sha all zeros) uploads nothing, so the local tree's gate
+# stamp measures the wrong subject: `git push origin --delete
+# release/version-bump-56.9.27.1` was refused mid-cut because the working tree
+# held an ungated relay merge that the push never carried. Such a push skips
+# the tree checks below ONLY when no ref it deletes is protected. main,
+# linux-next, windows-next and osx-next, tags, and salvage/* (874-w2gc, refused
+# above when the push is all-salvage) fall through to the gate exactly as
+# before, and a mixed push (any update) is never exempt.
+_all_delete=1
+_protected_delete=""
+while read -r _l _ls _remote_ref _rs; do
+    [[ -z "${_remote_ref:-}" ]] && continue
+    if [[ ! "$_ls" =~ ^0+$ ]]; then
+        _all_delete=0
+        break
+    fi
+    case "$_remote_ref" in
+        (refs/heads/main | refs/heads/linux-next | refs/heads/windows-next | refs/heads/osx-next \
+            | refs/heads/salvage/* | refs/tags/*)
+            _protected_delete="${_protected_delete:+$_protected_delete }$_remote_ref" ;;
+    esac
+done < <(printf '%s\n' "$REFS")
+if [[ "$_any_ref" -eq 1 && "$_all_delete" -eq 1 && -z "$_protected_delete" ]]; then
+    echo "${GRN}✓ local gate: deletion-only push of unprotected ref(s) — nothing is uploaded, so the tree stamp does not apply (1427-r2d2)${RST}" >&2
     exit 0
 fi
 
@@ -722,6 +756,54 @@ attempt_plan_only_lane() {
                     fi
                     bases+=("")
                     ;;
+                plan/inbox/?*.md)
+                    # ORDER 1507-e693. plan/inbox/<host>.md (currently
+                    # plan/inbox/codex.md only) is the STOPGAP mailbox for a
+                    # plan_only_peer that cannot receive a direct message
+                    # (Codex today; the message bus at 1506-3xu7 replaces it).
+                    # This lane never listed plan/inbox/, so every message —
+                    # the coordinator appending a new MSG section, or a peer
+                    # appending a RECEIVED/ASK note to an existing row — took
+                    # the whole push onto the full gate. MEASURED 2026-09-29 on
+                    # macuahuitl: a push touching only plan/inbox/codex.md was
+                    # refused with "outside plan/index.d/, ..., and
+                    # plan/deslop-sweeps.d/ ... (full gate required)", and the
+                    # message waited ~20 minutes for the next relay gate. A
+                    # mailbox that needs a full gate per message defeats its
+                    # purpose.
+                    #
+                    # SAME SHAPE AS plan/deslop-sweeps.d, the closest
+                    # precedent this lane already carries: a flat per-mailbox
+                    # .md file, no nesting, and the SAME A-OR-M-APPEND-ONLY
+                    # reasoning as the sweep and work-queue arms — SEVERAL
+                    # PARTIES WRITE THE SAME FILE (the coordinator posts
+                    # messages; a peer appends a RECEIVED/ASK note to an
+                    # EXISTING row), so the lane cannot tell a correction from
+                    # erasing another party's row, and a rewrite still takes
+                    # the full gate exactly as it does for a work-queue ledger
+                    # or a sweep record.
+                    if [[ "$status" != "A" && "$status" != "M" ]]; then
+                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; inbox mailboxes qualify as new (A) or appended (M) only (full gate required)" >&2
+                        return 1
+                    fi
+                    if [[ "${path#plan/inbox/}" == */* ]]; then
+                        echo "plan-only lane: not applicable — '$path' is nested below plan/inbox/ (full gate required)" >&2
+                        return 1
+                    fi
+                    # APPEND-ONLY ON M, the sweep/work-queue reasoning above: a
+                    # rewrite cannot be told apart from erasing another
+                    # party's message or acknowledgement.
+                    if [[ "$status" == "M" ]]; then
+                        _ib_removed="$(git diff "$remote_sha" "$local_sha" -- "$path" 2>/dev/null \
+                            | grep '^-' | grep -v '^---' | head -3)"
+                        if [[ -n "$_ib_removed" ]]; then
+                            echo "plan-only lane: not applicable — '$path' is an inbox mailbox and this edit REMOVES or REWRITES lines, which the lane cannot tell from erasing another party's message or RECEIVED/ASK note (full gate required)" >&2
+                            printf '%s\n' "$_ib_removed" | sed 's/^/    /' >&2
+                            return 1
+                        fi
+                    fi
+                    bases+=("")
+                    ;;
                 plan/issues/?*.md)
                     # Order 889-twhe. The Reduction Engine makes filing a
                     # plan/issues capture a NON-NEGOTIABLE exit condition of
@@ -900,7 +982,7 @@ attempt_plan_only_lane() {
                             continue
                         fi
                     fi
-                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, plan/deslop-sweeps.d/, and plan/mo-full-attestations.d/, and differs from origin/linux-next (full gate required)" >&2
+                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, plan/issues/, plan/deslop-sweeps.d/, plan/inbox/, and plan/mo-full-attestations.d/, and differs from origin/linux-next (full gate required)" >&2
                     return 1
                     ;;
             esac
@@ -1527,14 +1609,28 @@ attempt_plan_only_lane() {
 
     # Forbidden-pattern check that applies to any tracked text, fragments
     # included (methodology base64_script_injection_ban).
-    if [[ -f scripts/check-no-base64-script-injection.sh ]]; then
-        if ! out="$(bash scripts/check-no-base64-script-injection.sh 2>&1)"; then
-            echo "plan-only lane: validation FAILED — check-no-base64-script-injection refused (full gate required):" >&2
-            echo "$out" | head -6 | sed 's/^/  /' >&2
+    # PORTED to Lua (1525-c6jm): scripts/lua/check-no-base64-script-injection.lua
+    # through the one runner (`plan_bin`, resolved above). A missing plan
+    # binary is a loud could-not-run — the lane denies the fast path rather
+    # than silently skipping a security gate, unlike the "absent" skip below
+    # (which is for the checker SOURCE being absent, not its runner).
+    if [[ -f scripts/lua/check-no-base64-script-injection.lua ]]; then
+        if [[ -n "$plan_bin" ]] && ! grep -qx script <<<"$("$plan_bin" capabilities 2>/dev/null)"; then
+            echo "plan-only lane: validation COULD-NOT-RUN — check-no-base64-script-injection: $plan_bin predates \`script run\`, so the check was not asked (full gate required)" >&2
+            echo "  remedy: cargo build --release -p tillandsias-plan (or scripts/cycle-preflight.sh), then push again" >&2
+            return 1
+        elif [[ -n "$plan_bin" ]]; then
+            if ! out="$("$plan_bin" script run scripts/lua/check-no-base64-script-injection.lua 2>&1)"; then
+                echo "plan-only lane: validation FAILED — check-no-base64-script-injection refused (full gate required):" >&2
+                echo "$out" | head -6 | sed 's/^/  /' >&2
+                return 1
+            fi
+        else
+            echo "plan-only lane: validation FAILED — check-no-base64-script-injection could-not-run: no tillandsias-plan with \`script run\` resolves (full gate required)" >&2
             return 1
         fi
     else
-        LANE_NOTES+=("scripts/check-no-base64-script-injection.sh absent — skipped")
+        LANE_NOTES+=("scripts/lua/check-no-base64-script-injection.lua absent — skipped")
     fi
 
     # ORDER 1261-bn7v. A long-form field whose OUTGOING fold drops a line
@@ -1647,11 +1743,25 @@ enforce_stamp_scope() {
     while read -r local_ref local_sha remote_ref remote_sha; do
         [[ -n "$local_ref" ]] || continue
         if [[ "$local_sha" =~ ^0+$ ]]; then continue; fi
-        if [[ "$remote_sha" =~ ^0+$ ]] || ! git cat-file -e "$remote_sha" 2>/dev/null; then
+        if [[ "$remote_sha" =~ ^0+$ ]]; then
             refuse "the gate stamp is scoped to '$scope' but $remote_ref has no usable local base to diff against" \
                    "A scoped stamp can only be honoured when the push can be classified." \
                    "Re-run the full gate:" \
                    "  ./build.sh --check"
+        fi
+        # ORDER 1524-w8ys — A REMOTE THAT MOVED IS A RACE, NOT A GATE PROBLEM.
+        # git hands this hook the remote's ADVERTISED tip, so a sha we do not
+        # have means the branch moved since the last fetch. This used to share
+        # the refusal above and tell the pusher to re-run the full gate, which
+        # cost land120 a whole second gate on 2026-10-01 for one plan-only
+        # commit; fetching and merging is enough, because the merged tree is
+        # classified against the scope on the next push (Fable investigation,
+        # plan/issues/gate-collisions-scoped-stamps-2026-10-01.md).
+        if ! git cat-file -e "$remote_sha" 2>/dev/null; then
+            refuse "refused:pre-push:remote-moved-since-fetch:$remote_ref — origin has $remote_sha, which this checkout has never fetched" \
+                   "The branch moved on origin after your last fetch (another push landed). Nothing is wrong with your gate." \
+                   "Fetch and merge, then push again; no new gate is needed unless the merge brings in a change class your stamp's scope ('$scope') does not cover:" \
+                   "  git fetch origin && git merge origin/${remote_ref#refs/heads/}"
         fi
         while IFS= read -r path; do
             [[ -n "$path" ]] && paths+=("$path")
@@ -1684,6 +1794,18 @@ enforce_stamp_scope() {
     done
 
     if [[ ${#missing[@]} -gt 0 ]]; then
+        # ORDER 1521-y72e — OFFER THE PLAN-ONLY LANE BEFORE REFUSING, as the
+        # stale:* arms below do. The digest excludes plan fragments (930-i6x4),
+        # so a stamp written by a SCOPED gate stays ok:gate-fresh when a fragment
+        # lands on top, and this branch used to refuse that fragment's class
+        # (plan-ledger) without asking the lane. MEASURED on land117: every
+        # coordinator closure after a scoped land was refused here. The lane
+        # validates the whole outgoing diff and declines anything that is not
+        # plan-only, so a code class outside the scope still reaches the refusal
+        # below (test-gate-stamp-scope.sh case 9).
+        if attempt_plan_only_lane; then
+            exit 0
+        fi
         local missing_csv
         missing_csv="$(printf '%s,' "${missing[@]}")"; missing_csv="${missing_csv%,}"
         refuse "the gate stamp is scoped to '$scope' but this push also changes: $missing_csv" \
@@ -2051,5 +2173,47 @@ if [[ -f scripts/check-added-test-is-referenced.sh ]]; then
 else
     echo "${YLW}note: scripts/check-added-test-is-referenced.sh absent — added-test reference check skipped${RST}" >&2
 fi
-echo "${GRN}✓ local gate: preflight clean, ./build.sh --check current for this tree${RST}" >&2
+
+# ORDER 1434-vm7g. Native clippy -D warnings on the Windows tray. It lives HERE
+# because this hook is the one gate git runs natively on a Windows host:
+# ./build.sh re-execs inside the WSL2 builder, where the crate compiles its
+# Linux stubs, so a build.sh step would skip forever there. The checker skips
+# by name off Windows and when the change does not touch the crate. A
+# could-not-run (no cargo) is noted, not refused: a host without a toolchain
+# cannot have built the change it is pushing either.
+if [[ -f scripts/check-windows-tray-clippy.sh ]]; then
+    _wtc_out="$(bash scripts/check-windows-tray-clippy.sh 2>&1)"
+    _wtc_rc=$?
+    _wtc_verdict="$(printf '%s\n' "$_wtc_out" | tail -1)"
+    case "$_wtc_rc:$_wtc_verdict" in
+        0:ok:*) echo "${GRN}✓ ${_wtc_verdict}${RST}" >&2 ;;
+        0:skip:*) ;;
+        3:*) echo "${YLW}note: ${_wtc_verdict}${RST}" >&2 ;;
+        *)
+            TILLANDSIAS_HOOK_DECIDER="windows-tray-clippy" \
+            refuse "native clippy -D warnings refuses the Windows tray (1434-vm7g): ${_wtc_verdict:-<no verdict line>}" \
+                   "$(printf '%s\n' "$_wtc_out" | head -8)" \
+                   "Fix each site; cargo clippy -p tillandsias-windows-tray --all-targets -- -D warnings reproduces it."
+            ;;
+    esac
+fi
+# ORDER 1352-qbrd — THE TRAILER STATES WHAT THE HOOK SAW. It used to be an
+# UNCONDITIONAL "preflight clean, ./build.sh --check current for this tree",
+# reached on a work ref after every red decider had degraded to a warn and
+# returned — so the tail of a push log, the one line most likely to be read
+# alone, asserted exactly the state it had just denied (macneo 2026-09-22: a
+# `warn:pre-push:… tree changed since ./build.sh --check last passed` on line
+# 5, the green claim on the last line, and a report one step from saying the
+# push was clean). The claim is now made only when it is true — no decider
+# warned AND gate-stamp.sh verify answered ok:gate-fresh — and otherwise the
+# trailer names the warned deciders and the stamp verdict it read, the same
+# words `bash scripts/gate-stamp.sh verify` prints (the two must not disagree).
+_trailer_stamp="${stamp:-unknown:gate-stamp-not-read}"
+if [[ "$_PREPUSH_WARNED" -gt 0 ]]; then
+    echo "${YLW}⚠ work-ref lane: ${_PREPUSH_WARNED} decider(s) warned (${_PREPUSH_WARNED_NAMES}), gate-stamp ${_trailer_stamp} — NOT a clean gate; the landing queue gates this on arrival${RST}" >&2
+elif [[ "$_trailer_stamp" != "ok:gate-fresh" ]]; then
+    echo "${YLW}⚠ local gate: no decider refused, gate-stamp ${_trailer_stamp} — ./build.sh --check is NOT confirmed current for this tree${RST}" >&2
+else
+    echo "${GRN}✓ local gate: preflight clean, gate-stamp ok:gate-fresh — ./build.sh --check current for this tree${RST}" >&2
+fi
 exit 0

@@ -1,0 +1,246 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator rulings on message semantics, 2026-09-29 (relayed by the
+# coordinator, two messages, the second refining the first):
+#  (1) the ACK is produced by the INFRASTRUCTURE and exchange layer (mailbox
+#      daemon or mover), NEVER by an inference layer or an agent: "An agent
+#      does 'send this to agent X' and near immediately gets an ACK meaning
+#      the message was delivered, not read. And that's it." send returns a
+#      receipt id at once; status answers acked or undelivered; no agent
+#      writes an ACK and no agent writes a ledger event for delivery;
+#  (2) EPHEMERAL QUEUE WITH TTL: default 86400 s (24 h), per-send --ttl
+#      within 60 s .. 604800 s (7 d); an expired unread message is dropped
+#      from the mailbox; expiry before any ACK is undelivered:expired; this
+#      replaces the fixed 7/30-day retention;
+#  (3) RECEIPT IDS: every send returns a stable id for status, logs and
+#      in-reply-to on non-broadcast messages;
+#  (4) BROADCAST: one send to a list or a named group (@all-hosts, @<host>/*,
+#      committed plan/fleet/groups.yaml); each recipient mailbox ACKs
+#      independently; status per recipient; a reply to a broadcast is
+#      refused with a named verdict at the CLI AND at the exchange layer;
+#  (5) at-least-once with idempotent ids, deduped at the mailbox.
+# Applied as an AMENDMENT (fields + events) to 1506-3xu7, 1506-nvqt,
+# 1506-q7ab, 1506-ssb5, 1506-7tq4 and 1506-b8du, whose first fragment
+# (20260929t222518z) described two receipt levels, an ack verb and fixed
+# retention. Design files updated in the same commit:
+# openspec/changes/fleet-messaging-poc/ and
+# plan/issues/fleet-messaging-poc-design-2026-09-29.md.
+fields:
+  - packet_id: fleet-messaging-poc-a-harness-agnostic-acknowledged-message-bus-between-harnesses-on-the-same-host-and-the-same-lan-proved-before-the-cloudflare-rung
+    field: exit_criteria
+    value:
+      - 'scripts/test-fleet-msg-same-host.sh exits 0 on one Linux host: msg send prints ok:msg:queued:<id> at once; the message lands in a Codex forge lane''s inbox, the mover fsyncs and acks, and the sender''s msg status <id> reads acked:<host>/<lane>@<ts> BEFORE any msg recv has run in that lane; a later msg recv prints it; tillandsias-plan msg ack is an unknown verb (pre-fix: tillandsias-plan msg is an unknown verb)'
+      - 'scripts/test-fleet-msg-lan.sh exits 0 (two daemons on one host, two state roots, Noise XX pinned to a temp peers directory): acked:<host>/<lane>@<ts> then via:lan with no recv on the receiving side; an unknown key is refused:msg:unknown-peer:<fp> with nothing stored; a replayed envelope is absorbed and acked again; a --ttl 60 message to a dead port is undelivered:expired within 65 s; a broadcast to one live and one dead peer shows broadcast:2 with one acked and one undelivered:expired line (pre-fix: no daemon, no listener)'
+      - 'one live run: yoga sends a HEADS-UP to macuahuitl/<codex lane>; macuahuitl''s mailbox acks within 5 s and yoga''s msg status reads acked:macuahuitl/<codex lane>@<ts>; separately and without blocking, Codex''s session later runs msg recv at its own cadence and prints it; recorded in this milestone''s events with both fingerprints and the rung (pre-fix: Codex cannot receive a message)'
+      - 'a body containing a GitHub-token-shaped string is refused at msg send and, written directly into an outbox directory, refused again by the mover; a reply whose in-reply-to names a broadcast id is refused at the CLI with refused:msg:reply-to-broadcast and, written directly into an outbox, again by the mover; all four arms named in the fixtures (pre-fix: no such check anywhere)'
+      - 'scripts/research-warp-sidecar-rootless.sh has recorded one of its five outcomes in the design note; the Cloudflare rung is NOT a gate of this milestone'
+      - 'plan/inbox/codex.md is a pointer to msg recv and plan_only_peers names msg recv as its first step; an expired message that named a row carries an undelivered event written by the daemon and an acked message carries none; every child is completed or superseded and the fleet-messaging delta is synced into openspec/specs/'
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: tillandsias-plan-msg-send-recv-ack-list-status-over-a-maildir-style-lane-store-with-idempotent-ids-per-sender-sequence-explicit-ack-shape-budget-and-secret-shaped-body-refusal
+    field: title
+    value: |
+      tillandsias-plan msg whoami|send|recv [--keep]|list|status|lint|gc over a Maildir-shaped lane store ($XDG_STATE_HOME/tillandsias/msg/lanes/<lane>/{outbox,inbox,dead,receipts}; tmp then rename then fsync): send validates shape, secret patterns, TTL bounds (default 86400 s, 60..604800 s) and the reply target, resolves --to lists and @groups from plan/fleet/groups.yaml, and prints ok:msg:queued:<id> at once — the stable receipt id; recv is local read bookkeeping never reported to the sender and drops anything past its TTL; status reads receipt files (pending | acked:<host>/<lane>@<ts> then via:<rung> | undelivered:<reason>; broadcast:<n> plus one line per recipient); a reply to a broadcast is refused:msg:reply-to-broadcast; there is no ack verb — the ack is the infrastructure's (operator rulings 2026-09-29)
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: tillandsias-plan-msg-send-recv-ack-list-status-over-a-maildir-style-lane-store-with-idempotent-ids-per-sender-sequence-explicit-ack-shape-budget-and-secret-shaped-body-refusal
+    field: exit_criteria
+    value:
+      - 'scripts/test-fleet-msg-store.sh exits 0: a 9-line body is refused:msg:shape:lines>8 with an unchanged outbox; a body with ghp_ plus 36 chars is refused:msg:secret-shaped:github-token; a repeated --id prints skip:msg:duplicate:<id>; send with no daemon prints ok:msg:queued:<id> within 1 s and status prints pending; msg recv twice prints the same id and msg recv --keep leaves new/ untouched, with the sender''s receipt file byte-identical throughout; status walks pending -> acked:<host>/<lane>@<ts> plus via:local when the fixture writes the receipt, and undelivered:expired when it writes that; --ttl 30 and --ttl 700000 are refused:msg:ttl-out-of-bounds:<v>:min=60:max=604800 and an omitted --ttl records 86400; a message past its TTL in inbox/ is not printed by recv and is gone from inbox/ afterwards; send --in-reply-to <a broadcast id in the local inbox> is refused:msg:reply-to-broadcast:<id> naming the remedy, and an unknown id is refused:msg:unknown-reply-target:<id>; a seq gap is printed with the gap: prefix; whoami with no lane is refused:msg:no-lane (pre-fix: msg is an unknown verb)'
+      - 'tillandsias-plan capabilities lists msg and the forge-plan capability probe sees it; tillandsias-plan msg ack is refused as an unknown verb'
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: tillandsias-plan-msg-send-recv-ack-list-status-over-a-maildir-style-lane-store-with-idempotent-ids-per-sender-sequence-explicit-ack-shape-budget-and-secret-shaped-body-refusal
+    field: verifiable_closure
+    value: |
+      bash scripts/test-fleet-msg-store.sh exits 0 on the fixed tree with
+      twelve named arms over a temp XDG_STATE_HOME; on today's tree the verb
+      is unknown. Negative controls: TILLANDSIAS_MSG_SHAPE_LAX=1 (a fixture
+      seam that disables the secret check) makes the secret arm FAIL,
+      proving the arm reaches the check; the read-bookkeeping arm asserts
+      the sender's receipt file is byte-identical before and after recv;
+      the reply-to-broadcast arm plants a broadcast copy in the local
+      inbox, so an implementation that checks only the receipts side fails
+      it.
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: the-resident-mover-delivers-between-lanes-on-one-host-attributing-the-sender-by-its-mounted-lane-never-by-the-envelope-and-mounts-a-per-lane-mailbox-into-every-forge
+    field: title
+    value: |
+      tillandsias --msg-serve (the resident, started by the Linux tray beside the control socket) watches every lane's outbox, refuses an envelope whose from.lane differs from the directory it sits in (refused:msg:from-lane-mismatch to dead/), runs the secret check a second time, refuses an envelope whose in_reply_to names a broadcast it holds (undelivered:refused:reply-to-broadcast), hard-links into the destination lane's inbox/new, fsyncs file and directory, and only then writes the acked:<host>/<lane>@<ts> receipt with via:local — the infrastructure's ack, never an agent's — sweeps every mailbox at TTL, pokes $XDG_RUNTIME_DIR/tillandsias/msg.sock for recv --wait, resolves @<host>/* to every lane present with one receipt per lane, and every forge gets its own lane directory bind-mounted at /run/host/tillandsias-msg with TILLANDSIAS_MSG_LANE exported
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: the-resident-mover-delivers-between-lanes-on-one-host-attributing-the-sender-by-its-mounted-lane-never-by-the-envelope-and-mounts-a-per-lane-mailbox-into-every-forge
+    field: exit_criteria
+    value:
+      - 'scripts/test-fleet-msg-same-host.sh exits 0 with two temp lanes and the real --msg-serve: a message from lane a-default reaches b-default''s inbox/new and a-default''s receipts/<id> reads acked:<host>/b-default@<ts> with via:local while NO msg recv has run in b-default; an envelope in a-default''s outbox claiming from b-default lands in dead/ with refused:msg:from-lane-mismatch logged and b-default unchanged; a well-formed envelope with hvs. plus 24 chars written straight into outbox/new lands in dead/ with refused:msg:secret-shaped:vault-token; an envelope whose in_reply_to names a broadcast copy held by the mover lands in dead/ and the sender''s status reads undelivered:refused:reply-to-broadcast; a --ttl 60 message acked into b-default is gone from b-default''s inbox 61 s later with the sender''s status still acked:; recv --wait returns within 2 s of a delivery; @<host>/* reaches both lanes and writes two receipts (pre-fix: --msg-serve is an unknown flag)'
+      - 'the forge launch args carry --mount type=bind,source=<state>/msg/lanes/<project>-<instance>,target=/run/host/tillandsias-msg and --env TILLANDSIAS_MSG_LANE=<project>-<instance>, asserted by the existing launch-args unit tests beside the MCP mount assertion'
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: the-resident-mover-delivers-between-lanes-on-one-host-attributing-the-sender-by-its-mounted-lane-never-by-the-envelope-and-mounts-a-per-lane-mailbox-into-every-forge
+    field: verifiable_closure
+    value: |
+      bash scripts/test-fleet-msg-same-host.sh exits 0 on the fixed tree
+      with seven named arms; on today's tree the flag is unknown. Mutation
+      controls: removing the mover's second secret_shaped call makes the
+      direct-write arm FAIL (asserted by running once with
+      TILLANDSIAS_MSG_MOVER_LAX=1); TILLANDSIAS_MSG_SKIP_FSYNC=1 makes the
+      ack-before-recv arm FAIL through a seam that refuses the receipt when
+      fsync was skipped.
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: forge-plan-mcp-gains-msg-send-recv-ack-list-tools-and-the-codex-and-opencode-entrypoints-print-pending-messages-at-session-start-so-non-claude-harnesses-are-first-class
+    field: title
+    value: |
+      forge-plan.sh serves msg_send, msg_recv, msg_list and msg_status over MCP by wrapping the tillandsias-plan msg verbs behind the existing capability probe (an old binary answers the degraded envelope, never a fake success), msg_send returns the receipt id at once, and the Codex and OpenCode forge entrypoints run msg recv --keep at session start so a harness without MCP or without a vendor channel still sees its mail at its own cadence — there is no msg_ack tool, because the ack is the infrastructure's (operator rulings 2026-09-29)
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: forge-plan-mcp-gains-msg-send-recv-ack-list-tools-and-the-codex-and-opencode-entrypoints-print-pending-messages-at-session-start-so-non-claude-harnesses-are-first-class
+    field: exit_criteria
+    value:
+      - 'scripts/test-fleet-msg-mcp.sh exits 0: a JSON-RPC tools/list from forge-plan.sh includes msg_send, msg_recv, msg_list, msg_status and no msg_ack; msg_send answers with the receipt id and msg_status then answers pending or acked through a temp lane; with a stub binary whose capabilities omits msg every msg tool answers the degraded envelope with confidence=unsupported; the Codex entrypoint under a dry-run seam prints the pending message count line without moving anything out of new/ (pre-fix: no such tools, entrypoint prints nothing)'
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: the-lan-rung-msg-serve-listens-on-tcp-discovers-peers-from-the-directory-and-mdns-hints-forwards-outboxes-with-stored-receipts-and-end-to-end-acks-and-drops-replays-by-id-and-sequence
+    field: title
+    value: |
+      --msg-serve listens on TCP TILLANDSIAS_MSG_PORT (default 48640), resolves a peer from plan/fleet/peers lan_hints then mDNS _tillandsias-msg._tcp hints (fp must match the directory, otherwise ignored and counted) then mesh_ip, forwards each outbox envelope — one copy per recipient of a broadcast — inside a Noise XX session and keeps it pending until the receiving mailbox has fsync'd it and acked (the one receipt, recorded as acked:<host>/<lane>@<ts> with via:lan|mesh, per recipient), retries 1 s doubling to 60 s until the message's TTL then dead/ and undelivered:expired, refuses from.host not equal to the authenticated peer and an in_reply_to naming a broadcast it holds, absorbs a seen (from, id) while acking again, drops seq more than 1000 behind, sweeps mailboxes at TTL, and never learns whether the recipient ran recv (operator rulings 2026-09-29)
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: the-lan-rung-msg-serve-listens-on-tcp-discovers-peers-from-the-directory-and-mdns-hints-forwards-outboxes-with-stored-receipts-and-end-to-end-acks-and-drops-replays-by-id-and-sequence
+    field: exit_criteria
+    value:
+      - 'scripts/test-fleet-msg-lan.sh exits 0: a message between two loopback daemons ends acked:<host>/<lane>@<ts> plus via:lan with no msg recv run on the receiving lane, and the receiving inbox file was fsync''d before the ack left (asserted through a fixture seam that fails the ack when fsync is skipped); a captured envelope replayed over a fresh session is acked and changes no inbox; an mDNS-shaped hint with a foreign fp is ignored and mdns_ignored increments; an envelope with from.host not matching the authenticated peer is refused:msg:from-host-mismatch; a --ttl 60 message to a dead port is in dead/ within 65 s with status undelivered:expired; a broadcast --to <live>/host --to <dead>/host shows broadcast:2, acked:<live>/host@<ts> and later undelivered:expired:<dead>/host; a seq gap is delivered with gap: (pre-fix: no listener)'
+      - 'one live two-host run is recorded in the milestone 1506-3xu7 events as acked:<mailbox>@<ts> via:lan within 5 s of the send, with both fingerprints, and a separate later line for when Codex''s session ran recv'
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: the-lan-rung-msg-serve-listens-on-tcp-discovers-peers-from-the-directory-and-mdns-hints-forwards-outboxes-with-stored-receipts-and-end-to-end-acks-and-drops-replays-by-id-and-sequence
+    field: verifiable_closure
+    value: |
+      bash scripts/test-fleet-msg-lan.sh exits 0 on the fixed tree with
+      seven named arms over loopback; on today's tree --msg-serve has no
+      listener. Mutation controls: disabling the seen-set makes the replay
+      arm FAIL (two files in inbox/new); TILLANDSIAS_MSG_SKIP_FSYNC=1 makes
+      the fsync-before-ack arm FAIL; the broadcast arm fails if the dead
+      recipient's line is missing or the live one's is not acked.
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: the-ledger-stays-the-record-expired-or-dead-messages-become-events-on-their-row-msg-ack-row-writes-the-ack-event-and-plan-inbox-codex-md-becomes-a-pointer-to-msg-recv
+    field: title
+    value: |
+      When a message that named a row reaches undelivered:expired, the SENDING DAEMON — never an agent — appends an undelivered event (id, destination mailbox, TTL) to that row through the append-event path, the ONLY message outcome the ledger records; an acked message writes nothing and no agent path can write a delivery event; plan/inbox/codex.md is reduced to a pointer to msg recv, and plan_only_peers names tillandsias-plan msg recv as step 0, run at the peer's own cadence, with every ledger step unchanged — the bus is the fast acknowledged channel, the ledger stays the durable record (operator rulings 2026-09-29)
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: the-ledger-stays-the-record-expired-or-dead-messages-become-events-on-their-row-msg-ack-row-writes-the-ack-event-and-plan-inbox-codex-md-becomes-a-pointer-to-msg-recv
+    field: exit_criteria
+    value:
+      - 'scripts/test-fleet-msg-ledger.sh exits 0: an expired message with --row <temp order> writes a fragment whose event type is undelivered naming <id>, <host>/<lane> and the TTL, with the daemon''s agent_id; an acked message with --row writes NO fragment (asserted by counting plan/index.d before and after); no tillandsias-plan msg verb writes any event (asserted by running every verb against the temp overlay and counting); plan/inbox/codex.md is at most 12 lines and names msg recv; methodology_ask "plan-only peer protocol" returns a step 0 naming msg recv (pre-fix: no events, the inbox is a mailbox, plan_only_peers starts at 1_find)'
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+  - packet_id: the-ledger-stays-the-record-expired-or-dead-messages-become-events-on-their-row-msg-ack-row-writes-the-ack-event-and-plan-inbox-codex-md-becomes-a-pointer-to-msg-recv
+    field: verifiable_closure
+    value: |
+      bash scripts/test-fleet-msg-ledger.sh exits 0 on the fixed tree with
+      five named arms over a temp ledger overlay; on today's tree msg is
+      an unknown verb and plan/inbox/codex.md holds messages. The
+      no-event-on-ack and no-verb-writes arms are the negative controls: an
+      implementation that still writes an ack event, or lets a verb write
+      any delivery event, fails them.
+    ts: "2026-09-29T22:45:12Z"
+    host: macuahuitl
+
+events:
+  - packet_id: fleet-messaging-poc-a-harness-agnostic-acknowledged-message-bus-between-harnesses-on-the-same-host-and-the-same-lan-proved-before-the-cloudflare-rung
+    event:
+      type: note
+      ts: "2026-09-29T22:45:12Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        AMENDED by operator rulings 2026-09-29 on semantics: (1) the ack is
+        produced by the infrastructure only — the mover or the receiving
+        mailbox daemon, after fsync — never by an agent or inference layer;
+        send returns a stable receipt id at once; status answers pending,
+        acked:<mailbox>@<ts> or undelivered:<reason>; no agent writes an ack
+        or a delivery event; (2) ephemeral queue with TTL: default 86400 s,
+        per-send 60..604800 s, expired unread messages dropped from the
+        mailbox, expiry before ack is undelivered:expired, replacing the
+        7/30-day retention; (3) receipt ids referenceable by status, logs
+        and in-reply-to; (4) broadcast to lists and committed groups with
+        one ack per recipient and a refused reply at the CLI and at the
+        exchange layer; (5) at-least-once with dedupe at the mailbox. The
+        acceptance demo is "yoga sends, macuahuitl's mailbox acks within
+        5 s; separately, Codex recvs later at its own cadence". Exit
+        criteria replaced by the field in this fragment; the two-receipt
+        paragraphs in this row's context and in the children's contexts
+        are superseded by this event. Proposed TTLs and their reasons are
+        in the change's design.md, Decision 5a.
+  - packet_id: tillandsias-plan-msg-send-recv-ack-list-status-over-a-maildir-style-lane-store-with-idempotent-ids-per-sender-sequence-explicit-ack-shape-budget-and-secret-shaped-body-refusal
+    event:
+      type: note
+      ts: "2026-09-29T22:45:12Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        AMENDED (semantics rulings 2026-09-29): the ack verb is removed —
+        the ack is the infrastructure's; recv gains --keep and the TTL
+        drop; send gains --to lists, @groups from plan/fleet/groups.yaml,
+        --ttl within 60..604800 (default 86400), and the reply-target
+        checks (refused:msg:reply-to-broadcast, unknown-reply-target);
+        receipts are pending | acked:<host>/<lane>@<ts> plus via:<rung> |
+        undelivered:<reason>, per recipient for a broadcast; the store has
+        no acked/ or archive/ directory. Title, exit criteria and closure
+        replaced by the fields in this fragment; the packet_id keeps the
+        old words.
+  - packet_id: the-resident-mover-delivers-between-lanes-on-one-host-attributing-the-sender-by-its-mounted-lane-never-by-the-envelope-and-mounts-a-per-lane-mailbox-into-every-forge
+    event:
+      type: note
+      ts: "2026-09-29T22:45:12Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        AMENDED (semantics rulings 2026-09-29): the mover's receipt is the
+        infrastructure's ack — written only after fsync of the inbox file
+        and directory — named acked:<host>/<lane>@<ts> with via:local;
+        there is no delivered receipt and no reader receipt; the mover also
+        refuses a reply to a broadcast it holds and sweeps mailboxes at
+        TTL; @<host>/* is a group. Title, exit criteria and closure
+        replaced by the fields in this fragment.
+  - packet_id: forge-plan-mcp-gains-msg-send-recv-ack-list-tools-and-the-codex-and-opencode-entrypoints-print-pending-messages-at-session-start-so-non-claude-harnesses-are-first-class
+    event:
+      type: note
+      ts: "2026-09-29T22:45:12Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        AMENDED (semantics rulings 2026-09-29): msg_ack is dropped and no
+        archive tool is added; msg_send returns the receipt id at once; the
+        entrypoints print msg recv --keep so a session start moves nothing.
+        Title and exit criteria replaced by the fields in this fragment;
+        the packet_id keeps the old words.
+  - packet_id: the-lan-rung-msg-serve-listens-on-tcp-discovers-peers-from-the-directory-and-mdns-hints-forwards-outboxes-with-stored-receipts-and-end-to-end-acks-and-drops-replays-by-id-and-sequence
+    event:
+      type: note
+      ts: "2026-09-29T22:45:12Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        AMENDED (semantics rulings 2026-09-29): the stored/acked pair
+        collapses to one ack answered by the receiving mailbox after fsync;
+        no end-to-end reader receipt exists or is carried back; expiry is
+        undelivered:expired at the message's TTL; a broadcast is one copy
+        and one ack per recipient; the receiving daemon refuses a reply to
+        a broadcast it holds. Title, exit criteria and closure replaced by
+        the fields in this fragment; the packet_id keeps the old words.
+  - packet_id: the-ledger-stays-the-record-expired-or-dead-messages-become-events-on-their-row-msg-ack-row-writes-the-ack-event-and-plan-inbox-codex-md-becomes-a-pointer-to-msg-recv
+    event:
+      type: note
+      ts: "2026-09-29T22:45:12Z"
+      agent_id: claude-fable-macuahuitl-20260929t222518z
+      host: macuahuitl
+      summary: |-
+        AMENDED (semantics rulings 2026-09-29): no ack event is ever written
+        to the ledger and no agent path writes a delivery event; the
+        sending daemon writes undelivered on undelivered:expired, the only
+        message event. Title, exit criteria and closure replaced by the
+        fields in this fragment; the packet_id keeps the old words.
+        1437-arjg may still close by wrapping msg lint.

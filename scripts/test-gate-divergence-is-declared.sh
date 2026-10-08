@@ -70,19 +70,21 @@ BASELINE_UNTRIAGED=0    # 2026-09-12 (1087-h2z9: all 22 triaged). May fall, neve
 
 # Comments are stripped BEFORE scanning, in both gates. Both files discuss other
 # scripts in prose at length, and a mention is not an invocation (1055-6yp8).
+# 1384-ddua: a decider may be a .lua on `script run`; both sides see it, or a
+# ported decider would drop out of the population and its gap go unnoticed.
 _invoked_by_local_ci() {
     sed 's/[[:space:]]*#.*//' scripts/local-ci.sh \
-        | grep -oE 'scripts/[a-zA-Z0-9_./-]+\.sh' | sort -u
+        | grep -oE 'scripts/[a-zA-Z0-9_./-]+\.(sh|lua)' | sort -u
 }
 _invoked_by_check() {
     {
         awk '/^if \[\[ "\$FLAG_CHECK" == true \]\]/,0' build.sh \
-            | sed 's/[[:space:]]*#.*//' | grep -oE 'scripts/[a-zA-Z0-9_./-]+\.sh'
+            | sed 's/[[:space:]]*#.*//' | grep -oE 'scripts/[a-zA-Z0-9_./-]+\.(sh|lua)'
         # The gate-steps.d files are data; STEP_SCRIPT is a literal path by
         # contract (1072-b7eq), which is what makes this scan possible at all.
         for _f in scripts/gate-steps.d/*.step; do
             [ -e "$_f" ] || continue
-            ( STEP_SCRIPT=""; . "$_f" 2>/dev/null; [ -n "$STEP_SCRIPT" ] && printf '%s\n' "$STEP_SCRIPT" )
+            ( STEP_SCRIPT=""; STEP_LUA=""; . "$_f" 2>/dev/null; [ -n "$STEP_SCRIPT" ] && printf '%s\n' "$STEP_SCRIPT"; [ -n "$STEP_LUA" ] && printf '%s\n' "$STEP_LUA" )
         done
     } | sort -u
 }

@@ -88,10 +88,12 @@ pub const WIRE_VERSION: u16 = 4;
 pub mod auth_flow;
 pub mod flow_event;
 pub mod guest_transport;
+pub mod progress;
 pub mod secure_wire_mode;
 pub mod transport;
 
 pub use flow_event::{FLOW_STATE_PUSH_CAPACITY, FlowEventChannel};
+pub use progress::{ProgressEvent, ProgressKind, ProgressUnit};
 
 /// Maximum permitted single-message length on the wire, and the ONLY frame
 /// size ceiling the control wire has. Build the framing with
@@ -308,6 +310,50 @@ pub const CAP_PTY_STDIN_EOF: &str = "pty.stdin.eof@v1";
 ///
 /// @trace spec:vsock-transport, spec:vsock-exec-authz
 pub const CAP_PTY_DATA_SESSION: &str = "pty.data-session@v1";
+
+/// Capability a guest advertises in `HelloAck.server_caps` when it can emit
+/// [`ControlMessage::ProgressPush`] on the [`SubscriptionTopic::Progress`]
+/// topic (order 1420-r2sn).
+///
+/// THE FRAME IS OPT-IN, AND FOR A MEASURED REASON, NOT CAUTION. postcard gives
+/// an older reader `Error::UnknownVariant` for a trailing variant, which is
+/// harmless in a request/reply exchange. It is NOT harmless on the push
+/// stream: the macOS reader loop (`action_host.rs`, `next_envelope`) and the
+/// Windows one (`notify_icon.rs`) both treat ANY `Err` from `next_envelope`
+/// as "push stream dropped; resubscribing" and break out to reconnect. An
+/// unsolicited progress frame would make an old tray drop and re-establish its
+/// subscription once per event, during exactly the phase (provisioning) when
+/// the operator is watching it.
+///
+/// So the rule both ends follow:
+/// - the guest emits `ProgressPush` ONLY to a peer that subscribed to
+///   `SubscriptionTopic::Progress`; an old tray never asks, so it never gets one;
+/// - the tray puts `Progress` in its `Subscribe` ONLY after seeing this token
+///   in `HelloAck.server_caps`. An old guest decoding a `Subscribe` whose topic
+///   list contains an index it does not know fails the WHOLE frame, which
+///   would cost the tray its VmStatus/LoginState subscription as well.
+///
+/// @trace spec:vsock-transport
+/// @trace order:1420-r2sn
+pub const CAP_PROGRESS_PUSH_V1: &str = "progress.push@v1";
+
+/// The subscription topics a host should request, given the guest's
+/// `HelloAck.server_caps`: `base` unchanged, plus `Progress` ONLY when the
+/// guest advertises [`CAP_PROGRESS_PUSH_V1`] (order 1420-4grt). Every host
+/// shell builds its `Subscribe` through this, so the opt-in rule lives in one
+/// place instead of being re-derived per tray.
+pub fn subscription_topics(
+    base: &[SubscriptionTopic],
+    server_caps: &[String],
+) -> Vec<SubscriptionTopic> {
+    let mut topics = base.to_vec();
+    if server_caps.iter().any(|c| c == CAP_PROGRESS_PUSH_V1)
+        && !topics.contains(&SubscriptionTopic::Progress)
+    {
+        topics.push(SubscriptionTopic::Progress);
+    }
+    topics
+}
 
 /// Order 779-dqsv: this number OUTLIVED the transport it was written for.
 /// It was the per-variant cap on `McpFrame`, which order 505 retired (that
@@ -691,6 +737,55 @@ pub enum ControlMessage {
         reason: Option<String>,
         ts_unix: u64,
     },
+    /// In-VM headless → host: one typed progress observation (order 1420-r2sn).
+    ///
+    /// Pushed only to a peer subscribed to [`SubscriptionTopic::Progress`],
+    /// which a peer does only after seeing [`CAP_PROGRESS_PUSH_V1`]; that
+    /// constant's doc says why an unsolicited one breaks old trays.
+    ///
+    /// New trailing variant: additive per the `WIRE_VERSION` doc (does not
+    /// bump the version).
+    ///
+    /// @trace order:1420-r2sn
+    ProgressPush { seq: u64, event: ProgressEvent },
+    /// Login CLI → tray, unix control socket only (order 679-rp9m): sent by
+    /// `tillandsias --github-login` AFTER its Vault write is verified, so the
+    /// tray's login wait ends on an event instead of polling Vault once a
+    /// second. The tray answers `IssueAck { seq_acked }`.
+    ///
+    /// Best-effort by contract: a login with no tray running still succeeds,
+    /// and a tray that never hears this falls back to ONE presence check at its
+    /// 120 s deadline. Consumers: the Linux tray today; the macOS and Windows
+    /// trays per their follow-up rows.
+    ///
+    /// New trailing variant: additive per the `WIRE_VERSION` doc (does not
+    /// bump the version). An older tray rejects it with `UnknownVariant`,
+    /// which the sender treats as "no tray listening".
+    ///
+    /// @trace order:679-rp9m, spec:tray-host-control-socket
+    GithubLoginStored { seq: u64, ts_unix: u64 },
+    /// Host → in-VM headless, vsock only (order 1503-qrgz): "the host's wall
+    /// clock now reads `host_unix_ms`". Sent by the macOS tray on every
+    /// NSWorkspace did-wake notification. The guest ALWAYS answers exactly one
+    /// frame: `IssueAck { seq_acked }` on success (including "within 1 s, left
+    /// alone") or `Error`. Not silent-on-success like `SetVsockForwardTarget`:
+    /// the host client's `request` returns the NEXT inbound frame, so a silent
+    /// success would hand the caller's next reply to this request.
+    ///
+    /// WHY. Measured 2026-09-29: the VM does not run while the Mac sleeps, so
+    /// its clock falls behind by the sleep (about 30 s of guest time in 13 host
+    /// minutes; 69 min in one live incident). chrony then needs about 3.5 min to
+    /// re-acquire and, under Fedora's "makestep 1.0 3", only SLEWS after its
+    /// first three updates (about 77 ms/s, so about 15 h for 69 min). A token
+    /// TTL or device-flow poll judged against that clock fails. The host knows
+    /// the right time the moment it wakes; this carries it.
+    ///
+    /// New trailing variant: additive per the `WIRE_VERSION` doc (does not
+    /// bump the version). Same no-capability-bit argument as
+    /// `SetVsockForwardTarget`: the build version is bound into the channel key.
+    ///
+    /// @trace order:1503-qrgz, spec:vsock-transport
+    HostClockSync { seq: u64, host_unix_ms: u64 },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -775,6 +870,10 @@ pub enum SubscriptionTopic {
     LoginState,
     CloudProjects,
     FlowState,
+    /// Typed progress events (order 1420-r2sn). Subscribe to it only when the
+    /// guest advertises [`CAP_PROGRESS_PUSH_V1`]: an older guest fails to
+    /// decode the whole `Subscribe` frame on an unknown topic index.
+    Progress,
 }
 
 /// A single VM-visible project entry.
@@ -1040,6 +1139,9 @@ impl ControlMessage {
             ControlMessage::PtyOpenData { .. } => "PtyOpenData",
             ControlMessage::SetVsockForwardTarget { .. } => "SetVsockForwardTarget",
             ControlMessage::FlowStatePush { .. } => "FlowStatePush",
+            ControlMessage::ProgressPush { .. } => "ProgressPush",
+            ControlMessage::GithubLoginStored { .. } => "GithubLoginStored",
+            ControlMessage::HostClockSync { .. } => "HostClockSync",
         }
     }
 }
@@ -2747,7 +2849,215 @@ mod tests {
                 },
                 "FlowStatePush",
             ),
+            (
+                ControlMessage::ProgressPush {
+                    seq: 1,
+                    event: sample_progress_event(),
+                },
+                "ProgressPush",
+            ),
+            (
+                ControlMessage::GithubLoginStored {
+                    seq: 1,
+                    ts_unix: 1_790_000_000,
+                },
+                "GithubLoginStored",
+            ),
+            (
+                ControlMessage::HostClockSync {
+                    seq: 1,
+                    host_unix_ms: 1_790_706_540_000,
+                },
+                "HostClockSync",
+            ),
         ]
+    }
+
+    fn sample_progress_event() -> ProgressEvent {
+        ProgressEvent {
+            task: "provision/download-rootfs".into(),
+            parent: Some("provision".into()),
+            label: "Downloading Fedora rootfs".into(),
+            kind: ProgressKind::Determinate {
+                done: 314_572_800,
+                total: Some(629_145_600),
+                unit: ProgressUnit::Bytes,
+            },
+            ts_unix_ms: 1_790_000_000_000,
+        }
+    }
+
+    #[test]
+    fn progress_event_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 208,
+            body: ControlMessage::ProgressPush {
+                seq: 102,
+                event: sample_progress_event(),
+            },
+        });
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 209,
+            body: ControlMessage::Subscribe {
+                topics: vec![SubscriptionTopic::VmStatus, SubscriptionTopic::Progress],
+            },
+        });
+    }
+
+    /// WHAT AN OLD PEER DOES WITH THE NEW FRAME, measured rather than assumed
+    /// (order 1420-r2sn). `OldBody` stands in for a `ControlMessage` that
+    /// predates `ProgressPush`: postcard names nothing on the wire, so a reader
+    /// whose enum stops one variant earlier is exactly an older binary. The
+    /// padding variants are unit variants because postcard reads only the
+    /// index before dispatching; their payloads never matter for this frame.
+    ///
+    /// Two facts, both pinned:
+    /// 1. the old reader REFUSES the frame (an error, not a wrong variant), so
+    ///    nothing misdecodes; and
+    /// 2. the refusal costs that frame only: framing is a length prefix, so the
+    ///    NEXT frame (a `VmStatusPush`) still decodes. What the reader LOOP
+    ///    then does with the error is the caller's business, and today both
+    ///    trays reconnect on any error, which is why `CAP_PROGRESS_PUSH_V1`
+    ///    makes the frame opt-in.
+    #[test]
+    fn an_old_reader_refuses_progress_push_without_misdecoding() {
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        enum OldBody {
+            V0,
+            V1,
+            V2,
+            V3,
+            V4,
+            V5,
+            V6,
+            V7,
+            V8,
+            V9,
+            V10,
+            V11,
+            V12,
+            V13,
+            V14,
+            V15,
+            V16,
+            V17,
+            V18,
+            V19,
+            V20,
+            V21,
+            V22,
+            V23,
+            V24,
+            V25,
+            V26,
+            V27,
+            V28,
+            V29,
+            V30,
+            V31,
+            V32,
+            V33,
+        }
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        struct OldEnvelope {
+            wire_version: u16,
+            seq: u64,
+            body: OldBody,
+        }
+
+        let progress = encode(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::ProgressPush {
+                seq: 1,
+                event: sample_progress_event(),
+            },
+        })
+        .unwrap();
+        assert!(
+            postcard::from_bytes::<OldEnvelope>(&progress).is_err(),
+            "an old reader must refuse ProgressPush, never decode it as another variant"
+        );
+
+        // The control: the same old reader accepts the last variant it knows,
+        // so the refusal above is about the new index, not a broken mirror.
+        let flow = encode(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 2,
+            body: one_sample_per_variant()
+                .into_iter()
+                .find(|(_, n)| *n == "FlowStatePush")
+                .unwrap()
+                .0,
+        })
+        .unwrap();
+        let old: OldEnvelope =
+            postcard::from_bytes(&flow).expect("old reader decodes FlowStatePush");
+        assert!(matches!(old.body, OldBody::V33));
+
+        // And the stream survives: each frame is decoded from its own
+        // length-delimited body, so the frame after a refused one is intact.
+        let next = encode(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 3,
+            body: ControlMessage::SubscribeAck,
+        })
+        .unwrap();
+        let after: OldEnvelope = postcard::from_bytes(&next).expect("next frame decodes");
+        assert!(matches!(after.body, OldBody::V23));
+    }
+
+    #[test]
+    fn subscription_topics_adds_progress_only_on_the_capability() {
+        let base = [SubscriptionTopic::VmStatus, SubscriptionTopic::LoginState];
+        assert_eq!(
+            subscription_topics(&base, &["pty.attach@v1".into()]),
+            base.to_vec(),
+            "an old guest must never be asked for Progress"
+        );
+        assert_eq!(
+            subscription_topics(&base, &[CAP_PROGRESS_PUSH_V1.into()]),
+            vec![
+                SubscriptionTopic::VmStatus,
+                SubscriptionTopic::LoginState,
+                SubscriptionTopic::Progress
+            ]
+        );
+        assert_eq!(
+            subscription_topics(
+                &[SubscriptionTopic::Progress],
+                &[CAP_PROGRESS_PUSH_V1.into()]
+            ),
+            vec![SubscriptionTopic::Progress],
+            "no duplicate topic"
+        );
+    }
+
+    /// An old GUEST receiving a new tray's `Subscribe` that names `Progress`
+    /// fails the whole frame, losing the topics it does know. Pinned so the
+    /// capability gate on the tray side is a requirement, not a nicety.
+    #[test]
+    fn an_old_guest_refuses_a_subscribe_naming_progress() {
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        enum OldTopic {
+            VmStatus,
+            LoginState,
+            CloudProjects,
+            FlowState,
+        }
+        let bytes = postcard::to_allocvec(&vec![
+            SubscriptionTopic::VmStatus,
+            SubscriptionTopic::Progress,
+        ])
+        .unwrap();
+        assert!(postcard::from_bytes::<Vec<OldTopic>>(&bytes).is_err());
+        let known = postcard::to_allocvec(&vec![SubscriptionTopic::VmStatus]).unwrap();
+        assert!(postcard::from_bytes::<Vec<OldTopic>>(&known).is_ok());
     }
 
     #[test]
@@ -2831,6 +3141,11 @@ mod tests {
             ControlMessage::PtyOpenData { .. } => 31,
             ControlMessage::SetVsockForwardTarget { .. } => 32,
             ControlMessage::FlowStatePush { .. } => 33,
+            ControlMessage::ProgressPush { .. } => 34,
+            // 679-rp9m: trailing addition.
+            ControlMessage::GithubLoginStored { .. } => 35,
+            // 1503-qrgz: trailing addition.
+            ControlMessage::HostClockSync { .. } => 36,
         }
     }
 
@@ -2865,7 +3180,7 @@ mod tests {
         /// The number of `ControlMessage` variants. An independent literal for
         /// the same reason the discriminants are: anything computed from the
         /// enum agrees with the enum by construction.
-        const DECLARED_VARIANTS: usize = 34;
+        const DECLARED_VARIANTS: usize = 37;
 
         let samples = one_sample_per_variant();
         assert_eq!(

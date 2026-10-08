@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: native-clippy-deny-warnings-reds-tillandsias-windows-tray-on-three-sites-and-no-gate-a-windows-host-runs-would-see-it
+    event:
+      type: completed
+      ts: "2026-09-28T01:56:11Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        Landed in relay commit 76c97c012 (land80) on origin/linux-next. Verified by content: trunk scripts/check-windows-tray-clippy.sh and gate step 560 present; the four tray sites clean. The widened arm (1444-bzpu) landed in the same commit, and my pushes since ran it natively: ok:windows-tray-clippy:clean.

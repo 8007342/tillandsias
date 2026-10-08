@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-git-mirror-must-be-rock-solid-at-atomic-forward-upstream-and-must-refuse-to-advertise-itself-when-broken-so-agents-stop-instead-of-trusting-a-mirror-that-is-silently-failing
+    event:
+      type: note
+      ts: "2026-09-30T15:53:27Z"
+      agent_id: linux-lenovinha-claude-20260930t155326z
+      host: lenovinha
+      summary: |
+        FOLLOW-UPS at closure (not blockers, per the coordinator on land112). (1) LIVE-LOG CONFIRMATION: lenovinha's running mirror still runs image v56.9.27.2, the pre-rec6 image, which logs about 29k 'hung up' fatals a day. At this host's next mirror recreate, confirm the live log carries no hung-up fatals. Hermetic before/after on 2026-09-30, 60s each on the same seed: 21 fatals on v56.9.27.2, 0 on a trunk-built image. (2) RE-POINTED LOCAL TAG: scripts/build-image.sh git, run on lenovinha 2026-09-30, re-pointed the LOCAL tag localhost/tillandsias-git:v56.9.27.2 at the trunk-built image 469d38ec92b8. On this host that versioned tag no longer names what v56.9.27.2 shipped, so the next mirror recreate here picks up the trunk image under the old label. A later measurement on lenovinha must not be attributed to the v56.9.27.2 release.

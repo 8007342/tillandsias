@@ -93,6 +93,11 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         (IssueWebSession { .. } | EvictProject { .. }, UnixSocket) => Handle,
         (IssueWebSession { .. } | EvictProject { .. }, Vsock) => Unsupported,
 
+        // 679-rp9m: the login CLI tells the host tray its token is stored.
+        // Unix-only: it is a local notification to the tray on this host.
+        (GithubLoginStored { .. }, UnixSocket) => Handle,
+        (GithubLoginStored { .. }, Vsock) => Unsupported,
+
         // Q2: VM lifecycle queries on BOTH transports. Linux native has
         // a "phase" (Provisioning/Starting/Ready/...) too — useful for
         // UI state consistency even without a real VM.
@@ -151,6 +156,12 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         (SetVsockForwardTarget { .. }, Vsock) => Handle,
         (SetVsockForwardTarget { .. }, UnixSocket) => Unsupported,
 
+        // HostClockSync (1503-qrgz) is vsock-only and host->guest: only the
+        // host knows its wall clock survived a sleep the VM did not run through.
+        // A unix-socket peer is already on the host's clock.
+        (HostClockSync { .. }, Vsock) => Handle,
+        (HostClockSync { .. }, UnixSocket) => Unsupported,
+
         // DeliverCredentials and GetVaultHandover are vsock-only (for in-VM credential delivery/handover)
         (DeliverCredentials { .. } | GetVaultHandover { .. }, Vsock) => Handle,
         (DeliverCredentials { .. } | GetVaultHandover { .. }, UnixSocket) => Unsupported,
@@ -192,6 +203,7 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
             | LoginStatePush { .. }
             | CloudProjectsPush { .. }
             | FlowStatePush { .. }
+            | ProgressPush { .. }
             | MetricsSnapshotReply { .. },
             _,
         ) => ResponseOnly,
@@ -242,6 +254,25 @@ mod tests {
             ),
             DispatchOutcome::Unsupported,
             "nothing on the unix path can know the host's vsock port"
+        );
+    }
+
+    /// ORDER 1503-qrgz. The host's clock reading is HANDLED on vsock and
+    /// refused BY NAME on the unix socket (a unix peer already shares the
+    /// host's clock).
+    #[test]
+    fn host_clock_sync_is_vsock_only() {
+        let msg = ControlMessage::HostClockSync {
+            seq: 1,
+            host_unix_ms: 1_790_706_540_000,
+        };
+        assert_eq!(
+            decide_route(&msg, TransportKind::Vsock),
+            DispatchOutcome::Handle
+        );
+        assert_eq!(
+            decide_route(&msg, TransportKind::UnixSocket),
+            DispatchOutcome::Unsupported
         );
     }
 
@@ -463,6 +494,19 @@ mod tests {
                 },
                 "FlowStatePush",
             ),
+            (
+                ControlMessage::ProgressPush {
+                    seq: 1,
+                    event: tillandsias_control_wire::ProgressEvent {
+                        task: "provision".into(),
+                        parent: None,
+                        label: "Provisioning".into(),
+                        kind: tillandsias_control_wire::ProgressKind::Done,
+                        ts_unix_ms: 0,
+                    },
+                },
+                "ProgressPush",
+            ),
         ]
     }
 
@@ -502,6 +546,7 @@ mod tests {
 | "LoginStatePush"
 | "CloudProjectsPush"
 | "FlowStatePush"
+| "ProgressPush"
 | "MetricsSnapshotReply" => DispatchOutcome::ResponseOnly,
 _ => unreachable!("test fixture missing case for {name}"),
             };
@@ -548,6 +593,7 @@ _ => unreachable!("test fixture missing case for {name}"),
                 | "LoginStatePush"
                 | "CloudProjectsPush"
                 | "FlowStatePush"
+                | "ProgressPush"
                 | "MetricsSnapshotReply" => DispatchOutcome::ResponseOnly,
                 _ => unreachable!("test fixture missing case for {name}"),
             };
@@ -655,6 +701,16 @@ _ => unreachable!("test fixture missing case for {name}"),
                 to_state: "auth.github.blocked".into(),
                 reason: Some("persist(ca_bundle)".into()),
                 ts_unix: 1721779200,
+            },
+            ControlMessage::ProgressPush {
+                seq: 1,
+                event: tillandsias_control_wire::ProgressEvent {
+                    task: "provision".into(),
+                    parent: None,
+                    label: "Provisioning".into(),
+                    kind: tillandsias_control_wire::ProgressKind::Done,
+                    ts_unix_ms: 0,
+                },
             },
         ];
         for msg in &resp {

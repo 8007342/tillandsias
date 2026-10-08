@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    field: verifiable_closure
+    value: |-
+      scripts/test-status-channel-absent-is-first-class.sh prints
+      `ok:status-channel:absent-distinct-from-zero:4/4` and exits 0, where the
+      four arms are the four channels below driven with a child whose real
+      status is 1 and a child that never produced a status (killed), and the
+      consumer of each channel reports `rc=1`, `rc=absent`, and NEVER `rc=0`,
+      for the two cases respectively. PRE-FIX RESULT: FAILS — today every one
+      of the four channels reports `rc=0` for at least one of the two cases.
+      NEGATIVE CONTROL: a child that exits 0 through each channel still reports
+      `rc=0`, so the fix cannot be "report absent for everything".
+
+
+      [2026-09-28T18:58:01Z macos] AMENDED 2026-09-28 (coordinator; wording point raised by yolanda). The fixture's verdict counts arms RUN and names skips, so no single host prints 4/4. Closure is the exact verdict per regime, together covering all four arms:
+        darwin  (tlatoanis-macbook-air, at 25f800ec7): ok:status-channel:absent-distinct-from-zero:3/3 skipped=1 (arms 1, 3, 4; arm 2 has no wsl.exe)
+        windows (yolanda, trunk cf2829f9b containing 25f800ec7): ok:status-channel:absent-distinct-from-zero:1/1 skipped=3 (arm 2 passes as a DECLARED drop; arms 1, 3, 4 skip naming limit:windows-external-kill-reads-as-exited, which the run verb declares)
+      Both rc=0. An external kill on Windows reads as exited 2304, and the verb names that rather than decoding it (1443-8pur).
+    ts: "2026-09-28T18:58:01Z"
+    host: macos
+
+events:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    event:
+      type: progress
+      ts: "2026-09-28T18:58:01Z"
+      host: macos
+      summary: |-
+        status 'scripts/test-status-channel-absent-is-first-class.sh prints
+        `ok:status-channel:absent-distinct-from-zero:4/4` and exits 0, where the
+        four arms are the four channels below driven with a child whose real
+        status is 1 and a child that never produced a status (killed), and the
+        consumer of each channel reports `rc=1`, `rc=absent`, and NEVER `rc=0`,
+        for the two cases respectively. PRE-FIX RESULT: FAILS — today every one
+        of the four channels reports `rc=0` for at least one of the two cases.
+        NEGATIVE CONTROL: a child that exits 0 through each channel still reports
+        `rc=0`, so the fix cannot be "report absent for everything".
+        
+        
+        [2026-09-28T18:58:01Z macos] AMENDED 2026-09-28 (coordinator; wording point raised by yolanda). The fixture's verdict counts arms RUN and names skips, so no single host prints 4/4. Closure is the exact verdict per regime, together covering all four arms:
+          darwin  (tlatoanis-macbook-air, at 25f800ec7): ok:status-channel:absent-distinct-from-zero:3/3 skipped=1 (arms 1, 3, 4; arm 2 has no wsl.exe)
+          windows (yolanda, trunk cf2829f9b containing 25f800ec7): ok:status-channel:absent-distinct-from-zero:1/1 skipped=3 (arm 2 passes as a DECLARED drop; arms 1, 3, 4 skip naming limit:windows-external-kill-reads-as-exited, which the run verb declares)
+        Both rc=0. An external kill on Windows reads as exited 2304, and the verb names that rather than decoding it (1443-8pur).' (not terminal) with evidence_refs: plan/index.d/20260928t184354z-132c6f60-yolanda.yaml; plan/index.d/20260928t183904z-29f95898-tlatoanis-macbook-air.yaml
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    event:
+      type: note
+      ts: "2026-09-28T18:58:01Z"
+      host: macos
+      summary: |-
+        the 4/4 wording cannot be printed by any single regime; state the exact per-regime verdicts

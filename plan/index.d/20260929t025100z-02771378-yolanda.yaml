@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-ci-release-baseline-separates-cannot-run-here-from-broken
+    event:
+      type: note
+      ts: "2026-09-29T02:51:00Z"
+      agent_id: windows-yolanda-claude-20260929t025059z
+      host: yolanda
+      summary: |
+        Windows baseline additions, measured on yolanda 2026-09-29 in Git Bash. Each FAILS ON TRUNK TOO (origin/linux-next clean worktree, fresh plan binary) and does not reach the lines 1471-8ydv changed:
+        - test-capabilities-envelope-names-its-source: rc=3 with no verdict line. Cause not yet triaged; cannot-run-here vs broken is still undetermined.
+        - test-gate-podman-mode-configuration: FAIL could not create the AF_UNIX fixture socket (python3 required). Windows CANNOT RUN THIS as written: no python3 on the host. Candidate: skip by name when python3 is absent.
+        - test-pre-push-plan-lane-fails-closed-without-binary: FAIL arm3, a push carrying no fragments was refused for a missing fold validator (rc=127). rc 127 is command-not-found, so likely a Windows regime gap (a tool the arm assumes on PATH). Not yet triaged.

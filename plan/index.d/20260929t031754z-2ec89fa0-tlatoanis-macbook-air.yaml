@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-file-tillandsias-downloads-or-creates-on-the-host-lives-under-one-root-dot-tillandsias-so-removing-that-folder-wipes-everything
+    field: status
+    value: completed
+    ts: "2026-09-29T03:17:54Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: every-file-tillandsias-downloads-or-creates-on-the-host-lives-under-one-root-dot-tillandsias-so-removing-that-folder-wipes-everything
+    event:
+      type: completed
+      ts: "2026-09-29T03:17:54Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: duplicate of 1438-pk9j (host-state-lifecycle req aed53110)
+  - packet_id: every-file-tillandsias-downloads-or-creates-on-the-host-lives-under-one-root-dot-tillandsias-so-removing-that-folder-wipes-everything
+    event:
+      type: note
+      ts: "2026-09-29T03:17:54Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        DUPLICATE, filed in error by tlatoanis-macbook-air on 2026-09-29: 1438-pk9j (with the host-state-lifecycle requirement from 1437-8c6p) already makes ~/.tillandsias (TILLANDSIAS_HOME) the single root with a cross-platform layout and legacy-root migration. The operator's 2026-09-29 reaffirmation, the measured macOS roots and the Time Machine/Spotlight exclusion were moved onto 1438-pk9j as a note. Not implemented here, so the layout stays cross-platform.

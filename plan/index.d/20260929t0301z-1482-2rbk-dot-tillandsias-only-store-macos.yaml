@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: every-file-tillandsias-downloads-or-creates-on-the-host-lives-under-one-root-dot-tillandsias-so-removing-that-folder-wipes-everything
+    order: 1482-2rbk
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [macos, storage, provisioning, rust]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-macos-tray/src/diagnose.rs
+      - crates/tillandsias-core/src/guest_bin_path.rs
+      - scripts/e2e-step2-macos.sh
+    title: |
+      OPERATOR RULING 2026-09-29: ~/.tillandsias/ is the ONLY host store location on macOS: the VM, downloads, caches, the staged guest binary and logs move under it, so that removing the folder wipes everything
+    context: |
+      OPERATOR (2026-09-29): "we want all downloaded files to be in a
+      ~/.tillandsias/ folder, we're going to download lots of random files and
+      create lots of massive files, removing the folder should just wipe
+      everything", and then "file ... the ~/.tillandsias/ as the only store
+      location".
+      TODAY there are FOUR roots (measured on tlatoanis-macbook-air):
+        ~/Library/Application Support/tillandsias/  VM disk, swap, nvram, cidata, console.log, provision/
+        ~/Library/Caches/tillandsias/               models/
+        ~/.local/state/tillandsias/                 guest-bin/ (staged headless)
+        ~/Library/Logs/Tillandsias/                 tray.log
+      scripts/e2e-step2-macos.sh removes only the first two.
+      Design (exploration note plan/issues/macos-storage-and-snapshot-strategy-2026-09-29.md
+      on branch exploration/raw-xz-rootfs): subfolders vm/ snapshots/
+      downloads/ cache/ guest-bin/ logs/ tmp/, all derived from ONE constant;
+      NOT inside Tillandsias.app (the bundle is signed, /Applications is not
+      user-writable, and updates replace the bundle); Time Machine exclusion
+      (NSURLIsExcludedFromBackupKey or tmutil addexclusion) and
+      .metadata_never_index set when the root is created.
+      RELATED: 1437-jdgg (a download manifest under ~/.tillandsias/downloads/)
+      already assumes this root; this row makes it the ONLY one.
+    exit_criteria:
+      - 'on a clean Mac, provisioning and a tray session create files ONLY under ~/.tillandsias/ (a find over the four old roots is empty) (pre-fix result: FAILS — four roots)'
+      - 'an existing install is MIGRATED on first launch by rename (same volume, no copy that could de-sparsify the disk); the VM boots afterwards with no re-download'
+      - 'rm -rf ~/.tillandsias then relaunching is a full clean-room reset; scripts/e2e-step2-macos.sh and the uninstaller remove exactly that one path'
+      - 'the root is excluded from Time Machine and Spotlight when it is created, verified with tmutil isexcluded'
+    unscoreable: |
+      the pin is a unit test on the path derivation (every store path under one
+      root) plus one measured clean-Mac provision and one migration.

@@ -1,0 +1,66 @@
+packets:
+  - packet_id: lua-script-run-trace-records-every-managed-process-terminal-outcome
+    order: 1539-dt84
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [lua, rust, observability, tests]
+    estimated_hours: 5
+    multi_cycle: true
+    depends_on:
+      - lua-live-proc-spawn-streams-with-script-owned-cancellation-and-reaping
+      - lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    owned_files:
+      - crates/tillandsias-plan/src/script_run.rs
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/src/lua_process.rs
+      - crates/tillandsias-plan/tests/lua_proc_trace.rs
+      - scripts/test-script-run-verb.sh
+    title: "Complete 1384-aixy per-process trace through the existing script runner"
+    context: |
+      Astra's read-only immutable8c7af3886 audit confirmed that --trace prints
+      a script-summary only; outer timeout exits before that summary. Original
+      plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md section4.4
+      requires every proc.run/spawn terminal process result in the run's trace
+      and --trace rendering on stderr. No separate trace owner was found;
+      composition child1538 explicitly leaves this obligation open. Consume
+      the landed managed completion seam after1534/1538, do not reimplement
+      supervision or claim unfinished dependencies are already delivered.
+    outcome: |
+      Every actually launched managed process has one correlated terminal
+      record and --trace exposes these records without changing the script's
+      stdout/verdict or its exit status.
+    exit_criteria:
+      - "Successful/nonzero proc.run and completed spawn each produce one record {run_id,argv,wall_ms,status,code} correlated to the returned executor result. argv is an array, wall_ms is host-measured, status is non-null and code is null unless exited."
+      - "Concurrent spawn, chain stages and select/all record each underlying process exactly once; repeated waits or selecting a handle do not duplicate terminal records."
+      - "Deadline, explicit kill and script-scope cleanup records are collected before the runner exits, including outstanding children on verdict/error/outer timeout. Preserve the actual supervisor outcome: scope cleanup is not automatically a process timeout."
+      - "Failed spawn and policy-denied/consent-negative controls invent neither a child exit code nor an actual executor identity. Distinguish optional request-outcome records from launched-process completions; denial starts no child."
+      - "--trace off/on preserves exact stdout/verdict bytes and exit status for success, refusal and outer timeout; records appear only on stderr when requested. Assert structural fields/correlation, not variable run IDs or elapsed durations."
+      - "Existing supervision, callback barriers, capture and policy tests remain green; parent independently gates the integrated candidate on Linux. Native Mac/changed Windows evidence stays unmeasured until native receipts exist."
+    verifiable_closure: |
+      New named lua_proc/script-run-verb trace tests covering each terminal
+      outcome, repeated waits, async composition and outer-deadline cleanup;
+      original fixtures and forced parent integration gate. Source summary
+      alone is not per-process trace evidence.
+    unscoreable: "pinned-by-its-own-fixture: named process-terminal trace correlation and stdout-invariance regressions"
+    next_action: |
+      After dependencies land, inspect their delivered completion seam.
+      First session takes at most a two-hour vertical slice for proc.run and
+      explicitly waited spawn trace, checkpoints and records remaining async
+      scope-cleanup coverage; decompose the remainder at that seam if needed.
+      Parent does not close this row or1384 on a partial trace. Use existing
+      command_policy::redact for secret-shaped argv in emitted diagnostics,
+      without claiming arbitrary-secret removal or changing result argv.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Original contract does not require a standalone persisted trace file,
+      retention/overflow protocol or new trace destination. Those hardening
+      proposals require an explicit scoped decision, not a new closure bar.
+      No executor edits planned; report missing completion seams before
+      widening ownership. Preserve8MiB prefix capture and no-shell-strings.
+      This multi-cycle ready packet schedules remaining work, not a new claim.
+    provenance: "Operator-approved Bash-to-Lua runtime migration; focused immutable8c7af3886 remaining-trace audit on2026-10-02."

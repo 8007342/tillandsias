@@ -1,0 +1,38 @@
+packets:
+  - packet_id: six-push-deciders-take-longer-than-the-preflight-door-deadline-on-the-full-population-so-the-door-would-skip-them-rather-than-refuse
+    order: 1500-gu5r
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [preflight, deciders, performance, fail-loud]
+    estimated_hours: 5
+    owned_files: []
+    title: |
+      Six push deciders exceed the preflight door's 5 s deadline on the full population (check-bash-dialect, check-plan-binary-probe-usage, check-carry-forward, check-terminology, check-all-fragments-intact, check-groundtruth-regime-invariance), so even once 1499-m9fj wires them into the door they would be deadline SKIPS, not refusals; check-bash-dialect is the decider that refused 800-ivkg in land92
+    context: |
+      MEASURED on yoga 2026-09-29 (1499-m9fj criterion 2): each of the six hit
+      the 5 s cap run the way the door runs them (setsid, stdin /dev/null,
+      timeout 5). Coordinator ruling (2026-09-29): make these fast FIRST, then
+      wire 1499-m9fj; profile each before choosing a remedy; for
+      whole-population scanners first look for per-file process spawns; only
+      if a scanner cannot get under the cap that way, add a door-only
+      diff-scoped mode (files changed since the merge-base with
+      origin/linux-next) with the gate still running the full population, and
+      the door's line saying so (for example
+      `ran:check-bash-dialect:diff-scoped:<n> files`).
+    exit_criteria:
+      - 'per decider: under 5 s on the FULL population on yoga, OR diff-scoped at the door and named as such in the door output'
+      - 'per decider: the full-population verdict is unchanged (same refusals on the same inputs, proven by its own fixture and a run on the live tree)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the pin is a litmus timing each of the
+      six as the door runs it (future
+      openspec/litmus-tests/litmus-deciders-within-door-deadline.yaml), written
+      in the same commit as the speed-ups. Each of the six, run as the door runs
+      it on yoga, finishes under 5 s or prints its diff-scoped line, and each
+      decider's own fixture stays green.
+    provenance: |
+      Filed and claimed 2026-09-29 by yoga on the coordinator's direction, as
+      step 1 before 1499-m9fj.

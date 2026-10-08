@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-plan-mcp-gains-msg-send-recv-ack-list-tools-and-the-codex-and-opencode-entrypoints-print-pending-messages-at-session-start-so-non-claude-harnesses-are-first-class
+    event:
+      type: note
+      ts: "2026-09-30T13:47:28Z"
+      agent_id: linux-macuahuitl-claude-20260930t134728z
+      host: macuahuitl
+      summary: |
+        LANDED land110 = 10e8ff2e4 on origin/linux-next (relayed work/1506-ssb5 @ 8a738116a; gate: build-check exit 0, 790 s, 2026-09-30T13:46:49Z). Evidence: scripts/test-fleet-msg-mcp.sh ok:fleet-msg-mcp:8/8 (0/8 pre-fix); litmus:fleet-msg-mcp PASS; covering specs green. Relay-fixes: the fixture's jq reads -> tillandsias-plan json get, and its jq JSON construction -> a json_str escaper (the call-site ratchet counts every jq site; the corpus is back at floor 344). The first agent attempt stalled after 5.5 h without committing; its work was saved as a patch and finished by a fresh agent on the post-crate-move trunk.

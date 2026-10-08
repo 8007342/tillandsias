@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Coordinator ruling 2026-10-08 on 1553-6e3q, option (A): the 1384-aixy
+# contract (an ungrouped deadline kills only the child) stays on both OSes.
+# Criterion 2 now speaks of GROUPED runs; criterion 1 bounds the runtime drop.
+status:
+  - packet_id: on-native-windows-a-timed-out-command-whose-grandchild-holds-the-pipe-leaks-a-blocking-reader-thread-and-the-orphan-so-a-400ms-timeout-test-takes-120s-to-finish
+    field: exit_criteria
+    value:
+      - 'after a 400 ms timeout whose grandchild holds the stdout pipe, dropping the runtime returns within the deadline plus a stated margin of 15 s (a_timeout_does_not_leave_the_pipe_held_past_the_run); pre-fix it took 60.05 s natively on Windows (sleep 60), and the criterion-6 test took 120.09 s'
+      - 'a GROUPED run (.group(true)) leaves no descendant alive after its deadline (group_kill a_grouped_deadline_kills_the_grandchild); the ungrouped orphan is the documented 1384-aixy behaviour, and control_an_ungrouped_deadline_leaves_the_grandchild_running stays green on Windows and Linux'
+      - 'timeout_on_a_sigterm_ignoring_child_reports_killed and the whole executor_contract suite finish in seconds natively on Windows; the parked-reader residual for an ungrouped orphan is stated in the code and the row, not claimed fixed'
+    ts: "2026-10-08T16:40:05Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: on-native-windows-a-timed-out-command-whose-grandchild-holds-the-pipe-leaks-a-blocking-reader-thread-and-the-orphan-so-a-400ms-timeout-test-takes-120s-to-finish
+    event:
+      type: note
+      ts: "2026-10-08T16:40:05Z"
+      host: yolanda-windows
+      summary: |-
+        exit_criteria amended per coordinator ruling 2026-10-08 option A (keep 1384-aixy: an ungrouped deadline kills only the child, on both OSes). Implemented on work/1553-6e3q bfb7026d4: Windows pipe readers are detached std threads.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-litmus-specs-hardcode-the-plan-binary-path-so-a-stale-elf-shadows-the-windows-exe-resolve-it-through-the-probe
+    field: status
+    value: completed
+    ts: "2026-09-30T01:22:46Z"
+    host: yolanda
+
+events:
+  - packet_id: three-litmus-specs-hardcode-the-plan-binary-path-so-a-stale-elf-shadows-the-windows-exe-resolve-it-through-the-probe
+    event:
+      type: completed
+      ts: "2026-09-30T01:22:46Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 941e45b69
+  - packet_id: three-litmus-specs-hardcode-the-plan-binary-path-so-a-stale-elf-shadows-the-windows-exe-resolve-it-through-the-probe
+    event:
+      type: note
+      ts: "2026-09-30T01:22:46Z"
+      host: yolanda
+      summary: |-
+        landed in land97 941e45b69; content verified on origin/linux-next by content (probe resolution in all three specs)

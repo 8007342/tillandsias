@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-new-literal-pin-guard-covers-litmus-steps-but-not-rust-include-str-contains-tests-which-produced-four-of-the-ten-costliest-pins
+    order: 1473-scdq
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    pickup_role: any
+    capability_tags: [tests, litmus, maintainability, rust, instrument]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-rust-source-pin-added.sh
+      - scripts/test-rust-source-pin-added.sh
+    title: |
+      Extend 634-39ik's new-pin enforcement to Rust tests: an ADDED include_str!(<source>) + .contains("<literal>") assertion must carry a negative control or a stated reason, since that unguarded population produced 4 of the 10 costliest pins in the 827-d3dc survey
+    context: |
+      827-d3dc (plan/issues/source-literal-pin-survey-2026-09-28.md) inventoried
+      92 Rust pins of the form include_str!(<source file>) followed by
+      .contains(<literal>) in a test. Four of the ten costliest pins in the survey
+      are of this form: the headless run_init source_window, the vz.rs fetch-unit
+      After= pin (which kept a product defect green, 1472-3d29), the accel_probe
+      Metal scan, and the wsl_lifecycle comment-bounded window.
+      litmus:litmus-expression-pinning-enforcement-shape (634-39ik) refuses NEWLY
+      ADDED litmus steps that pin a literal source expression without a negative
+      control. Nothing applies the same rule to Rust tests, so the population
+      that produced the most expensive failures is the one no guard sees.
+      Coordinator direction (macuahuitl-fedora, 2026-09-28): file it as its own row.
+    exit_criteria:
+      - 'a diff-scoped decider refuses an ADDED Rust test line asserting <var>.contains("<literal>") where <var> is bound by include_str! of a source file, unless the test carries a negative control, an absence scan over the whole file, or a # source-pin-ok style reason marker (pre-fix result: FAILS — no guard covers Rust tests)'
+      - 'the decider leaves standing pins alone (diff-scoped negative control) and is bound with a fixture as a gate step, with a second regime'
+      - 'its refusal carries why and remedy, naming the behavioural alternative: assert on the value a function BUILDS (the repairs in the survey)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the deliverable is the decider and its
+      fixture, scripts/test-rust-source-pin-added.sh, bound as a gate step in
+      the same change.

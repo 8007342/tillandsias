@@ -1,0 +1,37 @@
+packets:
+  - packet_id: discipline-verb-fixture-must-establish-enforcement-history-instead-of-reading-trunk-diversity
+    order: 1535-enjy
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [tests, gate, discipline]
+    owned_files: [scripts/test-branch-discipline-verb.sh]
+    estimated_hours: 1
+    size: M
+    implementer_tier: opus
+    title: "Discipline fixture must establish its own multi-host enforcement history"
+    context: |
+      MEASURED full PR #201 integration gate at ff5511e6b, 2026-10-02:
+      test-branch-discipline-verb arm 2 fails 5/6 because the strict grammar
+      fixture uses this checkout's last 50 commits. Sole-builder plan updates
+      leave one author-host domain, so strict check-ref correctly returns
+      warn:discipline:ref-outside-grammar:seed-ahead-of-reality, exit 0, while
+      the test unconditionally expects refusal exit 1. No policy door failure
+      or runtime discipline regression is established by this failure.
+      The failed forced gate cost 724.561 seconds including landing wrapper.
+      Receipt: /tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/pr-201-second-gate-failure.log.
+    outcome: "The enforcement fixture supplies isolated history and origin refs, so development cadence cannot make the full gate nondeterministic."
+    exit_criteria:
+      - "Use a synthetic scratch git repository/local origin with distinct host-domain history and an origin work ref to exercise strict refusal."
+      - "A low-diversity control still warns and the high-diversity control refuses; do not weaken runtime rules, real project seed or main protection."
+      - "Preserve existing live main/work/warn, digest, invalid-seed and MCP assertions; count actual test arms and run the integrated full gate."
+    verifiable_closure: "bash scripts/test-branch-discipline-verb.sh; bash scripts/test-discipline-derive.sh; full ./build.sh --check with forced verification."
+    unscoreable: "pinned-by-its-own-fixture: scripts/test-branch-discipline-verb.sh"
+    next_action: "Sol repairs the fixture as a narrowly scoped PR #201 gate follow-up; parent merges, independently verifies, and closes only after a full integrated gate."
+    notes: |
+      Found while gating the active three-packet batch; no fourth implementation
+      lease is claimed. Repair is a gate follow-up of the held 1531-ae4a PR,
+      and the separate finding records why that unrelated fixture needed repair.
+    provenance: "Parent's forced PR #201 gate; retained exact first failing span at lines 9605-9623."

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    event:
+      type: note
+      ts: "2026-10-03T17:23:26Z"
+      agent_id: macos-tlatoanis-macbook-air-opencode-20261003t172326z
+      host: tlatoanis-macbook-air
+      summary: |
+        ASK: reconcile original absolute criterion1 with landed named-override exception before closure. Read-only audit published work/1235-rfub @4a9df312f4086f2bce7e442eefef07ba0a6f88da. Audit source3c05fc230 proves b35acba6c and originalccbd36616 ancestry. Existing scratch fixture8/8 exit0; REAL native cargo clippy -p tillandsias-macos-tray --all-targets -- -D warnings exit0 on macOS27.0.1 aarch64-apple-darwin Rust1.96.1. Attester binds exact subtree and names host/platform/all-targets; relay hook checks before gate. However arm8 proves TILLANDSIAS_NATIVE_LINT_UNATTESTED=<reason> permits unlinted landing with Native-Lint-Unattested debt, contrary to literal criterion1. Please ratify the documented debt exception or require a narrower policy change; I will not silently amend criteria or close. No source edits. Full workspace gate still exits101 at Linux-owned nonminimal_bool, separate from native tray lint. Next_action: coordinator RULING on criterion/debt exception; do not reimplement the landed guard. Audit scope delivered and claim released pending policy disposition.

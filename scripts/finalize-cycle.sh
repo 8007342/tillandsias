@@ -64,15 +64,20 @@ _state_dir() {
     printf '%s' "$dir"
 }
 
+# ORDER 1504-4tty (1247-amcu): every refused:finalize:* verdict says the rule
+# that refused and what clears it, in the fleet's why/remedy shape.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
 _step() { printf 'finalize: %s\n' "$1"; }
 
 SD="$(_state_dir)" || {
+    _afford "this cycle never took a startup boundary snapshot, so nothing records what the tree looked like before its work" "report this cycle as landed but unattested; next cycle run scripts/meta-orchestration-worktree-guard.sh snapshot <dir> at Start Of Cycle, BEFORE any write"
     echo "refused:finalize:no-boundary-state — the cycle never snapshotted a startup boundary, so it cannot attest. Run the guard's snapshot at Start Of Cycle." >&2
     exit 2
 }
 
 _step "verify boundary at the work head"
 scripts/meta-orchestration-worktree-guard.sh verify "$SD" || {
+    _afford "the tree no longer matches the startup boundary snapshot, so this cycle cannot prove it wrote only what it committed" "run git status: commit this cycle's own changes (or remove files it did not mean to write), then re-run scripts/finalize-cycle.sh. Never re-snapshot to pass: that compares the tree against itself"
     echo "refused:finalize:boundary-verify-failed — resolve by hand; do NOT re-snapshot to make this pass, which compares a tree against itself." >&2
     exit 3
 }
@@ -123,12 +128,14 @@ scripts/report-held-claims.sh || true
 # a real cycle before being trusted.
 _step "land the work head (gate + push + prove)"
 scripts/land-on-platform-branch.sh "$BRANCH" 4 || {
+    _afford "the gate, push or remote proof for the work head failed, so the work is not durably on the remote and no marker may follow it" "read the land-on-platform-branch output above (a red gate, a rejected or diverged push, or a credential verdict), fix that cause, then re-run scripts/finalize-cycle.sh"
     echo "refused:finalize:work-land-failed — the marker is NOT emitted; a marker may never follow an unpushed commit." >&2
     exit 6
 }
 
 _step "re-verify boundary after landing"
 scripts/meta-orchestration-worktree-guard.sh verify "$SD" || {
+    _afford "landing changed the tree beyond the startup boundary, so the landed head cannot be attested" "run git status to see what landing wrote; commit it if it is this cycle's, then re-run scripts/finalize-cycle.sh"
     echo "refused:finalize:boundary-verify-failed-post-land" >&2; exit 3; }
 
 _step "record the attestation (attests the now-landed WORK head)"
@@ -147,6 +154,7 @@ printf '%s\n' "$rec"
 # and the failure mode punished the honest disposition: a cycle willing to say it
 # was blocked could not attest, while a cycle claiming COMPLETE sailed through.
 [ "$rc" -eq 0 ] && printf '%s' "$rec" | grep -qE '^MO-FULL: (COMPLETE|BLOCKED)' || {
+    _afford "mo-full-attest.sh record did not report MO-FULL: COMPLETE or BLOCKED, so no attestation line is proven written" "read the record output printed above. Before any re-run, check git status plan/mo-full-attestations.d: if a line for this head is already there, commit it instead of recording again (a second record appends a duplicate)"
     echo "refused:finalize:record-failed — the ledger line was not written; do NOT emit a marker." >&2
     exit 4
 }
@@ -176,21 +184,25 @@ if [ -n "$(git status --porcelain -- plan/mo-full-attestations.d 2>/dev/null)" ]
     _step "commit the ledger record"
     if [ -n "${2:-}" ] && [ -r "${2}" ]; then
         git add plan/mo-full-attestations.d && git commit -q -F "$2" || {
+            _afford "git could not commit the attestation record, so it cannot be landed" "run git status and git commit by hand to see git's error (a hook refusal or missing identity), fix it, then re-run scripts/finalize-cycle.sh"
             echo "refused:finalize:commit-failed" >&2; exit 5; }
     else
         git add plan/mo-full-attestations.d && git commit -q -m "record(mo-full): attest ${BRANCH} cycle" || {
+            _afford "git could not commit the attestation record, so it cannot be landed" "run git status and git commit by hand to see git's error (a hook refusal or missing identity), fix it, then re-run scripts/finalize-cycle.sh"
             echo "refused:finalize:commit-failed" >&2; exit 5; }
     fi
 fi
 
 _step "land the ledger record"
 scripts/land-on-platform-branch.sh "$BRANCH" 4 || {
+    _afford "the attestation record is committed but its push failed, so it is not on the remote and no marker may follow" "read the land-on-platform-branch output above, fix that cause, then re-run scripts/finalize-cycle.sh; it is safe to re-run"
     echo "refused:finalize:ledger-land-failed — the record is committed but unpushed; do NOT emit a marker." >&2
     exit 6
 }
 
 _step "re-verify boundary at the head containing the record"
 scripts/meta-orchestration-worktree-guard.sh verify "$SD" || {
+    _afford "committing the record left the tree differing from the startup boundary" "run git status: something beyond the attestation file changed; commit or remove it, then re-run scripts/finalize-cycle.sh"
     echo "refused:finalize:boundary-verify-failed-post-record" >&2; exit 3; }
 
 # ORDER 829-dkuc: the context-proxy emit (997-pdgf) that used to sit here read

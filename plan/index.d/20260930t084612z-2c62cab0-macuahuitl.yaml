@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-coordinator-skill-never-names-the-claim-guards-its-routing-and-claim-steps-need
+    field: status
+    value: completed
+    ts: "2026-09-30T08:46:12Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-coordinator-skill-never-names-the-claim-guards-its-routing-and-claim-steps-need
+    event:
+      type: completed
+      ts: "2026-09-30T08:46:12Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 793662183
+  - packet_id: the-coordinator-skill-never-names-the-claim-guards-its-routing-and-claim-steps-need
+    event:
+      type: note
+      ts: "2026-09-30T08:46:12Z"
+      host: macuahuitl
+      summary: |-
+        landed in land107; the three names appear at their steps (grep 1/2/1)

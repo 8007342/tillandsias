@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: check-litmus-bindings-costs-730s-on-a-windows-host-because-it-spawns-per-file-so-every-push-attempt-there-pays-twelve-minutes
+    order: 1509-5i9p
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [performance, push-path, msys, windows, linux, deciders]
+    estimated_hours: 3
+    owned_files: [scripts/check-litmus-bindings.sh]
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the closure is a measurement (spawn count on Linux, wall time on yolanda) plus a byte-identical verdict comparison, written with the change.
+    title: |
+      check-litmus-bindings, a push-path decider, takes 730s on yolanda (Windows Git Bash) against 1.6s on yoga (Linux). That is MSYS process-spawn cost from a per-file loop, and it costs about 12 minutes per push attempt on a Windows host. PICKUP: a Linux host implements it with a spawn counter; yolanda measures the Windows wall time.
+    context: |
+      MEASURED on yolanda 2026-09-29: standalone wall=730s, rc 0, ok:litmus-bindings:files=494 bound=478 retired=6 grandfathered=10 spec_ids=145. Earlier the same day, in sequence after other deciders under a 900s timeout, it did not finish (rc 124). The owning row 660-ryhn is archived; a note also sits on 1499-m9fj, whose preflight door now runs it.
+      PRECEDENT, likely the same shape: 1500-gu5r took check-bash-dialect from 14.5s to 3.7s on yoga by replacing a per-file loop of about 12 spawns with one bulk grep, with verdicts byte-identical on the live tree and on seeded refusals.
+    verifiable_closure: |
+      On the live corpus, the decider's process-spawn count drops by an order of magnitude, measured on Linux with a spawn counter, and its verdict is byte-identical before and after on the live tree and on seeded refusals. yolanda re-measures the Windows wall time (pre-fix: 730s).
+    events:
+      - type: filed
+        ts: "2026-09-29T23:59:53Z"
+        host: yolanda
+        summary: Filed by yolanda at the coordinator's request, with the 730s Windows measurement and 1500-gu5r as the precedent.

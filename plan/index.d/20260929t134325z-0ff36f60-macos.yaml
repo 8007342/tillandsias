@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: litmus-vsock-handshake-pins-wire-version-2-and-fails-on-every-host-since-the-wire-moved-to-4
+    event:
+      type: note
+      ts: "2026-09-29T13:43:25Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t134324z
+      host: macos
+      summary: |
+        RUNTIME ARM STILL UNOBSERVED ON EVERY HOST (from the coordinator's Linux run at ed68b8ed0, 2026-09-29).
+        (1) The real vsock loopback handshake at WIRE_VERSION 4 is unconfirmed on BOTH regimes measured. On darwin the script SKIPs by design (no Linux loopback). On macuahuitl (Fedora 44, kernel 7.2.7) the run is rc=0 in 16 s; the static arms pass (hello_ 2/2, the host-shell fake-unix handshake 1/1), but headless vsock_listener_e2e prints "[skip] vsock loopback not available on this kernel: Permission denied (os error 13) (modprobe vsock_loopback to enable)" and the script ends "SKIP: wire-v2 vsock loopback is unsupported for this unprivileged host". This change turns a silent exit into named verdicts; it does NOT show that a v4 loopback handshake works anywhere.
+        (2) THE SKIP'S REMEDY IS WRONG on that host: vsock_loopback IS loaded (lsmod, /dev/vsock present) and bind still gets EACCES (candidates: vmw_vsock_vmci_transport also loaded, or SELinux; undiagnosed, since that needs root). The skip in crates/tillandsias-headless/tests/vsock_listener_e2e.rs should report the errno and NOT guess the cause ("modprobe vsock_loopback") when the module is already loaded: a confident wrong remedy is worse than none. Follow-up for whoever takes the runtime arm; not in this ref.

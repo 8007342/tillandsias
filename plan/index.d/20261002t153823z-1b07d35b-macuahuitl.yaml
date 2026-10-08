@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: observing-lua-stdlib-cannot-bypass-rooted-filesystem-capabilities
+    field: status
+    value: completed
+    ts: "2026-10-02T15:38:23Z"
+    host: macuahuitl
+
+events:
+  - packet_id: observing-lua-stdlib-cannot-bypass-rooted-filesystem-capabilities
+    event:
+      type: completed
+      ts: "2026-10-02T15:38:23Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: d0437d2f686f48ba02ac5111f8f7328459fef946 + forced ./build.sh --check PASS; PR #204 MERGED; parent independently integration68/68 plus lua_predicate6/6, script_run3/3 and script runner7/7; workspace observing boundary6/6 green
+  - packet_id: observing-lua-stdlib-cannot-bypass-rooted-filesystem-capabilities
+    event:
+      type: note
+      ts: "2026-10-02T15:38:23Z"
+      host: macuahuitl
+      summary: |-
+        Closed by linux-macuahuitl-opencode-20261002t053211z after loader/fixed-stream/walk-containment review, independent regressions, typed gate status exited0 and confirmed remote ancestry. No TOCTOU, arbitrary subprocess filesystem confinement or native Mac/Windows claim; gate reports34 unexercised litmus specs.

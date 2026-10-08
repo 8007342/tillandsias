@@ -1,0 +1,12 @@
+FAIL: a current long-output producer produced rc=2: refused:probe:stale-candidate:/Users/tlatoani/tillandsias-worktrees/1546-b8ba/target/fixture-tmp/probe-stale-test.ujK4Lc/current-long
+  it RUNS but its --capabilities omits accel_side, so it predates the
+  current envelope contract and would publish a row in an older
+  vocabulary. Rebuild it, or set TILLANDSIAS_HEADLESS_BIN to a current
+  binary. Refusing rather than publishing what it reports (1172-dyvd).
+error: no CURRENT tillandsias binary (build or install one; a stale candidate that was refused is named above, 1172-dyvd)
+FAIL: a current long-output producer was reported stale: refused:probe:stale-candidate:/Users/tlatoani/tillandsias-worktrees/1546-b8ba/target/fixture-tmp/probe-stale-test.ujK4Lc/current-long
+  it RUNS but its --capabilities omits accel_side, so it predates the
+  current envelope contract and would publish a row in an older
+  vocabulary. Rebuild it, or set TILLANDSIAS_HEADLESS_BIN to a current
+  binary. Refusing rather than publishing what it reports (1172-dyvd).
+error: no CURRENT tillandsias binary (build or install one; a stale candidate that was refused is named above, 1172-dyvd)

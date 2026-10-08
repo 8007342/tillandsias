@@ -1218,7 +1218,13 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # of recompiling — and coverage strictly widens (trunk is already held
     # clean at --all-targets -D warnings by the local gate). The heavy
     # --all-features flavor below is deliberately untouched.
-    if run_rust_on_host cargo clippy --workspace --all-targets -- -D warnings 2>&1 | tee /tmp/clippy-check.log; then
+    # ALLOW double_must_use in BOTH flavors, for the reason build.sh --check
+    # records beside its own clippy line (relay-fix 2b57c3304, 2026-10-01):
+    # clippy 1.99 fires it on the #[must_use] that async_trait's own expansion
+    # adds, across 22 trait sites in 11 files. That relay-fix changed build.sh
+    # only, so the release tier went red on code the landing gate had accepted
+    # (v56.10.8.1 cut, 2026-10-08). Remove both allows together.
+    if run_rust_on_host cargo clippy --workspace --all-targets -- -D warnings -A clippy::double_must_use 2>&1 | tee /tmp/clippy-check.log; then
         log_pass "Clippy checks pass (no warnings)"
         archive_check_log "rust-clippy" "pass" /tmp/clippy-check.log
     else
@@ -1238,7 +1244,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     if [[ "$FAST_MODE" == "1" ]]; then
         log_skip "All-features clippy lane (deep lane, skipped in fast mode)"
         archive_check_log "rust-clippy-all-features" "skipped"
-    elif run_rust_on_host cargo clippy --workspace --all-targets --all-features -- -D warnings 2>&1 | tee /tmp/clippy-all-features-check.log; then
+    elif run_rust_on_host cargo clippy --workspace --all-targets --all-features -- -D warnings -A clippy::double_must_use 2>&1 | tee /tmp/clippy-all-features-check.log; then
         log_pass "All-features clippy lane passes (no warnings)"
         archive_check_log "rust-clippy-all-features" "pass" /tmp/clippy-all-features-check.log
     else
@@ -1253,8 +1259,17 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # remote_projects.rs today, which is that row's hazard, so gating now
     # would red every host on it. Promote to log_fail_tracked when it closes.
     # Captured, then printed: the verdict is the exit code of one command.
-    seam_writers_out="$(bash "$REPO_ROOT/scripts/check-seam-writers-canonical.sh" 2>&1)"
-    seam_writers_rc=$?
+    # 1384-ddua: the decider is scripts/lua/check-seam-writers-canonical.lua,
+    # run through the one runner; no runner is a could-not-run, never a pass.
+    _sw_bin="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _sw_bin=""
+    case "$_sw_bin" in ./*) _sw_bin="$REPO_ROOT/${_sw_bin#./}" ;; esac
+    if [[ -n "$_sw_bin" ]]; then
+        seam_writers_out="$(cd "$REPO_ROOT" && "$_sw_bin" script run scripts/lua/check-seam-writers-canonical.lua 2>&1)"
+        seam_writers_rc=$?
+    else
+        seam_writers_out="could-not-run:seam-writers-canonical:no-script-runner"
+        seam_writers_rc=3
+    fi
     if [[ "$seam_writers_rc" -eq 0 ]]; then
         log_pass "seam writers all take the canonical lock: $seam_writers_out"
     else
@@ -1295,7 +1310,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # NOT closed by this: a neighbour that REMOVES the seam mid-flight rather
     # than restoring it still races, which is what --test-threads=1 shuts on
     # the headless target. The durable closure is the seam-writer guard
-    # (scripts/check-seam-writers-canonical.sh) going gating once 1250-92ty
+    # (scripts/lua/check-seam-writers-canonical.lua) going gating once 1250-92ty
     # lands; this seat removes the deterministic failure, not the race.
     if run_rust_test_on_host env TILLANDSIAS_PODMAN_BIN=/bin/false cargo test --workspace --lib --no-fail-fast 2>&1 | tee /tmp/test-check.log; then
         log_pass "All unit tests pass"
@@ -1505,8 +1520,14 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "cheatsheet-frontmatter" "skipped"
     fi
 
-    if [[ -f "scripts/check-dev-embed-model-agreement.sh" ]]; then
-        if bash scripts/check-dev-embed-model-agreement.sh 2>&1 | tee /tmp/dev-embed-model-agreement.log; then
+    if [[ -f "scripts/lua/source-agreements.lua" ]]; then
+        _sa_plan="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _sa_plan=""
+        case "$_sa_plan" in ./*) _sa_plan="$REPO_ROOT/${_sa_plan#./}" ;; esac
+        if [[ -z "$_sa_plan" ]] || ! grep -qx script <<<"$("$_sa_plan" capabilities 2>/dev/null)"; then
+            echo "could-not-run:dev-embed-model-agreement:no-script-runner — rebuild tillandsias-plan with script run" > /tmp/dev-embed-model-agreement.log
+            log_fail_tracked "dev-embed-model-agreement" "No typed Lua runner (see /tmp/dev-embed-model-agreement.log)"
+            archive_check_log "dev-embed-model-agreement" "fail" /tmp/dev-embed-model-agreement.log
+        elif (cd "$REPO_ROOT" && "$_sa_plan" script run scripts/lua/source-agreements.lua -- dev_embed_model_agreement images/default/config-overlay/mcp/lib-dev-env.sh scripts/dev-inference-ensure.sh) 2>&1 | tee /tmp/dev-embed-model-agreement.log; then
             log_pass "Dev embed model agrees across surfaces"
             archive_check_log "dev-embed-model-agreement" "pass" /tmp/dev-embed-model-agreement.log
         else
@@ -1514,7 +1535,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "dev-embed-model-agreement" "fail" /tmp/dev-embed-model-agreement.log
         fi
     else
-        log_fail_missing_guard "dev-embed-model-agreement" "scripts/check-dev-embed-model-agreement.sh"
+        log_fail_missing_guard "dev-embed-model-agreement" "scripts/lua/source-agreements.lua"
         archive_check_log "dev-embed-model-agreement" "skipped"
     fi
 
@@ -1911,17 +1932,27 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # Sub-check 8b: Base64 script injection ban
-    if [[ -f "scripts/check-no-base64-script-injection.sh" ]]; then
-        if bash scripts/check-no-base64-script-injection.sh 2>&1 | tee /tmp/no-base64-script-injection.log; then
-            log_pass "No base64 script injection detected"
-            archive_check_log "no-base64-script-injection" "pass" /tmp/no-base64-script-injection.log
+    # PORTED to Lua (1525-c6jm): scripts/lua/check-no-base64-script-injection.lua
+    # through the one runner; no runner is a could-not-run, never a pass.
+    if [[ -f "scripts/lua/check-no-base64-script-injection.lua" ]]; then
+        _b64_bin="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _b64_bin=""
+        case "$_b64_bin" in ./*) _b64_bin="$REPO_ROOT/${_b64_bin#./}" ;; esac
+        if [[ -n "$_b64_bin" ]]; then
+            if (cd "$REPO_ROOT" && "$_b64_bin" script run scripts/lua/check-no-base64-script-injection.lua) 2>&1 | tee /tmp/no-base64-script-injection.log; then
+                log_pass "No base64 script injection detected"
+                archive_check_log "no-base64-script-injection" "pass" /tmp/no-base64-script-injection.log
+            else
+                log_fail_tracked "no-base64-script-injection" "Base64 script injection detected (see /tmp/no-base64-script-injection.log)"
+                [[ "$VERBOSE" == "1" ]] && cat /tmp/no-base64-script-injection.log >&2
+                archive_check_log "no-base64-script-injection" "fail" /tmp/no-base64-script-injection.log
+            fi
         else
-            log_fail_tracked "no-base64-script-injection" "Base64 script injection detected (see /tmp/no-base64-script-injection.log)"
-            [[ "$VERBOSE" == "1" ]] && cat /tmp/no-base64-script-injection.log >&2
+            echo "could-not-run:no-base64-script-injection:no-script-runner" | tee /tmp/no-base64-script-injection.log >&2
+            log_fail_tracked "no-base64-script-injection" "no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
             archive_check_log "no-base64-script-injection" "fail" /tmp/no-base64-script-injection.log
         fi
     else
-        log_fail_missing_guard "no-base64-script-injection" "scripts/check-no-base64-script-injection.sh"
+        log_fail_missing_guard "no-base64-script-injection" "scripts/lua/check-no-base64-script-injection.lua"
         archive_check_log "no-base64-script-injection" "skipped"
     fi
 fi

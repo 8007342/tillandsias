@@ -101,10 +101,16 @@ COPY probe-upstream-auth.sh /usr/local/share/git-service/probe-upstream-auth
 # probe-upstream-auth because it answers the second half of the same question
 # and shares that probe's ref grammar exactly.
 COPY publish-sync-state.sh /usr/local/share/git-service/publish-sync-state
+# Order 1310-rec6 step 2: the mirror's own broken/ok verdict, on the same tick.
+COPY publish-relay-state.sh /usr/local/share/git-service/publish-relay-state
+# Order 1443-uit6: publishes refs/tillandsias/discipline/* on the same tick.
+COPY publish-discipline.sh /usr/local/share/git-service/publish-discipline
 RUN chmod +x /usr/local/share/git-service/ensure-mirror-head \
     /usr/local/share/git-service/reconcile-exported-heads \
     /usr/local/share/git-service/probe-upstream-auth \
-    /usr/local/share/git-service/publish-sync-state
+    /usr/local/share/git-service/publish-sync-state \
+    /usr/local/share/git-service/publish-relay-state \
+    /usr/local/share/git-service/publish-discipline
 
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli
@@ -147,9 +153,13 @@ COPY git-credential-tillandsias.sh /usr/local/bin/git-credential-tillandsias
 RUN mkdir -p /etc/tillandsias
 COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 
+# Order 1310-rec6: a HEALTHCHECK that speaks the git protocol.
+COPY healthcheck.sh /usr/local/share/git-service/healthcheck
+
 # @trace spec:user-runtime-lifecycle
 # Make scripts executable (security: chmod only what's needed)
 RUN chmod +x /usr/local/bin/entrypoint.sh \
+              /usr/local/share/git-service/healthcheck \
               /usr/local/bin/vault-cli.sh \
               /usr/local/bin/vault-cli \
               /usr/local/bin/vault-agent-bootstrap \
@@ -163,7 +173,9 @@ USER git
 EXPOSE 9418
 
 # @trace spec:git-mirror-service, spec:socket-container-orchestration
+# Order 1310-rec6: the probe speaks the git protocol (see healthcheck.sh); the
+# old bare `nc` made git-daemon log a fatal line every 2 s.
 HEALTHCHECK --interval=2s --timeout=5s --start-period=3s --retries=10 \
-    CMD nc -w 1 127.0.0.1 9418 </dev/null || exit 1
+    CMD /usr/local/share/git-service/healthcheck || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

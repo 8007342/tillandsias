@@ -58,7 +58,7 @@
 # (default /var/log/squid/crash-state), readable with `podman exec` and by
 # scripts/proxy-crash-report.sh.
 #
-# DISTRO: Alpine 3.22, bash 3.2 floor (scripts/check-bash-dialect.sh). No
+# DISTRO: Alpine 3.22, bash 3.2 floor (scripts/lua/check-bash-dialect.lua). No
 # arrays, no [[ ]], no associative arrays, no GNU-only date formats — the
 # crash-time window is a space-separated string of epoch seconds.
 # =============================================================================

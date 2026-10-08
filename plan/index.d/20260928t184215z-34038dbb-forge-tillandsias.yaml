@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-agent-door-tillandsias-plan-run-json-takes-named-flags-and-an-argv-never-a-string-evaluates-the-policy-before-spawning-starts-the-child-from-the-base-env-only-and-reads-argv-as-json-on-windows-so-nothing-crosses-msys-or-wsl-as-a-string
+    field: status
+    value: completed
+    ts: "2026-09-28T18:42:15Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: the-agent-door-tillandsias-plan-run-json-takes-named-flags-and-an-argv-never-a-string-evaluates-the-policy-before-spawning-starts-the-child-from-the-base-env-only-and-reads-argv-as-json-on-windows-so-nothing-crosses-msys-or-wsl-as-a-string
+    event:
+      type: completed
+      ts: "2026-09-28T18:42:15Z"
+      host: forge-tillandsias
+      summary: |-
+        status 'completed' with evidence_refs: 25f800ec7 test-run-verb-agent-door:32/32
+  - packet_id: the-agent-door-tillandsias-plan-run-json-takes-named-flags-and-an-argv-never-a-string-evaluates-the-policy-before-spawning-starts-the-child-from-the-base-env-only-and-reads-argv-as-json-on-windows-so-nothing-crosses-msys-or-wsl-as-a-string
+    event:
+      type: note
+      ts: "2026-09-28T18:42:15Z"
+      host: forge-tillandsias
+      summary: |-
+        landed in land84 = 25f800ec7 on origin/linux-next (gate 1328 s); closure re-run on trunk in the forge 32/32; darwin (macbookair 29/29 + argv arm) and Windows native (yolanda, 15 args byte-identical) evidence are on the row

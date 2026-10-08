@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: five-ci-release-litmus-tests-fail-on-unmodified-trunk-under-darwin-bsd-userland
+    field: context
+    value: |-
+      Measured by macbookair-macos on 2026-09-28 against unmodified trunk
+      392a0c514 while gating work/1443-qwpj; the reds are independent of that
+      change. One cause is named: BSD `wc -l` left-pads its count, so a
+      string compare against "consumers=4" sees "consumers=       4". The
+      other four are unexamined — they may share the cause or not. The
+      release tier runs ci-release on every platform, so a darwin red here is
+      a red release gate on the Mac, not a cosmetic one.
+
+
+      [2026-09-28T03:50:43Z macos] CORRECTION (macbookair, measured 2026-09-28, coordinator-accepted): the five
+      reds have FIVE causes, and BSD wc padding is NOT the shared one.
+      1. fragment-ts-skew, `consumers=       4`: BSD /usr/bin/grep -lc prints BOTH
+         `file:1` and `file` for each match (4 lines for 2 files; GNU prints only the
+         names). The wc padding is cosmetic, since [ -eq ] compares numerically.
+         Fix: `grep -l`, not `-lc`.
+      2. added-fragment-parse (negative control, bare timestamp): with no YAML
+         validator (darwin builds no tillandsias-policy and ships no yq) the gate
+         printed ok:added-fragments-parse:0 checked and exited 0, skipping even the
+         validator-free bare-timestamp test. The plan-only lane's push check
+         therefore accepted unparseable fragments and unquoted timestamps unchecked
+         on darwin. Fix: fall back to `tillandsias-plan validate-yaml`, and refuse
+         (blocked:added-fragments-parse:no-validator, rc 1) when nothing resolves.
+      3. fragment-closure-evidence (step 5) and 4. fragment-status-loss (step 6):
+         the "stale plan binary" simulation does not make the binary look stale on
+         darwin (ok:0 checked / the batched-fold fallback note instead of the skip).
+         The staleness trigger is regime-dependent.
+      5. validator-surface-currency (step 1): "resolved binary is stale against this
+         checkout / could not read both hashes"; cause not yet isolated.
+      Order of work (coordinator): #2 first, then #3/#4, then #5.
+    ts: "2026-09-28T03:50:43Z"
+    host: macos
+
+events:
+  - packet_id: five-ci-release-litmus-tests-fail-on-unmodified-trunk-under-darwin-bsd-userland
+    event:
+      type: note
+      ts: "2026-09-28T03:50:43Z"
+      host: macos
+      summary: |-
+        five-cause diagnosis replaces the single named cause (coordinator-accepted)

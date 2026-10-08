@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-cloud-project-launch-clones-the-host-mirror-and-checks-out-whatever-branch-its-head-names-so-a-forge-starts-on-an-arbitrary-local-work-branch
+    field: status
+    value: in_progress
+    ts: "2026-09-28T18:55:06Z"
+    host: forge-tillandsias
+
+events:
+  - packet_id: a-cloud-project-launch-clones-the-host-mirror-and-checks-out-whatever-branch-its-head-names-so-a-forge-starts-on-an-arbitrary-local-work-branch
+    event:
+      type: note
+      ts: "2026-09-28T18:55:06Z"
+      host: forge-tillandsias
+      summary: |-
+        claim: forge launch resolves the seed branch explicitly and says which (coordinator NEXT); work/1362-u8ww

@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    event:
+      type: progress
+      ts: "2026-09-29T20:23:36Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t202336z
+      host: macos
+      summary: |
+        CLOCK MECHANISM MEASURED, 2026-09-29, tlatoanis-macbook-air (raw output: /Users/tlatoani/.tillandsias/scratch/evidence-20260929t184231z/chrony-experiment.txt and chrony-experiment-2*.txt).
+        (1) INDUCED JUMP (the coordinator's experiment; guest, after chrony warm-up to Leap Normal; `date -s '-69 min'`): chrony does NOT step or slew at once. It detects the jump, discards its samples, and reports "Leap status: Not synchronised" with System time 0 for about 3.5 min (A+0 to A+180 s, same with scratch makestep 1.0 -1 over 160 s). At A+210 s it re-acquires and measures "4138.44 seconds slow", then SLEWS: 4138.44 -> 4136.13 -> 4133.84 -> 4131.53 -> 4129.20 -> 4126.89 -> 4124.58 s at 30 s intervals, i.e. about 77 ms/s. It never steps, because "makestep 1.0 3" allows steps only in the first 3 updates after chronyd starts. A 69-min error therefore takes about 15 h to slew out. The coordinator's slew prediction is CONFIRMED, preceded by about 3.5 min unsynchronised.
+        (2) HOST SLEEP PAUSES THE GUEST CLOCK (observed during the same run, unplanned): the Mac entered maintenance sleep cycles (pmset: Sleep 12:45:38 and 12:50:49 PDT, DarkWakes between). The run's last sample, A+390 s, is stamped guest 18:03:06 with 4124.58 s offset, i.e. about 19:11:50 true time, while the host read 19:58Z with no new sample: the guest advanced about 30 s in about 13 host minutes. The VM does not run while the Mac sleeps, and its clock falls behind by the sleep; after wake, (1) takes over, 3.5 min unsynchronised and then hours of slewing. This is the observed 69-min lag, now with a mechanism: host sleep plus chrony's first-3-updates makestep.
+        FIX DIRECTION (not implemented): let chrony step whenever the offset is large (e.g. "makestep 1.0 -1", which (1) shows is ALSO subject to the 3.5-min re-acquire), and/or have the host set the guest clock on resume (the tray observes wake; push host time over the control wire, or VZ's RTC). Exit criterion 1 stands: within a few seconds of the host within a minute of wake.
+        Restore status: the run ends with chronyc -a makestep; it is still in progress while the Mac sleeps.

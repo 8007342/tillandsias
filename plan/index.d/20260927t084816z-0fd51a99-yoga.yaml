@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: nix-toolbox-store-subcommands-call-the-host-nix-binary-so-gc-pin-and-store-status-cannot-run-on-a-toolbox-rung-host
+    field: status
+    value: completed
+    ts: "2026-09-27T08:48:16Z"
+    host: yoga
+
+events:
+  - packet_id: nix-toolbox-store-subcommands-call-the-host-nix-binary-so-gc-pin-and-store-status-cannot-run-on-a-toolbox-rung-host
+    event:
+      type: completed
+      ts: "2026-09-27T08:48:16Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: b60198ceb (relay bundle A on origin/linux-next; work/1421-3pd6 85e55229f an ancestor): _store_nix routes through the toolbox rung when host nix cannot address the store; measured on yoga gc blocked:nix-store-gc:nix-unusable -> ok:nix-store-gc:under-ceiling; test-nix-toolbox.sh 17/17 (arm 16 toolbox-only gc reaches the store, FAILS against the old script with the yoga symptom; arm 17 no-nix-no-toolbox still refuses)
+  - packet_id: nix-toolbox-store-subcommands-call-the-host-nix-binary-so-gc-pin-and-store-status-cannot-run-on-a-toolbox-rung-host
+    event:
+      type: note
+      ts: "2026-09-27T08:48:16Z"
+      host: yoga
+      summary: |-
+        landed and verified on trunk; the daily nix-gc maintenance step now runs on a toolbox-rung host

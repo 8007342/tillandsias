@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /home/tlatoani/codex/tillandsias-lua-work/1539-dt84
+export TILLANDSIAS_LUA_PROC_TRACE_TEST_BIN=/tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/pre-trace-plan
+exec cargo test -p tillandsias-plan --test lua_proc_trace > /tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/trace-before.log 2>&1

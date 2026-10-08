@@ -69,9 +69,15 @@ resolve_plan_binary() {
     # lesson the older specific one still had — the fifth instance of the
     # path-assumption class 704-zcgi centralised this file to end.
     local ctd="${CARGO_TARGET_DIR:-}"
-    if [ -n "$ctd" ] && [ "${ctd#/}" = "$ctd" ]; then
-        ctd="./$ctd"
-    fi
+    # ORDER 1415-my8j: a drive-letter path (C:/..., what cygpath -m and every
+    # Windows tool emits) is absolute too. Testing only a leading / rewrote it
+    # to ./C:/..., which never resolves. The "" arm leaves an UNSET
+    # CARGO_TARGET_DIR empty rather than turning it into "./": every candidate
+    # below is built with ${ctd:+...}, so empty means "skip those candidates".
+    case "$ctd" in
+        ""|/*|[A-Za-z]:*) ;;
+        *) ctd="./$ctd" ;;
+    esac
     # ORDER 1030-i2p8 — LOCUS-NATIVE ARTEFACT FIRST, WITHIN EACH GROUP.
     #
     # These used to try `.exe` before the ELF. Inside the tillandsias-build WSL2
@@ -109,6 +115,22 @@ resolve_plan_binary() {
         "$(command -v tillandsias-plan 2>/dev/null)"; do
         [ -n "$candidate" ] || continue
         [ -f "$candidate" ] || continue
+        # ORDER 1508-7s4w. On MSYS (Git Bash) an EXTENSIONLESS name whose `.exe`
+        # sibling exists is that .exe under exe magic, so trying it here
+        # promoted target/debug ahead of target/release/…exe. Measured on
+        # yolanda 2026-09-29: with an unrunnable Linux ELF at the release
+        # path, this answered ./target/debug/tillandsias-plan (the DEBUG .exe)
+        # before the fresh release .exe. A real ELF at that name cannot run on
+        # Windows either, so skip it and let the .exe entries below answer in
+        # their own release-before-debug order. Linux and WSL are untouched:
+        # this only applies under an MSYS/Cygwin kernel name.
+        case "$(uname -s 2>/dev/null)" in
+            MINGW*|MSYS*|CYGWIN*)
+                case "$candidate" in
+                    *.exe) ;;
+                    *) [ -e "$candidate.exe" ] && continue ;;
+                esac ;;
+        esac
         # `capabilities` is the right probe rather than `--help`: it exits 0
         # only on a binary built from sources carrying order 569, and its
         # output is the capability set the caller may want next.
@@ -353,9 +375,13 @@ target_binary_runs() {
 resolve_target_binary() {
     local name="$1" profile="${2:-debug}" root="${3:-.}"
     local ctd="${CARGO_TARGET_DIR:-}" dir candidate
-    if [ -n "$ctd" ] && [ "${ctd#/}" = "$ctd" ]; then
-        ctd="$root/$ctd"
-    fi
+    # 1415-my8j: a drive letter is absolute too. The "" arm keeps an unset
+    # CARGO_TARGET_DIR empty (not "$root/"): the loop below reads it through
+    # ${ctd:+...}, so empty means "skip that candidate".
+    case "$ctd" in
+        ""|/*|[A-Za-z]:*) ;;
+        *) ctd="$root/$ctd" ;;
+    esac
     # ORDER 1142-wn2k (esme filed the same defect as 1140-d6ni) — LOCUS-NATIVE ARTEFACT FIRST, the same reorder 1030-i2p8 made
     # for resolve_plan_binary fifty lines above. That comment predicted the
     # masking would lift; this sibling never got the change, so it lifted here

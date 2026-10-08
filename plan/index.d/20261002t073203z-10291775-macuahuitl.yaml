@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-parse-only-does-not-run-execution-preflights-or-rust-query-helpers
+    field: status
+    value: completed
+    ts: "2026-10-02T07:32:03Z"
+    host: macuahuitl
+
+events:
+  - packet_id: litmus-parse-only-does-not-run-execution-preflights-or-rust-query-helpers
+    event:
+      type: completed
+      ts: "2026-10-02T07:32:03Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 427b59b495d1a4a3376a1118ab7dead863400141 + forced ./build.sh --check PASS; parent test-litmus-parse-only-duplicate-key 16/16 exact accepted sets and no-execution/normal-refusal controls
+  - packet_id: litmus-parse-only-does-not-run-execution-preflights-or-rust-query-helpers
+    event:
+      type: note
+      ts: "2026-10-02T07:32:03Z"
+      host: macuahuitl
+      summary: |-
+        Parse-only skips execution preflights/Rust helpers without dropping YAML/extraction/duplicate checks; exact-set diagnostics preserve 4 shared extraction refusals. Historical count mismatch cause remains unproven.

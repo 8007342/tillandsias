@@ -1,0 +1,32 @@
+timestamp_utc=2026-10-03T17:20:52Z
+ccbd_to_b35_ancestor:
+ccbd36616_to_b35acba6c_rc=0
+ccbd_to_head_ancestor:
+ccbd36616_to_head_rc=0
+work_ref_commit:
+commit=ccbd3661609e71d985751a7a19529306676f2ea1
+subject=fix(1235-rfub): native-lint refusals name their why (1247-amcu convention)
+gated_crates:
+crates/tillandsias-macos-tray:tillandsias-macos-tray:darwin
+gated_crates_rc=0
+attester_all_targets_symbol:
+    echo "attest-native-lint: $CARGO clippy -p $pkg --all-targets -- -D warnings" >&2
+attester_content_trailer_symbol:
+    trailers+=(--trailer "Native-Lint: $host $platform $path=$tree clippy-all-targets-D-warnings")
+checker_content_binding_symbols:
+trailers="$(git log --format='%(trailers:key=Native-Lint,valueonly)' "$base..HEAD" 2>/dev/null)"
+    head_tree="$(git rev-parse --verify --quiet "HEAD:$path" 2>/dev/null)" || continue
+        echo "refused:native-lint:stale:$pkg"
+relay_hook_symbols:
+        _nl_out="$(bash scripts/check-native-lint-attested.sh --base "origin/$BRANCH" 2>&1)" || _nl_rc=$?
+            echo "refused:land:native-lint — ${_nl_verdict%%$'\n'*}" >&2
+                echo "refused:land:native-lint-debt-unrecorded — the override's debt commit failed" >&2
+                    _nl_trailers+=(--trailer "Native-Lint-Unattested: ${_l#override:native-lint:unattested:}") ;;
+override_symbols:
+scripts/check-native-lint-attested.sh:# Then TILLANDSIAS_NATIVE_LINT_UNATTESTED="<reason>" lets it land UNLINTED, as
+scripts/check-native-lint-attested.sh:            echo "  TILLANDSIAS_NATIVE_LINT_UNATTESTED=\"<reason>\" to land it as recorded debt."
+scripts/check-native-lint-attested.sh:            echo "  TILLANDSIAS_NATIVE_LINT_UNATTESTED=\"<reason>\" to land it as recorded debt."
+scripts/check-native-lint-attested.sh:    reason="${TILLANDSIAS_NATIVE_LINT_UNATTESTED:-}"
+scripts/land-on-platform-branch.sh:                "on the crate's platform, run scripts/attest-native-lint.sh on this ref, push it, then re-run; with no such host awake the land waits, or re-run with TILLANDSIAS_NATIVE_LINT_UNATTESTED=\"<reason>\" to land it as debt recorded on the landed history"
+scripts/land-on-platform-branch.sh:                    "fix what git commit reported (identity, hooks), then re-run with the same TILLANDSIAS_NATIVE_LINT_UNATTESTED"
+scripts/land-on-platform-branch.sh:            echo "land: attempt $attempt — native-lint DEBT recorded on the landed history: TILLANDSIAS_NATIVE_LINT_UNATTESTED=$TILLANDSIAS_NATIVE_LINT_UNATTESTED"

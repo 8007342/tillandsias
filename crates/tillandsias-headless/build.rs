@@ -117,6 +117,11 @@ fn main() {
         "images/chromium/Containerfile.core",
         "images/chromium/Containerfile.framework",
         "images/web/Containerfile",
+        "images/web-wrangler/Containerfile",
+        "images/web-wrangler/package.json",
+        "images/web-wrangler/package-lock.json",
+        "images/web-wrangler/wrangler.lock.json",
+        "images/web-wrangler/entrypoint.sh",
         "observatorium/index.html",
         "scripts/manage-cache.sh",
         "scripts/run-observatorium.sh",
@@ -135,6 +140,23 @@ fn main() {
             // entrypoints compiled this crate without staging the sidecar
             // first, and each failed with a bare path to a file the reader had
             // never heard of and could not restore from git (723-wd8i).
+            // ORDER 1269-6fcn. The sidecar is a LINUX musl binary for the
+            // router CONTAINER. A non-Linux TARGET (the Windows or macOS host
+            // build) never runs a container lane natively, so a missing sidecar
+            // there must not refuse the build: v56.9.19.1's Windows release job
+            // died here. It is skipped with a named warning and simply not
+            // embedded. A Linux target still refuses below, so the container
+            // lane can never be handed an empty embed.
+            if rel == "images/router/tillandsias-router-sidecar"
+                && std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os != "linux")
+            {
+                println!(
+                    "cargo:warning=router sidecar absent: not embedded for target_os={} \
+                     (a Linux container-lane artifact; only Linux targets require it; 1269-6fcn)",
+                    std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default()
+                );
+                continue;
+            }
             if rel == "images/router/tillandsias-router-sidecar" {
                 panic!(
                     "required runtime asset missing: {}\n\

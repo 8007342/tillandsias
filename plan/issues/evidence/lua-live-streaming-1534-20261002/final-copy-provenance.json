@@ -1,0 +1,9 @@
+{
+  "copied_from": "/home/tlatoani/codex/tillandsias-lua-work/1534-puyz/target/debug/tillandsias-plan",
+  "snapshot": "/tmp/opencode/sol-1534-evidence.lAvYa0/deadline-authoritative/plan",
+  "sha256": "fc91226e1a1568a4e883bb15ac9252c8814e7ad5b868373586c70f5c22876765",
+  "source_head": "94c4ed67ff38aa02f1befa053ac1f1279ed12ad7",
+  "source_status": "",
+  "baseline_receipt": "plan/issues/evidence/lua-script-deadline-20261002/receipts.json",
+  "fixture_note": "Byte-identical original deadline harness, producer, Lua probe and minimal index; only candidate binary and fresh scratch paths change."
+}

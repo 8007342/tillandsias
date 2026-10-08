@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-cache-sweep-marker-can-only-be-satisfied-by-sweeping
+    field: status
+    value: completed
+    ts: "2026-09-28T21:29:26Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: build-cache-sweep-marker-can-only-be-satisfied-by-sweeping
+    event:
+      type: completed
+      ts: "2026-09-28T21:29:26Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: 7cb25d9d3 (906-qi89, 2026-08-26); litmus-build-cache-sweep-trigger.yaml
+  - packet_id: build-cache-sweep-marker-can-only-be-satisfied-by-sweeping
+    event:
+      type: note
+      ts: "2026-09-28T21:29:26Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        ALREADY DELIVERED by 906-qi89 at 7cb25d9d3 (2026-08-26), filed a day after this row. check-build-cache-sweep.sh now initialises an ABSENT marker when target/ is under the size trigger and reports not-due, and the stamp records that no sweep ran (action=initialised:NO-SWEEP-PERFORMED(...)). That is this row's own smallest-fix shape, the first-run rule, so due no longer reads permanently true on a never-swept host. It also starts the 14-day clock, so the staleness arm can fire. MEASURED on tlatoanis-macbook-air 2026-09-28 against a scratch marker path: the first check gives ok:build-cache-sweep-not-due:...:marker=initialised:reason=no-marker-initialised-under-threshold rc=0 and writes date=2026-09-28 ... action=initialised:NO-SWEEP-PERFORMED(1GiB<40GiB); the second gives ok:...:marker=2026-09-28:reason=under-threshold-0d rc=0. The host's real marker also reads not-due (2026-09-27, 1d). Pinned by openspec/litmus-tests/litmus-build-cache-sweep-trigger.yaml. The rejected alternative (stamp on every evaluation) would disable the 14-day arm, which 906-qi89's comment explains.

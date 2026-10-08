@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: nothing-bounds-how-many-packets-one-host-holds-in-progress-so-hosts-climbed-to-six-to-ten-concurrent-claims-and-the-fleet-ended-a-week-with-most-work-open
+    event:
+      type: note
+      ts: "2026-09-30T14:50:04Z"
+      agent_id: linux-macuahuitl-claude-20260930t145004z
+      host: macuahuitl
+      summary: |
+        LANDED land111 = 7b50ae959 on origin/linux-next (relayed work/1367-2sbc @ d4a2f4d08; gate: build-check exit 0, 3047 s, 2026-09-30T14:49:14Z). Before landing, live claims per host were measured: tlatoanis-macbook-air 3, lenovinha 2, yolanda 1 (42 expired claims do not count), so the limit strands no host; fleet notice sent to yoga and yolanda (queued, offline); macbookair was unreachable and will meet the named refusal with its remedy. The row author closes from the ledger, citing 7b50ae959.

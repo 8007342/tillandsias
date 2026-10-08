@@ -41,6 +41,11 @@ critical_path:
     success_pattern: "PASS: podman preflight distinguishes timeout from immediate failure"
     failure_pattern: "FAIL:"
 
+  - step: "ORDER 1464-v3xq: the preflight fires on a podman INVOCATION (command position, wrappers, a quoted -c script), not on the word in quoted prose"
+    command: "bash scripts/test-litmus-podman-preflight-trigger.sh 2>&1 | tail -n 1"
+    timeout_ms: 300000
+    expected_behavior: "PASS: litmus-podman-preflight-trigger"
+
 observability:
   traces:
     - "@trace spec:litmus-framework"

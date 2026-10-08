@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-3-every-refusal-of-push-plan-fragments-to-trunk-says-why-and-what-clears-it-and-names-the-real-cause
+    order: 1247-3e64
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    parent: 1247-amcu
+    capability_tags: [affordance, error-messages, plan-lane, dx]
+    estimated_hours: 4
+    owned_files:
+      - scripts/push-plan-fragments-to-trunk.sh
+      - scripts/test-plan-fragments-lane-affordance.sh
+      - openspec/litmus-tests/litmus-plan-fragments-lane-refusals-carry-affordance.yaml
+    observed_by: yolanda
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixture and its litmus are written in the same
+      commit as the messages they pin (the 1247-omqr / 1247-lwek slice shape).
+    title: |
+      1247-amcu slice — FAMILY: every refusal of scripts/push-plan-fragments-to-trunk.sh (the plan-only lane) says WHY it refused and WHAT clears it, and a hook refusal is reported by its REAL cause rather than the first ✗ line
+    verifiable_closure: |
+      Each of the lane's refusal verdicts (usage, not-a-git-checkout, no-validator, fetch, scope,
+      missing, loop-status, exists, trunk-fold incl. status-loss, trunk-checkout-ahead, raced,
+      push) prints a why line and a what-clears-it line; a fixture triggers each reachable one and
+      asserts both. NEGATIVE CONTROL (1247-amcu criterion 5): for the most-hit ones (raced, the
+      stale-plan-binary push refusal) the named remedy is EXECUTED in the fixture and shown to
+      clear the refusal. Pre-fix result: FAILS — measured on yolanda 2026-09-27/28: "raced:3"
+      carries no next action, and a stale plan binary surfaced as "push:✗ pre-push refused: the
+      tree changed since ./build.sh --check last passed", naming the gate stamp while the real
+      cause (the plan-only lane's STALE-binary refusal and its cargo-build remedy) sat further up.
+    context: |
+      Slice of 1247-amcu, chosen by how often agents hit it, not alphabetically: yolanda hit the
+      lane's refusals repeatedly on 2026-09-26..28. The worst is the push verdict's reason
+      extraction: it quotes the hook's first ✗ line, which for a stale plan binary is the generic
+      stamp refusal, so the reader is sent to ./build.sh --check (tens of minutes) when the fix is
+      "cargo build --release -p tillandsias-plan". That is 1247-amcu's "confidently wrong remedy"
+      case in miniature. "raced:<n>" is bare: origin moved on every attempt, and nothing says
+      "fetch, then re-run; the fragments are unchanged".
+    events:
+      - type: filed
+        ts: "2026-09-28T05:46:05Z"
+        host: yolanda
+        summary: Filed by yolanda as a 1247-amcu slice at the coordinator's direction.

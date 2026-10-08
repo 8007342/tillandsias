@@ -1,0 +1,37 @@
+packets:
+  - packet_id: lua-proc-grandchild-liveness-test-treats-missing-linux-proc-as-dead-on-darwin
+    order: 1543-f44v
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.6
+    pickup_role: macos
+    capability_tags: [lua, rust, tests, macos, process-lifecycle]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/tests/lua_proc.rs
+    title: Native Lua proc grandchild test reads missing /proc as dead on Darwin
+    context: |
+      Read-only Sol review on source d6c84fcd94fcc72d68d4677aa5036a3b41604759,
+      independently verified by the parent at lua_proc.rs:1048-1075.
+      a_grandchild_neither_times_out_nor_outlives_proc_run runs on Unix,
+      but /proc/<pid>/stat read failure maps to false. Darwin therefore proves
+      prompt leader return but not descendant death. Existing group_exit tests
+      use a native ps state probe; do not confuse their evidence with this arm.
+      The managed_script module at lines43-46 is deliberately Linux-only and
+      remains a separate native parent1384 obligation, not a newly discovered
+      runtime defect. No native test run or production leak is claimed here.
+    outcome: The native test distinguishes a live Darwin descendant from a dead one.
+    exit_criteria:
+      - The test's liveness observation can detect a known live scratch child on Darwin, and cannot silently treat a failed observation as dead.
+      - The production cleanup case passes while a same-host negative control with cleanup disabled fails the descendant assertion.
+      - Linux process-state and zombie handling remain covered, and fixture cleanup targets only its own identity-checked descendants.
+    unscoreable: "unpinnable-until-test-exists: first show the old observation reports false for a known live scratch process on Darwin; then a named native liveness helper/test accepts the live control, distinguishes terminated/zombie/unobservable, and the cleanup mutant reds the descendant arm. No runtime implementation change authorized by this packet."
+    next_action: Coordinate ownership with active1538 before editing lua_proc.rs; run a known-live Darwin observation control, implement a native identity/state helper or reuse the existing group_exit pattern, and retain raw mutant/healthy receipts. Do not claim parent1384 closure.
+    notes: |
+      Filed by macos-tlatoanis-macbook-air-opencode native verification session.
+      size: M
+      implementer_tier: sonnet
+      Discovery is source-verified, not execution-measured; no fabricated FAIL/PASS.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: test-preflight-front-door-plants-guards-and-edits-build-sh-in-the-live-checkout-while-it-runs-so-a-concurrent-gate-or-boundary-snapshot-sees-them
+    field: status
+    value: in_progress
+    ts: "2026-09-30T10:33:54Z"
+    host: lenovinha
+
+events:
+  - packet_id: test-preflight-front-door-plants-guards-and-edits-build-sh-in-the-live-checkout-while-it-runs-so-a-concurrent-gate-or-boundary-snapshot-sees-them
+    event:
+      type: note
+      ts: "2026-09-30T10:33:54Z"
+      host: lenovinha
+      summary: |-
+        claimed by linux-lenovinha-claude-20260930t103354z; hermetic front-door fixture

@@ -662,13 +662,21 @@ New-Item -ItemType Directory -Force -Path $Tmp | Out-Null
 
 try {
     # -- Download SHA256SUMS-windows -------------------------------------------
+# BEGIN-SUMS-DOWNLOAD
     $SumsUrl = "$Base/SHA256SUMS-windows"
     Say "Fetching SHA256SUMS-windows..."
     try {
-        Invoke-WebRequest -Uri $SumsUrl -OutFile "$Tmp\SHA256SUMS-windows" -UseBasicParsing -ErrorAction Stop
+        # ORDER 1420-jmp4: Invoke-WebRequest's own bar is slow and flickers on
+        # PowerShell 5, so it runs silenced in a child scope; the script's
+        # Write-Progress elsewhere keeps its default preference.
+        & {
+            $ProgressPreference = 'SilentlyContinue'
+            Invoke-WebRequest -Uri $SumsUrl -OutFile "$Tmp\SHA256SUMS-windows" -UseBasicParsing -ErrorAction Stop
+        }
     } catch {
         Die "Could not download SHA256SUMS-windows from $SumsUrl -- check network or version."
     }
+# END-SUMS-DOWNLOAD
 
     # Find zip filename (e.g. tillandsias-tray-0.3.260622.4-windows-x64.zip)
     $SumsContent = Get-Content "$Tmp\SHA256SUMS-windows" -Raw
@@ -680,11 +688,59 @@ try {
     # -- Download zip ----------------------------------------------------------
     $ZipUrl = "$Base/$ZipName"
     Say "Downloading $ZipUrl..."
+# BEGIN-PROGRESS-DOWNLOAD
+    # ORDER 1420-jmp4: one clean progress bar for the release zip. The download
+    # is streamed here and reported with Write-Progress once per whole percent,
+    # instead of Invoke-WebRequest's bar, which on PowerShell 5 redraws per
+    # chunk, flickers, and slows the download itself several-fold.
+    function Save-WithProgress {
+        param([string]$Url, [string]$OutFile, [string]$Activity)
+        Add-Type -AssemblyName System.Net.Http
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        $client = New-Object System.Net.Http.HttpClient
+        $in = $null; $out = $null
+        try {
+            $resp = $client.GetAsync($Url, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+            [void]$resp.EnsureSuccessStatusCode()
+            $total = $resp.Content.Headers.ContentLength
+            $in = $resp.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+            $out = [System.IO.File]::Create($OutFile)
+            $buf = New-Object byte[] 262144
+            $done = [long]0; $last = -1
+            $tick = [Diagnostics.Stopwatch]::StartNew()
+            while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) {
+                $out.Write($buf, 0, $n)
+                $done += $n
+                if ($total -gt 0) {
+                    $pct = [int][Math]::Floor(100 * $done / $total)
+                    if ($pct -ne $last) {
+                        $last = $pct
+                        Write-Progress -Activity $Activity -PercentComplete $pct `
+                            -Status ('{0:N1} of {1:N1} MB' -f ($done / 1MB), ($total / 1MB))
+                    }
+                } elseif ($tick.ElapsedMilliseconds -ge 250) {
+                    # No Content-Length: report bytes, throttled, without a percent.
+                    $tick.Restart()
+                    Write-Progress -Activity $Activity -Status ('{0:N1} MB' -f ($done / 1MB))
+                }
+            }
+        } finally {
+            if ($out) { $out.Dispose() }
+            if ($in) { $in.Dispose() }
+            $client.Dispose()
+            Write-Progress -Activity $Activity -Completed
+        }
+    }
+    # The tillandsia palette's leaf green (LEAF, crates/tillandsias-progress-tty)
+    # for the bar where PowerShell can style it (7.2+). PowerShell 5 draws its
+    # own fixed colours.
+    if ($PSStyle) { $PSStyle.Progress.Style = "$([char]27)[38;2;79;138;91m" }
     try {
-        Invoke-WebRequest -Uri $ZipUrl -OutFile "$Tmp\$ZipName" -UseBasicParsing -ErrorAction Stop
+        Save-WithProgress -Url $ZipUrl -OutFile "$Tmp\$ZipName" -Activity "Downloading Tillandsias"
     } catch {
         Die "Download failed: $_"
     }
+# END-PROGRESS-DOWNLOAD
 
     # -- Verify SHA-256 --------------------------------------------------------
     Say "Verifying SHA-256..."
@@ -863,6 +919,7 @@ try {
     #
     # NOT a version comparison: that would have to know which tag first
     # carried the flag and would be wrong for any build off that line.
+# BEGIN-RESET-PROBE
     $ProbeLog = Join-Path $env:TEMP "tillandsias-reset-probe.log"
     & cmd.exe /c "set TILLANDSIAS_DESTRUCTIVE_RESET_OK=0&& `"$InstalledExe`" --reset-state > `"$ProbeLog`" 2>&1"
     $ProbeExit = $LASTEXITCODE
@@ -872,11 +929,26 @@ try {
     # and names itself; anything else is treated as unsupported too, because a
     # probe that cannot get a clean acceptance must not authorise a
     # destructive call.
-    $HasResetState = ($ProbeExit -eq 0)
+    #
+    # ORDER 1449-4qqu: EXCEPT when the binary SAYS it accepted the flag. With
+    # the opt-out set, a supporting tray prints the skip line (the phrase
+    # tillandsias-core pins byte-exact in reset_state::RESET_SKIPPED_LINE) and
+    # then re-inits the EXISTING state. When that state is broken the re-init
+    # fails (exit 1), and reading the exit code alone called it "predates
+    # --reset-state" and skipped the one repair the guest needed (measured on
+    # yolanda 2026-09-27, v56.9.27.2). The skip line proves the parser took the
+    # flag, so the flag ran and failed: proceed to the full reset.
+    $ProbeAccepted = $ProbeOut -match [regex]::Escape('reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0')
+    $HasResetState = ($ProbeExit -eq 0) -or $ProbeAccepted
+    if ($HasResetState -and $ProbeExit -ne 0) {
+        SayWn "  probe: this tray knows --reset-state; its re-init of the existing state failed (exit $ProbeExit)."
+        SayWn "  proceeding to the full reset, which is the repair for exactly that."
+    }
     if (-not $HasResetState) {
         SayWn "  probe: --reset-state not usable on this tray (exit $ProbeExit)."
         if ($ProbeOut) { SayWn ("  probe said: " + (($ProbeOut -split "`n")[0]).Trim()) }
     }
+# END-RESET-PROBE
     if (-not $HasResetState) {
         SayWn "this tray predates --reset-state (order 1286-4437); skipping the state reset."
         SayWn "  the install is complete, but a broken local state was NOT repaired."
@@ -939,6 +1011,14 @@ try {
             Get-ChildItem $nis | ForEach-Object {
                 $p = (Get-ItemProperty -Path $_.PSPath -Name 'ExecutablePath' -ErrorAction SilentlyContinue).ExecutablePath
                 if ($p -and ($p -like '*tillandsias-tray.exe') -and (($p -ne $InstalledExe) -or -not (Test-Path $p))) {
+                    # ORDER 1450-23if: an approval ("show on the taskbar") must
+                    # outlive the entry it lived in. Windows keys it on the exe
+                    # PATH, and this prune runs before the new tray ever has, so
+                    # remember it; the tray carries it into its own entry.
+                    if ((Get-ItemProperty -Path $_.PSPath -Name 'IsPromoted' -ErrorAction SilentlyContinue).IsPromoted -eq 1) {
+                        New-Item -Path 'HKCU:\Software\Tillandsias' -Force | Out-Null
+                        New-ItemProperty -Path 'HKCU:\Software\Tillandsias' -Name 'TrayIconPromoted' -Value 1 -PropertyType DWord -Force | Out-Null
+                    }
                     Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
                     Say "  removed stale tray-icon entry: $p"
                 }

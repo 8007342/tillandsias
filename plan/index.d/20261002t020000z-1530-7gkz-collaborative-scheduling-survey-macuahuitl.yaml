@@ -1,0 +1,45 @@
+packets:
+  - packet_id: collaborative-scheduling-survey-of-lane-routing-and-claim-attention
+    order: 1530-7gkz
+    status: ready
+    kind: research
+    priority: p1
+    desired_release: v0.5
+    release_target: architecture-audit-epic
+    pickup_role: linux
+    capability_tags: [coordination, scheduling, research]
+    estimated_hours: 2
+    owned_files:
+      - plan/issues/collaborative-work-scheduling-design-record-2026-08-25.md
+    title: |
+      Finish 335's provenance-backed survey of remaining lane routing and claim attention gaps
+    context: |
+      Parent 335 is a legacy unsuffixed order, which cannot name a conforming
+      work/<order> ref. Its dated next_action asks for a fragment-key guard
+      already delivered as 944-vim8; the unsatisfied work is the prior-art
+      survey scoped to F1 multi-lane remainder and F4 claim visibility,
+      with a smallest-mechanism disposition and verifiable adoption rungs.
+      No worker-protocol change is authorised until the operator signs off.
+    exit_criteria:
+      - The existing design record gains dated URLs for documented prior art on lane affinity, lease/claim visibility and attention routing, with the transferable property and the rejected analogy named for each.
+      - F1 and F4 are reconciled against current code and the already-landed 943-unii and 944-vim8 guards; stale inventory text is explicitly superseded rather than silently treated as current.
+      - The record recommends only mechanisms justified by measured remaining failures, states a falsifiable closure and adoption rung for each, and asks for operator sign-off before changing worker protocol.
+    verifiable_closure: |
+      Verify the cited URLs and current source symbols and run
+      scripts/check-issue-citation-convention.sh plus
+      tillandsias-plan check --strict-fragments. The survey is reviewer
+      judgment; its conclusions are not a shell fixture.
+    unscoreable: |
+      The deliverable compares external prior art with evolving ledger
+      evidence; a single test would only mirror its prose. Its proposed
+      implementation rungs each have their own executable closure.
+    events:
+      - type: filed
+        ts: '2026-10-02T02:00:00Z'
+        agent_id: linux-macuahuitl-opencode-20261002t015812z
+        host: macuahuitl
+        summary: |
+          Split from 335's actionable research remainder, with operator
+          approval retained by the parent. Base origin/linux-next
+          1f817895e. The 335 F10 fragment-key guard is already
+          scripts/check-fragment-keys-are-read.sh (944-vim8).

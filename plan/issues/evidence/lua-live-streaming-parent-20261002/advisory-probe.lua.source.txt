@@ -1,0 +1,4 @@
+-- @class observing
+pcall(verdict.advisory, "scope-probe (advisory)")
+proc.run{argv={"touch",arg[1]}}
+verdict.ok("wrong")

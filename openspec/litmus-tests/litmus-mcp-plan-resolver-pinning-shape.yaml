@@ -1,0 +1,44 @@
+# @trace spec:forge-environment-discoverability
+name: litmus:mcp-plan-resolver-pinning-shape
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Order 963-pdrp. project-info.sh and forge-plan.sh find the plan ledger by the
+  REPOSITORY (git rev-parse --show-toplevel), accept only a real Tillandsias
+  ledger (a top-level plan_index: key, or packets:/capabilities: beside an
+  index.d dir), and never fall back to a $HOME clone from inside a repo. A
+  foreign repo's plan/index.yaml (a Terraform plan, a roadmap) no longer enters
+  the plan lane, and a sparse checkout that dropped plan/ no longer answers from
+  a stale $HOME/src/tillandsias clone (682-z5h8's defect, fail-open).
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-mcp-plan-resolver-pinning.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-mcp-plan-resolver-pinning.sh && test -x scripts/test-mcp-plan-resolver-pinning.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "foreign and sparse repos resolve to nothing, a real ledger to the repo's own, outside-a-repo fallbacks held to the ledger test, both servers agree; plan_query from a sparse repo does not answer from $HOME"
+    command: "bash scripts/test-mcp-plan-resolver-pinning.sh 2>&1 | tail -n 1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: mcp-plan-resolver-pinning"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+  expected_log: "PASS: mcp-plan-resolver-pinning"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "mcp-plan-resolver-pinning-shape"
+    artifact: "images/default/config-overlay/mcp/{project-info,forge-plan}.sh resolve_plan_index"
+
+rollback:
+  on_failure: >
+    A server answering from a foreign plan/index.yaml or a stale $HOME clone is
+    the defect: restore project_toplevel + is_tillandsias_ledger and the
+    no-fallback-inside-a-repo rule in both servers.
+  command: "bash scripts/test-mcp-plan-resolver-pinning.sh"

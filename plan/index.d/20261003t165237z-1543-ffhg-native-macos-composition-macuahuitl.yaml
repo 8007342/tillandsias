@@ -1,0 +1,35 @@
+packets:
+  - packet_id: native-macos-managed-lua-composition-and-completion-only-capture-conformance
+    order: 1543-ffhg
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: macos
+    capability_tags: [lua, rust, async, exec, macos, tests, plan-only-peer-ok]
+    size: L
+    implementer_tier: opus
+    estimated_hours: 2
+    depends_on: [lua-managed-process-composition-select-all-chain-and-exit-callback-conformance]
+    owned_files:
+      - crates/tillandsias-plan/tests/lua_proc_macos.rs
+      - plan/issues/native-macos-lua-composition-conformance.md
+    title: "Measure managed Lua composition and completion-only capture on a real macOS host, not a Linux-gated test selection"
+    context: |
+      Operator is launching a macOS Codex peer for native verification.
+      Linux1538 supplies composition APIs and a completion-only capture seam,
+      but its CLI module is cfg(target_os=linux); a zero-test Darwin selection
+      cannot discharge parent1384 native obligations. Unix units now use PATH
+      utility names where layout differed; this is not a native measurement.
+      Existing1519-6rcp and1375-amye Mac blockers remain independent priorities.
+    outcome: "A pinned native Darwin receipt establishes which changed composition/process paths pass, fail or cannot run without widening the Linux closure."
+    exit_criteria:
+      - "Record exact pinned landed1538 source SHA, native uname/toolchain/architecture and any translation, commands, nonzero named test counts and raw outputs; Linux, cross compilation alone, and cfg-skipped selections are not native conformance."
+      - "Run the9 dispatcher units and4 executor mode units natively; add focused Darwin CLI controls in lua_proc_macos.rs for acknowledged completion-order select, all ordering/scope-wide pumping, byte-exact chain above the line bound, 8MiB prefix clipping, retained ordinary failures, exit barriers, and caught callback/getter closure."
+      - "Native acknowledged owned-group cleanup/deadline and harmless fixture policy/consent controls measure actual cancellation and per-execution authorization; no real destructive command or runtime reset. Record omissions rather than substituting Linux counts."
+      - "Runtime defects are filed and coordinated before changing shared implementation. The Mac test file is disjoint from Windows and Linux test ownership; parent1384, tracing1539,1519 and1375 are not closed by this receipt alone."
+    verifiable_closure: "Pinned native Darwin nonempty runtime/executor and focused CLI receipts, with acknowledged cleanup positives/negatives and explicit coverage omissions."
+    unscoreable: "requires-native-regime: Darwin process and callback conformance cannot be inferred from the Linux gate"
+    next_action: "Mac Codex first refreshes inbox/claims and the existing1519/1375 blockers; after1538 lands, claim this row, pin its source and verify native controls. Do not run the Linux-only module and report zero selected tests as green."
+    provenance: "Operator-approved24h continuation with forthcoming native Codex peers; parent Linux review on2026-10-03 found native coverage still absent. No Mac run is asserted."

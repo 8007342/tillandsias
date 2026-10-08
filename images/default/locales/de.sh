@@ -5,58 +5,15 @@
 # Variablen mit L_ als Präfix zur Vermeidung von Kollisionen.
 
 # ── entrypoint.sh ────────────────────────────────────────────
-L_INSTALLING_OPENCODE="OpenCode wird installiert..."
-L_INSTALLED_OPENCODE="  OpenCode bereit: %s"
-L_WARN_OPENCODE="  WARNUNG: OpenCode-Binary vorhanden, aber --version lieferte nichts."
-L_INSTALLING_CLAUDE="Claude Code wird installiert..."
-L_INSTALLED_CLAUDE="  Claude Code bereit: %s"
-L_WARN_CLAUDE="  WARNUNG: Claude Code-Binary vorhanden, aber --version lieferte nichts."
-L_CLAUDE_NOT_FOUND="  Claude Code-Binary nach der Installation nicht gefunden."
-L_INSTALL_FAILED_CLAUDE="  FEHLER: npm install fehlgeschlagen. Siehe Ausgabe oben für Details."
-L_INSTALLING_OPENSPEC="OpenSpec wird installiert..."
-L_INSTALLED_OPENSPEC="  ✓ OpenSpec installiert"
-L_OPENSPEC_NOT_FOUND="  ✗ OpenSpec-Binary nach der Installation nicht gefunden"
-L_OPENSPEC_FAILED="  OpenSpec-Installation fehlgeschlagen (nicht kritisch, wird fortgesetzt)"
-L_RETRY_HINT="Zum Wiederholen: Container neu starten"
-L_CLEAR_CACHE_CLAUDE="Cache leeren: rm -rf ~/.cache/tillandsias/claude/"
-L_CLEAR_CACHE_OPENCODE="Cache leeren: rm -rf ~/.cache/tillandsias/opencode/"
-L_OPENCODE_INSTALL_FAILED="FEHLER: OpenCode konnte nicht installiert werden."
 L_BANNER_FORGE="tillandsias forge"
 L_BANNER_PROJECT="Projekt:"
 L_BANNER_AGENT="Agent:"
-L_BANNER_MODE_MAINTENANCE="Modus:   Wartung"
-L_AGENT_NOT_AVAILABLE="Claude Code nicht verfügbar. Bash wird gestartet."
-L_OPENCODE_NOT_AVAILABLE="OpenCode nicht verfügbar. Bash wird gestartet."
-L_UNKNOWN_AGENT="Unbekannter Agent '%s'. Bash wird gestartet."
-
-# ── CA- / Proxy-Warnungen ───────────────────────────────────────
-L_WARN_CA_INSTALL="WARNUNG: CA-Zertifikat konnte nicht installiert werden — HTTPS-Proxy-Caching funktioniert möglicherweise nicht"
-L_WARN_CA_UPDATE="WARNUNG: CA-Vertrauensspeicher konnte nicht aktualisiert werden"
-
-# ── Git-Spiegel-Nachrichten ──────────────────────────────────────
-L_WARN_PUSH_URL="WARNUNG: Push-URL konnte nicht gesetzt werden — git push funktioniert möglicherweise nicht"
-L_GIT_CLONE_FAILED="FEHLER: Projekt konnte nicht vom Git-Dienst geklont werden."
-L_GIT_CLONE_HINT="Der Git-Dienst läuft möglicherweise nicht. Terminal wird geöffnet."
-L_GIT_EPHEMERAL="Alle Änderungen müssen committet werden, um zu bestehen. Nicht committete Arbeit geht beim Stoppen verloren."
-
-# ── Authentifizierungs- / Init-Warnungen ─────────────────────────
-L_WARN_GH_AUTH="WARNUNG: gh auth setup-git fehlgeschlagen — git push authentifiziert möglicherweise nicht"
-L_WARN_OPENSPEC_INIT="WARNUNG: OpenSpec-Initialisierung fehlgeschlagen — /opsx-Befehle funktionieren möglicherweise nicht"
-
-# ── Installer-Beendigungswarnungen ───────────────────────────────
-L_WARN_OPENCODE_EXIT="WARNUNG: OpenCode-Installer wurde mit Code beendet"
-L_WARN_OPENCODE_UPDATE_EXIT="WARNUNG: OpenCode-Aktualisierung wurde mit Code beendet"
-
-# ── Aktualisierungsnachrichten ───────────────────────────────────
-L_UPDATING_CLAUDE="Claude Code wird aktualisiert..."
-L_UPDATING_OPENCODE="OpenCode wird aktualisiert..."
 
 # ── forge-welcome.sh ──────────────────────────────────────────
 L_WELCOME_TITLE="🌱 Tillandsias Forge"
 L_WELCOME_PROJECT="Projekt"
 L_WELCOME_FORGE="Forge"
 L_WELCOME_MOUNTS="Einbindungen"
-L_WELCOME_PROJECT_AT="→ Projekt unter /home/forge/src/%s"
 L_WELCOME_SECURITY="Sicherheit"
 L_WELCOME_NETWORK="Netzwerk"
 L_WELCOME_NETWORK_DESC="nur Enklave (kein Internet, Pakete über Proxy)"
@@ -95,7 +52,6 @@ L_TIP_20="GitHub CLI: gh repo view, gh pr list"
 # Hinweis: Der Spickzettel-Zeiger ist derzeit in forge-welcome.sh codiert
 # und verwendet keine Locale-Variablen. Dies wird für zukünftige Lokalisierung
 # beibehalten, wenn wir das Banner vollständig Locale-fähig machen.
-L_WELCOME_CHEATSHEETS="📚 Spickzettel"
 
 # ── Fehlermeldungen (lib-localized-errors.sh) ──────────────────
 L_ERROR_CONTAINER_FAILED="FEHLER: Container konnte nicht gestartet werden"

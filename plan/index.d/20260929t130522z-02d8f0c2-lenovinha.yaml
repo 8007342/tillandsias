@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-claim-confirmed-prints-confirmed-from-the-local-ledger-after-a-claim-push-that-failed-so-a-claim-that-never-reached-origin-reads-as-won
+    event:
+      type: progress
+      ts: "2026-09-29T13:05:22Z"
+      agent_id: linux-lenovinha-claude-20260929t130522z
+      host: lenovinha
+      summary: |
+        work/1493-d93i at edd852b45: preflight refused=0; full gate running on lenovinha.
+        SECOND REGIME: macbookair (tlatoanis-macbook-air), darwin, 2026-09-29, detached worktree at edd852b45, env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR: PASS 10/10, git status clean. The three new arms (claim-not-on-origin, accepted push still confirmed, unreachable origin is unknown) pass. Gate step 430 keeps its existing regime record; this run covers the new arms without re-gating the ref.
+        SECOND INCIDENT: macbookair reports hitting this exact defect the same day. check-claim-confirmed printed ok:claim-confirmed for two of its own claims whose push had been refused (macbookair memory note, 2026-09-29). That makes two hosts, one day, the same false confirmation.

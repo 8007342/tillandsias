@@ -256,6 +256,13 @@ pub struct VmStateHandle {
     /// Last pushed project list, `None` until first fetched. Full-replacement
     /// compare: `set_cloud_projects` pushes only when the list differs.
     cloud_projects: Arc<RwLock<Option<Vec<CloudProjectEntry>>>>,
+    /// Broadcast fan-out for `ProgressPush` (order 1420-4grt). Same subscriber
+    /// semantics as `vm_status_tx`; nothing is sent unless a connection
+    /// subscribed to `SubscriptionTopic::Progress`.
+    progress_tx: broadcast::Sender<ControlMessage>,
+    /// Flow and dependency-node transitions (order 472 slice 3): the
+    /// `FlowStatePush` channel, reached through `flow_sink`.
+    flow: tillandsias_control_wire::FlowEventChannel,
     /// Monotonic counter for the `seq` field carried inside each push
     /// message (distinct from the per-request `ControlEnvelope.seq`, which
     /// pushes don't have a request to reply to). Shared across all push
@@ -290,6 +297,11 @@ const LOGIN_STATE_PUSH_CAPACITY: usize = 16;
 /// frame is a full-replacement list, so only the newest frame matters; a
 /// small buffer bounds memory for the larger payload.
 const CLOUD_PROJECTS_PUSH_CAPACITY: usize = 8;
+/// Order 1420-4grt: progress is the chattiest topic (one event per build
+/// step or download tick). A lagged receiver skips to the latest frame, which
+/// loses nothing durable because each task's state is grow-only and the next
+/// event carries it whole.
+const PROGRESS_PUSH_CAPACITY: usize = 64;
 /// Order 260: same shallow-queue rationale as CloudProjects — each push is a
 /// full replacement list, so a lagged receiver skipping to latest loses
 /// nothing durable.
@@ -307,6 +319,7 @@ impl VmStateHandle {
         let (vm_status_tx, _) = broadcast::channel(VM_STATUS_PUSH_CAPACITY);
         let (login_state_tx, _) = broadcast::channel(LOGIN_STATE_PUSH_CAPACITY);
         let (cloud_projects_tx, _) = broadcast::channel(CLOUD_PROJECTS_PUSH_CAPACITY);
+        let (progress_tx, _) = broadcast::channel(PROGRESS_PUSH_CAPACITY);
         Self {
             phase: Arc::new(RwLock::new(VmPhase::Starting)),
             podman_socket: PathBuf::from(IN_VM_PODMAN_SOCKET_DEFAULT),
@@ -315,6 +328,8 @@ impl VmStateHandle {
             login_state: Arc::new(RwLock::new(None)),
             cloud_projects_tx,
             cloud_projects: Arc::new(RwLock::new(None)),
+            progress_tx,
+            flow: tillandsias_control_wire::FlowEventChannel::with_default_capacity(),
             push_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             last_event: Arc::new(RwLock::new(SERVER_NAME.to_string())),
             subscriber_nudge: Arc::new(tokio::sync::Notify::new()),
@@ -351,6 +366,53 @@ impl VmStateHandle {
     /// independent-receiver semantics as [`subscribe_vm_status`].
     pub fn subscribe_cloud_projects(&self) -> broadcast::Receiver<ControlMessage> {
         self.cloud_projects_tx.subscribe()
+    }
+
+    /// Subscribe to the `Progress` push topic (order 1420-4grt). Same
+    /// independent-receiver semantics as [`subscribe_vm_status`].
+    pub fn subscribe_progress(&self) -> broadcast::Receiver<ControlMessage> {
+        self.progress_tx.subscribe()
+    }
+
+    /// Push one typed progress event to every `Progress` subscriber. With no
+    /// subscriber this sends nothing and is not an error: progress is opt-in,
+    /// so an old host that never subscribed never receives a frame it cannot
+    /// decode (see `CAP_PROGRESS_PUSH_V1`).
+    pub fn publish_progress(&self, event: tillandsias_control_wire::ProgressEvent) {
+        if self.progress_tx.receiver_count() == 0 {
+            return;
+        }
+        let seq = self
+            .push_seq
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            + 1;
+        let _ = self
+            .progress_tx
+            .send(ControlMessage::ProgressPush { seq, event });
+    }
+
+    /// Subscribe to the `FlowState` push topic (order 472 slice 3).
+    pub fn subscribe_flow_state(&self) -> broadcast::Receiver<ControlMessage> {
+        self.flow.subscribe()
+    }
+
+    /// Emit one flow or dependency-node transition to `FlowState`
+    /// subscribers. With no subscriber nothing is sent.
+    pub fn publish_flow(
+        &self,
+        source: tillandsias_control_wire::FlowSource,
+        from: String,
+        to: String,
+        reason: Option<String>,
+    ) {
+        if self.flow.receiver_count() == 0 {
+            return;
+        }
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        self.flow.emit(source, from, to, reason, ts);
     }
 
     /// True when at least one connection is subscribed to `LoginState`.
@@ -948,6 +1010,11 @@ async fn serve_ready_stream(
                 tillandsias_control_wire::CAP_PTY_DATA_SESSION.into(),
                 CAP_PTY_ATTACH_V1.into(),
                 CAP_PTY_HEARTBEAT_V1.into(),
+                // Order 1420-4grt: this guest emits ProgressPush to Progress
+                // subscribers. A host subscribes to Progress ONLY after seeing
+                // this (see CAP_PROGRESS_PUSH_V1: an old guest fails a whole
+                // Subscribe that names an unknown topic).
+                tillandsias_control_wire::CAP_PROGRESS_PUSH_V1.into(),
             ],
             // Report the workspace VERSION (repo-root VERSION file), NOT this
             // crate's CARGO_PKG_VERSION. The host tray displays + compares
@@ -1019,6 +1086,10 @@ async fn serve_ready_stream(
     // subscribe-gated zero-cost-when-unsubscribed contract as VmStatus.
     let mut login_state_rx: Option<broadcast::Receiver<ControlMessage>> = None;
     let mut cloud_projects_rx: Option<broadcast::Receiver<ControlMessage>> = None;
+    // Order 1420-4grt: Progress topic, same contract.
+    let mut progress_rx: Option<broadcast::Receiver<ControlMessage>> = None;
+    // Order 472 slice 3: FlowState topic, same contract.
+    let mut flow_rx: Option<broadcast::Receiver<ControlMessage>> = None;
     // Order 260: LocalProjects topic, same contract.
 
     'connection: loop {
@@ -1127,6 +1198,64 @@ async fn serve_ready_stream(
                     }
                     None => {
                         cloud_projects_rx = None;
+                    }
+                }
+                continue;
+            }
+            // Server-push: ProgressPush (order 1420-4grt). Same lag-skip
+            // contract; per-task state is grow-only, so the next frame
+            // carries whatever a skipped one said.
+            push = async {
+                loop {
+                    match progress_rx.as_mut()?.recv().await {
+                        Ok(msg) => return Some(msg),
+                        Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                            warn!(spec = "vsock-transport", skipped, "Progress push receiver lagged; skipping to latest");
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => return None,
+                    }
+                }
+            }, if progress_rx.is_some() => {
+                match push {
+                    Some(body) => {
+                        let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
+                        if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
+                            debug!(spec = "vsock-transport", "vsock write failed during ProgressPush; closing connection");
+                            break 'connection;
+                        }
+                    }
+                    None => {
+                        progress_rx = None;
+                    }
+                }
+                continue;
+            }
+            // Server-push: FlowStatePush (order 472 slice 3). Same lag-skip
+            // contract: a skipped transition is superseded by the next one,
+            // which names the node's current state in full.
+            push = async {
+                loop {
+                    match flow_rx.as_mut()?.recv().await {
+                        Ok(msg) => return Some(msg),
+                        Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                            warn!(spec = "vsock-transport", skipped, "FlowState push receiver lagged; skipping to latest");
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => return None,
+                    }
+                }
+            }, if flow_rx.is_some() => {
+                match push {
+                    Some(body) => {
+                        let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
+                        if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
+                            debug!(spec = "vsock-transport", "vsock write failed during FlowStatePush; closing connection");
+                            break 'connection;
+                        }
+                    }
+                    None => {
+                        flow_rx = None;
                     }
                 }
                 continue;
@@ -1243,6 +1372,12 @@ async fn serve_ready_stream(
                 }
                 if topics.contains(&tillandsias_control_wire::SubscriptionTopic::CloudProjects) {
                     cloud_projects_rx = Some(state.subscribe_cloud_projects());
+                }
+                if topics.contains(&tillandsias_control_wire::SubscriptionTopic::Progress) {
+                    progress_rx = Some(state.subscribe_progress());
+                }
+                if topics.contains(&tillandsias_control_wire::SubscriptionTopic::FlowState) {
+                    flow_rx = Some(state.subscribe_flow_state());
                 }
                 let ack = ControlEnvelope {
                     wire_version: WIRE_VERSION,
@@ -1498,6 +1633,51 @@ async fn serve_ready_stream(
                                 seq_in_reply_to: Some(env.seq),
                                 code: ErrorCode::Internal,
                                 message: format!("SetVsockForwardTarget failed: {err}"),
+                            },
+                        };
+                        if write_envelope_with_shutdown(&mut write_half, &err_env, &mut shutdown)
+                            .await
+                            .is_err()
+                        {
+                            break 'connection;
+                        }
+                    }
+                }
+            }
+            ControlMessage::HostClockSync { host_unix_ms, .. } => {
+                // ORDER 1503-qrgz. The Mac woke; the VM did not run while it
+                // slept, so our clock is behind by the sleep. Set it from the
+                // host's reading now rather than waiting hours for chrony.
+                match crate::clock_sync::apply_host_clock(host_unix_ms) {
+                    Ok(delta) => {
+                        if delta != 0 {
+                            eprintln!(
+                                "[tillandsias] guest clock stepped {delta:+} ms to the host's time \
+                                 (host wake; 1503-qrgz)"
+                            );
+                        }
+                        // Exactly one reply per request (see the variant's doc).
+                        let ack = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: env.seq,
+                            body: ControlMessage::IssueAck { seq_acked: env.seq },
+                        };
+                        if write_envelope_with_shutdown(&mut write_half, &ack, &mut shutdown)
+                            .await
+                            .is_err()
+                        {
+                            break 'connection;
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("[tillandsias] could not set the guest clock from the host: {err}");
+                        let err_env = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: env.seq,
+                            body: ControlMessage::Error {
+                                seq_in_reply_to: Some(env.seq),
+                                code: ErrorCode::Internal,
+                                message: format!("HostClockSync failed: {err}"),
                             },
                         };
                         if write_envelope_with_shutdown(&mut write_half, &err_env, &mut shutdown)
@@ -1887,6 +2067,45 @@ pub(crate) fn fetch_cloud_projects() -> (Vec<CloudProjectEntry>, CloudRefreshOut
 mod tests {
     use super::*;
 
+    /// ORDER 828-itr9. THE REGION A SOURCE SCAN READS, OR A RED TEST.
+    /// `str::split(end).next()` on an end anchor that no longer occurs yields
+    /// the WHOLE remaining string, so renaming the function that closes a
+    /// region silently widened the scan to the rest of the file, and every
+    /// assertion about that region kept passing while it guarded nothing. These
+    /// return the region only when BOTH anchors are present, and panic naming
+    /// the missing one otherwise: a rename is a red test, never a wider scan.
+    fn scan_region<'a>(src: &'a str, start: &str, end: &str) -> &'a str {
+        let (_, tail) = src
+            .split_once(start)
+            .unwrap_or_else(|| panic!("scan start anchor `{start}` is gone: repoint this scan"));
+        scan_until(tail, end)
+    }
+
+    /// The text before `end`, or a red test when `end` is absent.
+    fn scan_until<'a>(src: &'a str, end: &str) -> &'a str {
+        src.split_once(end)
+            .map(|(head, _)| head)
+            .unwrap_or_else(|| {
+                panic!(
+                    "scan end anchor `{end}` is gone: the region would silently widen \
+                 to the rest of the file (828-itr9)"
+                )
+            })
+    }
+
+    #[test]
+    fn scan_region_is_red_when_its_end_anchor_is_renamed() {
+        let src = "head START body END tail";
+        assert_eq!(scan_region(src, "START", "END"), " body ");
+        let renamed = std::panic::catch_unwind(|| scan_region(src, "START", "RENAMED").len());
+        assert!(
+            renamed.is_err(),
+            "a missing end anchor must panic, not return the tail"
+        );
+        let gone = std::panic::catch_unwind(|| scan_region(src, "GONE", "END").len());
+        assert!(gone.is_err(), "a missing start anchor must panic");
+    }
+
     /// Order 828-r2ek NEGATIVE CONTROL: the guest refuses to EMIT a frame its
     /// own reader would refuse to accept.
     ///
@@ -2172,6 +2391,76 @@ mod tests {
         }
     }
 
+    /// litmus:headless-keepalive (order 148, criterion 3): the control listener
+    /// is LONG-LIVED. It keeps accepting and HANDLING connections after an
+    /// earlier one has closed; a one-shot listener (accept once and return,
+    /// or exit after the first request) was the hypothesis for the 2026-06-30
+    /// Ready <-> "Wire unreachable" oscillation.
+    ///
+    /// Runs the REAL `serve_listener` loop on a Unix socket (the same
+    /// `Listener` type the vsock bind returns). Each of three sequential
+    /// connections sends a malformed frame and must be CLOSED BY THE HANDLER
+    /// within 5 s. That needs an accept plus a live `handle_connection`, so a
+    /// listener that stopped accepting (the second connect refused, or left
+    /// parked in the kernel backlog) fails, not just one that exited.
+    ///
+    /// @trace order:148, spec:vsock-transport
+    #[tokio::test]
+    async fn serve_listener_keeps_serving_after_earlier_connections_close() {
+        let dir =
+            std::env::temp_dir().join(format!("tillandsias-keepalive-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let sock = dir.join("control.sock");
+        let transport = Transport::Unix(sock.clone());
+        let mut listener = bind(&transport).await.expect("bind a unix listener");
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let server_shutdown = Arc::clone(&shutdown);
+        let server = tokio::spawn(async move {
+            serve_listener(&mut listener, server_shutdown, VmStateHandle::new()).await;
+        });
+
+        for n in 1..=3 {
+            let mut client = tillandsias_control_wire::transport::connect(&transport)
+                .await
+                .unwrap_or_else(|e| panic!("connection {n}: the listener must still accept: {e}"));
+            // Not a valid frame for any wire mode: a live handler closes it.
+            client
+                .write_all(&[0xFF, 0xFF, 0xFF, 0xF0, 0, 1, 2, 3])
+                .await
+                .unwrap_or_else(|e| panic!("connection {n}: write: {e}"));
+            let _ = client.flush().await;
+            let mut buf = [0u8; 256];
+            let mut closed = false;
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            while tokio::time::Instant::now() < deadline {
+                match tokio::time::timeout_at(deadline, client.read(&mut buf)).await {
+                    Ok(Ok(0)) | Ok(Err(_)) => {
+                        closed = true;
+                        break;
+                    }
+                    Ok(Ok(_)) => continue, // e.g. a refusal notice before the close
+                    Err(_) => break,
+                }
+            }
+            assert!(
+                closed,
+                "connection {n}: not handled within 5 s. The listener accepted nothing after \
+                 an earlier connection closed (a one-shot listener)"
+            );
+            drop(client);
+        }
+        assert!(
+            !server.is_finished(),
+            "the serve loop must still be running after three connections"
+        );
+
+        shutdown.store(true, Ordering::SeqCst);
+        shutdown_notify().notify_waiters();
+        let _ = tokio::time::timeout(Duration::from_secs(5), server).await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Order 795-5itp: PIPELINED Hello+Subscribe must both survive the
     /// handshake-to-read-loop handoff.
     ///
@@ -2368,6 +2657,146 @@ mod tests {
         );
     }
 
+    // ---- order 1420-4grt: the opt-in Progress topic -------------------------
+
+    async fn progress_test_client(
+        topics: Vec<tillandsias_control_wire::SubscriptionTopic>,
+    ) -> (
+        VmStateHandle,
+        tokio::io::DuplexStream,
+        Vec<String>,
+        watch::Sender<bool>,
+    ) {
+        let state = VmStateHandle::new();
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        tokio::spawn(handle_connection_with_mode(
+            Ok(SecureControlWireMode::Off),
+            Box::new(server),
+            state.clone(),
+            shutdown_rx,
+        ));
+        let mut frames = encode_frame_for_test(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::Hello {
+                from: "progress-test".into(),
+                capabilities: Vec::new(),
+                build_version: None,
+            },
+        });
+        frames.extend(encode_frame_for_test(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 2,
+            body: ControlMessage::Subscribe { topics },
+        }));
+        tokio::io::AsyncWriteExt::write_all(&mut client, &frames)
+            .await
+            .unwrap();
+        let caps = match read_envelope(&mut client).await.unwrap().body {
+            ControlMessage::HelloAck { server_caps, .. } => server_caps,
+            other => panic!("expected HelloAck, got {other:?}"),
+        };
+        assert!(matches!(
+            read_envelope(&mut client).await.unwrap().body,
+            ControlMessage::SubscribeAck
+        ));
+        (state, client, caps, shutdown_tx)
+    }
+
+    fn progress_event() -> tillandsias_control_wire::ProgressEvent {
+        tillandsias_control_wire::ProgressEvent {
+            task: "init/build/forge".into(),
+            parent: Some("init/build".into()),
+            label: "forge".into(),
+            kind: tillandsias_control_wire::ProgressKind::Done,
+            ts_unix_ms: 1,
+        }
+    }
+
+    #[tokio::test]
+    async fn guest_advertises_progress_and_pushes_it_to_a_progress_subscriber() {
+        let (state, mut client, caps, _stop) =
+            progress_test_client(vec![tillandsias_control_wire::SubscriptionTopic::Progress]).await;
+        assert!(
+            caps.iter()
+                .any(|c| c == tillandsias_control_wire::CAP_PROGRESS_PUSH_V1),
+            "the guest must advertise the capability hosts gate on: {caps:?}"
+        );
+        state.publish_progress(progress_event());
+        let env = tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+            .await
+            .expect("ProgressPush did not arrive")
+            .unwrap();
+        match env.body {
+            ControlMessage::ProgressPush { event, .. } => assert_eq!(event, progress_event()),
+            other => panic!("expected ProgressPush, got {other:?}"),
+        }
+    }
+
+    /// The opt-in half that protects old hosts: a connection that did NOT
+    /// subscribe to Progress never receives a ProgressPush, while the topics
+    /// it did ask for keep flowing.
+    #[tokio::test]
+    async fn a_connection_without_the_progress_topic_never_gets_progress() {
+        let (state, mut client, _caps, _stop) =
+            progress_test_client(vec![tillandsias_control_wire::SubscriptionTopic::VmStatus]).await;
+        state.publish_progress(progress_event());
+        state.set_phase(VmPhase::Ready);
+        let env = tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+            .await
+            .expect("VmStatusPush did not arrive")
+            .unwrap();
+        assert!(
+            matches!(env.body, ControlMessage::VmStatusPush { .. }),
+            "the first frame must be the VmStatus push, not progress: {:?}",
+            env.body
+        );
+    }
+
+    /// Order 472 slice 3, exit criterion 4's subscriber half: a CA rotation
+    /// published through the state reaches a FlowState subscriber as a
+    /// DependencyNode transition, with the node, both states and the reason.
+    #[tokio::test]
+    async fn a_ca_rotation_reaches_a_flow_state_subscriber() {
+        let (state, mut client, _caps, _stop) =
+            progress_test_client(vec![tillandsias_control_wire::SubscriptionTopic::FlowState])
+                .await;
+        let (from, to, reason) = crate::flow_sink::ca_transition(Some("aa"), Some("bb")).unwrap();
+        state.publish_flow(
+            tillandsias_control_wire::FlowSource::DependencyNode {
+                node: crate::flow_sink::CA_BUNDLE_NODE.into(),
+            },
+            from,
+            to,
+            Some(reason.into()),
+        );
+        let env = tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+            .await
+            .expect("FlowStatePush did not arrive")
+            .unwrap();
+        match env.body {
+            ControlMessage::FlowStatePush {
+                source,
+                from_state,
+                to_state,
+                reason,
+                ..
+            } => {
+                assert_eq!(
+                    source,
+                    tillandsias_control_wire::FlowSource::DependencyNode {
+                        node: "ca_bundle".into()
+                    }
+                );
+                assert_eq!(from_state, "current:aa");
+                assert_eq!(to_state, "current:bb");
+                assert_eq!(reason.as_deref(), Some("rotated"));
+            }
+            other => panic!("expected FlowStatePush, got {other:?}"),
+        }
+    }
+
     /// Frame an envelope the way a hand-rolled peer does, for tests that must
     /// control exactly how bytes hit the wire (rather than going through
     /// `write_envelope`, which writes the length and body separately).
@@ -2466,11 +2895,11 @@ mod tests {
     #[test]
     fn post_store_connection_exits_share_pty_cleanup() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/vsock_server.rs"));
-        let post_store = source
-            .split("let (pty_tx, mut pty_rx)")
-            .nth(1)
-            .and_then(|tail| tail.split("\nasync fn read_envelope").next())
-            .expect("post-store handle_connection source");
+        let post_store = scan_region(
+            source,
+            "let (pty_tx, mut pty_rx)",
+            "\nasync fn read_envelope",
+        );
         assert!(
             !post_store.contains("return;"),
             "post-store connection exits must break to shared PTY cleanup"
@@ -2487,11 +2916,11 @@ mod tests {
     #[test]
     fn empty_vault_handover_reply_keeps_later_first_boot_retry_eligible() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/vsock_server.rs"));
-        let handler = source
-            .split("ControlMessage::GetVaultHandover { seq } =>")
-            .nth(1)
-            .and_then(|tail| tail.split("ControlMessage::").next())
-            .expect("GetVaultHandover handler source");
+        let handler = scan_region(
+            source,
+            "ControlMessage::GetVaultHandover { seq } =>",
+            "ControlMessage::",
+        );
         assert!(
             handler.contains("handover_reply_delivers_unseal_share(")
                 && handler.contains("unseal_share_b64.as_deref()"),

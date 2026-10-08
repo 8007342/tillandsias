@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-installer-fetched-from-the-unstable-release-silently-installs-stable-because-the-channel-defaults-to-stable-unless-an-environment-variable-is-set-so-the-url-a-user-chose-does-not-decide-what-they-get
+    event:
+      type: completed
+      ts: "2026-09-27T16:49:15Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        Closure smoke on the first daily carrying the fix, v56.9.27.2 (the unstable channel is the same set). On yolanda-windows, the UNSTABLE release's install-windows.ps1, run with TILLANDSIAS_CHANNEL and TILLANDSIAS_VERSION unset (resolve-only), printed "resolved-channel: unstable (default of this installer copy) base: https://github.com/8007342/tillandsias/releases/download/unstable", exit 0. The tag-pinned copy resolved the tag and installed tillandsias-tray 56.9.27.2 (52e3bc32e). Report: plan/issues/smoke-e2e-findings-v56.9.27.2-windows-2026-09-27-yolanda.md (45086af3e).

@@ -1,0 +1,46 @@
+# @trace spec:command-policies
+name: litmus:fixture-git-dir-scope-shape
+spec: command-policies
+phase: pre-build
+description: >
+  Order 1443-fpck. Under regime=fixture (TILLANDSIAS_POLICY_REGIME, which
+  run-litmus-test.sh exports for every step with TILLANDSIAS_FIXTURE_SCOPE and
+  TILLANDSIAS_FIXTURE_GIT_DIRS) a fixture cannot write into the real checkout's
+  git dir or outside its scope: Lua fs.write/fs.mkdir raise
+  refused:policy:fixture-writes-outside-scope; proc.run and the run door deny
+  gate-stamp.sh write (fixture-gate-stamp-write), git update-ref, git push and rm
+  aimed at the real repo; and the runner turns a bash step that changed the real
+  gate files RED naming the rule, restoring the bytes. The 1442-22d2 shape (a
+  fixture minting a stamp four relay lands adopted) is unconstructible.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-fixture-git-dir-scope.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-fixture-git-dir-scope.sh && test -x scripts/test-fixture-git-dir-scope.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "git-dir writes refused (fs, proc.run, runner), scope enforced, scratch writes and regime=gate unaffected, the real gate files byte-identical"
+    command: "bash scripts/test-fixture-git-dir-scope.sh 2>&1 | tail -n 1"
+    timeout_ms: 300000
+    expected_behavior: "PASS: fixture-git-dir-scope"
+
+observability:
+  traces:
+    - "@trace spec:command-policies"
+  expected_log: "PASS: fixture-git-dir-scope"
+  log_fields:
+    spec: "command-policies"
+    test: "fixture-git-dir-scope-shape"
+    artifact: "command_policy.rs fixture scope + lua_predicate fs guard + run-litmus-test.sh step guard"
+
+rollback:
+  on_failure: >
+    A fixture that can write the real checkout's gate stamp is the defect
+    (1442-22d2): restore the fixture-regime rules in decide(), the fs write
+    guard, and the runner's per-step export and gate-file comparison first.
+  command: "bash scripts/test-fixture-git-dir-scope.sh"

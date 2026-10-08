@@ -48,33 +48,69 @@ grand=""
 files=0 retired=0 grandfathered=0 bound_n=0
 unbound=""
 on_disk=""
-for f in "$TESTS_DIR"/litmus-*.yaml; do
-    [ -e "$f" ] || continue
-    name="$(grep -m1 '^name:' "$f" | sed 's/name: *//' | tr -d ' ')"
+
+# ORDER 1509-5i9p: ONE BULK NAME EXTRACTION AND ONE BULK RETIRED-FILE SCAN
+# instead of a loop that spawned 4-6 processes PER FILE (grep|sed|tr for the
+# name, then a grep each for bound/retired/grandfathered) — 494 files paid
+# that on every push, 730s of it on MSYS (yolanda) against 1.6s on Linux
+# (yoga). Same shape as 1500-gu5r/1510-pfuj's bulk-grep rewrite of
+# check-bash-dialect.sh: one process reads the whole corpus, and every
+# per-file membership test below is a bash `case` match against a
+# newline-framed string built once, never a spawned grep. The loop still asks
+# the exact same three questions in the exact same order over the exact same
+# per-file name; it only stops forking a process to ask them.
+#
+# `grep -H -m1` keeps grep's own per-file cap (a file with two `name:` lines
+# still yields only its first, exactly as the old per-file `-m1` did) while
+# printing "<path>:name: <value>" once per matching file, in the SAME order
+# the shell glob would iterate them (grep visits multi-file arguments in the
+# order given). A file with no `^name:` line contributes no line and is
+# skipped, same as the old loop's `[ -n "$name" ] || continue`.
+_lb_names_raw="$(grep -H -m1 '^name:' "$TESTS_DIR"/litmus-*.yaml 2>/dev/null || true)"
+_lb_retired_raw="$(grep -lE '^phase: *retired *$' "$TESTS_DIR"/litmus-*.yaml 2>/dev/null || true)"
+
+# Framed lists for `case`-based containment, newline-anchored on both ends.
+# WATCH THIS TRAP (it cost 1510-pfuj a file the first time): a list run
+# through `var="$(...)"` loses its OWN trailing newline to that assignment,
+# so a plain `*$'\n'"$item"$'\n'*` pattern never matches an item sitting last
+# in the list. Built here by DIRECT concatenation, not a second command
+# substitution, so the trailing $'\n' below is never stripped — but the
+# fallback arm is kept anyway, one string compare being cheap insurance.
+_lb_bound_f=$'\n'"$bound"$'\n'
+_lb_grand_f=$'\n'"$grand"$'\n'
+_lb_retired_f=$'\n'"$_lb_retired_raw"$'\n'
+
+_lb_in() { # _lb_in <framed-list> <item> — bash-only containment, no spawn.
+    case "$1" in
+        *$'\n'"$2"$'\n'*) return 0 ;;
+        *$'\n'"$2") return 0 ;;
+    esac
+    return 1
+}
+
+while IFS= read -r _lb_line; do
+    [ -n "$_lb_line" ] || continue
+    f="${_lb_line%%:name:*}"
+    name="${_lb_line#*:name:}"
+    name="${name// /}"
     [ -n "$name" ] || continue
     files=$((files + 1))
     on_disk="${on_disk}${name}"$'\n'
-    # Herestrings, NEVER `printf | grep -q`: under this file's pipefail,
-    # grep -q exiting at first match can SIGPIPE the printf and flip a MATCH
-    # into a failed pipeline — under suite load the race fired on random
-    # files each run, reporting phantom unbound/dangling names (observed
-    # live on yoga 2026-08-23, three runs, three different name sets). The
-    # sigpipe-verdict-pipeline lesson, one gate later.
-    if grep -qxF "$name" <<< "$bound"; then
+    if _lb_in "$_lb_bound_f" "$name"; then
         bound_n=$((bound_n + 1))
         continue
     fi
-    if grep -qE '^phase: *retired *$' "$f"; then
+    if _lb_in "$_lb_retired_f" "$f"; then
         retired=$((retired + 1))
         continue
     fi
-    if [ -n "$grand" ] && grep -qxF "$name" <<< "$grand"; then
+    if [ -n "$grand" ] && _lb_in "$_lb_grand_f" "$name"; then
         grandfathered=$((grandfathered + 1))
         continue
     fi
     [ -n "$unbound" ] && unbound="$unbound,"
     unbound="$unbound$name"
-done
+done <<< "$_lb_names_raw"
 
 if [ -n "$unbound" ]; then
     echo "violation:unbound-litmus:$unbound"
@@ -88,10 +124,12 @@ if [ -n "$unbound" ]; then
 fi
 
 dangling=""
+# 1509-5i9p: same bulk-then-bash-match shape as the loop above — one framed
+# string built once, `_lb_in` checked per name, no per-name grep spawn.
+_lb_on_disk_f=$'\n'"$on_disk"$'\n'
 while IFS= read -r b; do
     [ -n "$b" ] || continue
-    # Herestring for the same SIGPIPE-under-pipefail reason as above.
-    grep -qxF "$b" <<< "$on_disk" || {
+    _lb_in "$_lb_on_disk_f" "$b" || {
         [ -n "$dangling" ] && dangling="$dangling,"
         dangling="$dangling$b"
     }

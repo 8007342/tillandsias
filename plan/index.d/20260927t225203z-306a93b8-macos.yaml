@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-generic-project-discipline-skill-shipped-in-the-forge-overlay-explains-the-ladder-the-projects-current-level-and-drift-how-to-raise-it-what-each-installed-hook-refuses-and-the-work-format-each-level-needs-so-every-hook-affordance-has-a-skill-to-point-at
+    event:
+      type: progress
+      ts: "2026-09-27T22:52:03Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t225203z
+      host: macos
+      summary: |
+        Implementation complete on work/1446-qkx4 at 159e494fe (based on origin/linux-next). skills/project-discipline/SKILL.md is generic: step 1 runs `discipline show` and `discipline derive` (fetch first). It covers the operator's ladder, drift, raising (xqi6's raise/install-hooks checked via `capabilities`, with a manual seed edit until they land), and one section per 1446-xqi6 refusal family (hook:pre-commit/post-commit/pre-push/post-merge/post-checkout/pre-receive/post-receive), each with the work format that clears it, plus the work format per level. It is registered in methodology.yaml shared_skills and symlinked from .claude/.opencode/.codex/.github (.gemini/skills already links the whole canonical tree); check-skills-single-source ok:5:19. FORGE WIRING FINDING: the image copies skills/ to /opt/skills, but nothing linked /opt/skills where any harness looks, so a forge on a non-Tillandsias project saw none of it. agent-profile.sh, sourced by every forge entrypoint under set -euo pipefail, now links generic skills into ~/.claude/skills, ~/.codex/skills, ~/.gemini/skills and ~/.config/opencode/skill. It is idempotent and never clobbers an existing entry. Evidence from a clean checkout (darwin): fixture 4/4, 0/4 on trunk; 11 deciders rc=0 (including skills-single-source, jq ratchet, gate-step-regimes); ratchet 6/6; litmus-covering 6 specs; gate step 276 with STEP_SECOND_REGIME. OPEN: arm 4's final clause (a filed event from a real forge on a project with no scripts/ listing /project-discipline) needs a forge rebuilt from this tree. The fixture exercises the same agent-profile.sh with /opt/skills stood in by skills/. The .gemini path (~/.gemini/skills) and the opencode user path (~/.config/opencode/skill) are linked on the documented conventions but have not been observed loaded by those harnesses. Please relay 159e494fe; the forge event closes it.

@@ -124,8 +124,7 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     merge (§6) still applies; this is the earlier one.
 1b. **Snapshot the startup boundary NOW — before any guard that writes.**
     Right after the pull and the branch guard, before the credential guard,
-    the daily-maintenance body, the capability-row republish, the opsx sync,
-    or any edit:
+    the daily-maintenance body, the capability-row republish, or any edit:
     ```bash
     boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
     scripts/meta-orchestration-worktree-guard.sh snapshot "$boundary_dir"
@@ -272,6 +271,24 @@ Three things about it that are easy to get wrong:
   80 of 140 on 2026-08-09.
 
 Budgets: autonomous/pairing forge sessions = adaptive 4 packets (configurable 3-6 via `--budget N` or `TILLANDSIAS_CYCLE_BUDGET`), unattended litmus step runs = 1 packet, non-forge hosts = 6 (order 707-3x9d).
+
+Tier (trims 2026-09-27, umbrella 1437-62g8): a session STATES the model tier
+it runs at, `--tier <haiku|sonnet|opus>` or `TILLANDSIAS_MODEL_TIER`
+(1437-vdz5). The tier is a FLOOR and an UNTAGGED row is opus (operator
+2026-09-27: "No size tags get Opus"): a haiku caller's pool is exactly the
+rows whose `implementer_tier` is haiku and it refuses
+`refused:no-tier-work:model-tier=haiku` rather than draining the general
+queue; a sonnet caller takes sonnet rows, then haiku, never untagged; an opus
+caller takes opus and untagged rows first, then sonnet, then haiku.
+`--tier-any` is for an orchestrator picking for its delegates
+(`/haiku-orchestrate`, 1443-hbgt).
+Until 1437-khnx projects the field, the tier is two lines inside the packet's
+`notes:` (`size: S|M|L`, `implementer_tier: …`) and the selector cannot see
+it — read them by eye. A cheaper packet runs in-session through
+`scripts/claude-delegate.sh implement <order>` (1437-yjf6, edits bounded to
+`owned_files`, no commit) with this session verifying and committing, or in
+a dedicated `./repeat --model haiku` session (1437-m5yx). Canonical:
+`methodology/distributed-work.yaml` → `cycle_batch_triage.model_tier_routing`.
 
 If the selector refuses (`refused:no-eligible-work`, `refused:no-plan-binary`),
 fall back to the manual ranking below — which is also the rationale the selector
@@ -664,16 +681,36 @@ Hard rules:
   in the fleet):
 
   ```bash
+  # The gate script writes its OWN log (so the Monitor sees it grow), and the
+  # agent door writes ONE JSON verdict to a separate status file (1260-2qgi).
+  #   <script-file>:  exec ./build.sh --check > gate.log 2>&1
   # linux
-  setsid nohup <script-file> < /dev/null > log 2>&1 &
+  setsid nohup tillandsias-plan run --json --timeout-ms 5400000 -- bash <script-file> \
+      < /dev/null > gate.status 2>&1 &
   # macos — no setsid; disown detaches from the job table
-  nohup <script-file> < /dev/null > log 2>&1 & disown
+  nohup tillandsias-plan run --json --timeout-ms 5400000 -- bash <script-file> \
+      < /dev/null > gate.status 2>&1 & disown
   ```
+
+  THE VERDICT IS `status` IN gate.status, NEVER AN INTEGER YOU COMPOSED
+  (methodology/convergence.yaml -> status_channel_policy, 1260-2qgi). The old
+  recipe ended the script with `echo "rc=$?"`, and that line lied twice: a gate
+  KILLED mid-run printed `rc=137`, an integer indistinguishable from a red,
+  and `$?` after a pipe was the LAST stage's (a failed push read as 0). The
+  door's record is `"status":"exited"` with `code` for a real exit, and
+  `signaled` / `timed_out` / `spawn_failed` / `no_status` / `policy_denied`,
+  with `code` null, when no exit status exists. Those are ABSENT, not red:
+  re-run, never report green, never push on them. A gate.status with NO record
+  means the door itself died, which is also absent.
+
+  `--timeout-ms` IS NOT OPTIONAL: the door's default deadline is 300 s, which
+  would kill every full gate at five minutes. 0 means no deadline; the
+  explicit ceiling above is the safer choice, so a wedged gate still ends.
 
   Both load-bearing details are unchanged on either platform: a script FILE
   rather than an inline command (an inline one re-exposes the sibling-match
-  trap, where a pgrep/kill pattern carried in the same command matches itself),
-  and a terminal `rc=` line for the Monitor to watch. This recipe was written
+  trap, where a pgrep/kill pattern carried in the same command matches itself;
+  the door refuses command strings anyway), and a log the Monitor can watch. This recipe was written
   from Linux measurements and prescribed fleet-wide for weeks before a Mac ran
   it — a remedy measured on one regime is a property of that regime until a
   second one executes it. On Windows invoke from Git Bash so `with-wsl2-builder.sh`

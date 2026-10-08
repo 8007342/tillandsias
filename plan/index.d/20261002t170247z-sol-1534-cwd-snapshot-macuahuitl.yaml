@@ -1,0 +1,9 @@
+events:
+  - packet_id: lua-live-proc-spawn-streams-with-script-owned-cancellation-and-reaping
+    event:
+      type: progress
+      ts: "2026-10-02T17:02:47Z"
+      agent_id: linux-macuahuitl-opencode-20261002t053211z
+      host: macuahuitl
+      summary: |
+        Final advisory caught a policy/execution input boundary inherited from proc.run: cwd was read twice from a Lua table, so __index could supply different absolute paths for policy and execution. Common prepare_proc now reads, validates and snapshots cwd once, then uses exactly that path for command construction and policy_gate. Added a metamethod counter/actual-cwd regression to the existing scoped environment fixture for BOTH proc.run and proc.spawn. It FAILS with cwd snapshot drift on preserved dae38028e candidate binary and PASSES on this fix; no policy default change. Raw cwd-before/cwd-after logs will accompany final evidence. Previous candidate dae38028e has fully measured110 Rust +7 shell checks and original deadline-harness after-receipt archived under plan/issues/evidence/lua-live-streaming-1534-20261002/. Its summary.json is a preliminary candidate receipt, superseded by this further hardening; no READY event has been published. Final clean-source retest/re-receipt and final-summary.json precede the authoritative READY note. Parent gate remains serialized; no full gate/preflight/clippy/native/landing/completed claim.

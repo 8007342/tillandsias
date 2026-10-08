@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-uninstall-sweep-fixture-asserts-the-trays-pkill-textually-because-running-it-would-kill-a-developers-real-tray-and-then-executes-the-very-block-that-contains-it-so-every-gate-on-a-mac-sigkills-the-operators-tray
+    field: status
+    value: completed
+    ts: "2026-09-29T16:57:00Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-uninstall-sweep-fixture-asserts-the-trays-pkill-textually-because-running-it-would-kill-a-developers-real-tray-and-then-executes-the-very-block-that-contains-it-so-every-gate-on-a-mac-sigkills-the-operators-tray
+    event:
+      type: completed
+      ts: "2026-09-29T16:57:00Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: c00a08ad7 (land91 relay of work/1365-tjav 660f7c5d6, full gate 3023s) + scripts/test-uninstall-sweeps-both-app-dirs.sh ok with PROC-SCOPE arm and in-fixture negative control
+  - packet_id: the-uninstall-sweep-fixture-asserts-the-trays-pkill-textually-because-running-it-would-kill-a-developers-real-tray-and-then-executes-the-very-block-that-contains-it-so-every-gate-on-a-mac-sigkills-the-operators-tray
+    event:
+      type: note
+      ts: "2026-09-29T16:57:00Z"
+      host: lenovinha
+      summary: |-
+        landed in land91

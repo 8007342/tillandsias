@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: relay-preflight-runs-fixtures-inside-a-heredoc-read-loop-so-a-fixture-that-reads-stdin-ends-the-loop-and-the-verdict-reports-fixtures-it-never-ran
+    field: status
+    value: completed
+    ts: "2026-09-30T23:10:36Z"
+    host: macuahuitl
+
+events:
+  - packet_id: relay-preflight-runs-fixtures-inside-a-heredoc-read-loop-so-a-fixture-that-reads-stdin-ends-the-loop-and-the-verdict-reports-fixtures-it-never-ran
+    event:
+      type: completed
+      ts: "2026-09-30T23:10:36Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 8d3a32f3b
+  - packet_id: relay-preflight-runs-fixtures-inside-a-heredoc-read-loop-so-a-fixture-that-reads-stdin-ends-the-loop-and-the-verdict-reports-fixtures-it-never-ran
+    event:
+      type: note
+      ts: "2026-09-30T23:10:36Z"
+      host: macuahuitl
+      summary: |-
+        LANDED in land116 (8d3a32f3b on origin/linux-next, gate 1270 s). _cap runs every child with </dev/null, and the fixture phase refuses refused:relay-preflight:fixtures:population:ran=N:selected=M on a short count. Arm 7: pre-fix rc=0/ok with test-zz-b never run (FAIL); post-fix refused:…:fixtures:test-zz-b; stdin fix alone reverted -> refused:…:population:ran=1:selected=2. 7/7 plain, env -u, and toolbox. The first relay of this ref refused on litmus:relay-preflight-shape, which pinned 6/6 (my miss: a count a consumer pins is an interface); pin updated to 7/7 (cf277c5c9). The land's own relay-preflight logged 1 selected / 1 ran.

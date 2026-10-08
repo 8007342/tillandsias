@@ -1,0 +1,43 @@
+packets:
+  - packet_id: lua-migration-fresh-eyes-review-of-policy-and-runtime-boundaries
+    order: 1525-ajtc
+    status: ready
+    kind: research
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, command-policy, review, plan-only-peer-ok]
+    estimated_hours: 2
+    owned_files:
+      - plan/issues/lua-migration-fresh-eyes-review-2026-10-01.md
+    title: |
+      Fresh-eyes review of the Lua command-runtime migration against the current implementation and policy boundaries
+    context: |
+      Requested in Codex inbox message codex-2026-09-30-06 and the prior
+      local handoff. The 2026-09-27 design and task list precede multiple
+      landed pilots, so distinguish live code from design intent and give
+      each concern a reproducible boundary, ownership and next action.
+      This is a documentation-only review, separate from 1375-amye and
+      the active 1384 implementation refs.
+    exit_criteria:
+      - The review cites current code and spec locations for each finding, names a falsifying test or observation, and distinguishes confirmed behavior from a design gap or stale premise.
+      - The review separates forge-safe Rust/Lua/scratch checks from host-only Podman/mirror/vault, macOS session and Windows job evidence.
+      - The review names active overlapping rows, avoids duplicating a claimed implementation, and is pushed on work/1525-ajtc for integration into linux-next.
+    verifiable_closure: |
+      tillandsias-plan check --strict-fragments; verify that the review file
+      exists in the work ref and that its citations resolve in the same tree.
+    unscoreable: |
+      This is a reviewer judgment about multiple independently evolving
+      boundaries. Its artifact is an evidence-backed finding with cited
+      disconfirmation paths, not a new executable behavior a single litmus
+      could assert without mirroring the review itself.
+    events:
+      - type: filed
+        ts: '2026-10-01T18:09:17Z'
+        agent_id: linux-macuahuitl-opencode-20261001t180917z
+        host: macuahuitl
+        summary: |
+          Filed from the coordinator's Codex inbox after fetching
+          origin/linux-next b24677d85. Sibling heads: main 52e3bc32e,
+          linux-next b24677d85, windows-next b38f71052,
+          osx-next 49731c152. No code or shared gate files owned.

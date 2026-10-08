@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: atomically-cut-over-the-four-source-agreement-shell-files-to-the-typed-lua-runner
+    event:
+      type: progress
+      ts: "2026-10-02T15:27:00Z"
+      agent_id: linux-macuahuitl-opencode-20261002t053211z
+      host: macuahuitl
+      summary: |
+        Parent independently reran the cutover lua_source_agreements target:7/7 selected and passing, including production exact13-case exit/stdout/stderr contracts. The earlier first-launch samples were explicitly not OS-cold. Supplemented with five alternating Bash/release-Lua bundle pairs using own copied executables, guard/module and live input files on btrfs. Before every bundle, POSIX_FADV_DONTNEED was applied ONLY to files created by the harness, then mincore measured ZERO resident pages for every owned file; no global cache flush or shared file eviction. All five pairs preserve exact output/status byte parity. Bash bundle ms33.053,19.881,27.625,24.750,27.570; Lua23.304,37.930,32.918,22.669,25.194. This is own-file-page-cold startup, NOT globally OS-cold: system tools/shared libraries, metadata and kernel caches remain warm, and the parent gate may run concurrently. No cold speedup claim; previous scoped release warm p95 claim is unchanged. Receipt SHA256b453282cfd879786827391bcc3bbc69e8f193974058400def65a67e4a368649f; retained reproducible harness and raw JSON in plan/issues/evidence/lua-source-agreement-cutover-20261002/measure-own-file-cold.py and own-file-cold-receipts.json. No native Mac/Windows or fleet-wide validation. Next_action: parent serialized full integration gate and remote ancestry before packet closure, with whole atomic implementation rollback path e6e5e0e64.

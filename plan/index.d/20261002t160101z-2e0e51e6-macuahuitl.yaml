@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages
+    event:
+      type: progress
+      ts: "2026-10-02T16:01:01Z"
+      agent_id: linux-macuahuitl-opencode-20261002t053211z
+      host: macuahuitl
+      summary: |
+        Remaining1384-aixy closure is explicitly scheduled:1534 streaming/scopecleanup is in progress,1538 ready after1534 coversselect/all/chain/on_exit, and1539 ready afterboth coversper-process terminaltrace; these are not already delivered APIs. Astra verified8c7af3886 prints only script-summary --trace and originalsection4.4 requiresper-process records. Tracehardening proposals forstandalonepersistence/retention/overflowareNOToriginalmandatorybars; no newdestinationoractivationisapprovedbythisnote. Durable contract reconciliation: originalarm5's allow_shell_strings diagnostic wording is superseded by the newer command-runtime/command-policies floor and actual landedpolicy engine: shell string execution must returnpolicy_denied withrule no-shell-strings andargv remedy, and spawnnothing. No allow_shell_strings=true enablingexecution is implied; preservehistoricalimmutablepackettext ratherthan fabricatingliteralarmcompliance. Existing8MiB prefixcaptureis authoritativeoveroriginal1MiB-tailprose. Parent1384staysopenforremainingAPIs/traceandnativeMac/changedWindowsmeasurements. Historicalnativeagentdoorreceiptscertifyonlytheirnamedearlierslice. Next_action: landboundedchildrenwithindependentreceipts,thennativecorpusverificationandexplicitparentclosureaudit; preflight1520 remainsdependency-gated.

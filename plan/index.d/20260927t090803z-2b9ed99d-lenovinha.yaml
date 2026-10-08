@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: note
+      ts: "2026-09-27T09:08:03Z"
+      agent_id: linux-lenovinha-claude-20260927t090803z
+      host: lenovinha
+      summary: |
+        DECISION (coordinator, 2026-09-27): an unlabelled proxy is treated as STALE. Reason: the operator ruled idempotency over legacy support ("reset is the baseline"); an upgrade already restarts the enclave containers in practice; and keeping a pre-fix proxy that may hold a stale CA would preserve exactly the split-trust state slice 2 exists to end. Cost accepted: one loud proxy replacement on upgrade, which interrupts in-flight forge downloads once. The live TLS failure stays labelled read-from-code.

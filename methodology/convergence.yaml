@@ -336,6 +336,38 @@ hot_path_nonblocking_policy:
     - justified_bootstrap_or_shutdown_wait: "allowed only with explicit spec trace and litmus coverage"
     - polling_for_idle_state: "forbidden unless it is a bounded one-shot check with an explicit exception"
 
+status_channel_policy:
+  # ORDER 1260-2qgi. Five instances on 2026-09-18, one shape: a status READ
+  # from something other than the thing that produced it, with nothing marking
+  # the substitution (a background wrapper's 0 for a gate that exited 1;
+  # wsl.exe's 0 for `false`; a pipeline's `$?` taken from its last stage; a
+  # wrapper-supplied 144 for a gate killed at 7%; a scripted "empty above =
+  # deleted" line that nothing checked).
+  description: >
+    A verdict is TERNARY: green (the child ran and exited 0), red (the child
+    ran and exited non-zero, or the check it performs failed), and ABSENT (no
+    status from the child reached the consumer: it was killed by a signal, it
+    timed out, it was never spawned, its status could not be collected, or the
+    channel that carries it drops status). Absent is a first-class value, the
+    same discipline as source=absent for missing data, applied to exit status.
+  rule: >
+    Every channel that carries a status MUST either preserve it exactly or
+    DECLARE that it cannot. It must never substitute an integer. A consumer
+    MUST be able to tell `exited 0` from `no status reached me`, and MUST act
+    on absent explicitly: re-run the command, or refuse to push, land, close
+    or report green. Treating absent as "use your judgement" is the defect,
+    because in practice it means using the wrapper's integer. The fleet's
+    status channel is the agent door, `tillandsias-plan run --json`
+    (1443-8pur): its terminal record carries an exit `code` ONLY when the
+    child exited, a signal, timeout, policy denial or uncollectable status is
+    named as such, and a missing terminal record is itself absent.
+  enforcement:
+    - a_status_is_preserved_or_declared_absent_never_substituted
+    - absent_is_distinct_from_exited_zero_at_every_consumer
+    - a_consumer_that_reads_absent_re_runs_or_refuses_never_reports_green
+    - detached_and_backgrounded_commands_run_through_tillandsias_plan_run_json
+    - pinned_by_scripts_test_status_channel_absent_is_first_class
+
 implementation_phases:
   description: >
     Convergence is not immediate. The system progressively strengthens validation

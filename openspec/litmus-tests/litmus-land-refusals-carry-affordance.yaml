@@ -1,0 +1,35 @@
+# @trace spec:ci-release, order:1247-lwek, order:1247-amcu
+name: litmus:land-refusals-carry-affordance
+spec: ci-release
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Every refused:land:* verdict of scripts/land-on-platform-branch.sh, read by
+  every landing host, is followed by "  why:" / "  remedy:" lines naming the
+  rule and what clears it, with the verdict line unchanged (1247-amcu slice 2).
+  For dirty-worktree, trunk-merge-conflict and gate-failed the fixture EXECUTES
+  the stated remedy against a scratch origin and shows it lands; a static arm
+  fails any refusal site added later without an affordance.
+
+preconditions:
+  - workspace contains scripts/land-on-platform-branch.sh
+  - workspace contains scripts/test-land-affordance.sh
+
+critical_path:
+  - step: "land refusals carry why and remedy, three executed remedies land, and no refusal site lacks an affordance"
+    command: "bash scripts/test-land-affordance.sh 2>&1 | tail -1"
+    timeout_ms: 180000
+    expected_behavior: "PASS: land-affordance 4/4 (1247-lwek)"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "a landing refusal names its rule and how to clear it"
+  log_fields:
+    spec: "ci-release"
+    test: "land-refusals-carry-affordance"
+
+failure_modes:
+  - "a new refused:land:* verdict ships without why/remedy"
+  - "a stated remedy no longer clears its refusal"

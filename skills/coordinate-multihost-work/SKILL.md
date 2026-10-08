@@ -107,6 +107,31 @@ progress: 526, 2009 and 2061 files against a truth of 3, 0 and 0. And "differs"
 is not "outstanding" — a file the branch touched after the snapshot is the
 branch moving on.
 
+### Which PACKETS are stranded — the same refs, read as ledger writes
+
+```bash
+scripts/check-stranded-plan-writes.sh       # or --from <saved salvage-audit transcript>
+```
+
+Order 1232-av4p. The audit above lists FILES; the dangerous subset is invisible
+in a file list — a `status:` write that exists only on a salvage or work ref,
+for a packet trunk reads differently. That is how a forge session nobody could
+message closed EIGHT packets onto a salvage ref while `plan_next` kept offering
+them (2026-09-16), and how 1430-9227 found a never-landed fragment that would
+have flipped 437. Each candidate fragment is folded INTO A SCRATCH COPY OF
+TRUNK'S LEDGER with the real plan binary, so the verdict is the fold's, not a
+string comparison:
+
+- `stranded:would-change:<order>:<id>:…` — relaying this fragment WOULD change
+  what trunk says. Decide: relay it, refuse it on the row, or re-verify the row
+  against trunk and close it on trunk evidence.
+- `stranded:superseded:…` — the ref's write lost to a later trunk write (an old
+  claim for a packet since completed). Relaying it changes nothing; no action.
+
+A `would-change` line is a question for the coordinator, never an action: the
+eight 2026-09-16 rows were re-verified and relayed hunk by hunk (1425-t9v9), not
+flipped by relaying their `implemented` writes.
+
 ## Which Hosts Are Active — RUN THE SCRIPT, DO NOT RETYPE THE QUERY
 
 ```bash
@@ -421,6 +446,24 @@ per pass) lands it exactly as the queue would. A fixture arriving through a
 Windows salvage snapshot has no exec bit (1321-2ixp); the relay lane fixes the
 mode in a fixup commit before the gate, so a `test -x` red never reaches the
 release tier from that path again.
+
+The relay lane's preflight is ONE command (1437-664a, landed):
+`scripts/relay-preflight.sh work/<a> work/<b> …` (merge onto `relay/<utc>`,
+cycle-preflight, the full decider list, `cargo fmt --check`, touched
+fixtures, touched crates' tests, and the SCOPED covering litmus from
+`litmus-covering-specs.sh --relay-scope origin/linux-next`, 1437-yfuh),
+printing one verdict line; `--plan` prints the selection without running
+and must be byte-identical across two runs. Running every covering spec is
+the `--all-covering` opt-in, not the default: declared matches and
+instant/quick command matches run per relay; long, e2e, non-pre-build and
+over-cap specs are named as deferred and run in the daily cut's
+`check:litmus-pre-build`. Canonical:
+`methodology/multi-host-development.yaml` → `pull_merge_cadence.relay_preflight`.
+Rulings 2026-09-27: the per-layer table (work-ref / relay / cut) is
+`methodology/ci.yaml` → `integration_layers` (1443-b85g); the land tool
+itself is being redesigned in Lua by a separate design and
+`relay-preflight.sh` may be superseded by it — do not redesign the land
+tool from this skill.
 
 ## Integration And Runtime Executor
 

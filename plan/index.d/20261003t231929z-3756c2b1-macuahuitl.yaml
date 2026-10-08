@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lua-script-run-trace-records-every-managed-process-terminal-outcome
+    field: next_action
+    value: |-
+      After dependencies land, inspect their delivered completion seam.
+      First session takes at most a two-hour vertical slice for proc.run and
+      explicitly waited spawn trace, checkpoints and records remaining async
+      scope-cleanup coverage; decompose the remainder at that seam if needed.
+      Parent does not close this row or1384 on a partial trace. Use existing
+      command_policy::redact for secret-shaped argv in emitted diagnostics,
+      without claiming arbitrary-secret removal or changing result argv.
+
+
+      [2026-10-03T20:59:39Z macuahuitl] Composition dependency1538 landed at f4f106c73/PR212. Await coordinator RULING on queued trace JSON/redaction schema, host-receipt duration timing and intact executor error identity before the first implementation slice. Then claim a bounded slice and explicit disjoint lua_proc_trace.rs ownership; do not contend with released Mac1543-f44v on lua_proc.rs or close whole1539/1384/OpenSpec4.2 from partial coverage.
+
+      [2026-10-03T23:19:29Z macuahuitl] Active first slice: linux-macuahuitl-opencode-20261003t225958z owns proc.run and explicitly-waited-spawn trace in lua_process.rs/script_run.rs with disjoint lua_proc_trace.rs tests. Prior ASK does not gate this already-pinned bounded slice. Keep cleanup/outer-timeout/legacy-door coverage and executor error identity gaps open; no parent/native closure.
+    ts: "2026-10-03T23:19:29Z"
+    host: macuahuitl
+
+events:
+  - packet_id: lua-script-run-trace-records-every-managed-process-terminal-outcome
+    event:
+      type: note
+      ts: "2026-10-03T23:19:29Z"
+      host: macuahuitl
+      summary: |-
+        linux-macuahuitl-opencode-20261003t225958z resumes approved multi-cycle first slice without an unnecessary design hold

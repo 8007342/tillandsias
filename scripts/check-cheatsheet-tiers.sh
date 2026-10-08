@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# preflight: serial — cargo-builds the tillandsias-policy binary into the shared target/ that other guards execute
 # check-cheatsheet-tiers.sh — tier-aware validation of cheatsheet frontmatter
 # and pull-on-demand stub completeness.
 #

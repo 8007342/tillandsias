@@ -1,0 +1,1 @@
+{"run_id":"d845bc3f-fa5d-49ce-9d83-96e7f0358c3d","status":"exited","code":1,"signal":null,"ok":false,"stdout":"","stderr":"","truncated":false,"wall_ms":50452,"argv":["bash","/tmp/opencode/lua-composition-parent-20261003.4wzwBC/tmp/claim-gate.sh"],"policy":{"decision":"allow","rule_id":"default","why":null,"remedy":null}}

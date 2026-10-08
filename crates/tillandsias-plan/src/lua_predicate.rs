@@ -63,8 +63,13 @@
 
 use crate::lua_runtime::LuaError;
 use mlua::prelude::*;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
+// @trace order:1534-puyz
+#[path = "lua_process.rs"]
+pub(crate) mod script_process;
 
 /// Which capabilities a predicate is given, and therefore whether its result may
 /// be cached. The class is what the environment is built FROM, not a label
@@ -100,16 +105,19 @@ impl PredicateClass {
 /// What `expert.shell{...}` returns to Lua, mirroring tillandsias_exec::Output.
 /// Three SEPARATE values plus the run identity — a predicate can tell stdout
 /// from stderr, and a stale artifact from a fresh one.
-fn shell_result_to_lua(lua: &Lua, out: tillandsias_exec::Output) -> LuaResult<LuaTable> {
+pub(crate) fn shell_result_to_lua(lua: &Lua, out: tillandsias_exec::Output) -> LuaResult<LuaTable> {
     let t = lua.create_table()?;
     t.set("stdout", String::from_utf8_lossy(&out.stdout).to_string())?;
     t.set("stderr", String::from_utf8_lossy(&out.stderr).to_string())?;
     t.set("run_id", out.run.as_str().to_string())?;
+    t.set("truncated", out.truncated)?;
+    t.set("dropped", out.dropped)?;
     match out.completion {
         tillandsias_exec::Completion::Exited(code) => {
             t.set("status", "exited")?;
             t.set("code", code)?;
-            t.set("ok", code == 0)?;
+            // Same rule as proc.run: a clipped capture is not ok (1443-esm5).
+            t.set("ok", code == 0 && !out.truncated)?;
         }
         tillandsias_exec::Completion::Signaled(sig) => {
             t.set("status", "signaled")?;
@@ -131,29 +139,19 @@ fn shell_result_to_lua(lua: &Lua, out: tillandsias_exec::Output) -> LuaResult<Lu
 /// Fields `proc.run{...}` accepts (design section 4.1). Anything else is a
 /// programmer error and RAISES: `timeout` misspelt for `timeout_ms` must not
 /// silently become "no deadline" (order 1384-aixy).
-pub const PROC_RUN_FIELDS: &[&str] = &["argv", "cwd", "env", "stdin", "timeout_ms", "group"];
+pub const PROC_RUN_FIELDS: &[&str] = &[
+    "argv",
+    "cwd",
+    "env",
+    "stdin",
+    "timeout_ms",
+    "group",
+    "capture_bytes",
+];
 
 /// The default deadline, 300 s, per the design. `timeout_ms = 0` means NO
 /// deadline and has to be written out.
 pub const PROC_RUN_DEFAULT_TIMEOUT_MS: u64 = 300_000;
-
-/// Shells that turn one string argument into a command line. Handing them a
-/// string reintroduces quoting, globbing and pipes, which is what argv-only
-/// execution exists to delete (1252-fg9e).
-const SHELL_PROGRAMS: &[&str] = &[
-    "sh",
-    "bash",
-    "dash",
-    "zsh",
-    "ksh",
-    "fish",
-    "cmd",
-    "cmd.exe",
-    "powershell",
-    "powershell.exe",
-    "pwsh",
-    "pwsh.exe",
-];
 
 /// The environment a child starts from: NOTHING is inherited except this set,
 /// plus the call's own `env` additions (design section 5.3). One constant, so
@@ -185,31 +183,155 @@ pub const PROC_RUN_BASE_ENV_FIXED: &[(&str, &str)] = &[
     ("GIT_TERMINAL_PROMPT", "0"),
 ];
 
-fn is_shell_string_call(argv: &[String]) -> bool {
-    let Some(prog) = argv.first() else {
-        return false;
-    };
-    let base = Path::new(prog)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or(prog)
-        .to_ascii_lowercase();
-    if !SHELL_PROGRAMS.contains(&base.as_str()) {
-        return false;
+/// A child command that starts from the base environment and nothing else
+/// (design section 5.3). EVERY Lua door builds its command here — proc.run,
+/// proc.spawn, proc.chain and the legacy sh.run / expert.shell — so "which
+/// variables leak into a check" has one answer (order 1551-nyzb: sh.run used
+/// to inherit the caller's whole environment, measured as a secret set in the
+/// runner's environment arriving in the child's `printenv`).
+pub(crate) fn base_env_command(argv: Vec<String>) -> tillandsias_exec::Command {
+    let mut cmd = tillandsias_exec::Command::new(argv).env_clear();
+    for key in PROC_RUN_BASE_ENV_PASSTHROUGH {
+        if let Some(v) = std::env::var_os(key) {
+            cmd = cmd.env(key, v);
+        }
     }
-    argv.iter().skip(1).any(|a| {
-        let a = a.to_ascii_lowercase();
-        a == "-c" || a == "/c" || a == "/k" || a == "-command" || a == "-encodedcommand"
-    })
+    for (k, v) in std::env::vars_os() {
+        if k.to_string_lossy().starts_with("TILLANDSIAS_") {
+            cmd = cmd.env(k, v);
+        }
+    }
+    for (k, v) in PROC_RUN_BASE_ENV_FIXED {
+        cmd = cmd.env(k, v);
+    }
+    cmd
+}
+
+/// The cwd a door runs in when the call names none: the repository root, else
+/// the process cwd. Resolve it ONCE per call and hand that same value to the
+/// policy gate and to the child, or the policy judges one directory while the
+/// child acts in another (order 1551-nyzb).
+pub(crate) fn default_cwd() -> std::io::Result<PathBuf> {
+    find_repo_root().or_else(|_| std::env::current_dir())
+}
+
+/// ORDER 1551-nyzb. `sh.run{...}` / `expert.shell{...}`: the legacy positional
+/// door, held to the same three rules as `proc.run`. Both installers (the
+/// predicate environment below and the script host in lua_process.rs) call
+/// this, so the rules cannot drift between them again.
+///
+/// MEASURED BEFORE THE FIX, runner started in a directory other than the
+/// repository root: `proc.run{argv={'rm','-r','victim'}}` answered
+/// `consent:policy:workspace-destroy` while `sh.run{'rm','-r','victim'}`
+/// exited 0 and the directory was gone — the gate was asked about the root
+/// (`cwd: None`) and the child ran in the inherited cwd. So:
+///
+/// 1. the cwd is resolved once and is the cwd of BOTH the policy request and
+///    the child;
+/// 2. the child starts from the base environment, not the caller's;
+/// 3. a call without `timeout_ms` gets the default deadline, and `0` means no
+///    deadline and has to be written out (it used to mean "already expired").
+pub(crate) fn prepare_shell(
+    argv: Vec<String>,
+    timeout_ms: Option<u64>,
+) -> LuaResult<tillandsias_exec::Command> {
+    let cwd = default_cwd().map_err(|e| {
+        mlua::Error::RuntimeError(format!("sh.run: cannot resolve effective cwd: {e}"))
+    })?;
+    if let Some(d) = policy_gate(&argv, Some(&cwd), "sh.run") {
+        return Err(mlua::Error::RuntimeError(format!(
+            "{}\n  why: {}\n  remedy: {}",
+            d.token,
+            d.why.unwrap_or_default(),
+            d.remedy.unwrap_or_default()
+        )));
+    }
+    let mut cmd = base_env_command(argv).current_dir(&cwd);
+    let timeout_ms = timeout_ms.unwrap_or(PROC_RUN_DEFAULT_TIMEOUT_MS);
+    if timeout_ms > 0 {
+        cmd = cmd.timeout(std::time::Duration::from_millis(timeout_ms));
+    }
+    Ok(cmd)
+}
+
+/// ORDER 1443-isrk: ask the command policy before spawning. `None` means the
+/// request is allowed; `Some` carries the deny or consent decision, and the
+/// caller must NOT spawn. The host kind comes from the host's own evidence
+/// (never a flag), the regime from `TILLANDSIAS_POLICY_REGIME` (default
+/// `interactive`), and the workspace is the repository root.
+pub fn policy_gate(
+    argv: &[String],
+    cwd: Option<&Path>,
+    caller: &str,
+) -> Option<crate::command_policy::Decision> {
+    use crate::command_policy as cp;
+    let here = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let root = find_repo_root().unwrap_or_else(|_| here.clone());
+    let protected = cp::protected_refs(&root);
+    let (seed, load) = cp::load_seed(&root, None, &protected);
+    let regime = std::env::var("TILLANDSIAS_POLICY_REGIME")
+        .ok()
+        .filter(|r| cp::REGIMES.contains(&r.as_str()))
+        .unwrap_or_else(|| "interactive".to_string());
+    let req = cp::Request {
+        argv: argv.to_vec(),
+        cwd: cwd.map(Path::to_path_buf).unwrap_or_else(|| root.clone()),
+        workspace: root.clone(),
+        host_kind: cp::read_host_kind(&root).kind,
+        regime,
+        caller: caller.to_string(),
+    };
+    let d = cp::decide_execution(
+        &req,
+        seed.as_ref(),
+        &load,
+        &protected,
+        &cp::ConsentCtx::from_env(&root),
+    );
+    cp::audit_decision(&req, &d, None);
+    (d.strictness != cp::Strictness::Allow).then_some(d)
 }
 
 /// `proc.run{argv=..., cwd, env, stdin, timeout_ms, group}` (order 1384-aixy,
 /// design section 4.1): one process, run to completion, returned as a VALUE.
 /// A non-zero exit, a signal and a timeout are all DATA; only programmer
-/// errors raise. This first slice is synchronous: `proc.spawn`, line
-/// callbacks, `proc.chain`, `proc.select` and `proc.all` come in later slices.
-fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
-    let err = |m: String| mlua::Error::RuntimeError(format!("proc.run: {m}"));
+/// errors raise. proc.run remains synchronous; the scoped script runner adds
+/// async proc.spawn/line delivery (1534-puyz) and composition (1538-pwdr).
+pub(crate) enum PreparedProc {
+    Refused(LuaTable),
+    Command {
+        argv: Vec<String>,
+        command: tillandsias_exec::Command,
+    },
+}
+
+// @trace order:1538-pwdr
+// No Lua values survive validation. In particular, authorization may consume
+// consent only when a snapshotted stage is actually about to execute.
+pub(crate) struct ProcSnapshot {
+    pub argv: Vec<String>,
+    pub command: tillandsias_exec::Command,
+    pub cwd: PathBuf,
+    pub explicit_stdin: bool,
+}
+
+// @trace order:1534-puyz
+// Validate the WHOLE call before the execution gate can consume consent.
+pub(crate) fn prepare_proc(
+    lua: &Lua,
+    spec: LuaTable,
+    caller: &str,
+    managed_group: bool,
+) -> LuaResult<PreparedProc> {
+    authorize_proc(lua, validate_proc(spec, caller, managed_group)?, caller)
+}
+
+pub(crate) fn validate_proc(
+    spec: LuaTable,
+    caller: &str,
+    managed_group: bool,
+) -> LuaResult<ProcSnapshot> {
+    let err = |m: String| mlua::Error::RuntimeError(format!("{caller}: {m}"));
 
     for pair in spec.clone().pairs::<LuaValue, LuaValue>() {
         let (k, _) = pair?;
@@ -257,50 +379,30 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
     if argv.is_empty() {
         return Err(err("argv is empty".into()));
     }
+    if argv.iter().any(|arg| arg.contains('\0')) {
+        return Err(err("argv strings must not contain NUL".into()));
+    }
     if argv_t.pairs::<LuaValue, LuaValue>().count() != argv.len() {
         return Err(err(
             "argv must be a sequence with no holes and no named keys".into(),
         ));
     }
-    if is_shell_string_call(&argv) {
-        return Err(err(format!(
-            "refused '{} {}': a shell given a command STRING reintroduces quoting, globbing \
-             and pipes. Pass the program's own argv instead. A script that genuinely needs \
-             one must declare allow_shell_strings (not available in this first slice).",
-            argv[0], argv[1]
-        )));
-    }
-
-    let mut cmd = tillandsias_exec::Command::new(argv.clone()).env_clear();
-    for key in PROC_RUN_BASE_ENV_PASSTHROUGH {
-        if let Some(v) = std::env::var_os(key) {
-            cmd = cmd.env(key, v);
-        }
-    }
-    for (k, v) in std::env::vars_os() {
-        if k.to_string_lossy().starts_with("TILLANDSIAS_") {
-            cmd = cmd.env(k, v);
-        }
-    }
-    for (k, v) in PROC_RUN_BASE_ENV_FIXED {
-        cmd = cmd.env(k, v);
-    }
-
-    match spec.get::<LuaValue>("cwd")? {
-        LuaValue::Nil => {
-            if let Ok(root) = find_repo_root() {
-                cmd = cmd.current_dir(root);
-            }
-        }
+    // Snapshot cwd ONCE. Lua __index may return a different value on every
+    // lookup; authorization must measure the exact cwd execution will use.
+    let cwd_path: Option<PathBuf> = match spec.get::<LuaValue>("cwd")? {
+        LuaValue::Nil => None,
         LuaValue::String(s) => {
             let p = PathBuf::from(s.to_str()?.to_string());
+            if s.as_bytes().contains(&0) {
+                return Err(err("cwd must not contain NUL".into()));
+            }
             if !p.is_absolute() {
                 return Err(err(format!(
                     "cwd '{}' is relative; pass an absolute path",
                     p.display()
                 )));
             }
-            cmd = cmd.current_dir(p);
+            Some(p)
         }
         other => {
             return Err(err(format!(
@@ -308,13 +410,28 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
                 other.type_name()
             )));
         }
-    }
+    };
+    let mut cmd = base_env_command(argv.clone());
+
+    let cwd = match cwd_path {
+        Some(p) => p,
+        None => default_cwd().map_err(|e| err(format!("cannot resolve effective cwd: {e}")))?,
+    };
+    cmd = cmd.current_dir(&cwd);
 
     match spec.get::<LuaValue>("env")? {
         LuaValue::Nil => {}
         LuaValue::Table(t) => {
-            for pair in t.pairs::<String, String>() {
-                let (k, v) = pair.map_err(|_| err("env must map strings to strings".into()))?;
+            for pair in t.pairs::<LuaValue, LuaValue>() {
+                let (LuaValue::String(k), LuaValue::String(v)) = pair? else {
+                    return Err(err("env must map strings to strings".into()));
+                };
+                let (k, v) = (k.to_str()?.to_string(), v.to_str()?.to_string());
+                if k.is_empty() || k.contains(['\0', '=']) || v.contains('\0') {
+                    return Err(err(
+                        "env names must be nonempty without NUL or '=', values without NUL".into(),
+                    ));
+                }
                 cmd = cmd.env(k, v);
             }
         }
@@ -326,16 +443,19 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
         }
     }
 
-    match spec.get::<LuaValue>("stdin")? {
-        LuaValue::Nil => {}
-        LuaValue::String(s) => cmd = cmd.stdin_bytes(s.as_bytes().to_vec()),
+    let explicit_stdin = match spec.get::<LuaValue>("stdin")? {
+        LuaValue::Nil => false,
+        LuaValue::String(s) => {
+            cmd = cmd.stdin_bytes(s.as_bytes().to_vec());
+            true
+        }
         other => {
             return Err(err(format!(
                 "stdin must be a string, not a {}",
                 other.type_name()
             )));
         }
-    }
+    };
 
     let timeout_ms: u64 = match spec.get::<LuaValue>("timeout_ms")? {
         LuaValue::Nil => PROC_RUN_DEFAULT_TIMEOUT_MS,
@@ -361,7 +481,72 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
         }
     };
     cmd = cmd.group(group);
+    if managed_group && !group {
+        return Err(err(format!(
+            "group=false is not supported by script-owned {caller}"
+        )));
+    }
 
+    // Per-fd capture cap (order 1443-esm5). Unset keeps the executor's default
+    // (tillandsias_exec::DEFAULT_CAPTURE_BYTES); a clipped capture comes back
+    // with truncated = true and ok = false, never as a whole one.
+    match spec.get::<LuaValue>("capture_bytes")? {
+        LuaValue::Nil => {}
+        LuaValue::Integer(i) if i > 0 => cmd = cmd.capture_bytes(i as usize),
+        other => {
+            return Err(err(format!(
+                "capture_bytes must be a positive integer, not {other:?}"
+            )));
+        }
+    }
+
+    Ok(ProcSnapshot {
+        argv,
+        command: cmd,
+        cwd,
+        explicit_stdin,
+    })
+}
+
+pub(crate) fn authorize_proc(
+    lua: &Lua,
+    snapshot: ProcSnapshot,
+    caller: &str,
+) -> LuaResult<PreparedProc> {
+    let ProcSnapshot {
+        argv, command, cwd, ..
+    } = snapshot;
+    if let Some(d) = policy_gate(&argv, Some(&cwd), caller) {
+        let t = lua.create_table()?;
+        let echo = lua.create_table()?;
+        for (i, a) in argv.iter().enumerate() {
+            echo.set(i + 1, crate::command_policy::redact(a))?;
+        }
+        t.set("argv", echo)?;
+        t.set(
+            "status",
+            if d.strictness == crate::command_policy::Strictness::Deny {
+                "policy_denied"
+            } else {
+                "policy_consent_required"
+            },
+        )?;
+        t.set("ok", false)?;
+        t.set("rule_id", d.rule_id.as_str())?;
+        t.set("decision", d.token.as_str())?;
+        t.set("why", d.why.unwrap_or_default())?;
+        t.set("remedy", d.remedy.unwrap_or_default())?;
+        return Ok(PreparedProc::Refused(t));
+    }
+    Ok(PreparedProc::Command { argv, command })
+}
+
+fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
+    let (argv, cmd) = match prepare_proc(lua, spec, "proc.run", false)? {
+        PreparedProc::Refused(t) => return Ok(t),
+        PreparedProc::Command { argv, command } => (argv, command),
+    };
+    let err = |m: String| mlua::Error::RuntimeError(format!("proc.run: {m}"));
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -377,6 +562,17 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
     // shutdown_background returns now and lets those threads end on their own.
     rt.shutdown_background();
 
+    proc_result_to_lua(lua, &argv, result, wall_ms)
+}
+
+pub(crate) fn proc_result_to_lua(
+    lua: &Lua,
+    argv: &[String],
+    result: Result<tillandsias_exec::Output, tillandsias_exec::ExecError>,
+    wall_ms: u64,
+) -> LuaResult<LuaTable> {
+    let err = |m: String| mlua::Error::RuntimeError(format!("proc.run: {m}"));
+
     let t = lua.create_table()?;
     let echo = lua.create_table()?;
     for (i, a) in argv.iter().enumerate() {
@@ -389,11 +585,15 @@ fn proc_run(lua: &Lua, spec: LuaTable) -> LuaResult<LuaTable> {
             t.set("run_id", out.run.as_str().to_string())?;
             t.set("stdout", lua.create_string(&out.stdout)?)?;
             t.set("stderr", lua.create_string(&out.stderr)?)?;
+            t.set("truncated", out.truncated)?;
+            t.set("dropped", out.dropped)?;
             match out.completion {
                 tillandsias_exec::Completion::Exited(code) => {
                     t.set("status", "exited")?;
                     t.set("code", code)?;
-                    t.set("ok", code == 0)?;
+                    // A clean exit with a CLIPPED capture is not ok: the caller
+                    // would be judging output it does not have (1443-esm5).
+                    t.set("ok", code == 0 && !out.truncated)?;
                 }
                 tillandsias_exec::Completion::Signaled(sig) => {
                     t.set("status", "signaled")?;
@@ -461,7 +661,7 @@ fn strip_verbatim(p: PathBuf) -> PathBuf {
 /// under a temp dir (`/var/folders/…`) was refused as "outside the repository
 /// root" and `lua_std::the_archiver_sweeps_in_the_default_sandbox` failed on
 /// every Mac, 3/3. Linux `/tmp` is not a symlink, so Linux was green.
-fn containment_path(normalized: &Path) -> Option<PathBuf> {
+pub(crate) fn containment_path(normalized: &Path) -> Option<PathBuf> {
     let mut probe = normalized.to_path_buf();
     let mut tail: Vec<std::ffi::OsString> = Vec::new();
     // symlink_metadata: a dangling link EXISTS here, so it becomes the probe
@@ -521,6 +721,35 @@ fn resolve_write_path(root: &Path, path_str: &str, verb: &str) -> Result<PathBuf
     Ok(normalized)
 }
 
+/// ORDER 1443-fpck. Under regime=fixture a write verb may not reach the real
+/// checkout's git dir or leave the declared scope; the refusal is audited and
+/// RAISED like every other fs refusal, carrying the verdict token, why and
+/// remedy on separate lines, and nothing is written.
+fn fixture_write_guard(root: &Path, target: &Path, verb: &str) -> Result<(), mlua::Error> {
+    use crate::command_policy as cp;
+    if std::env::var("TILLANDSIAS_POLICY_REGIME").as_deref() != Ok("fixture") {
+        return Ok(());
+    }
+    let Some(d) = cp::fixture_write_decision(target, &cp::FixtureScope::from_env(root)) else {
+        return Ok(());
+    };
+    let req = cp::Request {
+        argv: vec![verb.to_string(), target.display().to_string()],
+        cwd: root.to_path_buf(),
+        workspace: root.to_path_buf(),
+        host_kind: cp::read_host_kind(root).kind,
+        regime: "fixture".into(),
+        caller: verb.to_string(),
+    };
+    cp::audit_decision(&req, &d, None);
+    Err(mlua::Error::RuntimeError(format!(
+        "{verb}: {}\nwhy: {}\nremedy: {}",
+        d.token,
+        d.why.unwrap_or_default(),
+        d.remedy.unwrap_or_default()
+    )))
+}
+
 /// fs.mkdir / fs.write / fs.list / fs.exists: OBSERVING ONLY (order 1380-u7sq).
 /// Rooted exactly like fs.read, so a script can touch the checkout (or the
 /// root TILLANDSIAS_REPO_ROOT names, which is how the archiver's --check points
@@ -543,6 +772,7 @@ fn register_fs_write_verbs(lua: &Lua) -> Result<(), LuaError> {
             let root = root_mkdir()?;
             let p = resolve_write_path(&root, &path_str, "fs.mkdir")
                 .map_err(mlua::Error::RuntimeError)?;
+            fixture_write_guard(&root, &p, "fs.mkdir")?;
             std::fs::create_dir_all(&p).map_err(|e| {
                 mlua::Error::RuntimeError(format!("fs.mkdir: failed to create '{path_str}': {e}"))
             })?;
@@ -559,6 +789,7 @@ fn register_fs_write_verbs(lua: &Lua) -> Result<(), LuaError> {
             let root = root_write()?;
             let p = resolve_write_path(&root, &path_str, "fs.write")
                 .map_err(mlua::Error::RuntimeError)?;
+            fixture_write_guard(&root, &p, "fs.write")?;
             let parent = p.parent().ok_or_else(|| {
                 mlua::Error::RuntimeError(format!("fs.write: '{path_str}' has no parent"))
             })?;
@@ -697,7 +928,7 @@ pub const CACHEABLE_STDLIB_GLOBALS: &[&str] = &[
 /// would make every absolute path "inside the repository", so an unlocatable
 /// root is a named refusal at `fs.read` time, never a guess. `/` itself is
 /// never accepted as a root, whichever route proposed it.
-fn find_repo_root() -> Result<PathBuf, String> {
+pub(crate) fn find_repo_root() -> Result<PathBuf, String> {
     let root = locate_repo_root().ok_or_else(|| {
         "fs.read: refused — no repository root found (set TILLANDSIAS_REPO_ROOT, or run \
          inside a checkout containing plan/index.yaml or .git)"
@@ -826,9 +1057,16 @@ fn values_equal(a: &LuaValue, b: &LuaValue) -> bool {
     }
 }
 
-/// Every file a predicate read through `fs.read`, in read order (repo-rooted,
-/// normalised). The memo keys a Cacheable verdict on these files' CONTENT.
-pub type ReadLog = std::sync::Arc<std::sync::Mutex<Vec<PathBuf>>>;
+/// The digest belongs to the bytes returned by this particular read, not to a
+/// later reread of the path. Duplicate paths are retained when their contents
+/// differ during one evaluation, making that evaluation uncacheable.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ReadObservation {
+    path: PathBuf,
+    digest: Option<[u8; 32]>,
+}
+
+pub type ReadLog = std::sync::Arc<std::sync::Mutex<Vec<ReadObservation>>>;
 
 /// Build a Lua runtime whose `expert` table contains EXACTLY the verbs its class
 /// is entitled to.
@@ -840,45 +1078,114 @@ pub fn build_environment(class: PredicateClass) -> Result<Lua, LuaError> {
 pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result<Lua, LuaError> {
     let lua = Lua::new();
 
-    // Same stdlib removals as lua_runtime::new. Repeated rather than shared
-    // because this environment must not silently inherit a future widening of
-    // that one — the two have different purposes and a common helper would make
-    // a change there change the trust boundary here.
+    // @trace order:1532-u9en
+    // Both sandboxed classes use a capability allow-list. Being uncached does
+    // not authorize Observing to bypass rooted fs verbs with io.lines,
+    // os.remove, or package.loadlib. In particular, do not retain package:
+    // package.loaded aliases the original stdlib tables and its searchers can
+    // load files/native code even if the corresponding globals are removed.
+    // There is no debug/registry access or loader alias in the reachable set.
+    // This is not a filesystem sandbox for children spawned by proc/sh.
     {
         let globals = lua.globals();
-        if let Ok(os_table) = globals.get::<LuaTable>("os") {
-            let _ = os_table.set("execute", LuaValue::Nil);
-            let _ = os_table.set("exit", LuaValue::Nil);
-            let _ = os_table.set("getenv", LuaValue::Nil);
+        let observing = matches!(class, PredicateClass::Observing);
+        if observing {
+            // Fresh tables expose only clock helpers and fixed-stream logging,
+            // never file handles, filename readers, or filesystem verbs.
+            for (name, members) in [
+                ("os", &["clock", "date", "difftime", "time"][..]),
+                ("io", &["write", "flush"][..]),
+            ] {
+                let original: LuaTable = globals
+                    .get(name)
+                    .map_err(|e| LuaError::VmError(format!("{name}: {e}")))?;
+                let restricted = lua
+                    .create_table()
+                    .map_err(|e| LuaError::VmError(format!("{name}: {e}")))?;
+                for member in members {
+                    let value: LuaValue = original
+                        .get(*member)
+                        .map_err(|e| LuaError::VmError(format!("{name}.{member}: {e}")))?;
+                    restricted
+                        .set(*member, value)
+                        .map_err(|e| LuaError::VmError(format!("{name}.{member}: {e}")))?;
+                }
+                if name == "io" {
+                    // The push hook consumes Git's supplied stdin with
+                    // io.lines(). Its filename form is a different capability
+                    // and must not reach the native reader. No input/output
+                    // setter exists, so the streams cannot be redirected.
+                    let lines: LuaFunction = original
+                        .get("lines")
+                        .map_err(|e| LuaError::VmError(format!("io.lines: {e}")))?;
+                    let stdin_lines = lua
+                        .create_function(move |_, args: LuaMultiValue| {
+                            if !args.is_empty() {
+                                return Err(mlua::Error::RuntimeError(
+                                    "io.lines: refused — filenames are unmanaged; use fs.read (io.lines() is stdin-only)".into(),
+                                ));
+                            }
+                            lines.call::<LuaMultiValue>(())
+                        })
+                        .map_err(|e| LuaError::VmError(format!("io.lines: {e}")))?;
+                    restricted
+                        .set("lines", stdin_lines)
+                        .map_err(|e| LuaError::VmError(format!("io.lines: {e}")))?;
+                    // Do not return native file userdata from write, or expose
+                    // its metatable. A private closure owns each fixed stream.
+                    let proxy: LuaFunction = lua
+                        .load("return function(stream) return {write = function(_, ...) stream:write(...) end, flush = function(_) return stream:flush() end} end")
+                        .eval()
+                        .map_err(|e| LuaError::VmError(format!("io streams: {e}")))?;
+                    for stream in ["stdout", "stderr"] {
+                        let handle: LuaValue = original
+                            .get(stream)
+                            .map_err(|e| LuaError::VmError(format!("io.{stream}: {e}")))?;
+                        let table: LuaTable = proxy
+                            .call(handle)
+                            .map_err(|e| LuaError::VmError(format!("io.{stream}: {e}")))?;
+                        restricted
+                            .set(stream, table)
+                            .map_err(|e| LuaError::VmError(format!("io.{stream}: {e}")))?;
+                    }
+                    let write: LuaFunction = original
+                        .get("write")
+                        .map_err(|e| LuaError::VmError(format!("io.write: {e}")))?;
+                    restricted
+                        .set(
+                            "write",
+                            lua.create_function(move |_, args: LuaMultiValue| {
+                                write.call::<LuaMultiValue>(args)?;
+                                Ok(())
+                            })
+                            .map_err(|e| LuaError::VmError(format!("io.write: {e}")))?,
+                        )
+                        .map_err(|e| LuaError::VmError(format!("io.write: {e}")))?;
+                }
+                globals
+                    .set(name, restricted)
+                    .map_err(|e| LuaError::VmError(format!("{name}: {e}")))?;
+            }
         }
-        if let Ok(io_table) = globals.get::<LuaTable>("io") {
-            let _ = io_table.set("open", LuaValue::Nil);
-            let _ = io_table.set("popen", LuaValue::Nil);
-            let _ = io_table.set("close", LuaValue::Nil);
-            let _ = io_table.set("output", LuaValue::Nil);
-            let _ = io_table.set("input", LuaValue::Nil);
-        }
-        let _ = globals.set("debug", LuaValue::Nil);
-        let _ = globals.set("loadfile", LuaValue::Nil);
-        let _ = globals.set("dofile", LuaValue::Nil);
-        let _ = globals.set("require", LuaValue::Nil);
-    }
-
-    // ORDER 1367-upz6. The removals above are a DENY-list, and a deny-list
-    // left os.time, os.clock, io.lines, os.remove and math.random reachable,
-    // so a cacheable predicate could read the clock or the disk and have that
-    // verdict replayed from cache. The cacheable class is therefore cut down
-    // to an ALLOW-list: every global not named below is removed, and math
-    // loses its non-deterministic half. The observing class keeps the wider
-    // set; it is never cached and already holds the shell verb.
-    if matches!(class, PredicateClass::Cacheable) {
-        let globals = lua.globals();
         let mut drop: Vec<String> = Vec::new();
         for pair in globals.clone().pairs::<LuaValue, LuaValue>() {
             let (k, _) = pair.map_err(|e| LuaError::VmError(format!("globals: {e}")))?;
             if let LuaValue::String(name) = k {
                 let name = name.to_string_lossy().to_string();
-                if !CACHEABLE_STDLIB_GLOBALS.contains(&name.as_str()) {
+                if !(CACHEABLE_STDLIB_GLOBALS.contains(&name.as_str())
+                    || (observing
+                        && [
+                            "os",
+                            "io",
+                            "print",
+                            "warn",
+                            "load",
+                            "collectgarbage",
+                            // Narrowed to `yield` alone just below (1551-pemw).
+                            "coroutine",
+                        ]
+                        .contains(&name.as_str())))
+                {
                     drop.push(name);
                 }
             }
@@ -888,9 +1195,67 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                 .set(name.as_str(), LuaValue::Nil)
                 .map_err(|e| LuaError::VmError(format!("remove {name}: {e}")))?;
         }
-        if let Ok(math) = globals.get::<LuaTable>("math") {
-            let _ = math.set("random", LuaValue::Nil);
-            let _ = math.set("randomseed", LuaValue::Nil);
+        // ORDER 1551-pemw. A script may not CREATE a coroutine. The runner's
+        // instruction hook is what stops a script after its verdict or its
+        // deadline, and mlua 0.10 keeps ONE hook thread: a hook that fires on
+        // a script-created coroutine removes itself. Measured before this:
+        // after a caught verdict, code inside coroutine.wrap ran 20 million
+        // more iterations and wrote a file; and an async door called inside
+        // one returned a truthy userdata instead of waiting, so a script could
+        // go green without having waited. No shipped .lua used the library.
+        //
+        // The table cannot simply be dropped: mlua builds every async function
+        // from `coroutine.yield`, read from the GLOBALS at creation time
+        // (state/raw.rs, create_async_callback), and process handles create
+        // theirs while the script runs. So the global stays and holds `yield`
+        // and nothing else. A bare yield from script code is resumed at once
+        // by the async driver, on the thread the hook covers.
+        if observing && let Ok(original) = globals.get::<LuaTable>("coroutine") {
+            let narrowed = lua
+                .create_table()
+                .map_err(|e| LuaError::VmError(format!("coroutine: {e}")))?;
+            let yield_fn: LuaFunction = original
+                .get("yield")
+                .map_err(|e| LuaError::VmError(format!("coroutine.yield: {e}")))?;
+            narrowed
+                .set("yield", yield_fn)
+                .map_err(|e| LuaError::VmError(format!("coroutine.yield: {e}")))?;
+            globals
+                .set("coroutine", narrowed)
+                .map_err(|e| LuaError::VmError(format!("coroutine: {e}")))?;
+        }
+        // ORDER 1551-8gkg. Lua 5.4 does not verify bytecode, so a binary chunk
+        // is a way around every restriction this function builds. `string.dump`
+        // (which produces one) goes in BOTH classes, and Observing `load` — the
+        // Cacheable class has none — is narrowed to text chunks whatever mode
+        // the caller asks for. An explicit env argument is passed through, and
+        // an ABSENT one stays absent (a nil env would strip the chunk's _ENV).
+        if let Ok(string) = globals.get::<LuaTable>("string") {
+            string
+                .set("dump", LuaValue::Nil)
+                .map_err(|e| LuaError::VmError(format!("string.dump: {e}")))?;
+        }
+        if observing && let Ok(raw) = globals.get::<LuaFunction>("load") {
+            let text_only: LuaFunction = lua
+                .load(
+                    "local raw = ...\n\
+                     return function(chunk, chunkname, _mode, ...)\n\
+                       if select('#', ...) > 0 then return raw(chunk, chunkname, 't', (...)) end\n\
+                       return raw(chunk, chunkname, 't')\n\
+                     end",
+                )
+                .set_name("=text-only-load")
+                .call(raw)
+                .map_err(|e| LuaError::VmError(format!("load: {e}")))?;
+            globals
+                .set("load", text_only)
+                .map_err(|e| LuaError::VmError(format!("load: {e}")))?;
+        }
+        if !observing && let Ok(math) = globals.get::<LuaTable>("math") {
+            math.set("random", LuaValue::Nil)
+                .map_err(|e| LuaError::VmError(format!("math.random: {e}")))?;
+            math.set("randomseed", LuaValue::Nil)
+                .map_err(|e| LuaError::VmError(format!("math.randomseed: {e}")))?;
         }
     }
 
@@ -937,13 +1302,18 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                         "fs.read: refused — symlink '{path_str}' resolves outside repository root"
                     )));
                 }
-                // Logged BEFORE the read, so a file that is absent now and
-                // appears later still invalidates the memo (its digest moves
-                // from "absent" to its bytes).
+                // Record the bytes THIS call observed. A post-evaluation
+                // reread can see different bytes and falsely authenticate the
+                // verdict against a state it never evaluated (1470-dbuw).
+                let bytes = std::fs::read(&normalized);
+                let digest = bytes.as_ref().ok().map(|b| Sha256::digest(b).into());
                 if let Ok(mut log) = reads.lock() {
-                    log.push(normalized.clone());
+                    log.push(ReadObservation {
+                        path: normalized,
+                        digest,
+                    });
                 }
-                let bytes = std::fs::read(&normalized).map_err(|e| {
+                let bytes = bytes.map_err(|e| {
                     mlua::Error::RuntimeError(format!("fs.read: failed to read '{path_str}': {e}"))
                 })?;
                 lua.create_string(&bytes)
@@ -1105,11 +1475,10 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                         ));
                     }
                     let timeout_ms: Option<u64> = spec.get("timeout_ms").ok().flatten();
-
-                    let mut cmd = tillandsias_exec::Command::new(argv);
-                    if let Some(ms) = timeout_ms {
-                        cmd = cmd.timeout(std::time::Duration::from_millis(ms));
-                    }
+                    // 1443-isrk: the policy decides before anything spawns.
+                    // 1551-nyzb: against the cwd the child will run in, from
+                    // the base environment, with the default deadline.
+                    let cmd = prepare_shell(argv, timeout_ms)?;
 
                     // A dedicated current-thread runtime: this is called from
                     // synchronous Lua, and block_on inside an existing runtime
@@ -1185,7 +1554,7 @@ pub struct Predicate {
 /// cacheable class.
 ///
 /// THE CACHE IS CONTENT-ADDRESSED, and it is populated ONLY for `Cacheable`.
-/// An entry is found by (name, argument) and SERVED only while every file the
+/// An entry is found by (name, source, argument) and SERVED only while every file the
 /// predicate read through `fs.read` still has the digest it had when the
 /// verdict was computed (review of 1367-q9yc: keying on (name, arg) alone
 /// replayed a stale verdict after a file edit). A Cacheable predicate is thus a
@@ -1194,7 +1563,7 @@ pub struct Predicate {
 #[derive(Default)]
 pub struct PredicateRegistry {
     predicates: BTreeMap<String, Predicate>,
-    cache: BTreeMap<(String, String), CacheEntry>,
+    cache: BTreeMap<(String, String, String), CacheEntry>,
     /// How many times a cached value was served, for tests that need to prove a
     /// second call did NOT re-execute.
     pub cache_hits: usize,
@@ -1202,18 +1571,18 @@ pub struct PredicateRegistry {
 
 struct CacheEntry {
     verdict: bool,
-    /// (path, digest-or-None-if-unreadable) for every `fs.read` of the run.
-    inputs: Vec<(PathBuf, Option<[u8; 32]>)>,
+    inputs: Vec<ReadObservation>,
 }
 
 fn file_digest(path: &Path) -> Option<[u8; 32]> {
-    use sha2::{Digest, Sha256};
     std::fs::read(path).ok().map(|b| Sha256::digest(&b).into())
 }
 
 impl CacheEntry {
     fn still_valid(&self) -> bool {
-        self.inputs.iter().all(|(p, d)| file_digest(p) == *d)
+        self.inputs
+            .iter()
+            .all(|read| file_digest(&read.path) == read.digest)
     }
 }
 
@@ -1240,6 +1609,10 @@ impl PredicateRegistry {
             .globals()
             .get(name)
             .map_err(|e| LuaError::LoadError(format!("predicate {name} not defined: {e}")))?;
+        // A successfully compiled replacement invalidates every old argument;
+        // a failed replacement leaves the registered source and memo intact.
+        self.cache
+            .retain(|(registered, _, _), _| registered != name);
         self.predicates.insert(
             name.to_string(),
             Predicate {
@@ -1286,7 +1659,7 @@ impl PredicateRegistry {
             .ok_or_else(|| LuaError::LoadError(format!("no such predicate: {name}")))?;
         let class = p.class;
         let source = p.source.clone();
-        let key = (name.to_string(), arg.to_string());
+        let key = (name.to_string(), source.clone(), arg.to_string());
 
         if class.is_cacheable()
             && let Some(hit) = self.cache.get(&key)
@@ -1310,16 +1683,12 @@ impl PredicateRegistry {
             .map_err(|e| LuaError::VmError(format!("predicate {name}: {e}")))?;
 
         if class.is_cacheable() {
-            let mut paths = reads.lock().map(|l| l.clone()).unwrap_or_default();
-            paths.sort();
-            paths.dedup();
-            let inputs = paths
-                .into_iter()
-                .map(|p| {
-                    let d = file_digest(&p);
-                    (p, d)
-                })
-                .collect();
+            let mut inputs = reads
+                .lock()
+                .map_err(|_| LuaError::VmError("predicate read log poisoned".into()))?
+                .clone();
+            inputs.sort();
+            inputs.dedup();
             self.cache.insert(key, CacheEntry { verdict, inputs });
         }
         Ok(verdict)
@@ -1329,6 +1698,76 @@ impl PredicateRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 1470-dbuw: replacing source must never replay the old verdict.
+    #[test]
+    fn re_registering_a_predicate_invalidates_its_memo() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        // target/ may be a warm-cache symlink outside this checkout. The real
+        // repository-bound read must remain inside it; never relax containment.
+        let fixture = tempfile::Builder::new()
+            .prefix("lua-source-replace-")
+            .tempfile_in(&root)
+            .expect("create repository-local input");
+        let rel = fixture.path().file_name().unwrap().to_str().unwrap();
+        std::fs::write(fixture.path(), "same").expect("write unchanged input");
+
+        let mut reg = PredicateRegistry::new();
+        reg.register(
+            "changed",
+            PredicateClass::Cacheable,
+            "function changed(p) return fs.read(p) == 'same' end",
+        )
+        .expect("register first source");
+        assert!(reg.eval("changed", rel).expect("first evaluation"));
+        assert!(reg.eval("changed", rel).expect("cached evaluation"));
+        assert_eq!(reg.cache_hits, 1);
+
+        reg.register(
+            "changed",
+            PredicateClass::Cacheable,
+            "function changed(p) return fs.read(p) == 'different' end",
+        )
+        .expect("register replacement source");
+        assert!(!reg.eval("changed", rel).expect("replacement evaluation"));
+        assert_eq!(reg.cache_hits, 1, "replacement may not be a cache hit");
+    }
+
+    /// The read log captures observed bytes before a later file replacement.
+    /// This is the deterministic read-then-write schedule behind 1470-dbuw.
+    #[test]
+    fn read_log_authenticates_bytes_returned_to_lua() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let fixture = tempfile::Builder::new()
+            .prefix("lua-read-log-")
+            .tempfile_in(&root)
+            .expect("create repository-local input");
+        let rel = fixture.path().file_name().unwrap().to_str().unwrap();
+        std::fs::write(fixture.path(), "before").expect("write first version");
+
+        let reads = ReadLog::default();
+        let lua = build_environment_logged(PredicateClass::Cacheable, reads.clone())
+            .expect("pure environment");
+        let observed: String = lua
+            .load(format!("return fs.read('{rel}')"))
+            .eval()
+            .expect("read from Lua");
+        assert_eq!(observed, "before");
+        std::fs::write(fixture.path(), "after").expect("replace after read");
+
+        let inputs = reads.lock().expect("read log").clone();
+        assert_eq!(inputs.len(), 1, "one read must be recorded");
+        let expected: [u8; 32] = Sha256::digest(b"before").into();
+        assert_eq!(inputs[0].digest, Some(expected));
+        assert!(
+            !CacheEntry {
+                verdict: true,
+                inputs,
+            }
+            .still_valid(),
+            "a verdict over old bytes cannot validate against new bytes"
+        );
+    }
 
     /// Review of 1367-q9yc (b): the filesystem root is never a repository root,
     /// so a cwd of `/` cannot turn every absolute path into an "inside" one.

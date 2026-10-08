@@ -1,0 +1,51 @@
+# Additive correction; original declaration and events remain immutable.
+fields:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    field: owned_files
+    value:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/src/lua_process.rs
+      - crates/tillandsias-plan/src/script_run.rs
+      - crates/tillandsias-plan/tests/lua_proc.rs
+    ts: "2026-10-02T18:05:00Z"
+    host: macuahuitl
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    field: estimated_hours
+    value: 3
+    ts: "2026-10-02T18:05:00Z"
+    host: macuahuitl
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    field: next_action
+    value: |
+      Next scheduled runtime claim after1534-puyz lands: read the parent-reviewed
+      remaining-composition-and-trace-handoff-2026-10-02.md, re-audit landed
+      Host/Dispatch/prepare_proc, then implement remainingselect/all/chain/on_exit
+      onwork/1538-pwdr. Ownership includeslua_process.rs, where the delivered
+      dispatcher lives. Pin unspecified timeout/list/registration behaviors in
+      named tests before execution changes. Estimate100–135min plus full gates;
+      take a bounded checkpoint, not a promised90min closure. Sol implements,
+      parent independently verifies default-parallel regressions and forced
+      integration, then confirms remote ancestry before closure. Trace1539
+      remains separately scheduled after this packet; native and parent1384
+      obligations stay open. No recurring timer is armed by this ledger schedule.
+    ts: "2026-10-02T18:05:00Z"
+    host: macuahuitl
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: progress
+      ts: "2026-10-02T18:05:00Z"
+      agent_id: linux-macuahuitl-opencode-20261002t053211z
+      host: macuahuitl
+      summary: |
+        Parent-reviewed Astra immutablec1923 source audit found noselect/all/chain/on_exit
+        implementations, and identified the delivered Host/Dispatch inlua_process.rs
+        missing from the original ownership list. This additive correction adds
+        that file and honestly budgets100–135min targeted work plus integration
+        gates, roundedto3h. Research is not implemented behavior or a claim; status
+        remainsready and dependency1534 remains authoritative until it lands.
+        Same-thread completion barriers, immutable chain snapshots before consent,
+        original all-stage execution and callback scope latching are the critical
+        seams. Handoff retains symbols, proposed ambiguity resolutions and11 named
+        test groups.8MiB prefix capture/no-shell-strings unchanged. Next_action:
+        claim afterdependency landing; no premature1539/native/1384 closure.

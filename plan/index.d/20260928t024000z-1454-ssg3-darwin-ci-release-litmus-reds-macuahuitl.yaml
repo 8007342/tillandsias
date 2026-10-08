@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Reported by macbookair-macos 2026-09-28: five ci-release litmus tests red on
+# unmodified trunk 392a0c514 under darwin, independent of any change.
+packets:
+  - packet_id: five-ci-release-litmus-tests-fail-on-unmodified-trunk-under-darwin-bsd-userland
+    order: 1454-ssg3
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [darwin, bsd-userland, litmus, ci-release, portability]
+    estimated_hours: 4
+    owned_files:
+      - openspec/litmus-tests/litmus-validator-surface-currency.yaml
+      - openspec/litmus-tests/litmus-fragment-ts-skew.yaml
+      - openspec/litmus-tests/litmus-fragment-closure-evidence-gate-shape.yaml
+      - openspec/litmus-tests/litmus-fragment-status-loss-attribution-shape.yaml
+      - openspec/litmus-tests/litmus-added-fragment-parse-gate-shape.yaml
+    title: |
+      Five ci-release litmus tests fail on unmodified trunk under darwin (macbookair, 392a0c514): validator-surface-currency, fragment-ts-skew (BSD wc pads its count, "consumers=       4"), fragment-closure-evidence-gate-shape, fragment-status-loss-attribution-shape, added-fragment-parse-gate-shape
+    context: |
+      Measured by macbookair-macos on 2026-09-28 against unmodified trunk
+      392a0c514 while gating work/1443-qwpj; the reds are independent of that
+      change. One cause is named: BSD `wc -l` left-pads its count, so a
+      string compare against "consumers=4" sees "consumers=       4". The
+      other four are unexamined — they may share the cause or not. The
+      release tier runs ci-release on every platform, so a darwin red here is
+      a red release gate on the Mac, not a cosmetic one.
+    verifiable_closure: |
+      On a darwin host, `scripts/run-litmus-test.sh ci-release --phase
+      pre-build` reports none of the five named tests under [FAIL]; and each
+      fix that normalises a count is exercised by an arm that feeds a
+      left-padded count (the BSD shape) on Linux too, so the regime cannot
+      regress unseen. PRE-FIX RESULT: FAILS — five [FAIL] lines on darwin at
+      392a0c514.
+    unscoreable: "the closure is the named suite's result on a darwin host; no single litmus pin covers five tests across one platform regime"
+    next_action: >
+      Run each of the five on darwin with --compact, record the failing step
+      and its cause per test, fix the shared cause first (BSD wc padding:
+      wc -l < f | tr -d ' ', or the plan binary's count), then re-run the
+      suite.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Platform fix: route to the macOS host (yolanda has no darwin).

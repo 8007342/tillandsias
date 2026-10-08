@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-half-of-1415-89bs-tests-mutate-wsl-distro-and-localappdata-that-sibling-tests-read
+    event:
+      type: completed
+      ts: "2026-09-27T16:06:50Z"
+      agent_id: windows-yolanda-claude-20260926t151137z
+      host: yolanda
+      summary: |
+        Landed in relay commit 888548574 (bundle C) on origin/linux-next. Verified by content: trunk wsl_lifecycle.rs, notify_icon.rs and transport_windows.rs carry the no_test_mutates guards. The code is cfg(windows): native tillandsias-windows-tray 120/120 on a tree containing it (while gating 1434-vm7g), vm-layer transport_windows 12/12 earlier, and the 3/3 mutation control.

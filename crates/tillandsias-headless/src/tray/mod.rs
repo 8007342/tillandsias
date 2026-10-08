@@ -9,7 +9,7 @@
 
 pub mod cloud;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::{Read, Write};
@@ -804,20 +804,250 @@ impl TrayPhaseHandle {
     /// @trace spec:tray-host-control-socket, spec:vm-provisioning-lifecycle,
     ///        spec:signal-handling
     /// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
-    fn watch_shutdown_and_mark_stopping_blocking(
-        &self,
-        shutdown: Arc<std::sync::atomic::AtomicBool>,
-    ) {
-        use std::sync::atomic::Ordering;
-        while !shutdown.load(Ordering::SeqCst) {
-            std::thread::sleep(std::time::Duration::from_millis(250));
-        }
+    fn watch_shutdown_and_mark_stopping_blocking(&self, shutdown: Arc<ShutdownLatch>) {
+        // 679-vdi6: wait on the latch, not a 250 ms re-read of an atomic.
+        shutdown.wait_blocking();
         // Don't clobber a terminal Failed if some future advancer beat
         // us to it. (The tray doesn't have a Failed-producing advancer
         // today; this matches the vsock-side helper's defensive
         // pattern so the two stay symmetric.)
         if self.current_phase() != tillandsias_control_wire::VmPhase::Failed {
             self.set_phase(tillandsias_control_wire::VmPhase::Stopping);
+        }
+    }
+}
+
+/// The tray's shutdown signal as an EVENT (order 679-vdi6, SC-16: "no
+/// AtomicBool + sleep used as a signaling primitive").
+///
+/// Before this, two loops re-read the signal-hook atomic every 250 ms for the
+/// life of the tray: the control-socket phase watcher (a std thread) and the
+/// runtime's main wait loop — 8 wakeups a second while idle. Both now sleep
+/// until [`ShutdownLatch::trigger`] wakes them.
+///
+/// THE FLAG STAYS. `install_shutdown_signal_handlers` registers it with
+/// signal_hook (a C handler cannot notify a waiter), and other readers consume
+/// it. So the latch owns the flag, `trigger` sets it, and every waiter also
+/// honours a flag that was set before it started waiting. What wakes a waiter
+/// is `trigger`, called from the tokio signal task
+/// ([`spawn_shutdown_signal_task`]) and from the Quit handler.
+#[derive(Debug)]
+pub(crate) struct ShutdownLatch {
+    flag: Arc<AtomicBool>,
+    fired: std::sync::Mutex<bool>,
+    cv: std::sync::Condvar,
+    notify: tokio::sync::Notify,
+}
+
+impl ShutdownLatch {
+    pub(crate) fn new(flag: Arc<AtomicBool>) -> Arc<Self> {
+        Arc::new(Self {
+            flag,
+            fired: std::sync::Mutex::new(false),
+            cv: std::sync::Condvar::new(),
+            notify: tokio::sync::Notify::new(),
+        })
+    }
+
+    /// Idempotent. Sets the signal-hook flag too, so its other readers agree.
+    pub(crate) fn trigger(&self) {
+        self.flag.store(true, Ordering::SeqCst);
+        *self.fired.lock().expect("shutdown latch lock") = true;
+        self.cv.notify_all();
+        self.notify.notify_waiters();
+    }
+
+    pub(crate) fn is_triggered(&self) -> bool {
+        self.flag.load(Ordering::SeqCst) || *self.fired.lock().expect("shutdown latch lock")
+    }
+
+    /// Block the calling thread until the latch fires. No timer.
+    pub(crate) fn wait_blocking(&self) {
+        let mut fired = self.fired.lock().expect("shutdown latch lock");
+        while !*fired && !self.flag.load(Ordering::SeqCst) {
+            fired = self.cv.wait(fired).expect("shutdown latch lock");
+        }
+    }
+
+    /// Await the latch. `enable()` registers the waiter BEFORE the flag is
+    /// re-checked, so a `trigger` racing this call cannot be lost.
+    pub(crate) async fn wait(&self) {
+        loop {
+            let notified = self.notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self.is_triggered() {
+                return;
+            }
+            notified.await;
+        }
+    }
+}
+
+/// Deliver SIGTERM/SIGINT to the latch through tokio (the same mechanism
+/// `wait_for_shutdown_signal` uses since 690-xeda). Must run inside the
+/// runtime. A signal that arrived before this task registered has already set
+/// the signal-hook flag, which the waiters honour.
+pub(crate) fn spawn_shutdown_signal_task(latch: Arc<ShutdownLatch>) {
+    use tokio::signal::unix::{SignalKind, signal};
+    let task_latch = Arc::clone(&latch);
+    tokio::spawn(async move {
+        let latch = task_latch;
+        match (
+            signal(SignalKind::terminate()),
+            signal(SignalKind::interrupt()),
+        ) {
+            (Ok(mut term), Ok(mut int)) => {
+                tokio::select! {
+                    _ = term.recv() => {}
+                    _ = int.recv() => {}
+                }
+                latch.trigger();
+            }
+            (Err(e), _) | (_, Err(e)) => {
+                // Loud: without this task only Quit can end the tray.
+                warn!(spec = "signal-handling", error = %e, "tokio signal registration failed; SIGTERM/SIGINT will not wake the tray");
+            }
+        }
+    });
+    if latch.is_triggered() {
+        latch.trigger();
+    }
+}
+
+/// The tray's idle wait (order 679-vdi6). Sleeps until shutdown, or until a
+/// coalesced emission is pending AND its cooldown has elapsed, then flushes it
+/// (944-jaef's trailing flush). With nothing pending it does not wake at all:
+/// `pending` is notified by `emission_due` when it defers a burst.
+///
+/// `next_flush` answers "how long until a pending burst may be flushed", or
+/// `None` when nothing is pending.
+pub(crate) async fn idle_until_shutdown<N, F, Fut>(
+    latch: &ShutdownLatch,
+    pending: &tokio::sync::Notify,
+    next_flush: N,
+    mut flush: F,
+) where
+    N: Fn() -> Option<std::time::Duration>,
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    loop {
+        if latch.is_triggered() {
+            return;
+        }
+        match next_flush() {
+            Some(due) => {
+                tokio::select! {
+                    _ = latch.wait() => return,
+                    _ = tokio::time::sleep(due) => flush().await,
+                }
+            }
+            None => {
+                tokio::select! {
+                    _ = latch.wait() => return,
+                    _ = pending.notified() => {}
+                }
+            }
+        }
+    }
+}
+
+/// The 14-day GitHub refresh-expiry warning on the Linux desktop (1461-8tyy):
+/// a standard freedesktop notification, argv only, never a shell. The shared
+/// login-row state is NOT extended for this: it is matched in all three trays,
+/// and a variant added here would reach the macOS and Windows trays unbuilt.
+/// Best-effort: without notify-send the warning is still on stderr.
+fn notify_github_refresh_expiring(message: String) {
+    let _ = std::process::Command::new("notify-send")
+        .args([
+            "--app-name=Tillandsias",
+            "--urgency=normal",
+            "Tillandsias: GitHub sign-in",
+        ])
+        .arg(&message)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .and_then(|mut c| c.wait());
+}
+
+/// "The GitHub token is in Vault" as an EVENT (order 679-rp9m).
+///
+/// The login click used to poll Vault once a second for two minutes. Now
+/// `tillandsias --github-login` sends `GithubLoginStored` to the control socket
+/// after its Vault write is verified, the socket handler calls
+/// [`LoginSignal::notify`] on [`GITHUB_LOGIN_SIGNAL`], and the login task waits
+/// on it. A generation counter, not a flag: a waiter snapshots it first, so a
+/// notify that lands between the click and the wait is not lost, and one from
+/// an earlier login does not satisfy a later one.
+pub(crate) struct LoginSignal {
+    generation: std::sync::Mutex<u64>,
+    cv: std::sync::Condvar,
+}
+
+impl LoginSignal {
+    pub(crate) const fn new() -> Self {
+        Self {
+            generation: std::sync::Mutex::new(0),
+            cv: std::sync::Condvar::new(),
+        }
+    }
+
+    pub(crate) fn generation(&self) -> u64 {
+        *self.generation.lock().expect("login signal lock")
+    }
+
+    pub(crate) fn notify(&self) {
+        *self.generation.lock().expect("login signal lock") += 1;
+        self.cv.notify_all();
+    }
+
+    /// Wait until the generation moves past `seen` or `deadline` passes.
+    /// True when a notify arrived. No timer tick: one timed condvar wait.
+    fn wait_past(&self, seen: u64, deadline: std::time::Duration) -> bool {
+        let guard = self.generation.lock().expect("login signal lock");
+        let (guard, _) = self
+            .cv
+            .wait_timeout_while(guard, deadline, |g| *g <= seen)
+            .expect("login signal lock");
+        *guard > seen
+    }
+}
+
+/// The process-wide signal the control socket fires. Tests use their own.
+pub(crate) static GITHUB_LOGIN_SIGNAL: LoginSignal = LoginSignal::new();
+
+/// How a login wait ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LoginWait {
+    /// `GithubLoginStored` arrived; the presence check confirmed it.
+    Notified { present: bool },
+    /// No notify within the deadline; ONE presence check decided.
+    TimedOut { present: bool },
+}
+
+/// The one login wait deadline (679-rp9m): the old poll's two minutes, as a
+/// single deadline instead of 120 wakeups.
+pub(crate) const GITHUB_LOGIN_DEADLINE: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Wait for the login CLI's notify, then settle with ONE presence check either
+/// way — so a login run outside the tray (no notify) still lands at the
+/// deadline, and a notify is still confirmed against Vault.
+pub(crate) fn await_github_login_confirmation(
+    signal: &LoginSignal,
+    seen: u64,
+    deadline: std::time::Duration,
+    presence: impl Fn() -> bool,
+) -> LoginWait {
+    if signal.wait_past(seen, deadline) {
+        LoginWait::Notified {
+            present: presence(),
+        }
+    } else {
+        LoginWait::TimedOut {
+            present: presence(),
         }
     }
 }
@@ -925,6 +1155,7 @@ fn browser_tool_descriptors(
 
 fn handle_mcp_jsonrpc(
     project_label: &str,
+    instance: &str,
     req: &serde_json::Value,
     browser: &tillandsias_browser_mcp::BrowserMcpServer,
     rt: &tokio::runtime::Runtime,
@@ -954,11 +1185,12 @@ fn handle_mcp_jsonrpc(
             let mut tools = vec![
                 serde_json::json!({
                     "name": "publish_local",
-                    "description": "Publish this project's WEB service on the local reverse proxy and return its www.<project>.localhost URL. Idempotent: re-publishing replaces the running container and keeps the same URL.",
+                    "description": "Publish this authenticated lane's WEB preview on the local reverse proxy. The managed auto profile selects static or local Wrangler; re-publishing reconciles the same live-source service.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "category": { "type": "string", "enum": ["WEB"] }
+                            "category": { "type": "string", "enum": ["WEB"] },
+                            "runtime": { "type": "string", "enum": ["auto", "static", "wrangler"], "default": "auto" }
                         },
                         "required": ["category"]
                     }
@@ -971,6 +1203,17 @@ fn handle_mcp_jsonrpc(
                 serde_json::json!({
                     "name": "service_stop",
                     "description": "Stop this project's published local service and remove its route.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "category": { "type": "string", "enum": ["WEB"] }
+                        },
+                        "required": ["category"]
+                    }
+                }),
+                serde_json::json!({
+                    "name": "service_reload",
+                    "description": "Reload the authenticated lane's existing WEB preview runtime. This does not open or refresh a browser.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -1010,37 +1253,79 @@ fn handle_mcp_jsonrpc(
 
             match tool_name {
                 "publish_local" => {
-                    let category = args
-                        .and_then(|a| a.get("category"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    match rt.block_on(crate::publish_local_service(project_label, category, debug))
-                    {
-                        Ok(url) => serde_json::json!({
-                            "result": { "url": url, "state": "running" }
-                        }),
+                    let category = match web_category(args) {
+                        Ok(category) => category,
+                        Err(message) => return Some(mcp_error(req, message)),
+                    };
+                    if category != "WEB" {
+                        return Some(mcp_error(
+                            req,
+                            format!("Category {category} is not supported for local publish"),
+                        ));
+                    }
+                    let runtime = match preview_runtime(args) {
+                        Ok(runtime) => runtime,
+                        Err(message) => return Some(mcp_error(req, message)),
+                    };
+                    match rt.block_on(crate::local_web_preview::publish(
+                        project_label,
+                        instance,
+                        runtime,
+                        debug,
+                    )) {
+                        Ok(result) => serde_json::json!({ "result": result }),
                         Err(e) => serde_json::json!({
                             "error": { "code": -32000, "message": e }
                         }),
                     }
                 }
-                "service_status" => match rt.block_on(crate::service_status(project_label)) {
-                    Ok(state) => serde_json::json!({
-                        "result": { "state": state }
-                    }),
-                    Err(e) => serde_json::json!({
-                        "error": { "code": -32000, "message": e }
-                    }),
-                },
-                "service_stop" => {
-                    let category = args
-                        .and_then(|a| a.get("category"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    match rt.block_on(crate::service_stop(category, project_label, debug)) {
-                        Ok(_) => serde_json::json!({
-                            "result": { "state": "stopped" }
+                "service_status" => {
+                    match rt.block_on(crate::local_web_preview::status(project_label, instance)) {
+                        Ok(result) => serde_json::json!({ "result": result }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
                         }),
+                    }
+                }
+                "service_stop" => {
+                    let category = match web_category(args) {
+                        Ok(category) => category,
+                        Err(message) => return Some(mcp_error(req, message)),
+                    };
+                    if category != "WEB" {
+                        return Some(mcp_error(
+                            req,
+                            format!("Category {category} is not supported for service_stop"),
+                        ));
+                    }
+                    match rt.block_on(crate::local_web_preview::stop(
+                        project_label,
+                        instance,
+                        debug,
+                    )) {
+                        Ok(result) => serde_json::json!({ "result": result }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                "service_reload" => {
+                    let category = match web_category(args) {
+                        Ok(category) => category,
+                        Err(message) => return Some(mcp_error(req, message)),
+                    };
+                    if category != "WEB" {
+                        return Some(mcp_error(
+                            req,
+                            format!("Category {category} is not supported for service_reload"),
+                        ));
+                    }
+                    match rt.block_on(crate::local_web_preview::reload(
+                        project_label,
+                        instance,
+                        debug,
+                    )) {
+                        Ok(result) => serde_json::json!({ "result": result }),
                         Err(e) => serde_json::json!({
                             "error": { "code": -32000, "message": e }
                         }),
@@ -1062,6 +1347,35 @@ fn handle_mcp_jsonrpc(
         resp["id"] = id.clone();
     }
     Some(resp)
+}
+
+/// Validate WEB-category calls before invoking the host lifecycle. This keeps
+/// malformed requests hermetic: no Podman, route, or source lookup side effect.
+fn web_category(args: Option<&serde_json::Map<String, serde_json::Value>>) -> Result<&str, String> {
+    args.and_then(|a| a.get("category"))
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "invalid_category: category must be the string WEB".to_string())
+}
+
+/// `runtime` is intentionally a closed host-selected profile, never a command.
+fn preview_runtime(
+    args: Option<&serde_json::Map<String, serde_json::Value>>,
+) -> Result<&str, String> {
+    let Some(value) = args.and_then(|a| a.get("runtime")) else {
+        return Ok("auto");
+    };
+    match value.as_str() {
+        Some("auto" | "static" | "wrangler") => Ok(value.as_str().expect("matched string")),
+        _ => Err("invalid_runtime: runtime must be auto, static, or wrangler".to_string()),
+    }
+}
+
+fn mcp_error(req: &serde_json::Value, message: String) -> serde_json::Value {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": req.get("id").cloned().unwrap_or(serde_json::Value::Null),
+        "error": { "code": -32000, "message": message }
+    })
 }
 
 /// Serve one NDJSON MCP connection: one JSON-RPC object per line in, one
@@ -1235,7 +1549,7 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
             continue;
         }
         let resp = match serde_json::from_str::<serde_json::Value>(line) {
-            Ok(req) => handle_mcp_jsonrpc(&project_label, &req, &browser, &rt),
+            Ok(req) => handle_mcp_jsonrpc(&project_label, &identity.instance, &req, &browser, &rt),
             Err(_) => Some(serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": serde_json::Value::Null,
@@ -1263,17 +1577,23 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
 }
 
 /// Global registry tracking active per-lane MCP listeners.
-static ACTIVE_LANE_LISTENERS: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+/// This is a tuple rather than a hyphen-concatenated string: `(a-b, c)` and
+/// `(a, b-c)` are distinct lanes even though their display form is identical.
+type LaneListenerKey = (String, String);
 
-fn lane_listener_registry() -> &'static Mutex<std::collections::HashSet<String>> {
-    ACTIVE_LANE_LISTENERS.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+static ACTIVE_LANE_LISTENERS: OnceLock<Mutex<HashSet<LaneListenerKey>>> = OnceLock::new();
+
+fn lane_listener_registry() -> &'static Mutex<HashSet<LaneListenerKey>> {
+    ACTIVE_LANE_LISTENERS.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
 /// Bind the NDJSON MCP tool socket for lane `(project, instance)` and serve
 /// it from detached threads (order 505).
 /// The socket is mode 0600 in `$XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/mcp.sock`.
 ///
-/// Stale sockets from previous tray instances are unlinked before binding.
+/// A reachable existing socket is treated as another live owner and is never
+/// unlinked. A connection-refused socket is a stale filesystem entry from a
+/// departed tray and may be removed before retrying the bind.
 ///
 /// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
 pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result<(), String> {
@@ -1282,13 +1602,12 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
     } else {
         instance.trim()
     };
-    let lane_key = format!("{project}-{instance_clean}");
-    {
-        let mut reg = lane_listener_registry().lock().expect("lane registry lock");
-        if reg.contains(&lane_key) {
-            return Ok(());
-        }
-        reg.insert(lane_key);
+    let lane_key = (project.to_owned(), instance_clean.to_owned());
+    // Keep this lock through creation. Inserting only after bind + chmod makes
+    // a failed first attempt retryable, and serializes same-lane callers.
+    let mut registry = lane_listener_registry().lock().expect("lane registry lock");
+    if registry.contains(&lane_key) {
+        return Ok(());
     }
 
     let socket_path = mcp_socket_path_for_lane(project, instance_clean);
@@ -1298,16 +1617,49 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
         #[cfg(unix)]
         let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
     }
-    if socket_path.exists() {
-        fs::remove_file(&socket_path)
-            .map_err(|err| format!("failed to remove stale mcp socket: {err}"))?;
-    }
-
-    let listener = UnixListener::bind(&socket_path)
-        .map_err(|err| format!("failed to bind mcp socket: {err}"))?;
+    let listener = match UnixListener::bind(&socket_path) {
+        Ok(listener) => listener,
+        Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => {
+            match UnixStream::connect(&socket_path) {
+                // An active peer might belong to a CLI child or another tray
+                // process. Never steal its pathname merely because this
+                // process has not populated its own in-memory registry.
+                Ok(_) => {
+                    return Err(format!(
+                        "mcp socket already has a live owner; refusing to unlink: {}",
+                        socket_path.display()
+                    ));
+                }
+                // A refused connection is the kernel's evidence that no
+                // listener owns this pathname. It is the only stale-entry
+                // case we reclaim automatically.
+                Err(connect_err) if connect_err.kind() == std::io::ErrorKind::ConnectionRefused => {
+                    fs::remove_file(&socket_path).map_err(|remove_err| {
+                        format!(
+                            "failed to remove connection-refused mcp socket {}: {remove_err}",
+                            socket_path.display()
+                        )
+                    })?;
+                    UnixListener::bind(&socket_path).map_err(|bind_err| {
+                        format!("failed to bind reclaimed mcp socket: {bind_err}")
+                    })?
+                }
+                Err(connect_err) => {
+                    return Err(format!(
+                        "mcp socket exists but ownership is indeterminate; refusing to unlink {}: {connect_err}",
+                        socket_path.display()
+                    ));
+                }
+            }
+        }
+        Err(err) => return Err(format!("failed to bind mcp socket: {err}")),
+    };
     #[cfg(unix)]
     fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
         .map_err(|err| format!("failed to chmod mcp socket: {err}"))?;
+
+    registry.insert(lane_key);
+    drop(registry);
 
     let identity = LaneIdentity::new(project, instance_clean);
     std::thread::spawn(move || {
@@ -1424,6 +1776,21 @@ fn handle_control_connection(
                         body: ControlMessage::IssueAck {
                             seq_acked: first.seq,
                         },
+                    };
+                    let _ = write_control_envelope(&mut stream, &ack);
+                }
+                ControlMessage::GithubLoginStored { seq, .. } => {
+                    // 679-rp9m: the login CLI stored the token; wake the
+                    // tray's login wait, then ack the sender.
+                    GITHUB_LOGIN_SIGNAL.notify();
+                    info!(
+                        spec = "tray-host-control-socket",
+                        "github-login: GithubLoginStored received on the control socket"
+                    );
+                    let ack = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: first.seq,
+                        body: ControlMessage::IssueAck { seq_acked: seq },
                     };
                     let _ = write_control_envelope(&mut stream, &ack);
                 }
@@ -1603,7 +1970,7 @@ fn handle_control_connection(
 /// @trace spec:tray-host-control-socket, spec:opencode-web-session-otp,
 ///        spec:signal-handling, spec:vm-provisioning-lifecycle
 /// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
-fn start_control_socket_server(shutdown: Arc<std::sync::atomic::AtomicBool>) -> Result<(), String> {
+fn start_control_socket_server(shutdown: Arc<ShutdownLatch>) -> Result<(), String> {
     let socket_path = control_socket_path();
     if let Some(parent) = socket_path.parent() {
         fs::create_dir_all(parent)
@@ -1635,8 +2002,8 @@ fn start_control_socket_server(shutdown: Arc<std::sync::atomic::AtomicBool>) -> 
     // atomic, transition phase to `Stopping` so any concurrent
     // `VmStatusRequest` from a sibling host (e.g. macOS slice 20's
     // pre-VZ-stop wire shutdown or windows slice 80eceb0b's pre-WSL-
-    // terminate poller) sees the truth. Sync polling matches the
-    // accept loop's std::thread shape.
+    // terminate poller) sees the truth. A std thread matches the accept
+    // loop's shape; it blocks on the latch (679-vdi6), it does not poll.
     //
     // @trace spec:signal-handling, spec:vm-provisioning-lifecycle
     let watcher_handle = phase_handle.clone();
@@ -1689,7 +2056,7 @@ struct TrayService {
     /// main loop polls the signal-handler atomic directly — without this
     /// backlink a Quit click would set `TrayService.shutdown` but never
     /// break the main wait loop.
-    signal_shutdown: OnceLock<Arc<AtomicBool>>,
+    signal_shutdown: OnceLock<Arc<ShutdownLatch>>,
     /// ORDER 944-jaef, the operator's rate-limiter directive after the sixth
     /// freeze: every state change used to emit NewIcon+NewStatus+NewToolTip+
     /// LayoutUpdated unconditionally (16 call sites), and during a forge
@@ -1702,6 +2069,9 @@ struct TrayService {
     /// always reaches the shell.
     last_emit: std::sync::Mutex<std::time::Instant>,
     emit_pending: AtomicBool,
+    /// 679-vdi6: wakes the idle wait when a burst is deferred, so the trailing
+    /// flush needs no periodic tick.
+    emit_pending_notify: tokio::sync::Notify,
 }
 
 /// Minimum spacing between tray signal-emission groups (944-jaef).
@@ -1828,6 +2198,7 @@ impl TrayService {
                 std::time::Instant::now() - EMIT_COOLDOWN - EMIT_COOLDOWN,
             ),
             emit_pending: AtomicBool::new(false),
+            emit_pending_notify: tokio::sync::Notify::new(),
         }
     }
 
@@ -1846,7 +2217,7 @@ impl TrayService {
     /// the main wait loop starts, typically right after construction in
     /// `run_tray_mode_with_debug`. Uses `OnceLock::set` so `&self` is
     /// sufficient — the `TrayService` is behind an `Arc`.
-    fn attach_signal_shutdown(&self, signal: Arc<AtomicBool>) {
+    fn attach_signal_shutdown(&self, signal: Arc<ShutdownLatch>) {
         let _ = self.signal_shutdown.set(signal);
     }
 
@@ -1901,12 +2272,26 @@ impl TrayService {
         } else {
             self.emit_pending
                 .store(true, std::sync::atomic::Ordering::SeqCst);
+            // notify_one stores a permit when nobody is waiting, so a burst
+            // deferred just before the idle wait parks is not lost.
+            self.emit_pending_notify.notify_one();
             false
         }
     }
 
-    /// Trailing-edge flush: called from the 250 ms main wait loop so the
-    /// last state of a coalesced burst always reaches the shell.
+    /// How long until a deferred burst may be flushed; `None` when nothing is
+    /// pending (679-vdi6).
+    fn next_flush_in(&self) -> Option<std::time::Duration> {
+        if !self.emit_pending.load(std::sync::atomic::Ordering::SeqCst) {
+            return None;
+        }
+        let last = self.last_emit.lock().expect("emit stamp lock");
+        Some(EMIT_COOLDOWN.saturating_sub(last.elapsed()))
+    }
+
+    /// Trailing-edge flush: called from the idle wait when a deferred burst's
+    /// cooldown has elapsed, so the last state of a burst always reaches the
+    /// shell (944-jaef; event-driven since 679-vdi6).
     async fn flush_pending_emit(&self) {
         if self.emit_pending.load(std::sync::atomic::Ordering::SeqCst) && self.emission_due() {
             self.emit_pending
@@ -2078,11 +2463,13 @@ fn image_exists(image_tag: &str) -> bool {
 }
 
 fn discover_projects() -> Vec<ProjectEntry> {
-    let home = match std::env::var("HOME") {
-        Ok(home) => PathBuf::from(home),
-        Err(_) => return Vec::new(),
-    };
-    discover_projects_in(&home.join("src"))
+    // 920-mvgp: the tray scan hardcoded $HOME/src, so a forge/enclave host that
+    // remounts the project root elsewhere (TILLANDSIAS_HOST_PROJECT_ROOT) never
+    // listed its projects. Route through the canonical resolver, which honors
+    // the env var and defaults to $HOME/src when unset — identical behavior on
+    // a plain workstation, correct roots everywhere else.
+    let root = crate::local_projects::host_project_root();
+    discover_projects_in(&root)
 }
 
 /// Scan a project-root directory (e.g. `~/src`) and return one
@@ -2265,6 +2652,18 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
                 "TILLANDSIAS_CONTROL_SOCKET",
                 "/run/host/tillandsias-mcp/mcp.sock",
             );
+    }
+    // ORDER 1506-q7ab: the lane mailbox, value-aligned with the live launcher
+    // (main.rs build_forge_agent_run_args_with_vault).
+    if let Some(lane) = crate::msg_serve::prepare_forge_lane(project_name, Some(instance)) {
+        spec = spec
+            .bind_mount(
+                lane.source.display().to_string(),
+                tillandsias_msg::store::FORGE_LANE_MOUNT,
+                false,
+            )
+            .env("TILLANDSIAS_MSG_LANE", lane.lane)
+            .env("TILLANDSIAS_MSG_HOST", lane.host);
     }
 
     match kind {
@@ -2775,7 +3174,13 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
                 TrayIconState::Building,
                 None,
             ));
-            if let Err(err) = launch_in_terminal(&title, &argv[0], &argv[1..]) {
+            // 828-h7kw: run the lane under the hold wrapper so its window
+            // survives the lane's exit until Enter.
+            let held: Vec<String> = crate::hold_window_prefix()
+                .into_iter()
+                .chain(argv)
+                .collect();
+            if let Err(err) = launch_in_terminal(&title, &held[0], &held[1..]) {
                 eprintln!("error: cloud launch failed for '{}': {err}", cloud.name);
                 let _ = futures::executor::block_on(service_for_emit.set_status(
                     format!("🥀 Launch failed: {err}"),
@@ -4281,7 +4686,7 @@ impl DbusMenuIface {
                 });
                 self.0.shutdown.store(true, Ordering::SeqCst);
                 if let Some(sig) = self.0.signal_shutdown.get() {
-                    sig.store(true, Ordering::SeqCst);
+                    sig.trigger();
                 }
             }
             20 => {
@@ -4307,6 +4712,9 @@ impl DbusMenuIface {
                     return Ok(());
                 }
                 let _ = self.0.rebuild_after_state_change().await;
+                // 679-rp9m: snapshot the login signal BEFORE launching the
+                // flow, so a notify that lands before the wait starts counts.
+                let login_seen = GITHUB_LOGIN_SIGNAL.generation();
                 // GitHubLogin click: launch the gh login flow AND refresh
                 // the cached auth state. This is the only path that
                 // re-reads `gh auth status` outside tray launch.
@@ -4320,25 +4728,37 @@ impl DbusMenuIface {
                         // secret, not host `gh auth status`. The login flow
                         // stores the token in Vault, never in host gh, so the
                         // host keyring is the wrong source of truth.
+                        // 679-rp9m: wait for the login CLI's GithubLoginStored
+                        // notify under ONE 120 s deadline, then ONE presence
+                        // check (no container launch, no value read). It was
+                        // a 1 s Vault poll, 120 times.
                         let debug = service_for_task.snapshot().debug;
-                        let mut authed = false;
-                        // Poll silently — debug=false suppresses per-iteration
-                        // Vault log noise during the 2-minute wait window.
-                        // The login flow's own output is already on stderr.
-                        for i in 0..120 {
-                            // Fast presence-only check (no container launch, no value read).
-                            authed = crate::vault_bootstrap::is_github_key_present();
-                            if authed {
-                                break;
-                            }
-                            if debug && i % 15 == 0 {
-                                eprintln!(
-                                    "[tillandsias] github-login: waiting for token in Vault ({}s elapsed)",
-                                    i
+                        let t0 = std::time::Instant::now();
+                        let outcome = await_github_login_confirmation(
+                            &GITHUB_LOGIN_SIGNAL,
+                            login_seen,
+                            GITHUB_LOGIN_DEADLINE,
+                            crate::vault_bootstrap::is_github_key_present,
+                        );
+                        let authed = match outcome {
+                            LoginWait::Notified { present } => {
+                                info!(
+                                    spec = "tray-host-control-socket",
+                                    elapsed_ms = t0.elapsed().as_millis() as u64,
+                                    present,
+                                    "github-login: login-confirmed event"
                                 );
+                                present
                             }
-                            std::thread::sleep(std::time::Duration::from_secs(1));
-                        }
+                            LoginWait::TimedOut { present } => {
+                                info!(
+                                    spec = "tray-host-control-socket",
+                                    present,
+                                    "github-login: no notify within 120 s; settled by one presence check"
+                                );
+                                present
+                            }
+                        };
                         service_for_task.with_state(|state| {
                             state.is_authenticated = authed;
                             // windows-260719-2: the probe settled — clear
@@ -4647,7 +5067,7 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     //
     // @trace spec:signal-handling, spec:tray-host-control-socket
     // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
-    let shutdown = crate::install_shutdown_signal_handlers()?;
+    let shutdown = ShutdownLatch::new(crate::install_shutdown_signal_handlers()?);
     // Wire the Quit handler to the same signal-handler atomic so the
     // Quit button click triggers the main wait loop exit (not just the
     // TrayService-local `shutdown` field).  Without this, Quit would
@@ -4657,6 +5077,27 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // @trace spec:graceful-shutdown, spec:app-lifecycle
     service.attach_signal_shutdown(Arc::clone(&shutdown));
     start_control_socket_server(Arc::clone(&shutdown))?;
+    // Order 1506-q7ab: the same-host mover of the fleet message bus, beside
+    // the control socket and stopped by the same latch. It refuses to start
+    // (and says why) when a foreground `--msg-serve` already holds the store.
+    {
+        let mover_shutdown = Arc::clone(&shutdown);
+        crate::msg_serve::spawn_resident(move || mover_shutdown.is_triggered());
+    }
+    // Order 1461-8tyy: the Linux tray is this host's resident process, so it
+    // keeps the GitHub token in Vault alive (due-check at start, then every
+    // 15 min, rotating inside the 30-minute window). No desktop-session gate:
+    // that stays on the explicit `--refresh-github-token`.
+    #[cfg(feature = "vault")]
+    crate::vault_bootstrap::spawn_github_token_rotation_scheduler(
+        debug,
+        Some(Box::new(notify_github_refresh_expiring)),
+    );
+    // Order 1505-iysn: the same resident process keeps the Cloudflare OAuth
+    // bundle alive (secret/cloudflare/{token,refresh}); a no-op verdict when
+    // no Cloudflare login is stored.
+    #[cfg(feature = "vault")]
+    crate::vault_bootstrap::spawn_cloudflare_token_rotation_scheduler(debug);
     // Order 363: the NDJSON MCP tool socket for in-forge agents. A bind
     // failure degrades the tray to no-agent-publish rather than killing
     // it — the control socket above is load-bearing, this one is not
@@ -4761,21 +5202,23 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         let _ = StatusNotifierItemIface::new_tool_tip(&item_ctxt).await;
         let _ = DbusMenuIface::layout_updated(&menu_ctxt, service.snapshot().revision, 0).await;
 
-        // Main wait loop: poll the SIGTERM/SIGINT atomic at 250 ms
-        // cadence. Matches the control-socket watcher's poll cadence
-        // (start_control_socket_server) and `vsock_server`'s 250 ms
-        // shutdown poll on the in-VM side — symmetric across both
-        // transports. Replaces the prior `futures::future::pending`
-        // forever-await: signal-hook now intercepts SIGTERM/SIGINT, so
-        // the process would otherwise never exit on those signals.
+        // Main wait: until SIGTERM/SIGINT or Quit fires the shutdown latch.
+        // Replaces the prior `futures::future::pending` forever-await:
+        // signal-hook intercepts SIGTERM/SIGINT, so the process would
+        // otherwise never exit on those signals. Event-driven since
+        // 679-vdi6 (it was a 250 ms poll of the atomic).
         //
         // @trace spec:signal-handling, spec:tray-host-control-socket
-        use std::sync::atomic::Ordering;
-        while !shutdown.load(Ordering::SeqCst) {
-            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-            // 944-jaef: trailing flush of a coalesced signal burst.
-            service.flush_pending_emit().await;
-        }
+        // 679-vdi6: sleep until shutdown or a due trailing flush (944-jaef),
+        // instead of waking every 250 ms to re-read the atomic.
+        spawn_shutdown_signal_task(Arc::clone(&shutdown));
+        idle_until_shutdown(
+            &shutdown,
+            &service.emit_pending_notify,
+            || service.next_flush_in(),
+            || service.flush_pending_emit(),
+        )
+        .await;
         info!(
             spec = "signal-handling",
             "tray received shutdown signal; exiting gracefully (control-socket watcher already flipped phase=Stopping)"
@@ -5345,7 +5788,7 @@ mod tests {
     fn mcp_initialize_and_tools_list_advertise_publish_tool_family() {
         let init =
             serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}});
-        let resp = handle_mcp_jsonrpc("demo", &init, &test_browser(), &test_rt())
+        let resp = handle_mcp_jsonrpc("demo", "default", &init, &test_browser(), &test_rt())
             .expect("initialize replies");
         assert_eq!(resp["jsonrpc"], "2.0");
         assert_eq!(resp["id"], 1);
@@ -5355,7 +5798,7 @@ mod tests {
         );
 
         let list = serde_json::json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"});
-        let resp = handle_mcp_jsonrpc("demo", &list, &test_browser(), &test_rt())
+        let resp = handle_mcp_jsonrpc("demo", "default", &list, &test_browser(), &test_rt())
             .expect("tools/list replies");
         let tools: Vec<&str> = resp["result"]["tools"]
             .as_array()
@@ -5367,9 +5810,14 @@ mod tests {
         // ordering for existing consumers), and the browser family is now
         // advertised alongside it — the wiring gap this packet closed.
         assert_eq!(
-            &tools[..3],
-            &["publish_local", "service_status", "service_stop"],
-            "the host-services trio must keep its identity and order"
+            &tools[..4],
+            &[
+                "publish_local",
+                "service_status",
+                "service_stop",
+                "service_reload"
+            ],
+            "the host-services lifecycle tools must keep their identity and order"
         );
         let browser_tools: Vec<&&str> =
             tools.iter().filter(|t| t.starts_with("browser.")).collect();
@@ -5393,11 +5841,15 @@ mod tests {
                 "{expected} must be advertised: {tools:?}"
             );
         }
-        assert_eq!(tools.len(), 11, "trio + browser family, nothing else");
+        assert_eq!(
+            tools.len(),
+            12,
+            "lifecycle tools + browser family, nothing else"
+        );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
         assert!(
-            handle_mcp_jsonrpc("demo", &note, &test_browser(), &test_rt()).is_none(),
+            handle_mcp_jsonrpc("demo", "default", &note, &test_browser(), &test_rt()).is_none(),
             "notifications get no reply"
         );
     }
@@ -5458,8 +5910,8 @@ mod tests {
                 .collect();
             assert_eq!(
                 tools.len(),
-                11,
-                "over the transport: trio + eight browser tools, got {tools:?}"
+                12,
+                "over the transport: lifecycle tools + eight browser tools, got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
 
@@ -5667,8 +6119,8 @@ mod tests {
             "jsonrpc": "2.0", "id": 3, "method": "tools/call",
             "params": {"name": "publish_local", "arguments": {"category": "DATABASE"}}
         });
-        let resp =
-            handle_mcp_jsonrpc("demo", &call, &test_browser(), &test_rt()).expect("deny replies");
+        let resp = handle_mcp_jsonrpc("demo", "default", &call, &test_browser(), &test_rt())
+            .expect("deny replies");
         assert_eq!(resp["id"], 3);
         assert_eq!(resp["error"]["code"], -32000);
         let message = resp["error"]["message"].as_str().expect("error message");
@@ -5681,9 +6133,57 @@ mod tests {
             "jsonrpc": "2.0", "id": 4, "method": "tools/call",
             "params": {"name": "drop_all_containers", "arguments": {}}
         });
-        let resp = handle_mcp_jsonrpc("demo", &forged, &test_browser(), &test_rt())
+        let resp = handle_mcp_jsonrpc("demo", "default", &forged, &test_browser(), &test_rt())
             .expect("unknown tool replies");
         assert_eq!(resp["error"]["code"], -32601);
+    }
+
+    /// Preview argument validation happens before dispatching into the lifecycle
+    /// backend, so these negative controls remain hermetic (no Podman seam).
+    #[test]
+    fn mcp_preview_runtime_validation_is_closed_and_side_effect_free() {
+        for runtime in [serde_json::json!("remote"), serde_json::json!(false)] {
+            let call = serde_json::json!({
+                "jsonrpc": "2.0", "id": 9, "method": "tools/call",
+                "params": {"name": "publish_local", "arguments": {"category": "WEB", "runtime": runtime}}
+            });
+            let response = handle_mcp_jsonrpc(
+                "demo",
+                "listener-bound-instance",
+                &call,
+                &test_browser(),
+                &test_rt(),
+            )
+            .expect("invalid runtime replies");
+            assert_eq!(response["error"]["code"], -32000);
+            assert!(
+                response["error"]["message"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("invalid_runtime:"),
+                "closed runtime diagnostic: {response}"
+            );
+        }
+
+        let missing_category = serde_json::json!({
+            "jsonrpc": "2.0", "id": 10, "method": "tools/call",
+            "params": {"name": "service_reload", "arguments": {"category": false}}
+        });
+        let response = handle_mcp_jsonrpc(
+            "demo",
+            "listener-bound-instance",
+            &missing_category,
+            &test_browser(),
+            &test_rt(),
+        )
+        .expect("invalid category replies");
+        assert_eq!(response["error"]["code"], -32000);
+        assert!(
+            response["error"]["message"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("invalid_category:")
+        );
     }
 
     /// Order 505: The NDJSON mcp.sock transport: a peer that cannot be attributed to
@@ -5744,8 +6244,7 @@ mod tests {
     /// tests pass or fail based on which test mutated the env first and on
     /// whether the host's real ~/src happens to be empty.
     fn with_known_demo_project<T>(f: impl FnOnce() -> T) -> T {
-        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _guard = crate::test_support::env_lock();
         let dir = std::env::temp_dir().join(format!(
             "tillandsias-known-demo-project-{}",
             std::process::id()
@@ -5780,8 +6279,7 @@ mod tests {
 
     /// The same fixture with NOTHING known, for the arm that must be denied.
     fn with_no_known_projects<T>(f: impl FnOnce() -> T) -> T {
-        static ENV_LOCK2: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _guard = ENV_LOCK2.lock().unwrap_or_else(|p| p.into_inner());
+        let _guard = crate::test_support::env_lock();
         let dir = std::env::temp_dir().join(format!(
             "tillandsias-no-known-projects-{}",
             std::process::id()
@@ -5893,9 +6391,9 @@ mod tests {
             let resp: serde_json::Value =
                 serde_json::from_str(&lines.next().expect("tools/list reply").expect("readable"))
                     .expect("valid JSON");
-            // Order 779-3trn: the host-services trio plus the eight
-            // browser.* tools now compose on this socket (was 3).
-            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 11);
+            // Host-service lifecycle tools plus the eight browser.* tools
+            // compose on this socket (the lifecycle family includes reload).
+            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 12);
 
             drop(writer);
             drop(lines);
@@ -5960,6 +6458,59 @@ mod tests {
             "socket permissions must be 0600, got: {:o}",
             mode
         );
+    }
+
+    /// A failed bind/setup must not poison the in-memory idempotence registry:
+    /// restoring a usable runtime directory lets the exact same lane retry.
+    #[test]
+    fn mcp_listener_failed_start_rolls_back_registry_for_retry() {
+        let _env_lock = crate::runtime_assets::env_lock();
+        let temp = tempfile::tempdir().expect("temporary runtime root");
+        let blocked = temp.path().join("not-a-directory");
+        std::fs::write(&blocked, "file prevents mkdir below it").expect("blocked marker");
+        let runtime = temp.path().join("runtime");
+        std::fs::create_dir(&runtime).expect("runtime directory");
+        let project = format!("retry-{}", std::process::id());
+        let instance = "registry-rollback";
+        let prior = std::env::var_os("XDG_RUNTIME_DIR");
+
+        unsafe { std::env::set_var("XDG_RUNTIME_DIR", &blocked) };
+        let first = start_mcp_socket_server_for_lane(&project, instance);
+        assert!(
+            first.is_err(),
+            "blocked runtime directory must fail startup"
+        );
+        assert!(
+            !lane_listener_registry()
+                .lock()
+                .expect("lane registry lock")
+                .contains(&(project.clone(), instance.to_string())),
+            "failed startup must not be cached as active"
+        );
+
+        unsafe { std::env::set_var("XDG_RUNTIME_DIR", &runtime) };
+        let retry = start_mcp_socket_server_for_lane(&project, instance);
+        assert!(
+            retry.is_ok(),
+            "same lane must retry after failure: {retry:?}"
+        );
+        let socket = mcp_socket_path_for_lane(&project, instance);
+        assert!(socket.exists(), "successful retry must create its socket");
+
+        if let Some(value) = prior {
+            unsafe { std::env::set_var("XDG_RUNTIME_DIR", value) };
+        } else {
+            unsafe { std::env::remove_var("XDG_RUNTIME_DIR") };
+        }
+        let _ = std::fs::remove_file(socket);
+    }
+
+    #[test]
+    fn mcp_lane_registry_key_preserves_project_instance_boundaries() {
+        let mut lanes = HashSet::new();
+        lanes.insert(("alpha-beta".to_string(), "gamma".to_string()));
+        lanes.insert(("alpha".to_string(), "beta-gamma".to_string()));
+        assert_eq!(lanes.len(), 2, "hyphen display forms must not alias lanes");
     }
 
     /// Order 505: Listener-derived project attribution ignores forged peer environment.
@@ -6145,23 +6696,22 @@ mod tests {
 
         let handle = TrayPhaseHandle::ready_for_test();
         let observer = handle.clone();
-        let shutdown = Arc::new(AtomicBool::new(false));
+        let shutdown = ShutdownLatch::new(Arc::new(AtomicBool::new(false)));
         let watcher_shutdown = Arc::clone(&shutdown);
 
         let watcher = thread::spawn(move || {
             handle.watch_shutdown_and_mark_stopping_blocking(watcher_shutdown);
         });
 
-        // Briefly confirm the watcher is parked at `Ready` (it polls
-        // every 250 ms; give it well under one poll period to settle).
+        // Briefly confirm the watcher is parked at `Ready`.
         thread::sleep(Duration::from_millis(50));
         assert!(matches!(
             observer.current_phase(),
             tillandsias_control_wire::VmPhase::Ready
         ));
 
-        // Flip the atomic; the watcher should pick it up within ~250 ms.
-        shutdown.store(true, Ordering::SeqCst);
+        // Fire the latch; the watcher wakes on it (679-vdi6: no poll).
+        shutdown.trigger();
 
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
@@ -6198,11 +6748,9 @@ mod tests {
         let handle = TrayPhaseHandle::ready_for_test();
         handle.set_phase(tillandsias_control_wire::VmPhase::Failed);
         let observer = handle.clone();
-        let shutdown = Arc::new(AtomicBool::new(true));
-
-        // Run the watcher synchronously on this thread; with shutdown
-        // already true it should return after at most one poll without
-        // changing the phase.
+        // A flag already set before the wait (a signal that arrived before
+        // the tokio task registered): the watcher returns at once.
+        let shutdown = ShutdownLatch::new(Arc::new(AtomicBool::new(true)));
         let t = thread::spawn(move || {
             handle.watch_shutdown_and_mark_stopping_blocking(shutdown);
         });
@@ -6216,10 +6764,123 @@ mod tests {
             "watcher must not clobber a terminal Failed phase; got {:?}",
             observer.current_phase()
         );
-        // Sanity: the polling sleep is at most 250 ms so this test
-        // completes in well under a second even with the worst-case
-        // first-poll alignment.
         let _ = Duration::from_millis(0);
+    }
+
+    /// 679-vdi6: the latch wakes a blocked waiter promptly, and an async
+    /// waiter too; a trigger that happens before the waiter starts is not lost.
+    #[test]
+    fn shutdown_latch_wakes_blocking_and_async_waiters() {
+        use std::sync::atomic::AtomicBool;
+        use std::time::{Duration, Instant};
+        let latch = ShutdownLatch::new(Arc::new(AtomicBool::new(false)));
+        let l2 = Arc::clone(&latch);
+        let t0 = Instant::now();
+        let waiter = std::thread::spawn(move || l2.wait_blocking());
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(
+            !waiter.is_finished(),
+            "premise: the waiter is parked before the trigger"
+        );
+        latch.trigger();
+        waiter.join().unwrap();
+        assert!(t0.elapsed() < Duration::from_secs(2));
+        assert!(
+            latch.flag.load(Ordering::SeqCst),
+            "trigger sets the signal-hook flag too"
+        );
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let late = ShutdownLatch::new(Arc::new(AtomicBool::new(false)));
+        late.trigger();
+        rt.block_on(async {
+            tokio::time::timeout(Duration::from_secs(1), late.wait())
+                .await
+                .expect("a trigger before the wait must not be lost");
+        });
+    }
+
+    /// 679-vdi6 criterion 3: no sleep-poll of the shutdown atomic remains in
+    /// this file. The patterns are ASSEMBLED so this test's own source cannot
+    /// match them (a scan over a file that contains the scan finds itself).
+    #[test]
+    fn no_sleep_poll_of_the_shutdown_atomic_remains_in_the_tray() {
+        let src = include_str!("mod.rs");
+        let poll_loop = ["while !", "shutdown.load("].concat();
+        let quarter_second = ["from_millis(", "250)"].concat();
+        let hits: Vec<(usize, &str)> = src
+            .lines()
+            .enumerate()
+            .filter(|(_, l)| l.contains(&poll_loop) || l.contains(&quarter_second))
+            .collect();
+        assert!(hits.is_empty(), "a shutdown sleep-poll is back: {hits:?}");
+        // Premise: the scan reads the real file (it names the latch).
+        assert!(src.contains("fn wait_blocking(&self)"));
+    }
+
+    /// 679-vdi6: the idle wait does NOT wake with nothing pending, flushes a
+    /// deferred burst once its cooldown elapses, and returns on shutdown.
+    #[test]
+    fn idle_wait_sleeps_until_a_flush_is_due_or_shutdown() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize};
+        use std::time::Duration;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let latch = ShutdownLatch::new(Arc::new(AtomicBool::new(false)));
+            let pending = tokio::sync::Notify::new();
+            let is_pending = Arc::new(AtomicBool::new(false));
+            let flushes = Arc::new(AtomicUsize::new(0));
+            let wakes = Arc::new(AtomicUsize::new(0));
+            let (ip, fl, wk) = (is_pending.clone(), flushes.clone(), wakes.clone());
+            let next = move || {
+                wk.fetch_add(1, Ordering::SeqCst);
+                ip.load(Ordering::SeqCst)
+                    .then_some(Duration::from_millis(50))
+            };
+            let ip2 = is_pending.clone();
+            let flush = move || {
+                let fl = fl.clone();
+                let ip2 = ip2.clone();
+                async move {
+                    fl.fetch_add(1, Ordering::SeqCst);
+                    ip2.store(false, Ordering::SeqCst);
+                }
+            };
+            let driver = async {
+                // Nothing pending for 300 ms: the wait must not wake.
+                tokio::time::sleep(Duration::from_millis(300)).await;
+                assert_eq!(
+                    wakes.load(Ordering::SeqCst),
+                    1,
+                    "the idle wait woke with nothing pending"
+                );
+                // Defer a burst: the wait flushes it after its cooldown.
+                is_pending.store(true, Ordering::SeqCst);
+                pending.notify_one();
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                assert_eq!(
+                    flushes.load(Ordering::SeqCst),
+                    1,
+                    "the deferred burst was not flushed"
+                );
+                latch.trigger();
+            };
+            let waited = async {
+                tokio::time::timeout(
+                    Duration::from_secs(3),
+                    idle_until_shutdown(&latch, &pending, next, flush),
+                )
+                .await
+                .expect("the idle wait must return on shutdown");
+            };
+            tokio::join!(driver, waited);
+        });
     }
 
     /// `TrayPhaseHandle` round-trips state. Default constructor starts
@@ -6249,6 +6910,115 @@ mod tests {
             h.current_phase(),
             tillandsias_control_wire::VmPhase::Draining
         ));
+    }
+
+    /// 679-rp9m: a notify wakes the login wait promptly, and the wait then
+    /// consults presence exactly once.
+    #[test]
+    fn login_wait_ends_on_the_notify() {
+        use std::sync::atomic::AtomicUsize;
+        use std::time::{Duration, Instant};
+        let signal = Arc::new(LoginSignal::new());
+        let seen = signal.generation();
+        let s2 = Arc::clone(&signal);
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            s2.notify();
+        });
+        let checks = AtomicUsize::new(0);
+        let t0 = Instant::now();
+        let out = await_github_login_confirmation(&signal, seen, Duration::from_secs(30), || {
+            checks.fetch_add(1, Ordering::SeqCst);
+            true
+        });
+        assert_eq!(out, LoginWait::Notified { present: true });
+        assert!(t0.elapsed() < Duration::from_secs(5), "{:?}", t0.elapsed());
+        assert_eq!(checks.load(Ordering::SeqCst), 1);
+    }
+
+    /// 679-rp9m NEGATIVE CONTROL: with no notify the wait ends AT its deadline
+    /// (not before) and settles by ONE presence check; a notify from an earlier
+    /// login does not satisfy this one.
+    #[test]
+    fn login_wait_without_a_notify_times_out_with_one_presence_check() {
+        use std::sync::atomic::AtomicUsize;
+        use std::time::{Duration, Instant};
+        let signal = LoginSignal::new();
+        signal.notify(); // an EARLIER login's notify
+        let seen = signal.generation();
+        let checks = AtomicUsize::new(0);
+        let t0 = Instant::now();
+        let out =
+            await_github_login_confirmation(&signal, seen, Duration::from_millis(300), || {
+                checks.fetch_add(1, Ordering::SeqCst);
+                false
+            });
+        assert_eq!(out, LoginWait::TimedOut { present: false });
+        assert!(
+            t0.elapsed() >= Duration::from_millis(290),
+            "ended early: {:?}",
+            t0.elapsed()
+        );
+        assert_eq!(
+            checks.load(Ordering::SeqCst),
+            1,
+            "exactly one presence check"
+        );
+        assert_eq!(GITHUB_LOGIN_DEADLINE, Duration::from_secs(120));
+    }
+
+    /// 679-rp9m end to end: the login CLI's sender, the tray's real socket
+    /// handler and the login wait. The wait ends on the event within 5 s.
+    #[test]
+    fn github_login_stored_over_the_control_socket_wakes_the_login_wait() {
+        use std::time::{Duration, Instant};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("control.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
+        let subscribers: ControlSubscribers = Arc::new(Mutex::new(Vec::new()));
+        let server = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            handle_control_connection(stream, subscribers, TrayPhaseHandle::ready_for_test());
+        });
+        let seen = GITHUB_LOGIN_SIGNAL.generation();
+        let t0 = Instant::now();
+        let waiter = std::thread::spawn(move || {
+            await_github_login_confirmation(
+                &GITHUB_LOGIN_SIGNAL,
+                seen,
+                Duration::from_secs(30),
+                || true,
+            )
+        });
+        std::thread::sleep(Duration::from_millis(50));
+        assert_eq!(
+            crate::notify_tray_github_login_stored(&path),
+            crate::TrayNotify::Acked
+        );
+        server.join().unwrap();
+        assert_eq!(
+            waiter.join().unwrap(),
+            LoginWait::Notified { present: true }
+        );
+        assert!(t0.elapsed() < Duration::from_secs(5), "{:?}", t0.elapsed());
+    }
+
+    /// 679-rp9m criterion 3: the login confirmation path has no per-second
+    /// sleep-poll. Patterns are assembled so this test cannot match itself.
+    #[test]
+    fn the_login_confirmation_path_has_no_sleep_poll() {
+        let src = include_str!("mod.rs");
+        let start = src
+            .find(&["pub(crate) fn await_github_login_", "confirmation("].concat())
+            .expect("premise: the login wait function exists");
+        let end = src[start..].find("\n}\n").expect("fn end");
+        let body = &src[start..start + end];
+        assert!(
+            !body.contains(&["sleep", "("].concat()),
+            "a sleep in the login wait: {body}"
+        );
+        let old_loop = ["for i in 0", "..120"].concat();
+        assert!(!src.contains(&old_loop), "the 120 x 1 s Vault poll is back");
     }
 
     /// `VmShutdownRequest` over the unix socket flips the shared
@@ -7378,6 +8148,15 @@ mod tests {
         assert!(args.contains(&"--entrypoint".to_string()));
         assert!(args.contains(&"/usr/local/bin/entrypoint-forge-claude.sh".to_string()));
         assert!(args.contains(&"tillandsias-forge:v0.1.260506.6".to_string()));
+        // ORDER 1506-q7ab: this legacy path mounts the lane mailbox like the
+        // live launcher — read-write, only its own lane — with the lane label.
+        let lane = crate::msg_serve::store_root().join("lanes/alpha-default");
+        let want = format!(
+            "type=bind,source={},target=/run/host/tillandsias-msg,relabel=shared",
+            lane.display()
+        );
+        assert!(args.contains(&want), "missing {want}; argv={args:?}");
+        assert!(args.contains(&"TILLANDSIAS_MSG_LANE=alpha-default".to_string()));
     }
 
     // @trace spec:tray-ux, spec:browser-isolation-tray-integration
@@ -8133,5 +8912,45 @@ mod tests {
             shared_id_to_int(ids::CLOUD_PROJECTS_OVERFLOW),
             CLOUD_OVERFLOW_ID
         );
+    }
+}
+
+/// ORDER 1469-q2r3 — the tray's forge launch argv carries the ForgeBudget flags
+/// for every launch kind (the budget is asserted on the argv, not the helper).
+#[cfg(test)]
+mod forge_budget_argv_tests {
+    use super::*;
+
+    #[test]
+    fn every_tray_launch_kind_argv_carries_the_budget() {
+        let budget = tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args();
+        assert!(
+            budget.iter().any(|a| a.starts_with("--memory=")),
+            "{budget:?}"
+        );
+        let project = ProjectEntry {
+            name: "alpha".to_string(),
+            path: PathBuf::from("/tmp/alpha"),
+            full_name: None,
+        };
+        for kind in [
+            LaunchKind::OpenCode,
+            LaunchKind::OpenCodeWeb,
+            LaunchKind::Observatorium,
+            LaunchKind::Claude,
+            LaunchKind::Codex,
+            LaunchKind::Antigravity,
+            LaunchKind::Maintenance,
+        ] {
+            let args = build_launch_spec(&project, kind, "tillandsias-forge:v0.1.260506.6")
+                .build_run_argv()
+                .expect("hardening envelope");
+            for flag in &budget {
+                assert!(
+                    args.contains(flag),
+                    "tray {kind:?} launch argv is missing budget flag {flag}; argv={args:?}"
+                );
+            }
+        }
     }
 }

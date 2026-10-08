@@ -1,0 +1,45 @@
+# @trace spec:ci-release
+name: litmus:decider-retirement-shape
+spec: ci-release
+phase: pre-build
+description: >
+  Order 1443-xkwb. The three bash deciders (check-bash-dialect,
+  check-sigpipe-verdict-pipelines-added, check-jq-callsite-ratchet) report
+  `population=<n> bootstrap=<b>` on stderr with their stdout verdict unchanged;
+  scripts/check-decider-retirement.sh retires a decider when its population is
+  only bootstrap shell (scripts/portability/bootstrap-shell-allowlist.txt, the
+  design §6.5 table), keeps it live otherwise, and never retires one whose scan
+  was empty. ADVISORY: it answers, it never reds a gate for a live decider.
+severity: normal
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-decider-retirement.sh
+  - workspace contains scripts/test-decider-retirement.sh
+  - workspace contains scripts/portability/bootstrap-shell-allowlist.txt
+
+critical_path:
+  - step: "retirement decider and fixture parse"
+    command: "bash -n scripts/check-decider-retirement.sh scripts/test-decider-retirement.sh && test -x scripts/check-decider-retirement.sh && test -x scripts/test-decider-retirement.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "population lines, retire/live/blocked, and the allowlist (four arms, with the empty-tree negative control)"
+    command: "bash scripts/test-decider-retirement.sh 2>&1 | tail -n 1"
+    timeout_ms: 120000
+    expected_behavior: "PASS: decider-retirement 13/13 (1443-xkwb)"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "PASS: decider-retirement"
+  log_fields:
+    spec: "ci-release"
+    test: "decider-retirement-shape"
+    artifact: "scripts/check-decider-retirement.sh + bootstrap-shell-allowlist.txt"
+
+rollback:
+  on_failure: >
+    Keep each decider's stdout verdict line byte-identical; the population line
+    belongs on stderr. Do not add a path to the allowlist to make a decider retire.
+  command: "bash scripts/check-decider-retirement.sh"

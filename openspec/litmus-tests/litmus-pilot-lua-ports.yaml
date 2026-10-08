@@ -1,0 +1,34 @@
+# @trace spec:ci-release
+# @trace order:1384-ddua
+#
+# Order 1384-ddua: check-seam-writers-canonical and check-bash-dialect are
+# ported to scripts/lua on `script run`, each .sh deleted in the same commit,
+# and each incident class shown unrepresentable by a negative arm. The runner's
+# `-- @read-env` widening is pinned by a negative arm: an undeclared env path
+# outside the repo is refused (coordinator ruling 2026-09-30, option ii).
+name: litmus:pilot-lua-ports
+spec: ci-release
+phase: pre-build
+description: >
+  Seam-writers: byte-identical verdict to the parent .sh, unchanged under a
+  pipefail caller and a 200,000-line writer. Bash-dialect: one mapfile line is
+  one offender, an empty population is refused. Only a declared read-env widens
+  reads. A plan binary without script run makes the gate's Lua decider a loud
+  could-not-run. Both .sh are gone and check-*.sh counts two fewer.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-pilot-lua-ports.sh
+  - a runnable tillandsias-plan that knows `script`, or the fixture answers could-not-run
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-pilot-lua-ports.sh && test -x scripts/test-pilot-lua-ports.sh && echo 'ok: pilot-lua-ports-parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: pilot-lua-ports-parses"
+
+  - step: "the five arms hold"
+    command: "bash scripts/test-pilot-lua-ports.sh"
+    timeout_ms: 600000
+    expected_behavior: "pilot-lua-ports: 5 passed, 0 failed"

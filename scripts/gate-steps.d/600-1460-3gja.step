@@ -1,0 +1,14 @@
+# Gate step 1460-3gja — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. run-litmus-test.sh given an explicit empty spec name used to
+# store it as "no filter" and run every spec (1h47m on lenovinha 2026-09-28,
+# after a binding lookup came back empty). It now refuses with
+# refused:empty-litmus-spec-argument, exit 3. Pre-fix, arm 1 times out
+# running the suite.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking an empty litmus spec name is refused, not read as run-everything (1460-3gja)"
+STEP_SCRIPT="scripts/test-litmus-empty-spec-refused.sh"
+STEP_ERROR="run-litmus-test.sh again treats an explicit empty spec as no filter and runs every spec (1460-3gja)"
+STEP_OK="an empty litmus spec name is refused"
+STEP_SECOND_REGIME="yolanda 2026-09-28 msys PASS: litmus-empty-spec-refused (1460-3gja) at 450020f66, checkout clean"

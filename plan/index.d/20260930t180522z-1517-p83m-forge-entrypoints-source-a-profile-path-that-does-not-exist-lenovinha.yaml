@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: every-forge-entrypoint-sources-agent-profile-from-a-path-the-image-never-installs-so-no-forge-has-run-it-since-2026-05-14
+    order: 1517-p83m
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [forge-image, entrypoints, fail-loud, skills]
+    estimated_hours: 2
+    depends_on: []
+    owned_files:
+      - images/default/entrypoint-forge-claude.sh
+      - images/default/entrypoint-forge-codex.sh
+      - images/default/entrypoint-forge-opencode-web.sh
+      - images/default/entrypoint-forge-antigravity.sh
+    title: |
+      every forge entrypoint sources agent-profile.sh from /opt/config-overlay, which the image never installs, and a silent [ -f ] guard skips it, so no forge has run it since 2026-05-14
+    context: |
+      FOUND 2026-09-30 on lenovinha while verifying 1446-qkx4 criterion 4.
+      The four agent entrypoints (claude:15, codex:50, opencode-web:20,
+      antigravity:12) run: if [ -f /opt/config-overlay/mcp/agent-profile.sh ];
+      then source it. The Containerfile installs config-overlay/mcp/ at
+      /home/forge/.config-overlay/mcp/, which is also container_profile.rs's
+      ConfigOverlay mount point. /opt/config-overlay exists nowhere. The guard
+      makes the miss silent, so since b837eae09 (2026-05-14) no forge has
+      exported AGENT_PROFILE, AGENT_SUPPORTS_WEB or AGENT_DISPLAY_NAME, and
+      1446-qkx4's generic-skill link never ran.
+      LIVE EVIDENCE, lenovinha forge-maintenance, image v56.9.27.2 (carries
+      159e494fe): /opt/skills/project-discipline is present, and
+      ~/.config-overlay/mcp/agent-profile.sh contains link_forge_generic_skills,
+      but /home/forge/.claude/skills does not exist.
+      1446-qkx4's fixture sources the file directly, so it could not see this.
+      Coordinator ruling (macuahuitl, 2026-09-30): a new p1 row, wider than
+      1446. Drop the /opt fallback unless something really mounts there. A
+      missing profile is LOUD, with why and remedy on the forge's stderr.
+    exit_criteria:
+      - 'each of the four entrypoints sources the path the Containerfile COPY installs (static arm) (pre-fix: FAILS — /opt/config-overlay)'
+      - 'BEHAVIOURAL: the profile-loading block, run against a scratch HOME laid out like the image, exports AGENT_PROFILE and links project-discipline under the scratch ~/.claude/skills (pre-fix: FAILS — both absent, and nothing printed)'
+      - 'a missing profile prints a named warning with why and remedy on stderr, rather than skipping silently (pre-fix: FAILS — silent)'
+      - 'no /opt/config-overlay fallback remains unless a launch path mounts there, checked against container_profile.rs and every launch path'
+    verifiable_closure: |
+      bash scripts/test-forge-entrypoints-source-agent-profile.sh exits 0,
+      bound as litmus:forge-entrypoints-source-agent-profile.
+    events:
+      - type: filed
+        ts: "2026-09-30T18:05:22Z"
+        agent_id: "linux-lenovinha-claude-20260930t180522z"
+        host: lenovinha
+        summary: |-
+          Filed from the 1446-qkx4 check, on the coordinator's routing (new row, p1).

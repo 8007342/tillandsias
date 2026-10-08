@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    field: status
+    value: completed
+    ts: "2026-09-28T18:58:02Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    event:
+      type: completed
+      ts: "2026-09-28T18:58:02Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'completed' with evidence_refs: 25f800ec7 (land84); plan/index.d/20260928t183904z-29f95898-tlatoanis-macbook-air.yaml (darwin); plan/index.d/20260928t184354z-132c6f60-yolanda.yaml (windows)
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    event:
+      type: note
+      ts: "2026-09-28T18:58:02Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Landed at 25f800ec7. Closure is met per the amended verifiable_closure: darwin ok:status-channel:absent-distinct-from-zero:3/3 skipped=1 (tlatoanis-macbook-air, at 25f800ec7); windows ok:...:1/1 skipped=3 (yolanda, cf2829f9b), with arm 2 a declared drop and arms 1/3/4 skipping by the verb's named limit limit:windows-external-kill-reads-as-exited. Both rc=0, and each of the four arms passed on the regime able to run it.

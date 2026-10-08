@@ -62,7 +62,7 @@ pub struct Qcow2Info {
 }
 
 /// ORDER 795-5itp, recorded `keep`. The framing ratchet
-/// (`scripts/check-framing-raw-decodes.sh`) counts `u32::from_be_bytes` and so
+/// (`scripts/lua/check-framing-raw-decodes.lua`) counts `u32::from_be_bytes` and so
 /// counts this line, but this is NOT a wire frame length: it reads a
 /// big-endian field out of a QCOW2 DISK HEADER, whose layout is defined by the
 /// image format and cannot be renegotiated. `LengthDelimitedCodec` has nothing
@@ -103,6 +103,9 @@ pub fn read_header(f: &mut File) -> Result<Qcow2Info, String> {
         ));
     }
     let version = be32(&h, 4);
+    // exact-version: 2 and 3 are the qcow2 ON-DISK format versions this parser
+    // implements. A later version may change the header layout, so an unknown
+    // one is refused rather than read as if it were 3 (order 968-uhzg).
     if version != 2 && version != 3 {
         return Err(format!("unsupported qcow2 version {version} (need 2 or 3)"));
     }

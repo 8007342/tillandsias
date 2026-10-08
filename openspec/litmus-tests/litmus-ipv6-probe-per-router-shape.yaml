@@ -1,0 +1,52 @@
+# @trace spec:init-command
+# @trace order:1548-mhyk
+#
+# Pins the --init IPv6 egress probe (order 1548-mhyk). The probe parsed
+# "2001:4860:4860::8888:53" as a SocketAddr, which Rust rejects without
+# brackets, so it never returned true and --init wrote
+# pasta_options = ["--ipv4-only"] on every Linux host. It also must probe EVERY
+# default router: on a LAN with a non-forwarding second router a single probe
+# is a coin flip. Hermetic: injected route table and per-router probe.
+name: litmus:ipv6-probe-per-router-shape
+spec: init-command
+phase: pre-build
+description: >
+  Run scripts/test-ipv6-probe.sh: the probe address list parses; a stub table
+  of two routers with one black-holing reports egress=1/2 and is NOT
+  functional; both working reports 2/2 and is functional; no router is not
+  functional.
+severity: medium
+size: quick
+backend: fake
+
+preconditions:
+  - cargo is available in PATH
+  - workspace contains scripts/test-ipv6-probe.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-ipv6-probe.sh && test -x scripts/test-ipv6-probe.sh && echo 'ok: fixture-defined'"
+    timeout_ms: 5000
+    expected_behavior: "ok: fixture-defined"
+
+  - step: "all six named arms pass (parse, one-blackhole, both-ok, no-router, flowlabel, unmeasured)"
+    command: "scripts/test-ipv6-probe.sh >/dev/null 2>&1 && echo 'ok: ipv6-probe-arms-pass' || { scripts/test-ipv6-probe.sh; exit 1; }"
+    timeout_ms: 600000
+    expected_behavior: "ok: ipv6-probe-arms-pass"
+
+observability:
+  traces:
+    - "@trace spec:init-command"
+    - "@trace order:1548-mhyk"
+  expected_log: "ipv6 egress probe pinned (bracketed addresses, per-router, all-routers-must-pass)"
+  log_fields:
+    spec: "init-command"
+    test: "ipv6-probe-per-router-shape"
+    artifact: "scripts/test-ipv6-probe.sh + crates/tillandsias-headless/src/main.rs"
+
+rollback:
+  on_failure: >
+    Restore bracketed [addr]:port probe addresses in
+    crates/tillandsias-headless/src/main.rs and keep is_ipv6_functional
+    requiring every default router to carry traffic.
+  command: "scripts/test-ipv6-probe.sh"

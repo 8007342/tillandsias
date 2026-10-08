@@ -29,6 +29,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 pub mod answer;
+pub mod bash_policy;
+/// ORDER 801-g9nn — the commit-DAG plumbing behind a citation's `commit` and
+/// the envelope's `caller_relation`. Derives `same | behind | ahead | diverged`
+/// honestly and refuses to synthesise a total order git cannot give.
+pub mod branch_discipline;
+/// Order 1443-isrk: the command policy evaluator (allow | deny | consent for an
+/// argv) behind `policy eval` and proc.run / sh.run.
+pub mod command_policy;
+pub mod discipline_hooks;
 /// ORDER 920-pxg6 — the OpenAI-compatible loopback front-end over
 /// `pipeline::run_grounded`. One grounded pipeline, two front-ends.
 pub mod expert_serve;
@@ -40,9 +49,6 @@ pub mod experts_probe;
 /// which required exactly this and which the monolithic index file never was.
 pub mod forgotten;
 pub mod fragments;
-/// ORDER 801-g9nn — the commit-DAG plumbing behind a citation's `commit` and
-/// the envelope's `caller_relation`. Derives `same | behind | ahead | diverged`
-/// honestly and refuses to synthesise a total order git cannot give.
 pub mod gitref;
 /// ORDER 394d — the committed ground-truth query set and its grader.
 pub mod groundtruth;
@@ -66,6 +72,16 @@ pub mod lua_predicate;
 pub mod lua_runtime;
 pub mod lua_std;
 pub mod methodology;
+/// ORDER 1506-nvqt — the fleet message bus's pure checks (body budget, secret
+/// shapes, TTL bounds), shared by `msg send` and the mover. Lives in the
+/// `tillandsias-msg` crate since 1506-q7ab so the mover can link it.
+pub use tillandsias_msg::shape as msg_shape;
+/// ORDER 1506-nvqt — the Maildir-shaped lane store behind `tillandsias-plan
+/// msg`; no networking, no ack verb (the ack is the infrastructure's).
+pub mod msg_store;
+pub mod run_verb;
+// ORDER 1384-bqhy: `script run` (the Lua decider runner) and the one classify.
+pub mod script_run;
 
 /// Order 977-56fd — the seven-state obligation lattice, the product order over
 /// spec and project states, and the refinement operator that
@@ -79,6 +95,7 @@ pub mod obligation_props;
 pub mod pipeline;
 /// ORDER 706-f7mq — modular semantic explanation and fallback for documentation & plan corpora.
 pub mod semantic_expert;
+pub mod session_tokens;
 /// ORDER 547 — network-free RAG index over the whole-spec corpus (chunking,
 /// cosine retrieval, verifiable envelope construction). Embedding and synthesis
 /// happen outside the crate; see `spec.rs`.
@@ -206,6 +223,50 @@ pub struct FieldSource {
 
 pub fn str_field<'a>(packet: &'a Value, key: &str) -> Option<&'a str> {
     packet.get(key).and_then(Value::as_str)
+}
+
+/// ORDER 1437-khnx — the two tier-routing scalars and their vocabularies.
+/// `size` is the implementation size, `implementer_tier` the model tier a
+/// packet is written for; both are read by the selector's tier routing
+/// (1437-vdz5), never by a refusal.
+pub const TIER_FIELDS: [(&str, &[&str]); 2] = [
+    ("size", &["S", "M", "L"]),
+    ("implementer_tier", &["haiku", "sonnet", "opus"]),
+];
+
+/// ORDER 1437-khnx — a tier field's value: the top-level scalar when present,
+/// else a `<field>: <value>` line inside `notes:` whose value is in the
+/// vocabulary. The fallback exists for the rows filed on 2026-09-27 before the
+/// scalars did; a top-level scalar always wins, so a `set-field` correction
+/// overrides the note. Only an in-vocabulary note is read — a note that says
+/// `size: XL` is prose, not a field.
+pub fn tier_field(packet: &Value, field: &str) -> Option<String> {
+    if let Some(v) = packet.get(field) {
+        return match v {
+            Value::String(s) => Some(s.clone()),
+            other => serde_yaml::to_string(other)
+                .ok()
+                .map(|s| s.trim().to_string()),
+        };
+    }
+    let vocab = TIER_FIELDS.iter().find(|(f, _)| *f == field)?.1;
+    let prefix = format!("{field}:");
+    str_field(packet, "notes")?.lines().find_map(|line| {
+        let value = line.trim().strip_prefix(&prefix)?.trim();
+        vocab.contains(&value).then(|| value.to_string())
+    })
+}
+
+/// ORDER 1437-khnx — `Some(reason)` when `value` is outside `field`'s
+/// vocabulary; `None` for an in-vocabulary value or a field that has none.
+pub fn tier_vocabulary_refusal(field: &str, value: &str) -> Option<String> {
+    let vocab = TIER_FIELDS.iter().find(|(f, _)| *f == field)?.1;
+    (!vocab.contains(&value)).then(|| {
+        format!(
+            "{field}={value:?} is not in the vocabulary ({})",
+            vocab.join("|")
+        )
+    })
 }
 
 pub fn str_list(packet: &Value, key: &str) -> Vec<String> {
@@ -1255,6 +1316,29 @@ impl Ledger {
 
     /// Schema-as-data validation: field rules come from the checkout, not
     /// the binary. Unknown packet fields are NEVER violations (open-world).
+    /// ORDER 1437-khnx — every top-level tier scalar outside its vocabulary,
+    /// as `<id>: <reason>`. `check` reports these and `--strict-fragments`
+    /// refuses them; notes lines are prose and never reach this.
+    pub fn tier_vocabulary_violations(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for p in &self.packets {
+            for (field, _) in TIER_FIELDS {
+                if let Some(v) = p.get(field) {
+                    let value = match v {
+                        Value::String(s) => s.clone(),
+                        other => serde_yaml::to_string(other)
+                            .map(|s| s.trim().to_string())
+                            .unwrap_or_default(),
+                    };
+                    if let Some(reason) = tier_vocabulary_refusal(field, &value) {
+                        out.push(format!("{}: {reason}", self.id_of(p)));
+                    }
+                }
+            }
+        }
+        out
+    }
+
     pub fn validate_against_schema(&self, schema: &Schema) -> Vec<String> {
         let mut violations = Vec::new();
         for p in &self.packets {
@@ -1753,6 +1837,78 @@ pub mod edit {
                     lines.insert(end + k, bl.clone());
                 }
             }
+        }
+        Ok(lines.join("\n") + "\n")
+    }
+
+    /// [`push_event`] for MANY events in one pass (order 1476-5dfy).
+    ///
+    /// Compaction appended each new event with its own `push_event`, and every
+    /// call split the whole text, rescanned every item for the target and
+    /// re-joined it: O(events x text). On the live ledger (748 events into a
+    /// 5.9 MB candidate) that loop was ~10 s of every compaction. This splits
+    /// once, maps every packet_id to its item span in one scan (first item
+    /// containing the id, exactly as [`item_span`] resolves it), groups each
+    /// packet's blocks in the given order, and inserts bottom-up so an earlier
+    /// span is never shifted by a later insertion.
+    ///
+    /// The result is BYTE-IDENTICAL to calling `push_event` once per entry in
+    /// order. Appending a packet's k-th event after its (k-1)-th is exactly
+    /// appending the concatenation once, and creating `events:` on the first
+    /// push and then appending under it is exactly creating it with the
+    /// concatenation. Pinned by `push_events_equals_sequential_push_event`.
+    pub fn push_events(raw: &str, events: &[(String, String)]) -> Result<String, String> {
+        let mut lines: Vec<String> = raw.lines().map(String::from).collect();
+
+        let item_starts: Vec<usize> = (0..lines.len())
+            .filter(|&i| lines[i].starts_with("    - "))
+            .collect();
+        let mut span_of: std::collections::HashMap<String, (usize, usize)> =
+            std::collections::HashMap::new();
+        for (n, &st) in item_starts.iter().enumerate() {
+            let en = item_starts.get(n + 1).copied().unwrap_or(lines.len());
+            for line in &lines[st..en] {
+                let t = line.trim();
+                let t = t.strip_prefix("- ").unwrap_or(t);
+                if let Some(id) = t.strip_prefix("packet_id: ") {
+                    span_of.entry(id.to_string()).or_insert((st, en));
+                }
+            }
+        }
+
+        // Group blocks per packet, keeping each packet's events in order.
+        let mut order: Vec<(usize, usize, Vec<String>)> = Vec::new();
+        let mut slot: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+        for (pid, block) in events {
+            let (st, en) = *span_of
+                .get(pid.as_str())
+                .ok_or_else(|| format!("packet_id '{pid}' not found"))?;
+            let bl: Vec<String> = block.lines().map(String::from).collect();
+            if bl.is_empty() {
+                return Err("empty event block".to_string());
+            }
+            match slot.get(pid.as_str()) {
+                Some(&k) => order[k].2.extend(bl),
+                None => {
+                    slot.insert(pid.as_str(), order.len());
+                    order.push((st, en, bl));
+                }
+            }
+        }
+
+        // Bottom-up, so no insertion shifts a span still to be processed.
+        order.sort_by_key(|entry| std::cmp::Reverse(entry.0));
+        for (start, end, block) in order {
+            let at = match (start..end).find(|&i| lines[i] == "      events:") {
+                Some(ei) => (ei + 1..end)
+                    .find(|&i| lines[i].starts_with("      ") && !lines[i].starts_with("        "))
+                    .unwrap_or(end),
+                None => {
+                    lines.insert(end, "      events:".to_string());
+                    end + 1
+                }
+            };
+            lines.splice(at..at, block);
         }
         Ok(lines.join("\n") + "\n")
     }

@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# T2 one-command relay preflight. Design: plan/issues/efficiency-trims-design-2026-09-27.md
+packets:
+  - packet_id: relay-preflight-one-command-merge-deciders-fmt-fixtures-crates-covering
+    order: 1437-664a
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    release_target: efficiency-trims-2026-09-27
+    pickup_role: linux
+    capability_tags: [coordination, relay, gate, bash, linux]
+    estimated_hours: 8
+    depends_on: [litmus-covering-specs-relay-scope-partition]
+    owned_files: [scripts/relay-preflight.sh, scripts/test-relay-preflight.sh, openspec/litmus-tests/litmus-relay-preflight-shape.yaml, skills/coordinate-multihost-work/SKILL.md, skills/join-the-fleet/SKILL.md]
+    verifiable_closure: |
+      bash scripts/test-relay-preflight.sh prints ok:relay-preflight:6/6 and
+      exits 0, where, over a scratch repo carrying a base branch and two work
+      refs: arm 1: scripts/relay-preflight.sh work/a work/b prints exactly one
+      stdout line of the form ok:relay-preflight:<sha>:refs=2 deciders=<n>
+      fmt=<ok|skip> fixtures=<n> crates=<n> litmus=<run>/<deferred>, with
+      every per-item line on stderr as item: <name> <verdict> <ms>; arm 2: a
+      ref whose diff makes check-bash-dialect.sh red yields
+      refused:relay-preflight:deciders:check-bash-dialect on stdout and exit
+      1, and no later phase ran; arm 3: two --plan runs on the same merged
+      SHA print byte-identical item lists (determinism); arm 4: a diff that
+      touches scripts/foo.sh selects every scripts/test-*.sh whose bytes name
+      scripts/foo.sh, listed before any of them runs; arm 5: a conflicting
+      ref yields refused:relay-preflight:merge:merge-conflict:<ref> and exit
+      2 with the tree restored clean; arm 6 NEGATIVE CONTROL: a dirty
+      worktree is refused before any fetch. PRE-FIX RESULT: FAILS —
+      scripts/relay-preflight.sh does not exist; the relay lane hand-types
+      the sequence today.
+    title: |
+      `scripts/relay-preflight.sh <ref>...`: merge, cycle-preflight, deciders, fmt, touched fixtures, crate tests and the scoped covering litmus in one command with ONE verdict line
+    context: |
+      T2 of the 2026-09-27 trims. Every relay pass hand-types ~15 commands
+      (fetch, merge, cycle-preflight, ~10 deciders by rc, cargo fmt --check,
+      the touched fixtures and crates, litmus-covering-specs.sh --run over
+      every covering spec). The hand-typed set omitted
+      check-issue-citation-convention.sh on 2026-09-21 and cost a 20-minute
+      gate; the brief's check-preflight-fixtures-default-target.sh does not
+      exist under that name (it is scripts/preflight-fixtures-default-target.sh).
+      Phases and the exact decider list are in the design note section T2;
+      the diff-scoped deciders take their base through their existing env
+      seams (TILLANDSIAS_SIGPIPE_BASE, TILLANDSIAS_FRAGMENT_PARSE_BASE,
+      TILLANDSIAS_ADDED_TEST_BASE, TILLANDSIAS_DEFAULT_TARGET_BASE), never a
+      re-implementation. The litmus phase consumes litmus-covering-specs.sh
+      --relay-scope (T4, 1437-yfuh). Timing is emitted through timing_emit
+      as step relay-preflight so recur: sees the lane's cost. The script
+      never pushes; it leaves relay/<utc> for scripts/land-on-platform-branch.sh.
+    next_action: >
+      Write the script to the phase list in the design note; the fixture
+      with six arms over a scratch repo (stub the cargo and litmus phases
+      behind TILLANDSIAS_RELAY_PREFLIGHT_STUB so the fixture is seconds);
+      bind litmus:relay-preflight-shape under the ci-release spec; replace
+      the hand-typed sequence in skills/coordinate-multihost-work/SKILL.md
+      Landing Queue and skills/join-the-fleet/SKILL.md section 3 with the
+      one command (the methodology rule pull_merge_cadence.relay_preflight
+      already names it).
+    notes: |
+      size: L
+      implementer_tier: opus
+      Gate-integrity sensitive: the coordinator lands on this verdict; a
+      phase that silently skips lets a red tree land.
+    provenance: |
+      Filed 2026-09-27 on macuahuitl by the trims designer session from the
+      coordinator's relay transcripts of the same day.

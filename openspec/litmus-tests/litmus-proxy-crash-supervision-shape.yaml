@@ -48,7 +48,7 @@ critical_path:
     expected_behavior: "ok: proxy-supervisor-parses"
 
   - step: "supervisor is bash-3.2 clean (macOS system bash is the floor)"
-    command: "TILLANDSIAS_DIALECT_SCAN_DIR=images/proxy bash scripts/check-bash-dialect.sh"
+    command: ". scripts/plan-binary-probe.sh; TILLANDSIAS_DIALECT_SCAN_DIR=images/proxy \"$(resolve_plan_binary)\" script run scripts/lua/check-bash-dialect.lua"
     timeout_ms: 10000
     expected_behavior: "ok:bash-dialect-clean"
 

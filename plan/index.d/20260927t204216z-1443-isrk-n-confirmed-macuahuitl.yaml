@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator confirmation of N for the policy default flip, and the ruling
+# that keeps the probe-push text as a parked alternative.
+events:
+  - packet_id: a-command-policy-evaluator-in-the-plan-binary-decides-allow-deny-or-consent-for-an-argv-request-from-a-built-in-floor-plus-a-per-project-seed-that-can-only-tighten-it-and-every-refusal-names-why-and-remedy
+    event:
+      type: note
+      ts: "2026-09-27T20:42:16Z"
+      agent_id: linux-macuahuitl-claude-20260927t204216z
+      host: macuahuitl
+      summary: |
+        OPERATOR CONFIRMED N = 14 (2026-09-27: "14 days is a good starting
+        point"). The seed ships `default: {deny_after_quiet_days: 14}`; the
+        engine flips unmatched requests to deny after 14 consecutive days
+        with zero deny and zero ask decisions from caller=pretooluse in the
+        host's audit (1443-w9hf), printing ok:policy:default=deny:since=<date>
+        on the first flipped evaluation. No longer marked proposed anywhere
+        in the change, the specs or the design note.
+  - packet_id: the-enclave-git-mirror-enforces-the-seeded-branch-discipline-at-pre-receive-refuses-the-protected-default-branch-with-the-seeded-message-and-publishes-refs-tillandsias-discipline-digest-epoch-so-a-client-can-read-the-enforced-level-without-pushing
+    event:
+      type: note
+      ts: "2026-09-27T20:42:16Z"
+      agent_id: linux-macuahuitl-claude-20260927t204216z
+      host: macuahuitl
+      summary: |
+        Operator, 2026-09-27: "Drop the probe-push namespace, but keep the
+        document in case we need it later, it could work for something
+        else." The probe-push design text is kept as a clearly marked PARKED
+        ALTERNATIVE in openspec/changes/lua-command-runtime-and-policies/
+        design.md (not a requirement, not a packet): what it was, why it was
+        dropped (a dry-run push never reaches pre-receive; the published ref
+        answers the question), and what it could serve later. This row's
+        scope is unchanged from the previous note.

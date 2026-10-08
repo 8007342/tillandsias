@@ -1,0 +1,1 @@
+{"run_id":"48964629-5cd6-4556-ac72-46e773d892a6","status":"exited","code":0,"signal":null,"ok":true,"stdout":"","stderr":"","truncated":false,"wall_ms":56060,"argv":["bash","/tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/preflight-candidate.sh"],"policy":{"decision":"allow","rule_id":"default","why":null,"remedy":null}}

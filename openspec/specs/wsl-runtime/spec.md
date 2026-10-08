@@ -139,6 +139,51 @@ The host tray and WSL daemon MUST communicate asynchronously via:
 
 ---
 
+### Requirement 9: Tillandsias owns its WSL configuration and its block of `.wslconfig`
+<!-- req-id: 99436bac -->
+**Modality:** MUST
+
+Added 2026-09-27 (order 1437-8c6p; operator directive: "store there our
+.wslconfig, .podmanconfigs, etc, and have them all always explicitly use our
+config over the system defaults"). WSL reads exactly one global file,
+`%USERPROFILE%\.wslconfig`, and one per-distro file, `/etc/wsl.conf` inside
+the distro; neither can be pointed elsewhere. Ownership therefore means:
+
+1. The canonical Tillandsias WSL settings (swap, swapFile, sparseVhd,
+   autoMemoryReclaim, and any later key) MUST live in ONE Tillandsias-owned
+   file under the Tillandsias config directory,
+   `%USERPROFILE%\.tillandsias\config\wslconfig.toml` (`TILLANDSIAS_HOME/config`,
+   per `host-state-lifecycle`; AMENDED 2026-09-27, 1438-pk9j, from the
+   `%LOCALAPPDATA%` path the 1437-8c6p text named), which is operator data
+   and survives both the SOFT and the HARD reset.
+2. The installer and the tray MUST merge those settings into
+   `%USERPROFILE%\.wslconfig` inside a marked block
+   (`# >>> tillandsias >>>` … `# <<< tillandsias <<<`), idempotently: a second
+   run changes nothing; a changed canonical value updates the block and only
+   the block. `Get-WslConfigMerge` is the merge and stays pure. A key the user
+   set outside the block MUST NOT be rewritten; the existing consent prompt
+   (`TILLANDSIAS_WSLCONFIG=apply` or the interactive `[y/N]`) stays.
+3. `/etc/wsl.conf` inside the `tillandsias` distro MUST be provisioned by
+   Tillandsias from its own template on every provision (`[boot] systemd=true`
+   and whatever Requirement 1 needs), never inherited from the rootfs image's
+   default.
+4. Uninstall MUST remove the marked block from `%USERPROFILE%\.wslconfig` and
+   leave every other line byte-identical; it MUST NOT delete the file.
+
+**Measurable:** `scripts/test-installer-merges-wslconfig-swap-keys.sh` gains
+arms: (a) two merges are idempotent (second output equals first); (b) a user
+key outside the block survives a merge with a changed canonical value; (c) the
+un-merge removes exactly the block. Pre-fix result: (a) passes, (b) and (c)
+FAIL — there is no marked block and no un-merge; `-Purge` leaves the keys it
+added.
+
+**Scenario:** A user with their own `memory=8GB` line runs the installer
+twice, then uninstalls. Verify the swap keys were added once inside the block,
+`memory=8GB` never moved, and after uninstall the file holds only
+`memory=8GB` and the `[wsl2]` header.
+
+---
+
 ## Invariants
 
 1. **WSL distribution is always configured**: systemd is enabled before any Tillandsias component runs.

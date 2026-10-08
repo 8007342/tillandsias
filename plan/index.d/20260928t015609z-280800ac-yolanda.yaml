@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: native-clippy-deny-warnings-reds-tillandsias-windows-tray-on-three-sites-and-no-gate-a-windows-host-runs-would-see-it
+    field: status
+    value: completed
+    ts: "2026-09-28T01:56:09Z"
+    host: yolanda
+
+events:
+  - packet_id: native-clippy-deny-warnings-reds-tillandsias-windows-tray-on-three-sites-and-no-gate-a-windows-host-runs-would-see-it
+    event:
+      type: completed
+      ts: "2026-09-28T01:56:09Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 76c97c012 ok:windows-tray-clippy:clean

@@ -25,6 +25,15 @@
 
 set -euo pipefail
 
+# 1238-b825: --print-version answers before any podman requirement. Image TAGS
+# keep v<VERSION> (the tray looks images up by it; `+` is not a legal tag
+# character), so the derived label appears only in this build's log.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-build-version.sh"
+if [[ "${1:-}" == "--print-version" ]]; then
+    build_version_label "$(tr -d '[:space:]' < "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/VERSION")"
+    exit 0
+fi
+
 
 # ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
 # toolbox-fallback dispatch instead of assuming the host has it.
@@ -156,6 +165,7 @@ if [[ -z "$IMAGE_VERSION" ]]; then
     _error "VERSION file is empty"
     exit 1
 fi
+IMAGE_BUILD_LABEL="$(build_version_label "$IMAGE_VERSION")"
 IMAGE_LABEL_PREFIX="tillandsias-${IMAGE_NAME}"
 IMAGE_VERSION_TAG="${IMAGE_LABEL_PREFIX}:v${IMAGE_VERSION}"
 IMAGE_LATEST_TAG="${IMAGE_LABEL_PREFIX}:latest"
@@ -715,7 +725,7 @@ if [[ "$USE_HUMAN_ALIASES" == true ]]; then
     if [[ -n "$IMAGE_INSTALLED_TAG" ]]; then
         _info "Aliases:  ${IMAGE_VERSION_TAG}, ${IMAGE_LATEST_TAG}, ${IMAGE_INSTALLED_TAG} (installed binary)"
     else
-        _info "Aliases:  ${IMAGE_VERSION_TAG}, ${IMAGE_LATEST_TAG}"
+        _info "Aliases:  ${IMAGE_VERSION_TAG}, ${IMAGE_LATEST_TAG} (build label ${IMAGE_BUILD_LABEL})"
     fi
 fi
 _info "Size:     ${SIZE_DISPLAY}"

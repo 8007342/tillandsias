@@ -1,0 +1,29 @@
+# Found 2026-10-07 baselining a relay preflight on macuahuitl: three
+# ci-release litmus tests red on plain trunk 95350b0c8. Fixed on this
+# row's branch; see the PR body for each introducing commit.
+packets:
+  - packet_id: three-ci-release-litmus-tests-were-red-on-plain-trunk-shell-ratchet-decider-retirement-shape-and-command-policy-evaluator-shape
+    order: 1553-y9dv
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, ci-release, relay-fix, gate]
+    estimated_hours: 1
+    title: |
+      litmus:shell-ratchet, litmus:decider-retirement-shape and litmus:command-policy-evaluator-shape were red on plain trunk 95350b0c8 — a piped command added by 1443-z3vb, an entrypoint missing from the bootstrap allowlist after 1506-euvq, and an arm left asserting the floor-only answer that 1531-ae4a deliberately replaced
+    context: |
+      None of the three is reached by ./build.sh --check, which is why they
+      landed green. Each was measured red on trunk and green after its fix.
+      The fourth red seen in the same baseline (opencode-vault-auth-content)
+      is environmental and is filed separately as 1553-7uge.
+    exit_criteria:
+      - 'scripts/run-litmus-test.sh --test litmus:shell-ratchet, --test litmus:decider-retirement-shape and --test litmus:command-policy-evaluator-shape each pass on trunk after this row lands; pre-fix: all three red on 95350b0c8 (measured 2026-10-07)'
+    verifiable_closure: |
+      scripts/run-litmus-test.sh --test litmus:shell-ratchet --compact,
+      --test litmus:decider-retirement-shape and
+      --test litmus:command-policy-evaluator-shape all exit 0 on trunk.
+    depends_on: []
+    next_action: >
+      Land work/1553-y9dv, then run the three litmus tests on trunk and record completion.

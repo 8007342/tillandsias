@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-macos-guest-goes-silent-mid-session-the-tray-drops-the-signed-in-state-and-a-device-flow-can-hang-after-the-grant
+    event:
+      type: note
+      ts: "2026-09-30T05:11:16Z"
+      agent_id: linux-macuahuitl-claude-20260930t051115z
+      host: macuahuitl
+      summary: |
+        LANDED land101 = 011cd3f80 on origin/linux-next (relayed work/1503-qrgz @ 6a0651049; gate: build-check exit 0). Relay-fix: the chrony user-data test was #[cfg(unix)] but calls the macos-only shim provision_user_data_for_test, so vm-layer tests failed to COMPILE on Linux (E0425); now cfg(target_os = "macos"), vm-layer 103 passed on Linux. Live arm met on the MacBook Air (0d30bf879): +1655550 ms step at wake. The row author closes from the ledger, citing 011cd3f80.

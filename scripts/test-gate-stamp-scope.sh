@@ -206,4 +206,64 @@ printf '%s' "$out" | grep -q 'plan-only lane clean' || fail "case 7: lane did no
 [ "$before" != "$after" ] || fail "case 7: lane accepted but the remote did not advance"
 echo "ok: case 7 — the 668-2xeh plan-only lane is preserved intact"
 
-echo "PASS: gate-stamp-scope (8/8)"
+
+# ── case 8: a FRESH stamp scoped to code still admits a plan-only push ────────
+# ORDER 1521-y72e. The digest excludes plan fragments (930-i6x4), so a stamp
+# written after a scoped gate stays ok:gate-fresh when a fragment is added on
+# top — and that arm used to run only the scope check, which refused the
+# fragment's class (plan-ledger) without ever offering the plan-only lane that
+# the stale arms offer. MEASURED on land117 (2026-10-01): the coordinator's
+# closing fragment after a build-scripts-scoped land was refused this way.
+D="$WORK/c8"; make_repo "$D"
+before="$(remote_head "$D")"
+out="$(cd "$D/work" && issue_pass_token && bash scripts/gate-stamp.sh write --scope rust --dispatch check >/dev/null && printf 'packets: []\n' > plan/index.d/close.yaml && git add -A && git commit -qm close >/dev/null 2>&1 && TILLANDSIAS_PLAN_BIN="$LANE_PLAN_BIN" git push origin main 2>&1)"
+rc=$?
+after="$(remote_head "$D")"
+[ "$rc" = 0 ] || fail "case 8: a plan-only push was refused under a fresh scoped stamp: $out"
+grep -q 'plan-only lane clean' <<<"$out" || fail "case 8: the plan-only lane did not accept it: $out"
+[ "$before" != "$after" ] || fail "case 8: accepted but the remote did not advance"
+echo "ok: case 8 — a fresh stamp scoped to rust admits a plan-only push through the plan-only lane"
+
+# ── case 9 (NEGATIVE CONTROL for case 8): the lane does not launder a class ───
+# Same fresh rust-scoped stamp, but the stamped tree carries a README change
+# (class docs) the scope never validated, plus a fragment. The lane must
+# decline (the diff is not plan-only) and the scope refusal must stand.
+D="$WORK/c9"; make_repo "$D"
+before="$(remote_head "$D")"
+out="$(cd "$D/work" && printf 'edited\n' >> README.md && git add -A && git commit -qm readme >/dev/null 2>&1 && issue_pass_token && bash scripts/gate-stamp.sh write --scope rust --dispatch check >/dev/null && printf 'packets: []\n' > plan/index.d/close.yaml && git add -A && git commit -qm close >/dev/null 2>&1 && TILLANDSIAS_PLAN_BIN="$LANE_PLAN_BIN" git push origin main 2>&1)"
+rc=$?
+after="$(remote_head "$D")"
+[ "$rc" != 0 ] || fail "case 9: an out-of-scope README change rode a fragment through: $out"
+grep -q "scoped to .rust." <<<"$out" || fail "case 9: refusal did not name the scope: $out"
+grep -q 'changes: docs' <<<"$out" || fail "case 9: refusal did not name the missing class (docs): $out"
+[ "$before" = "$after" ] || fail "case 9: remote advanced despite the refusal"
+echo "ok: case 9 — the plan-only lane does not carry an out-of-scope class past a fresh scoped stamp"
+
+
+# ── case 10: a remote that MOVED is a race, not a gate problem ───────────────
+# ORDER 1524-w8ys. Another host lands a plan-only commit after our last fetch;
+# git hands the hook the remote's advertised tip, which this checkout has
+# never seen. The refusal must name the race and the fetch-and-merge remedy,
+# not "Re-run the full gate", and after fetch + merge the SAME stamp (no new
+# gate) carries the push. MEASURED on land120 (2026-10-01): the old shared
+# refusal sent the coordinator to a second 20-minute gate for one fragment.
+D="$WORK/c10"; make_repo "$D"
+git clone -q "$D/origin.git" "$D/other" 2>/dev/null
+git -C "$D/other" checkout -q main 2>/dev/null
+mkdir -p "$D/nohooks"; git -C "$D/other" config core.hooksPath "$D/nohooks"   # a global hooksPath would run a real hook here
+(cd "$D/other" && git config user.email o@t && git config user.name o && mkdir -p plan/index.d && printf 'packets: []\n' > plan/index.d/theirs.yaml && git add -A && git commit -qm theirs && git push -q origin main) \
+    || fail "case 10: could not move origin from the second clone"
+out="$(cd "$D/work" && printf 'pub fn more() {}\n' >> crates/demo/lib.rs && git add -A && git commit -qm code >/dev/null 2>&1 && issue_pass_token && bash scripts/gate-stamp.sh write --scope rust --dispatch check >/dev/null && TILLANDSIAS_PLAN_BIN="$LANE_PLAN_BIN" git push origin main 2>&1)"
+rc=$?
+[ "$rc" != 0 ] || fail "case 10: a push against a remote this checkout never fetched was accepted"
+grep -q 'remote-moved-since-fetch' <<<"$out" || fail "case 10: the refusal did not name the race: $out"
+if grep -q 'Re-run the full gate' <<<"$out"; then fail "case 10: a moved remote still sends the pusher to a full gate: $out"; fi
+before="$(remote_head "$D")"
+out="$(cd "$D/work" && git fetch -q origin && git merge -q --no-edit origin/main >/dev/null 2>&1 && TILLANDSIAS_PLAN_BIN="$LANE_PLAN_BIN" git push origin main 2>&1)"
+rc=$?
+after="$(remote_head "$D")"
+[ "$rc" = 0 ] || fail "case 10: after fetch + merge the same stamp did not carry the push: $out"
+[ "$before" != "$after" ] || fail "case 10: accepted after fetch + merge but the remote did not advance"
+echo "ok: case 10 — a moved remote is refused as a race with a fetch-and-merge remedy, and the same stamp carries the push after the merge"
+
+echo "PASS: gate-stamp-scope (11/11)"

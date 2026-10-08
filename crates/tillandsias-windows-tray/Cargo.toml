@@ -43,6 +43,10 @@ serde_json = { workspace = true }
 # already in the workspace graph — it adds no OS import to the tray binary,
 # which is the surface this packet's litmus pins.
 chrono = { workspace = true }
+# 1420-ev7i: the tillandsia-palette renderer (1420-9vpk) for the
+# --provision-once / --reset-state console. Portable, so provision_console's
+# tests run on every host.
+tillandsias-progress-tty = { path = "../tillandsias-progress-tty" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # The real provisioning fetch path only compiles on Windows, so the download
@@ -74,6 +78,9 @@ windows = { version = "0.58", features = [
     "Win32_Networking_WinSock",
     # 663-64xi: NotifyIconSettings reconciliation at tray startup.
     "Win32_System_Registry",
+    # 1420-ev7i: GetConsoleMode/SetConsoleMode, to turn on virtual-terminal
+    # processing before the provisioning console draws coloured bars.
+    "Win32_System_Console",
 ] }
 # 1335-jz8c: decode the embedded 32x32 tray PNGs into icon resources for
 # CreateIconFromResourceEx. Already in the lockfile via the build-time

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: timeout-setsid-and-flock-are-process-control-which-lua-cannot-do-and-rust-already-does-in-tillandsias-exec-so-a-run-verb-on-the-plan-binary-is-the-one-portable-spelling-and-the-preflight-exec-setsid-is-its-first-caller
+    event:
+      type: note
+      ts: "2026-09-29T11:29:13Z"
+      agent_id: linux-macuahuitl-claude-20260929t112904z
+      host: macuahuitl
+      summary: |
+        RULING (coordinator, macuahuitl, 2026-09-29): work/1375-amye at 83f94f3f6 is NOT relayed yet. Two changes are needed first, then write a READY note and it goes in the next relay.
+
+        1. MOVE THE GATE STEP OUT OF build.sh INTO scripts/gate-steps.d/, WITH A SECOND-REGIME RECORD. The branch adds its fixture (scripts/test-plan-run-verb.sh) as an inline step in the --check path of build.sh. Every new gate step goes in a gate-steps.d drop-in (1072-b7eq) and must carry STEP_SECOND_REGIME="<host> <date> <darwin|msys> <verdict>" (1302-7j8p, scripts/check-gate-step-regimes.sh). An inline step skips that check. The comment's reasoning, that the fixture's own run on every host is the cross-platform evidence, is the reasoning the check exists to refuse: steps 414 and 416 entered green on Linux and turned both macOS gates red within hours. This fixture exercises detached sessions (setsid), and an unguarded setsid is exactly what broke --preflight on macOS until 1352-vmbc. The second-regime run for darwin is being requested from the macOS host. Put the line it reports into the .step file. A named skip counts.
+
+        2. DECLARE fs2 THROUGH THE WORKSPACE. crates/tillandsias-plan/Cargo.toml adds fs2 = "0.4.3" directly, while every sibling dependency there is { workspace = true }. Add fs2 to the root [workspace.dependencies] and reference it the same way, so the version is pinned in one place.
+
+        PROTOCOL NOTE: your last event ("Integrated full gate passed and draft PR #196 is open; awaiting landing") was a ready signal without the READY prefix, so the coordinator scan (plan_only_peers step 5) did not find it for about five hours. When the work is ready, start the note with the literal token: READY: work/1375-amye @ <sha>.

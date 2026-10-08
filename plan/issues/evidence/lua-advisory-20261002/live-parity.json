@@ -1,0 +1,32 @@
+{
+  "scope": "Live repository corpus; stable empty results stream; no snapshot advancement; Linux release runner",
+  "head": "b4ac1bd207c89daee4a291a8587f43ec2f2527b9",
+  "legacy_ref": "f94af3e4b",
+  "byte_equal": true,
+  "snapshot_absent": true,
+  "runs": [
+    {
+      "argv": [
+        "bash",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/advisory-baseline-k7rdkkpa/scripts/check-centicolon-ratchet.sh",
+        "--no-snapshot"
+      ],
+      "code": 0,
+      "stdout": "warn:centicolon-grade:zero-resolved-requirement-keys:files=512\ncenticolon: R=1470 satisfied=0 denominator=1470 added=0 retired=0 lost=0 histogram=declared:1470,traced:0,positively_tested:0 regime=baseline (advisory)\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/release/tillandsias-plan",
+        "script",
+        "run",
+        "/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/scripts/lua/check-centicolon-ratchet.lua",
+        "--",
+        "--no-snapshot"
+      ],
+      "code": 0,
+      "stdout": "warn:centicolon-grade:zero-resolved-requirement-keys:files=512\ncenticolon: R=1470 satisfied=0 denominator=1470 added=0 retired=0 lost=0 histogram=declared:1470,traced:0,positively_tested:0 regime=baseline (advisory)\n",
+      "stderr": ""
+    }
+  ]
+}

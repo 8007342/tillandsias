@@ -5,6 +5,40 @@
 #
 # @trace spec:codex-tray-launcher, spec:forge-hot-cold-split
 
+# ── Fleet messaging: pending mail at session start (order 1506-ssb5) ───────
+# @trace order:1506-ssb5, openspec/changes/fleet-messaging-poc/design.md
+#
+# Codex is a PLAN-ONLY PEER (no MCP, no vendor message channel): today its
+# only channel is the git-pushed, gate-costly plan/inbox/codex.md. `msg recv
+# --keep` is the minimum that makes it first-class — LOCAL READ BOOKKEEPING
+# (msg_store.rs), never reported to the sender, and `--keep` skips the
+# inbox/new -> inbox/cur move entirely, so a session start can never silently
+# consume a message the way a bare `msg recv` would.
+#
+# Placed BEFORE `source lib-common.sh` on purpose: this block must run — and
+# a fixture must be able to run it — on a bare shell carrying none of this
+# forge's runtime. TILLANDSIAS_FORGE_MSG_DRY_RUN=1 is that fixture seam
+# (scripts/test-fleet-msg-mcp.sh): it runs exactly this block and exits
+# before any of the container-only setup below (sourcing lib-common.sh,
+# cloning, project discovery, the harness launch), so the print and the
+# "nothing moved out of inbox/new" property are testable in isolation.
+tillandsias_print_pending_fleet_messages() {
+    command -v tillandsias-plan >/dev/null 2>&1 || return 0
+    local out count who
+    out="$(tillandsias-plan msg recv --keep 2>/dev/null)" || return 0
+    count=$(printf '%s\n' "$out" | grep -cE '^(gap:)?msg:' 2>/dev/null) || true
+    case "$count" in '' | *[!0-9]*) count=0 ;; esac
+    if [ "$count" -gt 0 ]; then
+        who="$(tillandsias-plan msg whoami 2>/dev/null)" || who="unknown"
+        printf '[fleet-msg] %s pending message(s) in %s -- run `tillandsias-plan msg recv` to read them\n' \
+            "$count" "$who"
+    fi
+}
+tillandsias_print_pending_fleet_messages
+if [ "${TILLANDSIAS_FORGE_MSG_DRY_RUN:-}" = "1" ]; then
+    exit 0
+fi
+
 source /usr/local/lib/tillandsias/lib-common.sh
 # shellcheck source=codex-safe-state.sh
 source /usr/local/lib/tillandsias/codex-safe-state.sh
@@ -13,9 +47,7 @@ source /usr/local/lib/tillandsias/codex-safe-state.sh
 # Load agent profile configuration from config overlay.
 # This exports AGENT_PROFILE, AGENT_SUPPORTS_WEB, and related variables
 # based on the user's preferred agent (claude, opencode, opencode-web).
-if [ -f /opt/config-overlay/mcp/agent-profile.sh ]; then
-    source /opt/config-overlay/mcp/agent-profile.sh
-fi
+load_agent_profile   # lib-common; 1517-p83m (the /opt path never existed)
 
 # @trace spec:forge-git-identity-anonymization
 # Agent attribution for git commit trailers.
@@ -38,8 +70,14 @@ exit_pause() {
         echo "ERROR: forge agent launch failed (exit code: $exit_code)"
         echo "═══════════════════════════════════════════════════════"
         echo ""
-        echo "Press any key to exit..."
-        read -r -n 1 -s 2>/dev/null || true
+        # 1457-r8yi: when the host holds the window (tillandsias --hold-window
+        # passes TILLANDSIAS_HOST_HOLDS_WINDOW=1 by name), it asks for the one
+        # keypress; pausing here too asked for two. Other lanes (macOS, Windows,
+        # an operator's own terminal) do not set it and still pause here.
+        if [ "${TILLANDSIAS_HOST_HOLDS_WINDOW:-}" != 1 ]; then
+            echo "Press any key to exit..."
+            read -r -n 1 -s 2>/dev/null || true
+        fi
     fi
 }
 trap 'exit_pause' EXIT
@@ -89,6 +127,10 @@ find_project_dir
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
+# @trace order:1447-nmq3
+# Trust the checked-out project in the worker's (ephemeral) CODEX_HOME so Codex
+# does not ask; append-only, forge-gated inside the function.
+seed_codex_project_trust "$PROJECT_DIR" || true
 
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-command-policy-evaluator-in-the-plan-binary-decides-allow-deny-or-consent-for-an-argv-request-from-a-built-in-floor-plus-a-per-project-seed-that-can-only-tighten-it-and-every-refusal-names-why-and-remedy
+    event:
+      type: note
+      ts: "2026-10-01T21:45:30Z"
+      agent_id: linux-macuahuitl-claude-20261001t214528z
+      host: macuahuitl
+      summary: |
+        FINDING routed from Codex's review (1525-ajtc, landed bb57e9621; plan/issues/lua-migration-fresh-eyes-review-2026-10-01.md finding 1): command_policy::load_seed returns None for any parse, validation or cannot-loosen error, decide then falls through to ok:policy:allow:default for an unmatched command, and run_verb::execute spawns on it. Repro: `tillandsias-plan policy eval --root . --seed /dev/null -- printf safe` prints refused:policy-seed:invalid:not-a-mapping on stderr and ok:policy:allow:default, exit 0. The built-in floor still denies its named families (no floor bypass), but a project's deny-by-default seed is silently discarded if one rule is invalid. Proposed: distinguish an absent seed from a present-but-refused one at every door, and refuse or keep the last validated seed; pin it with a default: deny scratch project plus one corrupted rule.

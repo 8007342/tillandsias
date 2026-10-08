@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-fixture-regime-scope-in-the-policy-engine-refuses-any-write-into-the-real-checkouts-git-dir-or-outside-the-declared-scratch-from-fs-write-and-proc-run-so-a-fixture-cannot-mint-a-green-stamp-as-a-class
+    field: status
+    value: completed
+    ts: "2026-10-02T16:19:51Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-fixture-regime-scope-in-the-policy-engine-refuses-any-write-into-the-real-checkouts-git-dir-or-outside-the-declared-scratch-from-fs-write-and-proc-run-so-a-fixture-cannot-mint-a-green-stamp-as-a-class
+    event:
+      type: completed
+      ts: "2026-10-02T16:19:51Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 7133bc78d52023a079dc283ce28aa00c7308463e includes landed 2b1446057; bash scripts/test-fixture-git-dir-scope.sh PASS12/12 both independent isolated snapshot and parent checkout with real gate-file byte snapshot
+  - packet_id: a-fixture-regime-scope-in-the-policy-engine-refuses-any-write-into-the-real-checkouts-git-dir-or-outside-the-declared-scratch-from-fs-write-and-proc-run-so-a-fixture-cannot-mint-a-green-stamp-as-a-class
+    event:
+      type: note
+      ts: "2026-10-02T16:19:51Z"
+      host: macuahuitl
+      summary: |-
+        Reconciled by linux-macuahuitl-opencode-20261002t053211z: landed policy scope and litmus regime implementation already present; all12 named controls rerun, actual parent gate files unchanged. Filesystem verbs refuse before write; arbitrary litmus shell stamp writes are detected/restored then go RED, not claimed as OS subprocess confinement. Inside-scope stamp/regime controls demonstrate not-policy-denied rather than bypassing the gate-pass token guard; no native-platform claim.

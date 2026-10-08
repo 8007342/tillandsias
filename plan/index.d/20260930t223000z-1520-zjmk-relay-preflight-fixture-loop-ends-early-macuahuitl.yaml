@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found by the coordinator on 2026-09-30 while relaying 1384-bqhy (land115).
+packets:
+  - packet_id: relay-preflight-runs-fixtures-inside-a-heredoc-read-loop-so-a-fixture-that-reads-stdin-ends-the-loop-and-the-verdict-reports-fixtures-it-never-ran
+    order: 1520-zjmk
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [relay, preflight, fixtures, fail-open]
+    estimated_hours: 1
+    owned_files:
+      - scripts/relay-preflight.sh
+      - scripts/test-relay-preflight.sh
+    title: |
+      scripts/relay-preflight.sh printed ok:relay-preflight … fixtures=6 on land115's merged tree while only two fixtures ran: the loop is `while read; do _cap bash "$_fx"; done <<heredoc`, test-preflight-front-door read stdin to EOF, and the four fixtures after it were silently never judged
+    context: |
+      MEASURED 2026-09-30 on macuahuitl, relaying 1384-bqhy: the stderr item
+      list showed six `selected` fixtures and `ok` lines for only
+      test-gate-step-skip-exit and test-preflight-front-door; the verdict
+      still read fixtures=6 and ok. The four skipped fixtures were run by hand
+      on the merged tree (4, 8/8, 5/5, 7/7) before land115 went ahead, so no
+      red landed. Every child in the fixture, crate-test and litmus phases goes
+      through _cap inside a heredoc read loop, so any child that reads stdin
+      could end its phase early. The tool itself landed in land113
+      (1437-664a); every relay since then trusted this count.
+    outcome: |
+      Every selected fixture runs, whatever it does with stdin, and the phase
+      refuses if the number it ran differs from the number it selected.
+    exit_criteria:
+      - "scripts/test-relay-preflight.sh arm 7 (a fixture that drains stdin, followed by one that refuses) prints refused:relay-preflight:fixtures:test-zz-b; on the pre-fix relay-preflight.sh it FAILS with rc=0 and an ok: verdict (measured)."
+      - "With only the stdin fix reverted, arm 7 reads refused:relay-preflight:fixtures:population:ran=1:selected=2 (the population assertion reaches on its own; measured)."
+      - "The fixture passes 7/7 plain, under env -u CARGO_TARGET_DIR -u TILLANDSIAS_PLAN_BIN, and in the builder toolbox."
+    verifiable_closure: |
+      bash scripts/test-relay-preflight.sh prints ok:relay-preflight:7/7 in all
+      three regimes; the closing event cites the landed trunk commit.
+    unscoreable: "pinned-by-its-own-fixture: arm 7 of scripts/test-relay-preflight.sh, which is referenced by the ci-release litmus binding of 1437-664a"
+    next_action: >
+      Relay work/1520-zjmk after land115; close citing the landed commit.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Claimed and fixed by the coordinator (macuahuitl) in the same pass it
+      was found; the fix is its own tool.

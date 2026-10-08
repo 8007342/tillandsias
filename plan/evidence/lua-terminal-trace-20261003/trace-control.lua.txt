@@ -1,0 +1,10 @@
+local a = proc.run{argv={"printf", "baseline-run"}}
+assert(a.ok and a.stdout == "baseline-run")
+out.line("result:" .. json.encode(a))
+local p = proc.spawn{argv={"false"}}
+local b = p:wait()
+assert(b.status == "exited" and b.code == 1 and not b.ok)
+out.line("result:" .. json.encode(b))
+local again = p:wait()
+assert(again.run_id == b.run_id and again.wall_ms == b.wall_ms)
+verdict.ok("trace-control")

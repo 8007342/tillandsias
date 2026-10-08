@@ -1,0 +1,62 @@
+# Append-only research filing. Operator explicitly assigned this investigation to Codex.
+packets:
+  - packet_id: research-modern-stockfish-techniques-for-centicolon-evidence-and-convergence
+    order: 1453-p9gb
+    status: in_progress
+    kind: research
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    size: M
+    implementer_tier: opus
+    capability_tags: [research, centicolon, lua, litmus, methodology, stockfish]
+    estimated_hours: 4
+    depends_on: []
+    owned_files:
+      - plan/issues/stockfish-centicolon-lessons-research-2026-09-28.md
+    title: >
+      Investigate modern Stockfish evaluation, search, caching and Fishtest
+      experiments for lessons applicable to CentiColon and Lua evidence grading
+    context: |
+      Operator request 2026-09-27 local date: file a plan packet and assign
+      Codex to investigate modern Stockfish enhancements, apply the useful
+      lessons to this project's scenarios, and complement Antigravity's
+      work on work/1447-9sne. Parent design discussion: 1447-9sne.
+      Hypothesis to investigate, not an established cause: the four grader
+      counterexamples may be predicate-purity gaps. Distinguish capability
+      purity, complete cache keys, evidence attribution and semantic adequacy.
+      This packet authorizes research and a proposed program, not production
+      implementation, statistical acceptance thresholds or enforcement changes.
+    deliverable: plan/issues/stockfish-centicolon-lessons-research-2026-09-28.md
+    verifiable_closure: |
+      unscoreable: research judgment is not a behavioral litmus result.
+      Completion requires a source-cited report identifying the current
+      Stockfish release and source revision, separating observed upstream
+      facts from Tillandsias proposals, evaluating transfer and non-transfer
+      cases, specifying falsifiable pilot acceptance criteria, and linking
+      the findings into the 1447-9sne design review. Record evidence and
+      completion as a new fragment; adopting the recommendations is separate.
+    acceptance_evidence: |
+      Official release/source and Fishtest documentation citations; mapping
+      of caching, evaluation, search and experiments to local code seams;
+      concrete evidence-contract recommendations and staged pilot design;
+      diff/ledger validation and the pre-push local gate outcome.
+    next_action: >
+      Codex: verify current official Stockfish release and pinned source;
+      inspect evaluation/cache/search and Fishtest methods, then publish
+      the report and cross-link the parent review on work/1447-9sne.
+    notes: |
+      Assigned by the operator to Codex, working on macuahuitl in an isolated
+      linked worktree. The website refresh remains separate work by BigPickle.
+events:
+  - packet_id: research-modern-stockfish-techniques-for-centicolon-evidence-and-convergence
+    event:
+      type: note
+      ts: "2026-09-28T02:18:00Z"
+      agent_id: codex-stockfish-review-20260928
+      host: macuahuitl
+      summary: >
+        Operator-assigned to Codex. Research underway on work/1447-9sne;
+        preserve Antigravity and coordinator contributions, record design
+        recommendations without enabling new production behavior.

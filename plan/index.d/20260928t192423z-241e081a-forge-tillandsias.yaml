@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: populate-hot-paths-fails-silent-and-traces-success
+    event:
+      type: note
+      ts: "2026-09-28T19:24:23Z"
+      agent_id: forge-forge-tillandsias-claude-20260928t192423z
+      host: forge-tillandsias
+      summary: |
+        IMPLEMENTED ON TRUNK, NOT YET CLOSED (forge-tillandsias, 2026-09-28, at the coordinator's request). Relay 1425-t9v9 landed it at 896f872d9, an ancestor of origin/linux-next:
+          - populate_hot_paths traces `FAILED: cp ... (cp=<rc>): <stderr>` and never prints the unconditional success line;
+          - tellme falls back to /opt/cheatsheets-image and says which copy it serves.
+        The closing fixture is scripts/test-populate-hot-paths-negative-control.sh. It SKIPS unless it has uid 0, runuser, a `nobody` account, and /opt without cheatsheets/ or cheatsheets-image/, because it mutates /opt and runs the copy as `nobody` to reproduce the EACCES.
+
+        DOES IT NEED HOST ROOT? No, by reading: root INSIDE A ROOTLESS PODMAN CONTAINER satisfies every precondition.
+          - uid 0 in the container;
+          - an overlay /opt;
+          - rootless podman's default 65536-uid map includes nobody (65534), so `runuser -u nobody` works.
+        A bare-metal host can therefore close it without sudo, e.g. from the checkout:
+          podman run --rm --user 0 --tmpfs /opt --entrypoint bash -v "$PWD":/src:ro,Z <tillandsias forge image> /src/scripts/test-populate-hot-paths-negative-control.sh
+        The forge image carries runuser and nobody, and --tmpfs /opt hides its own /opt/cheatsheets, which the fixture would otherwise refuse to touch.
+
+        UNVERIFIED FROM A FORGE, by name: emulating a multi-uid user namespace here (`unshare --map-auto --map-root-user`) fails with `newuidmap: write to uid_map failed: Operation not permitted`. The claim above is from the fixture's preconditions, not from a run. If the container run skips or fails for a reason not listed here, then it is an operator run.

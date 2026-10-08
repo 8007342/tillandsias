@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: note
+      ts: "2026-10-03T16:09:03Z"
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      host: macuahuitl
+      summary: |
+        1538-pwdr bounded implementation decisions, to pin in tests before execution edits:
+
+        Keep existing dispatcher and one Lua callback thread. proc.select returns the original handle, non-consuming; completion is the ordered Finished/stream-terminal receipt (not unverifiable OS exit chronology). Persistent ordering must survive publication race, already completed handles and repeated calls. Default selection timeout300000ms, explicit0 disables selection deadline; outer scope deadline always wins. Expiry is nil,"timed_out", leaves all children running and invents no child status/code. all returns full results in argument order, empty returns{}. No all timeout option. Empty select is a programmer error. Reject sparse/duplicate/unexpected-key/forged/foreign lists before waiting, use private host/table identity and validate copied method receivers.
+
+        chain requires at least one stage. Validate/snapshot EVERY stage, argv/env/stdin/options/effective absolute cwd before consuming consent or starting a child. First-stage stdin allowed; non-nil explicit stdin on later stage is a programmer error (never silently overwrite). Managed chain requires group=true; keep existing single proc.run legacy group=false behavior unchanged. Authorize each actual stage immediately before launching it using snapshotted command/cwd. Run every stage after ordinary nonzero/signal/timeout/truncation/policy/spawn-failure, pass retained preceding stdout bytes or empty unavailable stdout in memory, return stages, ok conjunction, first_failure one-based or nil. Infrastructure/callback/scope errors abort, not fabricated stage success. Pump every owned producer while awaiting chain stages.
+
+        on_exit has one callback slot; replacement allowed before dispatch, refusal once dispatch starts/completes, returns same authentic handle. Deliver once after preceding fd lines and before wait/select/all observe completion. Lua result tables are fresh per observer; mutations of callback result cannot change stored output. Freeze wall time at actual completed outcome rather than re-wait duration. Keep callbacks outside mutex and release captures on completion/teardown. Pending completion must retry when event queue empty. Any caught callback/reentrancy error closes scope permanently; every new asynchronous door checks synchronously BEFORE yielding and again before per-stage authorization/launch. Programmer validation may run Lua metatable getters; block nested process doors during whole-chain parsing (caught nested error must not reopen scope); avoid re-reading fields after yield. Do not remove already supported single-run cwd getters.
+
+        Handle terminal executor Err even without Finished promptly by closing the scope; do not wait forever for a notification absent from an error path. Add deterministic race/error tests if possible through narrow internal dispatcher seams, not production env-var fault knobs or a second scheduler. Parent will independently verify.
+
+        These pin unspecified API behavior within the operator-approved composition scope; do not claim ratification of unrelated UX/capture/security contracts.8MiB prefix capture is authoritative; older1MiB tail prose remains documented drift. Source receipt Astra d3ffda692; no API is yet implemented or verified. Files owned:lua_process.rs,lua_predicate.rs,script_run.rs,tests/lua_proc.rs. No executor changes without parent review/ledger ownership correction.

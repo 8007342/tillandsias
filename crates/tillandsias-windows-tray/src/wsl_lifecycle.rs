@@ -201,9 +201,26 @@ pub struct GuestReadyRecord {
 /// Where the ready observation is recorded:
 /// `%LOCALAPPDATA%\tillandsias\state\guest-ready.json`.
 pub fn guest_ready_record_path() -> PathBuf {
-    let base = std::env::var_os("LOCALAPPDATA")
+    guest_ready_record_path_in(&local_app_data())
+}
+
+/// `%LOCALAPPDATA%`, or the Public profile's when it is unset. Every reader in
+/// this file goes through here.
+fn local_app_data() -> PathBuf {
+    local_app_data_from(std::env::var_os("LOCALAPPDATA"))
+}
+
+/// The parse, separated from the env read (order 1417-t29c, the 1415-nvzz
+/// shape). Tests used to set_var/remove_var LOCALAPPDATA in-process while
+/// sibling tests on other threads resolved paths under it; they now pass a
+/// base directory to the `_in`/`_at` variants instead.
+fn local_app_data_from(value: Option<std::ffi::OsString>) -> PathBuf {
+    value
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("C:\\Users\\Public\\AppData\\Local"));
+        .unwrap_or_else(|| PathBuf::from("C:\\Users\\Public\\AppData\\Local"))
+}
+
+fn guest_ready_record_path_in(base: &std::path::Path) -> PathBuf {
     base.join("tillandsias")
         .join("state")
         .join("guest-ready.json")
@@ -212,12 +229,15 @@ pub fn guest_ready_record_path() -> PathBuf {
 /// Record that the guest reached Ready. Best-effort: a failure here must not
 /// fail a provision that actually succeeded.
 pub fn write_guest_ready_record(installation_uuid: &str) {
+    write_guest_ready_record_at(&guest_ready_record_path(), installation_uuid);
+}
+
+fn write_guest_ready_record_at(path: &std::path::Path, installation_uuid: &str) {
     let record = GuestReadyRecord {
         ts: now_rfc3339_utc(),
         installation_uuid: installation_uuid.to_string(),
         tray_version: env!("WORKSPACE_VERSION").to_string(),
     };
-    let path = guest_ready_record_path();
     if let Some(dir) = path.parent()
         && let Err(e) = std::fs::create_dir_all(dir)
     {
@@ -226,7 +246,7 @@ pub fn write_guest_ready_record(installation_uuid: &str) {
     }
     match serde_json::to_vec_pretty(&record) {
         Ok(bytes) => {
-            if let Err(e) = std::fs::write(&path, bytes) {
+            if let Err(e) = std::fs::write(path, bytes) {
                 tracing::debug!(%e, "could not write guest ready record");
             }
         }
@@ -243,10 +263,17 @@ pub fn write_guest_ready_record(installation_uuid: &str) {
 /// re-verification, where the other direction tells an operator a guest that
 /// never came up merely went idle.
 pub fn guest_was_observed_ready(current_installation_uuid: Option<&str>) -> bool {
+    guest_was_observed_ready_at(&guest_ready_record_path(), current_installation_uuid)
+}
+
+fn guest_was_observed_ready_at(
+    path: &std::path::Path,
+    current_installation_uuid: Option<&str>,
+) -> bool {
     let Some(current) = current_installation_uuid else {
         return false;
     };
-    let Ok(bytes) = std::fs::read(guest_ready_record_path()) else {
+    let Ok(bytes) = std::fs::read(path) else {
         return false;
     };
     let Ok(record) = serde_json::from_slice::<GuestReadyRecord>(&bytes) else {
@@ -515,10 +542,11 @@ impl WslLifecycle {
     }
 
     pub fn install_root() -> PathBuf {
-        // %LOCALAPPDATA%\tillandsias\wsl
-        let base = std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("C:\\Users\\Public\\AppData\\Local"));
+        Self::install_root_in(&local_app_data())
+    }
+
+    /// %LOCALAPPDATA%\tillandsias\wsl, under an explicit base (1417-t29c).
+    fn install_root_in(base: &std::path::Path) -> PathBuf {
         base.join("tillandsias").join("wsl")
     }
 
@@ -530,19 +558,14 @@ impl WslLifecycle {
     /// in-memory record would be empty in exactly the invocation that wants to
     /// report it.
     pub fn guest_wiring_record_path() -> PathBuf {
-        let base = std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("C:\\Users\\Public\\AppData\\Local"));
-        base.join("tillandsias")
+        local_app_data()
+            .join("tillandsias")
             .join("state")
             .join("guest-wiring.json")
     }
 
     pub fn cache_root() -> PathBuf {
-        let base = std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("C:\\Users\\Public\\AppData\\Local"));
-        base.join("tillandsias").join("cache")
+        local_app_data().join("tillandsias").join("cache")
     }
 
     pub fn rootfs_cache_path(sha256_short: &str) -> PathBuf {
@@ -808,10 +831,13 @@ impl WslLifecycle {
             if last_pct.swap(pct, std::sync::atomic::Ordering::Relaxed) == pct {
                 return;
             }
-            let mb = downloaded / (1024 * 1024);
-            let total_mb = total / (1024 * 1024);
-            progress_for_cb.report_message(&format!(
-                "\u{1F535} Downloading Fedora rootfs {mb} / {total_mb} MB ({pct}%)"
+            // ORDER 1443-bgbs: a TYPED event, the Windows counterpart of
+            // x6rz on macOS. This used to fold the bytes into prose ("... N / M
+            // MB (P%)"), which a tray could only print. Surfaces that draw a
+            // bar read the fields; the default report_event still flattens it
+            // to one plain line for those that do not.
+            progress_for_cb.report_event(&crate::tray_phase_icon::rootfs_download_event(
+                downloaded, total,
             ));
         };
         download_verified(&artifact, &xz_dest, &on_progress).await?;
@@ -919,7 +945,11 @@ impl WslLifecycle {
     /// configure + bootstrap injection). Its absence on a registered distro
     /// marks a suspect (interrupted) import. Order 418.
     fn import_complete_marker_path() -> PathBuf {
-        Self::install_root().join(".import-complete")
+        Self::import_complete_marker_path_in(&local_app_data())
+    }
+
+    fn import_complete_marker_path_in(base: &std::path::Path) -> PathBuf {
+        Self::install_root_in(base).join(".import-complete")
     }
 
     /// Best-effort: the marker is an optimization hint, never a hard gate on
@@ -2280,8 +2310,10 @@ mod tests {
     /// OVER A TEMP STATE ROOT, deliberately. A test that read this host's real
     /// `%LOCALAPPDATA%` record would pass or fail by what the machine happens
     /// to hold — macbookair had three test attempts go vacuous that way on
-    /// 1072-qk43 the same day. LOCALAPPDATA is redirected so every arm below
-    /// describes the file it wrote and nothing else.
+    /// 1072-qk43 the same day. Every arm below goes through the `_at` variants
+    /// with a temp path, so it describes the file it wrote and nothing else.
+    /// It used to redirect LOCALAPPDATA itself, which raced every sibling test
+    /// resolving a path under it (order 1417-t29c).
     ///
     /// THE ARMS THAT MATTER ARE THE NEGATIVE ONES. A predicate that answered
     /// "ready" unconditionally would satisfy the happy path and reintroduce the
@@ -2301,23 +2333,21 @@ mod tests {
                 .unwrap_or(0)
         ));
         std::fs::create_dir_all(&tmp).expect("temp state root");
-        // SAFETY: single-threaded test process scope; restored below.
-        let prev = std::env::var_os("LOCALAPPDATA");
-        unsafe { std::env::set_var("LOCALAPPDATA", &tmp) };
+        let record = guest_ready_record_path_in(&tmp);
 
         let uuid_a = "11111111-1111-1111-1111-111111111111";
         let uuid_b = "22222222-2222-2222-2222-222222222222";
 
         // ABSENT: nothing has ever been recorded.
         assert!(
-            !guest_was_observed_ready(Some(uuid_a)),
+            !guest_was_observed_ready_at(&record, Some(uuid_a)),
             "an absent record must read as never-observed, not as ready"
         );
 
         // OBSERVED: the happy path this record exists to preserve.
-        write_guest_ready_record(uuid_a);
+        write_guest_ready_record_at(&record, uuid_a);
         assert!(
-            guest_was_observed_ready(Some(uuid_a)),
+            guest_was_observed_ready_at(&record, Some(uuid_a)),
             "a record for THIS installation must read as observed-ready"
         );
 
@@ -2326,27 +2356,23 @@ mod tests {
         // this the record becomes the stale-artifact problem one level up,
         // which is 1082-9rub's defect rebuilt in a new place.
         assert!(
-            !guest_was_observed_ready(Some(uuid_b)),
+            !guest_was_observed_ready_at(&record, Some(uuid_b)),
             "a record from a DIFFERENT installation must not vouch for this one"
         );
 
         // UNKNOWN INSTALLATION: we could not read our own uuid.
         assert!(
-            !guest_was_observed_ready(None),
+            !guest_was_observed_ready_at(&record, None),
             "an unknown installation must read as never-observed"
         );
 
         // CORRUPT: unreadable content must not be generous.
-        std::fs::write(guest_ready_record_path(), b"{not json").expect("write corrupt");
+        std::fs::write(&record, b"{not json").expect("write corrupt");
         assert!(
-            !guest_was_observed_ready(Some(uuid_a)),
+            !guest_was_observed_ready_at(&record, Some(uuid_a)),
             "a corrupt record must read as never-observed"
         );
 
-        match prev {
-            Some(v) => unsafe { std::env::set_var("LOCALAPPDATA", v) },
-            None => unsafe { std::env::remove_var("LOCALAPPDATA") },
-        }
         let _ = std::fs::remove_dir_all(&tmp);
     }
     use super::*;
@@ -2723,12 +2749,9 @@ mod tests {
 
     #[test]
     fn import_complete_marker_lives_under_install_root() {
-        // SAFETY: single-process test env mutation, matching sibling tests.
-        unsafe {
-            std::env::set_var("LOCALAPPDATA", "C:\\Users\\Tester\\AppData\\Local");
-        }
-        let marker = WslLifecycle::import_complete_marker_path();
-        assert!(marker.starts_with(WslLifecycle::install_root()));
+        let base = std::path::Path::new("C:\\Users\\Tester\\AppData\\Local");
+        let marker = WslLifecycle::import_complete_marker_path_in(base);
+        assert!(marker.starts_with(WslLifecycle::install_root_in(base)));
         assert!(marker.ends_with(".import-complete"));
     }
 
@@ -2862,13 +2885,33 @@ mod tests {
 
     #[test]
     fn install_root_resolves_under_localappdata() {
-        // SAFETY: tests set env synchronously; cargo test runs in single
-        // process so the env mutation only affects this test.
-        unsafe {
-            std::env::set_var("LOCALAPPDATA", "C:\\Users\\Tester\\AppData\\Local");
-        }
-        let root = WslLifecycle::install_root();
+        let base = local_app_data_from(Some("C:\\Users\\Tester\\AppData\\Local".into()));
+        assert_eq!(base, PathBuf::from("C:\\Users\\Tester\\AppData\\Local"));
+        let root = WslLifecycle::install_root_in(&base);
         assert!(root.ends_with("tillandsias\\wsl") || root.ends_with("tillandsias/wsl"));
+        // Unset falls back to the Public profile rather than a relative path.
+        assert_eq!(
+            local_app_data_from(None),
+            PathBuf::from("C:\\Users\\Public\\AppData\\Local")
+        );
+    }
+
+    /// ORDER 1417-t29c. The race cannot be reproduced on demand, so the
+    /// evidence is static: no code in this file may mutate LOCALAPPDATA,
+    /// because tests on other threads resolve install, cache and state paths
+    /// under it. The needles are assembled at runtime so this test does not
+    /// match itself.
+    #[test]
+    fn no_test_mutates_localappdata() {
+        let src = include_str!("wsl_lifecycle.rs");
+        for verb in ["set_var", "remove_var"] {
+            let needle = format!("{verb}(\"{}\"", "LOCALAPPDATA");
+            assert!(
+                !src.contains(&needle),
+                "{needle} found: a test mutating this env races every sibling \
+                 test that resolves a path under it"
+            );
+        }
     }
 
     // The committed recipe manifest — used for a live-contract integration check.

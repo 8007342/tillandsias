@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-tray-log-lines-carry-no-timestamp-so-a-latency-question-is-answered-by-the-operators-eyes-not-the-log
+    event:
+      type: progress
+      ts: "2026-09-29T03:46:06Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t034606z
+      host: macos
+      summary: |
+        work/1479-9hx6 @ 0be6803ef ready for relay (tlatoanis-macbook-air, darwin).
+        CRITERION 1: in GUI mode stdout and stderr go through a pipe whose relay thread writes every line as "<ISO-8601 UTC, ms> <line>" (tray_log::redirect_std_streams_stamped). No call site changed. An atexit handler drains the pipe on exit, and a panic hook writes the panic straight to the file, stamped. MEASURED LIVE: the bundle built from this ref, launched 2026-09-29, writes lines such as "2026-09-29T03:45:51.884Z [tillandsias-tray] progress vault: 100%".
+        CRITERION 3: the prefix and content after the stamp are unchanged (stamped_line_keeps_the_prefix_and_content). No script, litmus or crate outside the macOS tray reads the macOS tray.log by a line-start anchor (grepped: only the Windows tray's own tray.log and comments).
+        Tests: iso8601_utc_ms against known instants (cross-checked with `date -u -r`); an end-to-end child-process test covering normal lines, the last line before exit(0), and a panic, all stamped. MUTATION: with the atexit drain removed, the end-to-end test fails 3/3 (the last line is lost). macos-tray: 166 passed; clippy -D warnings, fmt and zigbuild are clean.
+        CRITERION 2 (one timed real sign-in, figure recorded on 1453-bnmt) is PENDING: it needs the operator to sign in on this build, which is now running.

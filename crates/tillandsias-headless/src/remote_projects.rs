@@ -383,12 +383,32 @@ if [ -z "$TOKEN" ]; then
   exit 2
 fi
 printf '%s\n' "$TOKEN" | gh auth login --hostname github.com --with-token >/dev/null 2>&1
-gh api user --jq .login
+gh api user --jq '[(.id|tostring), .login, (.name // "")] | @tsv'
 "#;
     match run_git_image_shell(script, &[], debug) {
+        // Order 1453-7rzd: the same one `/user` call now also yields the id and
+        // display name the forge git identity is built from. The result is
+        // cached on the host (public fields only, never the token) so a forge
+        // launch reads it without a second container run.
         Ok(out) => {
-            let name = out.trim().to_string();
-            if name.is_empty() { None } else { Some(name) }
+            let user = crate::parse_app_user(out.trim())?;
+            if let Some(path) = crate::app_user_cache_path() {
+                let line = format!(
+                    "{}\t{}\t{}\n",
+                    user.id,
+                    user.login,
+                    user.name.as_deref().unwrap_or("")
+                );
+                if let Err(e) = std::fs::write(&path, line)
+                    && debug
+                {
+                    eprintln!(
+                        "[tillandsias] could not cache the App user at {}: {e}",
+                        path.display()
+                    );
+                }
+            }
+            Some(user.login)
         }
         Err(e) => {
             if debug {
@@ -912,27 +932,14 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix::fs::symlink;
 
-    /// Serializes every test below that mutates PATH / TILLANDSIAS_GIT_IMAGE /
-    /// TILLANDSIAS_PODMAN_BIN.
-    ///
-    /// Order 793-a62g. Five tests here rewrite those PROCESS-GLOBAL variables
-    /// and politely restore them afterwards — which is correct in isolation
-    /// and useless in parallel, because cargo runs them as threads in one
-    /// process. Concurrently, one test's restore lands in the middle of
-    /// another's setup, so a test that installed a mock `gh` on PATH suddenly
-    /// resolves the real one. The four `remote_projects` failures that held
-    /// the v0.4.260817.1 release were exactly this, and they passed 11/11 the
-    /// moment they ran alone — which is the signature to recognise: an
-    /// environment-mutating test that only fails when it has company.
-    ///
-    /// The lock is poison-tolerant: a panicking test must not convert one
-    /// failure into a cascade of misleading ones in its siblings.
-    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
-        static ENV_LOCK: Mutex<()> = Mutex::new(());
-        ENV_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
+    // Order 793-a62g. Five tests below rewrite the PROCESS-GLOBAL PATH /
+    // TILLANDSIAS_GIT_IMAGE / TILLANDSIAS_PODMAN_BIN variables and politely
+    // restore them afterwards — which is correct in isolation and useless in
+    // parallel, because cargo runs them as threads in one process. They
+    // already take `crate::runtime_assets::env_lock()` (order 434) right
+    // after; this file's OWN redundant second lock (order 1437-5czv) is gone
+    // — two independent mutexes do not serialize anything against each
+    // other, or against the crate's other four locks that shared neither.
     use tempfile::tempdir;
 
     fn install_podman_mock() -> tempfile::TempDir {
@@ -948,7 +955,6 @@ mod tests {
 
     #[test]
     fn git_image_tag_defaults_to_fully_qualified_versioned_tag() {
-        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
@@ -1066,7 +1072,6 @@ mod tests {
 
     #[test]
     fn discover_projects_uses_containerized_gh() {
-        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
@@ -1108,7 +1113,6 @@ mod tests {
 
     #[test]
     fn clone_project_uses_containerized_gh() {
-        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
@@ -1199,7 +1203,6 @@ mod tests {
     /// `owner/name` form.
     #[test]
     fn clone_normalizes_api_url_to_owner_name() {
-        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
@@ -1263,7 +1266,6 @@ mod tests {
     /// containers (`build_git_run_args` and friends).
     #[test]
     fn clone_uses_host_parent_bindmount() {
-        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that

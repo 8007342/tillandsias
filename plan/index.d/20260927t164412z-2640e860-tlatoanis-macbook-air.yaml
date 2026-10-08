@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-trays-show-provisioning-progress-only-as-a-37-char-status-chip
+    event:
+      type: note
+      ts: "2026-09-27T16:44:12Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260927t164412z
+      host: tlatoanis-macbook-air
+      summary: |
+        OPERATOR RULING 2026-09-27 (asked by tlatoanis-macbook-air with previews; operator's words): "MenuBarIcon + MenuBar, plus on first install from curl, using the already open terminal we want the same progress colorful bars forwarded to the host, when initialization happens after install we want to see the pretty graphs on the terminal. Otherwise (like after an update, or a desktop launch) MenuBarIcon+MenuBar is enough". So for macOS: (1) the menu-bar ICON shows a thin tillandsia-palette progress bar under the plant while provisioning (visible without opening the menu); (2) the open MENU shows a full-width bar with the step name and percent; both driven by typed ProgressEvents (1420-x6rz). The curl-install TERMINAL requirement for post-install initialization (after `open -a`) is filed as its own row, since it needs the installer to follow the tray's progress feed and the guest relay (1420-4grt).

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: five-small-shell-deciders-run-as-lua-on-script-run-with-their-sh-deleted-and-byte-identical-verdicts-batch-b
+    event:
+      type: note
+      ts: "2026-10-01T21:45:28Z"
+      agent_id: linux-macuahuitl-claude-20261001t214528z
+      host: macuahuitl
+      summary: |
+        LANDED in land124 (bb57e9621 on origin/linux-next, gate 1636 s). Five deciders run as scripts/lua on script run, .sh deleted: check-ca-path-literals, check-backgrounded-jobs-redirect-stderr, check-secure-wire-single-reader, check-cheatsheet-source-anchors, check-oom-postmortem (sonnet port 492791c52). Live-tree and planted-violation stdout/stderr byte-identical; fixtures test-cheatsheet-source-anchors 5/5 and test-gate-memory-refusal 14/14 in plain, env -u and toolbox. Relay-preflight ok (deciders 16, fixtures 16/16, crates 1, litmus 14/8). Disclosed deviations: oom-postmortem's refusal detail lines go to stderr (callers branch on rc only), and its bad-flag path gains a stdout line. Left as .sh: check-fragment-events-land (it rebuilds the plan binary it would run inside).

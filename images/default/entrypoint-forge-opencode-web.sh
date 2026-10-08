@@ -17,9 +17,7 @@ source /usr/local/lib/tillandsias/lib-common.sh
 # Load agent profile configuration from config overlay.
 # This exports AGENT_PROFILE, AGENT_SUPPORTS_WEB, and related variables
 # based on the user's preferred agent (claude, opencode, opencode-web).
-if [ -f /opt/config-overlay/mcp/agent-profile.sh ]; then
-    source /opt/config-overlay/mcp/agent-profile.sh
-fi
+load_agent_profile   # lib-common; 1517-p83m (the /opt path never existed)
 
 # @trace spec:forge-git-identity-anonymization
 # Agent attribution for git commit trailers.
@@ -42,8 +40,14 @@ exit_pause() {
         echo "ERROR: forge agent launch failed (exit code: $exit_code)"
         echo "═══════════════════════════════════════════════════════"
         echo ""
-        echo "Press any key to exit..."
-        read -r -n 1 -s 2>/dev/null || true
+        # 1457-r8yi: when the host holds the window (tillandsias --hold-window
+        # passes TILLANDSIAS_HOST_HOLDS_WINDOW=1 by name), it asks for the one
+        # keypress; pausing here too asked for two. Other lanes (macOS, Windows,
+        # an operator's own terminal) do not set it and still pause here.
+        if [ "${TILLANDSIAS_HOST_HOLDS_WINDOW:-}" != 1 ]; then
+            echo "Press any key to exit..."
+            read -r -n 1 -s 2>/dev/null || true
+        fi
     fi
 }
 trap 'exit_pause' EXIT
@@ -105,13 +109,13 @@ export_project_env
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
-# ── OpenSpec init (every launch, silent) ────────────────────
-if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
-    if ! OS_OUTPUT=$("$OS_BIN" init --tools opencode </dev/null 2>&1); then
-        echo "[entrypoint] WARNING: OpenSpec init failed — /opsx commands may not work" >&2
-        echo "[entrypoint] $OS_OUTPUT" >&2
-    fi
-fi
+# ── OpenSpec init (only when absent, silent) ────────────────
+# Never rewrites a committed /opsx set: a launch must not modify tracked
+# files (order 1422-w3p8; see openspec_init_if_absent in lib-common.sh).
+# The CLI is the project's pinned version when openspec/cli-version exists
+# (order 1441-myz3; see ensure_openspec_pinned).
+ensure_openspec_pinned "$PROJECT_DIR"
+openspec_init_if_absent "$PROJECT_DIR" opencode
 
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme

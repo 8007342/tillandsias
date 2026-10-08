@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# preflight: serial — writes the fixed /tmp/tillandsias-timing.jsonl and counts lines of the fixed /tmp/forge-expert-usage.jsonl before and after a run
 # test-metrics-log-path-agreement.sh — the writer and the reader of a metrics
 # log must resolve the SAME path, and a record must name the host that made it.
 # @trace order:890-t9pu
@@ -92,7 +93,11 @@ rust_bin=""
 if [ -f "$ROOT/scripts/plan-binary-probe.sh" ]; then
     # shellcheck source=scripts/plan-binary-probe.sh
     . "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
-    command -v resolve_plan_binary >/dev/null 2>&1 && rust_bin="$(resolve_plan_binary 2>/dev/null || true)"
+    # RESOLVE FROM INSIDE THE CHECKOUT (1455-d7hc). The probe searches relative
+    # to the cwd, so a caller standing outside the checkout (the gate's stripped
+    # regime, preflight-fixtures-default-target) got nothing and five arms
+    # passed without running. The absolutise step below still applies.
+    command -v resolve_plan_binary >/dev/null 2>&1 && rust_bin="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null || true)"
 fi
 # ABSOLUTISE IT. The probe answers with a repo-relative path ("./target/release/…"),
 # and arm 1c below runs the binary from a scratch checkout — a relative path
@@ -236,10 +241,22 @@ fi
 # ── arm 3: NEGATIVE CONTROL — outside a checkout it must still work ───────────
 # A forge or a bare invocation has no repo to write into. Falling back to /tmp
 # there is correct; failing there would be a regression this fix must not cause.
+# ORDER 1455-d7hc: "outside a checkout" means the LIBRARY is outside one. Since
+# 1268-m2ir the shell rule falls back to the checkout its own library lives in,
+# by design, so naming a nonexistent root while sourcing the library from THIS
+# checkout resolves to this checkout: the arm could no longer fail the way it
+# meant, and it failed everywhere from 2026-09-20 unseen because no gate ran it.
+# Source a copy of the library from a scratch directory outside any checkout.
+_outside_lib="$(mktemp -d "${TMPDIR:-/tmp}/metrics-outside.XXXXXX")"
+mkdir -p "$_outside_lib/scripts"
+cp "$ROOT/scripts/metrics-log-path.sh" "$_outside_lib/scripts/"
 outside="$(
-    . "$ROOT/scripts/metrics-log-path.sh" 2>/dev/null || true
-    metrics_default_log tillandsias-timing.jsonl "/nonexistent-checkout-$$"
+    cd "$_outside_lib" || exit 1
+    unset PROJECT_ROOT
+    . "$_outside_lib/scripts/metrics-log-path.sh" 2>/dev/null || true
+    metrics_default_log tillandsias-timing.jsonl "/nonexistent-checkout-$$" 2>/dev/null
 )"
+rm -rf "$_outside_lib"
 case "$outside" in
     /tmp/tillandsias-timing.jsonl) ok "outside a checkout it falls back to /tmp (forge path preserved)" ;;
     *) bad "no-checkout fallback broke: $outside" ;;
@@ -261,7 +278,21 @@ esac
 # Fedora CONTAINER IMAGE and ships no `hostname`. /etc/hostname had the answer
 # the whole time. Simulated by shadowing `hostname` with a failing stub.
 tdir="$(mktemp -d)"
-trap 'rm -rf "$tdir"' EXIT
+# Arms 9 and 9c must create the REAL /tmp/tillandsias-timing.jsonl (the split
+# guard names that path). A fixture killed between the create and its own rm
+# (preflight-fixtures-default-target bounds it; measured on the land83 relay)
+# left the file behind, and every cycle-metrics report on the host then refused
+# with violation:metrics-log-split. Clean it on ANY exit, but only while it still
+# holds nothing except this fixture's record, so a real log is never deleted.
+_rm_fixture_tmp_log() {
+    local f=/tmp/tillandsias-timing.jsonl
+    [ -f "$f" ] || return 0
+    grep -qv '"host":"fixture"' "$f" && return 0
+    rm -f "$f"
+}
+trap 'rm -rf "$tdir" "${_FIXTURE_METRICS:-}"; _rm_fixture_tmp_log' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 mkdir -p "$tdir/bin"
 printf '#!/bin/sh\nexit 127\n' > "$tdir/bin/hostname"
 chmod +x "$tdir/bin/hostname"
@@ -459,6 +490,32 @@ else
         bad "the reporting path stopped refusing a split — scoping the guard disarmed it"
     fi
     rm -f /tmp/tillandsias-timing.jsonl
+fi
+
+# ── arm W: a LINKED WORKTREE is a checkout on both sides (1455-d7hc) ─────────
+# A linked worktree's .git is a FILE ("gitdir: ..."). The shell rule accepts it
+# (-e, 1268-m2ir); the Rust writer used is_dir and fell back to /tmp, so in any
+# worktree the writer and the reader disagreed. Built in a SCRATCH repo so the
+# real checkout's worktree list is never touched.
+if [ -n "$rust_bin" ] && [ -x "$rust_bin" ] && command -v git >/dev/null 2>&1; then
+    _wt="$(mktemp -d "${TMPDIR:-/tmp}/metrics-worktree.XXXXXX")"
+    git -C "$_wt" init -q main 2>/dev/null
+    git -C "$_wt/main" -c user.email=f@x -c user.name=f commit -q --allow-empty -m init 2>/dev/null
+    git -C "$_wt/main" worktree add -q --detach "$_wt/linked" 2>/dev/null
+    if [ -f "$_wt/linked/.git" ]; then
+        w_rust="$("$rust_bin" metrics-log-path wt-probe.jsonl "$_wt/linked" 2>/dev/null)"
+        w_shell="$(unset PROJECT_ROOT; . "$ROOT/scripts/metrics-log-path.sh" 2>/dev/null; metrics_default_log wt-probe.jsonl "$_wt/linked" 2>/dev/null)"
+        if [ "$w_rust" = "$w_shell" ] && [ "$w_rust" = "$_wt/linked/.cache/metrics/wt-probe.jsonl" ]; then
+            ok "in a linked worktree (.git is a file) the Rust writer and the shell reader agree on the worktree"
+        else
+            bad "linked worktree: rust=$w_rust shell=$w_shell (want $_wt/linked/.cache/metrics/wt-probe.jsonl)"
+        fi
+    else
+        bad "premise: the scratch linked worktree has no .git FILE"
+    fi
+    rm -rf "$_wt"
+else
+    printf 'skip: linked-worktree arm: no runnable plan binary or git\n'
 fi
 
 printf 'metrics-log-path-agreement: %d passed, %d failed\n' "$pass" "$fail"

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: linux-destructive-reset-keeps-the-vault-store-and-the-unseal-share-only-uninstall-clears
+    event:
+      type: note
+      ts: "2026-09-27T20:23:29Z"
+      agent_id: linux-macuahuitl-claude-20260927t190000z
+      host: macuahuitl
+      summary: |-
+        AMENDED 2026-09-27 (1443-bs9z), operator verbatim: "Unverified:KEEP is ok for a soft reset, let's see how that spills on the other cases." The SOFT reset's keyring announcement now has THREE dispositions (table in host-state-lifecycle): Verified:KEEP (keyring reachable, 32-byte share present), Unverified:KEEP (keyring UNREACHABLE — daemon absent, D-Bus timeout, locked-and-unpromptable — and no fallback share: keep the store, print `reset: keyring unreachable — Vault store kept unverified (Unverified:KEEP); it unseals at next init if the share is there, else init re-initialises it and says so`), Absent:REINIT-AT-INIT (keyring reachable, no share: the line already in this row). The store is never deleted by the reset in any of the three; the tokens are an interface — do not respell. Fixture: add an unreachable-keyring arm beside the no-share arm (the credential-channel fixtures' locked-keyring seam can stand in for unreachable; say which condition each arm induces). Also ruled: SOFT reset needs no consent and stays pre-authorised in forges and the installer update path; HARD (--reset-guest on guest regimes) needs per-run approval — not this row's platform, but do not add any prompt to the Linux bodies. Size and tier unchanged.

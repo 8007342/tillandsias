@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-guest-disk-starts-at-20-gib-and-grows-in-10-gib-steps-to-a-50-gib-cap-instead-of-a-250-gib-sparse-disk
+    event:
+      type: progress
+      ts: "2026-09-29T03:15:57Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20260929t031557z
+      host: macos
+      summary: |
+        work/1481-2bth @ 02da8291c ready for relay (tlatoanis-macbook-air, darwin). Only the size policy was ported from exploration/raw-xz-rootfs; the qcow2 path is unchanged and rawxz.rs is NOT included.
+        - GUEST_DISK_SIZE_GIB 250 -> 20; GUEST_DISK_MAX_GIB 50; 10 GiB steps at 75% allocated. next_guest_disk_size is pure and unit-tested (criterion 2: guest_disk_grows_in_steps_to_the_cap_and_never_shrinks, including the old 250 GiB disk left alone). grow_guest_disk_if_needed runs in VzRuntime::start before the disk is attached, and a failure there is reported but not fatal. The 32 GiB forge floor is met by growth, pinned at compile time in convert_grows_raw_disk_before_first_boot.
+        - CRITERION 1 MEASURED on the qcow2 path (operator-approved wipes "as needed", 2026-09-29): wipe, then `tillandsias-tray --provision` (48 s). rootfs.img is 21,474,836,480 B apparent and 731 MB allocated; in the guest, vda2 is 21,368,913,408 B and / is 21.4 GB btrfs, 4% used.
+        - CRITERION 3 MEASURED on the same code (exploration branch, same functions): the file was extended 20 -> 30 GiB with the VM stopped, and the guest showed vda and vda2 at 30 GiB and btrfs at 30 GiB on the next boot; the host allocated 972 MB.
+        - vm-layer lib 154 passed; clippy -D warnings, fmt and zigbuild with the tray consumer are clean. Pre-checked against the queued guards: rust-source-pin (scdq) ok, refusal-affordance (v67y) ok.

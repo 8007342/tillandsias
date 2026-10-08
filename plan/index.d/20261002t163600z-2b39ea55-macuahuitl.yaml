@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-port-guest-hardening-tray-refresh-and-podman-budget-deciders
+    event:
+      type: progress
+      ts: "2026-10-02T16:36:00Z"
+      agent_id: linux-macuahuitl-opencode-20261002t053211z
+      host: macuahuitl
+      summary: |
+        ParentPR206 integrationcandidate initiallyrequiredonefloorconflict resolution: adjacentretiredtray-process/tray-refreshentriesbothdeleted, preservingbothatomiccutovers. Gate1stoppedbeforetestswith51 measuredstderr `file.rs:line` stringsclassifiedasprosecitations.27199b358addsvalidJSON_cite_ok reasonsusingexistingguardexceptionONLYthosephysicalcapturelines; parentverifiedallsixJSONobjectsequalbefore/afterafterremovingonlynote, rawstderr/status/base64bytesunchanged. ReceiptSHAvaluesinREADMEexplicitlymeasurement-timeJSONbeforeannotations,origbytespreserved21f20a258. Gate2thenadvancedthroughRusttestsbutrefused2NEWfixtureCRLFcheckpipelines `printfraw | grep-q` underpipefail. Neitherisallowedto land: Terraassignedhere-stringrepairpreservingrawCRassertions, noSIGPIPEwaiver/guardweakening/testserialization. Parentcandidate66de10756284aecb66196ca1680c83b8a119adb8salvagedat salvage/macuahuitl/20261002-lua-guard-new-fixture-sigpipe-refusal; gatefailurelogsretainedexternally. No fullpass/native/closureclaim. Next_action: reviewnarrowfix,twofixturesandstandaloneSIGPIPEguard,thenSERIAL forcedfullgateandremoteancestrybeforeclosing1533.

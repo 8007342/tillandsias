@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: affordance-slice-build-sh-the-preflight-door-and-gate-refusals-say-why-and-what-clears-them
+    order: 1515-iwb3
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [fail-loud, affordance, preflight, gate]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+      - scripts/test-build-sh-affordances.sh
+    title: |
+      1247-amcu conversion slice: build.sh's 5 bare verdicts (refused:preflight: is the MOST recorded bare refusal, 43 hits, 1494-kkbi) say WHY and WHAT CLEARS IT, touching only the refusal lines of the preflight door 1499-m9fj rewrote
+    context: |
+      Routed by the macuahuitl coordinator (2026-09-29, night plan). build.sh
+      carries the top-ranked bare refusal: refused:preflight:<guard> and its
+      summary, plus refused:preflight:accounting-mismatch, refused:gate:oom-killed
+      and violation:plan-ledger-unverifiable. 1499-m9fj rewrote the preflight
+      door loop, so this slice edits ONLY the refusal lines and adds one helper;
+      tokens, exit codes and the door's accounting are unchanged. No in-flight
+      work ref touches these lines (checked: 1375-amye, 643-64bx, 765-xpct edit
+      other hunks).
+    exit_criteria:
+      - 'the slice-4 audit reports 0 bare sites in build.sh (pre-fix: 5 bare)'
+      - 'every verdict token and exit code is unchanged, and ./build.sh --preflight still prints its summary line'
+      - 'CRITERION 5: a scratch guard that refuses is run through the preflight door; its per-guard refusal names the command that reruns that guard alone, and running that command reproduces the guard verdict (the remedy is executable)'
+    verifiable_closure: |
+      bash scripts/test-build-sh-affordances.sh exits 0.
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fixture is this row's own
+      deliverable and lands with the conversion.
+    events:
+      - type: filed
+        ts: "2026-09-30T04:00:00Z"
+        agent_id: linux-lenovinha-claude-20260930t040000z
+        host: lenovinha
+        summary: |-
+          Filed from lenovinha at the coordinator's routing (night plan).

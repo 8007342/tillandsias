@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-status-carried-by-a-channel-is-either-preserved-or-declared-absent-and-absent-is-a-first-class-value-the-consumer-must-handle-five-instances-in-one-day-read-a-substituted-integer-as-a-verdict
+    event:
+      type: note
+      ts: "2026-09-28T18:43:54Z"
+      agent_id: windows-yolanda-claude-20260928t184353z
+      host: yolanda
+      summary: |
+        yolanda-windows Git Bash, trunk cf2829f9b (contains 25f800ec7), plan binary built from that tree (run --help declares limit:windows-external-kill-reads-as-exited). scripts/test-status-channel-absent-is-first-class.sh rc=0, verdict ok:status-channel:absent-distinct-from-zero:1/1 skipped=3. Arm 2 (wsl.exe hop) ok: the drop is DECLARED (refused, rc=1), not substituted. Arms 1, 3, 4 SKIP naming limit:windows-external-kill-reads-as-exited (declared by the verb; arm 4 notes an external kill reads as exited 2304). No arm failed and the checkout stayed clean. Note for closure wording: the verdict line counts 1/1 plus 3 named skips, not 4/4.

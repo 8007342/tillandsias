@@ -1,0 +1,52 @@
+events:
+  - packet_id: local-web-preview-runtime
+    event:
+      type: note
+      ts: "2026-10-07T19:07:33Z"
+      host: yoga
+      summary: >
+        Parent resolved memory policy for THIS feature: preserve current tier
+        ForgeBudget including positive bounded swap under explicit order437
+        ruling and approved forge-swap-backed-memory-ceiling delta. Draft no
+        longer requires stale canonical no-swap formula. No host swap changes
+        or persistent/disk filesystem source fallback authorized. Source cap,
+        ENOSPC, cgroup accounting, four HOT roots and generation cleanup remain.
+      next_action: >
+        Sol finish coherent fixes including mode0777/exact-cap checks and
+        build_local_preview_run_args rename. Astra one-shot read still saw
+        mode0700/run_args; canonical mechanism allowance and tracked enclave
+        symbol update wait for readback/evidence, without polling.
+  - packet_id: local-web-preview-image-mcp
+    event:
+      type: progress
+      ts: "2026-10-07T19:07:33Z"
+      host: yoga
+      summary: >
+        Terra actual backend smoke relayed by parent: glibc failure on Alpine
+        corrected to digest-pinned Debian Node with pinned npm dependencies;
+        assets JSONC/no-main watch V1->V2 and 404 config; Worker watch V1->V2
+        plus restart; readonly source/private tmpfs state passed. Managed image
+        kept. Exact image ID/digest recorded in
+        plan/issues/local-web-preview-core-review-2026-10-07.md. Not an Astra
+        rerun or proof of core inspector/MCP/TLS integration.
+      next_action: >
+        Terra finish routed B2/B3/B6 fixes and provide coherent readback with
+        exact inspector invocation evidence. Prior review findings stay open.
+  - packet_id: local-web-preview-live-acceptance
+    event:
+      type: note
+      ts: "2026-10-07T19:07:33Z"
+      host: yoga
+      summary: >
+        Precise pre-existing residual: canonical forge-hot-cold-split
+        requirement --memory ceiling pairs with tmpfs caps still says equal
+        memory/memory-swap, while operator order437 and approved newer swap
+        delta govern implemented positive-swap ForgeBudget. THIS feature must
+        preserve implemented policy; later scoped spec-sync must reconcile
+        canonical stale text with that ruling and actual cgroup-conf encoding.
+        No entire swap-change sync/activation or new UX/swap approval here.
+      next_action: >
+        Parent retain spec-sync follow-up under this acceptance row, review
+        coherent runtime fixes before closure, and prove live MCP/TLS/generation
+        cleanup. Mechanism exception waits for actual mode0777/exact-cap match;
+        draft remains inactive and parent harness/bindings remain parent-owned.

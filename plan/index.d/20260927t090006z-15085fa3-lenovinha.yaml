@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: research-cert-lifecycle-state-graph
+    event:
+      type: progress
+      ts: "2026-09-27T09:00:06Z"
+      agent_id: linux-lenovinha-claude-20260927t090005z
+      host: lenovinha
+      summary: |
+        Slice 2 on salvage/lenovinha/20260927-472-ca-generation-edge at 092a2a25c: the CaBundle->Proxy generation-equality edge. The proxy is launched with the label tillandsias.ca-generation (sha256 of intermediate.crt, first 16 hex digits). ensure_proxy_running replaces a running proxy whose label mismatches the cert on disk, or has no label; an unreadable cert or failed inspect keeps it. Tests: 4 new (source pin mutation-verified), clippy rc=0, preflight ran=119 refused=0. Awaiting relay. The split-trust TLS failure is still read-from-code, not live-confirmed. Remaining on the row: the defer-until-trusted gate for forge consumers, restart-on-rotation fan-out for long-running forges, FlowStatePush emission of cert transitions, and the node catalog/FSM litmus.

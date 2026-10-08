@@ -1,0 +1,41 @@
+# @trace order:1437-664a
+#
+# Pins `scripts/relay-preflight.sh`: the ONE-command relay preflight (T2 of
+# plan/issues/efficiency-trims-design-2026-09-27.md) that merges work refs
+# onto a scratch branch and runs every pre-gate check a relay needs, with
+# ONE stdout verdict line. The eight arms pin (arm 8, 1522-ey4h: a ref that deletes a decider runs the MERGED copy of the tool): one verdict line with per-item
+# stderr lines; a red decider refuses by exact token and stops every later
+# phase; --plan is deterministic across two runs; a diff touching a script
+# selects every fixture that names it, listed before any of them run; a
+# merge conflict refuses and restores the tree; and a dirty worktree is
+# refused before any fetch (the negative control); and a fixture that
+# drains stdin cannot end the fixture loop early (1520-zjmk).
+name: litmus:relay-preflight-shape
+spec: ci-release
+phase: pre-build
+description: >
+  scripts/relay-preflight.sh over a scratch repo with a base and two work
+  refs: one ok: verdict line with per-item stderr lines (arm 1), a red
+  decider refuses by its exact token and runs nothing later (arm 2), two
+  --plan runs are byte-identical (arm 3), a touched script selects every
+  fixture naming it before any run (arm 4), a conflicting ref refuses and
+  restores the tree (arm 5), and a dirty worktree refuses before any fetch
+  (arm 6, negative control).
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/relay-preflight.sh
+  - workspace contains scripts/test-relay-preflight.sh
+  - shell utilities (bash, git, awk, sort, mktemp) are available in PATH
+
+critical_path:
+  - step: "the script and its fixture parse, and both carry their exec bit"
+    command: "bash -n scripts/relay-preflight.sh && bash -n scripts/test-relay-preflight.sh && test -x scripts/relay-preflight.sh && test -x scripts/test-relay-preflight.sh && echo 'ok: relay-preflight-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: relay-preflight-parses"
+
+  - step: "eight arms, exit 0"
+    command: "out=$(TILLANDSIAS_RELAY_PREFLIGHT_STUB=1 bash scripts/test-relay-preflight.sh); rc=$?; case \"$out\" in (*'ok:relay-preflight:8/8'*) [ \"$rc\" = 0 ] && echo 'ok: relay-preflight 8/8' ;; (*) printf '%s\\n' \"$out\"; exit 1 ;; esac"
+    timeout_ms: 90000
+    expected_behavior: "ok: relay-preflight 8/8"

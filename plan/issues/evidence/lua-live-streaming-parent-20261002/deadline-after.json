@@ -1,0 +1,287 @@
+{
+  "utc": "2026-10-02T17:33:51.850522+00:00",
+  "copy": {
+    "copied_from": "/home/tlatoani/codex/tillandsias-lua-work/1534-puyz/target/debug/tillandsias-plan",
+    "snapshot": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG/plan",
+    "sha256": "ddc6cc86bb79e52240ea93df227f42e2b81322153918b1acb5198c18b02566c7",
+    "fixture_provenance": "Exact reproduce.py, producer.py and probe.lua bytes copied from the retained 2026-10-02 acknowledged pre-fix deadline control. External diagnostic only; no repository Python entrypoint."
+  },
+  "build_id": "0.1.0+1dc55c1e61ee3092",
+  "plan_sha256": "ddc6cc86bb79e52240ea93df227f42e2b81322153918b1acb5198c18b02566c7",
+  "fixture_hashes": {
+    "repo/producer.py": "227d17843062737ffea57490d14db52ea899684ace709f2f047cfd7127226644",
+    "repo/probe.lua": "fa90f81a99ba6e6ad7c1302ad2dc6be9cf7bb5a745d998d9636a683dca4025ac",
+    "reproduce.py": "5c199a47d585d55ae39254c0deb4267b98143c72d77bd2c348d5e560245bae61"
+  },
+  "subreaper": true,
+  "timing_note": "outer timer begins at script start; ACK is verified before deadline fires, not a separately armed timer",
+  "trials": [
+    {
+      "label": "short-outer",
+      "argv": [
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG/plan",
+        "script",
+        "run",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG/repo/probe.lua",
+        "--timeout",
+        "700ms",
+        "--",
+        "/usr/bin/python3",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG/repo/producer.py",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG/runs/short-outer"
+      ],
+      "environment": {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG",
+        "TMPDIR": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG",
+        "LC_ALL": "C",
+        "LANG": "C",
+        "TZ": "UTC",
+        "TILLANDSIAS_REPO_ROOT": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG/repo"
+      },
+      "outer_timeout": "700ms",
+      "process_timeout_ms": 4000,
+      "plan_pid": 1566302,
+      "ack": {
+        "child": {
+          "pid": 1566305,
+          "start_ticks": 4457288,
+          "pgid": 1566305,
+          "ppid": 1566302
+        },
+        "grandchild": {
+          "pid": 1566306,
+          "start_ticks": 4457289,
+          "pgid": 1566305,
+          "ppid": 1566305
+        },
+        "monotonic_ns": 44572917359067
+      },
+      "ack_after_start_ms": 42.173819,
+      "at_ack": {
+        "child": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1566302,
+          "pgid": 1566305,
+          "start_ticks": 4457288
+        },
+        "grandchild": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1566305,
+          "pgid": 1566305,
+          "start_ticks": 4457289
+        }
+      },
+      "exit": 124,
+      "wall_ms": 705.949334,
+      "stdout": "status=timed_out\nrefused:timed-out:probe\n",
+      "stderr": "  why: /tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG/repo/probe.lua did not reach a verdict within 700ms\n  remedy: find what it waits on (run it with --trace), or raise --timeout if the work is genuinely that long\n",
+      "stdout_sha256": "9b037f424106184b8b207871ddcbfd0bc154c2c4accde39a53e2aac846ba840d",
+      "stderr_sha256": "e2e42337f6624bfed1b1ce156dba708041f42a115c84e45abc87de34c44c7c15",
+      "after_outer_exit": {
+        "child": {
+          "exists": false,
+          "same_identity": false,
+          "running": false
+        },
+        "grandchild": {
+          "exists": true,
+          "same_identity": true,
+          "state": "Z",
+          "running": false,
+          "ppid": 1566300,
+          "pgid": 1566305,
+          "start_ticks": 4457289
+        }
+      },
+      "markers_at_outer_exit": {
+        "child": false,
+        "grandchild": false
+      },
+      "delayed_markers": {
+        "child": null,
+        "grandchild": null
+      },
+      "reaped_by_harness": [
+        {
+          "pid": 1566306,
+          "start_ticks": 4457289,
+          "exit": -9
+        }
+      ],
+      "forced_cleanup": [],
+      "final_tasks": [
+        {
+          "identity": {
+            "pid": 1566305,
+            "start_ticks": 4457288,
+            "pgid": 1566305,
+            "ppid": 1566302
+          },
+          "observed": {
+            "exists": false,
+            "same_identity": false,
+            "running": false
+          }
+        },
+        {
+          "identity": {
+            "pid": 1566306,
+            "start_ticks": 4457289,
+            "pgid": 1566305,
+            "ppid": 1566305
+          },
+          "observed": {
+            "exists": false,
+            "same_identity": false,
+            "running": false
+          }
+        }
+      ],
+      "all_owned_tasks_gone": true
+    },
+    {
+      "label": "positive-long-outer",
+      "argv": [
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG/plan",
+        "script",
+        "run",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG/repo/probe.lua",
+        "--timeout",
+        "3500ms",
+        "--",
+        "/usr/bin/python3",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG/repo/producer.py",
+        "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG/runs/positive-long-outer"
+      ],
+      "environment": {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG",
+        "TMPDIR": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG",
+        "LC_ALL": "C",
+        "LANG": "C",
+        "TZ": "UTC",
+        "TILLANDSIAS_REPO_ROOT": "/tmp/opencode/lua-implementation-boundary.dOHIiQ/tmp/parent-script-deadline-after.pUAILG/repo"
+      },
+      "outer_timeout": "3500ms",
+      "process_timeout_ms": 4000,
+      "plan_pid": 1566307,
+      "ack": {
+        "child": {
+          "pid": 1566310,
+          "start_ticks": 4457358,
+          "pgid": 1566310,
+          "ppid": 1566307
+        },
+        "grandchild": {
+          "pid": 1566311,
+          "start_ticks": 4457360,
+          "pgid": 1566310,
+          "ppid": 1566310
+        },
+        "monotonic_ns": 44573622196602
+      },
+      "ack_after_start_ms": 39.473711,
+      "at_ack": {
+        "child": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1566307,
+          "pgid": 1566310,
+          "start_ticks": 4457358
+        },
+        "grandchild": {
+          "exists": true,
+          "same_identity": true,
+          "state": "S",
+          "running": true,
+          "ppid": 1566310,
+          "pgid": 1566310,
+          "start_ticks": 4457360
+        }
+      },
+      "exit": 0,
+      "wall_ms": 1860.065031,
+      "stdout": "proc-stdout:child-ack-both-running\ngrandchild-running\n\nok:producer:exited:0\n",
+      "stderr": "proc-stderr:child-stderr\ngrandchild-stderr\n\n",
+      "stdout_sha256": "23053686f46bafa9b28aecbc5415ca7e8bd071037d13676b6d18f638b2e8e5ed",
+      "stderr_sha256": "9cd761a8eeee498ebaa11e9f85c7f79c7f1f63127d0a9fd12ea9e481a22ae572",
+      "after_outer_exit": {
+        "child": {
+          "exists": false,
+          "same_identity": false,
+          "running": false
+        },
+        "grandchild": {
+          "exists": false,
+          "same_identity": false,
+          "running": false
+        }
+      },
+      "markers_at_outer_exit": {
+        "child": true,
+        "grandchild": true
+      },
+      "delayed_markers": {
+        "child": {
+          "pid": 1566310,
+          "start_ticks": 4457358,
+          "pgid": 1566310,
+          "ppid": 1566307,
+          "monotonic_ns": 44574822417186
+        },
+        "grandchild": {
+          "pid": 1566311,
+          "start_ticks": 4457360,
+          "pgid": 1566310,
+          "ppid": 1566310,
+          "monotonic_ns": 44574823809642
+        }
+      },
+      "reaped_by_harness": [],
+      "forced_cleanup": [],
+      "final_tasks": [
+        {
+          "identity": {
+            "pid": 1566310,
+            "start_ticks": 4457358,
+            "pgid": 1566310,
+            "ppid": 1566307
+          },
+          "observed": {
+            "exists": false,
+            "same_identity": false,
+            "running": false
+          }
+        },
+        {
+          "identity": {
+            "pid": 1566311,
+            "start_ticks": 4457360,
+            "pgid": 1566310,
+            "ppid": 1566310
+          },
+          "observed": {
+            "exists": false,
+            "same_identity": false,
+            "running": false
+          }
+        }
+      ],
+      "all_owned_tasks_gone": true,
+      "grandchild_reaped_by_producer": {
+        "pid": 1566311,
+        "start_ticks": 4457360,
+        "exit": 0
+      }
+    }
+  ]
+}
