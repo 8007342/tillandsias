@@ -77,8 +77,8 @@ trap 'rm -rf "$TMP"' EXIT
 # "ENFORCED" line and no reachability at all.
 build_tree "$TMP/a" no-bind
 out_a="$(bash "$TMP/a/scripts/census-litmus-step-enforcement.sh" 2>&1)"
-if printf '%s\n' "$out_a" | grep -q 'ENFORCED-REACHABLE' \
-   && printf '%s\n' "$out_a" | grep -q 'ENFORCED-INERT'; then
+if grep -q 'ENFORCED-REACHABLE' <<<"$out_a" \
+   && grep -q 'ENFORCED-INERT' <<<"$out_a"; then
     ok "ARM 1: the census reports ENFORCED-REACHABLE and ENFORCED-INERT"
 else
     bad "ARM 1: no reachability split in the census output" \
@@ -127,7 +127,7 @@ else
 fi
 
 # ── ARM 6: the closure figure must name the REACHABLE count ──────────────────
-if printf '%s\n' "$out_a" | grep -qiE 'CLOSURE FIGURE.*reachable|reachable.*CLOSURE FIGURE'; then
+if grep -qiE 'CLOSURE FIGURE.*reachable|reachable.*CLOSURE FIGURE' <<<"$out_a"; then
     ok "ARM 6: the closure figure names reachability"
 else
     bad "ARM 6: the closure figure does not name reachability" \
