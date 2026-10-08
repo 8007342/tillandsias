@@ -206,6 +206,18 @@ elapsed deadline and prints `status=timed_out`, rc 124. Without `--timeout`
 a panic unwinds past the scope cleanup. Not fixed: there is no seam to force
 the branch, and an untested branch is not a fix.
 
+REPRODUCED AND FIXED 2026-10-08 (`1551-7hyq`, on `work/1551-af3e`), through a
+debug-only seam in `run_to_verdict` (`TILLANDSIAS_TEST_SCRIPT_WORKER_PANIC`,
+`cfg(debug_assertions)`). With `--timeout 20s` the worker panic printed
+`status=timed_out` and `refused:timed-out` with "did not reach a verdict
+within 20000ms" after 0.06 s, rc 124. Without `--timeout` the runner
+exited 101 with no verdict line, and its child was reaped in 8 of 8 runs
+although nothing runs the scope cleanup on that path;
+the reaping came from unwinding (the same child survives a SIGKILL of the
+runner), so it is incidental, not a guard. `run_guarded` now catches the
+panic on both paths; `cli_run` closes and reaps the scope and prints
+`refused:script-worker-died:<name>`, rc 1.
+
 ## 3. Checked and held
 
 Cacheable isolation (no `proc`, `sh`, `expert.shell`, clock, `os`, `io`,

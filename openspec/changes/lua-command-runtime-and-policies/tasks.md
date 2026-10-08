@@ -138,5 +138,5 @@ fixes; before them the spec had no requirement about script-owned processes.
       pump no longer sleeps while events flow; the timer rule is open).
 - [x] 6.7 `1551-af3e` one child's pipe anomaly or the process limit closes
       the whole scope; `proc.run` raises it.
-- [ ] 6.8 `1551-333i` (plausible) spawn setup bound; `1551-7hyq` (plausible)
+- [x] 6.8 `1551-333i` (reproduced) spawn setup bound; `1551-7hyq` (reproduced)
       a dead worker reported as a timeout.

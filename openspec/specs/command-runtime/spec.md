@@ -259,6 +259,20 @@ number. The handlers SHALL be installed before any script code runs. On
 Windows the job object owns the group and this requirement is met by it
 (order 1551-n45s).
 
+A script worker that ends WITHOUT a verdict (a panic in the runner) SHALL be
+reported as a crash, `refused:script-worker-died:<name>` with exit status 1,
+with or without `--timeout`; it SHALL NOT be reported `timed_out` or exit
+124, SHALL NOT report a verdict the script recorded before the crash, and the
+runner SHALL close its scope and reap every script-owned process group first
+(order 1551-7hyq).
+
+#### Scenario: A dead worker is a crash, not a timeout
+
+- **WHEN** the runner's script worker panics after the script spawned a
+  child, with or without `--timeout`
+- **THEN** the runner prints `refused:script-worker-died:<name>` and exits 1
+- **AND** the child is gone when the runner exits
+
 #### Scenario: A TERM to the runner reaches the child in its own group
 
 - **WHEN** a script holds a child that runs in its own process group and the

@@ -1793,6 +1793,79 @@ printf '%s' "$id"
         );
     }
 
+    // ORDER 1551-7hyq. A script worker that ends without a verdict (a panic,
+    // forced through the debug-only TILLANDSIAS_TEST_SCRIPT_WORKER_PANIC
+    // seam, after the script spawned a child and called verdict.ok) is a
+    // crash. It is not a timeout, it is not the verdict the script recorded,
+    // and it still takes the script-owned child with it.
+    // PRE-FIX: with --timeout the disconnected channel shared the deadline's
+    // arm (status=timed_out, rc 124); without --timeout the panic unwound
+    // past the scope cleanup and the child outlived the runner.
+    #[test]
+    fn a_dead_script_worker_is_not_a_timeout() {
+        let child = |dir: &std::path::Path| -> Option<u32> {
+            std::fs::read_to_string(dir.join("child.pid"))
+                .ok()
+                .and_then(|s| s.trim().parse().ok())
+        };
+        let alive = |pid: u32| {
+            std::fs::read_to_string(format!("/proc/{pid}/stat"))
+                .map(|s| {
+                    s.rsplit(')')
+                        .next()
+                        .is_some_and(|r| !r.trim_start().starts_with('Z'))
+                })
+                .unwrap_or(false)
+        };
+        for timeout in [Some("20s"), None] {
+            let f = ScriptFixture::new();
+            let holder = f.write("holder.sh", "#!/bin/sh\nprintf '%s\\n' $$\nexec sleep 30\n");
+            let script = f.write(
+                "probe.lua",
+                &format!(
+                    r#"
+                local p = proc.spawn{{argv={{'sh','{holder}'}}}}
+                local pid
+                p:on_line('stdout', function(s) pid = s end)
+                while not pid do proc.select{{p, timeout_ms=50}} end
+                fs.write('child.pid', pid)
+                verdict.ok('spawned')
+            "#
+                ),
+            );
+            let mut runner = f.runner(&script);
+            if let Some(t) = timeout {
+                runner.args(["--timeout", t]);
+            }
+            let out = runner
+                .env("TILLANDSIAS_TEST_SCRIPT_WORKER_PANIC", "1")
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let pid = child(f.dir.path()).expect("premise: the script spawned its child");
+            // Reap the child ourselves on failure, so a red run leaves nothing.
+            let reaped = !alive(pid);
+            if !reaped {
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGKILL);
+                }
+            }
+            assert!(
+                !stdout.contains("timed_out") && out.status.code() != Some(124),
+                "{timeout:?}: a dead worker read as a timeout: rc {:?} {stdout}{stderr}",
+                out.status.code()
+            );
+            assert!(
+                stdout.contains("refused:script-worker-died:probe") && out.status.code() == Some(1),
+                "{timeout:?}: rc {:?} {stdout}{stderr}",
+                out.status.code()
+            );
+            assert!(!stdout.contains("ok:spawned"), "{timeout:?}: {stdout}");
+            assert!(reaped, "{timeout:?}: child {pid} outlived the runner");
+        }
+    }
+
     // ORDER 1551-af3e. `MAX_ACTIVE_PROCESSES` (64) is a per-call refusal, not
     // a scope failure. PRE-FIX: the 65th proc.spawn raised
     // `script-process-limit` and closed the scope.
