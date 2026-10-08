@@ -1,0 +1,22 @@
+# Gate step 1559-sqzp — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. install-windows.ps1's reset-kind decision (1437-3iux S3,
+# host-state-lifecycle "The installer runs SOFT for an update and HARD only
+# when asked"). An install over an existing install must run the SOFT reset,
+# with no prompt and a first line naming it; HARD must be selected
+# (TILLANDSIAS_INSTALL_RESET=hard / -HardReset) AND approved per run, and the
+# installer must never grant that approval itself.
+#
+# The fixture cuts the decision between exact-once markers (BEGIN-RESET-KIND)
+# and RUNS it in PowerShell for nine inputs: default, hard-selected-only,
+# -HardReset without approval, approval=true, approval=1, typed HARD, a wrong
+# word, an empty answer, and SOFT-with-a-console (whose prompt reader throws if
+# shown). Pre-fix: FAILS, because the installer had no reset-kind block. Without
+# PowerShell (a Linux gate) it skips by name.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the installer runs SOFT by default and HARD only when selected and approved (1559-sqzp)"
+STEP_SCRIPT="scripts/test-installer-reset-kind.sh"
+STEP_ERROR="the installer's reset-kind decision no longer matches host-state-lifecycle (1559-sqzp); see which arm failed above"
+STEP_OK="installer resets SOFT by default and HARD only when selected and approved"
+STEP_SECOND_REGIME="yolanda 2026-10-08 msys ok:installer-reset-kind:9 arms"

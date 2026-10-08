@@ -1488,6 +1488,8 @@ fn reprovision_path_present() -> bool {
 /// then the same recipe path re-provisions, which reconciles the guest binary
 /// to this tray's version, restarts the daemon and delivers the share before
 /// the vault bootstraps. No prompt, ever: SOFT is pre-authorised (1443-bs9z).
+///
+/// @trace spec:host-state-lifecycle, order:1437-3iux
 pub fn reset_state_once() -> i32 {
     use crate::provision_console::{PhaseConsole, process_tier, render_line};
 
@@ -1606,6 +1608,7 @@ pub fn reset_state_once() -> i32 {
 /// The per-run approval and the `reset: HARD` announcement are S2.
 ///
 /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+/// @trace spec:host-state-lifecycle, order:1559-9uvb
 pub fn reset_guest_once(approve_arg: bool) -> i32 {
     use crate::provision_console::{PhaseConsole, process_tier, render_line};
 
