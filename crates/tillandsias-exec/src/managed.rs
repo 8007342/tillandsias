@@ -321,8 +321,11 @@ async fn read_stream<R: tokio::io::AsyncRead + Unpin>(
     let mut pending = Vec::new();
     let mut buf = [0u8; 8192];
     loop {
-        // Bound PIPE EOF after leader exit, not callback delivery time. Sending
-        // queued lines may take arbitrarily long within the process deadline.
+        // Bound PIPE EOF after leader exit, not callback delivery time. Once
+        // the leader has exited its own `timeout_ms` no longer applies
+        // (1551-sprq): sending queued lines may take as long as the consumer
+        // needs, bounded only by the enclosing scope deadline, and a cut-off
+        // there keeps the real exit status and marks the capture truncated.
         let read = async {
             if *leader.borrow() {
                 tokio::time::timeout(GROUP_DRAIN_GRACE, pipe.read(&mut buf))
@@ -471,12 +474,23 @@ async fn supervise(
         (Some(a), Some(b)) => Some(a.min(b)),
         (a, b) => a.or(b),
     };
-    let timer = async {
-        match end {
+    // ORDER 1551-sprq. Two timers, because they stop meaning the same thing
+    // once the leader exits. `timer` is the per-process `timeout_ms` (capped
+    // by the scope deadline) and bounds the CHILD only: it is disarmed when
+    // the leader's exit status arrives (grouped commands; see the select
+    // below for legacy group=false), so a child that exited inside its
+    // timeout is never reported timed_out however slowly its lines are
+    // consumed. `scope_timer` is the enclosing scope deadline alone and can
+    // still cut delivery off after the exit; it then keeps the real status
+    // and marks the capture truncated.
+    let sleep_until = |at: Option<Instant>| async move {
+        match at {
             Some(d) => tokio::time::sleep_until(tokio::time::Instant::from_std(d)).await,
             None => std::future::pending().await,
         }
     };
+    let timer = sleep_until(end);
+    let scope_timer = sleep_until(deadline);
     // Completion-only observers never enter read_stream's line assembly path;
     // both fds still drain and retain the ordinary bounded byte-prefix capture.
     let line_events = observation
@@ -517,6 +531,7 @@ async fn supervise(
     };
     let mut io = Box::pin(io);
     tokio::pin!(timer);
+    tokio::pin!(scope_timer);
     let mut drained = None;
     let mut status = None;
     let mut timed_out = false;
@@ -526,7 +541,18 @@ async fn supervise(
         tokio::select! {
             biased;
             _ = cancelled(&mut cancel) => break,
-            _ = &mut timer => { timed_out = true; break; },
+            // An ungrouped (legacy group=false) leader has no drain grace, so
+            // after its exit `timer` stays armed as the only bound on pipe
+            // EOF from a descendant; it then cuts the capture off like the
+            // scope deadline does, and still never fabricates timed_out.
+            _ = &mut timer, if status.is_none() || !command.group => {
+                timed_out = status.is_none();
+                break;
+            },
+            // Reached only after the leader exited (before that, `timer`
+            // already covers the scope deadline): a delivery cut-off, which
+            // falls through to the abandoned-capture path below.
+            _ = &mut scope_timer => break,
             r = &mut io, if drained.is_none() => match r {
                 Ok(r) => drained = Some(r), Err(e) => { failure = Some(e); break; }
             },
@@ -584,8 +610,10 @@ async fn supervise(
             // `seq 1 2000` had exited 0 while its lines were still queued for
             // delivery; `kill()` then returned status=exited code=0 with an
             // EMPTY stdout and truncated=false, so `ok` was true. A deadline
-            // is a different, already typed outcome (`timed_out`), so it is
-            // left alone.
+            // that fires while the leader still runs is a different, already
+            // typed outcome (`timed_out`), so it is left alone; a SCOPE
+            // deadline that cuts delivery off after the leader exited
+            // (1551-sprq) is an abandoned capture like a kill.
             let abandoned = !timed_out && drained.is_none();
             let (stdout, stderr, dropped) = match (timed_out, drained) {
                 (false, Some(capture)) => capture,
@@ -734,6 +762,79 @@ mod tests {
         assert_eq!(output.completion, Completion::Exited(0));
         assert!(output.stdout.is_empty());
         assert!(output.truncated, "an abandoned capture looked whole");
+        scope.cleanup().unwrap();
+    }
+
+    // ORDER 1551-sprq. `timeout_ms` bounds the child, not the consumer. The
+    // child exits 0 at once; its lines are then consumed one every 5 ms, so
+    // delivery outlasts the 300 ms process timeout several times over. The
+    // per-process timer used to keep running after the leader exited and
+    // reported this run timed_out with an empty capture.
+    #[tokio::test]
+    async fn an_exited_child_is_not_timed_out_by_slow_line_delivery() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_secs(10)));
+        let bytes = b"line\n".repeat(200);
+        let command = cat(bytes.clone()).timeout(Duration::from_millis(300));
+        let process = scope.spawn(command, true).unwrap();
+        let started = Instant::now();
+        let mut lines = 0;
+        let output = tokio::time::timeout(Duration::from_secs(8), async {
+            loop {
+                match events.try_recv() {
+                    Ok(Event::Line { .. }) => lines += 1,
+                    Ok(Event::Finished(_)) => {}
+                    Err(_) => {
+                        if let Some(result) = process.result() {
+                            return result;
+                        }
+                    }
+                }
+                // The deliberately slow consumer.
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("managed result was not published")
+        .unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert_eq!(lines, 200);
+        // Delivery really did outlast the process timeout (200 x 5 ms).
+        assert!(started.elapsed() > Duration::from_millis(600));
+        assert_eq!(output.stdout, bytes);
+        assert!(!output.truncated);
+        scope.cleanup().unwrap();
+    }
+
+    // ORDER 1551-sprq. After the leader exits only the SCOPE deadline can cut
+    // delivery off; when it does, the real exit status survives and the
+    // capture is marked truncated. It is never fabricated into timed_out.
+    #[tokio::test]
+    async fn a_scope_deadline_after_exit_keeps_the_exit_status_and_truncates() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_millis(400)));
+        // Nobody reads events yet: delivery parks after 32 lines, the child exits.
+        let process = scope
+            .spawn(
+                cat(b"line\n".repeat(200)).timeout(Duration::from_secs(5)),
+                true,
+            )
+            .unwrap();
+        // Let the scope deadline pass while delivery is parked, then drain so
+        // the Finished receipt can be enqueued, as the Lua host's pump would.
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        let output = tokio::time::timeout(Duration::from_secs(4), async {
+            loop {
+                while events.try_recv().is_ok() {}
+                if let Some(result) = process.result() {
+                    return result;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("managed result was not published")
+        .unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert!(output.truncated, "a cut-off delivery looked whole");
         scope.cleanup().unwrap();
     }
 
