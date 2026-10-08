@@ -234,9 +234,36 @@ cmd_claim() {
   return 1
 }
 
+# Release only a lease this caller HOLDS (1553-q7f4). An unconditional rm -rf
+# let drain-queue's closing release destroy a lease another agent held. The
+# caller is the holder when TILLANDSIAS_LEDGER_LEASE_ID is set and equals the
+# holder's lease_id; with no id set (the default lease_id is hostname-pid, new
+# in every process, so a later release can never equal it), when the holder's
+# host is this host. A missing or stale lease is released as before; a live
+# lease whose holder cannot be read (the mkdir-to-write window) is refused.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 cmd_release() {
-  local id="$1" dir
+  local id="$1" dir held_lid held_host me
   dir="$(lease_path "$id")"
+  if [ -d "$dir" ] && ! lease_is_stale "$dir"; then
+    held_lid="$(sed -n 's/^lease_id=//p' "$dir/holder" 2>/dev/null | head -1)"
+    held_host="$(sed -n 's/^host=//p' "$dir/holder" 2>/dev/null | head -1)"
+    me="$(hostname 2>/dev/null || printf unknown)"
+    if [ -n "${TILLANDSIAS_LEDGER_LEASE_ID:-}" ]; then
+      [ -n "$held_lid" ] && [ "$held_lid" = "$TILLANDSIAS_LEDGER_LEASE_ID" ] || {
+        echo "refused:release:not-holder:$id:held-by=${held_lid:-unknown}"
+        _afford "this caller's lease id '$TILLANDSIAS_LEDGER_LEASE_ID' is not the holder's '${held_lid:-unknown}'; releasing would destroy another agent's live lease, so nothing was removed (1553-q7f4)" \
+          "release with the holder's id (TILLANDSIAS_LEDGER_LEASE_ID=${held_lid:-<holder>}), or wait for the lease to expire and claim it (reclaimed:)"
+        return 3
+      }
+    elif [ -z "$held_host" ] || [ "$held_host" != "$me" ]; then
+      echo "refused:release:not-holder:$id:held-by=${held_lid:-unknown}"
+      _afford "the lease is held from host '${held_host:-unknown}', not '$me', and no lease id was given; nothing was removed (1553-q7f4)" \
+        "release from the holding host, or set TILLANDSIAS_LEDGER_LEASE_ID to the holder's id '${held_lid:-unknown}'"
+      return 3
+    fi
+  fi
   rm -rf "$dir"
   echo "released:$id"
   return 0

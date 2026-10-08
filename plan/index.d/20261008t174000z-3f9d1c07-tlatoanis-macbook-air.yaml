@@ -13,9 +13,9 @@ packets:
       - scripts/drain-queue.sh
       - scripts/claim-ledger-node.sh
     context: >
-      drain-queue.sh:188 captures the claim with stderr merged
+      drain-queue.sh's drain loop captures the claim with stderr merged
       (CLAIM_RESULT=$(scripts/claim-ledger-node.sh claim "$pid" 2>&1 || true)),
-      and :191 skips only when CLAIM_RESULT starts with "in-flight:". When the
+      and its in-flight test skips only when CLAIM_RESULT starts with "in-flight:". When the
       id cannot be verified (no resolvable plan binary or ledger, e.g. a fresh
       checkout), claim-ledger-node writes "  note: claim could not verify ..."
       to stderr BEFORE "in-flight:<id>" on stdout. The merged result then starts
@@ -26,7 +26,7 @@ packets:
       line "in-flight:held-node" and SKIP; the unverifiable case gives two lines
       (note, then in-flight:held-node) and PROCEEDS.
       It compounds: drain-queue then runs `claim-ledger-node.sh release "$pid"`,
-      and cmd_release (claim-ledger-node.sh:234-237) rm -rf's the lease without
+      and claim-ledger-node.sh cmd_release rm -rf's the lease without
       checking the holder. Also measured: holder claimed:held-node; intruder
       in-flight (rc 1); intruder release prints released:held-node; status goes
       from in-flight to free. The holder's lease is destroyed by a non-holder.

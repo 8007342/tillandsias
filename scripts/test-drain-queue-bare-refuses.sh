@@ -35,7 +35,9 @@ _sandbox() { # $1 = dir; prints nothing, builds a repo whose spenders only recor
     cp "$DQ" "$r/scripts/drain-queue.sh"
     : > "$rec"
     printf '#!/bin/sh\necho "repeat $*" >> "%s"\nexit 0\n' "$rec" > "$r/repeat"
-    printf '#!/bin/sh\necho "claim-ledger-node $*" >> "%s"\necho "ok:$1:$2"\n' "$rec" > "$r/scripts/claim-ledger-node.sh"
+    # The stub speaks the REAL verdict grammar (claimed:/released:<id>): since
+    # 1553-q7f4 drain-queue fails closed on any claim verdict but claimed:/reclaimed:.
+    printf '#!/bin/sh\necho "claim-ledger-node $*" >> "%s"\ncase "$1" in claim) echo "claimed:$2" ;; release) echo "released:$2" ;; *) echo "free:$2" ;; esac\n' "$rec" > "$r/scripts/claim-ledger-node.sh"
     # The plan binary answers the one query the script makes with one ready row.
     printf '#!/bin/sh\nprintf "278\\tfixture-packet\\tv0.5\\tlinux\\n"\n' > "$r/fake-plan"
     chmod +x "$r/repeat" "$r/scripts/claim-ledger-node.sh" "$r/fake-plan"

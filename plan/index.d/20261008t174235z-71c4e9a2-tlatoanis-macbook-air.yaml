@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by hand on the LWW `status:` channel (corrects any field, 642-fedr).
+status:
+  - packet_id: drain-queue-misreads-a-held-claim-as-free-when-the-unverifiable-note-precedes-in-flight-and-then-releases-the-holders-lease
+    field: priority
+    value: p1
+    ts: "2026-10-08T17:42:35Z"
+    host: tlatoanis-macbook-air
+  - packet_id: drain-queue-misreads-a-held-claim-as-free-when-the-unverifiable-note-precedes-in-flight-and-then-releases-the-holders-lease
+    field: status
+    value: in_progress
+    ts: "2026-10-08T17:42:35Z"
+    host: tlatoanis-macbook-air
+  - packet_id: drain-queue-misreads-a-held-claim-as-free-when-the-unverifiable-note-precedes-in-flight-and-then-releases-the-holders-lease
+    field: verifiable_closure
+    value: >
+      litmus:ledger-node-claim-shape, whose new step runs
+      scripts/test-claim-release-holder-safety.sh and expects
+      ok:claim-release-holder-safety:7. On darwin against the pre-fix scripts
+      it fails 3 of 7 arms: ARM 1 (a non-holder's release printed
+      released:held-node and status went free), ARM 3 (another host's lease was
+      released with no id) and ARM 5 (drain-queue end to end with an
+      unverifiable id: worked=yes, status free). Its controls stay green: own
+      release, same-host release with no id, a verifiable held node skipped, and
+      a free node worked and released. Post-fix 7/7. Receipts are in
+      plan/issues/evidence/1553-q7f4-darwin-20261008/. The Linux run is for the coordinator.
+    ts: "2026-10-08T17:42:35Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: drain-queue-misreads-a-held-claim-as-free-when-the-unverifiable-note-precedes-in-flight-and-then-releases-the-holders-lease
+    event:
+      type: note
+      ts: "2026-10-08T17:42:35Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Raised to p1 and claimed by macbookair-macos on coordinator ruling. Fix:
+        (1) cmd_release refuses a live lease the caller does not hold, with refused:release:not-holder:<id>:held-by=<lease_id> and exit 3, removing nothing. The caller is the holder when TILLANDSIAS_LEDGER_LEASE_ID equals the holder's lease_id. With no id set, it is the holder when the holder's host is this host. That same-host fallback is needed because the default lease_id is hostname-pid, new in every process, while the meta-orchestration skill and the fixtures claim and release in separate processes. A missing or stale lease is released as before.
+        (2) drain-queue reads the claim verdict from stdout alone (stderr goes to its log), fails closed (only claimed:/reclaimed: proceed), and exports one TILLANDSIAS_LEDGER_LEASE_ID for the whole drain, so its own release is recognised.
+        Also fixed: test-drain-queue-bare-refuses' stub printed ok:claim:<id>, which the real script never emits; it now speaks claimed:/released:. That fixture is 3/3 again.
+        DESIGN QUESTION for the coordinator: with no id set, the same-host fallback still lets a second same-host agent release a lease. drain-queue no longer does that because it now carries an id. Should the skill also be required to set an id, which would make the check exact everywhere?

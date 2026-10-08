@@ -92,6 +92,17 @@ critical_path:
     timeout_ms: 30000
     expected_behavior: "ok:ledger-node-claim-resolution-fixture:10"
 
+  - step: "only the holder can release a lease, and drain-queue skips a held node even when the id is unverifiable (1553-q7f4)"
+    # Measured on darwin 2026-10-08: drain-queue merged the claim's stderr into
+    # its verdict, an unverifiable-id note came before in-flight:, a held node
+    # was worked, and the closing release rm -rf'd the HOLDER's lease. The
+    # fixture runs the real drain-queue.sh end to end in a scratch repo and
+    # keeps three controls green (own release, same-host release with no id,
+    # a free node is worked and released).
+    command: "bash scripts/test-claim-release-holder-safety.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:claim-release-holder-safety:7"
+
   - step: "the meta-orchestration skill consults the claim probe before node closure"
     command: "grep -q 'claim-ledger-node.sh' skills/meta-orchestration/SKILL.md && echo 'ok: skill-consults-probe'"
     timeout_ms: 3000
