@@ -908,7 +908,11 @@ fn ",
             .nth(1)
             .expect("main must test for --reset-guest on its own");
         let hard_call = hard_branch.split('}').next().unwrap();
+        // WHICH body a flag dispatches to is the contract, and the behavioural
+        // alternative spawns the tray with --reset-guest, which destroys the
+        // distro; this pin was red before the dispatch fix (076c5773d).
         assert!(
+            // source-pin-ok: the dispatch target text is the contract (see above)
             hard_call.contains("notify_icon::reset_guest_once(approve_arg)"),
             "--reset-guest must reach the HARD body: {hard_call}"
         );
