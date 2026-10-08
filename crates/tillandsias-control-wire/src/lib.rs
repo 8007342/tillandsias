@@ -988,6 +988,21 @@ impl DeliverCredentialsOutcome {
         matches!(self, DeliverCredentialsOutcome::Accepted)
     }
 
+    /// ORDER 1562-bqcg. Whether the host should go on to `GetVaultHandover`
+    /// after this delivery: on `Accepted`, and on `Superseded`, whose remedy
+    /// (above) is "for the host to re-read, not re-deliver". A tray that bailed
+    /// on `!is_accepted()` before the handover never re-read: after a reset that
+    /// cleared the host credentials, the first launch failed and the share never
+    /// came back (v56.10.8.1 Windows smoke, 2026-10-08). `Rejected` and
+    /// `Unstated` stay fail-closed. Both trays branch on this, so they cannot
+    /// drift.
+    pub fn proceeds_to_handover(&self) -> bool {
+        matches!(
+            self,
+            DeliverCredentialsOutcome::Accepted | DeliverCredentialsOutcome::Superseded
+        )
+    }
+
     /// A short phrase for logs and tray surfaces. Never empty.
     pub fn describe(&self) -> String {
         match self {
@@ -3553,6 +3568,24 @@ mod deliver_credentials_outcome_tests {
             }
             .is_accepted()
         );
+    }
+
+    /// ORDER 1562-bqcg. The host reads the guest's handover on Accepted AND on
+    /// Superseded ("re-read, not re-deliver"); Rejected and Unstated stay
+    /// fail-closed. is_accepted() is unchanged: Superseded is still not an
+    /// acceptance, it is a reason to re-read.
+    #[test]
+    fn superseded_proceeds_to_the_handover_but_is_not_an_acceptance() {
+        assert!(DeliverCredentialsOutcome::Accepted.proceeds_to_handover());
+        assert!(DeliverCredentialsOutcome::Superseded.proceeds_to_handover());
+        assert!(!DeliverCredentialsOutcome::Unstated.proceeds_to_handover());
+        assert!(
+            !DeliverCredentialsOutcome::Rejected {
+                reason: "share does not authenticate".to_string()
+            }
+            .proceeds_to_handover()
+        );
+        assert!(!DeliverCredentialsOutcome::Superseded.is_accepted());
     }
 
     /// The default is what an absent field decodes to, so it is the value a

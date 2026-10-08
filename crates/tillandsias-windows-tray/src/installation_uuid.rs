@@ -292,7 +292,8 @@ pub(crate) async fn deliver_and_handover_with(
             outcome,
             ..
         } => {
-            if !outcome.is_accepted() {
+            // ORDER 1562-bqcg: Superseded goes on to read the handover.
+            if !outcome.proceeds_to_handover() {
                 return Err(format!(
                     "DeliverCredentials was received but not accepted: {}",
                     outcome.describe()
