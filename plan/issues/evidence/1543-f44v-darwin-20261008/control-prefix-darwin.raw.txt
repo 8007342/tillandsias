@@ -1,0 +1,49 @@
+   Compiling tillandsias-core v56.9.27 (/Users/tlatoani/claudia/wt-f44v/crates/tillandsias-core)
+   Compiling tillandsias-logging v0.1.260513 (/Users/tlatoani/claudia/wt-f44v/crates/tillandsias-logging)
+   Compiling slab v0.4.12
+   Compiling futures-core v0.3.32
+   Compiling tillandsias-plan v0.1.0 (/Users/tlatoani/claudia/wt-f44v/crates/tillandsias-plan)
+   Compiling tillandsias-msg v0.1.0 (/Users/tlatoani/claudia/wt-f44v/crates/tillandsias-msg)
+   Compiling tillandsias-exec v0.1.0 (/Users/tlatoani/claudia/wt-f44v/crates/tillandsias-exec)
+   Compiling futures-util v0.3.32
+   Compiling mlua v0.10.5
+   Compiling tillandsias-podman v56.9.27 (/Users/tlatoani/claudia/wt-f44v/crates/tillandsias-podman)
+warning: variants `Zombie` and `Unobservable` are never constructed
+  --> crates/tillandsias-plan/tests/lua_proc.rs:49:5 <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+   |
+47 | enum Liveness {
+   |      -------- variants in this enum
+48 |     Alive,
+49 |     Zombie,
+   |     ^^^^^^
+50 |     Gone,
+51 |     Unobservable(String),
+   |     ^^^^^^^^^^^^
+   |
+   = note: `Liveness` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `tillandsias-plan` (test "lua_proc") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 17s
+     Running tests/lua_proc.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/lua_proc-3a446b499d78ca26)
+
+running 1 test
+test liveness_sees_a_known_live_scratch_process_and_its_death ... FAILED
+
+failures:
+
+---- liveness_sees_a_known_live_scratch_process_and_its_death stdout ----
+
+thread 'liveness_sees_a_known_live_scratch_process_and_its_death' (6401825) panicked at crates/tillandsias-plan/tests/lua_proc.rs:79:5: <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+assertion `left == right` failed: a live scratch process 61337 was not seen alive
+  left: Gone
+ right: Alive
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    liveness_sees_a_known_live_scratch_process_and_its_death
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p tillandsias-plan --test lua_proc`

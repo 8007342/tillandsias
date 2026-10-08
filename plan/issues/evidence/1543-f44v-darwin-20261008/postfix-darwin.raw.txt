@@ -1,0 +1,11 @@
+   Compiling tillandsias-plan v0.1.0 (/Users/tlatoani/claudia/wt-f44v/crates/tillandsias-plan)
+   Compiling tillandsias-exec v0.1.0 (/Users/tlatoani/claudia/wt-f44v/crates/tillandsias-exec)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 02s
+     Running tests/lua_proc.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/lua_proc-3a446b499d78ca26)
+
+running 2 tests
+test liveness_sees_a_known_live_scratch_process_and_its_death ... ok
+test a_grandchild_neither_times_out_nor_outlives_proc_run ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.31s
+
