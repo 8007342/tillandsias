@@ -1,0 +1,917 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator direction 2026-10-04 (yoga session, rulings R1-R3 quoted verbatim
+# in the design note): machine-check the convergence model's theorems with
+# Lean on builder infrastructure only (toolbox / podman, transparent on Linux
+# hosts, nothing in the user runtime without a stated justification), wire
+# the result into the methodology and the pure Lua predicates, update
+# tillandsias.org to match, and file it durably enough that any agent in any
+# harness can continue.
+# Milestone 1550-32d6, twelve children, one goal, and two MEASURED defects
+# found while stating the properties (1550-8528, 1550-a5jc).
+# Design note: plan/issues/formal-verification-lane-design-2026-10-04.md
+# Change: openspec/changes/formal-verification-lane/
+packets:
+  - packet_id: the-convergence-models-theorems-are-machine-checked-on-builders-only-and-the-rust-scorer-and-lua-graders-are-tested-against-vectors-the-proved-model-emits
+    order: 1550-32d6
+    status: ready
+    kind: milestone
+    priority: p2
+    desired_release: v0.7
+    pickup_role: any
+    capability_tags: [formal-verification, lean, kani, methodology, centicolon, lua, plan, convergence, milestone]
+    estimated_hours: 6
+    owned_files:
+      - openspec/changes/formal-verification-lane/
+      - plan/issues/formal-verification-lane-design-2026-10-04.md
+    title: |
+      MILESTONE — the theorems of the convergence model in methodology/math-foundations.yaml (finite obligation lattice, refinement as a closure operator, CentiColons as a bounded ranking function, the conditional cycle bound, the ledger fold) are machine-checked in Lean by a builder-only lane that refuses sorry and unlisted axioms, the Rust scorer and the Lua graders are tested against expected values the proved model emits, the methodology records such claims at their own strength with a mandatory limit, and no formal tool ships in the user runtime; today the theorems are prose on the website plus sampled property tests over a three-rule fixture, no Lean or Kani exists on any host, and three scoring definitions disagree
+    context: |
+      OPERATOR (2026-10-04, verbatim in design note §1): R1 "Lean might be
+      just for our builder infra ... Running in toolboxes and podman
+      containers, should be transparent for all our linux hosts. Not on our
+      user's runtime unless we justify its presence clearly." R2 the website
+      follows ("it might require updating ../tillandsias.org as well"). R3
+      durable packets and specs on linux-next so any agent can take over.
+      Kani was ASKED ABOUT, not ruled on: adopting it is decision D3.
+      THE THREE LAYERS (design note §2), which every child must keep
+      apart: MODEL (what Lean can prove), MODEL-TO-CODE (what vectors and
+      Kani can test or bound-check), MODEL-TO-WORLD (the progress premise,
+      adequacy of the obligation set — empirical; no tool touches it).
+      Nothing here restores a claim the methodology or the website has
+      withdrawn: no contraction, no Galois connection, no probability, no
+      strong law, and non-increase still reaches only some floor d_* >= 0.
+      WHAT EXISTS (not re-filed): the obligation lattice and scorer in Rust
+      (976-kk6x, 977-56fd, 977-j6qu), the property tests with a committed
+      wrong model (977-dpbj), stable requirement identifiers (976-suab), the
+      Lua graders (1395-88tp) and the advisory ratchet (1395-ue3i,
+      1528-gxzf), the cacheable/observing predicate classes.
+      FOUND WHILE STATING THE PROPERTIES, both measured on yoga 2026-10-04
+      at trunk 9dae9870b (design note §5): a falsified status descent is
+      reverted by an older higher-rung fragment once it has been compacted
+      (1550-8528); Refiner::refine reports a valid chain of 64 or more rules
+      as Unstable (1550-a5jc). And by search: Refiner has no production
+      caller, so the convergence theorem is about an operator nothing runs
+      (1550-sy27).
+      DESIGN PRINCIPLES (binding on every child): statements are reviewed by
+      the operator before proofs are written; a green build is not a proof —
+      the lane inspects axioms; an absent toolchain is a named skip, never
+      ok; nothing formal runs in ./build.sh --check; no Python; the lane
+      stays small because the methodology's own complexity constraint names
+      "specialized training" as a red flag; a host without Lean still runs
+      the conformance tests from committed vectors.
+    children:
+      - 1550-c4ht
+      - 1550-8528
+      - 1550-a5jc
+      - 1550-n4eb
+      - 1550-7qz6
+      - 1550-jgve
+      - 1550-5i2w
+      - 1550-88nf
+      - 1550-sy27
+      - 1550-5sek
+      - 1550-jsvt
+      - 1550-gtcx
+    exit_criteria:
+      - 'on a Linux builder with the formal image, the lane prints one ok verdict naming the count of registered theorems, every one of L1-L7 and C1-C7 of the design note among them, each depending only on allowlisted axioms (pre-fix: no lane, no Lean on any host)'
+      - 'on a host without the image the same entry point prints a named skip and exits with a status distinct from ok (pre-fix: no entry point)'
+      - 'a Rust test and a Lua predicate test both consume one committed vector file emitted by the Lean model, and a one-value mutation of that file turns both red (pre-fix: three scoring definitions, no shared reference)'
+      - 'methodology/provenance.yaml carries the new claim strength with its limit, and each phase 1 and phase 2 check of validation_program in methodology/math-foundations.yaml names the theorem that proves it or says why none does'
+      - 'no shipped binary, image or installer references Lean or Kani, asserted by a check that fails when one is added (pre-fix: trivially true, unasserted)'
+      - 'every child order is completed or superseded and the deltas in openspec/changes/formal-verification-lane/ are synced into openspec/specs/'
+    unscoreable: milestone-scored-by-its-children — this row owns no fixture; each child names its own test or script; the operator decisions are recorded by 1550-c4ht.
+    next_action: >
+      Work that needs nothing from the operator and no new tooling first -
+      the two measured defects 1550-8528 and 1550-a5jc, and the research row
+      1550-sy27. In parallel draft the decision record 1550-c4ht for the
+      operator. The lane 1550-n4eb gates every Lean row.
+    notes: |
+      size: L
+      implementer_tier: opus
+      The website row 1550-gtcx cannot start until a STABLE release carries
+      the lane; the site footnotes the pinned stable tag, not trunk.
+    provenance: |
+      Filed by the yoga Fable 5.1 session on 2026-10-04, branch
+      work/1550-32d6 off linux-next 9dae9870b. Sources read: the methodology
+      files named in design note §12, the plan crate's obligation, fragments
+      and lua_predicate modules, and the sibling tillandsias.org checkout at
+      f6d57f5. Two external pages fetched (Lean install, Kani install). No
+      Lean or Kani was installed or run; the two defects were measured with
+      the trunk plan binary on scratch ledgers and a temporary test that was
+      restored.
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Milestone for the formal verification lane; twelve children and
+          one goal filed in the same fragment, two of them measured defects;
+          design note and OpenSpec change written alongside.
+
+  - packet_id: decision-record-names-the-machine-checked-model-claim-strength-and-rules-on-mathlib-kani-the-lanes-cadence-and-statement-review-signed-by-the-operator
+    order: 1550-c4ht
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.7
+    release_target: the-convergence-models-theorems-are-machine-checked-on-builders-only-and-the-rust-scorer-and-lua-graders-are-tested-against-vectors-the-proved-model-emits
+    pickup_role: any
+    capability_tags: [research, decision, methodology, formal-verification, operator-decision]
+    estimated_hours: 2
+    owned_files:
+      - plan/issues/formal-verification-lane-decision-record-2026-10.md
+    title: |
+      A Tlatoani-signable decision record answers the five open decisions of design note §10 — D1 the name and wording of a claim strength for machine-checked model theorems with its mandatory limit, D2 Mathlib or core Lean only, D3 whether Kani is adopted, D4 when the lane runs, D5 who reviews theorem statements — recording for each the options, the measured facts that bear on it and the operator's choice
+    context: |
+      The operator ruled R1-R3 (design note §1) and asked what Kani is
+      without ruling on it. D1 is a methodology change: claim_strength in
+      methodology/provenance.yaml has four values and none fits a theorem
+      about a model. D2 depends on a number nobody has — the size of a
+      pinned image with Mathlib's cache on a fleet builder — which
+      1550-n4eb measures; the record may leave D2 open until then and say
+      so. The recommendations in §10 are the filing session's, not rulings.
+    exit_criteria:
+      - 'plan/issues/formal-verification-lane-decision-record-2026-10.md lists D1-D5, each with options, the evidence cited, and either the operator choice with its date or the words OPEN and what it waits for'
+      - 'a signed event by the operator on this row names the record revision it signs'
+    unscoreable: |
+      a decision record signed by the operator. Its closure is a human signature event, which no litmus can produce or check.
+    depends_on: []
+    next_action: >
+      Draft the record from design note §10 and hand it to the operator.
+      D1 unblocks 1550-jsvt; D3 unblocks 1550-5sek; D2 waits for the image
+      size measured by 1550-n4eb.
+    notes: |
+      size: S
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Five open decisions; the operator has ruled only on placement,
+          website and durability.
+
+  - packet_id: a-falsified-status-descent-forgets-its-falsification-once-compacted-so-an-older-higher-rung-fragment-arriving-later-reverts-it-and-one-fragment-set-folds-to-two-statuses
+    order: 1550-8528
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.6
+    release_target: the-convergence-models-theorems-are-machine-checked-on-builders-only-and-the-rust-scorer-and-lua-graders-are-tested-against-vectors-the-proved-model-emits
+    pickup_role: any
+    capability_tags: [rust, plan, ledger, crdt, coordination, multi-host, compaction]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-plan/src/fragments.rs
+    title: |
+      The status fold is not equivalent across a compaction boundary when a falsification is involved — base completed, fragment A (verified, older) and fragment B (ready, newer, carrying a falsified event) fold to ready when both are present, but to verified when B is compacted first and A arrives afterwards — because the fold honours a descent only while the falsified event rides in the same fragment and the base arm compares against a compacted row with no falsification and no clock, so a returning host with a stale high rung silently re-closes work that was explicitly falsified
+    context: |
+      MEASURED on yoga 2026-10-04, binary build-id 0.1.0+579b43ef754b46de
+      (trunk 9dae9870b), scratch ledgers via the global --index flag
+      (design note §5 F1 has the table):
+        control, base alone                         -> completed
+        A + B both present                          -> ready
+        B alone                                     -> ready
+        B compacted ("compacted 1 fragment(s)"),
+          then A written, folded                    -> verified
+      Fragment A: status verified, ts 2020-01-01T00:00:00Z, host h1.
+      Fragment B: status ready, ts 2026-01-01T00:00:00Z, host h2, plus an
+      events entry of type falsified for the same packet.
+      MECHANISM, read from fold_with_sources, status_entry_wins and
+      fragment_falsifies in fragments.rs: a descent is accepted only when
+      the incoming fragment itself carries the falsified event; after
+      compaction the base row holds status ready and the base arm calls
+      status_entry_wins with empty timestamps and no falsification, where a
+      rung beats a working state unconditionally.
+      THE DATA TO DECIDE IS STILL THERE: the compacted base keeps the
+      falsified event with its ts under the packet's events. It is not
+      consulted.
+      NOT A DUPLICATE OF 1123-k3mq (completed, archived): that row made
+      compaction apply the ladder, and its load-bearing negative control —
+      with NO falsification an older verified still beats a newer completed
+      — is pinned by
+      compaction_keeps_the_ladder_teeth_an_older_higher_rung_still_wins.
+      This is the falsified case across a compaction boundary, which no
+      test names. Returning hosts with stale fragments are the expected
+      condition, which is what made 1123-k3mq p1.
+      THE REFERENCE IS THE UNCOMPACTED FOLD. Compaction is meant to be
+      invisible (fold's doc comment: any host can compact and get a result
+      every other host agrees with), so the defect is the inequivalence,
+      and ready is the answer the fold already gives. An implementer who
+      concludes the reference should instead be verified is changing what
+      a falsification means (650-dq6u) and must stop and ask the operator.
+      RELATED OPEN ROW 1073-xays (same file, same root, different defect):
+      compaction discards the winning status entry's host and ts because
+      the base schema has nowhere to put them, which leaves old claims
+      unattributable. That row is about WHO HOLDS A CLAIM; this one is
+      about WHICH STATUS THE FOLD ANSWERS. They are independently
+      schedulable — different exit criteria, and repair (a) below needs
+      nothing from 1073-xays — but 1073-xays shape (a) (status_host /
+      status_ts on the base row) would also supply the clock repair (b)
+      here needs, so whoever takes either should read the other first.
+      CANDIDATE REPAIRS (design note §5 F1): (a) the base arm consults the
+      packet's own falsified events and refuses an incoming non-falsified
+      rung whose ts is not later than the latest falsification — no new
+      field; (b) compaction writes the falsification clock beside the
+      status; (c) rule that an unseen older rung is new evidence and change
+      the uncompacted fold to agree.
+    exit_criteria:
+      - 'a test in the plan crate builds base completed, fragment A (verified, older) and fragment B (ready, newer, falsified) and asserts that folding A and B together and compacting B then folding A give the SAME status; pre-fix result: FAILS, ready versus verified (measured 2026-10-04 at 0.1.0+579b43ef754b46de)'
+      - 'the same equivalence is asserted with the order reversed (A compacted first, then B arrives) and for a falsified descent to a lower RUNG rather than to a working state; pre-fix result: not measured'
+      - 'NEGATIVE CONTROL, load-bearing: compaction_keeps_the_ladder_teeth_an_older_higher_rung_still_wins and higher_rung_wins_regardless_of_timestamp_order still pass, so without a falsification an older higher rung still beats a newer lower one; pre-fix result: PASSES and must still pass'
+      - 'a rung written LATER than the falsification still climbs (a re-verification after the falsification is not refused); pre-fix result: passes uncompacted, not measured across compaction'
+      - 'the rule that survives is stated where a reader meets it, in the doc comments of status_entry_wins and of the base arm, including what a falsification does to rungs older than itself'
+    verifiable_closure: |
+      cargo test -p tillandsias-plan compaction_then_late_arrival passes on
+      the fixed tree, and the first criterion's test fails on trunk
+      9dae9870b with ready versus verified.
+    depends_on: []
+    next_action: >
+      Write the failing test first from the measured fixture (design note
+      §5 F1), then repair (a) unless reading the base arm shows a reason it
+      cannot work. Keep 1123-k3mq's negative control green.
+    notes: |
+      size: S
+      implementer_tier: opus
+      Found by trying to STATE compaction equivalence as a theorem (S3 of
+      the design note), not by a prover. 1550-5i2w proves it once this is
+      fixed.
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Measured on scratch ledgers with the trunk binary; one fragment
+          set, two folded statuses, depending only on compaction timing.
+
+  - packet_id: refiner-refine-reports-a-valid-monotone-dependency-chain-of-64-or-more-rules-as-unstable-because-its-iteration-bound-is-a-constant-not-derived-from-the-rule-set
+    order: 1550-a5jc
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.7
+    release_target: the-convergence-models-theorems-are-machine-checked-on-builders-only-and-the-rust-scorer-and-lua-graders-are-tested-against-vectors-the-proved-model-emits
+    pickup_role: any
+    capability_tags: [rust, plan, obligation-lattice, convergence, methodology]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/obligation.rs
+      - crates/tillandsias-plan/src/obligation_props.rs
+    title: |
+      Refiner::refine iterates at most a hard-coded 64 times, while the finite-stabilisation theorem it implements bounds the strict steps by the lattice height (six per obligation) or the rule count and needs one further iteration to observe the fixed point, so a chain of 64 upward-closed rules reaches its fixed point and is reported Unstable, and longer chains are cut short — a closed failure, but one the existing test comment says cannot happen
+    context: |
+      MEASURED on yoga 2026-10-04 at trunk 9dae9870b with a temporary test
+      appended to obligation_props.rs (restored afterwards): rule 0 is
+      Rule::always(r000, Declared); rule i raises obligation i to Declared
+      when obligation i-1 is at least Declared. Every predicate is upward
+      closed, so the set is monotone and inflationary.
+        n=10  Fixed steps=10          declared 10/10
+        n=63  Fixed steps=63          declared 63/63
+        n=64  Unstable bound=64       declared 64/64   <- IS the fixed point
+        n=65  Unstable bound=64       declared 64/65
+        n=70  Unstable bound=64       declared 64/70
+      The doc comment on unstable_outcome_is_distinguishable_from_fixed
+      says no rule set can reach the refusal ("rules only raise, the chain
+      is finite") and so only constructs the value. The measurement shows
+      it is reachable by a valid rule set.
+      THE BOUND THE PROOF GIVES (design note §4.2 L5): each strict step
+      makes at least one rule take effect for the last time, and each
+      obligation can rise at most six times, so strict steps are at most
+      min(6 x obligations, rules); one more iteration observes equality.
+      Severity is low: Refiner has no production caller today (1550-sy27)
+      and the failure never reports a false fixed point.
+    exit_criteria:
+      - 'a test builds the n-rule dependency chain for n in 63, 64, 65 and 70 and asserts Fixed with every obligation declared; pre-fix result: 63 Fixed, 64 Unstable with 64 of 64 declared, 65 Unstable 64 of 65, 70 Unstable 64 of 70 (measured 2026-10-04)'
+      - 'the iteration bound is derived from the rule set and its derivation is stated in the doc comment of refine'
+      - 'Unstable is either removed as unreachable, or kept for a case a test actually reaches; the comment claiming it is reachable only in principle is corrected either way'
+      - 'the property tests in obligation_props.rs still pass, including the_suite_rejects_a_deliberately_wrong_model'
+    verifiable_closure: |
+      cargo test -p tillandsias-plan long_monotone_chain passes on the
+      fixed tree and fails on trunk 9dae9870b at n=64.
+    depends_on: []
+    next_action: >
+      Write the chain test from the measured shape, derive the bound, fix
+      the comment.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+      Rule.applies is a plain fn pointer, so a chain needs one
+      non-capturing closure per rule; the measurement generated them as
+      literals.
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Measured with a temporary test; the constant 64 where the theorem
+          has a function of the input.
+
+  - packet_id: a-builder-only-formal-lane-checks-every-registered-lean-theorem-in-a-pinned-image-refuses-sorry-and-unlisted-axioms-and-prints-a-named-skip-where-the-image-is-absent
+    order: 1550-n4eb
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.7
+    release_target: the-convergence-models-theorems-are-machine-checked-on-builders-only-and-the-rust-scorer-and-lua-graders-are-tested-against-vectors-the-proved-model-emits
+    pickup_role: linux
+    capability_tags: [formal-verification, lean, podman, toolbox, builder, images, gate]
+    estimated_hours: 8
+    owned_files:
+      - formal/
+      - images/formal/
+      - scripts/formal-check.sh
+      - scripts/test-formal-check.sh
+    title: |
+      One entry point on a Linux builder builds the Lean project under formal/ inside a pinned OCI image run by podman, reads a registry of theorem names, and prints ok with the theorem count only when every registered theorem exists and depends on allowlisted axioms alone; a proof using sorry, a user-declared axiom or native_decide is refused by name; a host without the image prints a named skip with a non-ok status; the image is never part of the builder toolbox's init set or of any shipped artifact; today no host has Lean and no such entry point exists
+    context: |
+      Ruling R1 (design note §1, §7): builder infrastructure only,
+      toolbox / podman, transparent on Linux hosts, nothing in the user
+      runtime. The builder toolbox init set (_toolbox_initialized in
+      scripts/with-tillandsias-builder.sh) is paid by every host; a proof
+      toolchain is a separate image pulled on first use of the lane.
+      THE TRAP THIS ROW EXISTS FOR (design note §3.1): in Lean a proof
+      containing sorry COMPILES, with a warning, and depends on the axiom
+      sorryAx. A lane that reads only the build's exit status is green for
+      an unproved theorem. The verdict must come from the axioms each
+      registered theorem depends on (the #print axioms facility), against
+      an allowlist of propext, Classical.choice and Quot.sound.
+      Read on 2026-10-04 at lean-lang.org/install/manual: the installer is
+      elan (curl https://elan.lean-lang.org/elan-init.sh -sSf | sh) and a
+      project pins its toolchain in a lean-toolchain file. Everything else
+      about lake and Mathlib's cache in the design note is prior knowledge
+      to re-verify here.
+      THE NUMBER DECISION D2 WAITS FOR: the size of the image with and
+      without Mathlib's prebuilt cache, and the cold and warm wall time of
+      the lane on yoga. Record both in this row's events.
+      NOT in ./build.sh --check. No Python. One gate per host still
+      applies: the lane must not run concurrently with a gate.
+    exit_criteria:
+      - 'scripts/test-formal-check.sh exits 0 on a host with the image: the lane over a fixture project with one honestly proved theorem prints ok naming 1 theorem; the same theorem proved with sorry is refused naming the theorem and sorryAx; a theorem resting on a user-declared axiom is refused naming that axiom; a registry entry naming a theorem that does not exist is refused (pre-fix: no lane)'
+      - 'on a host without the image the lane prints a skip verdict that names the missing image and exits with a status that is neither 0 nor the refusal status; the fixture asserts the three statuses are distinct'
+      - 'the image is pinned by digest and the Lean toolchain by a lean-toolchain file; a rebuild of the image from its definition on yoga reproduces a working lane'
+      - 'events on this row record the image size with and without Mathlib and the cold and warm wall time of the lane on yoga, each with the command that measured it'
+      - 'a check fails when any path under images/ other than images/formal/, any installer, or any Cargo manifest of a shipped crate references Lean, elan, lake or Kani; pre-fix: nothing asserts it'
+    verifiable_closure: |
+      bash scripts/test-formal-check.sh exits 0 on a host with the image;
+      each of its four arms is shown red by removing the corresponding
+      check, proving the arm reaches it.
+    depends_on: []
+    next_action: >
+      Build the image definition and a two-theorem fixture project first;
+      get the sorry arm red before writing any real theorem. Measure the
+      sizes D2 needs.
+    notes: |
+      size: M
+      implementer_tier: opus
+      Lean has no aarch64-specific concern here; Kani does (x86_64 Linux
+      and macOS only) and is 1550-5sek's.
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          The lane, its image and its registry; the axiom check is the
+          point.
+
+  - packet_id: lean-proves-the-obligation-lattice-and-that-refinement-is-a-closure-operator-that-stabilises-within-a-bound-derived-from-the-rule-set-whenever-every-rule-predicate-is-upward-closed
+    order: 1550-7qz6
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.7
+    release_target: the-convergence-models-theorems-are-machine-checked-on-builders-only-and-the-rust-scorer-and-lua-graders-are-tested-against-vectors-the-proved-model-emits
+    pickup_role: linux
+    capability_tags: [formal-verification, lean, obligation-lattice, convergence, methodology]
+    estimated_hours: 10
+    owned_files:
+      - formal/Tillandsias/Lattice.lean
+      - formal/Tillandsias/Refine.lean
+    title: |
+      A Lean model of the seven-state evidence chain, componentwise spec states, rules and the simultaneous step of Refiner::step proves L1-L7 of the design note — the step is inflationary for every rule set, monotone when every predicate is upward closed, the committed wrong model is not monotone, a strict chain has at most six steps per obligation, iteration stabilises within min(6n, rules) strict steps, the limit is the least fixed point above the start, and refine is then monotone, inflationary and idempotent — replacing the prose proofs of Proposition 1 and Theorem 3 on the website's Level 5 page
+    context: |
+      Statements and the methodology checks they discharge: design note
+      §4.2; statement shapes §4.3 (NOT compiled). The model must mirror the
+      Rust exactly where it matters: every rule reads the OLD state in one
+      step (Refiner::step evaluates applies on state, not on next), and a
+      rule raises its obligation to max(current, to).
+      L3 mirrors non_monotone_rules in obligation_props.rs (raise req-b to
+      RuntimeObserved when req-a == Declared) so the Lean negative control
+      and the Rust one are the same model.
+      L5's bound is the one 1550-a5jc makes the code use; if the proof
+      finds a different bound, that row's criterion follows the proof.
+      STATEMENT REVIEW COMES FIRST (decision D5): the operator reads the
+      statements before any proof is written. A vacuous or mis-modelled
+      theorem is green and worthless.
+    exit_criteria:
+      - 'the formal lane reports ok with L1-L7 registered, each depending only on allowlisted axioms (pre-fix: prose on the Level 5 page and sampled tests)'
+      - 'an event on this row records the operator review of the seven statements, by date, before the proofs landed'
+      - 'L3 exhibits the same witness pair the Rust search find_monotonicity_counterexample returns for non_monotone_rules, or the row says why they differ'
+      - 'mutating the model step to read the NEW state, or dropping the upward-closure hypothesis from L2, makes the lane refuse — recorded as the command and its verdict'
+    verifiable_closure: |
+      bash scripts/formal-check.sh prints its ok verdict with L1-L7 in the
+      registry on a host with the image; the two mutations of the fourth
+      criterion each turn it into a refusal.
+    depends_on:
+      - a-builder-only-formal-lane-checks-every-registered-lean-theorem-in-a-pinned-image-refuses-sorry-and-unlisted-axioms-and-prints-a-named-skip-where-the-image-is-absent
+    next_action: >
+      Write the seven statements with proofs left out, submit them for
+      operator review through 1550-c4ht's D5, then prove.
+    notes: |
+      size: M
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Lattice and refinement theorems L1-L7.
+
+  - packet_id: lean-proves-the-centicolon-ranking-properties-bounds-residual-identity-antitone-residual-per-obligation-preservation-the-conditional-cycle-bound-and-that-the-percentage-is-gameable-where-the-residual-is-not
+    order: 1550-jgve
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.7
+    release_target: the-convergence-models-theorems-are-machine-checked-on-builders-only-and-the-rust-scorer-and-lua-graders-are-tested-against-vectors-the-proved-model-emits
+    pickup_role: linux
+    capability_tags: [formal-verification, lean, centicolon, ranking-function, methodology]
+    estimated_hours: 8
+    owned_files:
+      - formal/Tillandsias/CentiColon.lean
+    title: |
+      A Lean model of centicolon_function — weights, per-obligation bars, tombstoned obligations leaving numerator and denominator — proves C1-C7 of the design note: earned never exceeds the denominator, residual plus earned equals it, more evidence never lowers earned or raises the residual under fixed scope, preserving each earned obligation implies residual non-increase while the converse fails with a witness, the residual reaches zero within K times R0 cycles under the stated progress premise, a tombstone is a scope change, and adding an already-earned obligation leaves the residual unchanged while raising the percentage
+    context: |
+      Statements: design note §4.2. Discharges every phase 2 check of
+      validation_program in methodology/math-foundations.yaml except
+      same_frozen_state_same_router_same_weights_same_score, which holds by
+      construction for a function and is what the Cacheable predicate class
+      protects in production.
+      C4 is the specification of an ENFORCING ratchet: it must compare per
+      obligation, because a non-increasing total can hide one loss behind
+      one gain. The advisory ratchet today (1395-ue3i) compares a snapshot;
+      this row specifies, it does not change the ratchet.
+      C5 is CONDITIONAL and must be stated as such everywhere it is cited:
+      the progress premise is an empirical hypothesis about the project,
+      not something Lean establishes. The website retracted an overclaim of
+      exactly this kind on 2026-09-28 (finding 1b27ef15 in the site's
+      issues.d).
+      C7 settles anti_gaming.adding_trivial_requirements_must_not_inflate_project_score
+      in methodology/proximity.yaml: true of the residual, false of the
+      percentage. 1550-jsvt carries that into the methodology text.
+      The model here is the BINARY contract (earned at a bar). The full
+      policy in proximity.yaml — multipliers, evidence credits, six caps,
+      sixteen penalties — is not modelled by this row; whether it is even
+      monotone is an open question the row should record, not answer by
+      assumption.
+    exit_criteria:
+      - 'the formal lane reports ok with C1-C7 registered, each depending only on allowlisted axioms (pre-fix: none checked)'
+      - 'C4 and C7 each include a concrete witness as a checked example, not only an existence statement'
+      - 'an event on this row records the operator review of the statements before the proofs landed'
+      - 'the row records, in an event, whether the full weighted policy of methodology/proximity.yaml was examined and what is known about its monotonicity, or files that as its own row'
+    verifiable_closure: |
+      bash scripts/formal-check.sh prints its ok verdict with C1-C7 in the
+      registry on a host with the image; removing the fixed-scope
+      hypothesis from C3 turns it into a refusal.
+    depends_on:
+      - a-builder-only-formal-lane-checks-every-registered-lean-theorem-in-a-pinned-image-refuses-sorry-and-unlisted-axioms-and-prints-a-named-skip-where-the-image-is-absent
+    next_action: >
+      Statements first, operator review, then proofs. C5 is a short
+      induction; C4 and C7 need witnesses.
+    notes: |
+      size: M
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          CentiColon ranking theorems C1-C7.
+
+  - packet_id: lean-models-the-status-ladder-fold-proves-the-sorted-fold-is-a-function-of-the-fragment-set-and-proves-compaction-equivalent-to-folding-everything-at-once
+    order: 1550-5i2w
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.7
+    release_target: the-convergence-models-theorems-are-machine-checked-on-builders-only-and-the-rust-scorer-and-lua-graders-are-tested-against-vectors-the-proved-model-emits
+    pickup_role: linux
+    capability_tags: [formal-verification, lean, plan, ledger, crdt, compaction]
+    estimated_hours: 10
+    owned_files:
+      - formal/Tillandsias/Fold.lean
+    title: |
+      A Lean model of the status decision (closure rungs, lateral terminals, working states, the falsified escape, last-writer-wins at equal rank) and of the sorted fold over base plus fragments proves S1-S3 of the design note: the pairwise decision is not a commutative join, the fold after sorting by timestamp and filename is nonetheless a function of the fragment set, and compacting any subset then folding the rest equals folding everything at once — the last being false on trunk today and provable only after 1550-8528
+    context: |
+      The fold's determinism does not come from the algebra people assume.
+      status_entry_wins is not symmetric (a falsified lower rung beats a
+      higher one whichever is newer; a higher rung beats a lower one
+      whichever is newer), so convergence rests on the canonical sort and
+      on compaction being invisible. S2 states the first; S3 the second.
+      S3 was the statement whose attempt found 1550-8528.
+      The website's Level 5 page says commutativity and idempotence of the
+      fold are tested by name and associativity is not; S2 and S3 are the
+      properties that actually carry the claim.
+      Model only the status channel and the event set; the other fields
+      are plain last-writer-wins registers and grow-only sets whose
+      algebra is standard.
+    exit_criteria:
+      - 'the formal lane reports ok with S1-S3 registered, each depending only on allowlisted axioms (pre-fix: none checked; S3 false on trunk 9dae9870b)'
+      - 'the model of the status decision is checked against the Rust on every pair of statuses, both falsified flags and the three timestamp orders, through the vector mechanism of 1550-88nf or an exhaustive Rust test, so the proof is about the function the code runs'
+      - 'S1 carries its witness as a checked example'
+    verifiable_closure: |
+      bash scripts/formal-check.sh prints its ok verdict with S1-S3 in the
+      registry on a host with the image, and cargo test -p tillandsias-plan
+      status_decision_matches_the_model passes.
+    depends_on:
+      - a-builder-only-formal-lane-checks-every-registered-lean-theorem-in-a-pinned-image-refuses-sorry-and-unlisted-axioms-and-prints-a-named-skip-where-the-image-is-absent
+      - a-falsified-status-descent-forgets-its-falsification-once-compacted-so-an-older-higher-rung-fragment-arriving-later-reverts-it-and-one-fragment-set-folds-to-two-statuses
+    next_action: >
+      Wait for 1550-8528's repaired rule; model THAT rule. S1 and S2 can be
+      stated and proved before it lands.
+    notes: |
+      size: M
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Fold theorems S1-S3; S3 waits for the compaction defect.
+
+  - packet_id: the-proved-lean-model-emits-exhaustive-expected-score-vectors-that-the-rust-scorer-and-a-pure-lua-scoring-predicate-are-both-tested-against-and-a-linux-check-refuses-stale-vectors
+    order: 1550-88nf
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.7
+    release_target: the-convergence-models-theorems-are-machine-checked-on-builders-only-and-the-rust-scorer-and-lua-graders-are-tested-against-vectors-the-proved-model-emits
+    pickup_role: any
+    capability_tags: [formal-verification, lean, rust, lua, centicolon, conformance, predicates]
+    estimated_hours: 8
+    owned_files:
+      - formal/vectors/
+      - crates/tillandsias-plan/src/obligation_vectors.rs
+      - scripts/lua/centicolon-score.lua
+      - scripts/test-centicolon-vectors.sh
+    title: |
+      The Lean model is run to emit a committed vector file — every spec state over a small obligation set with weights, bars and tombstone patterns, each with its expected earned, denominator, residual and regime — and one Rust test over centicolon_function and one test of a pure, cacheable Lua scoring predicate consume the same file, so the proved model becomes the single scoring definition both implementations answer to; hosts without Lean run the tests from the committed file and a Linux check regenerates it and refuses a difference; today the Lua graders, the Rust scorer and methodology/proximity.yaml each define the score differently and nothing compares them
+    context: |
+      Design note §6.2. This is the model-to-code link and it is a TEST,
+      not a proof: it shows the implementations agree with the model on the
+      enumerated domain and nothing more. Say so wherever it is cited.
+      THE LUA SIDE NEEDS A SEAM. Today's graders
+      (scripts/lua/centicolon-extract.lua, centicolon-grade-static.lua,
+      centicolon-grade-observed.lua, joined by scripts/centicolon-grade.sh
+      into ok:centicolon-grade:R=... satisfied=... denominator=...) take
+      repository bytes and a results log, not an abstract state. The
+      conformance point is the arithmetic over the per-obligation rung
+      list. If that arithmetic is not already a function of the rung list,
+      factoring it into one cacheable predicate is this row's first step —
+      and the predicate class (Cacheable: no shell, no clock) is what makes
+      it a function in production.
+      The vectors are emitted by Lean itself. No Python, and no jq at new
+      call sites (check-jq-callsite-ratchet); read JSON with
+      tillandsias-plan json get.
+      STALENESS IS THE RISK OF A COMMITTED ARTIFACT: the Linux check that
+      regenerates and compares is what keeps a host without Lean honest.
+    exit_criteria:
+      - 'scripts/test-centicolon-vectors.sh exits 0: the Rust scorer and the Lua scoring predicate each reproduce every vector (pre-fix: no vectors, no shared reference)'
+      - 'changing one expected residual in the vector file by one turns BOTH the Rust and the Lua arm red, each naming the vector'
+      - 'on a host with the formal image a check regenerates the vectors and refuses when they differ from the committed file; on a host without it the check prints the lane skip, not ok'
+      - 'the vector file states the domain it enumerates (obligation count, weights, bars, tombstone patterns) in its own header, so a reader knows what agreement does and does not cover'
+      - 'the Lua scoring predicate runs under the cacheable class; an attempt to give it a shell or clock verb fails the fixture'
+    verifiable_closure: |
+      bash scripts/test-centicolon-vectors.sh exits 0 on the fixed tree;
+      the one-value mutation of the second criterion turns it red in both
+      arms.
+    depends_on:
+      - lean-proves-the-centicolon-ranking-properties-bounds-residual-identity-antitone-residual-per-obligation-preservation-the-conditional-cycle-bound-and-that-the-percentage-is-gameable-where-the-residual-is-not
+    next_action: >
+      Decide the enumerated domain with 1550-jgve's implementer; find
+      whether the Lua arithmetic is already a function of the rung list
+      before factoring anything.
+    notes: |
+      size: M
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          One scoring definition, tested in both implementations.
+
+  - packet_id: the-live-refinement-operator-is-named-rule-by-rule-and-each-rule-predicate-is-checked-upward-closed-so-the-closure-theorem-applies-to-what-actually-runs
+    order: 1550-sy27
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.7
+    release_target: the-convergence-models-theorems-are-machine-checked-on-builders-only-and-the-rust-scorer-and-lua-graders-are-tested-against-vectors-the-proved-model-emits
+    pickup_role: any
+    capability_tags: [research, obligation-lattice, centicolon, lua, predicates, convergence, methodology]
+    estimated_hours: 6
+    owned_files:
+      - plan/issues/live-refinement-operator-2026-10.md
+    title: |
+      Refiner has no production caller — a search of crates for Refiner::new, .refine( and monotone_rules() outside obligation.rs and obligation_props.rs returns nothing — so the finite-stabilisation theorem is about an operator that only a three-rule fixture exercises; this row names what raises obligation states in production (tillandsias-plan score-checks and the Lua graders), writes each state-raising decision as a rule with its predicate, records for each whether the predicate is upward closed in evidence, and separates genuine refinement steps from evidence invalidation, which is a non-monotone transition the model already names
+    context: |
+      Design note §5 F4 and §6.2. The website's Level 5 page carries this
+      as a RED: the generative tests "exercise a committed rule set rather
+      than every live validator". The closure theorem (L2, L7) reduces the
+      global question to a LOCAL one per rule — is its predicate upward
+      closed — which is checkable exhaustively for a pure predicate over a
+      small domain. But there is nothing to check until the live rules are
+      written down.
+      KNOWN INPUTS: score-checks turns a passing CI check into
+      PositivelyTested (the comment on Weights in obligation.rs);
+      centicolon-grade-observed.lua earns positively_tested from the LATEST
+      results record for the same digest, and a later fail for the same
+      bytes un-earns it. That last move is not a refinement step: it is
+      evidence invalidation, which math-foundations.yaml lists among the
+      explicitly non-monotone transitions. The deliverable must say which
+      of the live decisions are which.
+      This is research: the output is a table and, where a decision turns
+      out not to be upward closed, a filed row — not a code change.
+    exit_criteria:
+      - 'plan/issues/live-refinement-operator-2026-10.md lists every production decision that raises or lowers an obligation state, each cited by symbol, written as a rule (obligation, target state, predicate) or classified as evidence invalidation or scope change'
+      - 'for each rule the document records upward closed, not upward closed with a witness, or undetermined with the reason; each not-upward-closed or undetermined entry has its own filed row'
+      - 'the document states whether Refiner should gain a production caller, be fed the live rules in a test, or be retired, with the reason; the choice is filed as its own row'
+    unscoreable: |
+      a research inventory: its deliverable is a classification table with citations and the rows it files; the properties it identifies are scored by those rows, not by this one.
+    depends_on: []
+    next_action: >
+      Read score-checks and the three centicolon Lua graders end to end;
+      needs no new tooling and nothing from the operator.
+    notes: |
+      size: M
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          The theorem's operator has no production caller; name the live
+          one.
+
+  - packet_id: kani-proves-the-rust-scorers-arithmetic-for-every-weight-and-evidence-pattern-up-to-a-stated-bound-and-its-unchecked-u64-sums-are-made-explicit
+    order: 1550-5sek
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.7
+    release_target: the-convergence-models-theorems-are-machine-checked-on-builders-only-and-the-rust-scorer-and-lua-graders-are-tested-against-vectors-the-proved-model-emits
+    pickup_role: linux
+    capability_tags: [formal-verification, kani, rust, centicolon, model-checking, builder]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-plan/src/score_arith.rs
+      - crates/tillandsias-plan/src/obligation_kani.rs
+      - scripts/formal-kani.sh
+    title: |
+      Kani proof harnesses over the scorer's arithmetic, factored out of the string-keyed map into a function over fixed-size arrays, prove for every weight and every evidence and tombstone pattern up to a stated obligation count that earned never exceeds the denominator, that residual equals denominator minus earned, that raising evidence never lowers earned, and that a tombstone yields the broken regime; the unchecked u64 additions in centicolon_function, which wrap in a release build because the workspace sets no overflow-checks, are replaced by checked arithmetic or a stated bound on weights; the harnesses compile out of every normal build and run only in the formal lane
+    context: |
+      BLOCKED ON DECISION D3 (1550-c4ht): the operator asked what Kani is
+      and has not ruled on adopting it. Do not claim this row to implement
+      it before D3 is signed.
+      Design note §3.2 and §5 F3. Read on 2026-10-04 at
+      model-checking.github.io/kani/install-guide.html: hosts supported are
+      x86_64 Linux and x86_64 / aarch64 macOS; install is cargo install
+      --locked kani-verifier then cargo kani setup, which downloads the
+      Kani compiler and dependencies under ~/.kani; requirement Rust 1.58
+      or newer through rustup. No aarch64 Linux, no Windows.
+      F3 IS BY SOURCE READING, NOT RUN: centicolon_function does
+      denominator += weight and earned += weight on u64, and
+      [profile.release] in the workspace Cargo.toml has no overflow-checks
+      line. Unreachable at real weights; it is the first thing an
+      arbitrary-weight harness reports.
+      EXPECTED, NOT OBSERVED: harnesses sit behind cfg(kani), and the
+      workspace may need kani declared as a known cfg so a -D warnings
+      clippy run does not fail on unexpected_cfgs. Kani is slow on
+      BTreeMap with String keys, which is why the arithmetic is factored
+      first. Record what the installed bundle contains, including whether
+      it carries a Python interpreter, in an event.
+      Kani is BOUNDED: "for all inputs up to N obligations". State N in
+      the harness and wherever the result is cited.
+      FILES: the factored arithmetic and the harnesses are NEW modules
+      (owned_files); centicolon_function in obligation.rs changes only to
+      call the factored function. 1550-a5jc edits Refiner::refine in the
+      same file — different function; land in sequence if both are in
+      flight. The Kani arm is its own script that the lane entry point of
+      1550-n4eb calls.
+    exit_criteria:
+      - 'the formal lane, on an x86_64 Linux builder with the image, reports the Kani harnesses verified and names the obligation-count bound they hold for (pre-fix: no harness)'
+      - 'a harness over arbitrary u64 weights reports no overflow on the fixed tree and reports one on trunk 9dae9870b, with the counterexample recorded in an event'
+      - 'removing the tombstone exclusion from the denominator in the factored function makes a harness fail with a counterexample'
+      - 'cargo clippy -p tillandsias-plan --all-targets -- -D warnings and the ordinary cargo test are unchanged by the harnesses; no kani symbol is present in a normal build'
+      - 'an event records what cargo kani setup installed and its size on yoga'
+    verifiable_closure: |
+      bash scripts/formal-check.sh prints its ok verdict including the Kani
+      harness count on an x86_64 Linux builder with the image; the mutation
+      of the third criterion turns it into a refusal.
+    depends_on:
+      - a-builder-only-formal-lane-checks-every-registered-lean-theorem-in-a-pinned-image-refuses-sorry-and-unlisted-axioms-and-prints-a-named-skip-where-the-image-is-absent
+      - decision-record-names-the-machine-checked-model-claim-strength-and-rules-on-mathlib-kani-the-lanes-cadence-and-statement-review-signed-by-the-operator
+    next_action: >
+      BLOCKED ON A DECISION - DO NOT CLAIM THIS TO IMPLEMENT IT until D3 is
+      signed on 1550-c4ht. Then factor the arithmetic and write the
+      overflow harness first.
+    notes: |
+      size: M
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Bounded proof on the real Rust; waits for the operator's ruling
+          on adopting Kani.
+
+  - packet_id: methodology-records-machine-checked-model-claims-at-their-own-strength-with-a-mandatory-limit-names-the-theorem-behind-each-validation-check-and-a-provenanced-cheatsheet-explains-the-formal-lane
+    order: 1550-jsvt
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.7
+    release_target: the-convergence-models-theorems-are-machine-checked-on-builders-only-and-the-rust-scorer-and-lua-graders-are-tested-against-vectors-the-proved-model-emits
+    pickup_role: any
+    capability_tags: [methodology, provenance, formal-verification, cheatsheet, openspec, centicolon]
+    estimated_hours: 5
+    owned_files:
+      - methodology/provenance.yaml
+      - methodology/math-foundations.yaml
+      - methodology/proximity.yaml
+      - docs/cheatsheets/formal-verification-lane.md
+      - openspec/specs/formal-model-verification/spec.md
+      - openspec/specs/methodology-accountability/spec.md
+    title: |
+      methodology/provenance.yaml gains the claim strength the operator names in decision D1 for a theorem machine-checked about a model, defined with its limit (proved of the model, silent about the code and the world), every phase 1 and phase 2 check of validation_program in methodology/math-foundations.yaml names the registered theorem that proves it or says why none does, the anti-gaming rule about trivial requirements is restated as true of the residual and false of the percentage, a cheatsheet with provenance explains the lane and its vocabulary, and the two OpenSpec deltas are synced into openspec/specs with requirement identifiers
+    context: |
+      Design note §6.1. claim_strength today: observed_project_practice,
+      external_analogy, adopted_standard, project_invariant. None fits: a
+      machine-checked theorem is stronger than litmus evidence about the
+      MODEL and says nothing about the code, so folding it into
+      project_invariant would overclaim and leaving it as external_analogy
+      would underclaim.
+      The four words to keep apart everywhere (methodology, cheatsheet,
+      website): proved (of the model), model-checked (of the code, up to a
+      bound), tested, empirical.
+      A methodology change needs the operator (D1). Weight and claim
+      changes cite the event that motivated them
+      (proximity.calibration.rule); cite the decision record.
+      The synced specs need req-id comments (check-requirement-ids); the
+      deltas under openspec/changes/formal-verification-lane/ have none by
+      design.
+      DO NOT upgrade any claim's strength before its theorem is registered
+      and green in the lane: a strength that names a proof which does not
+      exist is the 2026-09-28 retraction again.
+    exit_criteria:
+      - 'methodology/provenance.yaml defines the new strength with the limit sentence, and no claim carries it unless the formal lane reports its theorem (asserted by a check that reads the theorem registry; pre-fix: no such strength)'
+      - 'each phase 1 and phase 2 entry of validation_program names a theorem id from the registry or the words not-a-theorem with the reason; phase 3 is unchanged'
+      - 'the anti-gaming text in methodology/proximity.yaml says the residual is unchanged by adding an already-earned obligation and the percentage is not, citing C7'
+      - 'docs/cheatsheets/formal-verification-lane.md exists with provenance URLs and access dates, is bound per the cheatsheet rules, and explains the four words and the sorry trap'
+      - 'openspec/specs/formal-model-verification/spec.md exists and openspec/specs/methodology-accountability/spec.md carries the added requirement, every requirement with a unique req-id; ./build.sh --check is green'
+    verifiable_closure: |
+      bash scripts/test-formal-claims-registered.sh exits 0 on the fixed
+      tree: every claim at the new strength resolves to a registered
+      theorem; giving a claim the new strength with an unregistered theorem
+      name turns it red.
+    depends_on:
+      - decision-record-names-the-machine-checked-model-claim-strength-and-rules-on-mathlib-kani-the-lanes-cadence-and-statement-review-signed-by-the-operator
+      - lean-proves-the-obligation-lattice-and-that-refinement-is-a-closure-operator-that-stabilises-within-a-bound-derived-from-the-rule-set-whenever-every-rule-predicate-is-upward-closed
+      - lean-proves-the-centicolon-ranking-properties-bounds-residual-identity-antitone-residual-per-obligation-preservation-the-conditional-cycle-bound-and-that-the-percentage-is-gameable-where-the-residual-is-not
+    next_action: >
+      Wait for D1 and for at least the lattice and CentiColon theorems to
+      be green; then edit the methodology and sync the specs in one landing.
+    notes: |
+      size: M
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Methodology wiring; no strength is upgraded before its theorem is
+          green.
+
+  - packet_id: tillandsias-org-level-5-cites-checked-theorem-names-and-separates-proved-model-checked-tested-and-empirical-claims-once-a-stable-release-carries-the-formal-lane
+    order: 1550-gtcx
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.7
+    release_target: the-convergence-models-theorems-are-machine-checked-on-builders-only-and-the-rust-scorer-and-lua-graders-are-tested-against-vectors-the-proved-model-emits
+    pickup_role: any
+    capability_tags: [website, tillandsias-org, documentation, formal-verification, level-5]
+    estimated_hours: 5
+    owned_files: []
+    title: |
+      In the sibling tillandsias.org repository, once the pinned STABLE release contains the formal lane, the Level 5 page cites registered theorem names for Proposition 1, Theorem 3 and the conditional cycle bound instead of carrying prose proofs, narrows the RED about generative tests to what remains (the per-rule check of the live operator), narrows the scoring REDs only if the shared vectors have landed, adds a legend separating proved, model-checked, tested and empirical, and leaves the progress premise, the zero floor, the absent Galois connection, the withdrawn strong-law citation and the 2026-09-28 retraction exactly as they are
+    context: |
+      Ruling R2. Design note §8. The site footnotes the pinned stable tag
+      (../tillandsias.org/skills/update-website/SKILL.md), so nothing on
+      the site may describe the lane until a stable release carries it; a
+      fix present only in a daily goes on a PATH line, not into a claim.
+      At site commit f6d57f5 (pin v56.9.27.2), in
+      docs/matrix/level-5-phd.md: the RED on generative tests is at line
+      92, the CentiColon RED at 155, the shell-scorer RED at 362, and the
+      uninstrumented complexity constraint at 365. Line numbers will have
+      moved; find them by their text.
+      The site has its own process: an OpenSpec change under
+      openspec/changes/ there (the pattern is level-5-centicolon-guarantee),
+      findings appended to issues.d through its file-issue skill, never a
+      rewritten fragment, and its audit-site-claims skill for every
+      footnote. The site's history contains a retraction of an enforcement
+      and fixed-point overclaim (finding 1b27ef15); a "formally verified"
+      headline that drops the words "of the model" would repeat it.
+      owned_files is empty because every path is in the other repository.
+    exit_criteria:
+      - 'the site build passes its checked build against the stable pin with the Level 5 footnotes for Proposition 1, Theorem 3 and the cycle bound resolving to files under formal/ at that pin'
+      - 'the legend of the four words appears on Level 5 and the CentiColons page uses them consistently; no sentence says verified or proved without naming the layer'
+      - 'the site ledger carries an appended event recording the change, and no existing fragment is rewritten'
+      - 'the sections on the progress premise, the zero floor, the Galois connection and the strong law are unchanged except for footnote renumbering, shown by a diff in the audit note'
+    unscoreable: |
+      the deliverable lives in the sibling tillandsias.org repository and is verified by that repository's own checked build and audit skills; nothing in this tree can score it.
+    depends_on:
+      - methodology-records-machine-checked-model-claims-at-their-own-strength-with-a-mandatory-limit-names-the-theorem-behind-each-validation-check-and-a-provenanced-cheatsheet-explains-the-formal-lane
+    next_action: >
+      Do nothing until a stable release contains formal/ and the
+      methodology edits; then run the site's update-website skill with this
+      row's list.
+    notes: |
+      size: M
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Website follow-up, gated on a stable release carrying the lane.
+
+  - packet_id: goal-kani-proves-the-wire-framing-decoders-never-panic-or-over-read-on-any-input-up-to-a-stated-frame-size
+    order: 1550-xath
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.8
+    pickup_role: any
+    capability_tags: [goal, research, kani, security, framing, model-checking]
+    estimated_hours: 6
+    owned_files: []
+    title: |
+      GOAL — the control-frame and wire-framing decoders on the security boundary are a plausible second target for bounded model checking (no panic, no out-of-bounds read, no length confusion on any input up to a stated frame size); this row is a candidate named during the 2026-10-04 design session and NOT inspected — its first deliverable is reading the decoders and saying whether the target is worth a harness
+    context: |
+      Parsers of untrusted bytes are the textbook use of a bounded model
+      checker. The repository already ratchets hand-rolled framing
+      (scripts/lua/check-framing-raw-decodes.lua and the single-reader
+      check), which suggests the decoders are few and named. The filing
+      session did not open them. Depends on Kani being adopted (D3) and on
+      the lane existing.
+    exit_criteria:
+      - 'a short note lists the framing decoders by symbol, says for each whether a Kani harness is feasible and what bound it would hold for, and recommends go or no-go; a go is filed as its own row'
+    unscoreable: |
+      a GOAL research packet for a later release; its deliverable is a recommendation after reading code the filing session did not inspect, not a property a fixture can assert.
+    depends_on:
+      - kani-proves-the-rust-scorers-arithmetic-for-every-weight-and-evidence-pattern-up-to-a-stated-bound-and-its-unchecked-u64-sums-are-made-explicit
+    next_action: >
+      Later. Read the decoders once Kani is in the lane.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-04T18:06:32Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Uninspected candidate, filed so it is not lost.
+
+events:
+  - packet_id: compaction-folds-a-claim-into-the-base-and-drops-the-claiming-host-and-ts
+    event:
+      type: note
+      ts: "2026-10-04T18:06:32Z"
+      agent_id: claude-fable-yoga-20261004t180632z
+      host: yoga
+      summary: |-
+        RELATED FINDING, same root, filed as 1550-8528: because the base
+        row keeps a status with no clock and no falsification, a falsified
+        descent that has been compacted is reverted by an older higher-rung
+        fragment arriving later (measured 2026-10-04 at 0.1.0+579b43ef754b46de -
+        base completed, B ready+falsified compacted, then A verified older
+        -> verified, where folding A and B together gives ready). This
+        row's shape (a), status_host / status_ts on the base row, would
+        also give that defect a clock to compare against. Read 1550-8528
+        before choosing between shapes (a) and (b) here.

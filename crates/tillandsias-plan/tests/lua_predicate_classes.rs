@@ -400,10 +400,15 @@ fn a_cacheable_predicate_cannot_read_a_file_through_the_stdlib() {
 #[test]
 fn a_cacheable_verdict_is_re_evaluated_when_a_file_it_read_changes() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let rel = format!("target/lua-memo-probe-{}.txt", std::process::id());
-    let file = root.join(&rel);
-    std::fs::create_dir_all(file.parent().unwrap()).expect("mkdir target");
-    std::fs::write(&file, "alpha").expect("write probe");
+    // target/ may be a warm-cache symlink outside this checkout. Keep this
+    // repository-bound fixture under the actual repository root instead.
+    let file = tempfile::Builder::new()
+        .prefix("lua-memo-probe-")
+        .suffix(".txt")
+        .tempfile_in(&root)
+        .expect("create repository-local probe");
+    let rel = file.path().file_name().unwrap().to_str().unwrap();
+    std::fs::write(file.path(), "alpha").expect("write probe");
 
     let mut reg = PredicateRegistry::new();
     reg.register(
@@ -413,16 +418,15 @@ fn a_cacheable_verdict_is_re_evaluated_when_a_file_it_read_changes() {
     )
     .expect("register");
 
-    assert!(reg.eval("memo_probe", &rel).expect("eval 1"));
-    assert!(reg.eval("memo_probe", &rel).expect("eval 2"));
+    assert!(reg.eval("memo_probe", rel).expect("eval 1"));
+    assert!(reg.eval("memo_probe", rel).expect("eval 2"));
     assert_eq!(
         reg.cache_hits, 1,
         "an unchanged input must be served from cache"
     );
 
-    std::fs::write(&file, "beta").expect("edit probe");
-    let after = reg.eval("memo_probe", &rel).expect("eval 3");
-    let _ = std::fs::remove_file(&file);
+    std::fs::write(file.path(), "beta").expect("edit probe");
+    let after = reg.eval("memo_probe", rel).expect("eval 3");
     assert!(
         !after,
         "a stale verdict was served after the file it read changed"
@@ -579,12 +583,19 @@ fn pure_shims_available_in_observing_class_too() {
 // ---------------------------------------------------------------------------
 // 1395-ue3i. fs.list(dir): sorted names, rooted, and part of the memo's input set.
 
-fn scratch_dir(tag: &str) -> (std::path::PathBuf, String) {
+fn scratch_dir(tag: &str) -> (tempfile::TempDir, String) {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let rel = format!("target/fs-list-{tag}-{}", std::process::id());
-    let dir = root.join(&rel);
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("mkdir");
+    let dir = tempfile::Builder::new()
+        .prefix(&format!("lua-fs-list-{tag}-"))
+        .tempdir_in(&root)
+        .expect("create repository-local directory");
+    let rel = dir
+        .path()
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .replace('\\', "/");
     (dir, rel)
 }
 
@@ -615,17 +626,16 @@ fn fs_list_is_observing_only_and_absent_from_the_cacheable_class() {
 fn fs_list_returns_regular_file_names_in_byte_order_and_never_a_symlink() {
     let (dir, rel) = scratch_dir("order");
     for n in ["b", "a", "C", "é"] {
-        std::fs::write(dir.join(n), "").expect("seed");
+        std::fs::write(dir.path().join(n), "").expect("seed");
     }
     #[cfg(unix)]
-    std::os::unix::fs::symlink("/etc", dir.join("zz-link")).expect("symlink");
+    std::os::unix::fs::symlink("/etc", dir.path().join("zz-link")).expect("symlink");
     let lua =
         tillandsias_plan::lua_predicate::build_environment(PredicateClass::Observing).expect("env");
     let got: String = lua
         .load(format!(r#"return table.concat(fs.list("{rel}"), ",")"#))
         .eval()
         .expect("fs.list");
-    let _ = std::fs::remove_dir_all(&dir);
     // Regular files only, in UTF-8 byte order; the symlink is EXCLUDED (so
     // it is never followed), which is fs.list's contract since 1380-u7sq.
     assert_eq!(got, "C,a,b,é");

@@ -54,6 +54,7 @@ OVL="$WORK/overlay"
 mkdir -p "$OVL/mcp"
 cp "$ROOT/images/default/config-overlay/mcp/forge-plan.sh" "$OVL/mcp/forge-plan.sh"
 cp "$ROOT/images/default/config-overlay/mcp/project-info.sh" "$OVL/mcp/project-info.sh"
+cp "$ROOT/images/default/config-overlay/mcp/host-browser.sh" "$OVL/mcp/host-browser.sh"
 chmod +x "$OVL/mcp/"*.sh
 
 fail() {
@@ -96,8 +97,9 @@ apply_helper "$A"
 apply_helper "$A"    # second application must stay idempotent
 [ "$(count_named "$A" forge-plan)" = 1 ] || fail "forge-plan not exactly once after double apply"
 [ "$(count_named "$A" project-info)" = 1 ] || fail "project-info not exactly once after double apply"
+[ "$(count_named "$A" host-browser)" = 1 ] || fail "host-browser not exactly once after double apply"
 total_a="$(names_from "$A" | wc -l | tr -d ' ')"
-[ "$total_a" = 2 ] || fail "empty scenario registered $total_a servers (expected exactly forge-plan + project-info)"
+[ "$total_a" = 3 ] || fail "empty scenario registered $total_a servers (expected forge-plan + project-info + host-browser)"
 
 # ── Scenario B: pre-populated CODEX_HOME, double application ─────
 B="$WORK/pre"
@@ -119,9 +121,10 @@ apply_helper "$B"
 apply_helper "$B"
 [ "$(count_named "$B" forge-plan)" = 1 ] || fail "forge-plan not exactly once in pre-populated scenario"
 [ "$(count_named "$B" project-info)" = 1 ] || fail "project-info not exactly once in pre-populated scenario"
+[ "$(count_named "$B" host-browser)" = 1 ] || fail "host-browser not exactly once in pre-populated scenario"
 [ "$(count_named "$B" custom)" = 1 ] || fail "unrelated custom server was dropped or duplicated"
 total_b="$(names_from "$B" | wc -l | tr -d ' ')"
-[ "$total_b" = 3 ] || fail "pre-populated scenario registered $total_b servers (expected custom + forge-plan + project-info)"
+[ "$total_b" = 4 ] || fail "pre-populated scenario registered $total_b servers (expected custom + forge-plan + project-info + host-browser)"
 diff -q "$WORK/auth.before" "$B/.codex/auth.json" >/dev/null \
     || fail "auth.json was not byte-preserved"
 grep -Fq 'model = "gpt-5"' "$B/.codex/config.toml" || fail "unrelated config key model was lost"

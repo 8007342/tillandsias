@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /home/tlatoani/codex/tillandsias-lua-work/1538-pwdr
+logs=/tmp/opencode/lua-composition-parent-20261003.4wzwBC/tmp
+rustfmt --edition 2024 crates/tillandsias-plan/tests/lua_proc.rs
+scripts/with-tillandsias-builder.sh cargo test -p tillandsias-plan --test lua_proc --no-run --message-format json > "$logs/callback-observer-build.jsonl" 2> "$logs/callback-observer-build.log"
+jq -Rr 'fromjson? | select(.reason=="compiler-artifact" and .target.name=="lua_proc" and .executable!=null) | .executable' "$logs/callback-observer-build.jsonl" > "$logs/callback-observer-test-binary"
+test "$(wc -l < "$logs/callback-observer-test-binary")" -eq 1
+sha256sum "$(cat "$logs/callback-observer-test-binary")" > "$logs/callback-observer-test-binary.sha256"
+seq 1 64 | xargs -P 8 -n 1 bash "$logs/callback-observer-one.sh"
+stage=${CALLBACK_OBSERVER_STAGE:-before}
+jq -s '{trials:length, exited0:map(select(.status=="exited" and .code==0))|length, exited101:map(select(.status=="exited" and .code==101))|length, other:map(select(.status!="exited" or (.code!=0 and .code!=101)))|length}' "$logs"/callback-observer-"$stage"-trial-*.json
+binary=$(cat "$logs/callback-observer-test-binary")
+"$logs/base-plan" run --json --timeout-ms 120000 -- "$binary" --exact managed_script::cleanup_observer_rejects_acknowledged_live_group_before_accepting_its_stop --nocapture > "$logs/callback-observer-known-live-$stage.json"
+jq -e '.status=="exited" and .code==0 and (.stdout|contains("1 passed; 0 failed"))' "$logs/callback-observer-known-live-$stage.json"

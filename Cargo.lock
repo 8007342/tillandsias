@@ -3351,6 +3351,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tillandsias-fleet-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_yaml",
+]
+
+[[package]]
 name = "tillandsias-headless"
 version = "56.9.27"
 dependencies = [

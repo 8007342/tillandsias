@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /home/tlatoani/codex/tillandsias-opencode-lua-session-20261002
+export GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never
+export TILLANDSIAS_SKIP_VERSION_BUMP=1
+export TILLANDSIAS_LAND_QUEUE_GATE='bash /tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/landing-gate.sh'
+exec scripts/land-queue.sh --limit 1 > /tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/landing-queue.log 2>&1

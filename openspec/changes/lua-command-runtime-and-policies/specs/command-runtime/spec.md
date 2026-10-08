@@ -103,6 +103,80 @@ deadline passes the runtime SHALL kill the process GROUP and report
 - **THEN** `stdout` holds 1 MiB, `truncated` is true, `dropped` is 2 MiB,
   `status` is `exited` and `ok` is false
 
+A capture ABANDONED before it was drained — because the handle was killed or
+the script scope closed — SHALL be reported `truncated:true`, and therefore
+`ok:false`, whatever exit status the child had already produced (order
+1551-mkr9). A deadline is reported as `timed_out` and is not this case.
+
+#### Scenario: A kill after exit does not return a whole-looking empty capture
+
+- **WHEN** a script-owned child has exited 0 while its output is still queued
+  for delivery, and the script kills its handle
+- **THEN** the result carries `status:"exited"`, `truncated:true` and
+  `ok:false`
+
+### Requirement: Every Lua door judges and runs in one directory, from one environment, under one deadline rule
+
+`proc.run`, `proc.spawn`, `proc.chain` and the positional `sh.run` /
+`expert.shell` SHALL each resolve the child's working directory ONCE per call
+— the call's `cwd` where the door has one, else the repository root, else the
+process cwd — and SHALL use that same value both as the cwd of the policy
+request and as the cwd the child runs in. Each SHALL start the child from the
+base environment (`PROC_RUN_BASE_ENV_PASSTHROUGH` plus `TILLANDSIAS_*` plus
+`PROC_RUN_BASE_ENV_FIXED`) and the call's own additions only, and SHALL apply
+the default deadline when the call names none; `timeout_ms = 0` SHALL mean no
+deadline on every door (order 1551-nyzb).
+
+#### Scenario: The positional door acts where it was judged
+
+- **WHEN** the runner is started in a directory other than the repository
+  root and a script calls `sh.run{'pwd'}` and `proc.run{argv={'pwd'}}`
+- **THEN** both print the same directory
+- **AND** `sh.run{'rm','-r','victim'}` removes nothing in the directory the
+  runner was started in
+
+#### Scenario: The caller's environment does not reach a child through any door
+
+- **WHEN** the runner's environment carries a variable outside the base set
+- **THEN** it is absent from the child of `sh.run`, as it is from the child
+  of `proc.run`
+
+### Requirement: Script code cannot outrun its verdict or load bytecode
+
+A script SHALL NOT be able to keep executing after its verdict or its
+deadline. The script environments SHALL therefore expose no way to create a
+coroutine: the Cacheable class has no `coroutine` table, and the Observing
+class's table holds `yield` alone (the host's async doors are built from it).
+`string.dump` SHALL be absent from both classes and Observing `load` SHALL
+accept text chunks only, whatever mode the caller requests (orders 1551-pemw,
+1551-8gkg).
+
+#### Scenario: Nothing runs after a caught verdict
+
+- **WHEN** a script catches its own `verdict.ok` with `pcall` and continues
+- **THEN** no further script code runs, on any thread the script could create
+
+#### Scenario: A binary chunk is refused
+
+- **WHEN** a script calls `load` on a string that begins with the binary-chunk
+  signature
+- **THEN** `load` returns nil and a message naming a binary chunk
+
+### Requirement: A terminated runner leaves no script-owned process behind
+
+When `tillandsias-plan script run` receives SIGTERM, SIGINT or SIGHUP it
+SHALL close its script scope, kill and reap every script-owned process group
+within the executor's cleanup bound, and exit with 128 plus the signal
+number. The handlers SHALL be installed before any script code runs. On
+Windows the job object owns the group and this requirement is met by it
+(order 1551-n45s).
+
+#### Scenario: A TERM to the runner reaches the child in its own group
+
+- **WHEN** a script holds a child that runs in its own process group and the
+  runner receives SIGTERM
+- **THEN** the runner exits 143 and the child is gone within the cleanup bound
+
 ### Requirement: The runtime runs identically on every locus
 
 The plan binary is native on Linux, macOS and Windows and is resolved by

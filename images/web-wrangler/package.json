@@ -1,0 +1,9 @@
+{
+  "name": "tillandsias-managed-web-wrangler",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pinned local-only Wrangler runtime image",
+  "dependencies": {
+    "wrangler": "4.42.0"
+  }
+}

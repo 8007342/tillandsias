@@ -1,0 +1,52 @@
+events:
+  - packet_id: local-web-preview-runtime
+    event:
+      type: note
+      ts: "2026-10-07T19:02:48Z"
+      host: yoga
+      summary: >
+        Astra adversarial source review filed
+        plan/issues/local-web-preview-core-review-2026-10-07.md. B1 dotted
+        target rejected and TLS filename truncated; B2 inspector module path
+        disagrees with image; B3 remote checks are one-shot over live config;
+        B4 failed route reload/cleanup is not retried truthfully; B7 individual
+        file atomic-save limitation lacks diagnostic; B8 nominal 30s readiness
+        contains 300s Podman calls. B5 canonical mode/swap reconciliation pending.
+        Sol's reported bounded tmpfs/ENOSPC/subpath/shmem proof is attributed,
+        not Astra execution. No real forge MCP/TLS/teardown acceptance claimed.
+      next_action: >
+        Sol fix B1-B4/B7-B8 with failure controls; coordinate B2/B3 with Terra.
+        Parent resolve B5 authority drift rather than silently restoring old
+        no-swap formula. Read review packet for exact functions and proof limits.
+  - packet_id: local-web-preview-image-mcp
+    event:
+      type: note
+      ts: "2026-10-07T19:02:48Z"
+      host: yoga
+      summary: >
+        Astra review B2: image installs /opt/tillandsias/wrangler but core
+        inspector requires /srv/preview/node_modules/wrangler. B3 entrypoint
+        does not guard live remote-binding edits. B6 pre-existing listener
+        registry caches registration before bind succeeds; new propagation
+        cannot make retries truthful. Full findings in
+        plan/issues/local-web-preview-core-review-2026-10-07.md.
+      next_action: >
+        Terra coordinate exact inspector-image smoke and live remote edit
+        enforcement with Sol; repair/test listener failed-bind retry through
+        parent-approved scope. Direct Wrangler smoke is insufficient for B2.
+  - packet_id: local-web-preview-live-acceptance
+    event:
+      type: note
+      ts: "2026-10-07T19:02:48Z"
+      host: yoga
+      summary: >
+        Review checkpoint on work/1552-e3wf. Narrow additive router TLS
+        reconciliation written; actual run_args enclave attach site documented
+        with guard population gap (Lua admits build_/launch_ only). HOT mechanism
+        exception withheld because mode 0700 and pre-existing swap-policy drift
+        prevent an honest whole-contract equivalence claim. Draft remains S0;
+        parent harness/bindings not edited. Review lists missing failure coverage.
+      next_action: >
+        Parent triage B1-B8, reconcile existing operator swap ruling with HOT
+        spec explicitly, obtain real lifecycle evidence, and rename/document
+        supported attach builder or extend guard. Do not activate draft yet.

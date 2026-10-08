@@ -1,0 +1,53 @@
+ok:no-competing-gate
+[tillandsias-builder] Re-execing inside 'tillandsias-builder' toolbox...
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+   Compiling tillandsias-plan v0.1.0 (/home/tlatoani/codex/tillandsias-lua-work/1538-pwdr/crates/tillandsias-plan)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.75s
+     Running tests/lua_predicate_classes.rs (target/debug/deps/lua_predicate_classes-c7866eeec42e0efb)
+
+running 22 tests
+test lua_runtime_states_containment_and_disclaims_selinux ... ok
+test a_cacheable_verdict_is_served_from_cache ... ok
+test a_cacheable_predicate_cannot_read_the_clock_through_the_stdlib ... ok
+test a_cacheable_predicate_cannot_remove_a_file_through_the_stdlib ... ok
+test a_cacheable_predicate_cannot_resolve_the_shell_verb ... ok
+test the_cacheable_global_set_is_exactly_the_allow_list ... ok
+test a_cacheable_predicate_reads_repo_files_via_fs_read ... ok
+test a_cacheable_verdict_is_re_evaluated_when_a_file_it_read_changes ... FAILED
+test fs_list_returns_regular_file_names_in_byte_order_and_never_a_symlink ... FAILED
+test pure_shims_available_in_observing_class_too ... ok
+test fs_read_refuses_outside_paths_and_traversals ... ok
+test fs_list_refuses_outside_the_root_by_name ... ok
+test the_shell_verb_refuses_an_empty_argv ... ok
+test the_cacheable_class_cannot_read_the_clock ... ok
+test the_verb_enumeration_matches_the_audited_set_exactly ... ok
+test fs_list_is_observing_only_and_absent_from_the_cacheable_class ... ok
+test expect_shims_return_verdict_values_and_fail_loud ... ok
+test a_cacheable_predicate_cannot_read_a_file_through_the_stdlib ... ok
+test the_same_predicate_resolves_in_the_observing_class ... ok
+test a_predicate_authored_at_runtime_executes_without_recompilation ... ok
+test an_observing_verdict_is_never_served_from_cache ... ok
+test a_timed_out_shell_call_is_distinguishable_in_lua ... ok
+
+failures:
+
+---- a_cacheable_verdict_is_re_evaluated_when_a_file_it_read_changes stdout ----
+
+thread 'a_cacheable_verdict_is_re_evaluated_when_a_file_it_read_changes' (2835852) panicked at crates/tillandsias-plan/tests/lua_predicate_classes.rs:416:42:
+eval 1: VmError("predicate memo_probe: runtime error: fs.read: refused — path 'target/lua-memo-probe-2835846.txt' is outside repository root\nstack traceback:\n\t[C]: in field 'read'\n\t[string \"crates/tillandsias-plan/src/lua_predicate.rs:...\"]:1: in function 'memo_probe'\n")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- fs_list_returns_regular_file_names_in_byte_order_and_never_a_symlink stdout ----
+
+thread 'fs_list_returns_regular_file_names_in_byte_order_and_never_a_symlink' (2835860) panicked at crates/tillandsias-plan/tests/lua_predicate_classes.rs:627:10:
+fs.list: CallbackError { traceback: "stack traceback:\n\t[C]: in field 'list'\n\t[string \"crates/tillandsias-plan/tests/lua_predicate_c...\"]:1: in main chunk", cause: RuntimeError("fs.list: refused — path 'target/fs-list-order-2835846' is outside the repository root (or is the root itself)") }
+
+
+failures:
+    a_cacheable_verdict_is_re_evaluated_when_a_file_it_read_changes
+    fs_list_returns_regular_file_names_in_byte_order_and_never_a_symlink
+
+test result: FAILED. 20 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+error: test failed, to rerun pass `-p tillandsias-plan --test lua_predicate_classes`

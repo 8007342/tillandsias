@@ -1,0 +1,843 @@
+ok:no-competing-gate
+[tillandsias-builder] Re-execing inside 'tillandsias-builder' toolbox...
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+[0;32m[build][0m Git hooks installed (pre-push gate is now active)
+[0;32m[build][0m Skipping host Podman registry setup for check-only dispatch (765-uti9)
+[0;32m[build][0m Skipping host dev cache setup for check-only dispatch (765-uti9)
+[0;36m[build][0m Staging router sidecar (build artifact — not committed)...
+[build-sidecar] up-to-date: /home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/images/router/tillandsias-router-sidecar
+[0;36m[build][0m Checking Rust formatting...
+[0;32m[build][0m Formatting check passed
+[0;36m[build][0m Fast refusals: sub-second deciders before any compile (1009-gccx)...
+[0;32m[build][0m ok:gate-memory:57149MB available, floor 1024MB
+could-not-run:competing-gate:inside-dispatch (the caller reports it is INSIDE the dispatch, where the host side is unreadable — the answerable call site is the wrapper's, not this one; NOTHING TO FIX HERE)
+ok:fragment-ts-skew:0 checked
+skip:no-new-packets
+ok:unique-bin-names:7 checked
+ok:tray-process-naming:3 checked
+ok:dev-embed-model-agreement:nomic-embed-text
+ok:issue-citation-convention:0 checked
+ok:script-exec-bits:22 checked
+ok:order-citations-resolve:474 checked, 2 declared
+  note: 3 line-wrapped token(s) skipped (not claims)
+ok:litmus-pin-claims:117 checked
+ok:secure-wire-single-reader:0 of 0
+ok:cheatsheet-source-anchors:24 checked
+[0;36m[build][0m Checking for if-not pipeline verdict guards (795-imz3)...
+ok:no-spawn-in-if-not
+[0;32m[build][0m If-not pipeline guard check passed
+[0;36m[build][0m Checking the enclave membership list matches the code (245 P8)...
+ok:enclave-membership:13 attach site(s) documented
+[0;32m[build][0m Enclave membership documentation check passed
+[0;32m[build][0m Fast refusals passed
+[0;36m[build][0m Running clippy (strict; includes the workspace type-check)...
+   Compiling tillandsias-core v56.9.27 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-core)
+    Checking tillandsias-exec v0.1.0 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-exec)
+   Compiling tillandsias-headless v56.9.27 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-headless)
+   Compiling tillandsias-plan v0.1.0 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-plan)
+warning: tillandsias-windows-tray@0.1.0: tillandsias-windows-tray: /home/tlatoani/codex/tillandsias-lua-work/1538-pwdr/crates/tillandsias-windows-tray/assets/tillandsias-headless-x86_64-unknown-linux-musl is 0 bytes (placeholder). This build embeds an EMPTY guest binary, so guest injection will be a SILENT NO-OP at runtime. Stage the real musl headless before packaging -- scripts/build-windows-tray.ps1 refuses on this condition (1059-ry6t).
+    Checking tillandsias-podman v56.9.27 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-podman)
+    Checking tillandsias-vm-layer v0.1.0 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-vm-layer)
+    Checking tillandsias-scanner v56.9.27 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-scanner)
+    Checking tillandsias-browser-mcp v0.1.170 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-browser-mcp)
+    Checking tillandsias-vault-client v0.1.1 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-vault-client)
+    Checking tillandsias-host-shell v0.1.0 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-host-shell)
+    Checking tillandsias-metrics v0.1.260513 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-metrics)
+    Checking tillandsias-podman-cli v0.1.260518 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-podman-cli)
+    Checking tillandsias-router-sidecar v0.1.170 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-router-sidecar)
+    Checking tillandsias-windows-tray v0.1.0 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-windows-tray)
+    Checking tillandsias-macos-tray v0.1.0 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-macos-tray)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.06s
+[0;32m[build][0m Clippy passed
+[0;36m[build][0m Running clippy (strict + listen-vsock)...
+   Compiling tillandsias-core v56.9.27 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-core)
+   Compiling tillandsias-headless v56.9.27 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-headless)
+    Checking tillandsias-scanner v56.9.27 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-scanner)
+    Checking tillandsias-vm-layer v0.1.0 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-vm-layer)
+    Checking tillandsias-podman v56.9.27 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-podman)
+    Checking tillandsias-browser-mcp v0.1.170 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-browser-mcp)
+    Checking tillandsias-vault-client v0.1.1 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-vault-client)
+    Checking tillandsias-host-shell v0.1.0 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-host-shell)
+    Checking tillandsias-metrics v0.1.260513 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-metrics)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.45s
+[0;32m[build][0m Clippy (listen-vsock) passed
+[0;36m[build][0m Checking plan ledger integrity (tillandsias-plan check)...
+warning (organic reference debt): gate-cycle-runs-a-flat-list-instead-of-a-plan: split_into carries a prose annotation 'gate-shared-ledger-parse,archiver-check-internal-profile,gate-ledger-native-fs-staging-windows'
+advisory (schema drift): every-platform-builds-through-a-container-backed-by-the-nix-cache: missing required field 'title'
+advisory (schema drift): an-idempotent-join-the-fleet-skill-gives-a-worker-on-bare-metal-or-in-a-forge-the-requirements-scheduled-work-attestation-rules-and-session-joining-steps-so-no-host-is-bootstrapped-by-message: missing required field 'title'
+advisory (schema drift): a-standalone-idempotent-initialize-bare-metal-host-skill-brings-up-rebuilds-and-troubleshoots-the-host-s-own-enclave-and-git-mirror-and-evolves-with-every-repair-recorded-in-it: missing required field 'title'
+advisory (schema drift): a-work-order-ref-is-the-ungated-place-a-host-commits-and-pushes-so-the-integration-race-moves-from-every-push-to-one-serialized-landing-and-the-hook-warns-with-an-affordance-instead-of-refusing: missing required field 'title'
+advisory (schema drift): integration-into-linux-next-is-one-serialized-landing-per-work-ref-drawn-from-open-pull-requests-in-order-so-the-shared-branch-is-raced-by-one-lander-instead-of-every-host: missing required field 'title'
+advisory (schema drift): join-the-fleet-and-advance-work-from-plan-teach-the-work-ref-and-landing-flow-so-a-bootstrapped-agent-commits-and-pushes-freely-to-its-own-branch-and-integrates-once-per-unit-of-work: missing required field 'title'
+advisory (schema drift): a-fixture-that-plants-a-probe-fragment-in-the-live-plan-index-d-leaves-it-behind-when-the-run-is-cut-short-and-the-release-preflight-then-refuses-the-whole-ledger-as-incomplete: missing required field 'title'
+advisory (schema drift): a-salvage-snapshot-from-a-windows-host-carries-no-exec-bits-so-a-fixture-relayed-from-it-fails-test-x-on-every-linux-release-gate-while-every-check-gate-passes: missing required field 'title'
+advisory (schema drift): the-usage-a-host-sees-when-it-makes-a-mistake-is-the-stale-one-so-the-tool-s-most-read-surface-is-the-one-nobody-keeps-current: missing required field 'title'
+advisory (schema drift): the-ledger-distillation-advisory-cannot-refuse-a-cut-yet-its-fixture-pins-head-at-or-under-threshold-and-refused-the-v56-9-21-1-ledger-land-at-the-eleventh-row: missing required field 'title'
+advisory (schema drift): the-landing-queue-requeues-a-green-candidate-when-trunk-moved-by-plan-fragments-only-during-its-gate-so-during-busy-hours-it-lands-nothing-while-the-land-tool-adopts-the-same-stamp: missing required field 'title'
+advisory (schema drift): no-instrument-can-see-a-comment-that-admits-its-own-missing-evidence-so-a-constant-with-an-honest-unverified-rationale-shaped-the-product-for-seven-weeks-while-every-wiring-check-cleared-it: missing required field 'title'
+advisory (schema drift): the-substrate-checkers-mirror-todo-prints-a-bare-project-name-where-the-binary-wants-a-checkout-path-so-a-worker-who-runs-the-affordance-verbatim-gets-project-not-found-and-rc1: missing required field 'title'
+advisory (schema drift): the-macos-installer-is-not-named-in-its-own-sha256sums-while-the-linux-and-windows-installers-are: missing required field 'title'
+advisory (schema drift): the-install-entry-point-verifies-everything-it-downloads-and-nothing-verifies-the-entry-point: missing required field 'title'
+advisory (schema drift): a-cloud-project-launch-clones-the-host-mirror-and-checks-out-whatever-branch-its-head-names-so-a-forge-starts-on-an-arbitrary-local-work-branch: missing required field 'title'
+advisory (schema drift): a-project-earns-its-branching-discipline-progressively-and-nothing-today-can-tell-an-agent-which-level-a-loaded-project-is-at: missing required field 'title'
+parked-block: local-network-shared-development-resources waits on every-platform-builds-through-a-container-backed-by-the-nix-cache [implemented]
+parked-block: in-forge-delegate-disposition-unobservable waits on forge-delegation-concurrency-ramp [blocked] — Criterion 2 DONE (stage_lift_gates G1-G5 in methodology/in-forge-delegation.yaml; G4's producer fixed as 943-3xyf after it was found unable to ever report a death). CRITERION 1 IS BLOCKED ON OPERATOR AUTHORIZATION, and that is the whole remaining gate. It means launching a sibling AI harness that autonomously commits to the shared ledger, plus a tray rebuild and container recycle on a human's machine. The 2026-08-11 stage-0 authorization was interactive, that night, on linux_mutable, naming a delegate logged in THERE — it does not transfer to another host by inference. A host that HAS recorded authorization (macuahuitl/linux_mutable) can take criterion 1 today; lenovinha cannot, and on lenovinha only opencode is installed (codex and gemini are absent). EVERYTHING PREPARABLE WITHOUT IT IS DONE: the disposition channel is verified in all three states on this host, its default probe now discriminates, and two paired litmus arms pin it. Criterion 3's stage log stays empty by design until a lift can occur, and no lift is possible while G1 (943-7dn5) and G5's mcp half read absent.
+parked-block: fleet-propagation-write-readiness waits on forge-upstream-write-readiness-guard [implemented]
+parked-block: authenticated-forge-write-transport-impl waits on git-mirror-cross-project-service-identity [blocked] — Amend the unsigned SSH-CA design to replace shared aliases and wildcard signer policy with an opaque project ID, exact roles/policies and exact certificate principals; prove the negative two-project matrix before 451 wires production sshd.
+parked-block: the-thirty-seven-standing-gnu-only-idioms-the-advisory-found-on-its-first-run waits on gnu-only-shell-idioms-reach-trunk-green-and-freeze-a-whole-platform-one-host-at-a-time [implemented] — Write the advisory as a gate step AND openspec/litmus-tests/ litmus-gnuism-advisory-names-the-known-instances.yaml in the same commit — the declared pin is unresolvable until that file exists, and an unresolvable pin is 1068-cxmf's defect, not a placeholder. Then prove BOTH halves of the closure against real history: run it on the tree before 2026-09-12's fixes (it must name grep -Rl in audit-guard-activation.sh, rg in check-cheatsheet-refs.sh, and sed -i in test-gate-stamp-does-not-memoize-guard-owned-paths.sh) and on the tree after (it must name none). Idioms 4 and 5 from the context are NOT grep-detectable — a PATH-dependent tool identity and a locked keychain are runtime facts, not source text — so say so in the step's own comment rather than letting a future reader believe the advisory covers all five.
+parked-block: land-on-platform-branch-becomes-scripts-lua-land-on-platform-branch-lua-with-every-existing-verdict-token-byte-identical-the-push-bounded-by-proc-run-the-stamp-read-as-a-value-the-freeze-read-through-the-exported-refs-and-the-sh-reduced-to-a-stub waits on land-on-platform-branch-probes-the-branch-discipline-before-it-fetches-or-gates-refuses-the-protected-default-branch-with-the-seeded-message-picks-the-integration-branch-from-the-seed-and-compares-the-mirror-published-digest-to-the-checkouts-seed [implemented] — LANDED on linux-next at 8a5ee3eb1 (PR #209, full gate green on macuahuitl 2026-10-02, fixture scripts/test-land-discipline-probe.sh in the gate). What is LEFT: a second host runs scripts/land-on-platform-branch.sh against a seed whose integration branch differs from the default and confirms the probe refuses the protected default branch with the seeded message before any fetch or gate; flip this row to verified citing that run.
+parked-block: plan-only-lane-excludes-the-captures-the-loop-must-write waits on lane-branch-methodology-for-a-fleet-that-outruns-its-slowest-host [implemented]
+parked-block: spec-index-delta-reuses-nothing-and-starves-the-floor waits on local-expert-system-in-toolboxes-on-accelerated-hosts [blocked] — BLOCKED (2026-09-23): by 1259-dgaq (per-model groundtruth vectors, ready) plus a second accelerated linux host measurement.
+parked-block: landed-malformed-fragment-should-fail-loud-fleet-wide waits on malformed-fragment-passes-every-gate [implemented]
+parked-block: mirror-identity-staged-migration-and-spec-amendments waits on mirror-identity-agent-sidecar-and-forge-wiring [implemented]
+parked-block: mirror-identity-negative-matrix-litmus waits on mirror-identity-lane-sidecar-and-sshd [blocked]
+parked-block: mirror-identity-negative-matrix-litmus waits on mirror-identity-per-project-dns [implemented]
+parked-block: mirror-identity-negative-matrix-litmus waits on mirror-identity-vault-roles-exact [implemented]
+parked-block: on-demand-image-freshness-podman-evidence waits on on-demand-image-ensure-ignores-source-digest [implemented]
+parked-block: the-preflight-door-is-ported-to-scripts-lua-preflight-on-script-run-with-proc-spawn-so-guards-run-concurrently-under-group-kill-and-its-wall-time-does-not-regress waits on proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages [blocked] — Streaming child1534-puyz is landed through PR207 at7b829b205, independently reviewed and forced-gated. Next scheduled implementation is composition1538-pwdr (owned dispatcher list corrected; estimated3h including verification), then multi-cycle trace1539-dt84. Read plan/issues/remaining-composition-and-trace-handoff-2026-10-02.md and pin API ambiguities before coding. Obtain native Mac/changed Windows runtime evidence before closing this parent or unblocking preflight1520-z95v. Preserve8MiB-prefix/no-shell-strings; no default-deny/build-land rewrite/destructive E2E authorization. Scheduler remains due:not-installed; no timer was armed.
+parked-block: tillandsias-plan-script-run-is-the-one-runner-for-a-lua-decider-with-a-verdict-module-a-no-verdict-exit-that-cannot-be-green-typed-classification-shared-by-gate-and-door-and-step-lua-in-gate-steps-d waits on proc-run-and-proc-spawn-on-tillandsias-exec-with-mlua-async-so-a-process-is-a-typed-result-a-stream-has-line-callbacks-and-no-os-pipe-exists-between-stages [blocked] — Streaming child1534-puyz is landed through PR207 at7b829b205, independently reviewed and forced-gated. Next scheduled implementation is composition1538-pwdr (owned dispatcher list corrected; estimated3h including verification), then multi-cycle trace1539-dt84. Read plan/issues/remaining-composition-and-trace-handoff-2026-10-02.md and pin API ambiguities before coding. Obtain native Mac/changed Windows runtime evidence before closing this parent or unblocking preflight1520-z95v. Preserve8MiB-prefix/no-shell-strings; no default-deny/build-land rewrite/destructive E2E authorization. Scheduler remains due:not-installed; no timer was armed.
+ok: 1422 packets, ids unique, live references sound (16 parked-block edges)
+[0;32m[build][0m Plan ledger check passed
+[0;36m[build][0m Checking every fragment event lands on a real packet...
+ok:fragment-events-land:3692 fragment(s) checked
+[0;32m[build][0m All fragment events land
+[0;36m[build][0m Checking a fragment-events check that could not run never claims what it would have found (1021-a944)...
+ok   extracted the live call site from build.sh (not a copy of it)
+ok   exit 2 -> named as could-not-run
+ok   exit 2 makes NO substantive claim about the ledger
+ok   exit 2 surfaces the script's own verdict line
+ok   exit 2 names the cycle-preflight remedy
+ok   exit 1 still reports the substantive violation
+ok   exit 1 is NOT labelled could-not-run
+ok   exit 0 -> passes
+ok   the real script reaches exit 2 with its documented verdict
+PASS: fragment-events-land call site 9/9 (1021-a944)
+[0;32m[build][0m Fragment-events could-not-run verdict fixture passed
+[0;36m[build][0m Checking every ledger fragment is intact (whole overlay)...
+ok:all-fragments-intact:4358 checked
+[0;32m[build][0m All fragments intact
+[0;36m[build][0m Checking the whole-overlay fragment guard's negative controls...
+ok: valid YAML uses the repository validator, not Ruby
+ok: unparseable YAML is refused
+ok: conflict markers inside valid block scalars are refused
+PASS: all-fragments-intact (3/3)
+[0;32m[build][0m Fragment-integrity fixture passed
+[0;36m[build][0m Checking the sanctioned YAML reader is present here (746-htj9)...
+ok   availability-here                  ok:yaml-reader:toolbox:./target/release/tillandsias-plan
+ok   real-ledger-loads                  ok:yaml-loads:plan/index.yaml
+ok   real-ledger-vocab                  pending ready in_progress blocked needs_clarification implemented completed verified done obsoleted failed
+ok   malformed-is-load-failed           blocked:yaml-load-failed:/tmp/tmp.RhmPoO85tf/bad.yaml: did not find expected node content at line 2 column 1, while parsing a flow node
+ok   malformed-via-get                  blocked:yaml-load-failed:/tmp/tmp.RhmPoO85tf/bad.yaml: did not find expected node content at line 2 column 1, while parsing a flow node
+ok   gate-load-vs-divergence            blocked:index-load-failed: /tmp/tmp.RhmPoO85tf/bad.yaml: blocked:yaml-load-failed:/tmp/tmp.RhmPoO85tf/bad.yaml: did not find expected node content at line 2 column 1, while parsing a flow node
+ok   missing-key-is-empty               empty, rc=0
+ok   absent-file                        blocked:yaml-unreadable:/tmp/tmp.RhmPoO85tf/nope.yaml: No such file or directory (os error 2)
+ok   reader-absent-is-named             blocked:index-load-failed: plan/index.yaml: no sanctioned YAML reader built (resolve_plan_binary found none; run scripts/cycle-preflight.sh)
+ok   type-of-fragment-is-map            !!map
+ok   type-of-sequence                   !!seq
+ok   type-of-broken-is-load-failed      blocked:yaml-load-failed:/tmp/tmp.RhmPoO85tf/bad.yaml: did not find expected node content at line 2 column 1, while parsing a flow node
+
+12 passed, 0 failed
+[0;32m[build][0m YAML reader available and its verdicts stay distinct
+[0;36m[build][0m Checking the wsl.exe transport can carry an exit status (1155-jurn)...
+ok   arm 1: no wsl on this host — reported as skip, not as a pass
+ok   arm 2: absence of wsl.exe is a named skip, not a pass
+ok   arm 3: the before-not-after instruction is present
+ok   arm 4: refuses (0,0), (empty,empty) and a half-sound pair
+ok   arm 5: the check probes the TRANSPORT, and says why a local probe cannot
+ok   arm 6: the refusal names the remedy and both measured non-remedies
+ok   arm 7 (live): skipped — not an msys host, the defect cannot occur here
+ok:wsl-exec-channel-fixture:all
+[0;32m[build][0m Exit-status canary sound
+[0;36m[build][0m Checking set-field emits valid YAML for every value shape...
+  ok   colon-space: fragment is valid YAML
+  ok   colon-space: value round-trips exactly
+  ok   multi-line: fragment is valid YAML
+  ok   multi-line: value round-trips exactly
+  ok   multi-line-with-dashes: fragment is valid YAML
+  ok   multi-line-with-dashes: value round-trips exactly
+  ok   apostrophe: fragment is valid YAML
+  ok   apostrophe: value round-trips exactly
+  ok   leading-dash: fragment is valid YAML
+  ok   leading-dash: value round-trips exactly
+  ok   trailing-colon: fragment is valid YAML
+  ok   trailing-colon: value round-trips exactly
+  ok   blank-line: fragment is valid YAML
+  ok   blank-line: value round-trips exactly
+set-field-yaml-shapes: 14 passed, 0 failed
+ok:set-field-yaml-shapes:14
+[0;32m[build][0m set-field YAML-shape fixture passed
+[0;36m[build][0m Checking the pre-push empty-ref-list fixture (877-mynm)...
+ok: fast-forward push carries a ref list (125 bytes)
+ok: the --dry-run origin HEAD probe form carries a ref list (108 bytes)
+ok: an up-to-date push yields an EMPTY ref list
+ok: non-ff with a CURRENT remote-tracking ref yields an EMPTY ref list
+ok: non-ff with a STALE remote-tracking ref still carries a ref list (125 bytes)
+ok: the guard exits 0 on an empty ref list (rc=0)
+ok: the message names the real remedy (fetch and rebase)
+ok: no misleading gate remedy on the empty-list path
+ok: a non-empty ref list is still gated (rc=1) — no unscoped acceptance
+ok: MUTATION: without the early accept the same empty list is refused — arm 6 has teeth
+ok: BISTABILITY: arm 7's premise holds under controlled stamp absence (rc=1)
+test-pre-push-empty-ref-list: 11 passed, 0 failed
+[0;32m[build][0m pre-push empty-ref-list fixture passed
+[0;36m[build][0m Checking the cross-platform unrunnable-arm advisory (1194-davi)...
+ARM 1: a change touching nothing platform-scoped is SILENT (negative control)
+  ok: clean tree reports ok: with a zero numerator, rc=0
+ARM 2: the guard's own verdict grammar is closed
+  ok: verdict carries the documented prefix
+ARM 3: a SHORT row makes it refuse rather than read the wrong column
+  ok: a 4-field row is refused as unparsable, and the refusal still exits 0
+ARM 4: an EMPTY spec skips loudly and never reports ok
+  ok: no rows parsed reports skipped:, not ok: (785-sqe6)
+ARM 5: an ABSENT spec source skips rather than passing over an empty set
+  ok: absent source reports skipped:no-spec-source
+ARM 6: an unresolvable base ref skips rather than diffing the world
+  ok: unresolvable base reports skipped:no-diff-base
+ARM 7: the advisory NEVER exits non-zero, on any arm above
+  ok: every verdict exits 0 — it is advisory, never a refusal (1194-davi)
+ARM 8: THE DISCRIMINATING CONTROL — the same prover file is SILENT on the
+       platform that actually runs the arm, so this is about scope and not
+       about matching a filename.
+  ok: linux gets advisory:, macos gets ok: for the SAME changed file
+ARM 10: the ADVISORY path itself exits 0 — the branch ARM 7 cannot reach.
+  ok: a FIRING advisory still exits 0 (rc=0)
+ARM 9: the guard is BOUND — something actually invokes it
+  ok: scripts/land-on-platform-branch.sh invokes the advisory
+ARM 11: the repo's OWN orphan auditor agrees the guard is active.
+  ok: audit-guard-activation.sh does not list it as an orphan
+
+unrunnable-platform-arms: 11 passed, 0 failed
+[0;32m[build][0m cross-platform unrunnable-arm advisory fixture passed
+[0;36m[build][0m Checking the must-ship-next release advisory (1218-25z3)...
+ARM 1: a clean cut prints ONE line and does not become noise (negative control)
+  ok: stdout is exactly one verdict line in the closed grammar, rc=0
+ARM 2: the advisory NEVER exits non-zero, on any ref
+  ok: every verdict exits 0 — it reports, it does not block
+ARM 3: an unresolvable cut ref SKIPS rather than reporting a clean cut
+  ok: unresolvable ref reports skipped:, never ok: (785-sqe6)
+ARM 4: THE STALE-BINARY PROBE — a binary that cannot see the field must not report zero.
+  ok: a binary that cannot project must_ship reports stale-plan-binary, not a clean zero
+ARM 5: a MENTION is not a fix — driving the GUARD, not a copy of its rule
+  skip: could not synthesise a probe commit
+ARM 6: a real fix SUBJECT is counted — same guard, same probe shape
+  skip: could not synthesise a probe commit
+ARM 7: REAL HISTORY — 1211-34v6's fix is reachable from this branch
+  ok: found 2 subject-anchored commit(s) for 1211-34v6 on HEAD
+ARM 8: REAL HISTORY — and it is ABSENT from the tag that shipped after it
+  ok: 1211-34v6 is absent from v56.9.13.1 — the miss this row exists for is reproduced
+ARM 11: an UNKNOWN ARGUMENT is refused, not silently discarded
+  ok: invocation [v56.9.13.1] refused without printing a verdict, rc=0
+  ok: invocation [--against v56.9.13.1] refused without printing a verdict, rc=0
+  ok: invocation [--marker] refused without printing a verdict, rc=0
+ARM 9: the guard is BOUND — the release path invokes it
+  ok: scripts/release-preflight.sh invokes the advisory
+ARM 10: release-preflight's ONE-LINE stdout contract survives the addition
+  ok: release-preflight still prints exactly one line on stdout
+
+must-ship-rows: 11 passed, 0 failed
+[0;32m[build][0m must-ship-next release advisory fixture passed
+[0;36m[build][0m Checking the unstable-channel installer default (1369-sjbc)...
+skip:unstable-installer-fixture:D-run:no-pwsh-on-this-host
+ok:unstable-installer-fixture:ran=13 skipped=1
+[0;32m[build][0m unstable-channel installer default fixture passed
+[0;36m[build][0m Checking the installers' PENDING ACTIONS banner (1380-zmpi)...
+skip:pending-banner-fixture:W1-W2:no-powershell-on-this-host
+ok:pending-banner-fixture:ran=8 skipped=2
+[0;32m[build][0m pending-actions banner fixture passed
+[0;36m[build][0m Checking the stale-stamp refusal names content movers (970-7fqk)...
+ARM 1: a stamp write emits a manifest, and movers is SILENT on an unchanged tree
+  ok: manifest written; unchanged tree reports no movers
+ARM 2: CONTENT changed with an OLD mtime is NAMED (the mtime signal cannot see it)
+  ok: movers names a.txt as modified (mtime signal would have said: no)
+  ok: and the mtime signal indeed could NOT see it — the arms are not measuring the same thing
+ARM 3: an IDENTICAL rewrite with a NEW mtime is NOT named as a content mover
+  ok: identical rewrite reports NO content mover (mtime signal would have said: yes)
+  ok: and the mtime signal DID name it — the innocent-file case is reproduced
+ARM 4: an ADDED and a DELETED path are both named
+  ok: an added path is named
+  ok: a deleted path is named
+ARM 5: NO MANIFEST must refuse, never report a clean tree
+  ok: a missing manifest answers unavailable at rc=2, not an empty clean list
+ARM 6: the manifest describes the STAMPED tree, not the tree being verified
+  ok: verify did not rewrite the manifest, even with the flag exported
+ARM 8: PLAN FAST-LANE paths are excluded, exactly as compute excludes them
+  ok: fast-lane paths are excluded from movers, as they are from the digest
+  ok: a plan/issues SUBDIRECTORY path is still covered (the skip is top-level only)
+ARM 7: the REFUSAL PATH itself runs — it is only reached when someone is blocked
+  ok: the hook invokes movers via a variable it defines itself
+  ok: the mtime list survives, relabelled as the live-writer hint it was built to be
+  ok: the hook still parses
+
+gate-stamp-names-content-movers: 14 passed, 0 failed
+[0;32m[build][0m stale-stamp content-mover fixture passed
+[0;36m[build][0m Checking the release-ledger distillation advisory (914-nkc4)...
+ok:   ARM 1: a table at or under threshold reports ok (got: ok:ledger-distillation:10-rows:threshold=10)
+ok:   ARM: the over-threshold table at v56.9.12.2 reports due (got: due:ledger-distillation:19-rows:threshold=10)
+ok:   ARM: the over-threshold table at 66d615e3f~1 reports due (got: due:ledger-distillation:24-rows:threshold=10)
+ok:   ARM 4: an unreadable ref is skipped, not counted as zero rows
+ok:   ARM 5: an unknown argument refuses instead of answering about the default tree
+ok:   ARM 6: '--ref' with no value refuses and terminates (got: fail:ledger-distillation:missing-value:--ref)
+ok:   ARM 6: '--threshold' with no value refuses and terminates (got: fail:ledger-distillation:missing-value:--threshold)
+ok:   ARM 7: a due: verdict still exits 0 — the advisory cannot refuse a cut
+ok:ledger-distillation-advisory
+PASS: ledger-distillation-advisory 8/8 (914-nkc4)
+[0;32m[build][0m release-ledger distillation advisory fixture passed
+[0;36m[build][0m Checking the fleet-activity read (1223-wzc4)...
+ok:   ARM 1: --ref is honoured and named in the header
+ok:   ARM 2: an address naming no host is reported as an unattributed bucket
+ok:   ARM 3: no shared-provider address appears as a host row
+skip: ARM 4 — no .local author in the ARM 2 window on this checkout
+ok:   ARM 5: an empty window is skipped, not reported as zero hosts
+ok:   ARM 6: an unresolvable ref refuses instead of reporting nobody landed
+ok:   ARM 7: an unknown argument examines nothing
+ok:   ARM 7: '--since' with no value refuses and terminates
+ok:   ARM 7: '--ref' with no value refuses and terminates
+ok:   ARM 8: every run says absence from the window is not idleness (a non-empty and an empty window)
+ok:fleet-activity-fixture
+PASS: fleet-activity 9/9 (1223-wzc4)
+[0;32m[build][0m fleet-activity read fixture passed
+[0;36m[build][0m Checking the salvage audit (1226-jb8y)...
+ok:   ARM 1: the ref lookup found refs (151 SALVAGE refs present; ARM 1b covers the work/ surface)
+ok:   ARM 1b: the default header names BOTH stranding surfaces
+ok:   ARM 1b: it audited 568 refs, covering salvage (151) + work (417)
+ok:   ARM 2: differing files carry a DIRECTION label, not a bare 'differs'
+ok:   ARM 2b: a CONSTRUCTED stale snapshot is labelled is-AHEAD — the positive path ran on this host
+ok:   ARM 3: the output states that ancestry is not the integration test
+ok:   ARM 4: an unresolvable branch refuses instead of reporting nothing stranded
+ok:   ARM 5: a pattern matching nothing is skipped, not reported as clean
+ok:   ARM 6: an unknown argument examines nothing
+ok:   ARM 6: '--branch' with no value refuses and terminates
+ok:   ARM 6: '--pattern' with no value refuses and terminates
+ok:   ARM 6: '--remote' with no value refuses and terminates
+ok:   ARM 7: the old spelling read a PRESENT pattern as absent (rc=141) and line_matches reads it as present — the false-absence class is closed
+ok:   ARM 7b: no assertion in this file matches through an early-exiting reader on a pipe
+ok:salvage-audit-fixture
+PASS: salvage-audit 14/14 (1226-jb8y)
+[0;32m[build][0m salvage audit fixture passed
+[0;36m[build][0m Checking the credential-channel fixture (860-g798)...
+ok: gh-green + GCM helper -> blocked, not ok (rc=1)
+ok: remedy names the repo-local seeding
+ok: gh-green + push refused -> names the push, not the keyring
+ok: 1106-k2df: authenticates + 403 -> refused, and the PUSH is named
+ok: working channel -> ok:gh-keyring-push-verified (rc=0)
+ok: 4a: a present store file whose push is refused is NOT green (blocked:gh-credentials-store-push-refused)
+ok: 4b: a store file whose push authenticates -> ok:gh-credentials-store-push-verified
+ok: 4c: a store file with no origin to probe is unverified:, not ok: (unverified:gh-credentials-store)
+ok: 4d: GH_TOKEN set: refused probe -> blocked:gh-token-env-push-refused, passing probe -> ok:gh-token-env-push-verified
+ok: 4d: GITHUB_TOKEN set: refused probe -> blocked:github-token-env-push-refused, passing probe -> ok:github-token-env-push-verified
+ok: 4e: reverify refuses the same dead store credential (rc=1)
+ok: MUTATION: the pre-fix arm passes the incident shape — the suite has teeth
+ok: hook refusal -> ok:...-hook-refused, NOT blocked:* (rc=0)
+ok: the note names ./build.sh --check, not credential seeding
+ok: no misleading credential remedy printed
+ok: an unreachable remote is still blocked:* (rc=1) — the retry rescues nothing real
+ok: MUTATION: the pre-fix guard calls our own hook a credential fault — arm 6 has teeth (blocked:credential-accepted-but-push-refused)
+ok: fixture precondition: a behind branch really is refused by the remote
+ok: behind branch -> ok:...-refstate-refused, NOT blocked:* (rc=0)
+ok: the note names the fast-forward remedy
+ok: no misleading credential remedy printed for a ref-state refusal
+ok: MUTATION: the pre-fix guard calls a behind branch a credential fault — arm 8b has teeth (blocked:credential-accepted-but-push-refused)
+ok: reverify on a healthy channel -> ok:gh-keyring-push-verified (rc=0)
+ok: a passing verdict records a stamp
+ok: a credential that DIED mid-cycle is named as such (rc=1)
+ok: the diagnosis states it worked and then stopped
+ok: the remedy names the operator's token re-seed
+ok: it points at the 872-c9nd salvage path instead of discarding work
+ok: no prior pass -> ordinary verdict, not a false expiry (unknown:secret-service-unprobed)
+ok: every probe invocation site (1) is inside credential_channel_verdict(); the default path carries none
+ok: healthy keyring + 401 -> names GitHub, not the keyring (rc=1)
+ok: the diagnosis says outright that the keyring is not the problem
+ok: explicitly steers the reader AWAY from the secret store
+ok: prescribes no keyring action on a rejection
+ok: no secret-service on the bus -> unretrievable, not rejected (rc=1)
+ok: names it a LOCAL retrieval failure
+ok: does not prescribe a token refresh for a retrieval failure
+ok: unprobed collection -> unknown:secret-service-unprobed (rc=1), and it FAILS CLOSED
+ok: plaintext fallback is its own state, not 'keyring healthy' (rc=1)
+ok: says outright that keyring probes are irrelevant here
+ok: GitHub accepts but push refused -> names the push (rc=1)
+ok: rules out BOTH previously-conflated causes explicitly
+ok: the guard never calls secret-tool — discrimination is via gh api user
+ok: all five 894-scxy verdicts match the pinned grammar
+ok: the new verdict matches the pinned grammar (no second colon)
+ok: 778-hb3x: no-local-heads names the unseeded mirror
+ok: 778-hb3x: transport still reads as a transport failure
+ok: 778-hb3x: a reasonless error keeps the legacy wording
+ok:credential-channel-fixture:all
+[0;32m[build][0m credential-channel fixture passed
+[0;36m[build][0m Checking the gate-stamp scope fixture (887-bz88)...
+ok: case 0 — classifier is total (unknown path -> other)
+ok: case 1 — a full-scope stamp accepts the push, as today
+ok: case 2 — scoped stamp refuses an out-of-scope push, naming the missing class
+ok: case 3 — scoped stamp accepts a push inside its scope, loudly
+ok: case 4 — a legacy v1 stamp refuses with migration guidance
+ok: case 5 — an unknown scope token is treated as stale (fail closed)
+ok: case 6 — write refuses an unknown scope class at write time
+ok: case 7 — the 668-2xeh plan-only lane is preserved intact
+ok: case 8 — a fresh stamp scoped to rust admits a plan-only push through the plan-only lane
+ok: case 9 — the plan-only lane does not carry an out-of-scope class past a fresh scoped stamp
+ok: case 10 — a moved remote is refused as a race with a fetch-and-merge remedy, and the same stamp carries the push after the merge
+PASS: gate-stamp-scope (11/11)
+[0;32m[build][0m gate-stamp scope fixture passed
+[0;36m[build][0m Checking the brew shim re-entrancy guard (966-rq7f)...
+ok: guarded: the install path runs EXACTLY ONCE (brew invoked 1x)
+ok: guarded: the nested probe refuses with the re-entrancy reason and the in-flight formula
+ok: guarded: the nested probe degrades to the standard not-installed hint
+ok: MUTATION: with the marker dropped the same probe re-enters (25 brew invocations, hard-stopped at 25)
+ok: an already-installed tool execs normally even inside an install (guard sits below that check)
+ok: AUTOINSTALL=0 still hints without invoking brew at all (ordering preserved)
+test-brew-shim-reentrancy: 6 passed, 0 failed
+ok:brew-shim-reentrancy:6
+[0;32m[build][0m brew shim re-entrancy fixture passed
+[0;36m[build][0m Checking the append-event archived-refusal fixture (896-f8ti)...
+ok: an archived ref is refused and the refusal names it as ARCHIVED
+ok: a ref matching nothing is refused with a DIFFERENT message than an archived one
+ok: both refusals wrote NOTHING (no new fragments at all)
+ok: a LIVE packet still accepts events (699-usxc fragment-only path intact)
+append-event-archived-refusal: 4 passed, 0 failed
+ok:append-event-archived-refusal-fixture:4
+[0;32m[build][0m append-event archived-refusal fixture passed
+[0;36m[build][0m Checking the checkout-lock attested-release fixture (899-q9di)...
+ok: ppid probe resolves and agrees with an independent mechanism (1532937)
+ok: an ATTESTED holder's lock is reclaimed by the next cycle
+ok: an UNATTESTED live holder still refuses (873-zcim preserved)
+ok: mark-attested accepts a descendant of the holder and writes the marker
+ok: mark-attested refuses a lock held by an unrelated live pid
+ok: mark-attested with no lock is a clean no-op
+ok: the bare invocation refuses rather than acquiring over a dying anchor
+ok: the refusal names the variable that fixes it
+ok: the refused acquire left no lock for the next lane to reap
+ok: CONTROL: CLAUDE_PID alone yields a clean acquire, no warning
+ok: CONTROL: the documented explicit anchor is still a clean acquire
+cycle-lock-attested-release: 11 passed, 0 failed
+ok:cycle-lock-attested-release-fixture:11
+[0;32m[build][0m checkout-lock attested-release fixture passed
+[0;36m[build][0m Checking the land-verdict-through-a-pipe fixture (1137-da83)...
+ok: arm D: unpiped, the land tool exits 3 for a refused gate (its documented code)
+ok: arm D2: and names the refusal on stderr
+ok: arm E: the refusal names the first failing line from the gate log
+ok: arm A: $? after the pipe is 0 — tail's status, not the land tool's 3
+ok: arm A2: and the refusal is ABSENT from the captured stdout — nothing in what the caller kept says the land failed
+ok: arm B: ${PIPESTATUS[0]} recovers the land tool's 3 from that same pipeline
+ok: arm C: with 2>&1 the refusal text IS captured
+ok: arm C2: but $? is STILL 0 — seeing the verdict and reading the status are independent, and only one of them was believed
+ok: arm F: set -o pipefail propagates the land tool's 3 through the pipe
+ok:land-verdict-pipe-fixture:all
+[0;32m[build][0m land-verdict-through-a-pipe fixture passed
+[0;36m[build][0m Checking the evidence capture helper (899-6pwv)...
+ok: REPRODUCED: tee|head truncates the evidence file; RESULT line absent from 40 captured lines
+ok: REPRODUCED with its precondition named: cmd|tail returns 0 without pipefail (status lost) and 7 with it
+ok: capture.sh stores the whole output including the RESULT line
+ok: capture.sh exits 7 while still showing an excerpt — display and status are decoupled
+ok: the exit code is recorded beside the log, readable after the fact
+ok: --verify rejects a truncated file
+ok: --verify accepts a complete file
+ok: NEGATIVE CONTROL: a file with a valid terminator but a missing body is still rejected
+ok: NEGATIVE CONTROL: a failing command still exits 3, and its complete log verifies — completeness is not success
+ok: stderr is captured into the log, not dropped
+capture-helper: 10 passed, 0 failed
+ok:capture-helper:10
+[0;32m[build][0m capture helper fixture passed
+[0;36m[build][0m Checking expire-claims --list-live names what it counts (905-wjfj)...
+ok: zero in_progress: no rows, and rows total=0 says so explicitly
+ok: a claimed in_progress packet yields one live-claim row naming its host
+ok: a fresh unclaimed in_progress packet is NAMED, not merely counted (the 905-wjfj defect)
+ok: the unclaimed row carries '-' where a host and claim time would be, in live-claim field positions
+ok: mixed ledger: rows total=3 equals summary in_progress=3 across all buckets
+ok: the rows: line is present AND reports no partition mismatch on a balanced ledger
+ok: NEGATIVE CONTROL: the stale claim is still an expire-candidate, not reclassified as unclaimed
+ok: the existing summary grammar is byte-compatible for callers that parse it
+ok: --list-live wrote no fragment
+expire-claims-list-live-rows: 9 passed, 0 failed
+ok:expire-claims-list-live-rows:9
+[0;32m[build][0m expire-claims --list-live rows fixture passed
+[0;36m[build][0m Checking expire-claims writes only when asked (1067-24q6)...
+ok: bare expire-claims leaves the ledger byte-identical
+ok: bare expire-claims exits 0
+ok: bare invocation reports mode=dry-run
+ok: bare invocation still reports the stale candidate
+ok: dry-run output names --write so the reader learns it
+ok: dry-run output says nothing happened yet
+ok: --list-live alone leaves the ledger byte-identical
+ok: --dry-run leaves the ledger byte-identical
+ok: --write mutates the ledger
+ok: --write reports the claim as expired
+ok: --write reports mode=write
+ok: --write folds through to status=ready
+ok: --apply is accepted as the write opt-in
+ok: --write --dry-run refused with exit 2
+ok: a refused invocation writes nothing
+ok: --write leaves a within-TTL claim alone
+expire-claims-write-is-opt-in: 16 passed, 0 failed
+ok:expire-claims-write-is-opt-in:16
+[0;32m[build][0m expire-claims write-is-opt-in fixture passed
+[0;36m[build][0m Checking the release runbook's tag/back-merge order (898-zhf3)...
+ok: both the back-merge and the tag push are present in the runbook (lines 456, 477)
+ok: back-merge precedes the tag push — the executable order
+ok: the 'after the tag push, never before' instruction is gone
+ok: the runbook prescribes verifying the tag did not move
+release-runbook-tag-order: 4 passed, 0 failed
+ok:release-runbook-tag-order:4
+[0;32m[build][0m release runbook tag-order fixture passed
+[0;36m[build][0m Checking the vault-shutdown classifier keeps all four outcomes reachable (1140-i6ct)...
+vault-shutdown classifier — four outcomes, four exit codes (1140-i6ct)
+  ok   green/match -> 0 (rc=0)
+  ok   stall+137/match -> FAIL (rc=1)
+  ok   regression still fails (rc=1)
+  ok   stall+137/differs -> 4 (rc=4)
+  ok   stall+137/unknown -> 3 (rc=3)
+  ok   green/differs -> 0, noted (rc=0)
+  ok   fast but non-zero -> FAIL (rc=1)
+  ok   slow but zero -> FAIL (rc=1)
+vault-shutdown-fixture-classifier: 8 passed, 0 failed
+ok:vault-shutdown-fixture-classifier:8
+[0;32m[build][0m vault-shutdown classifier fixture passed
+[0;36m[build][0m Checking the promote-stable evidence gate and dry-run...
+ok   real e2e-skill evidence shape (was BROKEN)           -> would-promote:v0.4.260817.1 (0 mutations)
+ok   no evidence at all                                   -> refused:no-evidence:v0.4.260817.1:missing=linux,macos,windows (0 mutations)
+ok   correctly named file but FAIL verdict                -> refused:no-evidence:v0.4.260817.1:missing=windows (0 mutations)
+ok   PASS exists but for a different version              -> refused:no-evidence:v0.4.260817.1:missing=linux,macos,windows (0 mutations)
+ok   legacy single-line evidence still accepted           -> would-promote:v0.4.260817.1 (0 mutations)
+ok   regex dots do not match arbitrary chars              -> refused:no-evidence:v0.4.260817.1:missing=windows (0 mutations)
+ok   flags parse in either order                          -> would-promote:v0.4.260817.1 (0 mutations)
+ok   bad tag refused before any gh call                   -> refused:bad-tag:not-a-tag (0 mutations)
+ok   demote dry-run names the restore                     -> would-demote:v0.4.260817.1:latest-would-be:v0.4.260810.1 (0 mutations)
+ok   demote without --to is refused                       -> refused:missing-target:<empty> (0 mutations)
+ok   ONLY linux passed -> refused, names the other two    -> refused:no-evidence:v0.4.260817.1:missing=macos,windows (0 mutations)
+ok   ONLY macos passed -> refused, names the other two    -> refused:no-evidence:v0.4.260817.1:missing=linux,windows (0 mutations)
+ok   ONLY windows passed -> refused, names the other two  -> refused:no-evidence:v0.4.260817.1:missing=linux,macos (0 mutations)
+ok   two of three platforms -> refused naming windows     -> refused:no-evidence:v0.4.260817.1:missing=windows (0 mutations)
+ok   ledger co-occurrence is NOT evidence (index.yaml + loop_status) -> refused:no-evidence:v0.4.260817.1:missing=linux,macos,windows (0 mutations)
+ok   work-queue log line is not a report (says FAIL, said PASS) -> refused:no-evidence:v0.4.260817.1:missing=windows (0 mutations)
+ok   body mentioning Linux does not make a windows report linux evidence -> refused:no-evidence:v0.4.260817.1:missing=linux (0 mutations)
+ok   --force overrides incomplete per-platform evidence   -> would-promote:v0.4.260817.1 (0 mutations)
+ok   --force warning names what was overridden            -> names linux,macos
+ok   PASS-but-disclaimed counts, and warns loudly         -> promoted + warned
+ok   clean evidence does not warn                         -> silent
+ok   REQUIRED_PLATFORMS=linux is satisfied by linux       -> would-promote
+ok   accept path names the evidence per platform          -> all three named + caveat
+ok   refusal does not print an evidence list              -> silent
+ok   MUTATION CONTROL: guard-defeated script trips wire   -> tripwire fired: MUTATION gh release edit v0.4.260817.1 --prerelease=false --latest
+ok   tag push failure is not a promotion                  -> rc=1, no promoted: line
+ok   origin tag disagreeing is refused by name            -> refused:stable-tag-not-moved:99999999999999999999999999999
+ok   a landed tag still reports a promotion               -> verified + promoted
+
+28/28 passed
+[0;32m[build][0m promote-stable gate + dry-run fixture passed
+[0;36m[build][0m Checking host-identity derivation...
+  ok   a pure-NVIDIA host does NOT report amd (comp-ATI-ble trap)
+  ok   a Non-VGA line alone yields no GPU at all (Non-VGA trap)
+  ok   the dual-vendor Silverblue laptop reports both, sorted
+  ok   the low-end Intel laptop reports intel only
+  ok   a Display-controller-class AMD part is still found
+  ok   no accel device -> no npu token
+  ok   an accel device -> npu token, sorted into the set
+  ok   identical hardware, different hostname -> DIFFERENT slug
+  ok   the hostname is the trailing component
+  ok   deterministic across invocations
+  ok   hostname is slugified, not passed through
+  ok   lspci reporting no display device -> accel is 'none', not a crash
+  ok   a degraded probe still exits 0
+  ok   the Darwin branch derives the documented macOS shape
+  ok   --help exits 0
+  ok   --help prints usage
+  ok   an unknown argument exits 2
+  ok   a bare run prints exactly one line
+derive-host-identity: 18 passed, 0 failed
+ok:derive-host-identity:18
+[0;32m[build][0m Host-identity fixture passed
+[0;36m[build][0m Checking the test-baseline ratchet's own fixture...
+test-baseline ratchet fixture
+  ok   the seeded known-red failure alone is tolerated
+  ok   an unlisted failure is a new regression
+  ok   a listed test that now passes is a stale entry
+  ok   a new red and a stale entry together report the new red first
+  ok   a listed test absent from the transcript is neither red nor stale
+  ok   the same test name in another binary is not covered by the entry
+  ok   an ignored listed test is neither red nor stale
+  ok   a transcript with no test results refuses
+  ok   the per-binary summary line is not counted as a test
+  ok   a missing known-red list refuses rather than defaulting to empty
+
+PASS: test-baseline ratchet fixture — 10 passed, 0 failed
+[0;32m[build][0m Test-baseline fixture passed
+[0;36m[build][0m Checking compaction deletes only what it folded (843-624y)...
+  ok   compact exits 0 when there is folded work to do
+  ok   the FOLDED fragment was consumed (deleted)
+  ok   the misplaced-definition fragment SURVIVED
+  ok   the capabilities fragment SURVIVED
+  ok   the refusal is REPORTED, not silent
+  ok   the report NAMES the misplaced definition
+  ok   the report NAMES the capabilities channel
+  ok   the folded event reached the base
+  ok   an all-refused run says so instead of claiming success
+  ok   an all-refused run leaves the fragment alone
+  ok   --help exits 0
+  ok   --help prints usage, not a compaction report
+  ok   --help says the command MUTATES
+  ok   --help left the fragment on disk
+  ok   --help left the base byte-identical
+  ok   an unknown argument REFUSES (exit 2)
+  ok   the refusal names the argument
+  ok   an unknown argument left the fragment on disk
+  ok   --dry-run exits 0
+  ok   --dry-run reports what it WOULD fold
+  ok   --dry-run wrote nothing to the base
+  ok   --dry-run left the fragment on disk
+  ok   CONTROL: a bare compact still consumes it
+compaction-coverage: 23 passed, 0 failed
+ok:compaction-coverage:23
+[0;32m[build][0m Compaction coverage fixture passed
+[0;36m[build][0m Checking point-of-use instrument freshness (851-cduu)...
+  ok   fresh binary resolves
+  ok   fresh binary prints its path
+  ok   stale + failed rebuild returns 2
+  ok   stale + failed rebuild is silent
+  ok   stale + rebuild-in-locus heals
+  ok   healed binary prints its path
+  ok   no binary returns 1
+  ok   override honoured despite staleness
+  ok   override path passes through
+  ok   lane REFUSES a fragment push validated by a stale binary
+  ok   the refusal names STALENESS as the cause
+  ok   the refusal carries a remedy the operator can type
+  ok   the refusal names the newer file that makes it stale
+  ok   the lane did NOT rebuild inside the hook
+  ok   the wsl2 redirect declaration is still readable and still ends in $REPO_BASENAME
+  ok   CONTROL: a CURRENT binary is not refused as stale
+  ok   CONTENT: an mtime-stale binary that vouches for its content is ACCEPTED
+  ok   CONTENT: a binary whose surface really differs is REFUSED
+  ok   CONTENT: the refusal names BOTH hashes
+  ok   CONTENT: a binary that cannot ANSWER falls back to the ladder and is refused
+  ok   CONTENT: the fallback refusal still names staleness
+plan-binary-freshness: 21 passed, 0 failed
+ok:plan-binary-freshness:21
+[0;32m[build][0m Instrument freshness fixture passed
+[0;36m[build][0m Checking the stale-binary remedy names only a runnable binary (1267-uafx)...
+  ok   premise: the planted ELF does not run on this host (rc 126)
+  ok   arm1: the lane refuses the stale binary
+  ok   arm1: the refusal names STALENESS
+  ok   arm1: the unrunnable newer ELF is NOT named as a remedy
+  ok   arm1: no FRESHER line at all
+  ok   arm1: falls back to the rebuild remedy
+  ok   arm2: the lane refuses the stale binary
+  ok   arm2: a newer candidate IS named (./target/debug/tillandsias-plan.exe)
+  ok   arm2: the named remedy binary RUNS
+  ok   arm3: the lane refuses the stale binary
+  ok   arm3: the runnable .exe is named
+  ok   arm3: the unrunnable ELF beside it is NOT named
+plan-binary-remedy-runnable: 12 passed, 0 failed
+ok:plan-binary-remedy-runnable:12
+[0;32m[build][0m Runnable-remedy fixture passed
+[0;36m[build][0m Checking the new-surface parity railguard fixture (628-r2vk)...
+  ok   clean fixture passes
+  ok   label-copy constant is not extracted as a surface
+  ok   new unclaimed menu id fails
+  ok   failure names the columns to fill
+  ok   unannotated declaration site fails
+  ok   stale baseline entry fails
+  ok   claiming row makes the same surface pass
+tray-surface-parity-gate: 7 passed, 0 failed
+ok:tray-surface-parity-gate:7
+[0;32m[build][0m New-surface parity railguard fixture passed
+[0;36m[build][0m Checking populate_hot_paths silent-failure regression (920-tqhs)...
+skip: not root — the negative control needs to mutate /opt and drop to a lane user
+[0;32m[build][0m Populate hot paths negative control fixture passed
+[0;36m[build][0m Checking capability-row host resolution (859-b2zc)...
+capability-row-check: 859-b2zc
+  ok   no hostname binary, HOSTNAME known -> ok
+  ok   no hostname binary, HOSTNAME unknown -> due (not unavailable)
+  ok   HOSTNAME empty -> falls through to /etc/hostname
+  ok   uppercase node name is lowercased
+  ok   FQDN is domain-stripped
+  ok   TILLANDSIAS_WORKSTATION overrides HOSTNAME
+  ok   forge without a stable identity refuses to publish
+  ok   forge WITH TILLANDSIAS_WORKSTATION resolves normally
+  ok   no runnable plan binary is reported
+capability-row-check: 9 passed, 0 failed
+ok:capability-row-check:9
+[0;32m[build][0m Capability-row host-resolution fixture passed
+[0;36m[build][0m Checking the probe refuses a stale candidate (1172-dyvd)...
+ok: a stale candidate is refused (rc=2) rather than published
+ok: the refusal NAMES the candidate it refused
+ok: the refusal says WHICH contract the candidate predates
+ok: a current candidate is still ADMITTED by the resolver (rc=1, not the resolver's 2)
+ok: and is not reported as stale
+ok: two candidates of identical age get opposite RESOLVER verdicts — the check reads output, not mtime
+ok: a non-running candidate is not misreported as stale
+ok: a current binary in the install dir is CONSULTED (rc=1, not the resolver's 2)
+ok: a STALE binary in the install dir is refused by name, not admitted for its location
+ok: with LOCALAPPDATA unset the install candidate does not exist (rc=2)
+ok:probe-stale-candidate-fixture:all
+[0;32m[build][0m Probe stale-candidate refusal fixture passed
+[0;36m[build][0m Checking capability-row truth dimension (889-ewvt)...
+ok: no-row-is-due-not-drifted (due:no-capability-row:fixturehost rc=1)
+ok: row-matching-the-probe-is-current (ok:capability-row-current:fixturehost rc=0)
+ok: row-claiming-an-absent-engine-is-drifted-and-names-it (stale:capability-row-drifted:fixturehost:row-only=gpu/container/ollama,probe-only=- rc=1)
+ok: row-missing-a-live-engine-is-drifted-too (stale:capability-row-drifted:fixturehost:row-only=-,probe-only=cpu/container/ollama rc=1)
+ok: an-unrunnable-probe-never-manufactures-drift (ok:capability-row-reported:fixturehost rc=0)
+ok: an-agreeing-but-week-old-row-is-expired (stale:capability-row-expired:fixturehost:age=694800s)
+ok: drift-outranks-age (stale:capability-row-drifted:fixturehost:row-only=gpu/container/ollama,probe-only=cpu/container/ollama rc=1)
+ok: unreadable-matrix-is-unavailable (unavailable:capability-matrix-failed rc=2)
+ok: grammar-exactly-one-line
+ok: a-fresh-own-locus-row-outranks-an-older-foreign-locus-row (ok:capability-row-current:fixturehost rc=0)
+ok: a-genuinely-expired-own-locus-row-still-expires-and-reports-its-own-age (stale:capability-row-expired:fixturehost:age=694800s rc=1)
+ok: a-foreign-locus-row-does-not-satisfy-a-missing-own-locus-row (due:no-capability-row:fixturehost rc=1)
+ok: a-foreign-locus-engine-is-not-this-locus-drifting (ok:capability-row-current:fixturehost rc=0)
+ok: a-foreign-locus-that-schedules-two-engines-is-not-this-empty-locus-drifting (ok:capability-row-current:fixturehost rc=0)
+ok: one-wrong-locus-read-corrupts-the-age-and-the-engine-set-together (stale:capability-row-expired:fixturehost:age=694800s rc=1)
+ok: an-expired-row-is-still-expired-when-the-probe-cannot-run (stale:capability-row-expired:fixturehost:age=694800s rc=1)
+ok: a-fresh-row-with-no-probe-still-reports-rather-than-verifies (ok:capability-row-reported:fixturehost rc=0)
+ok: an-age-answer-did-not-become-a-truth-answer (ok:capability-row-reported:fixturehost rc=0)
+ok: the-newest-row-decides-on-the-unrunnable-path-so-an-old-sibling-does-not-expire-a-live-host (ok:capability-row-reported:fixturehost rc=0)
+ok: an-unreachable-remedy-is-named-as-unreachable
+ok: the-diagnostic-did-not-leak-into-the-verdict (stale:capability-row-expired:fixturehost:age=694800s rc=1)
+ok: a-reachable-remedy-is-not-announced-as-unreachable
+ok: a-fallback-locus-on-a-host-that-publishes-elsewhere-asks-for-nothing (unavailable:locus-not-published rc=2)
+ok: a-forge-declaring-in-guest-is-still-asked-to-publish (due:no-capability-row:fixturehost rc=1)
+ok: a-windows-kind-probe-declaring-windows-host-is-still-asked-to-publish (due:no-capability-row:fixturehost rc=1)
+ok:capability-row-check-fixture:25
+[0;32m[build][0m Capability-row truth fixture passed
+[0;36m[build][0m Checking the live MCP server build join (823-u3k9)...
+ok: unattested-is-not-ok (unattested:no-live-build-claim rc=3)
+ok: attested-id-matching-disk-is-current (ok:live-build-current:forge-plan rc=0)
+ok: a-process-that-predates-the-file-is-a-named-state (stale:live-server-build:forge-plan:667f61a069b7!=7857856061d1 rc=1)
+ok: relaunching-onto-the-fixed-file-clears-it (ok:live-build-current:forge-plan rc=0)
+ok: unknown-is-never-current (unavailable:build-id-unknown rc=2)
+ok: unreadable-source-is-unavailable-not-stale (unavailable:server-source-unreadable rc=2)
+ok: a-stale-claim-does-not-vouch-for-this-cycle (unattested:live-build-claim-stale rc=3)
+ok: a-fresh-claim-still-counts (ok:live-build-current:forge-plan rc=0)
+ok: attest-without-a-claim-is-refused
+ok: attest-without-a-source-is-refused
+ok: the-real-forge-plan-server-reports-its-own-build
+ok: a-server-that-reports-no-build-is-stale-not-unknown (stale:live-server-build-unreported:forge-plan rc=1)
+ok: a-current-forge-plan-does-not-hide-a-stale-project-info (stale:live-server-build:project-info:de8f74df8ca3!=b62c667cb9cd rc=1)
+ok: each-server-is-checkable-by-name (ok:live-build-current:forge-plan rc=0)
+ok: relaunched-project-info-clears-and-forge-plan-survives (ok:live-build-current:forge-plan rc=0)
+ok: the-real-project-info-server-reports-its-own-build
+ok: grammar-exactly-one-line
+ok:mcp-live-build-check-fixture:15
+[0;32m[build][0m Live MCP server build fixture passed
+[0;36m[build][0m Checking the tier-model warm selection (965-hz3f)...
+ok: gpu-prefers-14b (qwen2.5:14b rc=0)
+ok: hybrid-prefers-14b (qwen2.5:14b rc=0)
+ok: gpu-without-14b-takes-7b (qwen2.5:7b rc=0)
+ok: gpu-with-only-3b-takes-3b (qwen2.5:3b rc=0)
+ok: cpu-floor-prefers-3b (qwen2.5:3b rc=0)
+ok: mobile-npu-uses-cpu-floor (qwen2.5:3b rc=0)
+ok: unknown-class-uses-floor (qwen2.5:3b rc=0)
+ok: no-candidate-is-nonzero (<none> rc=1)
+ok: empty-inventory-is-nonzero (<none> rc=1)
+ok: cpu-only never selects 14b even when present (got qwen2.5:3b)
+ok: no-substring-false-match (<none> rc=1)
+ok:warm-tier-model-select:11
+PASS: test-warm-tier-model all branches proven
+[0;32m[build][0m Tier-model warm selection fixture passed
+[0;36m[build][0m Checking the commit-time cheatsheet image sync (448)...
+ok: unrelated commit is a no-op (skip:no-authored-cheatsheet-change)
+ok: authored edit re-synced the derived tree (ok:cheatsheet-image-synced:1)
+ok: the derived copy is STAGED into this very commit (images/default/cheatsheets/runtime/thing.md)
+ok: committed derived copy matches the authored source
+ok: MUTATION — without the guard the derived copy goes stale (arm 2 has teeth)
+ok: a missing stager warns and never blocks (warn:stager-missing rc=0)
+ok: the warning names the consequence other hosts will see
+ok:cheatsheet-commit-sync:7
+PASS: order-448 commit-time cheatsheet sync proven (incl. mutation)
+[0;32m[build][0m Commit-time cheatsheet sync fixture passed
+[0;36m[build][0m Checking the forge project guard-hook install (969-nhh7)...
+ok: repo-local core.hooksPath set (/tmp/forge-guard-hooks.m9dY2Y/proj/.git/hooks)
+ok: pre-commit installed repo-local
+ok: pre-push installed repo-local
+ok: GLOBAL hooks dir untouched (post-commit prepare-commit-msg )
+ok: no pre-push leaked into the global dir
+ok: agent trailer hook carried across into the repo-local dir
+ok: with no runnable plan binary a non-Tillandsias repo is untouched
+ok: with a plan binary a non-Tillandsias repo gets discipline hooks repo-local, global dir untouched
+ok: a missing checkout is a silent no-op (exit 0)
+ok: an empty path is a silent no-op (exit 0)
+ok: state line reports present (hooks: pre_push=present pre_commit=present dir=/tmp/forge-guard-hooks.m9dY2Y/proj/.git/hooks)
+ok: state line reports absent for an unguarded checkout (hooks: pre_push=absent pre_commit=absent dir=/tmp/forge-guard-hooks.m9dY2Y/bare/.git/hooks)
+ok:forge-project-guard-hooks:11
+PASS: guards install repo-local, global dir untouched, state line honest
+[0;32m[build][0m Forge project guard-hook fixture passed
+ok: branch1 global hooksPath refused, global dir untouched (prepare-commit-msg )
+ok: branch2 local hooksPath installs locally
+ok: branch3 no hooksPath installs into .git/hooks
+PASS: install-hooks refuses a global core.hooksPath (1442-wyf9)
+[0;36m[build][0m Checking the file -> covering-litmus-specs query (748-tkjx)...
+ok: declared-artifact-names-its-spec
+ok: undeclared-command-coverage-is-found-and-labelled
+ok: a-test-no-spec-binds-is-marked-unbound
+ok: the-count-counts-only-bound-specs
+ok: an-uncovered-path-is-silent-and-exits-zero
+ok: run-mode-emits-a-runnable-command
+ok: run-mode-omits-unbound-specs
+ok: a-steps-nested-size-is-not-the-documents-size
+ok: multiple-paths-answer-in-one-call
+ok: an-unreadable-corpus-is-unavailable-not-empty
+ok: the-target-list-is-not-passed-through-awk-v
+ok: the-real-lib-common.sh-case-returns-meta-orchestration
+ok:litmus-covering-specs-fixture:12
+[0;32m[build][0m Litmus coverage query fixture passed
+[0;36m[build][0m Reporting litmus line-window pins (925-erjs, advisory)...
+ok:litmus-line-windows:7-recorded
+[0;32m[build][0m Litmus line-window report emitted
+[0;36m[build][0m Checking groundtruth cases grade the same with inference up or down (928-qm8k)...
+ok:groundtruth-regime-invariant:33-cases
+[0;32m[build][0m Groundtruth regime-invariance check passed
+[0;36m[build][0m Checking the containers.conf proxy-env converger (923-rmtw)...
+ok: a-stale-block-is-drift (drift:containers-conf-proxy-env-present:1 rc=1)
+ok: a-commented-block-is-still-drift (drift:containers-conf-proxy-env-present:1 rc=1)
+ok: a-converged-conf-is-ok (ok:containers-conf-proxy-env-absent rc=0)
+ok: another-sections-env-and-a-non-proxy-engine-env-are-clean (ok:containers-conf-proxy-env-absent rc=0)
+ok: an-absent-conf-is-ok (ok:containers-conf-proxy-env-absent rc=0)
+ok: a-reintroduced-writer-is-its-own-drift (drift:compiled-writer-recreates-the-block rc=1)
+ok: a-source-with-no-converger-is-unavailable (unavailable:no-converger-in-source rc=2)
+ok: the-shipped-init-path-converges-and-does-not-recreate
+ok: grammar-exactly-one-line
+ok:containers-conf-proxy-env-fixture:9
+[0;32m[build][0m containers.conf proxy-env fixture passed
+[0;36m[build][0m Checking the enclave network is internal (972-a8vh)...
+ok:enclave-network-internal:source[sh=1009,rs=306,rust=file-scoped,declined=docs]
+[0;32m[build][0m Enclave network internal check passed
+[0;36m[build][0m Checking ledger prose round-trips byte-identically (971-7muc)...
+  [OK]   --summary-file round-trips backticks, $(...) and $VAR byte-identically
+  [OK]   --summary-file - (stdin) preserves backticks and $(...)
+  [OK]   argv path REFUSES an unbalanced backtick
+  [OK]   argv path REFUSES a literal $(
+  [OK]   argv path still accepts balanced backticks (correct single-quoting)
+  [OK]   negative control: the shell silently deletes backticked text (no error)
+
+  passed=6 failed=0
+ok:ledger-prose-roundtrip
+[0;32m[build][0m Ledger prose round-trip passed
+ok:enclave-network-internal:source+deployed[sh=1009,rs=306,rust=file-scoped,declined=docs]
+[0;36m[build][0m Checking the enclave proxy list has one definition (923-rmtw)...
+enclave-proxy-lib: 923-rmtw
+  ok   the lib's base list equals ENCLAVE_NO_PROXY_BASE
+  ok   the lib's default subnet equals DEFAULT_ENCLAVE_SUBNET
+  ok   the composed list appends the subnet, as enclave_no_proxy() does
+  ok   TILLANDSIAS_ENCLAVE_SUBNET overrides the subnet
+  ok   the env-arg array carries the six proxy flags
+  ok   the array's no_proxy value is the composed list
+  ok   nix-cache is present (801-kqme)
+  ok   git-service is absent, as in the Rust list
+  ok   no script re-pastes the list
+ok:enclave-proxy-lib:9 checked
+[0;32m[build][0m Enclave proxy list single-source check passed
+[0;36m[build][0m Checking bench prompt uniqueness (858-ihcb)...
+bench-prompt-uniqueness: 858-ihcb
+  ok   every /api/generate prompt is distinct
+  ok   expected number of generate calls
+  ok   distinguishing text is within the first 24 chars (shared prefix=5)
+  ok   prefill_tok_s comes from the isolated probes
+  ok   prefill_n reports the kept sample size
+  ok   projection declines without a measured chunk count
+bench-prompt-uniqueness: 6 passed, 0 failed
+ok:bench-prompt-uniqueness:6
+[0;32m[build][0m Bench prompt-uniqueness fixture passed
+[0;36m[build][0m Running Lua source-agreement production integration (1484-uf29)...
+   Compiling tillandsias-core v56.9.27 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-core)
+   Compiling tillandsias-plan v0.1.0 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-plan)
+   Compiling tillandsias-podman v56.9.27 (/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/crates/tillandsias-podman)

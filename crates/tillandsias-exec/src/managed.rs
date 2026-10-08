@@ -1,4 +1,4 @@
-// @trace order:1534-puyz, spec:command-runtime
+// @trace order:1534-puyz, order:1538-pwdr, spec:command-runtime
 //! Script-owned supervision. No Lua value or callback crosses this boundary.
 //! Supervisors run independently of the Lua thread, including during a CPU loop.
 
@@ -30,6 +30,18 @@ enum Stop {
     Running,
     Kill,
     Close,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum ObservationMode {
+    Silent,
+    Completion,
+    Lines,
+}
+
+struct Observation {
+    events: mpsc::Sender<Event>,
+    lines: bool,
 }
 
 struct State {
@@ -106,7 +118,30 @@ impl Scope {
     }
     /// Linearizes shutdown against launch acceptance AND registration. The supervisor owns
     /// a successfully spawned child before the caller can obtain its handle.
+    /// `stream=true` emits bounded lines followed by Finished; `false` emits
+    /// no events (the legacy blocking run path). Capture bounds are independent.
     pub fn spawn(&self, command: Command, stream: bool) -> Result<Process, ExecError> {
+        self.spawn_observed(
+            command,
+            if stream {
+                ObservationMode::Lines
+            } else {
+                ObservationMode::Silent
+            },
+        )
+    }
+    /// Capture bytes without line buffering or line events, but emit the same
+    /// Finished receipt after fd draining and direct-child reaping. Script-owned
+    /// chain stages use this mode; public streaming still enforces MAX_LINE_BYTES.
+    /// Ownership, deadlines, capture defaults and result publication are unchanged.
+    pub fn spawn_completion(&self, command: Command) -> Result<Process, ExecError> {
+        self.spawn_observed(command, ObservationMode::Completion)
+    }
+    fn spawn_observed(
+        &self,
+        command: Command,
+        mode: ObservationMode,
+    ) -> Result<Process, ExecError> {
         let mut processes = self.0.processes.lock().unwrap();
         if self.stopped() {
             return Err(scope_error(&command, "script-scope-closed"));
@@ -130,7 +165,10 @@ impl Scope {
             state: state.clone(),
             cancel,
         };
-        let events = stream.then(|| self.0.events.clone());
+        let observation = (mode != ObservationMode::Silent).then(|| Observation {
+            events: self.0.events.clone(),
+            lines: mode == ObservationMode::Lines,
+        });
         let deadline = self.0.deadline;
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let argv = command.argv.clone();
@@ -153,7 +191,7 @@ impl Scope {
                             id,
                             rx,
                             deadline,
-                            events,
+                            observation,
                             ready_tx,
                             &worker_state.reaped,
                         ));
@@ -283,8 +321,11 @@ async fn read_stream<R: tokio::io::AsyncRead + Unpin>(
     let mut pending = Vec::new();
     let mut buf = [0u8; 8192];
     loop {
-        // Bound PIPE EOF after leader exit, not callback delivery time. Sending
-        // queued lines may take arbitrarily long within the process deadline.
+        // Bound PIPE EOF after leader exit, not callback delivery time. Once
+        // the leader has exited its own `timeout_ms` no longer applies
+        // (1551-sprq): sending queued lines may take as long as the consumer
+        // needs, bounded only by the enclosing scope deadline, and a cut-off
+        // there keeps the real exit status and marks the capture truncated.
         let read = async {
             if *leader.borrow() {
                 tokio::time::timeout(GROUP_DRAIN_GRACE, pipe.read(&mut buf))
@@ -345,7 +386,7 @@ async fn supervise(
     id: u64,
     mut cancel: watch::Receiver<Stop>,
     deadline: Option<Instant>,
-    events: Option<mpsc::Sender<Event>>,
+    observation: Option<Observation>,
     ready: std::sync::mpsc::Sender<Result<(), ExecError>>,
     reaped: &AtomicBool,
 ) -> Result<Output, ExecError> {
@@ -433,12 +474,29 @@ async fn supervise(
         (Some(a), Some(b)) => Some(a.min(b)),
         (a, b) => a.or(b),
     };
-    let timer = async {
-        match end {
+    // ORDER 1551-sprq. Two timers, because they stop meaning the same thing
+    // once the leader exits. `timer` is the per-process `timeout_ms` (capped
+    // by the scope deadline) and bounds the CHILD only: it is disarmed when
+    // the leader's exit status arrives (grouped commands; see the select
+    // below for legacy group=false), so a child that exited inside its
+    // timeout is never reported timed_out however slowly its lines are
+    // consumed. `scope_timer` is the enclosing scope deadline alone and can
+    // still cut delivery off after the exit; it then keeps the real status
+    // and marks the capture truncated.
+    let sleep_until = |at: Option<Instant>| async move {
+        match at {
             Some(d) => tokio::time::sleep_until(tokio::time::Instant::from_std(d)).await,
             None => std::future::pending().await,
         }
     };
+    let timer = sleep_until(end);
+    let scope_timer = sleep_until(deadline);
+    // Completion-only observers never enter read_stream's line assembly path;
+    // both fds still drain and retain the ordinary bounded byte-prefix capture.
+    let line_events = observation
+        .as_ref()
+        .filter(|observer| observer.lines)
+        .map(|observer| observer.events.clone());
     let io = async {
         use tokio::io::AsyncWriteExt;
         let feed = async {
@@ -456,7 +514,7 @@ async fn supervise(
                 command.capture_bytes,
                 id,
                 "stdout",
-                events.clone(),
+                line_events.clone(),
                 leader_rx.clone()
             ),
             read_stream(
@@ -464,7 +522,7 @@ async fn supervise(
                 command.capture_bytes,
                 id,
                 "stderr",
-                events.clone(),
+                line_events.clone(),
                 leader_rx
             ),
             feed
@@ -473,6 +531,7 @@ async fn supervise(
     };
     let mut io = Box::pin(io);
     tokio::pin!(timer);
+    tokio::pin!(scope_timer);
     let mut drained = None;
     let mut status = None;
     let mut timed_out = false;
@@ -482,7 +541,18 @@ async fn supervise(
         tokio::select! {
             biased;
             _ = cancelled(&mut cancel) => break,
-            _ = &mut timer => { timed_out = true; break; },
+            // An ungrouped (legacy group=false) leader has no drain grace, so
+            // after its exit `timer` stays armed as the only bound on pipe
+            // EOF from a descendant; it then cuts the capture off like the
+            // scope deadline does, and still never fabricates timed_out.
+            _ = &mut timer, if status.is_none() || !command.group => {
+                timed_out = status.is_none();
+                break;
+            },
+            // Reached only after the leader exited (before that, `timer`
+            // already covers the scope deadline): a delivery cut-off, which
+            // falls through to the abandoned-capture path below.
+            _ = &mut scope_timer => break,
             r = &mut io, if drained.is_none() => match r {
                 Ok(r) => drained = Some(r), Err(e) => { failure = Some(e); break; }
             },
@@ -535,6 +605,16 @@ async fn supervise(
             source,
         }),
         None => {
+            // ORDER 1551-mkr9. A capture abandoned by a kill or a scope close
+            // is NOT a whole capture, and must not look like one. Measured:
+            // `seq 1 2000` had exited 0 while its lines were still queued for
+            // delivery; `kill()` then returned status=exited code=0 with an
+            // EMPTY stdout and truncated=false, so `ok` was true. A deadline
+            // that fires while the leader still runs is a different, already
+            // typed outcome (`timed_out`), so it is left alone; a SCOPE
+            // deadline that cuts delivery off after the leader exited
+            // (1551-sprq) is an abandoned capture like a kill.
+            let abandoned = !timed_out && drained.is_none();
             let (stdout, stderr, dropped) = match (timed_out, drained) {
                 (false, Some(capture)) => capture,
                 _ => (Vec::new(), Vec::new(), 0),
@@ -550,19 +630,226 @@ async fn supervise(
                 stdout,
                 stderr,
                 dropped,
-                truncated: dropped > 0,
+                truncated: dropped > 0 || abandoned,
                 argv: command.argv.clone(),
                 run: RunId::new(),
             })
         }
     };
     // Completion delivery is also cancellable: cleanup never needs Lua to drain.
-    if let Some(tx) = &events {
+    if let Some(observer) = &observation {
         tokio::select! {
             biased;
             _ = scope_cancelled(&mut cancel) => {},
-            _ = tx.send(Event::Finished(id)) => {},
+            _ = observer.events.send(Event::Finished(id)) => {},
         }
     }
     result
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    fn cat(bytes: Vec<u8>) -> Command {
+        Command::new(["/bin/cat"])
+            .stdin_bytes(bytes)
+            .group(true)
+            .timeout(Duration::from_secs(2))
+    }
+
+    async fn published(process: &Process) -> Result<Output, String> {
+        tokio::time::timeout(Duration::from_secs(4), async {
+            loop {
+                if let Some(result) = process.result() {
+                    return result;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("managed result was not published")
+    }
+
+    fn only_finished(events: &mut mpsc::Receiver<Event>, id: u64) {
+        assert!(matches!(events.try_recv(), Ok(Event::Finished(actual)) if actual == id));
+        assert!(matches!(
+            events.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+    }
+
+    #[tokio::test]
+    async fn completion_only_accepts_newline_free_payload_beyond_stream_line_bound() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_secs(5)));
+        let bytes = vec![b'x'; MAX_LINE_BYTES + 1];
+        let process = scope.spawn_completion(cat(bytes.clone())).unwrap();
+        let output = published(&process).await.unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert_eq!(output.stdout, bytes);
+        assert!(output.stderr.is_empty());
+        assert!(!output.truncated);
+        assert_eq!(output.dropped, 0);
+        only_finished(&mut events, process.id);
+        scope.cleanup().unwrap();
+    }
+
+    #[tokio::test]
+    async fn completion_only_capture_is_bounded_without_line_queue_backpressure() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_secs(5)));
+        let bytes = b"line\0\xff\n".repeat(MAX_LINE_BYTES / 7 + 1);
+        let cap = 257;
+        let process = scope
+            .spawn_completion(cat(bytes.clone()).capture_bytes(cap))
+            .unwrap();
+        // Deliberately do not poll events until publication. Full line streaming
+        // would fill the 32-slot queue and fail to drain this producer in time.
+        let output = published(&process).await.unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert_eq!(output.stdout, bytes[..cap]);
+        assert!(output.stderr.is_empty());
+        assert!(output.truncated);
+        assert_eq!(output.dropped, (bytes.len() - cap) as u64);
+        only_finished(&mut events, process.id);
+        scope.cleanup().unwrap();
+    }
+
+    #[tokio::test]
+    async fn full_streaming_keeps_unterminated_line_limit() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_secs(5)));
+        let process = scope
+            .spawn(cat(vec![b'x'; MAX_LINE_BYTES + 1]), true)
+            .unwrap();
+        let failure = published(&process).await.unwrap_err();
+        assert!(failure.contains("proc-line-too-long"), "{failure}");
+        only_finished(&mut events, process.id);
+        scope.cleanup().unwrap();
+    }
+
+    // ORDER 1551-mkr9. The child has exited 0, its lines are still queued
+    // because nobody drains the 32-slot event channel, and the handle is then
+    // killed. That capture was abandoned, and the result has to say so.
+    #[tokio::test]
+    async fn a_kill_after_exit_with_undelivered_lines_is_not_a_whole_capture() {
+        // The receiver stays alive and unread: dropping it would turn parked
+        // delivery into a stream error, which is a different outcome.
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_secs(5)));
+        // 200 lines: more than the queue holds, far less than a pipe buffer,
+        // so `cat` exits at once while the reader is parked on line delivery.
+        let process = scope.spawn(cat(b"line\n".repeat(200)), true).unwrap();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        // PREMISE, asserted before the verdict is read: nothing published yet.
+        assert!(
+            process.result().is_none(),
+            "premise: line delivery must still be parked"
+        );
+        process.kill();
+        // The Finished receipt queues behind the parked lines, exactly as it
+        // does for the Lua host, which keeps pumping while it waits.
+        let output = tokio::time::timeout(Duration::from_secs(4), async {
+            loop {
+                while events.try_recv().is_ok() {}
+                if let Some(result) = process.result() {
+                    return result;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("managed result was not published")
+        .unwrap();
+        // Exited(0), not Signaled: the child had finished before the kill.
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert!(output.stdout.is_empty());
+        assert!(output.truncated, "an abandoned capture looked whole");
+        scope.cleanup().unwrap();
+    }
+
+    // ORDER 1551-sprq. `timeout_ms` bounds the child, not the consumer. The
+    // child exits 0 at once; its lines are then consumed one every 5 ms, so
+    // delivery outlasts the 300 ms process timeout several times over. The
+    // per-process timer used to keep running after the leader exited and
+    // reported this run timed_out with an empty capture.
+    #[tokio::test]
+    async fn an_exited_child_is_not_timed_out_by_slow_line_delivery() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_secs(10)));
+        let bytes = b"line\n".repeat(200);
+        let command = cat(bytes.clone()).timeout(Duration::from_millis(300));
+        let process = scope.spawn(command, true).unwrap();
+        let started = Instant::now();
+        let mut lines = 0;
+        let output = tokio::time::timeout(Duration::from_secs(8), async {
+            loop {
+                match events.try_recv() {
+                    Ok(Event::Line { .. }) => lines += 1,
+                    Ok(Event::Finished(_)) => {}
+                    Err(_) => {
+                        if let Some(result) = process.result() {
+                            return result;
+                        }
+                    }
+                }
+                // The deliberately slow consumer.
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("managed result was not published")
+        .unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert_eq!(lines, 200);
+        // Delivery really did outlast the process timeout (200 x 5 ms).
+        assert!(started.elapsed() > Duration::from_millis(600));
+        assert_eq!(output.stdout, bytes);
+        assert!(!output.truncated);
+        scope.cleanup().unwrap();
+    }
+
+    // ORDER 1551-sprq. After the leader exits only the SCOPE deadline can cut
+    // delivery off; when it does, the real exit status survives and the
+    // capture is marked truncated. It is never fabricated into timed_out.
+    #[tokio::test]
+    async fn a_scope_deadline_after_exit_keeps_the_exit_status_and_truncates() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_millis(400)));
+        // Nobody reads events yet: delivery parks after 32 lines, the child exits.
+        let process = scope
+            .spawn(
+                cat(b"line\n".repeat(200)).timeout(Duration::from_secs(5)),
+                true,
+            )
+            .unwrap();
+        // Let the scope deadline pass while delivery is parked, then drain so
+        // the Finished receipt can be enqueued, as the Lua host's pump would.
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        let output = tokio::time::timeout(Duration::from_secs(4), async {
+            loop {
+                while events.try_recv().is_ok() {}
+                if let Some(result) = process.result() {
+                    return result;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("managed result was not published")
+        .unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert!(output.truncated, "a cut-off delivery looked whole");
+        scope.cleanup().unwrap();
+    }
+
+    #[tokio::test]
+    async fn silent_spawn_keeps_no_event_legacy_semantics() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_secs(5)));
+        let bytes = vec![b'x'; MAX_LINE_BYTES + 1];
+        let process = scope.spawn(cat(bytes.clone()), false).unwrap();
+        let output = published(&process).await.unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert_eq!(output.stdout, bytes);
+        assert!(matches!(
+            events.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+        scope.cleanup().unwrap();
+    }
 }

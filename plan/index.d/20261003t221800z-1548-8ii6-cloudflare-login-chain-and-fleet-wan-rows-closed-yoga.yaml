@@ -1,0 +1,126 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Closes 1548-8ii6: completion events for the Cloudflare login chain rows and two
+# fleet-wan rows, each citing a closure run on trunk 02c199aa67b4443cae30e00b7991dcb8acd2e01f (origin/linux-next).
+status:
+  - packet_id: a-fake-cloudflare-server-serves-openid-discovery-oauth-and-the-zero-trust-api-routes-the-bootstrap-calls-so-every-login-and-fleet-vpn-fixture-runs-without-the-real-app
+    field: status
+    value: completed
+    ts: "2026-10-03T22:18:00Z"
+    host: yoga
+  - packet_id: cloudflare-oauth-begin-exchange-refresh-and-revoke-are-pure-pkce-functions-over-an-injected-http-client-and-the-login-announces-a-device-grant-if-discovery-ever-lists-one
+    field: status
+    value: completed
+    ts: "2026-10-03T22:18:00Z"
+    host: yoga
+  - packet_id: the-cloudflare-bundle-lives-at-secret-cloudflare-token-and-secret-cloudflare-refresh-with-the-github-ordering-rule-and-a-resident-due-check-rotates-it-from-the-same-three-entry-points
+    field: status
+    value: completed
+    ts: "2026-10-03T22:18:00Z"
+    host: yoga
+  - packet_id: tillandsias-cloudflare-login-completes-the-pkce-flow-through-one-of-three-receivers-loopback-qr-to-an-operator-relay-page-or-paste-stores-the-bundle-and-cloudflare-logout-revokes-it
+    field: status
+    value: completed
+    ts: "2026-10-03T22:18:00Z"
+    host: yoga
+  - packet_id: cloudflare-names-is-the-one-normalizer-every-cloudflare-object-name-passes-through-with-typed-label-and-display-classes-and-the-canonical-tillandsias-vpn-name-table
+    field: status
+    value: completed
+    ts: "2026-10-03T22:18:00Z"
+    host: yoga
+  - packet_id: is-ipv6-functional-parses-unbracketed-socket-addresses-so-init-writes-ipv4-only-on-every-linux-host-and-the-repair-must-probe-every-default-router
+    field: status
+    value: completed
+    ts: "2026-10-03T22:18:00Z"
+    host: yoga
+  - packet_id: fleet-score-orders-hosts-by-measured-class-first-so-a-transient-laptop-never-outranks-an-always-on-host-and-services-yaml-names-macuahuitl-preferred
+    field: status
+    value: completed
+    ts: "2026-10-03T22:18:00Z"
+    host: yoga
+  - packet_id: the-four-cloudflare-login-chain-rows-still-fold-ready-though-their-code-landed-at-7985e2469-and-kc5f-still-lacks-the-tray-signal
+    field: status
+    value: completed
+    ts: "2026-10-03T22:18:00Z"
+    host: yoga
+
+events:
+  - packet_id: a-fake-cloudflare-server-serves-openid-discovery-oauth-and-the-zero-trust-api-routes-the-bootstrap-calls-so-every-login-and-fleet-vpn-fixture-runs-without-the-real-app
+    event:
+      type: completed
+      ts: "2026-10-03T22:18:00Z"
+      agent_id: claude-sonnet-yoga-20261003t221800z
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: trunk 02c199aa67b4443cae30e00b7991dcb8acd2e01f (origin/linux-next; landing 7985e2469 land96 is its ancestor). On this tree 'bash scripts/test-fake-cloudflare.sh' rc=0 with arms wrong_verifier_refused, redirect_uri_trailing_slash_refused, code_single_use_refused, refresh_rotates_and_invalidates_old, ledger_records_calls_in_order 5/5 plus the LAX negative control (output ok:fake-cloudflare:5/5+control).
+  - packet_id: cloudflare-oauth-begin-exchange-refresh-and-revoke-are-pure-pkce-functions-over-an-injected-http-client-and-the-login-announces-a-device-grant-if-discovery-ever-lists-one
+    event:
+      type: completed
+      ts: "2026-10-03T22:18:00Z"
+      agent_id: claude-sonnet-yoga-20261003t221800z
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: trunk 02c199aa67b4443cae30e00b7991dcb8acd2e01f (landing 7985e2469). 'bash scripts/test-cloudflare-oauth-core.sh' rc=0 (ok:cloudflare-oauth-core:5/5+note, includes state-mismatch makes zero token requests and the device-grant note). 'cargo test -p tillandsias-headless cloudflare_oauth' rc=0, 19 passed 0 failed 5 ignored.
+  - packet_id: the-cloudflare-bundle-lives-at-secret-cloudflare-token-and-secret-cloudflare-refresh-with-the-github-ordering-rule-and-a-resident-due-check-rotates-it-from-the-same-three-entry-points
+    event:
+      type: completed
+      ts: "2026-10-03T22:18:00Z"
+      agent_id: claude-sonnet-yoga-20261003t221800z
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: trunk 02c199aa67b4443cae30e00b7991dcb8acd2e01f (landing 7985e2469). 'bash scripts/test-cloudflare-token-rotation.sh' rc=0 (ok:cloudflare-token-rotation:6/6+controls: the three ARM6 call-site mutations are caught, and the POL arm plus its forge-glob, forge-wide and mirror-changed controls show the forge policy grants nothing under secret/data/cloudflare/ and git-mirror is unchanged).
+  - packet_id: tillandsias-cloudflare-login-completes-the-pkce-flow-through-one-of-three-receivers-loopback-qr-to-an-operator-relay-page-or-paste-stores-the-bundle-and-cloudflare-logout-revokes-it
+    event:
+      type: completed
+      ts: "2026-10-03T22:18:00Z"
+      agent_id: claude-sonnet-yoga-20261003t221800z
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: trunk 02c199aa67b4443cae30e00b7991dcb8acd2e01f (landing 7985e2469). 'bash scripts/test-cloudflare-login.sh' rc=0 (ok:cloudflare-login:all-arms+controls, real binary against the fake: loopback, deny, qr, paste, no-relay refusal, LITMUS_PODMAN_MODE stop, logout). Both exit criteria name only the script and the logout behaviour; the tray-side stored signal appears only in the row context and in tasks.md 5.1 and is not an exit criterion, so it is split out to 1505-hfim (the row that owns tray-side Cloudflare rows) and does not hold this row open. See the following note.
+  - packet_id: tillandsias-cloudflare-login-completes-the-pkce-flow-through-one-of-three-receivers-loopback-qr-to-an-operator-relay-page-or-paste-stores-the-bundle-and-cloudflare-logout-revokes-it
+    event:
+      type: note
+      ts: "2026-10-03T22:18:00Z"
+      agent_id: claude-sonnet-yoga-20261003t221800z
+      host: yoga
+      summary: |-
+        WHAT REMAINS after this completion: the tray-side waiter for the stored Cloudflare signal (the analogue of await_github_login_confirmation) does not exist; openspec/changes/cloudflare-login-and-fleet-vpn/tasks.md 5.1 records it as not done and assigns it to 1505-hfim. Nothing in 1505-kc5f's own code is outstanding.
+  - packet_id: cloudflare-names-is-the-one-normalizer-every-cloudflare-object-name-passes-through-with-typed-label-and-display-classes-and-the-canonical-tillandsias-vpn-name-table
+    event:
+      type: completed
+      ts: "2026-10-03T22:18:00Z"
+      agent_id: claude-sonnet-yoga-20261003t221800z
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: trunk 02c199aa67b4443cae30e00b7991dcb8acd2e01f. 'cargo test -p tillandsias-headless cloudflare_names' rc=0, 25 passed 0 failed, including participant_name_worked_example, participant_name_100_char_hostname_fits_and_is_idempotent, normalize_label_refuses_input_that_normalizes_to_empty and the 1000-input normalize_twice_equals_normalize_once_label and _display property tests. Caveats in the following note.
+  - packet_id: cloudflare-names-is-the-one-normalizer-every-cloudflare-object-name-passes-through-with-typed-label-and-display-classes-and-the-canonical-tillandsias-vpn-name-table
+    event:
+      type: note
+      ts: "2026-10-03T22:18:00Z"
+      agent_id: claude-sonnet-yoga-20261003t221800z
+      host: yoga
+      summary: |-
+        Two caveats on the closing run. (1) The row text says network_name = tillandsias-vpn; the test is network_name_is_tillandsias_enclave_vpn because the operator naming ruling of 2026-09-29 (fragment 20260929t223658z-1505-iky3-naming-ruling-macuahuitl.yaml) superseded the name, and the title keeps the old words. (2) The compile-fail doctest on normalize_display is NOT executed by any command: tillandsias-headless has no library target (cargo test --doc answers no library targets found), so the Display-is-not-a-Label guarantee rests on the types and the marker test display_is_not_a_label_see_compile_fail_doctest_on_normalize_display, not on a run compile-fail. The verifiable_closure itself was satisfied.
+  - packet_id: is-ipv6-functional-parses-unbracketed-socket-addresses-so-init-writes-ipv4-only-on-every-linux-host-and-the-repair-must-probe-every-default-router
+    event:
+      type: completed
+      ts: "2026-10-03T22:18:00Z"
+      agent_id: claude-sonnet-yoga-20261003t221800z
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: trunk 02c199aa67b4443cae30e00b7991dcb8acd2e01f. 'bash scripts/test-ipv6-probe.sh' rc=0 (6 passed 0 failed: parse, one-blackhole egress=1/2 not functional, both-ok 2/2, no-router, flowlabel, unmeasured). Falsifier asserted once on this tree: rewriting the first probe address at crates/tillandsias-headless/src/main.rs back to the unbracketed form made 'cargo test -p tillandsias-headless --bin tillandsias tests::ipv6_probe_addresses_parse -- --exact' fail (rc=101, 0 passed 1 failed), then reverted (git diff empty). Not re-run here: the live yoga ipv6 egress=1/2 measurement the row cites separately.
+  - packet_id: fleet-score-orders-hosts-by-measured-class-first-so-a-transient-laptop-never-outranks-an-always-on-host-and-services-yaml-names-macuahuitl-preferred
+    event:
+      type: completed
+      ts: "2026-10-03T22:18:00Z"
+      agent_id: claude-sonnet-yoga-20261003t221800z
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: trunk 02c199aa67b4443cae30e00b7991dcb8acd2e01f. 'cargo test -p tillandsias-fleet-core score' rc=0 (9 passed 0 failed, including score_transient_laptop_with_more_ram_never_outranks_always_on, score_class_zero_never_outranks_class_two, score_declared_two_with_half_availability_scores_as_class_zero, score_ordering_is_total_and_stable, score_services_yaml_prefers_macuahuitl_with_four_hours). Mutation asserted once: moving ram_log2 ahead of class_effective in score::rank on both tuple sides made the run rc=101 with 2 failed (the laptop and class-zero tests), then reverted (git diff empty). 'cargo build -p tillandsias-fleet-core --target wasm32-unknown-unknown' rc=0 after 'rustup target add wasm32-unknown-unknown' (no sudo needed), which closes the criterion the landing note left UNPROVEN.
+  - packet_id: the-four-cloudflare-login-chain-rows-still-fold-ready-though-their-code-landed-at-7985e2469-and-kc5f-still-lacks-the-tray-signal
+    event:
+      type: completed
+      ts: "2026-10-03T22:18:00Z"
+      agent_id: claude-sonnet-yoga-20261003t221800z
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: this fragment. All four rows resolved against trunk 02c199aa67b4443cae30e00b7991dcb8acd2e01f: 1505-svve, 1505-kyx8, 1505-iysn and 1505-kc5f carry completed events quoting their closure scripts' rc=0; the kc5f tray signal is split out to 1505-hfim by a note. Also closed in the same pass: 1505-iky3, 1548-mhyk and 1548-dylo.

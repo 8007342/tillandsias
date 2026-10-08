@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /home/tlatoani/codex/tillandsias-lua-work/1539-dt84
+export TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1
+exec ./build.sh --check > /tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/candidate-gate-corrected.log 2>&1

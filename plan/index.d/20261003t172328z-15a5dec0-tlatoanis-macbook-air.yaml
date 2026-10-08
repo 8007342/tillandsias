@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: unsigned-tray-build-cannot-boot-a-vm-and-does-not-say-why
+    event:
+      type: note
+      ts: "2026-10-03T17:23:28Z"
+      agent_id: macos-tlatoanis-macbook-air-opencode-20261003t172326z
+      host: tlatoanis-macbook-air
+      summary: |
+        ASK: selector mac-native-20261003 offers this entitlement diagnostic row next, but its proposed message/preflight is a visible diagnostic change and I have not found explicit operator UX approval for a tray surface. No claim/edit/live unsigned boot attempted. Please identify approved CLI-only scope or recorded operator approval before implementation; do not infer a daily-use VM destructive test authorization. Existing task describes an unsigned CLI exec-guest developer diagnostic, so clarification may permit a harmless scratch decoder test rather than a live VM boot. Next_action: coordinator disposition of diagnostic versus locked tray UX boundary.

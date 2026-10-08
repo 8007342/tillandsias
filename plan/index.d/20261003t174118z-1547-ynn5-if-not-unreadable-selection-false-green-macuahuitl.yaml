@@ -1,0 +1,40 @@
+packets:
+  - packet_id: lua-if-not-pipeline-decider-silently-blesses-unreadable-selected-files
+    order: 1547-ynn5
+    status: blocked
+    kind: defect
+    priority: p1
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [lua, tests, ci-gate, gate-integrity]
+    size: M
+    implementer_tier: opus
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/check-no-spawn-in-if-not.lua
+      - scripts/test-if-not-pipeline-guard.sh
+    title: "Unreadable selected files are silently treated as a clean if-not-pipeline scan"
+    context: |
+      Parent1538 integration verification on2026-10-03 reproduced exited1
+      from test-if-not-pipeline-guard.sh with 'failed to refuse pipeline'.
+      Its known-violating file lives under target/plan-scratch, an external
+      worktree cache symlink. The Lua decider catches fs.read failure and
+      continues, then emits ok:no-spawn-in-if-not instead of a non-green
+      unreadable-population outcome. This is not a filesystem capability gap:
+      repository-bound read refusal is correct. The old Bash port deliberately
+      preserved silent read/git-population failure, so tightening the decider
+      changes its documented contract and must be separately reviewed.
+      Moving the fixture into the repository restores its positive control
+      but does not fix this production false-green behavior.
+    outcome: "A decider cannot claim a clean selected population it failed to read, without widening filesystem authority or laundering inability into success."
+    exit_criteria:
+      - "Record approval for the decider contract correction before changing what the gate refuses; coordinate test-file ownership after1538 and native1543-f44v rather than editing an actively gated file."
+      - "Known readable violating and readable clean files remain discriminating. An explicitly selected nonexistent or outside-root unreadable file produces a typed non-green result with why/remedy, never ok:no-spawn-in-if-not."
+      - "Mixed readable/unreadable selections cannot hide the unreadable member; default git-population inability and zero-input semantics are explicitly decided, not guessed or conflated with a successful clean scan."
+      - "Preserve sandbox/read-root restrictions and argv execution; before/after controls assert actual bytes/status with genuine unreadable selections and positive clean/violating inputs, not source spelling or conditional skips."
+    verifiable_closure: "Named scan-observability fixture with readable clean/violating, nonexistent/outside-root, mixed-population and git-discovery controls plus independently forced integrated gate after recorded contract approval."
+    unscoreable: "unpinnable-until-observability-fixture: existing fixture exposes unreadable selection returning clean, but does not yet specify the approved non-green diagnostic contract"
+    blocked_by: "ASK: coordinator ratify unreadable/default-population contract correction;1538 currently owns the overlapping fixture through gate/landing"
+    next_action: "Review the documented old-port silent-failure contract and approve a bounded non-green read/discovery outcome. After1538 releases ownership, claim and implement as a separate guard-integrity packet; do not close from the fixture-location repair alone."
+    provenance: "Parent independent typed if-not fixture reproduction on2026-10-03 during approved24h composition/regression pass; no production guard edit or unsupported full-green claim."

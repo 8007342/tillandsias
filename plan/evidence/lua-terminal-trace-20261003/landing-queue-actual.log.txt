@@ -1,0 +1,4 @@
+land-queue: #213 work/1539-dt84 tier=full base=3a3826117 head=cbafa30a1
+land:213 tier=full gate=green base=3a3826117 head=cbafa30a1 merge=1630531e5
+  not-run: nothing — tier=full runs the whole gate
+ok:land-queue:1 landed=1 evicted=0 requeued=0 skipped=0

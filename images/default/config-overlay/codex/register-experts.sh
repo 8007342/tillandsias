@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # @trace order:605-u9g5, spec:forge-environment-discoverability
 #
-# register-experts.sh — idempotently register the forge-plan and project-info
-# expert MCP servers with the Codex CLI.
+# register-experts.sh — idempotently register the forge-plan, project-info, and
+# host-browser MCP servers with the Codex CLI.
 #
 # The supported Codex interface (verified against codex-cli 0.146.0 and the
 # official manual at shaping time, order 600-xrqk) is:
@@ -75,6 +75,7 @@ register_codex_experts() {
     done <<'SERVERS'
 forge-plan
 project-info
+host-browser
 SERVERS
 }
 

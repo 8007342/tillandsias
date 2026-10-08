@@ -1,0 +1,10 @@
+ok:no-competing-gate
+[tillandsias-builder] Re-execing inside 'tillandsias-builder' toolbox...
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+ok:   ARM 1: seam-writers verdict byte-identical to the parent .sh, and ok:seam-writers-canonical:3 under pipefail with a 200,000-line writer
+ok:   ARM 2: one bash-4 builtin line is ONE offender (blocked:bash4-unguarded:1), and an empty population is refused (scan-empty), never clean
+ok:   ARM 3: an undeclared env path outside the repo is refused (refused:script-error:undeclared); the same read under -- @read-env succeeds
+ok:   ARM 4: with a plan binary lacking script run, the gate's Lua decider is a loud could-not-run (rc 3, why+remedy), never a pass
+ok:   ARM 5: both .sh existed at the baseline and are gone, and both .lua are present
+pilot-lua-ports: 5 passed, 0 failed

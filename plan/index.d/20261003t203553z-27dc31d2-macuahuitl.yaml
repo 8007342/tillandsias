@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: complete
+      ts: "2026-10-03T20:35:53Z"
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      host: macuahuitl
+      summary: |
+        LANDED/CLOSED BOUNDED1538: PR212 MERGED atf4f106c73400197364f1a6e17723bbdd439d3e99 on2026-10-03T20:32:39Z. Serialized queue pinned base14a5db889 and exact pushed head10d2890ed708e144cd7aa194425338246bedd1ea, forced tier=full, gate=green, landed1/evicted0/requeued0/skipped0. Actual typed run552a1054-eb79-43ee-833f-0172ba659164 exited0/ok=true,1073429ms, with the launching wrapper's own fetched-trunk ancestry check. Parent independently fetched origin, verified that exact source head is an ancestor of origin/linux-next and confirmed PR MERGED. Primary checkout fast-forwarded to landed trunk; current plan-binary content guard and startup boundary passed.
+
+        Delivered scope: authentic non-consuming completion-order select, argument-order all, whole-chain immutable prevalidation/snapshots before authorization, byte-only stages preserving every typed failure and per-execution consent, and exactly-once same-Lua-thread exit callbacks after lines/before wait/select/all observation. Reuses existing supervisors/dispatcher with real completion receipts and completion-only mode, preserving actual streaming1MiB line bound and8MiB prefix capture.45 CLI/427 library/22 predicate-class/32 executor tests plus9 dispatcher units independently passed, all18 new composition controls fail pre-composition and long-byte control fails before repair. Corrected parent forced workspace2892/new-red0/tolerated0/stale0; fresh preflight explicitly PARTIAL207ran/8declared/9deadline/0could-not-run/0refused. Old external-target fixtures moved only to unique actual-root inputs. Linux callback observer race was genuinely refuted (R->Z3.955us, X->absent1.681us), corrected with100ms actual-identity polling,64/64 after stress and real known-live child/grandchild negative; production cleanup never changed. Raw failures, exact absence, negative controls, hashes and measurement sources are retained without binary/citation/guard waivers or failure tolerances.
+
+        RELEASED test/runtime ownership1538. Mac1543-f44v can now claim the OLD OUTER Unix observer (the Linux managed module fix is not a Darwin fix). Native Mac1543-ffhg and Windows1544-cnae dependencies now land-complete: pullf4f106c73/currentlinux-next, claim by order and use their disjoint lua_proc_macos.rs/lua_proc_windows.rs; execute nonempty native controls and never label cfg-skipped zero tests as conformance. The accepted native whitelist lint simplification is now on trunk and can be retried there. Mac1375-amye/1519-6rcp receipts and Windows native pipeline/CI-baseline/performance claims remain their separate obligations. No native green is asserted from Linux, and existing draft PR196 remains held for its real gate receipts.
+
+        Parent1384, whole terminal tracing1539, composite OpenSpec4.2, capture-tail/prefix drift, preflight1520 and1547 unreadable-selection correction remain open. No UX/defaultflip/shell-string/filesystem widening/destructiveE2E/release/build-or-landing rewrite. Eight delegates were invoked, no ninth; token instrument source=absent means unknown spend. The original dirty checkout/recovery map and warm target link remain untouched. Next_action: native peers can claim their now-unblocked packets; tracing requires the queued schema/timing/identity rulings and a separately claimed bounded slice. No closure of broader migration from this child.
+
+        Exact actual landing receipt:
+        {"run_id":"552a1054-eb79-43ee-833f-0172ba659164","status":"exited","code":0,"signal":null,"ok":true,"stdout":"ok:composition-landed:candidate=10d2890ed708e144cd7aa194425338246bedd1ea:remote=f4f106c73400197364f1a6e17723bbdd439d3e99\n","stderr":"From https://github.com/8007342/tillandsias\n * branch                linux-next -> FETCH_HEAD\n","truncated":false,"wall_ms":1073429,"argv":["bash","/tmp/opencode/lua-composition-parent-20261003.4wzwBC/tmp/land-composition.sh"],"policy":{"decision":"allow","rule_id":"default","why":null,"remedy":null}}

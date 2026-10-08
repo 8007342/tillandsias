@@ -1,0 +1,30 @@
+ok:no-competing-gate
+[tillandsias-builder] Re-execing inside 'tillandsias-builder' toolbox...
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+skip:preflight:check-append-vs-origin-fold:deadline:6s — outlived the 5s front-door deadline; the gate still runs it
+note:preflight:check-cheatsheet-sources:serial — declares shared state; run with no other guard beside it
+note:preflight:check-cheatsheet-tiers:serial — declares shared state; run with no other guard beside it
+skip:preflight:check-fragment-events-land:deadline:5s — outlived the 5s front-door deadline; the gate still runs it
+skip:preflight:check-groundtruth-regime-invariance[--strict]:gate-only — �� its live regime synthesises one answer per run (plan-current-direction-bootstrap-question, ~4 s on lenovinha 2026-09-30, 0.1 s with inference down); capping synthesis would blind it to rendering flips (1518-8p5k)
+skip:preflight:check-no-competing-gate:gate-context — answers about a RUNNING gate's dispatch, not about the tree; it has no subject outside one
+note:preflight:check-no-python-scripts:serial — declares shared state; run with no other guard beside it
+skip:preflight:check-portability-idioms:deadline:5s — outlived the 5s front-door deadline; the gate still runs it
+skip:preflight:check-tracked-files-unwritten[verify "$_TRACKED_STATE"]:gate-context — compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
+skip:preflight:test-a-claim-names-a-workstation:deadline:6s — outlived the 5s front-door deadline; the gate still runs it
+skip:preflight:test-credential-channel-survives-a-killed-probe:deadline:5s — outlived the 5s front-door deadline; the gate still runs it
+note:preflight:test-gate-step-metrics-isolation:serial — declares shared state; run with no other guard beside it
+skip:preflight:test-litmus-parse-only-duplicate-key:gate-only — �� runs scripts/run-litmus-test.sh end to end (the whole litmus runner); 30 s uncapped on yoga 2026-09-29
+skip:preflight:test-litmus-runner-reads-without-jq:gate-only — �� runs scripts/run-litmus-test.sh end to end (the whole litmus runner); 78 s uncapped on yoga 2026-09-29
+skip:preflight:test-loop-status-audit-reads-current-emitter:deadline:5s — outlived the 5s front-door deadline; the gate still runs it
+skip:preflight:test-memo-hit-observability:deadline:5s — outlived the 5s front-door deadline; the gate still runs it
+note:preflight:test-metrics-log-path-agreement:serial — declares shared state; run with no other guard beside it
+skip:preflight:test-metrics-log-path-agreement:deadline:6s — outlived the 5s front-door deadline; the gate still runs it
+skip:preflight:test-mirror-healthcheck-quiet:deadline:5s — outlived the 5s front-door deadline; the gate still runs it
+skip:preflight:test-pending-capability-row-does-not-wedge:deadline:5s — outlived the 5s front-door deadline; the gate still runs it
+note:preflight:test-set-field-refuses-unknown-flags:serial — declares shared state; run with no other guard beside it
+skip:preflight:test-token-instrument:gate-only — �� runs scripts/cycle-metrics.sh three times, each a full ledger fold; 25 s uncapped on yoga 2026-09-29
+skip:preflight:test-tool-materialize-litmus-surfaces-arm:gate-only — �� runs the ci-release instant litmus tier through scripts/run-litmus-test.sh; 29 s uncapped on yoga 2026-09-29
+skip:not-darwin — this fixture exercises pgrep/pkill -x against a real
+partial:preflight:ran=206 declared-skip=8 skipped-by-deadline=10 could-not-run=0 refused=0 sum=224 isolation=session wall=55s
+partial:preflight: 10 guard(s) did not examine this tree — this run does not vouch for them; the gate still runs them

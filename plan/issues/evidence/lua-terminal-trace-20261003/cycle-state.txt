@@ -1,0 +1,17 @@
+cycle_start=2026-10-03T22:59:38Z
+agent_id=linux-macuahuitl-opencode-20261003t225958z
+host=macuahuitl
+platform=linux_mutable
+packet=1539-dt84
+scope=proc.run and explicitly waited proc.spawn; partial slice only
+authorization_ends=2026-10-04T15:46:14Z
+primary=/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002
+boundary=/tmp/opencode/lua-trace-boundary-20261003.WHlcMa
+start_source=e889a1c0ef94c8a1fba0c3b8623d6e07964613fd
+observed_origin_main=52e3bc32ec063c7a7090d0c8dca35bb8ade3c844
+observed_origin_linux_next=e889a1c0ef94c8a1fba0c3b8623d6e07964613fd
+observed_origin_windows_next=b38f7105262afdd2805e947e50d126ea58a4cbfa
+observed_origin_osx_next=49731c152273395cf95fd9f63249844cac707a57
+pre_trace_binary_sha256=7c147a5d86c7320caea4dc9f525575f98038fd6ab09ab38ea61f3a306c3143c1
+mcp_fallback=unavailable; tools unexposed, measured handshake healthy
+scheduler=due:not-installed; no scheduler armed by this cycle

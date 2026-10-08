@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /home/tlatoani/codex/tillandsias-lua-work/1539-dt84
+S=/tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp
+cargo test -p tillandsias-plan --test lua_proc_trace > "$S/trace-after.log" 2>&1
+cargo test -p tillandsias-plan --lib > "$S/plan-library.log" 2>&1
+cargo test -p tillandsias-plan --bin tillandsias-plan > "$S/plan-cli.log" 2>&1
+cargo test -p tillandsias-plan --test lua_proc > "$S/lua-proc-existing.log" 2>&1
+cargo test -p tillandsias-plan --test lua_predicate_classes > "$S/predicate-classes.log" 2>&1
+cargo test -p tillandsias-exec > "$S/executor.log" 2>&1
+cargo clippy -p tillandsias-plan --all-targets -- -D warnings > "$S/targeted-clippy.log" 2>&1
+cargo fmt --all --check > "$S/format-after.log" 2>&1

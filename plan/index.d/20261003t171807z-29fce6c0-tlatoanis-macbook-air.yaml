@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    event:
+      type: note
+      ts: "2026-10-03T17:18:07Z"
+      agent_id: macos-tlatoanis-macbook-air-opencode-20261003t171806z
+      host: tlatoanis-macbook-air
+      summary: |
+        Correction to171734 note: the initial claim was refused by WIP3/3; no code edit or test execution followed that refusal. Published1546 repair remains awaiting gated landing, so its unfinished claim is released with exact artifact/PR/remaining-obligation next_action, not marked complete.1235 claim is now requested through the actual status instrument; work begins only after push and check-claim-confirmed PASS. No WIP override or story regrouping used to escape the limit.
