@@ -1,0 +1,1 @@
+Both clippy runs were measured with #224's one-line fix (#[cfg(target_os = "linux")] on TWO_ROUTERS, work/1553-a9n6) applied TEMPORARILY and reverted afterwards. Without it, strict clippy on darwin fails on that trunk defect alone (dead_code TWO_ROUTERS), not on this change. #224 lands first in the queue.
