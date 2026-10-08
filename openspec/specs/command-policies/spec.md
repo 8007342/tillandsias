@@ -41,8 +41,11 @@ workspace) and `force-push` (`git push --force*` to a protected ref). A
 per-project seed `.tillandsias/command-policies.yaml` MAY add rules and MAY
 tighten a floor rule (deny where the floor asks consent) but SHALL NOT
 loosen one; a seed that tries is refused at load with
-`refused:policy-seed:cannot-loosen:<rule-id>` and the engine answers from
-the floor alone. An unmatched request is allowed until the default flips
+`refused:policy-seed:cannot-loosen:<rule-id>`. A refused seed (loosening,
+malformed, invalid or unreadable) is never treated as absent: every request
+evaluated against it answers `refused:policy-seed:<reason>` with the seed's
+repair remedy, so a broken seed cannot drop the project's restrictions
+(order 1531-ae4a); only a seed that does not exist leaves the floor alone. An unmatched request is allowed until the default flips
 (`ok:policy:allow:default`). The flip is MEASURED, not dated (operator
 ruling 2026-09-27): the seed's `default: {deny_after_quiet_days: N}` flips
 unmatched requests to deny once the host's audit shows N consecutive days
