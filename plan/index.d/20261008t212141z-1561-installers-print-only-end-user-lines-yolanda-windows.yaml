@@ -1,0 +1,156 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator ruling 2026-10-08, verbatim: "we do not ask end users to do power
+# user stuff. That's our guideline. An install prompt asking for destructive
+# cases should not be an acceptable case. End user is NOT a power user. No
+# prompts like those, we make all the decisions for them, on their behalf, for
+# their best interests. So SOFT reset is the default only and forever. A power
+# user wanting to do a hard reset should be capable of figuring out where to
+# place a flag and which flag, we do not need to print any power user messages
+# during install, at all. Install should be for END USER (NOT POWER USER) and be
+# a pretty installer, rather than an informational/debugging installer. As
+# frictionless as possible for end users."
+packets:
+  - packet_id: the-end-user-installers-print-only-end-user-lines-and-send-diagnostics-to-a-log-file-shown-by-path-only-on-failure
+    order: 1561-9f4x
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [installer, end-user, ux, guard]
+    estimated_hours: 2
+    split_into:
+      - the-windows-installer-prints-only-end-user-lines
+      - the-macos-installer-prints-only-end-user-lines
+      - the-linux-installer-prints-only-end-user-lines
+    title: |
+      The end-user installers (install-windows.ps1, install-macos.sh, install.sh) print only end-user lines: nothing in the normal path names a channel, a base URL, a flag or an environment variable; diagnostics go to a log file shown by path only on failure (as #247 does for the reset log)
+    context: |
+      Coordinator request 2026-10-08 under the operator ruling quoted at the top
+      of this fragment: the `resolved-channel: <ch> (<source>) base: <url>` line
+      (install-windows.ps1:98, install.sh:71, install-macos.sh:96-98) is
+      diagnostic text in end-user output, in scope of the ruling. Measured on
+      trunk 2026-10-08 (output statements naming TILLANDSIAS_*, a --flag, a URL,
+      a channel or a base): install-windows.ps1 25, install.sh 28,
+      install-macos.sh 23 candidate lines. The contract is held by one guard,
+      scripts/check-installer-end-user-output.sh, with a per-installer floor so
+      each platform slice drops its own installer to 0. Lines reachable ONLY when
+      a power user passes a bad flag (usage and argument errors) may be marked
+      `# power-user-only`; the two prompt blocks left "for now" are tracked by
+      1560-uam3. Parent of three platform slices; it closes when all three do.
+    exit_criteria:
+      - 'every split_into slice is completed and the guard''s floor is 0 for all three installers'
+    verifiable_closure: |
+      bash scripts/check-installer-end-user-output.sh at floor 0 for every
+      installer.
+      unscoreable: parent-of-slices — each slice carries the fixture arm for its installer.
+    events:
+      - type: filed
+        ts: "2026-10-08T21:21:41Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request (2026-10-08); Windows slice taken by yolanda, macOS slice for macbookair, Linux slice for a Linux host.
+  - packet_id: the-windows-installer-prints-only-end-user-lines
+    order: 1561-47a8
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [installer, windows, end-user, ux]
+    estimated_hours: 3
+    owned_files:
+      - scripts/install-windows.ps1
+      - scripts/check-installer-end-user-output.sh
+    title: |
+      install-windows.ps1 prints only end-user lines: the resolved-channel line (98), the --version / --diagnose --json verification lines, the --init launch lines, the unstable-channel TILLANDSIAS_CHANNEL hint and the wsl --install lines go to the install log or become plain end-user wording
+    context: |
+      Windows slice of 1561-9f4x (operator ruling quoted at the top of this
+      fragment). Stacks on 1437-3iux S3 (#247), which already moved the reset
+      path to end-user wording and keeps the tray's reset log in a file. The
+      .wslconfig and Hyper-V prompt blocks stay until 1560-uam3 and are
+      exempted by region markers.
+    exit_criteria:
+      - 'scripts/check-installer-end-user-output.sh reports install-windows.ps1 at 0 diagnostic output lines (pre-fix on trunk 2026-10-08: FAILS — resolved-channel line 98 and the verification and launch lines)'
+      - 'diagnostic detail the installer used to print is written to its install log, and a failure names the log path'
+      - 'test-installer-reset-probe, test-installer-reset-kind and test-unstable-installer-defaults-to-unstable still pass'
+    verifiable_closure: |
+      The guard's fixture (scripts/test-check-installer-end-user-output.sh) is
+      red on trunk for install-windows.ps1 and green after.
+      unscoreable: unpinnable-until-the-guard-exists — the guard and its fixture land with this slice.
+    events:
+      - type: filed
+        ts: "2026-10-08T21:21:41Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Windows slice of 1561-9f4x, taken by yolanda (coordinator request 2026-10-08).
+  - packet_id: the-macos-installer-prints-only-end-user-lines
+    order: 1561-kfgk
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: macos
+    capability_tags: [installer, macos, end-user, ux]
+    estimated_hours: 2
+    depends_on:
+      - the-windows-installer-prints-only-end-user-lines
+    owned_files:
+      - scripts/install-macos.sh
+    title: |
+      install-macos.sh prints only end-user lines (resolved-channel at 96-98, the "channel: pinned <base>" line, the unstable --channel hint and every other normal-path line naming a channel, base URL, flag or variable); lower its floor in the 1561-9f4x guard to 0
+    context: |
+      macOS slice of 1561-9f4x (operator ruling quoted at the top of this
+      fragment). The guard and its per-installer floor land with the Windows
+      slice; this slice drops install-macos.sh's floor (23 candidate lines on
+      trunk 2026-10-08) to 0.
+    exit_criteria:
+      - 'the 1561-9f4x guard reports install-macos.sh at 0 and its floor is lowered to 0'
+    verifiable_closure: |
+      bash scripts/check-installer-end-user-output.sh with install-macos.sh at floor 0.
+      unscoreable: guard-floor-lowering — the guard's fixture is the 1561-47a8 deliverable.
+    events:
+      - type: filed
+        ts: "2026-10-08T21:21:41Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          macOS slice of 1561-9f4x; the coordinator routes it (macbookair).
+  - packet_id: the-linux-installer-prints-only-end-user-lines
+    order: 1561-y6f9
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [installer, linux, end-user, ux]
+    estimated_hours: 2
+    depends_on:
+      - the-windows-installer-prints-only-end-user-lines
+    owned_files:
+      - scripts/install.sh
+    title: |
+      install.sh prints only end-user lines (resolved-channel at 71, the unstable --channel hint and every other normal-path line naming a channel, base URL, flag or variable); lower its floor in the 1561-9f4x guard to 0
+    context: |
+      Linux slice of 1561-9f4x (operator ruling quoted at the top of this
+      fragment). The --channel usage and argument errors at install.sh:38-60 are
+      reachable only when a power user passes the flag, so they may carry
+      `# power-user-only`. 28 candidate lines on trunk 2026-10-08.
+    exit_criteria:
+      - 'the 1561-9f4x guard reports install.sh at 0 and its floor is lowered to 0'
+    verifiable_closure: |
+      bash scripts/check-installer-end-user-output.sh with install.sh at floor 0.
+      unscoreable: guard-floor-lowering — the guard's fixture is the 1561-47a8 deliverable.
+    events:
+      - type: filed
+        ts: "2026-10-08T21:21:41Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Linux slice of 1561-9f4x; for a Linux host.
