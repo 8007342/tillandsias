@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # @trace order:1176-fn2p
 # @trace order:1047-h88p (the job ceiling whose lowest rung is one job)
+# @trace order:1538-pwdr (repository-contained integration fixture inputs)
 #
 # REGIME: hermetic. Every arm feeds the two probes through their seams
 # (--meminfo-from, --journal-from, --floor-mb) and reads build.sh and
@@ -16,10 +17,10 @@
 #
 # PORTED to Lua (1526-gv3t): the OOM post-mortem is
 # scripts/lua/check-oom-postmortem.lua, run through the one runner (`script
-# run`); no runner is a loud skip, never a silent pass. Scratch moved from an
-# outside-the-repo mktemp to target/plan-scratch (1384-ddua's convention)
-# because the guard's fs.read is repo-rooted: a --journal-from fixture file
-# outside the repo and every declared read-env root is refused, not read.
+# run`); no runner is a loud skip, never a silent pass. Scratch is physically
+# inside the repository: target/ can be a warm-cache symlink outside it.
+# The guard's fs.read is repo-rooted: a --journal-from fixture file outside
+# the repo and every declared read-env root is refused, not read.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -38,8 +39,7 @@ if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev
 fi
 OOM() { "$PLAN_BIN" script run "$OOM_LUA" -- "$@"; }
 
-mkdir -p "$ROOT/target/plan-scratch"
-W="$(mktemp -d "$ROOT/target/plan-scratch/gate-mem-refusal.XXXXXX")" || exit 3
+W="$(mktemp -d "$ROOT/.gate-mem-refusal.XXXXXX")" || exit 3
 trap 'rm -rf "$W"' EXIT
 
 pass=0; fail=0

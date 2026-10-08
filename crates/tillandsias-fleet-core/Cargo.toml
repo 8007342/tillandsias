@@ -1,0 +1,11 @@
+[package]
+name = "tillandsias-fleet-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Pure no-I/O fleet score and affinity core (native now, wasm32 later; consumed by the host, the fake rendezvous and the Worker)"
+
+[dependencies]
+serde = { workspace = true }
+serde_yaml = { workspace = true }

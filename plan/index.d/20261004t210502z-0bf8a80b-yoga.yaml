@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-observing-lua-class-load-accepts-binary-chunks-and-string-dump-produces-them-so-unverified-bytecode-is-reachable-from-script-code
+    field: status
+    value: completed
+    ts: "2026-10-04T21:05:02Z"
+    host: yoga
+
+events:
+  - packet_id: the-observing-lua-class-load-accepts-binary-chunks-and-string-dump-produces-them-so-unverified-bytecode-is-reachable-from-script-code
+    event:
+      type: completed
+      ts: "2026-10-04T21:05:02Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3044da4ca + land gate ./build.sh --check green on 3044da4ca at 2026-10-04T21:04Z (2381 s), test script_code_has_no_coroutines_and_cannot_load_bytecode ok there; red against the pre-fix binary 0.1.0+579b43ef754b46de
+  - packet_id: the-observing-lua-class-load-accepts-binary-chunks-and-string-dump-produces-them-so-unverified-bytecode-is-reachable-from-script-code
+    event:
+      type: note
+      ts: "2026-10-04T21:05:02Z"
+      host: yoga
+      summary: |-
+        fixed in the landing that filed the row; closed from the landed tree

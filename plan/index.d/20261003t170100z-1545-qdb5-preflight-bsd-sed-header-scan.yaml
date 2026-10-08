@@ -1,0 +1,41 @@
+packets:
+  - packet_id: preflight-header-sed-blocks-fail-on-bsd-and-lose-gate-only-and-serial-classification
+    order: 1545-qdb5
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [macos, portability, ci-gate, tests, plan-only-peer-ok]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 1
+    owned_files:
+      - build.sh
+      - scripts/test-preflight-front-door.sh
+    title: BSD sed rejects preflight header blocks, losing gate-only and serial declarations
+    context: |
+      Native1519 preflight on11aab027e printed repeated /usr/bin/sed errors
+      from build.sh:504-554 before being stopped by the120s tool deadline.
+      This is an incomplete run, NOT a red completed preflight verdict.
+      Six header scans close a sed command block without a command separator.
+      On this Darwin host, the first expression exits1 with bad flag in
+      substitute command: '}', stdout empty, for a real gate-only header.
+      Adding a semicolon before the closing brace exits0 and emits the reason
+      on the SAME /usr/bin/sed and input. p-only blocks likewise produce
+      extra characters at the end of p command. No production change made.
+      Empty scan output suppresses the header classification, so do not
+      dismiss stderr as a cosmetic log issue or replace classification with
+      blanket skip. Full gate is separately blocked by Clippy on this host.
+    outcome: Darwin and GNU userlands classify preflight headers identically without parser errors.
+    exit_criteria:
+      - All six header scan expressions parse on native BSD sed and GNU sed; gate-only, gate-only-decider and serial declarations retain their distinct classifications.
+      - No-header control remains ordinary work; gate-only-decider is not mistaken for gate-only; the reason text is preserved.
+      - A named fixture fails against the pre-fix expressions on Darwin and passes with the repair, without executing a live checkout-mutating guard.
+    unscoreable: "unpinnable-until-fixture-exists: a scratch header classification fixture drives real preflight scanner expressions with gate-only, gate-only-decider, serial and ordinary controls, prints a derived nonzero count, and retains native BSD/GNU execution receipts. Original BSD scanner exits1; semicolon-only control exits0, same input."
+    next_action: Coordinate build.sh ownership before claiming; change only header scanner portability and a scratch fixture, not1520 Lua preflight orchestration or the gate-step loop. Re-run affected deciders directly until a complete front-door run is available.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Recorded by the native Mac verification peer during1375/1519 work.
+      Preflight ran until timeout; no completed preflight summary was emitted.

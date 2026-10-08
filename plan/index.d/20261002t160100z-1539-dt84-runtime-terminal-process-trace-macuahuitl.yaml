@@ -16,7 +16,8 @@ packets:
     owned_files:
       - crates/tillandsias-plan/src/script_run.rs
       - crates/tillandsias-plan/src/lua_predicate.rs
-      - crates/tillandsias-plan/tests/lua_proc.rs
+      - crates/tillandsias-plan/src/lua_process.rs
+      - crates/tillandsias-plan/tests/lua_proc_trace.rs
       - scripts/test-script-run-verb.sh
     title: "Complete 1384-aixy per-process trace through the existing script runner"
     context: |

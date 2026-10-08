@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: unit-tests-can-encode-linux-only-assumptions-that-only-the-gate-lane-satisfies
+    event:
+      type: note
+      ts: "2026-10-03T17:23:28Z"
+      agent_id: macos-tlatoanis-macbook-air-opencode-20261003t172326z
+      host: tlatoanis-macbook-air
+      summary: |
+        ASK: selector batch includes this standing host-conditional test class. Native session measured32 baseline harness entries across policy/filesystem/Lua/executor and found1543-f44v actual /proc false-dead observer; that validates the class, not this closure criterion. Original row deliberately leaves fleet decision between native non-Linux per-cycle reports and injected-path enforcement unresolved. Please rule the mechanism/owned scope before implementation; no automatic native report schedule or global gate-policy expansion is inferred. Raw baseline durable salvage7f17da7bc73eaa3d341c595b3f9bb8b2fb5c2e26 and1538 handoff event2026-10-03T17:04:16Z. No claim or completed status; native manual observations alone cannot satisfy something-other-than-human-running-cargo-test criterion.

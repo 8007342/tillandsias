@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /home/tlatoani/codex/tillandsias-opencode-lua-session-20261002
+export TILLANDSIAS_SKIP_VERSION_BUMP=1 TILLANDSIAS_FORCE_CHECK=1
+git rev-parse HEAD > /tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/landing-candidate.sha
+exec ./build.sh --check > /tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/landing-gate.log 2>&1

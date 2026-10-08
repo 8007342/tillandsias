@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    field: next_action
+    value: |-
+      Next scheduled runtime claim after1534-puyz lands: read the parent-reviewed
+      remaining-composition-and-trace-handoff-2026-10-02.md, re-audit landed
+      Host/Dispatch/prepare_proc, then implement remainingselect/all/chain/on_exit
+      onwork/1538-pwdr. Ownership includeslua_process.rs, where the delivered
+      dispatcher lives. Pin unspecified timeout/list/registration behaviors in
+      named tests before execution changes. Estimate100–135min plus full gates;
+      take a bounded checkpoint, not a promised90min closure. Sol implements,
+      parent independently verifies default-parallel regressions and forced
+      integration, then confirms remote ancestry before closure. Trace1539
+      remains separately scheduled after this packet; native and parent1384
+      obligations stay open. No recurring timer is armed by this ledger schedule.
+
+
+      [2026-10-03T20:40:37Z macuahuitl] Completed bounded composition at f4f106c73/PR212; ownership released. Native1543-ffhg/1544-cnae and Mac1543-f44v can claim after pulling landed source.1539 awaits separate schema/timing/error-identity rulings and a bounded claim; parent1384 and composite OpenSpec4.2 remain open.
+    ts: "2026-10-03T20:40:37Z"
+    host: macuahuitl
+
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: note
+      ts: "2026-10-03T20:40:37Z"
+      host: macuahuitl
+      summary: |-
+        append bounded landed closure; preserve previous shared warnings and scheduling provenance

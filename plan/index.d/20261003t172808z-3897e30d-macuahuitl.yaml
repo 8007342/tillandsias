@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: progress
+      ts: "2026-10-03T17:28:08Z"
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      host: macuahuitl
+      summary: |
+        Progress, not READY: the parent independently passed427 plan-library,44 CLI-process,22 predicate-class and32 executor tests; all18 new composition controls fail pre-composition, and the long-capture control fails pre-repair and passes after. Forced candidate02562a619807576d275b7571298f89e6d5506868 passed strict Clippy and all2891 workspace tests, with0 new-red/0 tolerated/0 stale, then correctly refused the compressed raw diagnostic archives as unallowlisted tracked binaries. The preceding gate had revealed the two old target-symlink fixture failures; those are now repaired without widening production fs containment or weakening negative assertions.
+
+        This Linux gate is still RED, not complete. Raw logs have been returned byte-for-byte to plain text under the already existing plan/evidence/ area (outside prose-audit citation checks); hashes and typed receipts remain under plan/issues/evidence/lua-managed-composition-20261003. No raw diagnostic edits, source-citation waiver, binary allowlist addition, guard change or known-red tolerance. All failures and their pinned source identities are retained; these packaging retries are parent-owned overhead, not native or runtime-green evidence. A complete forced retry is running. Next_action: on full green, parent pushes the first work/1538-pwdr code checkpoint and its actual SHA, then PR-integrates through the serialized queue. Mac ownership of1375/1519/1546 is unchanged; native1543-ffhg/1544-cnae remain dependency-gated,1543-f44v waits for Linux lua_proc.rs ownership release, and parent1384/tracing1539/preflight1520 remain open. No destructive E2E, UX, defaultflip or release work.

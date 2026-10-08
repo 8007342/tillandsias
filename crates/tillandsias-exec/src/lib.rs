@@ -201,25 +201,33 @@ async fn reap_group(pgid: libc::pid_t) {
 /// It keeps READING past the cap. Stopping would leave the child blocked on a
 /// full pipe, which is the deadlock this crate exists to make unconstructible.
 /// So bytes past the cap are consumed and discarded, and their count is
-/// returned so the caller can report it.
-async fn read_bounded<R>(r: &mut R, cap: usize) -> std::io::Result<(Vec<u8>, u64)>
+/// kept so the caller can report it.
+///
+/// The bytes and the count live in `acc`, OUTSIDE this future, so a caller
+/// that stops waiting (the group drain grace) still has what was read
+/// (order 1551-af3e). The lock is never held across an await.
+async fn read_bounded<R>(
+    r: &mut R,
+    cap: usize,
+    acc: &std::sync::Mutex<(Vec<u8>, u64)>,
+) -> std::io::Result<()>
 where
     R: tokio::io::AsyncRead + Unpin,
 {
     use tokio::io::AsyncReadExt;
-    let mut kept = Vec::new();
-    let mut dropped: u64 = 0;
     let mut buf = vec![0u8; 64 * 1024];
     loop {
         let n = r.read(&mut buf).await?;
         if n == 0 {
             break;
         }
+        let mut acc = acc.lock().unwrap();
+        let (kept, dropped) = &mut *acc;
         let take = cap.saturating_sub(kept.len()).min(n);
         kept.extend_from_slice(&buf[..take]);
-        dropped += (n - take) as u64;
+        *dropped += (n - take) as u64;
     }
-    Ok((kept, dropped))
+    Ok(())
 }
 
 impl Command {
@@ -376,6 +384,11 @@ impl Command {
         let in_pipe = child.stdin.take();
         let to_write = self.stdin.clone();
         let cap = self.capture_bytes;
+        // What each fd has read so far, OUTSIDE the drain future, so a drain
+        // abandoned after the group drain grace still yields its bytes (order
+        // 1551-af3e).
+        let out_acc = std::sync::Mutex::new((Vec::new(), 0u64));
+        let err_acc = std::sync::Mutex::new((Vec::new(), 0u64));
 
         let drain = async {
             use tokio::io::AsyncWriteExt;
@@ -390,12 +403,12 @@ impl Command {
                 Ok::<(), std::io::Error>(())
             };
             let (ro, re, rw) = tokio::join!(
-                read_bounded(&mut out_pipe, cap),
-                read_bounded(&mut err_pipe, cap),
+                read_bounded(&mut out_pipe, cap, &out_acc),
+                read_bounded(&mut err_pipe, cap, &err_acc),
                 feed
             );
-            let (o, dropped_o) = ro?;
-            let (e, dropped_e) = re?;
+            ro?;
+            re?;
             // A child that exits before consuming stdin gives us EPIPE here.
             // That is NOT an error of ours -- `head -1` legitimately does it --
             // so it is swallowed rather than turned into a spawn failure.
@@ -404,7 +417,15 @@ impl Command {
                 Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {}
                 Err(err) => return Err(err),
             }
-            Ok::<(Vec<u8>, Vec<u8>, u64), std::io::Error>((o, e, dropped_o + dropped_e))
+            Ok::<(), std::io::Error>(())
+        };
+        // The capture read so far. `complete` is false when the group drain
+        // grace expired; the bytes are kept and the capture is `truncated`.
+        let capture = |complete: bool| {
+            let (stdout, dropped_o) = std::mem::take(&mut *out_acc.lock().unwrap());
+            let (stderr, dropped_e) = std::mem::take(&mut *err_acc.lock().unwrap());
+            let dropped = dropped_o + dropped_e;
+            (stdout, stderr, dropped, dropped > 0 || !complete)
         };
 
         let io_err = |source| ExecError::Io {
@@ -430,7 +451,8 @@ impl Command {
                 // Drain and wait CONCURRENTLY. Waiting first would deadlock for
                 // the same reason draining serially does.
                 let (drained, status) = tokio::join!(&mut drain, child.wait());
-                return Ok::<_, std::io::Error>((drained?, status?));
+                drained?;
+                return Ok::<_, std::io::Error>((true, status?));
             }
             let mut drained = None;
             let status = loop {
@@ -447,28 +469,34 @@ impl Command {
             if let Some(j) = &job {
                 j.terminate();
             }
-            let drained = match drained {
-                Some(r) => r?,
+            let complete = match drained {
+                Some(r) => r.map(|()| true)?,
                 None => match tokio::time::timeout(GROUP_DRAIN_GRACE, &mut drain).await {
-                    Ok(r) => r?,
+                    Ok(r) => r.map(|()| true)?,
                     // Only a descendant that left the group can still hold the
                     // pipe now; its output is not the leader's to wait for.
-                    Err(_) => (Vec::new(), Vec::new(), 0),
+                    // ORDER 1551-af3e: what was read is KEPT and the capture is
+                    // reported truncated. It used to be dropped, leaving an
+                    // empty capture with truncated=false that read as whole:
+                    // measured through the legacy `lua` door as status=exited
+                    // code=0 ok=true stdout="".
+                    Err(_) => false,
                 },
             };
-            Ok((drained, status))
+            Ok((complete, status))
         };
 
         match self.timeout {
             None => {
-                let ((stdout, stderr, dropped), status) = both.await.map_err(io_err)?;
+                let (complete, status) = both.await.map_err(io_err)?;
+                let (stdout, stderr, dropped, truncated) = capture(complete);
                 Ok(Output {
                     completion: completion_of(status),
                     stdout,
                     stderr,
                     run,
                     argv: self.argv,
-                    truncated: dropped > 0,
+                    truncated,
                     dropped,
                 })
             }
@@ -476,14 +504,15 @@ impl Command {
                 let started = std::time::Instant::now();
                 match tokio::time::timeout(d, both).await {
                     Ok(joined) => {
-                        let ((stdout, stderr, dropped), status) = joined.map_err(io_err)?;
+                        let (complete, status) = joined.map_err(io_err)?;
+                        let (stdout, stderr, dropped, truncated) = capture(complete);
                         Ok(Output {
                             completion: completion_of(status),
                             stdout,
                             stderr,
                             run,
                             argv: self.argv,
-                            truncated: dropped > 0,
+                            truncated,
                             dropped,
                         })
                     }

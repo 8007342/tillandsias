@@ -1,0 +1,39 @@
+packets:
+  - packet_id: capability-row-generator-calls-a-current-native-probe-stale-after-grep-q-breaks-its-output-pipe
+    order: 1546-b8ba
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [macos, fleet, portability, tests, plan-only-peer-ok]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 1
+    owned_files:
+      - scripts/host-capability-probe.sh
+      - scripts/test-probe-refuses-stale-candidate.sh
+    title: Capability publisher calls a freshly built native probe stale when grep-q closes its pipe
+    context: |
+      Native Mac session freshly built tillandsias-headless debug binary,
+      but host-capability-probe.sh:147 refused it as stale and could not
+      refresh the expired row. Same real binary prints accel_side=macos-host.
+      Controlled same-host measurement under bash pipefail: producer
+      --capabilities | grep -q accel_side= gives PIPESTATUS=101 0.
+      Capturing the complete output first gives producer exit0 and the
+      same grep via here-string exit0. The missing-vocabulary refusal is
+      wrong: the consumer matched, and early pipe closure killed the producer.
+      Native host has10 physical cores/16GiB, not a floor-tier queue premise.
+      No changes made to the probe or generator before filing this packet.
+    outcome: A current native binary can publish a fresh capability row without disabling genuine stale-candidate refusal.
+    exit_criteria:
+      - A producer with the current envelope followed by enough output to outlive an early matcher is accepted without broken-pipe termination.
+      - A runnable producer without accel_side is still refused as stale, and a failing producer is not accepted merely because its partial output names accel_side.
+      - The real freshly built Darwin producer publishes a fresh generated row and check-capability-row reports current after persistence.
+    unscoreable: "unpinnable-until-fixture-exists: scratch probe current/large-output, missing-vocabulary and failed-partial-output controls exercise the actual generator; pre-fix large-output producer is falsely refused, post-fix succeeds, and negative stale/error controls remain red. Same real Darwin pipeline statuses101 0 versus capture0/match0 are retained as the initial falsifier."
+    next_action: Capture the candidate capabilities output and its exit status before matching vocabulary; extend the existing generator fixture if present, keep the genuine stale guard, and publish this host's row through the unchanged generator after verification.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      This bootstrap defect prevents capability refresh before general drain.
+      Do not hand-compose hardware rows or suppress producer errors to escape it.

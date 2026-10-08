@@ -1,0 +1,71 @@
+import concurrent.futures
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+import time
+
+base = Path('/tmp/opencode/lua-composition-parent-20261003.4wzwBC/tmp')
+source = Path('/home/tlatoani/codex/tillandsias-lua-work/1538-pwdr/crates/tillandsias-plan/tests/lua_proc.rs').read_text()
+producer = re.search(r'const OWNED_PRODUCER: &str = r#"(.*?)"#;', source, re.S).group(1)
+binary = Path('/home/tlatoani/codex/tillandsias-opencode-lua-session-20261002/target/debug/tillandsias-plan')
+actions = ["error('callback-broke')", 'p:wait()', 'p:kill()', "proc.run{argv={'true'}}", "proc.spawn{argv={'true'}}", "verdict.ok('callback-verdict')", "pcall(verdict.ok,'callback-verdict'); while true do end", 'while true do end']
+
+def observe(ack):
+    try:
+        stat = Path(f'/proc/{ack["pid"]}/stat').read_text()
+    except FileNotFoundError:
+        return {'live': False, 'reason': 'absent'}
+    fields = stat[stat.rindex(')') + 2:].split()
+    return {'live': fields[19] == ack['start'] and fields[0] != 'Z', 'state': fields[0], 'start': fields[19], 'stat': stat}
+
+def run(item):
+    i, action = item
+    with tempfile.TemporaryDirectory(prefix=f'callback-{i}-', dir=base) as d:
+        root = Path(d)
+        (root / '.git').mkdir()
+        (root / '.tillandsias').mkdir()
+        (root / 'owned.py').write_text(producer)
+        body = f'''local p=proc.spawn{{argv={{"python3","{root / 'owned.py'}"}}}}
+p:on_line("stdout",function(s) assert(s=='READY'); {action} end)
+pcall(function() p:wait() end)
+while true do end
+'''
+        (root / 'probe.lua').write_text(body)
+        env = dict(os.environ)
+        for key in ['TILLANDSIAS_POLICY_SEED', 'TILLANDSIAS_CONSENT_TOKEN', 'CI', 'TILLANDSIAS_SKILL', 'TILLANDSIAS_DESTRUCTIVE_RESET_OK']:
+            env.pop(key, None)
+        env.update(TILLANDSIAS_REPO_ROOT=d, TILLANDSIAS_POLICY_REGIME='interactive', TILLANDSIAS_CONSENT_DIR=str(root / 'consent'))
+        completed = subprocess.run([str(binary), 'script', 'run', str(root / 'probe.lua'), '--timeout', '700ms'], cwd=root, env=env, capture_output=True, timeout=5)
+        zero = time.monotonic()
+        record = {'i': i, 'action': action, 'code': completed.returncode, 'stdout': completed.stdout.decode(errors='replace'), 'stderr': completed.stderr.decode(errors='replace'), 'observations': []}
+        acks = {name: json.loads((root / f'{name}-ack').read_text()) for name in ['child', 'grandchild']}
+        record['acks'] = acks
+        deadline = zero + .100
+        while True:
+            states = {name: observe(ack) for name, ack in acks.items()}
+            record['observations'].append({'after_ms': (time.monotonic() - zero) * 1000, 'tasks': states})
+            if not any(state['live'] for state in states.values()) or time.monotonic() >= deadline:
+                break
+            time.sleep(.001)
+        record['still_live_at_bound'] = any(state['live'] for state in states.values())
+        if record['still_live_at_bound']:
+            # Record the real defect before disposing only this fixture's
+            # acknowledged owned group, never a reused/unrelated pid.
+            for name, ack in acks.items():
+                if observe(ack)['live']:
+                    os.killpg(ack['pgid'], 9)
+        return record
+
+with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    records = list(executor.map(run, [(i, actions[i % len(actions)]) for i in range(256)]))
+output = base / 'callback-cleanup-measurement.json'
+output.write_text(json.dumps({'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(), 'source_sha256': hashlib.sha256(source.encode()).hexdigest(), 'runs': records}, indent=2) + '\n')
+immediate = [r for r in records if any(s['live'] for s in r['observations'][0]['tasks'].values())]
+bounded = [r for r in records if r['still_live_at_bound']]
+bad_status = [r for r in records if r['code'] != (124 if r['action'] == 'while true do end' else 0 if 'verdict' in r['action'] else 1)]
+print(json.dumps({'runs': len(records), 'immediate_live': len(immediate), 'live_at_100ms': len(bounded), 'unexpected_status': len(bad_status), 'measurement': str(output)}))
+raise SystemExit(bool(bounded or bad_status))

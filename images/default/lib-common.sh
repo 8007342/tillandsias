@@ -5101,11 +5101,13 @@ Two flows; pick by intent:
    conventions: the web-services instruction / \`tellme about web\`.
 2. **Hosting/publishing** ("host/serve/publish this project"): do NOT run
    a server in here. Delegate to the host over the MCP tools
-   (\`host-browser\` server): \`publish_local {"category":"WEB"}\` returns
-   \`http://www.${project_name}.localhost:8080\` served by a SIBLING
-   container; \`service_status\` / \`service_stop\` manage it. The host
-   attributes the project from your session — publishing is local-only
-   today (public Cloudflare share is a planned rung).
+    (\`host-browser\` server): \`publish_local {"category":"WEB",\
+    "runtime":"auto"}\` selects the managed static or local-Wrangler
+    preview against this lane's live worktree; \`service_status\`,
+    \`service_reload {"category":"WEB"}\`, and \`service_stop\` manage it.
+    The host attributes the project and lane from your session. Publishing is
+    local-only: Wrangler local preview never deploys, logs in, or accepts
+    remote bindings/commands from an agent.
 CONTEXT_EOF
 
     # ── Checkout-sourced addendum (order 743-y5wh) ───────────────────────────

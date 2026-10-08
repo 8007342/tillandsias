@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-lua-spawned-process-deadline-is-charged-for-the-hosts-own-line-delivery-so-a-chatty-child-that-already-exited-reads-as-timed-out-with-its-output-discarded
+    event:
+      type: note
+      ts: "2026-10-04T21:05:03Z"
+      agent_id: claude-fable-yoga-20261004t180632z
+      host: yoga
+      summary: |
+        PARTIAL FIX LANDED at 3044da4ca (land gate green 2026-10-04T21:04Z): change
+        (a) of this row. Host::wait and the proc.select loop no longer sleep 1 ms
+        after a pump that dispatched events; they yield and come straight back, and
+        sleep only when the queue was empty. NOT re-measured: the lines-per-second
+        figure after the change is this row's first exit criterion and is still
+        owed. Change (b), the per-process timer that keeps running after the leader
+        has exited, is untouched and is the open part of the row.

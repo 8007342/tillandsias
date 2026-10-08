@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: capability-row-generator-calls-a-current-native-probe-stale-after-grep-q-breaks-its-output-pipe
+    event:
+      type: note
+      ts: "2026-10-03T17:15:52Z"
+      agent_id: macos-tlatoanis-macbook-air-opencode-20261003t171552z
+      host: tlatoanis-macbook-air
+      summary: |
+        Scoped repair published work/1546-b8ba @6d26025a4333a23f809571a6aebbe66776f686a9, draft PR211. Parent independently reran fixture PASS, sigpipe/refusal-affordance/source-pin deciders PASS, syntax and whitespace PASS. Preserved old generator against extended fixture FAIL exits1; real old native generator false-stale exits2; real broken-pipe statuses101 0 versus capture0/match0. Repaired long current producer admitted, failed-partial exit73 and missing-vocabulary controls still refused. Raw receipts retained on workref. Fresh REAL row generated using reviewed script and actual native target/debug/tillandsias at2026-10-03T17:14:40Z, no hand-composition; check-capability-row answers ok:capability-row-reported:tlatoanis-macbook-air. Row riding this plan-only publication. GPU/accelerator availability is only what that unmodified native probe reports, not an execution claim. Full code gate attempted and fast deciders passed but strictClippy exits101 at existing CACHEABLE_STDLIB_GLOBALS nonminimal_bool, Linux1538 accepts repair; not full-green READY/completed. Next_action: coordinator gate/land PR211 against repaired trunk; then verify generator and current row on landed source, close only after actual landing.

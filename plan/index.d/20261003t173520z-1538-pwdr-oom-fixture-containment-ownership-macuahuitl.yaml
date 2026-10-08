@@ -1,0 +1,40 @@
+fields:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    field: owned_files
+    value:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/src/lua_process.rs
+      - crates/tillandsias-plan/src/script_run.rs
+      - crates/tillandsias-plan/tests/lua_proc.rs
+      - crates/tillandsias-plan/tests/lua_predicate_classes.rs
+      - crates/tillandsias-exec/src/managed.rs
+      - scripts/test-gate-memory-refusal.sh
+    ts: "2026-10-03T17:35:20Z"
+    host: macuahuitl
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: progress
+      ts: "2026-10-03T17:35:20Z"
+      host: macuahuitl
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      summary: |
+        Forced candidate7dfb53f511cfed85c304ddd989af9043137195a9 passed the
+        workspace and plain-text evidence checks, then stopped at the existing
+        gate-memory-refusal fixture:11/14. All three OOM journal reads returned
+        could-not-run:oom-postmortem:unreadable-seam because the fixture creates
+        its journal inputs under target/plan-scratch, an external warm-cache
+        symlink. The Lua guard's repository-bound refusal is correct. Memory
+        floor/refusal and unreadable-journal negatives remain discriminating.
+        Parent adds only scripts/test-gate-memory-refusal.sh to1538 ownership
+        for the same bounded integration fixture correction: create its unique
+        temporary directory under the actual repository root, preserve cleanup
+        and every related-OOM/unrelated-victim/quiet/unreadable assertion.
+        No production guard, memory floor, environment read root, gate-step or
+        landing policy edit; no changing a refusal into a skip or known red.
+        Eight delegate invocations are exhausted for this cycle; the parent
+        performs this mechanical integration correction and independently
+        measures before/after instead of adding a ninth worker. The original
+        warm target link stays unchanged. No source push/READY/closure yet.
+        Next_action:measure11/14 before and14/14 after, then force the complete
+        gate again; all native, tracing and parent obligations stay separate.

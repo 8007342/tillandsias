@@ -1,0 +1,6 @@
+local bytes=string.rep('x',1024*1024+1)
+local direct=proc.run{argv={'cat'},stdin=bytes}
+assert(direct.ok and direct.stdout==bytes, 'direct prefix capture failed')
+local c=proc.chain{{argv={'cat'},stdin=bytes},{argv={'cat'}}}
+assert(c.ok and c.stages[2].stdout==bytes, 'chain changed byte capture semantics')
+verdict.ok('long-chain-bytes')

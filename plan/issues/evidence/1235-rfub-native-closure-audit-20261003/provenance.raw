@@ -1,0 +1,32 @@
+timestamp_utc=2026-10-03T17:19:49Z
+worktree=/Users/tlatoani/tillandsias-worktrees/1235-rfub-audit
+head=3c05fc230a06ae72efc3daa592bb48900cb62c4c
+expected_head=3c05fc230
+status:
+?? plan/issues/evidence/1235-rfub-native-closure-audit-20261003/
+host:
+Darwin Tlatoanis-MacBook-Air.local 27.0.0 Darwin Kernel Version 27.0.0: Tue Aug 11 21:02:59 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T8142 arm64
+ProductName:		macOS
+ProductVersion:		27.0.1
+BuildVersion:		26A434
+toolchain:
+rustc 1.96.1 (31fca3adb 2026-06-26)
+binary: rustc
+commit-hash: 31fca3adb283cc9dfd56b49cdee9a96eb9c96ffd
+commit-date: 2026-06-26
+host: aarch64-apple-darwin
+release: 1.96.1
+LLVM version: 22.1.2
+cargo 1.96.1 (356927216 2026-06-26)
+ancestor_proof:
+b35acba6c_ancestor_rc=0
+commit=b35acba6ce85fe08ba576c7d3568975f519e7b19
+parents=512051a87de198eb8940520b5e33c332d40ca96c 590b73585300c5ebad96438bbfefc00f7fccbdf2
+subject=Merge remote-tracking branch 'origin/linux-next' into linux-next
+implementation_paths_at_b35acba6c:
+current_source_trees:
+3a78243e08f2485164dc58972df232c68878e49e
+1686ab0c0f0cb58a853cb531afe292f2063c21bd
+072d2fa1efcc8d7b9113d419c779cccfbcf58311
+549f472624f1861bdef187921391ad8346a36a4f
+56aca166def8bd29d4a4c35a021afad5b2f76c2a

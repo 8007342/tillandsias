@@ -1,0 +1,5 @@
+land-queue: reclaiming a lock whose holder (1530600) is gone
+land-queue: #212 work/1538-pwdr tier=full base=14a5db889 head=10d2890ed
+land:212 tier=full gate=green base=14a5db889 head=10d2890ed merge=f4f106c73
+  not-run: nothing — tier=full runs the whole gate
+ok:land-queue:1 landed=1 evicted=0 requeued=0 skipped=0

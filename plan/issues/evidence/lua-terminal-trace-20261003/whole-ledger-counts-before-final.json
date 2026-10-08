@@ -1,0 +1,42 @@
+[
+  {
+    "status": "blocked",
+    "count": 29
+  },
+  {
+    "status": "completed",
+    "count": 440
+  },
+  {
+    "status": "done",
+    "count": 13
+  },
+  {
+    "status": "implemented",
+    "count": 120
+  },
+  {
+    "status": "in_progress",
+    "count": 3
+  },
+  {
+    "status": "needs_clarification",
+    "count": 2
+  },
+  {
+    "status": "obsoleted",
+    "count": 54
+  },
+  {
+    "status": "pending",
+    "count": 43
+  },
+  {
+    "status": "ready",
+    "count": 707
+  },
+  {
+    "status": "verified",
+    "count": 33
+  }
+]

@@ -1,0 +1,79 @@
+ok:no-competing-gate
+[tillandsias-builder] Re-execing inside 'tillandsias-builder' toolbox...
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running unittests src/lib.rs (target/debug/deps/tillandsias_exec-bab2490bbd3db6b8)
+
+running 4 tests
+test managed::tests::silent_spawn_keeps_no_event_legacy_semantics ... ok
+test managed::tests::completion_only_capture_is_bounded_without_line_queue_backpressure ... ok
+test managed::tests::completion_only_accepts_newline_free_payload_beyond_stream_line_bound ... ok
+test managed::tests::full_streaming_keeps_unterminated_line_limit ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/capture_bound.rs (target/debug/deps/capture_bound-32ce75990642c20f)
+
+running 4 tests
+test a_capture_under_the_cap_is_whole ... ok
+test the_default_cap_leaves_ordinary_output_whole ... ok
+test a_capture_past_the_cap_is_kept_to_the_cap_and_reported ... ok
+test both_fds_keep_draining_past_the_cap_without_deadlock ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/executor_contract.rs (target/debug/deps/executor_contract-c16c39c71da9cb2a)
+
+running 12 tests
+test empty_argv_is_refused ... ok
+test stderr_survives_when_only_stdout_is_read ... ok
+test one_argv_entry_arrives_unaltered ... ok
+test a_sigpipe_killed_producer_keeps_its_own_status ... ok
+test two_runs_have_distinct_run_identities ... ok
+test dual_stream_megabyte_each_completes ... ok
+test managed_unterminated_line_has_an_explicit_bound ... ok
+test managed_stream_is_live_ordered_byte_exact_and_capture_bounded ... ok
+test managed_cancel_reaps_when_delivery_or_stdin_is_blocked ... ok
+test managed_launch_close_race_keeps_every_accepted_child_owned ... ok
+test timeout_on_a_sigterm_ignoring_child_reports_killed ... ok
+test sigpipe_inversion_does_not_occur_through_the_executor ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.12s
+
+     Running tests/group_exit.rs (target/debug/deps/group_exit-d3a2d4958cda4f52)
+
+running 3 tests
+test a_grandchild_holding_stdout_does_not_turn_success_into_a_timeout ... ok
+test the_leaders_status_is_reported_after_the_reap ... ok
+test a_detached_grandchild_does_not_outlive_the_run ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/group_kill.rs (target/debug/deps/group_kill-7502487508e605b9)
+
+running 2 tests
+test a_grouped_deadline_kills_the_grandchild ... ok
+test control_an_ungrouped_deadline_leaves_the_grandchild_running ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.51s
+
+     Running tests/verbs.rs (target/debug/deps/verbs-e2a9998745ae2a6b)
+
+running 7 tests
+test spawn_reports_still_running_then_reaps ... ok
+test spawned_children_have_distinct_identities ... ok
+test stdin_bytes_reach_the_child ... ok
+test a_failing_early_stage_is_visible_and_named ... ok
+test a_child_that_ignores_stdin_is_not_an_error ... ok
+test pipeline_feeds_each_stage ... ok
+test stdin_and_both_outputs_do_not_deadlock ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests tillandsias_exec
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

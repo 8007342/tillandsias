@@ -1,0 +1,34 @@
+ok:no-competing-gate
+[tillandsias-builder] Re-execing inside 'tillandsias-builder' toolbox...
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+/home/tlatoani/.bashrc: line 28: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+   Compiling tillandsias-plan v0.1.0 (/home/tlatoani/codex/tillandsias-lua-work/1538-pwdr/crates/tillandsias-plan)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.01s
+     Running tests/lua_predicate_classes.rs (target/debug/deps/lua_predicate_classes-c7866eeec42e0efb)
+
+running 22 tests
+test lua_runtime_states_containment_and_disclaims_selinux ... ok
+test a_cacheable_predicate_cannot_read_the_clock_through_the_stdlib ... ok
+test a_cacheable_predicate_cannot_remove_a_file_through_the_stdlib ... ok
+test a_cacheable_verdict_is_served_from_cache ... ok
+test a_cacheable_predicate_cannot_resolve_the_shell_verb ... ok
+test a_cacheable_predicate_reads_repo_files_via_fs_read ... ok
+test fs_list_is_observing_only_and_absent_from_the_cacheable_class ... ok
+test the_cacheable_global_set_is_exactly_the_allow_list ... ok
+test fs_list_returns_regular_file_names_in_byte_order_and_never_a_symlink ... ok
+test a_cacheable_verdict_is_re_evaluated_when_a_file_it_read_changes ... ok
+test the_shell_verb_refuses_an_empty_argv ... ok
+test the_verb_enumeration_matches_the_audited_set_exactly ... ok
+test fs_read_refuses_outside_paths_and_traversals ... ok
+test fs_list_refuses_outside_the_root_by_name ... ok
+test the_cacheable_class_cannot_read_the_clock ... ok
+test pure_shims_available_in_observing_class_too ... ok
+test the_same_predicate_resolves_in_the_observing_class ... ok
+test a_cacheable_predicate_cannot_read_a_file_through_the_stdlib ... ok
+test expect_shims_return_verdict_values_and_fail_loud ... ok
+test a_predicate_authored_at_runtime_executes_without_recompilation ... ok
+test an_observing_verdict_is_never_served_from_cache ... ok
+test a_timed_out_shell_call_is_distinguishable_in_lua ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+

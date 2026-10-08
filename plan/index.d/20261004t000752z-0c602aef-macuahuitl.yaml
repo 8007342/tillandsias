@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-script-run-trace-records-every-managed-process-terminal-outcome
+    event:
+      type: progress
+      ts: "2026-10-04T00:07:52Z"
+      agent_id: linux-macuahuitl-opencode-20261003t225958z
+      host: macuahuitl
+      summary: |
+        READY: bounded first1539-dt84 slice, PR213 (draft until this event is durably pushed), work/1539-dt84 at cbafa30a1fd1992a7456b3d55c03e7f1be96bcab. This is partial implementation, not whole1539/1384/OpenSpec4.2 closure. Real proc.run and dispatcher-published waited-spawn Output metadata is immutable, redacted by existing command_policy::redact, deduplicated by authentic RunId, and rendered trace:proc: JSON on stderr only. Stdout/verdict/exit behavior and callback barriers remain unchanged.
+
+        Parent independently measured585 targeted Linux tests:12 new trace controls,428 library (including10 dispatcher units),46 CLI,45 existing proc,22 predicate-class,32 executor. The identical12 CLI controls against pinned pre-slice artifact7c147a5d86c7320caea4dc9f525575f98038fd6ab09ab38ea61f3a306c3143c1 gave10 expected positive-record reds and two existing-behavior negative greens; candidate12/12 passes. Existing gate-policy Clippy+format passed. Corrected preflight exited0 with206 ran/eight declared skips/ten deadline skips/zero could-not-run/refusals; no vouch for skipped checks.
+
+        Forced candidate gate actual run_id0c9ff90c-93fe-4c06-8e9a-8ad2889adf94 exited0/ok=true in1010755ms; workspace baseline ran2921/new-red0/tolerated0/stale0. Feature-gated tests passed too; zero-test native stubs are not native conformance. Exact work head matches origin/work/1539-dt84, and its startup boundary verifies with the intentional target symlink unchanged. Archive typed receipt and byte-exact gate log after actual landing in the final checkpoint; until then external scratch is /tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/candidate-gate-corrected.status and candidate-gate-corrected.log. Earlier actual launch/citation/strict-Clippy/scorable-packet reds and separate controls are retained in candidate evidence, not waived or relabeled green.
+
+        Remaining: dropped/outstanding-handle scope-cleanup and outer-timeout terminals; broad composition/legacy-door trace verification; executor errors without intact Finished/Output identities; native1543-ffhg/1544-cnae and Mac observer1543-f44v. Parent keeps status in_progress only through integration, then releases unfinished1539 back to ready. Native/preflight1520/parent1384 and approval-held1547-ynn5/1545-qdb5 remain open. No UX/default-deny/release/destructive-E2E/build-or-landing rewrite or scheduler activation.
+
+        partial_artifact_refs: work/1539-dt84@cbafa30a1fd1992a7456b3d55c03e7f1be96bcab; https://github.com/8007342/tillandsias/pull/213; plan/issues/lua-managed-terminal-trace-first-slice-2026-10-03.md; plan/evidence/lua-terminal-trace-20261003/; plan/issues/evidence/lua-terminal-trace-20261003/.
+        Next_action: serialized landing proves PR213 integrated; then archive the actual gate/landing receipts, release the slice claim and checkpoint the remaining obligation queue. Follow-on Astra read-only audit proposes a callback-free post-cleanup collector for registered async handles plus outer-timeout rendering, but registration gaps/blocking-run races/identity-less launched-child errors remain unmeasured and require coordinated ownership before widening executor scope.

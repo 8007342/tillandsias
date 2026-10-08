@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+logs=/tmp/opencode/lua-composition-parent-20261003.4wzwBC/tmp
+binary=$(cat "$logs/callback-observer-test-binary")
+stage=${CALLBACK_OBSERVER_STAGE:-before}
+case "$stage" in before|after) ;; *) exit 2 ;; esac
+"$logs/base-plan" run --json --timeout-ms 120000 -- "$binary" --exact managed_script::callbacks_cancel_owned_groups_even_when_caught_or_cpu_bound --nocapture > "$logs/callback-observer-$stage-trial-$1.json"
