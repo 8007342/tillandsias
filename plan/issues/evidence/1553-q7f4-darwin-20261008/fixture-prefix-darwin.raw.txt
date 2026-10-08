@@ -1,0 +1,8 @@
+FAIL: ARM 1: non-holder release: holder='claimed:held-node' out='released:held-node' rc=0 status='free:held-node' holder_lid=''
+ok:   ARM 2: the holder's own release frees the node
+FAIL: ARM 3: cross-host release: out='released:held-node' rc=0 status='free:held-node'
+ok:   ARM 4: a same-host release with no lease id still works (skill/fixture flow)
+FAIL: ARM 5: unverifiable: worked=yes status='free:held-node' holder_lid='' (drain log: 2026-10-08T17:33:25Z Claim:   note: claim could not verify 'held-node' (no resolvable plan binary or ledger at /var/folders/lm/krdnbsm56j13fy8vn_r0t47h0000gn/T//claim-holder-safety.1KFIZz/nonexistent/plan/index.yaml); leasing unverified 2026-10-08T17:33:25Z COMPLETE: [900-zzzz] held-node )
+ok:   ARM 6: with a verifiable id, drain-queue skips the held node
+ok:   ARM 7: a free node is claimed, worked once, and released by drain-queue
+claim-release-holder-safety: 4 passed, 3 failed

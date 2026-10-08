@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: claim-ledger-node-never-reclaims-an-orphaned-lease-on-darwin-because-stat-c-has-no-bsd-fallback
+    order: 1553-kvmf
+    title: claim-ledger-node never reclaims an orphaned lease on darwin because stat -c has no BSD fallback
+    status: in_progress
+    kind: bug
+    priority: p1
+    pickup_role: macos
+    capability_tags: [bash, macos, portability, claims]
+    estimated_hours: 0.5
+    owned_files:
+      - scripts/claim-ledger-node.sh
+      - scripts/test-ledger-node-claim-resolution.sh
+      - openspec/litmus-tests/litmus-ledger-node-claim-shape.yaml
+      - scripts/lua/check-bash-dialect.lua
+    context: >
+      lease_is_stale ages a holderless lease dir (a claimant killed between
+      mkdir and write_holder) by the dir's own mtime, read with GNU-only
+      `stat -c %Y`. On darwin BSD stat refuses -c, the mtime is empty, and the
+      orphan is treated as live FOREVER: the node can never be claimed again on
+      a Mac. Interim fix, ruled by the coordinator, until the Lua port
+      1553-jbnt (blocked on the runtime API row) removes the script: chain
+      `stat -c %Y … || stat -f %m … || echo ''`. The file runs `set -uo
+      pipefail` without -e, so a failing substitution cannot exit before the
+      chain runs. The check-bash-dialect SITE_ALLOWLIST entry for this site
+      (added by 1553-x8js) is dropped in the same change; the stat-c rule now
+      sees the BSD fallback on the same line.
+    depends_on: []
+    exit_criteria:
+      - On darwin an orphaned holderless lease dir past its TTL is reclaimed (reclaimed:<id>, rc 0).
+      - A fresh holderless lease dir is still live (in-flight:<id>, rc 1), so the write window holds.
+      - check-bash-dialect stays clean with the allowlist entry removed.
+    verifiable_closure: >
+      litmus:ledger-node-claim-shape, whose resolution step now expects
+      ok:ledger-node-claim-resolution-fixture:10. Arm 9 (an aged orphan is
+      reclaimed; the aging is checked with find -mmin before the verdict
+      counts) fails on the pre-fix script on darwin with
+      "out=in-flight:fixture-real-node rc=1", the only red arm; post-fix 10/10.
+      Arm 10 is the control: a fresh orphan stays live. Receipts are in
+      plan/issues/evidence/1553-kvmf-darwin-20261008/.
+    next_action: Land after #231 (stacked on work/1553-x8js).
+
+events:
+  - packet_id: claim-ledger-node-never-reclaims-an-orphaned-lease-on-darwin-because-stat-c-has-no-bsd-fallback
+    event:
+      type: note
+      ts: "2026-10-08T17:25:00Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        filed and claimed by macbookair-macos on coordinator ruling (interim BSD fallback while 1553-jbnt is blocked). Darwin, plan binary built in the worktree: pre-fix 9/10 (arm 9 red: in-flight forever), post-fix 10/10. Without a plan binary, arm 4 (near-miss id refused) also fails, because the claim degrades to unverifiable and leases; that is environment, not this change.

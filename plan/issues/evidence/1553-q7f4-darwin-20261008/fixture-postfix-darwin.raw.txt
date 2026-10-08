@@ -1,0 +1,9 @@
+ok:   ARM 1: a non-holder's release is refused by name; the lease stays in-flight under agent-A
+ok:   ARM 2: the holder's own release frees the node
+ok:   ARM 3: with no lease id, a lease held from another host is refused
+ok:   ARM 4: a same-host release with no lease id still works (skill/fixture flow)
+ok:   ARM 5: with an unverifiable id, drain-queue skips the held node and agent-A's lease survives
+ok:   ARM 6: with a verifiable id, drain-queue skips the held node
+ok:   ARM 7: a free node is claimed, worked once, and released by drain-queue
+claim-release-holder-safety: 7 passed, 0 failed
+ok:claim-release-holder-safety:7

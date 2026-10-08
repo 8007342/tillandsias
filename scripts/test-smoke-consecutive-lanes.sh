@@ -37,7 +37,10 @@ line="$(sed -n "${n}p" "$STUB_DIR/plan")"
 rc="${line%% *}"; rest="${line#* }"
 text="${rest%% *}"; newid="${rest#* }"; [ "$newid" = "$rest" ] && newid=""
 printf '%s\n' "$text" > "$STUB_DIR/lane.log"
-[ -n "$newid" ] && sed -i "s/^tillandsias-proxy=.*/tillandsias-proxy=$newid/" "$STUB_DIR/containers"
+[ -n "$newid" ] && { sed "s/^tillandsias-proxy=.*/tillandsias-proxy=$newid/" "$STUB_DIR/containers" > "$STUB_DIR/containers.tmp" \
+    && mv "$STUB_DIR/containers.tmp" "$STUB_DIR/containers" \
+    && grep -qx "tillandsias-proxy=$newid" "$STUB_DIR/containers" \
+    || { echo "launcher stub: proxy id rewrite did not apply" >&2; exit 97; }; }
 exit "$rc"
 SH
 chmod +x "$W/bin/podman" "$W/launcher.sh"
