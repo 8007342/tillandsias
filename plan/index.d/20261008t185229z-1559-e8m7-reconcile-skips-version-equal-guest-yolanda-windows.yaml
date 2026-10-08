@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-windows-tray-reconcile-leaves-a-version-equal-guest-untouched-so-a-same-version-rebuild-keeps-a-stale-guest-headless-and-the-secure-handshake-fails-until-a-reset
+    order: 1559-e8m7
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, tray, wsl, provisioning, version-skew]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+    title: |
+      reconcile_adopted_guest re-injects the guest headless only when its VERSION differs from the tray's WORKSPACE_VERSION, so a tray rebuilt at the same version (dev builds, a re-cut of a version) keeps an adopted guest's older binary, and the secure control wire fails with "peer sent no readable Noise frame" / guest "secure control wire REFUSED: early eof" until a SOFT or HARD reset
+    context: |
+      MEASURED on yolanda-windows 2026-10-08 (1437-3iux live SOFT arm): the guest
+      ran a headless built 2026-10-07 and the tray was built from trunk, BOTH
+      reporting 56.9.27.2. --provision-once failed: tray "secure handshake failed:
+      [peer-sent-no-usable-frame] ... peer sent 0 byte(s)"; guest "secure control
+      wire REFUSED: early eof (psk inputs: v=56.9.27.2, wire=4, hop=host-guest)".
+      The reconcile's own doc says "Version-equal guests are left untouched, so the
+      fast path stays fast on healthy installs" (wsl_lifecycle.rs, before
+      reconcile_adopted_guest). The version is the only identity compared, and it
+      cannot tell two builds of one version apart.
+      FIXED FOR SOFT ONLY in 1437-3iux S1 (PR #243): the SOFT reset injects
+      unconditionally. A normal tray launch after a same-version rebuild is still
+      exposed, which is this row. The coordinator ruled 2026-10-08 that widening S1
+      was the wrong place.
+    exit_criteria:
+      - 'the reconcile compares a build identity that differs between two builds of one version (e.g. a digest of the embedded headless asset recorded in the guest at injection, compared on adoption), and re-injects on mismatch; a version-equal, digest-equal guest is still left untouched (the fast path)'
+      - 'a fixture or measured run: same-version tray rebuilt with a changed embedded asset leads to the adopted guest being re-injected, and the handshake succeeds without a reset; pre-fix the handshake fails as quoted above'
+    verifiable_closure: |
+      A windows-tray unit test over the reconcile decision (version-equal +
+      digest-different -> reinject; both equal -> untouched), plus one measured
+      launch on a Windows host. Pre-fix evidence: yolanda-windows 2026-10-08 above.
+      unscoreable: unpinnable-until-the-guard-exists — the decision test is the
+      deliverable.
+    events:
+      - type: filed
+        ts: "2026-10-08T18:52:29Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request: defect (1) of 1437-3iux's live SOFT
+          arm, outside SOFT.
