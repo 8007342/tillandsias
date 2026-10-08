@@ -1,6 +1,7 @@
 // @trace order:1539-dt84, spec:command-runtime
-// First-slice Linux measurements only. Cleanup, outer-timeout trace collection,
-// legacy doors, and native Mac/Windows conformance remain separate obligations.
+// Linux measurements only. The second slice adds post-cleanup collection of
+// registered async handles and outer-timeout rendering; registration races,
+// identity-less executor errors, legacy doors and native conformance remain open.
 #![cfg(target_os = "linux")]
 
 use serde_json::Value;
@@ -403,7 +404,7 @@ fn trace_truncated_capture_retains_actual_exited_status_and_code() {
 }
 
 #[test]
-fn trace_outer_timeout_preserves_stdout_and_exit_without_claiming_cleanup_records() {
+fn trace_outer_timeout_preserves_stdout_and_exit_and_renders_held_records() {
     let f = Fixture::new();
     let script = "assert(proc.run{argv={'true'}}.ok); while true do end";
     let off = f.run_with_timeout(script, false, "100ms");
@@ -413,6 +414,121 @@ fn trace_outer_timeout_preserves_stdout_and_exit_without_claiming_cleanup_record
     assert_eq!(off.status.code(), Some(124));
     assert_eq!(on.status.code(), Some(124));
     assert!(records(&off).is_empty());
-    // The first slice does not yet collect/render all outer-cleanup terminals.
-    // Do not pin their absence as a contract: only stdout/status invariance.
+    // Second slice: the outer-timeout branch renders records the host holds.
+    let actual = records(&on);
+    assert_eq!(actual.len(), 1, "{on:?}");
+    assert_eq!(actual[0]["argv"][0], "true");
+    assert_eq!(actual[0]["code"], 0);
+}
+
+// Second slice (2026-10-08): registered async handles that the script never
+// waited on are collected from their authentic published Output after
+// Scope::cleanup, and the outer-timeout branch renders the trace.
+const COLLECTED_BASIS: &str = "launch_request_to_host_collection";
+
+fn by_argv0<'a>(records: &'a [Value], argv0: &str) -> Vec<&'a Value> {
+    records.iter().filter(|r| r["argv"][0] == argv0).collect()
+}
+
+#[test]
+fn trace_outer_timeout_renders_collected_outstanding_async_terminals() {
+    let f = Fixture::new();
+    // Neither handle is ever waited on, so the dispatcher never pumps their
+    // Finished receipts: only the post-cleanup host collector can see them.
+    let script = r#"
+        local a = proc.spawn{argv={"printf", "collected\n"}}
+        local b = proc.spawn{argv={"false"}}
+        local c = proc.spawn{argv={"sleep", "30"}}
+        assert(proc.run{argv={"sleep", "0.3"}}.ok)
+        while true do end
+    "#;
+    let off = f.run_with_timeout(script, false, "1500ms");
+    let on = f.run_with_timeout(script, true, "1500ms");
+    assert_eq!(off.stdout, on.stdout, "{off:?}\n{on:?}");
+    assert_eq!(off.stdout, b"status=timed_out\nrefused:timed-out:probe\n");
+    assert_eq!(off.status.code(), Some(124));
+    assert_eq!(on.status.code(), Some(124));
+    assert!(records(&off).is_empty(), "{off:?}");
+    let actual = records(&on);
+    // The blocking proc.run keeps its own receipt duration and no basis label.
+    let run = by_argv0(&actual, "sleep");
+    assert!(
+        run.iter()
+            .any(|r| r["argv"][1] == "0.3" && r["code"] == 0 && r.get("wall_basis").is_none()),
+        "{on:?}"
+    );
+    let printf = by_argv0(&actual, "printf");
+    assert_eq!(printf.len(), 1, "{on:?}");
+    assert_eq!(printf[0]["status"], "exited");
+    assert_eq!(printf[0]["code"], 0);
+    assert_eq!(printf[0]["wall_basis"], COLLECTED_BASIS);
+    let falsy = by_argv0(&actual, "false");
+    assert_eq!(falsy.len(), 1, "{on:?}");
+    assert_eq!(falsy[0]["status"], "exited");
+    assert_eq!(falsy[0]["code"], 1);
+    assert_eq!(falsy[0]["wall_basis"], COLLECTED_BASIS);
+    // The never-completed sleeper may only carry what the executor actually
+    // published when cleanup ended it: never a fabricated clean exit.
+    for r in run.iter().filter(|r| r["argv"][1] == "30") {
+        assert!(r["code"].is_null(), "{r}");
+        assert_ne!(r["status"], "exited", "{r}");
+    }
+    let mut ids: Vec<_> = actual.iter().map(|r| r["run_id"].clone()).collect();
+    ids.sort_by_key(|v| v.to_string());
+    ids.dedup();
+    assert_eq!(
+        ids.len(),
+        actual.len(),
+        "run ids must be unique: {actual:?}"
+    );
+    for r in &actual {
+        assert!(r["run_id"].as_str().is_some_and(|id| !id.is_empty()));
+        assert!(r.get("stdout").is_none());
+    }
+}
+
+#[test]
+fn trace_dropped_unwaited_handle_is_collected_on_verdict_and_on_error() {
+    for (ending, exit) in [("verdict.ok('dropped')", 0), ("error('dropped-error')", 1)] {
+        let f = Fixture::new();
+        let script = format!(
+            r#"
+            local p = proc.spawn{{argv={{"printf", "dropped\n"}}}}
+            p = nil
+            collectgarbage(); collectgarbage()
+            assert(proc.run{{argv={{"sleep", "0.2"}}}}.ok)
+            {ending}
+            "#
+        );
+        let off = f.run(&script, false);
+        let on = f.run(&script, true);
+        assert_eq!(off.stdout, on.stdout, "{off:?}\n{on:?}");
+        assert_eq!(on.status.code(), Some(exit), "{on:?}");
+        assert_eq!(off.status.code(), Some(exit));
+        let actual = records(&on);
+        let printf = by_argv0(&actual, "printf");
+        assert_eq!(printf.len(), 1, "{on:?}");
+        assert_eq!(printf[0]["status"], "exited");
+        assert_eq!(printf[0]["code"], 0);
+        assert_eq!(printf[0]["wall_basis"], COLLECTED_BASIS);
+        assert_eq!(by_argv0(&actual, "sleep").len(), 1, "{on:?}");
+    }
+}
+
+#[test]
+fn trace_already_delivered_handle_is_not_duplicated_or_relabelled_by_collection() {
+    let f = Fixture::new();
+    let output = f.run(
+        r#"
+        local p = proc.spawn{argv={"printf", "waited\n"}}
+        out.line("result:" .. json.encode(p:wait()))
+        verdict.ok("delivered")
+        "#,
+        true,
+    );
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    let actual = records(&output);
+    assert_eq!(actual.len(), 1, "{output:?}");
+    correlate(&actual[0], &results(&output)[0]);
+    assert!(actual[0].get("wall_basis").is_none(), "{output:?}");
 }

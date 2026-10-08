@@ -991,6 +991,18 @@ pub fn cli_run(args: &[String]) -> ! {
                     if let Err(e) = host.scope.cleanup() {
                         eprintln!("{e}");
                     }
+                    // @trace order:1539-dt84 — the worker may still be tearing
+                    // down; this collection is serialized with its release.
+                    if trace {
+                        host.collect_terminals();
+                        for record in host.terminal_trace() {
+                            eprintln!("trace:proc:{record}");
+                        }
+                        eprintln!(
+                            "[script-run] {name}: status=timed_out exit=124 {}ms",
+                            t0.elapsed().as_millis()
+                        );
+                    }
                     println!("status=timed_out");
                     println!("refused:timed-out:{name}");
                     eprintln!(
