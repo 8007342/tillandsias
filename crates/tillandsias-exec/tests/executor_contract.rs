@@ -333,6 +333,41 @@ async fn timeout_on_a_sigterm_ignoring_child_reports_killed() {
     assert!(!out.completion.is_success());
 }
 
+/// A TIMEOUT ENDS THE WHOLE RUN, not only the call (1553-6e3q). The child is a
+/// shell whose grandchild (`sleep`) holds the stdout pipe. On native Windows the
+/// pipe reader is a blocking thread, and killing only the shell left the
+/// grandchild holding the pipe: run() returned at ~430 ms, but dropping the
+/// runtime waited for the reader until the grandchild exited on its own.
+/// MEASURED pre-fix on yolanda-windows: the criterion-6 test above took 120.09 s
+/// against a 400 ms deadline. The runtime is built and dropped HERE so the
+/// bound covers its shutdown; a #[tokio::test] drops it after the measurement.
+/// The drop finishing is the proof that no live process still holds the pipe.
+#[test]
+fn a_timeout_does_not_leave_the_pipe_held_past_the_run() {
+    let started = std::time::Instant::now();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+    let out = rt.block_on(
+        Command::new(["sh", "-c", "trap '' TERM; sleep 60"])
+            .timeout(Duration::from_millis(400))
+            .run(),
+    );
+    drop(rt);
+    let whole = started.elapsed();
+    let out = out.expect("spawn");
+    assert!(
+        matches!(out.completion, Completion::TimedOut { .. }),
+        "expected TimedOut, got {:?}",
+        out.completion
+    );
+    assert!(
+        whole < Duration::from_secs(15),
+        "a 400 ms timeout held the run for {whole:?}: the grandchild kept the pipe"
+    );
+}
+
 /// An empty argv is refused rather than guessed at.
 #[tokio::test]
 async fn empty_argv_is_refused() {
