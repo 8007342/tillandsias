@@ -108,35 +108,60 @@ if ! command -v socat >/dev/null 2>&1; then
   exit 3
 fi
 
-# The 900s is NOT a bind-latency budget: the listener is the first await in the
-# vsock task and answers in 61-255 ms (measured over four cold boots, 795-jeym).
-# What this window covers is the module load racing the probe. Shorten it only
-# after that dependency is deterministic everywhere -- otherwise a short
-# deadline just converts a slow pass into a fast INDETERMINATE.
-DEADLINE=$(( $(date +%s) + ${TILLANDSIAS_READY_TIMEOUT:-900} ))
+# NESTED, NAMED BUDGETS replace the flat 900 s (798-vxj5; the nested-deadline
+# shape is microsoft/mxc's, plan/issues/microsoft-mxc-learnings-2026-10-07.md).
+# Each expiry names the budget that ran out, so a slow step surfaces as itself,
+# not as one undifferentiated timeout.
+#   transport-budget: from probe start until the vsock loopback answers at all
+#     (anything but ENETUNREACH). MEASURED, three cold boots on yolanda-windows
+#     2026-10-08: systemd-modules-load finished in 16 ms each time and the
+#     module was already loaded when the probe started (798-emje made the order
+#     deterministic). 5 s is a floor for a loaded host, not a multiple.
+#   bind-budget: from the transport answering until the listener accepts.
+#     MEASURED, daemon start -> "vsock listener bound": 26, 257, 52 ms (2026-10-08)
+#     and 61-255 ms (four cold boots, 795-jeym). 5 s is about 20x the worst.
+# TILLANDSIAS_READY_TIMEOUT, when set, is a NAMED OVERRIDE of the whole wait.
+TRANSPORT_BUDGET="${TILLANDSIAS_READY_TRANSPORT_BUDGET:-5}"
+BIND_BUDGET="${TILLANDSIAS_READY_BIND_BUDGET:-5}"
+OVERRIDE="${TILLANDSIAS_READY_TIMEOUT:-}"
+T0=$(date +%s)
+transport_up_at=""
 last=""
 while :; do
   # The CONNECT address must come FIRST -- see the module docs. The reversed
   # form was measured returning 0 for both a live and a dead port.
-  last="$(timeout 8 socat -T1 "VSOCK-CONNECT:1:${PORT}" /dev/null 2>&1)" && {
+  last="$(timeout 3 socat -T1 "VSOCK-CONNECT:1:${PORT}" /dev/null 2>&1)" && {
     echo "[tillandsias-ready] vsock_listener=bound port=${PORT}"
     exit 0
   }
-  if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-    case "$last" in
-      *"Network is unreachable"*)
-        echo "[tillandsias-ready] vsock_listener=INDETERMINATE port=${PORT} -- no vsock loopback transport in this guest (vsock_loopback absent), so a guest-local probe cannot observe the listener; this says NOTHING about host reachability, which does not use loopback." >&2
+  now=$(date +%s)
+  case "$last" in
+    *"Network is unreachable"*) phase=transport; deadline=$(( T0 + TRANSPORT_BUDGET )); budget="transport-budget=${TRANSPORT_BUDGET}s" ;;
+    *"No such file or directory"*|*"command not found"*) phase=tool; deadline=$(( T0 + TRANSPORT_BUDGET )); budget="transport-budget=${TRANSPORT_BUDGET}s" ;;
+    *)
+      phase=bind
+      [ -n "$transport_up_at" ] || transport_up_at=$now
+      deadline=$(( transport_up_at + BIND_BUDGET )); budget="bind-budget=${BIND_BUDGET}s"
+      ;;
+  esac
+  if [ -n "$OVERRIDE" ]; then
+    deadline=$(( T0 + OVERRIDE )); budget="TILLANDSIAS_READY_TIMEOUT=${OVERRIDE}s (override)"
+  fi
+  if [ "$now" -ge "$deadline" ]; then
+    case "$phase" in
+      transport)
+        echo "[tillandsias-ready] vsock_listener=INDETERMINATE port=${PORT} -- ${budget} expired: no vsock loopback transport in this guest (Network is unreachable; vsock_loopback absent), so a guest-local probe cannot observe the listener; this says NOTHING about host reachability, which does not use loopback." >&2
         exit 2
         ;;
-      *"No such file or directory"*|*"command not found"*)
+      tool)
         # Belt and braces for the up-front check: if socat vanishes mid-window
         # (a dnf transaction, a read-only remount) the verdict must still not
         # be NOT-BOUND. A broken check and an unbound port are different facts.
-        echo "[tillandsias-ready] vsock_listener=UNVERIFIABLE port=${PORT} -- the probe tool could not be run, so nothing was observed. Last error: ${last}" >&2
+        echo "[tillandsias-ready] vsock_listener=UNVERIFIABLE port=${PORT} -- ${budget} expired: the probe tool could not be run, so nothing was observed. Last error: ${last}" >&2
         exit 3
         ;;
       *)
-        echo "[tillandsias-ready] vsock_listener=NOT-BOUND port=${PORT} -- the transport works but nothing accepts on the control-wire port; the host cannot reach this guest. Last error: ${last}" >&2
+        echo "[tillandsias-ready] vsock_listener=NOT-BOUND port=${PORT} -- ${budget} expired: the transport works but nothing accepts on the control-wire port; the host cannot reach this guest. Last error: ${last}" >&2
         exit 1
         ;;
     esac
