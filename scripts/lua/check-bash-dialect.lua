@@ -75,8 +75,6 @@ local ALLOWLIST = {}   -- empty since 761-g36m's burndown; the branch is kept
 -- entry that matches nothing is reported, so the list can only shrink.
 -- key = "<path>|<rule>|<literal substring of the offending line>"
 local SITE_ALLOWLIST = {
-  ["scripts/claim-ledger-node.sh|stat-c|stat -c %Y \"$dir\""] =
-    "ported to Lua under slice C; do not patch",
   -- a '\'-continued condition line: a trailing marker comment would end the continuation
   ["scripts/check-archive-answerability.sh|stat-c|stat -f -c '%T' \"$REPO_ROOT\""] =
     "GNU file-system-mode v9fs probe; BSD fails it to empty, which correctly reads as not-9P",
