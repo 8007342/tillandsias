@@ -10467,6 +10467,7 @@ fn run_reset_state(_debug: bool) -> Result<(), String> {
 /// `--reset-guest` is deliberately NOT changed. It documents "images are
 /// preserved, so this is fast when they still exist" and callers rely on that;
 /// this flag is the stronger sibling, not a redefinition.
+// @trace spec:host-state-lifecycle
 #[cfg(target_os = "linux")]
 fn run_reset_state(debug: bool) -> Result<(), String> {
     // Order 1437-qza3, aligned to host-state-lifecycle as amended by 1443-bs9z.
