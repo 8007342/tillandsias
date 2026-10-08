@@ -49,7 +49,8 @@ append_once() { # append_once <file> <line>...: append the lines, assert the fir
 
 # 1 — the real tree.
 guard
-if [ "$RC" -eq 0 ]; then pass "1 real tree: $OUT"; else bad "1 real tree rc=$RC: $(printf '%s' "$OUT" | head -1 | cut -c1-300)"; fi
+first_line="${OUT%%$'\n'*}"
+if [ "$RC" -eq 0 ]; then pass "1 real tree: $OUT"; else bad "1 real tree rc=$RC: $first_line"; fi
 
 # 2 — a diagnostic line added to the Windows installer.
 scratch "$TMP/a"
