@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: test-pre-push-main-branch-affordance-arm-2-plants-an-empty-file-as-a-non-runnable-plan-binary-but-on-the-wsl2-guests-9p-mount-every-file-is-mode-777-and-an-empty-file-executes-as-an-empty-script-with-rc-0
+    order: 1556-b2tq
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tests, windows, wsl2, fixtures, pre-push]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-pre-push-main-branch-affordance.sh
+    title: |
+      test-pre-push-main-branch-affordance arm 2 plants `: > $W/not-runnable` as TILLANDSIAS_PLAN_BIN to prove the hook fails closed with no-plan-binary; on a Windows host's WSL2 guest the scratch dir is on /mnt/c (v9fs), where a fresh empty file is mode 777 and executing it returns rc=0, so the hook gets past capabilities and prints no-verdict instead
+    context: |
+      MEASURED on yolanda-windows 2026-10-08. Preflight of four refs (each diff
+      one exec-crate Rust file) refused only this guard:
+        FAIL: arm 2: lines=14 rc=1 out=[blocked:main-branch-affordance:no-verdict]
+      The coordinator measured it 5/5 GREEN on Linux trunk (a09275137+), arm 2
+      included, so the defect is the host's filesystem, not trunk.
+      ROOT CAUSE, probed in the tillandsias-build guest (not assumed):
+        /mnt/c/.../target/plan-scratch: mode=777 fs=v9fs   exec rc=0
+        mktemp -d (/tmp):               mode=644 fs=ext2/ext3 exec rc=126
+      The fixture's scratch base is $ROOT/target/plan-scratch, which in the
+      guest is the Windows checkout on 9p. Every file there is executable, and
+      bash runs an empty executable as an empty script that exits 0. The probe
+      honours TILLANDSIAS_PLAN_BIN on existence alone (by design, 1287-family),
+      so the hook's `"$PLAN" capabilities` succeeds, the Lua call prints
+      nothing, and the stub prints its fallback no-verdict.
+      CORRECTION: the first diagnosis, relayed to the coordinator, was that
+      plan-binary-probe found the real binary despite the planted one. The
+      probe above refutes that; the planted file IS used, and it is runnable.
+      The hook still FAILS CLOSED (rc=1, a blocked: line), so nothing unsafe
+      passed. The fixture's premise ("this file is not runnable") is false
+      on this host, and the arm reads as a regression.
+    exit_criteria:
+      - 'arm 2''s planted binary is non-runnable on every filesystem: e.g. a file whose first line is a shebang naming a nonexistent interpreter (fails 126/127 regardless of mode), or a file the fixture verifies is not executable and otherwise skips the arm by name with the measured reason'
+      - 'test-pre-push-main-branch-affordance passes 5/5 in the Windows WSL2 guest on /mnt/c and on Linux; pre-fix arm 2 fails on yolanda as quoted above'
+      - 'a sweep names any other fixture that plants an empty file under $ROOT/target as a "non-runnable" binary (git grep for ": > .*not-runnable" and similar), each fixed or listed with the reason it is safe'
+    verifiable_closure: |
+      bash scripts/test-pre-push-main-branch-affordance.sh -> 5/5 inside the
+      tillandsias-build guest on a Windows host (checkout on /mnt/c) and on
+      Linux. Pre-fix: arm 2 FAIL with no-verdict on yolanda-windows.
+      unscoreable: crate-external-fixture — the deliverable is an existing
+      fixture's arm made filesystem-independent, not a new litmus.
+    events:
+      - type: filed
+        ts: "2026-10-08T16:53:28Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request after it measured the guard 5/5 on
+          Linux trunk. Root cause measured with a 9p-vs-tmpfs exec probe; it
+          corrects the probe-resolution diagnosis I relayed earlier.
