@@ -23531,6 +23531,9 @@ mod tests {
         );
     }
 
+    // Gated like its only readers, the cfg(linux) egress tests below; ungated,
+    // strict clippy --all-targets on darwin fails dead_code (1553-a9n6).
+    #[cfg(target_os = "linux")]
     const TWO_ROUTERS: &str = "default proto ra metric 20600 pref medium\n\
         \tnexthop via fe80::1 dev wlp3s0 weight 1\n\
         \tnexthop via fe80::2 dev wlp3s0 weight 1\n";
