@@ -363,6 +363,12 @@ The full gate subsequently reached litmus binding enforcement and found that
 the new live guard's unquoted step name was valid YAML but not extractable by
 the runner. Quoted the step scalar; this changes no command or acceptance
 criteria. Verify with run-litmus-test.sh --parse-only before another full gate.
+The uncapped full-gate run completed the jq/yq selection fixture successfully
+(28 selected tests, identical in both regimes), ruling out a persistent hang
+there in this run. It then refused five missing requirement IDs in the new
+preview spec. Stamped only this spec with the canonical stable-ID tool; no
+requirement text or existing IDs changed. The Lua ID decider now passes all
+740 requirements. The failed gate stopped before work-ref push or landing.
 
 ## Parent checkpoint — 2026-10-07T18:33:24Z
 

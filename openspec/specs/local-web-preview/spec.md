@@ -21,6 +21,7 @@ Chromium sibling, tray UI change, or host CA trust-store modification is approve
 ## Requirements
 
 ### Requirement: Session-bound live source
+<!-- req-id: 99f3633b -->
 
 All lifecycle calls MUST use the project and forge lane authenticated by the
 existing MCP socket. Caller-supplied project labels, host paths, image names,
@@ -47,6 +48,7 @@ mutation while the service is owned by another live lane; no implicit takeover.
 Status MAY report that conflict without exposing private filesystem paths.
 
 ### Requirement: Shared source preserves the bounded HOT storage contract
+<!-- req-id: 5b8fc880 -->
 
 `forge-hot-cold-split` remains authoritative. Sharing source MUST preserve its
 four HOT roots: `/opt/cheatsheets` (8 MB, 0755), `/home/forge/src` (per-launch
@@ -145,6 +147,7 @@ fallback. The small writer-cgroup proof is not complete launch-budget or
 generation-cleanup acceptance.
 
 ### Requirement: Allowlisted local runtime profiles
+<!-- req-id: 087743d0 -->
 
 Category remains `WEB`. The host MUST choose only managed profiles `static` and
 `wrangler`; these are not arbitrary commands or images. `runtime=auto` selects
@@ -178,6 +181,7 @@ the static compatibility profile. The new runtime belongs in
 `images/web-wrangler`, not a silent enlargement of the less-than-10MB static image.
 
 ### Requirement: Existing MCP lifecycle contract
+<!-- req-id: c05132c7 -->
 
 Extend the existing host-services tool registry and dispatch path; do not add a
 second MCP server or bypass session identity. Keep the existing result/error
@@ -221,6 +225,7 @@ carry a stable reason in `message` (e.g. `live_worktree_unavailable`,
 `not_running`, `remote_binding_forbidden`). Do not return secrets or raw env.
 
 ### Requirement: HTTPS routing and honest trust
+<!-- req-id: 36a4c4e1 -->
 
 The successful preview URL MUST be
 `https://www.<project>.localhost[:actual_tls_port]`, routed by the existing
