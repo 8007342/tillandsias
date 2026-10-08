@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: one-lua-managed-childs-pipe-anomaly-or-the-64-process-limit-closes-the-whole-script-scope-and-the-same-anomaly-is-raised-from-proc-run-instead-of-returned
+    field: status
+    value: completed
+    ts: "2026-10-08T05:34:36Z"
+    host: macuahuitl
+
+events:
+  - packet_id: one-lua-managed-childs-pipe-anomaly-or-the-64-process-limit-closes-the-whole-script-scope-and-the-same-anomaly-is-raised-from-proc-run-instead-of-returned
+    event:
+      type: completed
+      ts: "2026-10-08T05:34:36Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 2eeabecf5 + cargo test -p tillandsias-plan --test lua_proc one_childs_pipe_anomaly_does_not_close_the_scope ok on 2eeabecf5, red on the parent 33fa27e71 code with the test added (proc.run raised "io while draining [sh, detached.sh]: group-pipe-eof-timeout" through script run); the_65th_live_spawn_is_refused_as_a_value_and_the_scope_stays_open ok, red on 33fa27e71 ("proc.run: io while draining [sleep, 30]: script-process-limit", script-error); cargo test -p tillandsias-exec and the plan lua_proc, lua_proc_trace, lua_observing_boundary, lua_predicate_classes, lua_std, lua_source_agreements and lib lua tests green, fmt and clippy clean, on macuahuitl
+  - packet_id: one-lua-managed-childs-pipe-anomaly-or-the-64-process-limit-closes-the-whole-script-scope-and-the-same-anomaly-is-raised-from-proc-run-instead-of-returned
+    event:
+      type: note
+      ts: "2026-10-08T05:34:36Z"
+      host: macuahuitl
+      summary: |-
+        Vocabulary chosen: no new status. A drain grace that expires after the leader exits keeps the leader's real status, the bytes read and truncated=true (ok=false), on every door; the 65th live process is a spawn_failed value whose stderr names script-process-limit. Neither is raised and neither closes the scope (read_stream and Scope::spawn_observed in the managed supervisor, Command::run in the executor). Pre-fix probe with the debug binary on 33fa27e71: q:wait() raised group-pipe-eof-timeout, an unrelated live:wait() and a later proc.run then raised script-scope-closed; the legacy lua door returned exited code 0 stdout "" truncated=false ok=true. Spec command-runtime names both. Touches crates/tillandsias-exec/src/lib.rs, outside owned_files. proc-line-too-long still closes the scope (pinned by spawn_validation_missing_program_kill_and_line_limit_are_explicit); not in this row. Not yet landed: on work/1551-af3e.

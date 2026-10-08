@@ -338,6 +338,29 @@ mod managed_script {
     // /proc read may catch its final R -> Z transition, or the Linux X (dead)
     // state. Preserve its start identity and a short bound, not a single-read
     // scheduling assertion (1538-pwdr's measured landing/stress refutation).
+    fn task_observation_is_absent(error: &std::io::Error) -> bool {
+        // Linux procfs may return ESRCH if the task exits after the file was
+        // opened but before its contents are read. This is task absence, not
+        // an observation-permission failure. Every other error stays fatal.
+        error.kind() == std::io::ErrorKind::NotFound || error.raw_os_error() == Some(libc::ESRCH)
+    }
+
+    #[test]
+    fn cleanup_observer_absence_distinguishes_procfs_exit_from_observation_errors() {
+        assert!(task_observation_is_absent(
+            &std::io::Error::from_raw_os_error(libc::ENOENT)
+        ));
+        assert!(task_observation_is_absent(
+            &std::io::Error::from_raw_os_error(libc::ESRCH)
+        ));
+        assert!(!task_observation_is_absent(
+            &std::io::Error::from_raw_os_error(libc::EACCES)
+        ));
+        assert!(!task_observation_is_absent(
+            &std::io::Error::from_raw_os_error(libc::EIO)
+        ));
+    }
+
     fn acknowledged_task_stopped(ack: &serde_json::Value) -> bool {
         let pid = ack["pid"].as_u64().unwrap();
         match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
@@ -346,7 +369,7 @@ mod managed_script {
                 let fields: Vec<_> = details.split_whitespace().collect();
                 fields[19] != ack["start"].as_str().unwrap() || matches!(fields[0], "Z" | "X")
             }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
+            Err(e) if task_observation_is_absent(&e) => true,
             Err(e) => panic!("cannot observe acknowledged task {pid}: {e}"),
         }
     }
@@ -1729,6 +1752,173 @@ printf '%s' "$id"
             out.status.code(),
             Some(1),
             "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    // ORDER 1551-af3e. A child whose session-detached descendant keeps its
+    // stdout after the leader exits is ONE child's anomaly. It is reported on
+    // that child's result — real exit status, the bytes read, truncated=true,
+    // ok=false — and it closes nothing else.
+    // PRE-FIX (measured by the audit, 2026-10-04): proc.run RAISED
+    // `group-pipe-eof-timeout` through `script run`, waiting on an unrelated
+    // handle raised the same error, and every later call answered
+    // `script-scope-closed`; the legacy `lua` door returned `exited` with an
+    // EMPTY capture and truncated=false.
+    #[test]
+    fn one_childs_pipe_anomaly_does_not_close_the_scope() {
+        let f = ScriptFixture::new();
+        // `setsid` leaves the leader's process group, so the group reap cannot
+        // reach it; it holds the inherited stdout for three seconds. The
+        // leader waits 0.3 s first: exiting at once raced the group TERM
+        // against setsid() and the descendant often died still in the group.
+        let detached = f.write(
+            "detached.sh",
+            "#!/bin/sh\nprintf 'before\\n'\nsetsid sleep 3 &\nsleep 0.3\nexit 0\n",
+        );
+        let out = f.run(
+            &format!(
+                r#"
+            local function anomaly(r, door)
+                assert(r.status == 'exited' and r.code == 0, door..': status '..tostring(r.status))
+                assert(r.stdout == 'before\n', door..': stdout '..string.format('%q', tostring(r.stdout)))
+                assert(r.truncated == true and r.ok == false, door..': truncated '..tostring(r.truncated))
+            end
+            anomaly(proc.run{{argv={{'sh','{detached}'}}}}, 'proc.run')
+            local live = proc.spawn{{argv={{'sleep','1'}}}}
+            local q = proc.spawn{{argv={{'sh','{detached}'}}}}
+            anomaly(q:wait(), 'p:wait')
+            local l = live:wait()
+            assert(l.ok and l.status == 'exited', 'unrelated handle: '..tostring(l.status))
+            assert(proc.run{{argv={{'true'}}}}.ok, 'a later proc.run failed')
+            verdict.ok('anomaly-is-per-child')
+        "#
+            ),
+            "20s",
+        );
+        assert!(
+            out.status.success(),
+            "script run: {}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        // The legacy `lua` door: the same child through the executor's run.
+        let (status, code, stdout, truncated, ok): (String, i64, String, bool, bool) =
+            observing(&format!(
+                r#"local r = proc.run{{argv = {{'sh', '{detached}'}}}}
+                   return r.status, r.code, r.stdout, r.truncated, r.ok"#
+            ))
+            .unwrap();
+        assert_eq!(
+            (status.as_str(), code, stdout.as_str(), truncated, ok),
+            ("exited", 0, "before\n", true, false),
+            "legacy door"
+        );
+    }
+
+    // ORDER 1551-7hyq. A script worker that ends without a verdict (a panic,
+    // forced through the debug-only TILLANDSIAS_TEST_SCRIPT_WORKER_PANIC
+    // seam, after the script spawned a child and called verdict.ok) is a
+    // crash. It is not a timeout, it is not the verdict the script recorded,
+    // and it still takes the script-owned child with it.
+    // PRE-FIX: with --timeout the disconnected channel shared the deadline's
+    // arm (status=timed_out, rc 124); without --timeout the panic unwound
+    // past the scope cleanup and the child outlived the runner.
+    #[test]
+    fn a_dead_script_worker_is_not_a_timeout() {
+        let child = |dir: &std::path::Path| -> Option<u32> {
+            std::fs::read_to_string(dir.join("child.pid"))
+                .ok()
+                .and_then(|s| s.trim().parse().ok())
+        };
+        let alive = |pid: u32| {
+            std::fs::read_to_string(format!("/proc/{pid}/stat"))
+                .map(|s| {
+                    s.rsplit(')')
+                        .next()
+                        .is_some_and(|r| !r.trim_start().starts_with('Z'))
+                })
+                .unwrap_or(false)
+        };
+        for timeout in [Some("20s"), None] {
+            let f = ScriptFixture::new();
+            let holder = f.write("holder.sh", "#!/bin/sh\nprintf '%s\\n' $$\nexec sleep 30\n");
+            let script = f.write(
+                "probe.lua",
+                &format!(
+                    r#"
+                local p = proc.spawn{{argv={{'sh','{holder}'}}}}
+                local pid
+                p:on_line('stdout', function(s) pid = s end)
+                while not pid do proc.select{{p, timeout_ms=50}} end
+                fs.write('child.pid', pid)
+                verdict.ok('spawned')
+            "#
+                ),
+            );
+            let mut runner = f.runner(&script);
+            if let Some(t) = timeout {
+                runner.args(["--timeout", t]);
+            }
+            let out = runner
+                .env("TILLANDSIAS_TEST_SCRIPT_WORKER_PANIC", "1")
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let pid = child(f.dir.path()).expect("premise: the script spawned its child");
+            // Reap the child ourselves on failure, so a red run leaves nothing.
+            let reaped = !alive(pid);
+            if !reaped {
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGKILL);
+                }
+            }
+            assert!(
+                !stdout.contains("timed_out") && out.status.code() != Some(124),
+                "{timeout:?}: a dead worker read as a timeout: rc {:?} {stdout}{stderr}",
+                out.status.code()
+            );
+            assert!(
+                stdout.contains("refused:script-worker-died:probe") && out.status.code() == Some(1),
+                "{timeout:?}: rc {:?} {stdout}{stderr}",
+                out.status.code()
+            );
+            assert!(!stdout.contains("ok:spawned"), "{timeout:?}: {stdout}");
+            assert!(reaped, "{timeout:?}: child {pid} outlived the runner");
+        }
+    }
+
+    // ORDER 1551-af3e. `MAX_ACTIVE_PROCESSES` (64) is a per-call refusal, not
+    // a scope failure. PRE-FIX: the 65th proc.spawn raised
+    // `script-process-limit` and closed the scope.
+    #[test]
+    fn the_65th_live_spawn_is_refused_as_a_value_and_the_scope_stays_open() {
+        let f = ScriptFixture::new();
+        let out = f.run(
+            r#"
+            local held = {}
+            for i = 1, 64 do
+                held[i] = proc.spawn{argv={'sleep','30'}}
+                assert(held[i].wait, 'spawn '..i..' was refused: '..tostring(held[i].status))
+            end
+            local r = proc.spawn{argv={'sleep','30'}}
+            assert(r.wait == nil, 'the 65th live spawn was accepted')
+            assert(r.status == 'spawn_failed' and r.ok == false, 'status '..tostring(r.status))
+            assert(r.stderr:find('script-process-limit', 1, true), r.stderr)
+            local s = proc.run{argv={'true'}}
+            assert(s.status == 'spawn_failed' and s.stderr:find('script-process-limit', 1, true))
+            assert(not held[1]:kill().ok)
+            assert(proc.run{argv={'true'}}.ok, 'a slot freed by kill was not reusable')
+            for i = 2, 64 do held[i]:kill() end
+            verdict.ok('limit-is-a-value')
+        "#,
+            "20s",
+        );
+        assert!(
+            out.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         );
     }

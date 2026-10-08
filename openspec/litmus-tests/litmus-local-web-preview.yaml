@@ -1,0 +1,19 @@
+name: litmus:local-web-preview
+spec: local-web-preview
+description: Opt-in behavioral acceptance of a real tillandsias.org forge lane through its authenticated MCP socket and CA-verified host HTTPS ingress. This covers asset watch, lifecycle, argument refusal and trust-anchor non-mutation, not the full draft acceptance matrix or browser trust.
+severity: critical
+size: e2e
+preconditions:
+  - A tray-enabled Tillandsias host has launched a real tillandsias.org forge lane with its shared RAM-backed live source and the managed Wrangler image available.
+  - TILLANDSIAS_PREVIEW_E2E_SOCKET names that lane's MCP socket; TILLANDSIAS_PREVIEW_E2E_FORGE names that running forge; TILLANDSIAS_PREVIEW_E2E_CA names its verifying local CA certificate.
+  - No WEB preview is already running for the lane; the test refuses to disturb one.
+  - Cargo build environment, host Podman, curl and trust are available; var/html is the target's asset directory.
+critical_path:
+  - step: "Exercise MCP start, two uncommitted edits, repeated publish, runtime reload, stop twice and restart through CA-verified HTTPS."
+    command: "cargo test -p tillandsias-headless --features tray --test local_web_preview_e2e live_forge_assets_https_mcp_lifecycle -- --ignored --exact --nocapture"
+    timeout_ms: 900000
+    expected_behavior: "ok:local-web-preview:live-assets-watch-reload-stop-ca-verified; host-browser-trust=unverified"
+postconditions:
+  - Only the uniquely named nonce asset is removed from the forge; no host checkout or pre-existing asset is overwritten.
+  - The test-owned preview is stopped; unrelated containers and routes are not explicitly modified by the harness.
+  - Forge HEAD and host trust CA-anchor listing are unchanged; browser-specific trust remains unverified.

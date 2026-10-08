@@ -1,0 +1,53 @@
+events:
+  - packet_id: local-web-preview-runtime
+    event:
+      type: progress
+      ts: "2026-10-07T18:39:01Z"
+      host: yoga
+      summary: >
+        Astra bounded design review on observed work/1552-e3wf: Terra's
+        disposable volumes-from/overlay/tmpfs and podman-mount probes did not
+        export live tmpfs. Shared runtime bind is recommended, NOT proven.
+        Parent acceptance in principle does not waive forge-hot-cold-split:
+        a runtime tmpfs subdirectory lacks independent per-lane ENOSPC cap.
+        Draft now requires equivalent compute_hot_budget size bound,
+        memory/swap accounting, four HOT roots and teardown isolation.
+        Full proof boundary and vendor-doc limits are in
+        plan/issues/local-web-preview-shared-tmpfs-proof-2026-10-07.md.
+      next_action: >
+        Sol coordinate one bounded rootless sharing proof with Terra. Prove
+        actual mount size/ENOSPC and cgroup charging as well as live source
+        visibility. Fail explicitly if unsupported; no unbounded runtime-dir
+        or disk fallback. Canonical mechanism amendment remains pending.
+  - packet_id: local-web-preview-image-mcp
+    event:
+      type: progress
+      ts: "2026-10-07T18:39:01Z"
+      host: yoga
+      summary: >
+        Terra negative sharing results recorded as relayed evidence in
+        plan/issues/local-web-preview-shared-tmpfs-proof-2026-10-07.md;
+        no successful shared bind or bounded rootless named-volume proof is
+        claimed. Vendor docs describe tmpfs size option but require root for
+        local-driver mount options; this does not establish rootless support.
+      next_action: >
+        Terra attach exact disposable commands/version/log artifacts and
+        coordinate bounded sharing/accounting experiment with Sol. Preserve
+        narrow read-only source views including atomic-save watch behavior;
+        proceed image/MCP work without claiming source provisioning solved.
+  - packet_id: local-web-preview-live-acceptance
+    event:
+      type: note
+      ts: "2026-10-07T18:39:01Z"
+      host: yoga
+      summary: >
+        Parent work/1552-e3wf confirmed by git. Shared workspace proposal
+        requires scoped reconciliation of forge-hot-cold-split's literal
+        --tmpfs launch mechanism only AFTER bounded kernel/tmpfs accounting
+        and lifecycle evidence. No weakening of active ENOSPC/cap rules and
+        no canonical spec activation/edit performed by this follow-up.
+      next_action: >
+        Parent require the five proof obligations in
+        plan/issues/local-web-preview-shared-tmpfs-proof-2026-10-07.md before
+        accepting shared source. Reconcile canonical mechanism only with
+        evidence; runtime-directory RAM backing or serving a page is insufficient.

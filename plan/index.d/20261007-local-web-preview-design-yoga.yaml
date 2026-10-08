@@ -1,0 +1,118 @@
+# Append-only design filing; parent owns integration and publication.
+packets:
+  - packet_id: local-web-preview-runtime
+    order: 1552-238z
+    title: Live forge WEB preview lifecycle and loopback HTTPS routing
+    status: ready
+    kind: feature
+    priority: p1
+    pickup_role: linux
+    capability_tags: [rust, podman, web, tls]
+    estimated_hours: 5
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - crates/tillandsias-headless/src/local_web_preview.rs
+      - crates/tillandsias-headless/src/local_projects.rs
+      - crates/tillandsias-headless/src/ca.rs
+      - images/router/
+    deliverable: plan/issues/local-web-preview-design-2026-10-07.md
+    context: >
+      Operator-approved local Wrangler preview, designed by Astra for Sol.
+      Reuses completed 357/363/364. Current source uses a host-root bind and
+      returns HTTP; actual live forge source and TLS must be implemented.
+      Draft contract is openspec/specs/local-web-preview/spec.md.
+    depends_on: []
+    exit_criteria:
+      - Live worktree identity is proven with uncommitted nonce changes and cross-lane refusal.
+      - Publish/status/stop/reload share one lifecycle with truthful readiness and error classification.
+      - Returned HTTPS URL verifies against existing local CA with correct hostname and loopback ingress; no trust-store mutation.
+    verifiable_closure: >
+      litmus:local-web-preview supplies the executed basic live MCP/TLS path;
+      failure-injection and full launch/isolation criteria remain additional
+      closure obligations, not implied by that positive test alone.
+      Record passing behavioral source/lifecycle/router tests and acceptance
+      matrix A/C/D in plan/issues/local-web-preview-design-2026-10-07.md;
+      contrast against the pre-fix HTTP/host-root behavior. Browser trust
+      evidence is separately owned by local-web-preview-live-acceptance.
+    next_action: >
+      Parent assigns Sol; confirm lane-context helper contract with Terra,
+      inspect actual forge tmpfs mount identity, implement runtime and router.
+    notes: 'size: M; implementer: Sol; no tray UX or host CA trust approval.'
+  - packet_id: local-web-preview-image-mcp
+    order: 1552-mqvf
+    title: Pinned local Wrangler sibling image and existing MCP controls
+    status: ready
+    kind: feature
+    priority: p1
+    pickup_role: linux
+    capability_tags: [rust, containers, mcp, web]
+    estimated_hours: 4
+    owned_files:
+      - images/web-wrangler/
+      - crates/tillandsias-headless/src/container_deps.rs
+      - crates/tillandsias-headless/src/runtime_assets.rs
+      - crates/tillandsias-headless/src/tray/mod.rs
+      - images/default/config-overlay/mcp/
+    deliverable: plan/issues/local-web-preview-design-2026-10-07.md
+    context: >
+      Astra design for Terra; parallel with runtime implementation using the
+      draft JSON contract. Preserve busybox images/web. Wrangler assets-only
+      JSONC without main is required; local mode, watch and private state.
+    depends_on: []
+    exit_criteria:
+      - Managed pinned Wrangler image runs assets-only and Worker fixtures locally with automatic watch and no production credentials.
+      - Existing MCP registry advertises optional runtime selection and service_reload and dispatches authenticated lane context.
+      - Static image and existing tool calls remain compatible; no arbitrary command or caller-selected path is accepted.
+    verifiable_closure: >
+      litmus:local-web-preview supplies the executed target image/MCP path;
+      separate Worker, remote-binding and compatibility evidence is required
+      before full closure.
+      Record image runtime and MCP behavioral test commands/results for
+      acceptance B/C/E in plan/issues/local-web-preview-design-2026-10-07.md;
+      fail controls include no-main assets config, bad runtime type and remote binding.
+    next_action: >
+      Parent assigns Terra; agree runtime helper signature with Sol, inspect
+      image materialization before edits, build pinned image and wire existing MCP.
+    notes: 'size: M; implementer: Terra; integration requires local-web-preview-runtime.'
+  - packet_id: local-web-preview-live-acceptance
+    order: 1552-e3wf
+    title: Prove live tillandsias.org preview and activate scoped specs
+    status: ready
+    kind: test
+    priority: p1
+    pickup_role: linux
+    capability_tags: [e2e, web, tls, openspec]
+    estimated_hours: 3
+    owned_files:
+      - openspec/specs/local-web-preview/spec.md
+      - openspec/specs/subdomain-routing-via-reverse-proxy/spec.md
+      - openspec/specs/mcp-tool-socket/spec.md
+      - openspec/specs/forge-environment-discoverability/spec.md
+      - openspec/litmus-bindings.yaml
+      - openspec/litmus-tests/litmus-local-web-preview.yaml
+      - scripts/test-local-web-preview.sh
+    deliverable: plan/issues/local-web-preview-design-2026-10-07.md
+    context: >
+      Integrator closure owns spec activation and actual host-browser evidence.
+      Current router spec pins HTTP-only ingress; reconcile additive TLS before
+      activation. MCP read fallback was unavailable during design, recorded in
+      deliverable. No runtime or browser success has yet been observed.
+    depends_on: [local-web-preview-runtime, local-web-preview-image-mcp]
+    exit_criteria:
+      - Acceptance A through E have bounded executable evidence and negative controls with image/source identity.
+      - Real tillandsias.org forge serves ./var/html through CA-verified HTTPS and watches uncommitted edits.
+      - Host-browser trust is measured separately and no host trust-store or tray UI changes occur.
+      - New draft is activated only after executable binding and required evidence; prior HTTP/static contracts reconciled narrowly.
+    verifiable_closure: >
+      litmus:local-web-preview executes the basic real-lane acceptance;
+      its passing result alone does not cover every A-E negative control.
+      Execute the A-E matrix from plan/issues/local-web-preview-design-2026-10-07.md
+      through the existing MCP socket and host HTTPS ingress; attach commands,
+      artifacts and per-criterion pass/fail. Run bound preview coverage and
+      existing static/catalog/MCP regressions. Missing browser-trust evidence
+      remains blocked, not completed.
+    next_action: >
+      After both implementation rows land, parent integrates and authors/binds
+      behavioral tests, launches requested target forge, records browser trust
+      without installing CA, reconciles specs and runs required build gate.
+    notes: 'size: M; implementer: parent integrator; draft remains S0 until evidence.'
