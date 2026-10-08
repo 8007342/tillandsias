@@ -51,7 +51,7 @@ done
 for d in $DECLARED; do
     n=$((n + 1))
     f="${TILLANDSIAS_DOOR_DECIDER_DIR:-scripts}/$d.sh"
-    decl="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p}' "$f" 2>/dev/null | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+    decl="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p;}' "$f" 2>/dev/null | head -n 1 | sed 's/^[—-][[:space:]]*//')"
     if [ -z "$decl" ]; then
         echo "FAIL: $d is neither timed nor declared — it lost its '# preflight: gate-only-decider — <reason>' line, so the door would deadline-skip it in silence (1518-8p5k)" >&2
         fail=$((fail + 1))

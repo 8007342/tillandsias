@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: preflight-door-reads-guard-header-declarations-through-one-batched-lua-run
+    order: 1553-6b3a
+    title: The preflight door reads gate-only, gate-only-decider and serial header declarations through one batched Lua run instead of six host-sed calls per guard
+    status: in_progress
+    kind: refactor
+    priority: p2
+    pickup_role: macos
+    capability_tags: [bash, lua, preflight, macos]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+      - scripts/lua/preflight-declarations.lua
+      - scripts/test-preflight-declarations-lua.sh
+      - openspec/litmus-tests/litmus-preflight-declarations-lua.yaml
+      - openspec/litmus-bindings.yaml
+    context: >
+      Operator directive: move BSD/GNU-flaky shell parsing onto the
+      cross-platform Lua runtime. _pf_predecide read each guard's first 40
+      lines with six sed programs; BSD sed rejected the unclosed brace groups
+      and darwin read no declaration (fixed in place by 1545-qdb5 with ';}').
+      This row replaces the parsing with scripts/lua/preflight-declarations.lua
+      (@class cacheable, fs.read only), run ONCE per door run over the roster's
+      paths by _pf_load_declarations, which fills _PF_DECL_TABLE with
+      <path>TAB<kind>TAB<reason> rows. _pf_predecide reads the table and keeps
+      return codes 10/11/12, every skip/note line and the scripts/check-*
+      hook-membership rule unchanged. With no plan binary, or a reader that
+      does not answer, the door prints a note and reads with the 1545-qdb5 sed
+      programs; a path missing from the table also reads with sed. The
+      launcher/concurrency code is untouched (1520-z95v).
+    depends_on: []
+    exit_criteria:
+      - The door reads header declarations through one Lua run per door run when a plan binary resolves, and calls sed zero times for them.
+      - With no plan binary or a failing reader the door says so and decides from the host sed, never from an empty table.
+      - For every guard in the real roster the Lua rows equal the fixed sed's and _pf_predecide decides identically.
+    verifiable_closure: >
+      litmus:preflight-declarations-lua passes (ok:preflight-declarations-lua:10):
+      eleven planted guards decided identically on the Lua, no-plan-binary and
+      broken-reader paths, sed called 0 times on the Lua path, and parity over
+      all 224 real roster guards. Mutating the reader (header window 41 lines;
+      dropping the gate-only-decider exclusion) turns it red, the second also
+      in both real-roster parity arms. litmus:preflight-declarations-host-sed
+      still passes 5/5 on the sed fallback.
+    next_action: Land after slice B on the re-keyed base work/1545-qdb5.
+
+events:
+  - packet_id: preflight-door-reads-guard-header-declarations-through-one-batched-lua-run
+    event:
+      type: note
+      ts: "2026-10-08T16:49:15Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        filed and claimed by macbookair-macos on coordinator assignment. darwin (BSD sed, bash 3.2): litmus:preflight-declarations-lua 10/10; two applied-and-reverted mutations of the reader went red (1 and 3 arms).

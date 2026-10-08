@@ -1,0 +1,30 @@
+# @trace spec:ci-release, order:1553-6b3a
+name: litmus:preflight-declarations-lua
+spec: ci-release
+phase: pre-build
+size: instant
+severity: high
+description: >
+  ORDER 1553-6b3a. The preflight door reads each guard's `# preflight:
+  gate-only`, `gate-only-decider` and `serial` header declaration ONCE per run,
+  through scripts/lua/preflight-declarations.lua (one process for the whole
+  roster, in plain Lua string operations, the same on every
+  host), instead of six host-sed calls per guard (BSD and GNU sed disagreed:
+  1545-qdb5). The fixture lifts the door's own _pf_load_declarations and
+  _pf_predecide out of build.sh and asserts the decisions for eleven planted
+  guards on three paths: the Lua table (with sed called zero times), the
+  no-plan-binary host-sed fallback, and a broken reader's fallback; both
+  fallbacks must SAY so. Parity arms: for every guard in the real roster the
+  Lua rows equal what the fixed sed programs read, and _pf_predecide decides
+  identically with and without the table. A negative control (an undeclared
+  guard runs plainly) keeps a broken harness from passing.
+preconditions:
+  - workspace contains scripts/test-preflight-declarations-lua.sh
+  - workspace contains scripts/lua/preflight-declarations.lua
+  - build.sh defines _pf_load_declarations and _pf_predecide
+  - a tillandsias-plan binary with `script run` resolves
+critical_path:
+  - step: "the door reads guard header declarations through one Lua run, and falls back to the host sed out loud"
+    command: "bash scripts/test-preflight-declarations-lua.sh"
+    timeout_ms: 60000
+    expected_behavior: "ok:preflight-declarations-lua:10"

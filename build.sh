@@ -460,6 +460,38 @@ _pf_run_guard() {  # $1 = path, $2 = deadline seconds (0 = none), $3 = outfile, 
     return $?
 }
 
+# ORDER 1553-6b3a. THE DECLARATION TABLE, read once per door run: every roster
+# path's `# preflight:` header declarations, from ONE Lua process instead of six
+# host-sed calls per guard (BSD and GNU sed disagreed: 1545-qdb5). Roster on
+# stdin (`path[<TAB>args]`). Sets _PF_DECL_TABLE; leaves it empty, and SAYS SO,
+# when no plan binary resolves or the reader fails, and _pf_predecide then reads
+# with the host sed — a fallback, never "no declarations".
+_pf_load_declarations() {
+    local _l _out="" _rc=0
+    local -a _ps=()
+    _PF_DECL_TABLE=""
+    while IFS= read -r _l; do
+        [ -z "$_l" ] || _ps+=("${_l%%$'\t'*}")
+    done
+    if [ -z "${_pf_plan_bin:-}" ]; then
+        echo "note:preflight:declarations:host-sed — no plan binary resolves; guard headers are read with the host sed (1553-6b3a)"
+        return 0
+    fi
+    _out="$(cd "$SCRIPT_DIR" && TILLANDSIAS_REPO_ROOT="$SCRIPT_DIR" "$_pf_plan_bin" script run \
+        "$SCRIPT_DIR/scripts/lua/preflight-declarations.lua" -- ${_ps[@]+"${_ps[@]}"} 2>/dev/null)" || _rc=$?
+    # `case`, not `| grep -q`: under pipefail an early-exiting grep SIGPIPEs the
+    # printf and the pipeline reads as "no verdict".
+    case "$_out" in
+        ok:preflight-declarations:*|*$'\n'ok:preflight-declarations:*) ;;
+        *) [ "$_rc" -ne 0 ] || _rc=no-verdict ;;
+    esac
+    if [ "$_rc" != 0 ]; then
+        echo "note:preflight:declarations:host-sed — scripts/lua/preflight-declarations.lua did not answer (rc $_rc); guard headers are read with the host sed (1553-6b3a)"
+        return 0
+    fi
+    _PF_DECL_TABLE="$(printf '%s\n' "$_out" | grep "$(printf '\t')" || true)"
+}
+
 # ORDER 1499-m9fj. WHETHER THE DOOR RUNS A GUARD, decided in ONE place, because
 # two passes ask it: the launcher (which must never start a guard the door does
 # not run: a gate-only fixture leaves a marker) and the reporter (which prints
@@ -501,9 +533,35 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # because a check-* is a push decider the door exists to run; and the
     # full gate still runs every declared guard.
     # (`gate-only-decider`, 1518-8p5k below, is a different token: excluded here.)
-    _go="$(sed -n '1,40{/^# preflight: gate-only-decider/d;s/^# preflight: gate-only[[:space:]]*//p}' "$SCRIPT_DIR/$_p" | head -n 1)"
-    if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/d;/^# preflight: gate-only/p}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(printf '%s' "$_go" | sed 's/^[—-][[:space:]]*//')"
+    #
+    # ORDER 1553-6b3a: THE HEADER IS READ ONCE PER DOOR RUN, BY LUA. The door
+    # fills _PF_DECL_TABLE from scripts/lua/preflight-declarations.lua (one
+    # process for the whole roster; `<path>\t<kind>\t<reason>` rows, reason
+    # already stripped). A path the table does not carry, or a door with no
+    # table (no plan binary), reads with the host sed exactly as before
+    # (`;}`-closed groups, 1545-qdb5) — never as "no declarations".
+    local _row _rk _rr _go_has="" _god_has="" _god_reason="" _ser_has="" _ser_reason="" _rows=""
+    [ -z "${_PF_DECL_TABLE:-}" ] || _rows="$(printf '%s\n' "$_PF_DECL_TABLE" | awk -F'\t' -v p="$_p" '$1 == p')"
+    if [ -n "$_rows" ]; then
+        while IFS= read -r _row; do
+            _rk="${_row#*$'\t'}"; _rr="${_rk#*$'\t'}"; _rk="${_rk%%$'\t'*}"
+            case "$_rk" in
+                gate-only) _go_has=1; _go="$_rr" ;;
+                gate-only-decider) _god_has=1; _god_reason="$_rr" ;;
+                serial) _ser_has=1; _ser_reason="$_rr" ;;
+            esac
+        done <<< "$_rows"
+    else
+        _go="$(sed -n '1,40{/^# preflight: gate-only-decider/d;s/^# preflight: gate-only[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1)"
+        _go="$(printf '%s' "$_go" | sed 's/^[—-][[:space:]]*//')"
+        [ -z "$(sed -n '1,40{/^# preflight: gate-only-decider/d;/^# preflight: gate-only/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ] || _go_has=1
+        [ -z "$(sed -n '1,40{/^# preflight: gate-only-decider/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ] || _god_has=1
+        _god_reason="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        [ -z "$(sed -n '1,40{/^# preflight: serial/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ] || _ser_has=1
+        _ser_reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+    fi
+    if [ -n "$_go_has" ]; then
+        _reason="$_go"
         case "$_p" in
             scripts/test-*)
                 if [ -n "$_reason" ]; then
@@ -526,8 +584,8 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # above, which a check-* may not use: this token is honoured only for a
     # check-* that NO pre-push hook runs (the push lane keeps every decider it
     # has), only with a reason, and the full gate still runs it.
-    if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/p}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+    if [ -n "$_god_has" ]; then
+        _reason="$_god_reason"
         case "$_p" in
             scripts/check-*)
                 if grep -qF "${_p##*/}" "$SCRIPT_DIR"/scripts/hooks/* 2>/dev/null; then
@@ -550,8 +608,8 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # shape as gate-only; the launcher then waits for every running guard,
     # runs it with nothing beside it, and only then launches the next. The
     # reason is required: a bare declaration runs concurrently, with a note.
-    if [ -n "$(sed -n '1,40{/^# preflight: serial/p}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+    if [ -n "$_ser_has" ]; then
+        _reason="$_ser_reason"
         if [ -n "$_reason" ]; then
             return 12
         fi
@@ -979,6 +1037,7 @@ if [[ "$FLAG_PREFLIGHT" == true ]]; then
         [ "$_pf_jobs" -ge 2 ] || _pf_jobs=2
     fi
     _pf_roster="$(_preflight_roster | sort -u)"
+    _pf_load_declarations <<< "$_pf_roster"
     _pf_wall0=$SECONDS
     printf '%s\n' "$_pf_roster" | _pf_launcher "$_pf_dir" "$_pf_deadline" "$_pf_jobs" &
     _pf_launcher_pid=$!
