@@ -63,7 +63,9 @@ if [ "$soft_calls" = "1" ]; then pass "2 one --reset-state call, stdin from NUL"
 if grep -qi 'Read-Host' <<<"$reset_path"; then bad "3 a Read-Host on the reset path"; else pass "3 no prompt on the reset path"; fi # sigpipe-ok: herestring, no upstream writer
 
 # 4 — no power-user text in the reset path's output statements.
-said="$(grep -E '(^|[[:space:]])(Say|SayOk|SayWn|Write-Host|Die)[[:space:]]' <<<"$reset_path")"
+# Variable NAMES are not visible text (the operator sees $ResetLog's path, not
+# the word "ResetLog"), so $Identifiers are dropped before matching.
+said="$(grep -E '(^|[[:space:]])(Say|SayOk|SayWn|Write-Host|Die)[[:space:]]' <<<"$reset_path" | sed -E 's/\$[A-Za-z_]+//g')"
 noisy="$(grep -iE -- '--[a-z]|TILLANDSIAS_|SOFT|HARD|reset|probe' <<<"$said" | grep -vF 'Get-Content')"
 if [ -z "$noisy" ]; then pass "4 no flag, variable or reset-kind text in the output"; else bad "4 power-user text: $(printf '%s' "$noisy" | tr '\n' '|' | cut -c1-300)"; fi
 
