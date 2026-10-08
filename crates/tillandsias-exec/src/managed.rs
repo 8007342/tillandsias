@@ -21,9 +21,24 @@ pub enum Event {
 
 /// A bound on an individual unterminated line, independent of capture.
 pub const MAX_LINE_BYTES: usize = 1024 * 1024;
+/// How many script-owned processes may be live at once in one scope (a
+/// process counts until its supervisor has published and reaped it). The
+/// next spawn is REFUSED for that call only, as `ExecError::Spawn` whose
+/// source reads `script-process-limit`; the Lua doors return it as a
+/// `spawn_failed` value and the scope stays open (order 1551-af3e).
 pub const MAX_ACTIVE_PROCESSES: usize = 64;
 pub const CLEANUP_BOUND: Duration = Duration::from_secs(2);
-pub const SPAWN_SETUP_BOUND: Duration = Duration::from_secs(1);
+/// How long a spawning caller waits for its supervisor thread to report that
+/// the child started (capped by the scope deadline). ORDER 1551-333i: it was
+/// one second, and a supervisor held 2 s at fork (reproduced under gdb on
+/// Linux; a loaded host or an antivirus scan at process creation is the same
+/// shape) made proc.spawn RAISE proc-spawn-setup-failed and close the script
+/// scope although the child then started. Slow setup is LATENCY: the caller
+/// waits for the true outcome. Only a setup stalled past this bound is a
+/// failure, and it stays a raised, scope-closing one, because a refusal value
+/// such as spawn_failed would claim the child never ran while a late child
+/// may still start (the scope then kills and reaps it).
+pub const SPAWN_SETUP_BOUND: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Copy, PartialEq)]
 enum Stop {
@@ -92,6 +107,11 @@ struct Inner {
     next: AtomicU64,
     deadline: Option<Instant>,
     events: mpsc::Sender<Event>,
+    // Test-only seam (1551-333i): hold every supervisor thread of this scope
+    // before setup, so a slow host is reproducible on demand. Absent from
+    // every non-test build.
+    #[cfg(test)]
+    setup_delay: Duration,
 }
 
 #[derive(Clone)]
@@ -108,6 +128,26 @@ impl Scope {
                 next: AtomicU64::new(1),
                 deadline,
                 events,
+                #[cfg(test)]
+                setup_delay: Duration::ZERO,
+            })),
+            rx,
+        )
+    }
+    #[cfg(test)]
+    fn with_setup_delay(
+        deadline: Option<Instant>,
+        setup_delay: Duration,
+    ) -> (Self, mpsc::Receiver<Event>) {
+        let (events, rx) = mpsc::channel(32);
+        (
+            Self(Arc::new(Inner {
+                closed: AtomicBool::new(false),
+                processes: Mutex::new(Vec::new()),
+                next: AtomicU64::new(1),
+                deadline,
+                events,
+                setup_delay,
             })),
             rx,
         )
@@ -150,7 +190,17 @@ impl Scope {
             !p.state.finished.load(Ordering::Acquire) || !p.state.reaped.load(Ordering::Acquire)
         });
         if processes.len() >= MAX_ACTIVE_PROCESSES {
-            return Err(scope_error(&command, "script-process-limit"));
+            // ORDER 1551-af3e. A refusal of THIS call, typed as a spawn
+            // failure, so no door mistakes it for a scope failure. It used to
+            // be an Io error, which the Lua doors raise and which closed the
+            // whole scope: every sibling handle then answered
+            // script-scope-closed.
+            return Err(ExecError::Spawn {
+                argv: command.argv.clone(),
+                source: std::io::Error::other(format!(
+                    "script-process-limit: {MAX_ACTIVE_PROCESSES} script-owned processes are live; wait on or kill one first"
+                )),
+            });
         }
         let id = self.0.next.fetch_add(1, Ordering::Relaxed);
         let (cancel, rx) = watch::channel(Stop::Running);
@@ -178,9 +228,13 @@ impl Scope {
         processes.push(process.clone());
         drop(processes); // No OS thread/process setup holds the close gate.
         let worker_state = state.clone();
+        #[cfg(test)]
+        let setup_delay = self.0.setup_delay;
         let spawned = std::thread::Builder::new()
             .name(format!("proc-{id}"))
             .spawn(move || {
+                #[cfg(test)]
+                std::thread::sleep(setup_delay);
                 let result = match tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
@@ -314,31 +368,45 @@ async fn read_stream<R: tokio::io::AsyncRead + Unpin>(
     fd: &'static str,
     events: Option<mpsc::Sender<Event>>,
     mut leader: watch::Receiver<bool>,
-) -> std::io::Result<(Vec<u8>, u64)> {
+) -> std::io::Result<(Vec<u8>, u64, bool)> {
     use tokio::io::AsyncReadExt;
     let mut kept = Vec::new();
     let mut dropped = 0;
     let mut pending = Vec::new();
     let mut buf = [0u8; 8192];
     loop {
-        // Bound PIPE EOF after leader exit, not callback delivery time. Sending
-        // queued lines may take arbitrarily long within the process deadline.
+        // Bound PIPE EOF after leader exit, not callback delivery time. Once
+        // the leader has exited its own `timeout_ms` no longer applies
+        // (1551-sprq): sending queued lines may take as long as the consumer
+        // needs, bounded only by the enclosing scope deadline, and a cut-off
+        // there keeps the real exit status and marks the capture truncated.
+        //
+        // ORDER 1551-af3e. A drain grace that expires — a descendant that left
+        // the group (setsid) still holds the pipe after the group reap — is
+        // THIS child's condition, not a supervisor failure. Reading stops; the
+        // bytes already read are kept and the capture is reported incomplete
+        // (`truncated`), with the leader's real exit status. It used to be an
+        // error, which proc.run raised and which closed the whole script
+        // scope, so every sibling handle answered script-scope-closed. An
+        // unterminated tail is NOT emitted as a line: it was cut, not ended.
         let read = async {
             if *leader.borrow() {
                 tokio::time::timeout(GROUP_DRAIN_GRACE, pipe.read(&mut buf))
                     .await
-                    .map_err(|_| std::io::Error::other("group-pipe-eof-timeout"))?
+                    .ok()
             } else {
                 tokio::select! {
-                    r = pipe.read(&mut buf) => r,
+                    r = pipe.read(&mut buf) => Some(r),
                     _ = leader.changed() => {
-                        tokio::time::timeout(GROUP_DRAIN_GRACE, pipe.read(&mut buf)).await
-                            .map_err(|_| std::io::Error::other("group-pipe-eof-timeout"))?
+                        tokio::time::timeout(GROUP_DRAIN_GRACE, pipe.read(&mut buf)).await.ok()
                     }
                 }
             }
         };
-        let n = read.await?;
+        let Some(n) = read.await else {
+            return Ok((kept, dropped, false));
+        };
+        let n = n?;
         let take = cap.saturating_sub(kept.len()).min(n);
         kept.extend_from_slice(&buf[..take]);
         dropped += (n - take) as u64;
@@ -375,7 +443,7 @@ async fn read_stream<R: tokio::io::AsyncRead + Unpin>(
         .await
         .map_err(|_| std::io::Error::other("script-stream-closed"))?;
     }
-    Ok((kept, dropped))
+    Ok((kept, dropped, true))
 }
 
 async fn supervise(
@@ -471,12 +539,23 @@ async fn supervise(
         (Some(a), Some(b)) => Some(a.min(b)),
         (a, b) => a.or(b),
     };
-    let timer = async {
-        match end {
+    // ORDER 1551-sprq. Two timers, because they stop meaning the same thing
+    // once the leader exits. `timer` is the per-process `timeout_ms` (capped
+    // by the scope deadline) and bounds the CHILD only: it is disarmed when
+    // the leader's exit status arrives (grouped commands; see the select
+    // below for legacy group=false), so a child that exited inside its
+    // timeout is never reported timed_out however slowly its lines are
+    // consumed. `scope_timer` is the enclosing scope deadline alone and can
+    // still cut delivery off after the exit; it then keeps the real status
+    // and marks the capture truncated.
+    let sleep_until = |at: Option<Instant>| async move {
+        match at {
             Some(d) => tokio::time::sleep_until(tokio::time::Instant::from_std(d)).await,
             None => std::future::pending().await,
         }
     };
+    let timer = sleep_until(end);
+    let scope_timer = sleep_until(deadline);
     // Completion-only observers never enter read_stream's line assembly path;
     // both fds still drain and retain the ordinary bounded byte-prefix capture.
     let line_events = observation
@@ -513,10 +592,11 @@ async fn supervise(
             ),
             feed
         )?;
-        Ok::<_, std::io::Error>((a.0, b.0, a.1 + b.1))
+        Ok::<_, std::io::Error>((a.0, b.0, a.1 + b.1, a.2 && b.2))
     };
     let mut io = Box::pin(io);
     tokio::pin!(timer);
+    tokio::pin!(scope_timer);
     let mut drained = None;
     let mut status = None;
     let mut timed_out = false;
@@ -526,7 +606,18 @@ async fn supervise(
         tokio::select! {
             biased;
             _ = cancelled(&mut cancel) => break,
-            _ = &mut timer => { timed_out = true; break; },
+            // An ungrouped (legacy group=false) leader has no drain grace, so
+            // after its exit `timer` stays armed as the only bound on pipe
+            // EOF from a descendant; it then cuts the capture off like the
+            // scope deadline does, and still never fabricates timed_out.
+            _ = &mut timer, if status.is_none() || !command.group => {
+                timed_out = status.is_none();
+                break;
+            },
+            // Reached only after the leader exited (before that, `timer`
+            // already covers the scope deadline): a delivery cut-off, which
+            // falls through to the abandoned-capture path below.
+            _ = &mut scope_timer => break,
             r = &mut io, if drained.is_none() => match r {
                 Ok(r) => drained = Some(r), Err(e) => { failure = Some(e); break; }
             },
@@ -584,13 +675,18 @@ async fn supervise(
             // `seq 1 2000` had exited 0 while its lines were still queued for
             // delivery; `kill()` then returned status=exited code=0 with an
             // EMPTY stdout and truncated=false, so `ok` was true. A deadline
-            // is a different, already typed outcome (`timed_out`), so it is
-            // left alone.
+            // that fires while the leader still runs is a different, already
+            // typed outcome (`timed_out`), so it is left alone; a SCOPE
+            // deadline that cuts delivery off after the leader exited
+            // (1551-sprq) is an abandoned capture like a kill.
             let abandoned = !timed_out && drained.is_none();
-            let (stdout, stderr, dropped) = match (timed_out, drained) {
+            // `complete` is false when a drain grace expired (1551-af3e):
+            // the bytes read so far are kept, and the capture is truncated.
+            let (stdout, stderr, dropped, complete) = match (timed_out, drained) {
                 (false, Some(capture)) => capture,
-                _ => (Vec::new(), Vec::new(), 0),
+                _ => (Vec::new(), Vec::new(), 0, true),
             };
+            let abandoned = abandoned || !complete;
             Ok(Output {
                 completion: if timed_out {
                     Completion::TimedOut {
@@ -734,6 +830,103 @@ mod tests {
         assert_eq!(output.completion, Completion::Exited(0));
         assert!(output.stdout.is_empty());
         assert!(output.truncated, "an abandoned capture looked whole");
+        scope.cleanup().unwrap();
+    }
+
+    // ORDER 1551-sprq. `timeout_ms` bounds the child, not the consumer. The
+    // child exits 0 at once; its lines are then consumed one every 5 ms, so
+    // delivery outlasts the 300 ms process timeout several times over. The
+    // per-process timer used to keep running after the leader exited and
+    // reported this run timed_out with an empty capture.
+    #[tokio::test]
+    async fn an_exited_child_is_not_timed_out_by_slow_line_delivery() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_secs(10)));
+        let bytes = b"line\n".repeat(200);
+        let command = cat(bytes.clone()).timeout(Duration::from_millis(300));
+        let process = scope.spawn(command, true).unwrap();
+        let started = Instant::now();
+        let mut lines = 0;
+        let output = tokio::time::timeout(Duration::from_secs(8), async {
+            loop {
+                match events.try_recv() {
+                    Ok(Event::Line { .. }) => lines += 1,
+                    Ok(Event::Finished(_)) => {}
+                    Err(_) => {
+                        if let Some(result) = process.result() {
+                            return result;
+                        }
+                    }
+                }
+                // The deliberately slow consumer.
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("managed result was not published")
+        .unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert_eq!(lines, 200);
+        // Delivery really did outlast the process timeout (200 x 5 ms).
+        assert!(started.elapsed() > Duration::from_millis(600));
+        assert_eq!(output.stdout, bytes);
+        assert!(!output.truncated);
+        scope.cleanup().unwrap();
+    }
+
+    // ORDER 1551-sprq. After the leader exits only the SCOPE deadline can cut
+    // delivery off; when it does, the real exit status survives and the
+    // capture is marked truncated. It is never fabricated into timed_out.
+    #[tokio::test]
+    async fn a_scope_deadline_after_exit_keeps_the_exit_status_and_truncates() {
+        let (scope, mut events) = Scope::new(Some(Instant::now() + Duration::from_millis(400)));
+        // Nobody reads events yet: delivery parks after 32 lines, the child exits.
+        let process = scope
+            .spawn(
+                cat(b"line\n".repeat(200)).timeout(Duration::from_secs(5)),
+                true,
+            )
+            .unwrap();
+        // Let the scope deadline pass while delivery is parked, then drain so
+        // the Finished receipt can be enqueued, as the Lua host's pump would.
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        let output = tokio::time::timeout(Duration::from_secs(4), async {
+            loop {
+                while events.try_recv().is_ok() {}
+                if let Some(result) = process.result() {
+                    return result;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("managed result was not published")
+        .unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert!(output.truncated, "a cut-off delivery looked whole");
+        scope.cleanup().unwrap();
+    }
+
+    // ORDER 1551-333i. A spawn whose setup is slow — a loaded host, an
+    // antivirus scan at process creation — is latency, not a failure. The
+    // supervisor thread is held 1.5 s before setup; the child then runs and
+    // its real result is returned. PRE-FIX: Err("proc-spawn-setup-failed:
+    // timed out waiting on channel") after the 1 s handshake bound, which the
+    // Lua doors raised and which closed the script scope.
+    #[tokio::test]
+    async fn a_slow_spawn_setup_is_latency_not_a_failure() {
+        let (scope, _events) = Scope::with_setup_delay(
+            Some(Instant::now() + Duration::from_secs(10)),
+            Duration::from_millis(1500),
+        );
+        let started = Instant::now();
+        let process = scope
+            .spawn(cat(b"hello\n".to_vec()), false)
+            .expect("a slow setup was reported as a spawn failure");
+        assert!(started.elapsed() >= Duration::from_millis(1500));
+        let output = published(&process).await.unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert_eq!(output.stdout, b"hello\n");
+        assert!(!scope.stopped());
         scope.cleanup().unwrap();
     }
 
