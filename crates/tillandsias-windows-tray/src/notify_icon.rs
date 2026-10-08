@@ -1265,9 +1265,9 @@ pub fn help_text() -> String {
             --reset-guest           HARD RESET: unregister the distro, which destroys its\n                            \
             Vault store and every sign-in, clear the store's Credential Manager\n                            \
             share and token, and reprovision. Keeps tillandsias-vm-uuid and the\n                            \
-            downloads. Asks EVERY run: type HARD at the prompt, or pass\n                            \
-            --approve-hard-reset / TILLANDSIAS_HARD_RESET_APPROVED=1 on that\n                            \
-            invocation; otherwise it refuses before touching anything.\n                            \
+            downloads. Runs only with --approve-hard-reset (or\n                            \
+            TILLANDSIAS_HARD_RESET_APPROVED=1) on that invocation; otherwise\n                            \
+            it refuses before touching anything. It never prompts.\n                            \
             Exit: 0 = Ready, 1 = failed or refused.\n    \
             --forge <project>       Open a forge PTY for <project> without a tray click.\n                            \
             Add --shell (default), --claude, --codex or --opencode to pick\n                            \
@@ -1648,26 +1648,18 @@ pub fn reset_guest_once(approve_arg: bool) -> i32 {
     let wipe = tillandsias_core::reset_state::destructive_reset_allowed();
 
     if wipe {
-        // ORDER 1437-3iux S2 (host-state-lifecycle "SOFT reset is
-        // pre-authorised everywhere, HARD asks every time"; 1443-bs9z). All
-        // three gates run BEFORE anything is destroyed, and each refusal exits
-        // 1 having touched nothing.
-        use std::io::IsTerminal;
+        // ORDER 1437-3iux S2 / 1559-9uvb (host-state-lifecycle; operator
+        // rulings 1443-bs9z and 2026-10-08). All three gates run BEFORE
+        // anything is destroyed, and each refusal exits 1 having touched
+        // nothing. NOTHING ASKS: operator, 2026-10-08, "No prompts like those
+        // ... A power user wanting to do a hard reset should be capable of
+        // figuring out where to place a flag and which flag".
         use tillandsias_core::reset_state as rs;
-        // 1. Per-run approval: the argument, the variable on THIS invocation,
-        //    or the exact word HARD typed at a TTY. Never a file or a prior run.
+        // 1. Per-run, NON-INTERACTIVE approval: the argument or the variable
+        //    on THIS invocation. Never a prompt, a file or a prior run.
         let approval = rs::hard_reset_approval(
             approve_arg,
             std::env::var(rs::HARD_APPROVAL_ENV).ok().as_deref(),
-            std::io::stdin().is_terminal(),
-            || {
-                eprint!("{}", rs::HARD_PROMPT);
-                let mut line = String::new();
-                match std::io::stdin().read_line(&mut line) {
-                    Ok(n) if n > 0 => Some(line),
-                    _ => None,
-                }
-            },
         );
         let Some(approval) = approval else {
             eprintln!("{}", rs::HARD_REFUSED_NO_APPROVAL);
