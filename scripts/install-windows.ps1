@@ -99,6 +99,72 @@ switch ($Channel) {
     default    { throw "Unknown TILLANDSIAS_CHANNEL '$Channel' (want stable or unstable)" }
 }
 
+# -- Reset kind: SOFT by default, HARD only when asked (order 1559-sqzp) -------
+# @trace spec:host-state-lifecycle, order:1559-sqzp, order:1437-3iux
+# host-state-lifecycle "The installer runs SOFT for an update and HARD only when
+# asked" (operator rulings 1438-pk9j and 1443-bs9z, 2026-09-27). An install over
+# an existing install is an UPDATE: it runs the SOFT reset (--reset-state),
+# pre-authorised, and an update never costs the operator a sign-in. HARD
+# (--reset-guest) runs only when TILLANDSIAS_INSTALL_RESET=hard or -HardReset
+# selects it, AND with a per-run approval.
+#
+# WHO ASKS. The spec says the HARD prompt is shown by the reset itself, but the
+# Windows tray is a GUI-subsystem binary with no console (AttachConsole was
+# tried and reverted, see its main.rs), so it cannot ask. The installer has the
+# console, so it shows the reset's own prompt, word for word, and forwards the
+# operator's typed answer to that one invocation as --approve-hard-reset. It
+# never sets TILLANDSIAS_HARD_RESET_APPROVED: without a console the variable
+# must already be on the operator's own invocation, and it passes through to
+# the tray untouched. The tray is always started with stdin from NUL, so it can
+# never block on a prompt nobody can see.
+#
+# Decided BEFORE anything is downloaded or destroyed, so a refused HARD exits
+# having touched nothing. The block is pure; scripts/test-installer-reset-kind.sh
+# runs it with every input the spec names.
+# BEGIN-RESET-KIND
+function Get-TillandsiasResetPlan {
+    param(
+        [string]$InstallReset,
+        [bool]$HardSwitch,
+        [string]$ApprovedEnv,
+        [bool]$Interactive,
+        [scriptblock]$Ask
+    )
+    $hard = $HardSwitch -or ($InstallReset -eq 'hard')
+    if (-not $hard) {
+        return @{
+            Kind    = 'soft'
+            Line    = 'install: SOFT reset (stores and sign-ins kept); TILLANDSIAS_INSTALL_RESET=hard for a full guest wipe'
+            Args    = @('--reset-state')
+            Refused = $null
+        }
+    }
+    $line = 'install: HARD reset (TILLANDSIAS_INSTALL_RESET=hard or -HardReset): the guest, its Vault store and every sign-in will be destroyed'
+    $refusal = 'reset: HARD requires per-run approval (TILLANDSIAS_HARD_RESET_APPROVED=1 or --approve-hard-reset)'
+    if ($ApprovedEnv -eq '1') {
+        return @{ Kind = 'hard'; Line = $line; Args = @('--reset-guest'); Refused = $null }
+    }
+    if ($Interactive) {
+        $typed = & $Ask
+        if ($null -ne $typed -and $typed.Trim() -ceq 'HARD') {
+            return @{ Kind = 'hard'; Line = $line; Args = @('--reset-guest', '--approve-hard-reset'); Refused = $null }
+        }
+    }
+    return @{ Kind = 'hard'; Line = $line; Args = @(); Refused = $refusal }
+}
+# END-RESET-KIND
+# The installer's FIRST line names the kind (the spec's wording), so it runs
+# before the channel line below. -Uninstall / -Purge run no reset at all.
+if (-not ($Uninstall -or $Purge)) {
+    $ResetPlan = Get-TillandsiasResetPlan -InstallReset $env:TILLANDSIAS_INSTALL_RESET -HardSwitch ([bool]$HardReset) `
+        -ApprovedEnv $env:TILLANDSIAS_HARD_RESET_APPROVED `
+        -Interactive ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) `
+        -Ask { Read-Host 'HARD reset destroys the guest, its Vault store and every sign-in. Type HARD to continue' }
+    Write-Host $ResetPlan.Line
+    # Inline, not Die: the helpers are defined below this point.
+    if ($ResetPlan.Refused) { Write-Host "  ERROR: $($ResetPlan.Refused)" -ForegroundColor Red; exit 1 }
+}
+
 # ORDER 1369-sjbc. Resolved channel, its source and base URL, printed before
 # anything is downloaded and long before the reset, so a mismatch can still be
 # stopped. TILLANDSIAS_INSTALL_RESOLVE_ONLY=1 stops here (fixture seam).
@@ -226,67 +292,6 @@ if ($Uninstall -or $Purge) {
     }
     return
 }
-
-# -- Reset kind: SOFT by default, HARD only when asked (order 1559-sqzp) -------
-# @trace spec:host-state-lifecycle, order:1559-sqzp, order:1437-3iux
-# host-state-lifecycle "The installer runs SOFT for an update and HARD only when
-# asked" (operator rulings 1438-pk9j and 1443-bs9z, 2026-09-27). An install over
-# an existing install is an UPDATE: it runs the SOFT reset (--reset-state),
-# pre-authorised, and an update never costs the operator a sign-in. HARD
-# (--reset-guest) runs only when TILLANDSIAS_INSTALL_RESET=hard or -HardReset
-# selects it, AND with a per-run approval.
-#
-# WHO ASKS. The spec says the HARD prompt is shown by the reset itself, but the
-# Windows tray is a GUI-subsystem binary with no console (AttachConsole was
-# tried and reverted, see its main.rs), so it cannot ask. The installer has the
-# console, so it shows the reset's own prompt, word for word, and forwards the
-# operator's typed answer to that one invocation as --approve-hard-reset. It
-# never sets TILLANDSIAS_HARD_RESET_APPROVED: without a console the variable
-# must already be on the operator's own invocation, and it passes through to
-# the tray untouched. The tray is always started with stdin from NUL, so it can
-# never block on a prompt nobody can see.
-#
-# Decided BEFORE anything is downloaded or destroyed, so a refused HARD exits
-# having touched nothing. The block is pure; scripts/test-installer-reset-kind.sh
-# runs it with every input the spec names.
-# BEGIN-RESET-KIND
-function Get-TillandsiasResetPlan {
-    param(
-        [string]$InstallReset,
-        [bool]$HardSwitch,
-        [string]$ApprovedEnv,
-        [bool]$Interactive,
-        [scriptblock]$Ask
-    )
-    $hard = $HardSwitch -or ($InstallReset -eq 'hard')
-    if (-not $hard) {
-        return @{
-            Kind    = 'soft'
-            Line    = 'install: SOFT reset (stores and sign-ins kept); TILLANDSIAS_INSTALL_RESET=hard for a full guest wipe'
-            Args    = @('--reset-state')
-            Refused = $null
-        }
-    }
-    $line = 'install: HARD reset (TILLANDSIAS_INSTALL_RESET=hard or -HardReset): the guest, its Vault store and every sign-in will be destroyed'
-    $refusal = 'reset: HARD requires per-run approval (TILLANDSIAS_HARD_RESET_APPROVED=1 or --approve-hard-reset)'
-    if ($ApprovedEnv -eq '1') {
-        return @{ Kind = 'hard'; Line = $line; Args = @('--reset-guest'); Refused = $null }
-    }
-    if ($Interactive) {
-        $typed = & $Ask
-        if ($null -ne $typed -and $typed.Trim() -ceq 'HARD') {
-            return @{ Kind = 'hard'; Line = $line; Args = @('--reset-guest', '--approve-hard-reset'); Refused = $null }
-        }
-    }
-    return @{ Kind = 'hard'; Line = $line; Args = @(); Refused = $refusal }
-}
-# END-RESET-KIND
-$ResetPlan = Get-TillandsiasResetPlan -InstallReset $env:TILLANDSIAS_INSTALL_RESET -HardSwitch ([bool]$HardReset) `
-    -ApprovedEnv $env:TILLANDSIAS_HARD_RESET_APPROVED `
-    -Interactive ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) `
-    -Ask { Read-Host 'HARD reset destroys the guest, its Vault store and every sign-in. Type HARD to continue' }
-Write-Host $ResetPlan.Line
-if ($ResetPlan.Refused) { Die $ResetPlan.Refused }
 
 # -- Platform gates -----------------------------------------------------------
 if ($PSVersionTable.PSVersion.Major -lt 5) {
