@@ -26,7 +26,7 @@ critical_path:
     expected_behavior: "ok: parse"
 
   - step: "protected default refused before fetch, level-0 floor, seed-named target, mirror digest compare, grammar refusal, probe-unavailable fallback"
-    command: "bash scripts/test-land-discipline-probe.sh 2>&1 | tail -n 1"
+    command: "bash scripts/test-land-discipline-probe.sh"
     timeout_ms: 180000
     expected_behavior: "PASS: land-discipline-probe"
 
