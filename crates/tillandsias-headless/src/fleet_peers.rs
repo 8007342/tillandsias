@@ -209,10 +209,10 @@ fn check_record(stem: &str, v: &Value) -> (Vec<String>, Option<[u8; 32]>) {
             bad.push(format!("host-is-not-file-name:{host}"));
         }
     }
-    if let Some(a) = req_str(v, "announce_pub", &mut bad) {
-        if !is_hex_len(a, 64) {
-            bad.push("malformed-field:announce_pub".into());
-        }
+    if let Some(a) = req_str(v, "announce_pub", &mut bad)
+        && !is_hex_len(a, 64)
+    {
+        bad.push("malformed-field:announce_pub".into());
     }
     if let Some(p) = req_str(v, "noise_pub", &mut bad) {
         match parse_static_hex(p) {
@@ -230,10 +230,10 @@ fn check_record(stem: &str, v: &Value) -> (Vec<String>, Option<[u8; 32]>) {
         }
     }
     for k in ["ssh_host_ca_pub", "ssh_user_ca_pub"] {
-        if let Some(s) = req_str(v, k, &mut bad) {
-            if !is_ssh_pub(s) {
-                bad.push(format!("malformed-field:{k}"));
-            }
+        if let Some(s) = req_str(v, k, &mut bad)
+            && !is_ssh_pub(s)
+        {
+            bad.push(format!("malformed-field:{k}"));
         }
     }
     for k in ["class_declared", "substrate"] {
@@ -299,15 +299,15 @@ fn check_owner(path: &Path, rep: &mut Report) {
         Some(Value::String(s)) if !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()) => {}
         Some(_) => bad.push("malformed-field:github_user_id".into()),
     }
-    if let Some(s) = req_str(&v, "cloudflare_user_sha256", &mut bad) {
-        if !is_hex_len(s, 64) {
-            bad.push("malformed-field:cloudflare_user_sha256".into());
-        }
+    if let Some(s) = req_str(&v, "cloudflare_user_sha256", &mut bad)
+        && !is_hex_len(s, 64)
+    {
+        bad.push("malformed-field:cloudflare_user_sha256".into());
     }
-    if let Some(s) = req_str(&v, "salt", &mut bad) {
-        if s.len() < 16 || !is_hex_len(s, s.len()) {
-            bad.push("malformed-field:salt".into());
-        }
+    if let Some(s) = req_str(&v, "salt", &mut bad)
+        && (s.len() < 16 || !is_hex_len(s, s.len()))
+    {
+        bad.push("malformed-field:salt".into());
     }
     let mut all = Vec::new();
     scalars("", &v, &mut all);
