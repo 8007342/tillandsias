@@ -1,0 +1,67 @@
+# @trace order:1506-32k5, openspec/changes/fleet-messaging-poc/specs/fleet-messaging/spec.md
+#
+# Pins the fleet message bus's HOST IDENTITY (1506-32k5): one X25519 static
+# key per host, its public half in a peer directory, and Noise XX pinned to
+# that directory, driven through the real `tillandsias --msg-serve` over
+# loopback with temp key files (no Vault) and a temp peers directory. Bound
+# under ci-release so a gate actually executes it; the fleet-messaging
+# capability is still an unsynced change (openspec/changes/fleet-messaging-poc/),
+# so it has no spec_id of its own yet.
+name: litmus:fleet-msg-identity
+spec: ci-release
+phase: pre-build
+description: >
+  Two daemons whose keys are in the peers directory complete
+  Noise_XX_25519_ChaChaPoly_BLAKE2s and exchange the proto 1.0 hello; a key
+  absent from the directory, or filed under a noise_fp that does not hash
+  it, is refused:msg:unknown-peer:<fp> with zero envelope bytes read; a
+  hello claiming proto 2.0 is refused:msg:proto-major:2; --mint twice is
+  skip:msg:key-exists and --mint --rotate rewrites the peer file keeping
+  foreign fields; no Vault policy but the host resident's grants anything
+  under secret/data/fleet/msg/ and git-mirror's grants are unchanged.
+  Mutation controls: the lookup-after-read seam makes the zero-bytes arm
+  fail, and a fleet-wide read added to forge.hcl makes the policy arm fail.
+severity: critical
+size: long
+
+# PRE-FIX RESULT: FAILS — `--mint` is not a --msg-serve verb. Measured:
+# pointing TILLANDSIAS_MSG_SERVE_BIN at an installed pre-1506-32k5
+# tillandsias prints "FAIL: mint — alpha rc=2" and
+# fail:fleet-msg-identity:0/5+0-controls.
+
+preconditions:
+  - workspace contains scripts/test-fleet-msg-identity.sh
+  - workspace contains crates/tillandsias-headless/src/msg_identity.rs
+  - workspace contains crates/tillandsias-secure-channel/src/secure_stream.rs
+  - cargo is available in PATH (the fixture builds tillandsias)
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-fleet-msg-identity.sh && test -x scripts/test-fleet-msg-identity.sh && echo 'ok: fleet-msg-identity-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: fleet-msg-identity-fixture-parses"
+
+  - step: "five arms (handshake, unknown, proto, mint, policy) and two controls pass by name"
+    command: "out=$(bash scripts/test-fleet-msg-identity.sh 2>&1); rc=$?; case \"$out\" in (*'ok:fleet-msg-identity:5/5+2-controls'*) [ \"$rc\" = 0 ] && echo 'ok: fleet-msg-identity 5/5+2' ;; (*) grep -E '^(FAIL|fail:)' <<<\"$out\"; exit 1 ;; esac"
+    timeout_ms: 900000
+    expected_behavior: "ok: fleet-msg-identity 5/5+2"
+
+observability:
+  traces:
+    - "@trace order:1506-32k5"
+    - "@trace openspec/changes/fleet-messaging-poc/design.md#decision-4"
+  expected_log: "ok:fleet-msg-identity:5/5+2-controls"
+  log_fields:
+    spec: "ci-release"
+    test: "fleet-msg-identity"
+    artifact: "crates/tillandsias-headless/src/msg_identity.rs"
+
+rollback:
+  on_failure: >
+    A named arm or control failed. Re-run `bash scripts/test-fleet-msg-identity.sh`
+    and read its FAIL lines. Do not move the directory lookup out of the
+    handshake's verify callback (it must run before a stream exists), trust a
+    record whose noise_fp does not hash its noise_pub, honour a seam without
+    an explicit TILLANDSIAS_MSG_ROOT, or grant any non-tray policy a path
+    under secret/data/fleet/msg/ to make it pass.
+  command: "bash scripts/test-fleet-msg-identity.sh"

@@ -14,6 +14,14 @@ hkdf = { workspace = true }
 sha2 = { workspace = true }
 zeroize = { workspace = true }
 snow = { workspace = true }
+# Order 1506-32k5: the fleet-messaging Noise XX identity. Both crates are
+# already in the lockfile as snow's own dependencies (snow's default resolver
+# IS blake2 + curve25519-dalek), so this adds no new package: blake2 for the
+# BLAKE2s-128 static-key fingerprint, curve25519-dalek to derive a static
+# public key from the private half Vault holds instead of trusting a stored
+# copy of it.
+blake2 = "0.10"
+curve25519-dalek = { version = "4", default-features = false }
 tokio = { workspace = true, features = ["io-util", "rt", "macros"] }
 
 [dev-dependencies]

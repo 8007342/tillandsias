@@ -46,6 +46,9 @@ libc = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 serde = { workspace = true }
 serde_json = "1"
+# Order 1506-32k5: plan/fleet/peers/<host>.yaml is read and MERGE-rewritten
+# (unknown keys kept for 1548-cii8). Already linked via tillandsias-msg.
+serde_yaml = { workspace = true }
 toml = { workspace = true }
 base64 = { workspace = true }
 sha2 = "0.10"
