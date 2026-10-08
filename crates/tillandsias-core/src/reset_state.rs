@@ -64,6 +64,63 @@ pub const RESET_SKIPPED_LINE: &str = "[tillandsias] --reset-state: reset skipped
 pub const RESET_NO_REPROVISION_PATH: &str = "[tillandsias] --reset-state: REFUSING to destroy anything — the reprovision \
      path is missing or not executable:";
 
+/// ORDER 1437-3iux S2 (host-state-lifecycle "SOFT reset is pre-authorised
+/// everywhere, HARD asks every time"; operator ruling 1443-bs9z, 2026-09-27).
+/// The prompt and the refusals are interface strings, shared by every tray
+/// that has a HARD reset, so they are spelled once here.
+pub const HARD_PROMPT: &str =
+    "HARD reset destroys the guest, its Vault store and every sign-in. Type HARD to continue: ";
+
+/// Printed, and exit 1, when a HARD reset has no per-run approval.
+pub const HARD_REFUSED_NO_APPROVAL: &str = "reset: HARD requires per-run approval (TILLANDSIAS_HARD_RESET_APPROVED=1 or --approve-hard-reset)";
+
+/// Printed, and exit 1, when the keyring that holds the store's share cannot
+/// be asked, so the share could not be cleared after the store is destroyed.
+/// THIS IS A SPEC OPEN QUESTION (host-state-lifecycle): the refusal is the
+/// interim ruling, kept behind this one named reason so the operator can flip
+/// it in one place.
+pub const HARD_REFUSED_KEYRING_UNREACHABLE: &str = "reset: HARD refused — keyring unreachable, share cannot be cleared (open question, host-state-lifecycle)";
+
+/// The per-run approval variable. Read only from THIS invocation's environment;
+/// never from a file, a forge image or a previous run.
+pub const HARD_APPROVAL_ENV: &str = "TILLANDSIAS_HARD_RESET_APPROVED";
+
+/// The per-run approval argument.
+pub const HARD_APPROVAL_ARG: &str = "--approve-hard-reset";
+
+/// How a HARD reset was approved, for the log line that records it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HardApproval {
+    Argument,
+    Environment,
+    TypedAtPrompt,
+}
+
+/// Decide a HARD reset's per-run approval. Pure: the caller passes whether the
+/// argument was given, this invocation's value of [`HARD_APPROVAL_ENV`],
+/// whether stdin is a TTY, and a reader that prompts and returns the typed
+/// line (called only on a TTY with no other approval). Only the argument, the
+/// literal value `1`, or the exact word `HARD` approve; anything else, including
+/// `TILLANDSIAS_INSTALL_RESET=hard` (which selects the kind and does not
+/// approve it), refuses.
+pub fn hard_reset_approval(
+    approve_arg: bool,
+    env_value: Option<&str>,
+    stdin_is_tty: bool,
+    read_typed: impl FnOnce() -> Option<String>,
+) -> Option<HardApproval> {
+    if approve_arg {
+        return Some(HardApproval::Argument);
+    }
+    if env_value == Some("1") {
+        return Some(HardApproval::Environment);
+    }
+    if stdin_is_tty && read_typed().as_deref().map(str::trim) == Some("HARD") {
+        return Some(HardApproval::TypedAtPrompt);
+    }
+    None
+}
+
 /// Print the reset plan BEFORE anything is touched.
 ///
 /// `preserved` is not decoration and is the reason this takes two lists. Every
@@ -156,5 +213,64 @@ mod tests {
         );
         assert!(RESET_SKIPPED_LINE.contains("--reset-state"));
         assert!(RESET_NO_REPROVISION_PATH.contains("REFUSING to destroy anything"));
+    }
+
+    /// ORDER 1437-3iux S2. Every approval path, and every refusal the spec
+    /// names: no TTY without the variable, the wrong word at the prompt, the
+    /// variable set to anything but `1`, and an install-kind selection that
+    /// is not an approval. The prompt reader runs only on a TTY with no other
+    /// approval.
+    #[test]
+    fn hard_reset_needs_an_explicit_per_run_approval() {
+        let never = || -> Option<String> { panic!("the prompt must not be shown") };
+        assert_eq!(
+            hard_reset_approval(true, None, false, never),
+            Some(HardApproval::Argument)
+        );
+        assert_eq!(
+            hard_reset_approval(false, Some("1"), false, never),
+            Some(HardApproval::Environment)
+        );
+        assert_eq!(
+            hard_reset_approval(false, None, true, || Some("HARD\n".into())),
+            Some(HardApproval::TypedAtPrompt)
+        );
+        // Refusals.
+        assert_eq!(
+            hard_reset_approval(false, None, false, never),
+            None,
+            "no TTY, no variable"
+        );
+        assert_eq!(
+            hard_reset_approval(false, Some("true"), false, never),
+            None,
+            "only the literal 1"
+        );
+        assert_eq!(hard_reset_approval(false, Some("0"), false, never), None);
+        for typed in ["hard", "yes", "", "HARD!"] {
+            assert_eq!(
+                hard_reset_approval(false, None, true, || Some(typed.into())),
+                None,
+                "only the exact word HARD, not {typed:?}"
+            );
+        }
+        assert_eq!(
+            hard_reset_approval(false, None, true, || None),
+            None,
+            "EOF at the prompt"
+        );
+    }
+
+    /// The refusal strings are interfaces: the spec quotes them verbatim.
+    #[test]
+    fn hard_reset_strings_are_the_specs() {
+        assert_eq!(
+            HARD_REFUSED_NO_APPROVAL,
+            "reset: HARD requires per-run approval (TILLANDSIAS_HARD_RESET_APPROVED=1 or --approve-hard-reset)"
+        );
+        assert!(HARD_PROMPT.ends_with("Type HARD to continue: "));
+        assert!(HARD_REFUSED_KEYRING_UNREACHABLE.contains("open question, host-state-lifecycle"));
+        assert!(HARD_REFUSED_NO_APPROVAL.contains(HARD_APPROVAL_ENV));
+        assert!(HARD_REFUSED_NO_APPROVAL.contains(HARD_APPROVAL_ARG));
     }
 }
