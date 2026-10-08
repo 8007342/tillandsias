@@ -1,0 +1,3 @@
+ok: timeout deadline returns 124 promptly with measured status
+ok: argv remains tokenized; spaces and glob characters are not reinterpreted
+FAIL: detached session equals caller session (45555)

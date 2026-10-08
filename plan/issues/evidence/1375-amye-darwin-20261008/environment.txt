@@ -1,0 +1,6 @@
+ProductName:		macOS
+ProductVersion:		27.0.1
+BuildVersion:		26A434
+arm64
+rustc 1.96.1 (31fca3adb 2026-06-26)
+subject: 75a0df1ace88f41a32ed41de87afa3a1928f04a4 (work/1375-amye merged with origin/linux-next e60506d2f)
