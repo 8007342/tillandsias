@@ -929,8 +929,33 @@ fn ",
         assert!(KNOWN_FLAGS.contains(&tillandsias_core::reset_state::HARD_APPROVAL_ARG));
     }
 
+    /// ORDER 1559-9uvb, operator ruling 2026-10-08 ("we do not ask end users
+    /// to do power user stuff ... No prompts like those"): HARD NEVER ASKS.
+    /// The body reads no stdin, checks no TTY and prints no prompt; it runs
+    /// only on the non-interactive approval (`--approve-hard-reset` or
+    /// TILLANDSIAS_HARD_RESET_APPROVED=1). Pre-fix: FAILS, because the body
+    /// read a typed HARD from a TTY.
+    #[test]
+    fn reset_guest_never_asks() {
+        let hard = notify_fn_body(
+            "pub fn reset_guest_once(approve_arg: bool) -> i32 {",
+            "\n}\n",
+        );
+        for prompt in ["read_line(", "is_terminal(", "HARD_PROMPT", "stdin()"] {
+            assert!(
+                !hard.contains(prompt),
+                "HARD must never ask: found {prompt}"
+            );
+        }
+        let core = include_str!("../../tillandsias-core/src/reset_state.rs");
+        assert!(
+            !core.contains("pub const HARD_PROMPT"),
+            "no prompt string may exist to show"
+        );
+    }
+
     /// ORDER 1437-3iux S2 (host-state-lifecycle "SOFT reset is pre-authorised
-    /// everywhere, HARD asks every time"; 1443-bs9z). The HARD body asks for
+    /// everywhere"; 1443-bs9z, as amended 2026-10-08). The HARD body checks
     /// its per-run approval, refuses when Credential Manager is unreachable
     /// (named reason, spec open question), and announces `reset: HARD`, all
     /// BEFORE it destroys anything; and it keeps the download cache. Pre-fix:

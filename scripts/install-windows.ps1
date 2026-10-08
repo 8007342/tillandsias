@@ -30,13 +30,6 @@
     -Uninstall PLUS wsl --unregister tillandsias + remove cache/log dirs.
     Full "as if never installed" cleanup.
 
-.PARAMETER HardReset
-    Run the HARD reset (--reset-guest) instead of the default SOFT one: the
-    guest, its Vault store and every sign-in are destroyed. Same as
-    TILLANDSIAS_INSTALL_RESET=hard. It SELECTS the kind and does not approve
-    it: type HARD at the prompt, or set TILLANDSIAS_HARD_RESET_APPROVED=1 on
-    this invocation when there is no console.
-
 .EXAMPLE
     irm https://github.com/8007342/tillandsias/releases/latest/download/install-windows.ps1 | iex
     irm https://.../install-windows.ps1 | iex  # (same URL, short form)
@@ -48,8 +41,7 @@ param(
     [switch]$NoLaunch,
     [switch]$LoginItem,
     [switch]$Uninstall,
-    [switch]$Purge,
-    [switch]$HardReset
+    [switch]$Purge
 )
 
 $ErrorActionPreference = 'Stop'
@@ -97,72 +89,6 @@ switch ($Channel) {
     'stable'   { $ChannelBase = "https://github.com/$Repo/releases/latest/download" }
     'unstable' { $ChannelBase = "https://github.com/$Repo/releases/download/unstable" }
     default    { throw "Unknown TILLANDSIAS_CHANNEL '$Channel' (want stable or unstable)" }
-}
-
-# -- Reset kind: SOFT by default, HARD only when asked (order 1559-sqzp) -------
-# @trace spec:host-state-lifecycle, order:1559-sqzp, order:1437-3iux
-# host-state-lifecycle "The installer runs SOFT for an update and HARD only when
-# asked" (operator rulings 1438-pk9j and 1443-bs9z, 2026-09-27). An install over
-# an existing install is an UPDATE: it runs the SOFT reset (--reset-state),
-# pre-authorised, and an update never costs the operator a sign-in. HARD
-# (--reset-guest) runs only when TILLANDSIAS_INSTALL_RESET=hard or -HardReset
-# selects it, AND with a per-run approval.
-#
-# WHO ASKS. The spec says the HARD prompt is shown by the reset itself, but the
-# Windows tray is a GUI-subsystem binary with no console (AttachConsole was
-# tried and reverted, see its main.rs), so it cannot ask. The installer has the
-# console, so it shows the reset's own prompt, word for word, and forwards the
-# operator's typed answer to that one invocation as --approve-hard-reset. It
-# never sets TILLANDSIAS_HARD_RESET_APPROVED: without a console the variable
-# must already be on the operator's own invocation, and it passes through to
-# the tray untouched. The tray is always started with stdin from NUL, so it can
-# never block on a prompt nobody can see.
-#
-# Decided BEFORE anything is downloaded or destroyed, so a refused HARD exits
-# having touched nothing. The block is pure; scripts/test-installer-reset-kind.sh
-# runs it with every input the spec names.
-# BEGIN-RESET-KIND
-function Get-TillandsiasResetPlan {
-    param(
-        [string]$InstallReset,
-        [bool]$HardSwitch,
-        [string]$ApprovedEnv,
-        [bool]$Interactive,
-        [scriptblock]$Ask
-    )
-    $hard = $HardSwitch -or ($InstallReset -eq 'hard')
-    if (-not $hard) {
-        return @{
-            Kind    = 'soft'
-            Line    = 'install: SOFT reset (stores and sign-ins kept); TILLANDSIAS_INSTALL_RESET=hard for a full guest wipe'
-            Args    = @('--reset-state')
-            Refused = $null
-        }
-    }
-    $line = 'install: HARD reset (TILLANDSIAS_INSTALL_RESET=hard or -HardReset): the guest, its Vault store and every sign-in will be destroyed'
-    $refusal = 'reset: HARD requires per-run approval (TILLANDSIAS_HARD_RESET_APPROVED=1 or --approve-hard-reset)'
-    if ($ApprovedEnv -eq '1') {
-        return @{ Kind = 'hard'; Line = $line; Args = @('--reset-guest'); Refused = $null }
-    }
-    if ($Interactive) {
-        $typed = & $Ask
-        if ($null -ne $typed -and $typed.Trim() -ceq 'HARD') {
-            return @{ Kind = 'hard'; Line = $line; Args = @('--reset-guest', '--approve-hard-reset'); Refused = $null }
-        }
-    }
-    return @{ Kind = 'hard'; Line = $line; Args = @(); Refused = $refusal }
-}
-# END-RESET-KIND
-# The installer's FIRST line names the kind (the spec's wording), so it runs
-# before the channel line below. -Uninstall / -Purge run no reset at all.
-if (-not ($Uninstall -or $Purge)) {
-    $ResetPlan = Get-TillandsiasResetPlan -InstallReset $env:TILLANDSIAS_INSTALL_RESET -HardSwitch ([bool]$HardReset) `
-        -ApprovedEnv $env:TILLANDSIAS_HARD_RESET_APPROVED `
-        -Interactive ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) `
-        -Ask { Read-Host 'HARD reset destroys the guest, its Vault store and every sign-in. Type HARD to continue' }
-    Write-Host $ResetPlan.Line
-    # Inline, not Die: the helpers are defined below this point.
-    if ($ResetPlan.Refused) { Write-Host "  ERROR: $($ResetPlan.Refused)" -ForegroundColor Red; exit 1 }
 }
 
 # ORDER 1369-sjbc. Resolved channel, its source and base URL, printed before
@@ -1014,44 +940,38 @@ try {
     # flag, so the flag ran and failed: proceed to the full reset.
     $ProbeAccepted = $ProbeOut -match [regex]::Escape('reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0')
     $HasResetState = ($ProbeExit -eq 0) -or $ProbeAccepted
-    if ($HasResetState -and $ProbeExit -ne 0) {
-        SayWn "  probe: this tray knows --reset-state; its re-init of the existing state failed (exit $ProbeExit)."
-        SayWn "  proceeding to the full reset, which is the repair for exactly that."
-    }
-    if (-not $HasResetState) {
-        SayWn "  probe: --reset-state not usable on this tray (exit $ProbeExit)."
-        if ($ProbeOut) { SayWn ("  probe said: " + (($ProbeOut -split "`n")[0]).Trim()) }
-    }
+    # The probe's outcome is a decision, not news for the end user: it prints
+    # nothing (operator ruling 2026-10-08, below).
 # END-RESET-PROBE
+    # @trace spec:host-state-lifecycle, order:1559-sqzp, order:1437-3iux
+    # SOFT, ALWAYS, AND QUIET. Operator ruling 2026-10-08, verbatim: "we do not
+    # ask end users to do power user stuff. That's our guideline. An install
+    # prompt asking for destructive cases should not be an acceptable case. End
+    # user is NOT a power user. No prompts like those, we make all the decisions
+    # for them, on their behalf, for their best interests. So SOFT reset is the
+    # default only and forever. A power user wanting to do a hard reset should be
+    # capable of figuring out where to place a flag and which flag, we do not
+    # need to print any power user messages during install, at all. Install
+    # should be for END USER (NOT POWER USER) and be a pretty installer, rather
+    # than an informational/debugging installer. As frictionless as possible for
+    # end users." So: the SOFT reset (it keeps the distro, the Vault store, the
+    # sign-ins and the downloads), no reset kind, no prompt, no flag names, and
+    # the tray's own reset log stays in a file, shown by path only on failure.
+    # stdin is NUL so the GUI-subsystem tray can never wait on a prompt nobody
+    # can see. scripts/test-installer-reset-kind.sh pins all of it.
     if (-not $HasResetState) {
-        SayWn "this tray predates --reset-state (order 1286-4437); skipping the state reset."
-        SayWn "  the install is complete, but a broken local state was NOT repaired."
-        SayWn "  install a release that carries --reset-state to get the repair."
+        SayWn "Tillandsias is installed. Restart it from the Start menu to finish setting up."
     }
     if ($HasResetState) {
-    # ORDER 1559-sqzp: the kind was decided (and a HARD approved or refused)
-    # before anything was downloaded; see BEGIN-RESET-KIND. The tray prints
-    # its own announcement of what it destroys and keeps, so this names only
-    # the kind. stdin is NUL so the GUI-subsystem tray can never wait on a
-    # prompt nobody can see.
-    $ResetArgs = $ResetPlan.Args -join ' '
-    if ($ResetPlan.Kind -eq 'hard') {
-        Say "HARD reset and reprovisioning ($ResetArgs): the guest, its Vault store and every sign-in go..."
-    } else {
-        Say "SOFT reset and reprovisioning ($ResetArgs): the distro, Vault store, sign-ins and downloads are kept..."
-    }
-    Say "  set TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 to skip the destructive half"
-    $ResetLog = Join-Path $env:TEMP "tillandsias-reset-state.log"
-    & cmd.exe /c "`"$InstalledExe`" $ResetArgs < NUL > `"$ResetLog`" 2>&1"
+    Say "Getting Tillandsias ready..."
+    $ResetLog = Join-Path $env:TEMP "tillandsias-setup.log"
+    & cmd.exe /c "`"$InstalledExe`" --reset-state < NUL > `"$ResetLog`" 2>&1"
     $ResetExit = $LASTEXITCODE
-    if (Test-Path $ResetLog) {
-        Get-Content $ResetLog | ForEach-Object { Write-Host "  $_" }
-        Remove-Item $ResetLog -Force -ErrorAction SilentlyContinue
-    }
     if ($ResetExit -ne 0) {
-        Die "tillandsias-tray $ResetArgs failed (exit $ResetExit); the local state was not reprovisioned."
+        Die "Tillandsias could not finish setting up (exit $ResetExit). Details: $ResetLog"
     }
-    SayOk "reset ($($ResetPlan.Kind)): provisioned and ready (exit $ResetExit)"
+    Remove-Item $ResetLog -Force -ErrorAction SilentlyContinue
+    SayOk "Tillandsias is ready."
     }
 
     # -- Installed-Software registration (windows-260722-3) -------------------
