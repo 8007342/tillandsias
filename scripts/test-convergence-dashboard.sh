@@ -31,8 +31,16 @@ fi
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-MD_PATH="docs/convergence/centicolon-dashboard.md"
-JSON_PATH="docs/convergence/centicolon-dashboard.json"
+# The renderer writes into a scratch dir, never the tracked docs/convergence
+# copies: the gate refuses a fixture that modifies tracked files while it is
+# measured (1063-363b), and #217 was evicted for exactly that once a change
+# touched this fixture. update-convergence-dashboard.sh honours MD_OUT,
+# JSON_OUT and SUMMARY_OUT.
+DASH_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/convergence-dashboard-test.XXXXXX")"
+trap 'rm -rf "$DASH_SCRATCH"' EXIT
+MD_PATH="$DASH_SCRATCH/centicolon-dashboard.md"
+JSON_PATH="$DASH_SCRATCH/centicolon-dashboard.json"
+export MD_OUT="$MD_PATH" JSON_OUT="$JSON_PATH" SUMMARY_OUT="$DASH_SCRATCH/summary.md"
 
 TESTS_RUN=0
 TESTS_PASSED=0
