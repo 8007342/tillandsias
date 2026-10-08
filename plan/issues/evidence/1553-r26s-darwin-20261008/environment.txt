@@ -1,0 +1,5 @@
+ProductName:		macOS
+ProductVersion:		27.0.1
+BuildVersion:		26A434
+arm64
+plan binary: built from linux-next checkout at a01726fe3

@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Measure drain-queue's claim step (scripts/drain-queue.sh) against a lease that
+# another claimant already HOLDS, with the id unverifiable vs verifiable.
+# $1 = repo root. The two decision lines are extracted from drain-queue.sh itself
+# (not retyped), so this measures the shipped code.
+set -uo pipefail
+ROOT="$1"; cd "$ROOT" || exit 1
+claim_line="$(grep -n 'CLAIM_RESULT=$(scripts/claim-ledger-node.sh claim' scripts/drain-queue.sh)"
+match_line="$(grep -n 'if \[\[ "$CLAIM_RESULT" == in-flight:\* \]\]' scripts/drain-queue.sh)"
+echo "source: drain-queue.sh:${claim_line%%:*}: ${claim_line#*:}" | sed 's/  */ /g'
+echo "source: drain-queue.sh:${match_line%%:*}: ${match_line#*:}" | sed 's/  */ /g'
+[ -n "$claim_line" ] && [ -n "$match_line" ] || { echo "could-not-run: drain-queue lines moved"; exit 3; }
+
+T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+mkdir -p "$T/fx/plan"
+printf 'plan_index:\n  packets:\n    - packet_id: held-node\n      order: 900-zzzz\n      status: ready\n' > "$T/fx/plan/index.yaml"
+
+step() { # $1 label, $2 index path
+  export TILLANDSIAS_LEDGER_LEASE_ROOT="$T/leases-$1" TILLANDSIAS_LEDGER_CLAIM_INDEX="$2"
+  # Another agent holds the node first (same index regime).
+  first="$(scripts/claim-ledger-node.sh claim held-node 2>/dev/null)"
+  # drain-queue's claim step, verbatim shape:
+  CLAIM_RESULT=$(scripts/claim-ledger-node.sh claim "held-node" 2>&1 || true)
+  printf '[%s] holder got: %s\n' "$1" "$first"
+  printf '[%s] CLAIM_RESULT (%d lines):\n' "$1" "$(printf '%s\n' "$CLAIM_RESULT" | grep -c .)"
+  printf '%s\n' "$CLAIM_RESULT" | sed 's/^/    | /'
+  if [[ "$CLAIM_RESULT" == in-flight:* ]]; then
+    echo "[$1] drain-queue decision: SKIP (held node correctly skipped)"
+  else
+    echo "[$1] drain-queue decision: PROCEEDS TO WORK A HELD NODE (double-claim)"
+  fi
+}
+step verifiable "$T/fx/plan/index.yaml"
+step unverifiable "$T/nonexistent/plan/index.yaml"

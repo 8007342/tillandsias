@@ -1,0 +1,5 @@
+holder:   claimed:held-node
+intruder claim: in-flight:held-node rc=1
+status before intruder release: in-flight:held-node
+intruder release: released:held-node
+status after: free:held-node

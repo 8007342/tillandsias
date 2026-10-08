@@ -1,0 +1,13 @@
+-- Probe for the 1553-r26s API row: what a non-cacheable script can do today.
+local function try(label, f)
+  local ok, a, b = pcall(f)
+  out.line(string.format("%s: pcall_ok=%s ret=%s %s", label, tostring(ok), tostring(a), tostring(b or "")))
+end
+try("mkdir#1 new", function() return fs.mkdir("target/probe/lease.d") end)
+try("mkdir#2 existing", function() return fs.mkdir("target/probe/lease.d") end)
+try("mkdir outside repo", function() return fs.mkdir("/tmp/r26s-probe-outside") end)
+out.line("fs.mtime=" .. tostring(fs.mtime) .. " fs.stat=" .. tostring(fs.stat) .. " fs.remove=" .. tostring(fs.remove) .. " fs.rmdir=" .. tostring(fs.rmdir) .. " fs.rename=" .. tostring(fs.rename))
+out.line("os.remove=" .. tostring(os.remove) .. " os.rename=" .. tostring(os.rename) .. " io.open=" .. tostring(io and io.open) .. " host=" .. tostring(host))
+try("emit claimed:x 0", function() return verdict.emit("claimed:x", 0) end)
+try("emit ok:x 64", function() return verdict.emit("ok:x", 64) end)
+verdict.ok("runtime-probe", 1)

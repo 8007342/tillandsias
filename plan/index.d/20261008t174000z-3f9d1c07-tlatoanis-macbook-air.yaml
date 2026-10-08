@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: drain-queue-misreads-a-held-claim-as-free-when-the-unverifiable-note-precedes-in-flight-and-then-releases-the-holders-lease
+    order: 1553-q7f4
+    title: drain-queue works a node another agent holds when the claim's id is unverifiable, then releases the holder's lease
+    status: ready
+    kind: bug
+    priority: p2
+    pickup_role: any
+    capability_tags: [bash, claims, coordination]
+    estimated_hours: 2
+    owned_files:
+      - scripts/drain-queue.sh
+      - scripts/claim-ledger-node.sh
+    context: >
+      drain-queue.sh:188 captures the claim with stderr merged
+      (CLAIM_RESULT=$(scripts/claim-ledger-node.sh claim "$pid" 2>&1 || true)),
+      and :191 skips only when CLAIM_RESULT starts with "in-flight:". When the
+      id cannot be verified (no resolvable plan binary or ledger, e.g. a fresh
+      checkout), claim-ledger-node writes "  note: claim could not verify ..."
+      to stderr BEFORE "in-flight:<id>" on stdout. The merged result then starts
+      with the note, the prefix match fails, and drain-queue PROCEEDS to run an
+      agent cycle on a node another agent holds: a double claim. Measured on
+      darwin (tlatoanis-macbook-air, 2026-10-08), driving the two shipped lines
+      extracted from drain-queue.sh: the verifiable control gives a single
+      line "in-flight:held-node" and SKIP; the unverifiable case gives two lines
+      (note, then in-flight:held-node) and PROCEEDS.
+      It compounds: drain-queue then runs `claim-ledger-node.sh release "$pid"`,
+      and cmd_release (claim-ledger-node.sh:234-237) rm -rf's the lease without
+      checking the holder. Also measured: holder claimed:held-node; intruder
+      in-flight (rc 1); intruder release prints released:held-node; status goes
+      from in-flight to free. The holder's lease is destroyed by a non-holder.
+      Evidence is in plan/issues/evidence/1553-q7f4-darwin-20261008/.
+      Note for the fixer: 1553-jbnt (the Lua port of claim-ledger-node) must
+      either preserve or deliberately fix these semantics; coordinate.
+    depends_on: []
+    exit_criteria:
+      - drain-queue skips a held node whether or not the claim's id is verifiable (verdict read from stdout only, or matched as a line, not a prefix of merged output).
+      - A release by an agent that does not hold the lease does not destroy the holder's lease (or release is skipped for a claim drain-queue did not win).
+      - A fixture drives drain-queue's real claim step against a held lease in both the verifiable and unverifiable regimes, and fails on the pre-fix code.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Future litmus filename:
+      drain-queue-skips-held-node-unverifiable. Plant a held lease. Run
+      drain-queue's claim step with an unverifiable index (and with a
+      verifiable one as the control). Assert SKIP in both, and assert the
+      holder's lease survives the drain. PRE-FIX RESULT: the unverifiable
+      regime PROCEEDS and the holder's lease is freed, as measured in
+      plan/issues/evidence/1553-q7f4-darwin-20261008/.
+    next_action: Unassigned; coordinator to schedule.
+
+events:
+  - packet_id: drain-queue-misreads-a-held-claim-as-free-when-the-unverifiable-note-precedes-in-flight-and-then-releases-the-holders-lease
+    event:
+      type: note
+      ts: "2026-10-08T17:40:00Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        filed by macbookair-macos on coordinator instruction, measured not source-read: the double claim and the release clobber both reproduce on darwin against origin/linux-next.

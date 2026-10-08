@@ -1,0 +1,12 @@
+source: drain-queue.sh:188: CLAIM_RESULT=$(scripts/claim-ledger-node.sh claim "$pid" 2>&1 || true)
+source: drain-queue.sh:191: if [[ "$CLAIM_RESULT" == in-flight:* ]]; then
+[verifiable] holder got: claimed:held-node
+[verifiable] CLAIM_RESULT (2 lines):
+    |   note: claim could not verify 'held-node' (no resolvable plan binary or ledger at /var/folders/lm/krdnbsm56j13fy8vn_r0t47h0000gn/T/tmp.Gkynt2GOsm/fx/plan/index.yaml); leasing unverified
+    | in-flight:held-node
+[verifiable] drain-queue decision: PROCEEDS TO WORK A HELD NODE (double-claim)
+[unverifiable] holder got: claimed:held-node
+[unverifiable] CLAIM_RESULT (2 lines):
+    |   note: claim could not verify 'held-node' (no resolvable plan binary or ledger at /var/folders/lm/krdnbsm56j13fy8vn_r0t47h0000gn/T/tmp.Gkynt2GOsm/nonexistent/plan/index.yaml); leasing unverified
+    | in-flight:held-node
+[unverifiable] drain-queue decision: PROCEEDS TO WORK A HELD NODE (double-claim)
