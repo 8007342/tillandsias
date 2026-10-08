@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-ci-release-baseline-separates-cannot-run-here-from-broken
+    field: status
+    value: completed
+    ts: "2026-10-08T17:03:03Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: windows-ci-release-baseline-separates-cannot-run-here-from-broken
+    event:
+      type: completed
+      ts: "2026-10-08T17:03:03Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: c9ff1550d + 5e7e1ea07: ok:forge-swap-service:26 arms (skipped=3); ok:bsd-count-shapes:4/4; ok:json-get-parity:79/79; ok:lua-determinism:6 arms; PASS plan-hash-time-verbs 6/6 (native yolanda-windows, stamped binary)
+  - packet_id: windows-ci-release-baseline-separates-cannot-run-here-from-broken
+    event:
+      type: note
+      ts: "2026-10-08T17:03:03Z"
+      host: yolanda-windows
+      summary: |-
+        Closed per entry (coordinator ruling 2026-10-08), measured natively on yolanda-windows (MINGW64_NT-10.0-26300) on trunk origin/linux-next 5e7e1ea07, one fixture at a time, with a freshly built native plan binary: stamped:plan-binary-validator-surface:./target/release/tillandsias-plan.exe (surface sha256 cbb5bda8b618bd4c8507324b2ef5e845c6e6886e35a33e3ea71109413129f445). ENTRIES: - test-bsd-count-shapes: rc=0 1s, ok:bsd-count-shapes:4/4. The stale-binary cause is confirmed; green on a current binary. - test-json-query-jq-parity: rc=0 13s, ok:json-get-parity:79/79. Stale-binary cause confirmed. - test-lua-determinism: rc=0 1s, ok:lua-determinism:6 arms (skipped=0). Stale-binary cause confirmed. - test-plan-hash-time-verbs: rc=0 1s, PASS: plan-hash-time-verbs 6/6. Stale-binary cause confirmed. - test-forge-swap-service: fixed on trunk by c9ff1550d (1448-kmyn): arms 8-12 skip by name off Linux. Native: ok:forge-swap-service:26 arms (skipped=3), skip swap-is-linux-only: --swap arms not run on MINGW64_NT-10.0-26300. WINDOWS BASELINE (2026-10-08): - WSL-hosted ./build.sh --preflight from the MAIN checkout, current guest plan binary: refused:preflight:ran=140 declared-skip=9 skipped-by-deadline=74 could-not-run=0 refused=1 sum=224 wall=180s. The 1 refusal is test-pre-push-main-branch-affordance arm 2 = 1556-b2tq (on the guest's 9p /mnt/c every file is mode 777, so an empty planted binary runs with rc 0). The 74 deadline skips are 9p slowness. - Native MSYS preflight (TILLANDSIAS_SKIP_WSL2=1), partial: 47 deadline skips at 7-15 s against the 5 s door, 0 refused, 0 could-not-run, before the harness reaped it for low host memory. Native MSYS mostly measures process-spawn cost. - RULE: on Windows, run preflight from the MAIN checkout. From a linked worktree the guest cannot resolve the .git file's Windows path: 4 guards refused with "fatal: not a git repository" and only 46 of 224 ran. Rebuild the guest plan binary first and look for stamped:, not ok: (a stale guest binary made 103 guards could-not-run; 1555-f6wy). - NOTE: a full native preflight on a 15 GB floor host gets reaped for memory; the WSL-hosted run is the baseline instrument there.

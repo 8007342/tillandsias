@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: tillandsias-exec-managed-rs-test-module-is-cfg-all-test-unix-so-the-managed-process-suite-including-1551-333i-never-runs-on-windows-and-native-strict-clippy-is-red
+    order: 1554-prxf
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tests, windows, exec, clippy]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-exec/src/managed.rs
+    title: |
+      crates/tillandsias-exec/src/managed.rs gates its whole test module on cfg(all(test, unix)) and spawns "/bin/cat", so 0 of its 8 managed-process tests (including 1551-333i's slow-setup fix) ever run on Windows, and Scope::with_setup_delay is dead code under cfg(test) there, so native strict clippy is red
+    context: |
+      MEASURED on yolanda-windows 2026-10-08 (native, coordinator item 2):
+        cargo clippy -p tillandsias-exec --all-targets -- -D warnings -A clippy::double_must_use
+        -> error: associated function `with_setup_delay` is never used
+      The test module at managed.rs:718 is #[cfg(all(test, unix))], so on
+      Windows: 0 managed tests run, and the cfg(test) helper with_setup_delay
+      (1551-333i, ebdb59149) has no caller. 1551-333i was expected to be worst
+      on Windows (antivirus at process creation) and was measured only on Linux.
+      Ungating alone fails 8/8 on "/bin/cat": "The system cannot find the path
+      specified." With cfg(test) and a bare cat, 8/8 pass natively in 3.3 s,
+      a_slow_spawn_setup_is_latency_not_a_failure included.
+      A bare name resolves to whatever the host has (1386-iubj: System32
+      sort.exe), so the fix asserts that the cat these tests run is a
+      byte-faithful cat and, on Windows, not a program under SystemRoot.
+    exit_criteria:
+      - 'the managed tests run on Windows: cfg(test), not cfg(all(test, unix)); pre-fix 0 run there'
+      - 'the spawned program is a bare cat whose identity is asserted (a CRLF and NUL round trip is byte-identical; on Windows the resolved cat is outside SystemRoot), so a green cannot come from a different binary'
+      - 'native strict clippy on tillandsias-exec --all-targets is clean on Windows (pre-fix: with_setup_delay never used)'
+      - 'the 8 managed tests are green natively on Windows and on Linux'
+    verifiable_closure: |
+      cargo test -p tillandsias-exec --lib managed natively on Windows (8/8 plus
+      the identity test) and on Linux; cargo clippy -p tillandsias-exec
+      --all-targets -- -D warnings -A clippy::double_must_use clean on Windows.
+      unscoreable: crate-unit-tests — the deliverable is the existing managed
+      unit tests running on a second OS, not a new litmus.
+    events:
+      - type: filed
+        ts: "2026-10-08T16:03:36Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request after the native item-2 run found
+          the module gated to Unix. Coordinator ruled own row and own ref, landing
+          first because it clears native clippy for the other Windows refs.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: executor-contract-a-sigpipe-killed-producer-keeps-its-own-status-asserts-signaled-13-unconditionally-and-is-red-on-native-windows-where-msys-sh-reports-exited-3328
+    field: status
+    value: in_progress
+    ts: "2026-10-08T15:58:56Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: executor-contract-a-sigpipe-killed-producer-keeps-its-own-status-asserts-signaled-13-unconditionally-and-is-red-on-native-windows-where-msys-sh-reports-exited-3328
+    event:
+      type: note
+      ts: "2026-10-08T15:58:56Z"
+      host: yolanda-windows
+      summary: |-
+        yolanda-windows implements the cfg(unix)/cfg(windows) split on work/1553-5x9x (coordinator ruling 2026-10-08)
