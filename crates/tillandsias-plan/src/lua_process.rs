@@ -14,6 +14,9 @@ struct Completed {
     order: u64,
 }
 
+/// Not the OS lifetime: the time from the launch request to host collection.
+const COLLECTED_WALL_BASIS: &str = "launch_request_to_host_collection";
+
 #[derive(Default)]
 struct TerminalTrace {
     run_ids: BTreeSet<String>,
@@ -235,6 +238,45 @@ mod tests {
         assert_eq!(records[0]["wall_ms"], 7);
         f.host.release_callbacks();
         assert_eq!(f.host.terminal_trace(), records);
+    }
+
+    #[test]
+    fn cleanup_collection_keeps_receipts_labels_fallback_and_never_fabricates() {
+        let f = Fixture::new();
+        let (_, pending, pending_output) = f.handle("pending");
+        let (_, failed, _) = f.handle("failed");
+        let (_, absent, _) = f.handle("absent");
+        let (_, unseen, unseen_output) = f.handle("unseen");
+        let pending_run = pending_output.run.as_str().to_owned();
+        let unseen_run = unseen_output.run.as_str().to_owned();
+        f.lua
+            .load("pending:on_exit(function() error('collector must not call back') end)")
+            .exec()
+            .unwrap();
+        f.send(Event::Finished(pending.process.id));
+        f.host.pump(&f.lua).unwrap();
+        let receipt_ms = f.host.dispatch.lock().unwrap().pending[0].wall_ms;
+        std::thread::sleep(Duration::from_millis(30));
+        publish(&pending, pending_output);
+        publish(&unseen, unseen_output);
+        *failed.publication_override.lock().unwrap() =
+            Some(Some(Err("synthetic-supervisor-failure".into())));
+        // `absent` keeps Some(None): nothing was ever published.
+        f.host.scope.cleanup().unwrap();
+        f.host.collect_terminals();
+        f.host.release_callbacks(); // Serialized repeat: deduplicated by RunId.
+        let records = f.host.terminal_trace();
+        assert_eq!(records.len(), 2, "{records:?}");
+        let get = |run: &str| records.iter().find(|r| r["run_id"] == run).unwrap();
+        assert_eq!(get(&pending_run)["wall_ms"], receipt_ms);
+        assert_eq!(get(&pending_run)["wall_basis"], "finished_receipt");
+        assert_eq!(get(&unseen_run)["wall_basis"], COLLECTED_WALL_BASIS);
+        assert!(get(&unseen_run)["wall_ms"].as_u64().unwrap() >= 30);
+        for state in [&pending, &failed, &absent, &unseen] {
+            assert!(!state.delivered.load(Ordering::Acquire));
+            assert!(state.completed.lock().unwrap().is_none());
+        }
+        assert!(f.host.dispatch.lock().unwrap().handlers.is_empty());
     }
 
     #[test]
@@ -959,9 +1001,59 @@ impl Host {
         }
         Ok(table)
     }
+    // ORDER 1539-dt84 (second slice). After Scope::cleanup, record the
+    // authentic published Output of every still-registered async handle that
+    // the dispatcher never delivered (never waited, dropped, or interrupted by
+    // a verdict, error or the outer timeout). It never pumps the closed
+    // dispatcher, invokes a callback, sets `delivered`, or waits on a
+    // supervisor. Err/None publications stay absent: no record is invented.
+    // A Finished receipt or a Completed keeps its frozen duration; otherwise
+    // the duration is launch request to this collection, labelled as such.
+    fn collect_locked(&self, dispatch: &Dispatch) {
+        for (id, handler) in &dispatch.handlers {
+            let state = &handler.state;
+            let receipt = |output: &tillandsias_exec::Output, wall_ms: u64| {
+                let mut record = Self::terminal_record(output, wall_ms);
+                record["wall_basis"] = serde_json::json!("finished_receipt");
+                record
+            };
+            let completed = state
+                .completed
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map(|c| receipt(&c.output, c.wall_ms));
+            let record = if let Some(record) = completed {
+                record
+            } else {
+                state.poll_publication();
+                let Some(Ok(output)) = state.publication.lock().unwrap().clone() else {
+                    continue;
+                };
+                match dispatch.pending.iter().find(|p| p.id == *id) {
+                    Some(p) => receipt(&output, p.wall_ms),
+                    None => {
+                        let wall_ms = state.started.elapsed().as_millis() as u64;
+                        let mut record = Self::terminal_record(&output, wall_ms);
+                        record["wall_basis"] = serde_json::json!(COLLECTED_WALL_BASIS);
+                        record
+                    }
+                }
+            };
+            self.push_terminal(record);
+        }
+    }
+    /// Call only after `Scope::cleanup`. Serialized with `release_callbacks`
+    /// by the dispatch lock; the outer-timeout branch calls it while the
+    /// worker thread may still be tearing down.
+    pub(crate) fn collect_terminals(&self) {
+        let dispatch = self.dispatch.lock().unwrap();
+        self.collect_locked(&dispatch);
+    }
     pub fn release_callbacks(&self) {
         // Break host/VM registry cycles when a script drops its handles.
         let mut dispatch = self.dispatch.lock().unwrap();
+        self.collect_locked(&dispatch);
         dispatch.handlers.clear();
         dispatch.pending.clear();
         *self.identities.lock().unwrap() = None;
