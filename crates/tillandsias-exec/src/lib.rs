@@ -1,4 +1,4 @@
-// @trace order:1252-fg9e, spec:ci-release
+// @trace order:1252-fg9e, order:1553-q3wi, spec:ci-release, spec:command-runtime
 //
 // tillandsias-exec — run a child process and get back a VALUE.
 //
@@ -196,6 +196,127 @@ async fn reap_group(pgid: libc::pid_t) {
     alive(libc::SIGKILL);
 }
 
+/// Put `rest` on `cmd` as argv entries, ONE ENTRY EACH, byte-identical
+/// (order 1553-q3wi; executor contract CRITERION 4).
+///
+/// Windows has no argv, only a command line the child re-parses. Rust std
+/// quotes an argument only for a space, a tab or an empty string, so an
+/// argument holding a newline went out bare, and an MSYS child (Git's printf)
+/// split it at the newline: measured on yolanda 2026-10-08, "a\nb" arrived as
+/// two entries. So on Windows an argument containing CR or LF goes out through
+/// `raw_arg` with quotes FORCED by the CommandLineToArgvW / MSVC CRT rules (see
+/// `win_quote`), and every other argument takes std's unchanged path, so no
+/// argv that works today changes (pinned against std by
+/// `arguments_without_newlines_arrive_exactly_as_std_delivers_them`).
+fn apply_args(cmd: &mut tokio::process::Command, rest: &[OsString]) {
+    for arg in rest {
+        #[cfg(windows)]
+        if win_quote::needs_forced_quotes(arg) {
+            cmd.raw_arg(win_quote::quote(arg));
+            continue;
+        }
+        cmd.arg(arg);
+    }
+}
+
+/// MSVC CRT / CommandLineToArgvW quoting, forced (order 1553-q3wi). Over UTF-16
+/// code units so it is exact for any `OsStr`. The rules:
+/// - the argument is wrapped in `"`;
+/// - a run of backslashes is DOUBLED only when it precedes an embedded quote or
+///   the closing quote; backslashes anywhere else stay literal;
+/// - each embedded quote becomes backslash-quote.
+#[cfg(any(windows, test))]
+mod win_quote {
+    const BACKSLASH: u16 = b'\\' as u16;
+    const QUOTE: u16 = b'"' as u16;
+
+    pub(crate) fn needs_forced_quotes_units(units: &[u16]) -> bool {
+        units
+            .iter()
+            .any(|&u| u == u16::from(b'\n') || u == u16::from(b'\r'))
+    }
+
+    pub(crate) fn quote_units(units: &[u16]) -> Vec<u16> {
+        let mut out = Vec::with_capacity(units.len() + 2);
+        out.push(QUOTE);
+        let mut backslashes = 0usize;
+        for &u in units {
+            if u == BACKSLASH {
+                backslashes += 1;
+                continue;
+            }
+            if u == QUOTE {
+                // 2n backslashes then \" : n literal backslashes and a literal quote.
+                out.extend(std::iter::repeat_n(BACKSLASH, backslashes * 2 + 1));
+            } else {
+                out.extend(std::iter::repeat_n(BACKSLASH, backslashes));
+            }
+            out.push(u);
+            backslashes = 0;
+        }
+        // Before the closing quote a run must be doubled, or it would escape it.
+        out.extend(std::iter::repeat_n(BACKSLASH, backslashes * 2));
+        out.push(QUOTE);
+        out
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn needs_forced_quotes(arg: &std::ffi::OsStr) -> bool {
+        use std::os::windows::ffi::OsStrExt;
+        needs_forced_quotes_units(&arg.encode_wide().collect::<Vec<u16>>())
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn quote(arg: &std::ffi::OsStr) -> std::ffi::OsString {
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+        std::ffi::OsString::from_wide(&quote_units(&arg.encode_wide().collect::<Vec<u16>>()))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn q(s: &str) -> String {
+            String::from_utf16(&quote_units(&s.encode_utf16().collect::<Vec<u16>>())).unwrap()
+        }
+
+        /// The CommandLineToArgvW / MSVC CRT table the coordinator's ruling asks
+        /// for (1553-q3wi): trailing backslash, a backslash run before a quote,
+        /// an embedded quote, a lone CR, CRLF, a newline mixed with a space, and
+        /// backslashes NOT before a quote staying literal.
+        #[test]
+        fn quoting_follows_the_msvc_rules() {
+            for (arg, want) in [
+                ("a\nb", "\"a\nb\""),
+                ("trailing\\", "\"trailing\\\\\""),
+                ("a\\\"b", "\"a\\\\\\\"b\""),
+                ("q\"x", "\"q\\\"x\""),
+                ("lone\rcr", "\"lone\rcr\""),
+                ("a\r\nb", "\"a\r\nb\""),
+                ("a b\nc", "\"a b\nc\""),
+                ("a\\b\nc", "\"a\\b\nc\""),
+                ("two\\\\\n", "\"two\\\\\n\""),
+                ("end\\\\", "\"end\\\\\\\\\""),
+                ("", "\"\""),
+            ] {
+                assert_eq!(q(arg), want, "quoting {arg:?}");
+            }
+        }
+
+        /// Only CR or LF force the raw path; everything else stays on std's.
+        #[test]
+        fn only_cr_or_lf_forces_quotes() {
+            let units = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+            for s in ["a\nb", "a\rb", "\r\n"] {
+                assert!(needs_forced_quotes_units(&units(s)), "{s:?}");
+            }
+            for s in ["plain", "", "two words", "tab\there", "q\"x", "back\\"] {
+                assert!(!needs_forced_quotes_units(&units(s)), "{s:?}");
+            }
+        }
+    }
+}
+
 /// Read `r` to EOF, keeping at most `cap` bytes and COUNTING the rest.
 ///
 /// It keeps READING past the cap. Stopping would leave the child blocked on a
@@ -329,15 +450,15 @@ impl Command {
         let run = RunId::new();
 
         let mut cmd = tokio::process::Command::new(program);
-        cmd.args(rest)
-            .stdin(if self.stdin.is_some() {
-                Stdio::piped()
-            } else {
-                Stdio::null()
-            })
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
+        apply_args(&mut cmd, rest);
+        cmd.stdin(if self.stdin.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
         if let Some(d) = &self.cwd {
             cmd.current_dir(d);
         }
@@ -716,8 +837,8 @@ impl Command {
         };
         protect_parent_std_handles();
         let mut cmd = tokio::process::Command::new(program);
-        cmd.args(rest)
-            .stdin(Stdio::null())
+        apply_args(&mut cmd, rest);
+        cmd.stdin(Stdio::null())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .kill_on_drop(true);

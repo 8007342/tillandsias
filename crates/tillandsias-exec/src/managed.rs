@@ -467,15 +467,15 @@ async fn supervise(
     };
     protect_parent_std_handles();
     let mut cmd = tokio::process::Command::new(program);
-    cmd.args(rest)
-        .stdin(if command.stdin.is_some() {
-            Stdio::piped()
-        } else {
-            Stdio::null()
-        })
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
+    crate::apply_args(&mut cmd, rest);
+    cmd.stdin(if command.stdin.is_some() {
+        Stdio::piped()
+    } else {
+        Stdio::null()
+    })
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .kill_on_drop(true);
     if let Some(cwd) = &command.cwd {
         cmd.current_dir(cwd);
     }
