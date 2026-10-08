@@ -31,6 +31,7 @@ size: instant
 preconditions:
   - workspace contains scripts/lib/tool-dispatch.sh
   - workspace contains scripts/test-tool-dispatch-lib.sh
+  - workspace contains scripts/test-jq-multiword-prefix.sh
   - bash and coreutils are available in PATH
 
 critical_path:
@@ -43,6 +44,19 @@ critical_path:
     command: "bash scripts/test-tool-dispatch-lib.sh 2>&1 | tail -1"
     timeout_ms: 120000
     expected_behavior: "ok:tool-dispatch-lib:all"
+
+  - step: "fast_tool JQ callers survive a multi-word toolbox prefix (unquoted $JQ; control arm proves quoted fails)"
+    # ORDER 914-ahsy. Bound HERE rather than as a gate step: the fixture
+    # pins the same dispatch this suite pins (the resolve_tool fallback answers
+    # a multi-word `toolbox run ... jq`, which "$JQ" hands to exec as one
+    # command name), and a new scripts/gate-steps.d entry needs a recorded
+    # darwin|msys run (check-gate-step-regimes, 1302-7j8p) that no host has
+    # made yet. Promote it to a step once one has.
+    command: "bash scripts/test-jq-multiword-prefix.sh 2>&1"
+    timeout_ms: 30000
+    expected_behavior: "PASS: jq-multiword-prefix 3/3 (914-ahsy)"
+    assert_exit: 0
+    assert_output_contains: "PASS: jq-multiword-prefix 3/3 (914-ahsy)"
 
   - step: "the shipped diagnostics have not been 'tidied' into the shared lib"
     # ORDER 925-erjs / 921-vtf4. Was `grep -l 'lib/tool-dispatch.sh' <files>` —
