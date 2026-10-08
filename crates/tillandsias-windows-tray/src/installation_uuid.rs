@@ -227,9 +227,39 @@ fn clear_credentials(targets: &[&'static str]) -> Result<Vec<&'static str>, Stri
 pub async fn deliver_credentials_and_check_handover(
     client: &mut tillandsias_host_shell::vsock_client::Client,
 ) -> Result<(), String> {
-    let uuid = ensure_installation_uuid()?;
-    let share = read_credential_string("vault-shamir-share-v1")?;
-    let token = read_credential_string("vault-root-token-v1")?;
+    deliver_and_handover_with(client, &PRODUCTION_TARGETS).await
+}
+
+/// The three Credential Manager targets the delivery reads and the handover
+/// writes. Production uses the real names; tests pass scratch `...-test-<uuid>`
+/// names they delete, so a test never writes the operator's real credentials
+/// (order 1562-bqcg).
+pub(crate) struct CredTargets<'a> {
+    pub(crate) uuid: &'a str,
+    pub(crate) share: &'a str,
+    pub(crate) token: &'a str,
+}
+
+const PRODUCTION_TARGETS: CredTargets<'static> = CredTargets {
+    uuid: TARGET_NAME,
+    share: VAULT_SHARE_TARGET,
+    token: VAULT_ROOT_TOKEN_TARGET,
+};
+
+pub(crate) async fn deliver_and_handover_with(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+    targets: &CredTargets<'_>,
+) -> Result<(), String> {
+    let uuid = match read_installation_uuid_from(targets.uuid)? {
+        Some(existing) => existing,
+        None => {
+            let fresh = Uuid::new_v4();
+            write_installation_uuid_to(targets.uuid, fresh)?;
+            fresh
+        }
+    };
+    let share = read_credential_string(targets.share)?;
+    let token = read_credential_string(targets.token)?;
 
     let seq = client.allocate_seq();
     let env = tillandsias_control_wire::ControlEnvelope {
@@ -295,10 +325,10 @@ pub async fn deliver_credentials_and_check_handover(
             ..
         } => {
             if let Some(s) = unseal_share_b64 {
-                write_credential_string("vault-shamir-share-v1", &s)?;
+                write_credential_string(targets.share, &s)?;
             }
             if let Some(t) = root_token {
-                write_credential_string("vault-root-token-v1", &t)?;
+                write_credential_string(targets.token, &t)?;
             }
         }
         tillandsias_control_wire::ControlMessage::Error { message, .. } => {
@@ -376,6 +406,157 @@ mod tests {
             clear_credentials(&[share, token]).unwrap().is_empty(),
             "clearing an already-clear store must report nothing cleared"
         );
+    }
+
+    /// A fake guest on the other end of an in-memory stream: answers the
+    /// delivery with `outcome`, then (if asked) the handover with
+    /// `fresh-share` / `fresh-token`. Returns whether the handover was asked.
+    async fn fake_guest(
+        mut io: tokio::io::DuplexStream,
+        outcome: tillandsias_control_wire::DeliverCredentialsOutcome,
+    ) -> bool {
+        use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        async fn recv(io: &mut tokio::io::DuplexStream) -> Option<ControlEnvelope> {
+            let mut len = [0u8; 4];
+            io.read_exact(&mut len).await.ok()?;
+            let mut buf = vec![0u8; u32::from_be_bytes(len) as usize];
+            io.read_exact(&mut buf).await.ok()?;
+            tillandsias_control_wire::decode(&buf).ok()
+        }
+        async fn send(io: &mut tokio::io::DuplexStream, seq: u64, body: ControlMessage) {
+            let bytes = tillandsias_control_wire::encode(&ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq,
+                body,
+            })
+            .unwrap();
+            io.write_all(&(bytes.len() as u32).to_be_bytes())
+                .await
+                .unwrap();
+            io.write_all(&bytes).await.unwrap();
+        }
+        let Some(env) = recv(&mut io).await else {
+            return false;
+        };
+        let ControlMessage::DeliverCredentials { seq, .. } = env.body else {
+            panic!("expected DeliverCredentials first, got {:?}", env.body)
+        };
+        send(
+            &mut io,
+            env.seq,
+            ControlMessage::DeliverCredentialsReply {
+                seq_in_reply_to: seq,
+                success: true,
+                outcome,
+            },
+        )
+        .await;
+        let Some(env) = recv(&mut io).await else {
+            return false;
+        };
+        let ControlMessage::GetVaultHandover { seq } = env.body else {
+            panic!("expected GetVaultHandover, got {:?}", env.body)
+        };
+        send(
+            &mut io,
+            env.seq,
+            ControlMessage::VaultHandoverReply {
+                seq_in_reply_to: seq,
+                unseal_share_b64: Some("fresh-share".into()),
+                root_token: Some("fresh-token".into()),
+            },
+        )
+        .await;
+        true
+    }
+
+    /// ORDER 1562-bqcg. `Superseded` means the guest holds a NEWER handover
+    /// (890-y72v: "the remedy is for the host to re-read, not re-deliver"), so
+    /// the tray must go on to GetVaultHandover and store what it returns.
+    /// Pre-fix: FAILS — the tray returned Err on any non-Accepted outcome
+    /// BEFORE the handover, so after a reset that cleared the host credentials
+    /// the first launch failed and Credential Manager never got the share back
+    /// (v56.10.8.1 Windows smoke, 2026-10-08). Scratch targets only.
+    #[tokio::test]
+    async fn a_superseded_delivery_reads_the_guests_handover() {
+        let run = Uuid::new_v4();
+        let (uuid_t, share_t, token_t) = (
+            format!("tillandsias-vm-uuid-test-{run}"),
+            format!("vault-shamir-share-v1-test-{run}"),
+            format!("vault-root-token-v1-test-{run}"),
+        );
+        let _c = (
+            CredCleanup(uuid_t.clone()),
+            CredCleanup(share_t.clone()),
+            CredCleanup(token_t.clone()),
+        );
+        let targets = CredTargets {
+            uuid: &uuid_t,
+            share: &share_t,
+            token: &token_t,
+        };
+        let (host, guest) = tokio::io::duplex(1 << 16);
+        let guest = tokio::spawn(fake_guest(
+            guest,
+            tillandsias_control_wire::DeliverCredentialsOutcome::Superseded,
+        ));
+        let mut client = tillandsias_host_shell::vsock_client::Client::from_stream(
+            Box::new(host),
+            tillandsias_control_wire::transport::Transport::Vsock { cid: 0, port: 0 },
+        );
+        let result = deliver_and_handover_with(&mut client, &targets).await;
+        drop(client);
+        let asked = guest.await.unwrap();
+        assert_eq!(result, Ok(()), "Superseded must not fail the delivery");
+        assert!(asked, "Superseded must go on to GetVaultHandover");
+        assert_eq!(
+            read_credential_string(&share_t).unwrap().as_deref(),
+            Some("fresh-share")
+        );
+        assert_eq!(
+            read_credential_string(&token_t).unwrap().as_deref(),
+            Some("fresh-token")
+        );
+    }
+
+    /// ORDER 1562-bqcg, the fail-closed side: a REJECTED delivery is still an
+    /// error and the handover is not trusted or written.
+    #[tokio::test]
+    async fn a_rejected_delivery_still_fails_closed() {
+        let run = Uuid::new_v4();
+        let (uuid_t, share_t, token_t) = (
+            format!("tillandsias-vm-uuid-test-{run}"),
+            format!("vault-shamir-share-v1-test-{run}"),
+            format!("vault-root-token-v1-test-{run}"),
+        );
+        let _c = (
+            CredCleanup(uuid_t.clone()),
+            CredCleanup(share_t.clone()),
+            CredCleanup(token_t.clone()),
+        );
+        let targets = CredTargets {
+            uuid: &uuid_t,
+            share: &share_t,
+            token: &token_t,
+        };
+        let (host, guest) = tokio::io::duplex(1 << 16);
+        let guest = tokio::spawn(fake_guest(
+            guest,
+            tillandsias_control_wire::DeliverCredentialsOutcome::Rejected {
+                reason: "share does not open the store".into(),
+            },
+        ));
+        let mut client = tillandsias_host_shell::vsock_client::Client::from_stream(
+            Box::new(host),
+            tillandsias_control_wire::transport::Transport::Vsock { cid: 0, port: 0 },
+        );
+        let result = deliver_and_handover_with(&mut client, &targets).await;
+        drop(client);
+        let asked = guest.await.unwrap();
+        assert!(result.is_err(), "Rejected must fail closed");
+        assert!(!asked, "a rejected delivery must not go on to the handover");
+        assert_eq!(read_credential_string(&share_t).unwrap(), None);
     }
 
     /// The installation UUID is NOT a guest credential. It anchors the
