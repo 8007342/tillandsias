@@ -66,6 +66,9 @@ trap 'rm -f "$_reach_list"' EXIT
 _bound="$(awk '/^  - litmus:/ {print $2}' openspec/litmus-bindings.yaml 2>/dev/null | sort -u)"
 if [ -z "$_bound" ]; then
     echo "blocked:census:no-bound-names-read-from-litmus-bindings.yaml" >&2
+    printf '  why: %s\n  remedy: %s\n' \
+        "no '  - litmus:<name>' binding was read from openspec/litmus-bindings.yaml, so every file would read as unreachable and the census would report a false zero" \
+        "run from a checkout whose openspec/litmus-bindings.yaml exists and declares litmus bindings, then re-run this census" >&2
     exit 2
 fi
 for _f in "$TESTS_DIR"/*.yaml; do
