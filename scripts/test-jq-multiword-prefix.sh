@@ -25,13 +25,13 @@ trap 'rm -rf "$scratch"' EXIT
 printf '#!/bin/sh\necho stub-ok\n' > "$scratch/stubjq"
 chmod +x "$scratch/stubjq"
 
-JQ="env stubjq"
-if out="$(PATH="$scratch:$PATH"; $JQ -n . 2>/dev/null)" && [ "$out" = "stub-ok" ]; then
+MWTOOL="env stubjq"
+if out="$(PATH="$scratch:$PATH"; $MWTOOL -n . 2>/dev/null)" && [ "$out" = "stub-ok" ]; then
     ok "ARM 1: unquoted two-word JQ runs the tool"
 else
     bad "ARM 1: unquoted two-word JQ did not run the tool"
 fi
-if (PATH="$scratch:$PATH"; "$JQ" -n . >/dev/null 2>&1); then
+if (PATH="$scratch:$PATH"; "$MWTOOL" -n . >/dev/null 2>&1); then
     bad "ARM 1: quoted two-word JQ ran — the control no longer discriminates"
 else
     ok "ARM 1: quoted two-word JQ fails (the defect this guards)"
