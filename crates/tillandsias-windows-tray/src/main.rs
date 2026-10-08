@@ -163,7 +163,13 @@ fn main() {
     // Destructive by design, and TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 is the one
     // documented opt-out; the BINARY owns that decision, so the installer
     // calls this unconditionally and never reads the variable itself.
-    if std::env::args().any(|a| a == "--reset-state" || a == "--reset-guest") {
+    // ORDER 1437-3iux: the two flags are two bodies now. --reset-guest is
+    // checked FIRST so a command line carrying both gets the stronger reset
+    // (which asks for its own approval) rather than silently the weaker one.
+    if std::env::args().any(|a| a == "--reset-guest") {
+        std::process::exit(notify_icon::reset_guest_once());
+    }
+    if std::env::args().any(|a| a == "--reset-state") {
         std::process::exit(notify_icon::reset_state_once());
     }
     // 945-vpg3: headless forge launch. Until this existed, the ONLY way to
@@ -872,6 +878,38 @@ fn ",
         assert!(
             !hard.trim().starts_with("reset_state_once()"),
             "HARD must not delegate to the SOFT body"
+        );
+    }
+
+    /// ORDER 1437-3iux S1. Each flag reaches its OWN body. Read from main.rs's
+    /// NON-TEST code with comments stripped: the older pin
+    /// `main_src.contains("notify_icon::reset_guest_once()")` was satisfied by
+    /// its own assertion string in this very file, while the real dispatch
+    /// sent `--reset-guest` to `reset_state_once()`, harmless while the two
+    /// were one body and wrong once SOFT and HARD split. Pre-fix: FAILS.
+    #[test]
+    fn each_reset_flag_dispatches_to_its_own_body() {
+        let src = include_str!("main.rs");
+        let code: String = src
+            .split("#[cfg(test)]\nmod tests {")
+            .next()
+            .unwrap()
+            .lines()
+            .map(|l| l.split("//").next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let hard_branch = code
+            .split("a == \"--reset-guest\"")
+            .nth(1)
+            .expect("main must test for --reset-guest on its own");
+        let hard_call = hard_branch.split('}').next().unwrap();
+        assert!(
+            hard_call.contains("notify_icon::reset_guest_once()"),
+            "--reset-guest must reach the HARD body: {hard_call}"
+        );
+        assert!(
+            !code.contains("a == \"--reset-state\" || a == \"--reset-guest\""),
+            "the two flags must not share one dispatch"
         );
     }
 
