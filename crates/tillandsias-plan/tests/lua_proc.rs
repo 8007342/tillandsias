@@ -338,6 +338,29 @@ mod managed_script {
     // /proc read may catch its final R -> Z transition, or the Linux X (dead)
     // state. Preserve its start identity and a short bound, not a single-read
     // scheduling assertion (1538-pwdr's measured landing/stress refutation).
+    fn task_observation_is_absent(error: &std::io::Error) -> bool {
+        // Linux procfs may return ESRCH if the task exits after the file was
+        // opened but before its contents are read. This is task absence, not
+        // an observation-permission failure. Every other error stays fatal.
+        error.kind() == std::io::ErrorKind::NotFound || error.raw_os_error() == Some(libc::ESRCH)
+    }
+
+    #[test]
+    fn cleanup_observer_absence_distinguishes_procfs_exit_from_observation_errors() {
+        assert!(task_observation_is_absent(
+            &std::io::Error::from_raw_os_error(libc::ENOENT)
+        ));
+        assert!(task_observation_is_absent(
+            &std::io::Error::from_raw_os_error(libc::ESRCH)
+        ));
+        assert!(!task_observation_is_absent(
+            &std::io::Error::from_raw_os_error(libc::EACCES)
+        ));
+        assert!(!task_observation_is_absent(
+            &std::io::Error::from_raw_os_error(libc::EIO)
+        ));
+    }
+
     fn acknowledged_task_stopped(ack: &serde_json::Value) -> bool {
         let pid = ack["pid"].as_u64().unwrap();
         match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
@@ -346,7 +369,7 @@ mod managed_script {
                 let fields: Vec<_> = details.split_whitespace().collect();
                 fields[19] != ack["start"].as_str().unwrap() || matches!(fields[0], "Z" | "X")
             }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
+            Err(e) if task_observation_is_absent(&e) => true,
             Err(e) => panic!("cannot observe acknowledged task {pid}: {e}"),
         }
     }

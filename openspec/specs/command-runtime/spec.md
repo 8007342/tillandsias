@@ -134,7 +134,17 @@ deadline passes the runtime SHALL kill the process GROUP and report
 A capture ABANDONED before it was drained — because the handle was killed or
 the script scope closed — SHALL be reported `truncated:true`, and therefore
 `ok:false`, whatever exit status the child had already produced (order
-1551-mkr9). A deadline is reported as `timed_out` and is not this case.
+1551-mkr9). A per-process deadline that passes while the child still runs
+is reported as `timed_out` and is not this case.
+
+A per-process deadline (`timeout_ms`) bounds the CHILD, not the delivery of
+its output to the script. Once the leader has exited, its `timeout_ms` no
+longer applies: a child that exited inside its `timeout_ms` SHALL keep its
+real exit status and SHALL NOT be reported `timed_out`, however slowly the
+script consumes its lines. Only the enclosing scope deadline can still cut
+delivery off; when it does, the result SHALL keep the real exit status and
+SHALL be reported `truncated:true` (an abandoned capture), never `timed_out`
+(order 1551-sprq).
 
 #### Scenario: A kill after exit does not return a whole-looking empty capture
 
@@ -142,6 +152,15 @@ the script scope closed — SHALL be reported `truncated:true`, and therefore
   for delivery, and the script kills its handle
 - **THEN** the result carries `status:"exited"`, `truncated:true` and
   `ok:false`
+
+#### Scenario: Slow line delivery does not turn an exited child into a timeout
+
+- **WHEN** a script-owned child exits 0 well inside its `timeout_ms` and the
+  script consumes its lines more slowly than that timeout
+- **THEN** the result carries `status:"exited"`, `code:0` and the whole
+  capture, not `timed_out`
+- **AND** if the scope deadline passes before delivery completes, the result
+  carries `status:"exited"` and `truncated:true`
 
 ### Requirement: Every Lua door judges and runs in one directory, from one environment, under one deadline rule
 <!-- req-id: 231502c2 -->

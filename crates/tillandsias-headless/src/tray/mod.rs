@@ -9,7 +9,7 @@
 
 pub mod cloud;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::{Read, Write};
@@ -1155,6 +1155,7 @@ fn browser_tool_descriptors(
 
 fn handle_mcp_jsonrpc(
     project_label: &str,
+    instance: &str,
     req: &serde_json::Value,
     browser: &tillandsias_browser_mcp::BrowserMcpServer,
     rt: &tokio::runtime::Runtime,
@@ -1184,11 +1185,12 @@ fn handle_mcp_jsonrpc(
             let mut tools = vec![
                 serde_json::json!({
                     "name": "publish_local",
-                    "description": "Publish this project's WEB service on the local reverse proxy and return its www.<project>.localhost URL. Idempotent: re-publishing replaces the running container and keeps the same URL.",
+                    "description": "Publish this authenticated lane's WEB preview on the local reverse proxy. The managed auto profile selects static or local Wrangler; re-publishing reconciles the same live-source service.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "category": { "type": "string", "enum": ["WEB"] }
+                            "category": { "type": "string", "enum": ["WEB"] },
+                            "runtime": { "type": "string", "enum": ["auto", "static", "wrangler"], "default": "auto" }
                         },
                         "required": ["category"]
                     }
@@ -1201,6 +1203,17 @@ fn handle_mcp_jsonrpc(
                 serde_json::json!({
                     "name": "service_stop",
                     "description": "Stop this project's published local service and remove its route.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "category": { "type": "string", "enum": ["WEB"] }
+                        },
+                        "required": ["category"]
+                    }
+                }),
+                serde_json::json!({
+                    "name": "service_reload",
+                    "description": "Reload the authenticated lane's existing WEB preview runtime. This does not open or refresh a browser.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -1240,37 +1253,79 @@ fn handle_mcp_jsonrpc(
 
             match tool_name {
                 "publish_local" => {
-                    let category = args
-                        .and_then(|a| a.get("category"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    match rt.block_on(crate::publish_local_service(project_label, category, debug))
-                    {
-                        Ok(url) => serde_json::json!({
-                            "result": { "url": url, "state": "running" }
-                        }),
+                    let category = match web_category(args) {
+                        Ok(category) => category,
+                        Err(message) => return Some(mcp_error(req, message)),
+                    };
+                    if category != "WEB" {
+                        return Some(mcp_error(
+                            req,
+                            format!("Category {category} is not supported for local publish"),
+                        ));
+                    }
+                    let runtime = match preview_runtime(args) {
+                        Ok(runtime) => runtime,
+                        Err(message) => return Some(mcp_error(req, message)),
+                    };
+                    match rt.block_on(crate::local_web_preview::publish(
+                        project_label,
+                        instance,
+                        runtime,
+                        debug,
+                    )) {
+                        Ok(result) => serde_json::json!({ "result": result }),
                         Err(e) => serde_json::json!({
                             "error": { "code": -32000, "message": e }
                         }),
                     }
                 }
-                "service_status" => match rt.block_on(crate::service_status(project_label)) {
-                    Ok(state) => serde_json::json!({
-                        "result": { "state": state }
-                    }),
-                    Err(e) => serde_json::json!({
-                        "error": { "code": -32000, "message": e }
-                    }),
-                },
-                "service_stop" => {
-                    let category = args
-                        .and_then(|a| a.get("category"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    match rt.block_on(crate::service_stop(category, project_label, debug)) {
-                        Ok(_) => serde_json::json!({
-                            "result": { "state": "stopped" }
+                "service_status" => {
+                    match rt.block_on(crate::local_web_preview::status(project_label, instance)) {
+                        Ok(result) => serde_json::json!({ "result": result }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
                         }),
+                    }
+                }
+                "service_stop" => {
+                    let category = match web_category(args) {
+                        Ok(category) => category,
+                        Err(message) => return Some(mcp_error(req, message)),
+                    };
+                    if category != "WEB" {
+                        return Some(mcp_error(
+                            req,
+                            format!("Category {category} is not supported for service_stop"),
+                        ));
+                    }
+                    match rt.block_on(crate::local_web_preview::stop(
+                        project_label,
+                        instance,
+                        debug,
+                    )) {
+                        Ok(result) => serde_json::json!({ "result": result }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                "service_reload" => {
+                    let category = match web_category(args) {
+                        Ok(category) => category,
+                        Err(message) => return Some(mcp_error(req, message)),
+                    };
+                    if category != "WEB" {
+                        return Some(mcp_error(
+                            req,
+                            format!("Category {category} is not supported for service_reload"),
+                        ));
+                    }
+                    match rt.block_on(crate::local_web_preview::reload(
+                        project_label,
+                        instance,
+                        debug,
+                    )) {
+                        Ok(result) => serde_json::json!({ "result": result }),
                         Err(e) => serde_json::json!({
                             "error": { "code": -32000, "message": e }
                         }),
@@ -1292,6 +1347,35 @@ fn handle_mcp_jsonrpc(
         resp["id"] = id.clone();
     }
     Some(resp)
+}
+
+/// Validate WEB-category calls before invoking the host lifecycle. This keeps
+/// malformed requests hermetic: no Podman, route, or source lookup side effect.
+fn web_category(args: Option<&serde_json::Map<String, serde_json::Value>>) -> Result<&str, String> {
+    args.and_then(|a| a.get("category"))
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "invalid_category: category must be the string WEB".to_string())
+}
+
+/// `runtime` is intentionally a closed host-selected profile, never a command.
+fn preview_runtime(
+    args: Option<&serde_json::Map<String, serde_json::Value>>,
+) -> Result<&str, String> {
+    let Some(value) = args.and_then(|a| a.get("runtime")) else {
+        return Ok("auto");
+    };
+    match value.as_str() {
+        Some("auto" | "static" | "wrangler") => Ok(value.as_str().expect("matched string")),
+        _ => Err("invalid_runtime: runtime must be auto, static, or wrangler".to_string()),
+    }
+}
+
+fn mcp_error(req: &serde_json::Value, message: String) -> serde_json::Value {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": req.get("id").cloned().unwrap_or(serde_json::Value::Null),
+        "error": { "code": -32000, "message": message }
+    })
 }
 
 /// Serve one NDJSON MCP connection: one JSON-RPC object per line in, one
@@ -1465,7 +1549,7 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
             continue;
         }
         let resp = match serde_json::from_str::<serde_json::Value>(line) {
-            Ok(req) => handle_mcp_jsonrpc(&project_label, &req, &browser, &rt),
+            Ok(req) => handle_mcp_jsonrpc(&project_label, &identity.instance, &req, &browser, &rt),
             Err(_) => Some(serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": serde_json::Value::Null,
@@ -1493,17 +1577,23 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
 }
 
 /// Global registry tracking active per-lane MCP listeners.
-static ACTIVE_LANE_LISTENERS: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+/// This is a tuple rather than a hyphen-concatenated string: `(a-b, c)` and
+/// `(a, b-c)` are distinct lanes even though their display form is identical.
+type LaneListenerKey = (String, String);
 
-fn lane_listener_registry() -> &'static Mutex<std::collections::HashSet<String>> {
-    ACTIVE_LANE_LISTENERS.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+static ACTIVE_LANE_LISTENERS: OnceLock<Mutex<HashSet<LaneListenerKey>>> = OnceLock::new();
+
+fn lane_listener_registry() -> &'static Mutex<HashSet<LaneListenerKey>> {
+    ACTIVE_LANE_LISTENERS.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
 /// Bind the NDJSON MCP tool socket for lane `(project, instance)` and serve
 /// it from detached threads (order 505).
 /// The socket is mode 0600 in `$XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/mcp.sock`.
 ///
-/// Stale sockets from previous tray instances are unlinked before binding.
+/// A reachable existing socket is treated as another live owner and is never
+/// unlinked. A connection-refused socket is a stale filesystem entry from a
+/// departed tray and may be removed before retrying the bind.
 ///
 /// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
 pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result<(), String> {
@@ -1512,13 +1602,12 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
     } else {
         instance.trim()
     };
-    let lane_key = format!("{project}-{instance_clean}");
-    {
-        let mut reg = lane_listener_registry().lock().expect("lane registry lock");
-        if reg.contains(&lane_key) {
-            return Ok(());
-        }
-        reg.insert(lane_key);
+    let lane_key = (project.to_owned(), instance_clean.to_owned());
+    // Keep this lock through creation. Inserting only after bind + chmod makes
+    // a failed first attempt retryable, and serializes same-lane callers.
+    let mut registry = lane_listener_registry().lock().expect("lane registry lock");
+    if registry.contains(&lane_key) {
+        return Ok(());
     }
 
     let socket_path = mcp_socket_path_for_lane(project, instance_clean);
@@ -1528,16 +1617,49 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
         #[cfg(unix)]
         let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
     }
-    if socket_path.exists() {
-        fs::remove_file(&socket_path)
-            .map_err(|err| format!("failed to remove stale mcp socket: {err}"))?;
-    }
-
-    let listener = UnixListener::bind(&socket_path)
-        .map_err(|err| format!("failed to bind mcp socket: {err}"))?;
+    let listener = match UnixListener::bind(&socket_path) {
+        Ok(listener) => listener,
+        Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => {
+            match UnixStream::connect(&socket_path) {
+                // An active peer might belong to a CLI child or another tray
+                // process. Never steal its pathname merely because this
+                // process has not populated its own in-memory registry.
+                Ok(_) => {
+                    return Err(format!(
+                        "mcp socket already has a live owner; refusing to unlink: {}",
+                        socket_path.display()
+                    ));
+                }
+                // A refused connection is the kernel's evidence that no
+                // listener owns this pathname. It is the only stale-entry
+                // case we reclaim automatically.
+                Err(connect_err) if connect_err.kind() == std::io::ErrorKind::ConnectionRefused => {
+                    fs::remove_file(&socket_path).map_err(|remove_err| {
+                        format!(
+                            "failed to remove connection-refused mcp socket {}: {remove_err}",
+                            socket_path.display()
+                        )
+                    })?;
+                    UnixListener::bind(&socket_path).map_err(|bind_err| {
+                        format!("failed to bind reclaimed mcp socket: {bind_err}")
+                    })?
+                }
+                Err(connect_err) => {
+                    return Err(format!(
+                        "mcp socket exists but ownership is indeterminate; refusing to unlink {}: {connect_err}",
+                        socket_path.display()
+                    ));
+                }
+            }
+        }
+        Err(err) => return Err(format!("failed to bind mcp socket: {err}")),
+    };
     #[cfg(unix)]
     fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
         .map_err(|err| format!("failed to chmod mcp socket: {err}"))?;
+
+    registry.insert(lane_key);
+    drop(registry);
 
     let identity = LaneIdentity::new(project, instance_clean);
     std::thread::spawn(move || {
@@ -5666,7 +5788,7 @@ mod tests {
     fn mcp_initialize_and_tools_list_advertise_publish_tool_family() {
         let init =
             serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}});
-        let resp = handle_mcp_jsonrpc("demo", &init, &test_browser(), &test_rt())
+        let resp = handle_mcp_jsonrpc("demo", "default", &init, &test_browser(), &test_rt())
             .expect("initialize replies");
         assert_eq!(resp["jsonrpc"], "2.0");
         assert_eq!(resp["id"], 1);
@@ -5676,7 +5798,7 @@ mod tests {
         );
 
         let list = serde_json::json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"});
-        let resp = handle_mcp_jsonrpc("demo", &list, &test_browser(), &test_rt())
+        let resp = handle_mcp_jsonrpc("demo", "default", &list, &test_browser(), &test_rt())
             .expect("tools/list replies");
         let tools: Vec<&str> = resp["result"]["tools"]
             .as_array()
@@ -5688,9 +5810,14 @@ mod tests {
         // ordering for existing consumers), and the browser family is now
         // advertised alongside it — the wiring gap this packet closed.
         assert_eq!(
-            &tools[..3],
-            &["publish_local", "service_status", "service_stop"],
-            "the host-services trio must keep its identity and order"
+            &tools[..4],
+            &[
+                "publish_local",
+                "service_status",
+                "service_stop",
+                "service_reload"
+            ],
+            "the host-services lifecycle tools must keep their identity and order"
         );
         let browser_tools: Vec<&&str> =
             tools.iter().filter(|t| t.starts_with("browser.")).collect();
@@ -5714,11 +5841,15 @@ mod tests {
                 "{expected} must be advertised: {tools:?}"
             );
         }
-        assert_eq!(tools.len(), 11, "trio + browser family, nothing else");
+        assert_eq!(
+            tools.len(),
+            12,
+            "lifecycle tools + browser family, nothing else"
+        );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
         assert!(
-            handle_mcp_jsonrpc("demo", &note, &test_browser(), &test_rt()).is_none(),
+            handle_mcp_jsonrpc("demo", "default", &note, &test_browser(), &test_rt()).is_none(),
             "notifications get no reply"
         );
     }
@@ -5779,8 +5910,8 @@ mod tests {
                 .collect();
             assert_eq!(
                 tools.len(),
-                11,
-                "over the transport: trio + eight browser tools, got {tools:?}"
+                12,
+                "over the transport: lifecycle tools + eight browser tools, got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
 
@@ -5988,8 +6119,8 @@ mod tests {
             "jsonrpc": "2.0", "id": 3, "method": "tools/call",
             "params": {"name": "publish_local", "arguments": {"category": "DATABASE"}}
         });
-        let resp =
-            handle_mcp_jsonrpc("demo", &call, &test_browser(), &test_rt()).expect("deny replies");
+        let resp = handle_mcp_jsonrpc("demo", "default", &call, &test_browser(), &test_rt())
+            .expect("deny replies");
         assert_eq!(resp["id"], 3);
         assert_eq!(resp["error"]["code"], -32000);
         let message = resp["error"]["message"].as_str().expect("error message");
@@ -6002,9 +6133,57 @@ mod tests {
             "jsonrpc": "2.0", "id": 4, "method": "tools/call",
             "params": {"name": "drop_all_containers", "arguments": {}}
         });
-        let resp = handle_mcp_jsonrpc("demo", &forged, &test_browser(), &test_rt())
+        let resp = handle_mcp_jsonrpc("demo", "default", &forged, &test_browser(), &test_rt())
             .expect("unknown tool replies");
         assert_eq!(resp["error"]["code"], -32601);
+    }
+
+    /// Preview argument validation happens before dispatching into the lifecycle
+    /// backend, so these negative controls remain hermetic (no Podman seam).
+    #[test]
+    fn mcp_preview_runtime_validation_is_closed_and_side_effect_free() {
+        for runtime in [serde_json::json!("remote"), serde_json::json!(false)] {
+            let call = serde_json::json!({
+                "jsonrpc": "2.0", "id": 9, "method": "tools/call",
+                "params": {"name": "publish_local", "arguments": {"category": "WEB", "runtime": runtime}}
+            });
+            let response = handle_mcp_jsonrpc(
+                "demo",
+                "listener-bound-instance",
+                &call,
+                &test_browser(),
+                &test_rt(),
+            )
+            .expect("invalid runtime replies");
+            assert_eq!(response["error"]["code"], -32000);
+            assert!(
+                response["error"]["message"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("invalid_runtime:"),
+                "closed runtime diagnostic: {response}"
+            );
+        }
+
+        let missing_category = serde_json::json!({
+            "jsonrpc": "2.0", "id": 10, "method": "tools/call",
+            "params": {"name": "service_reload", "arguments": {"category": false}}
+        });
+        let response = handle_mcp_jsonrpc(
+            "demo",
+            "listener-bound-instance",
+            &missing_category,
+            &test_browser(),
+            &test_rt(),
+        )
+        .expect("invalid category replies");
+        assert_eq!(response["error"]["code"], -32000);
+        assert!(
+            response["error"]["message"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("invalid_category:")
+        );
     }
 
     /// Order 505: The NDJSON mcp.sock transport: a peer that cannot be attributed to
@@ -6212,9 +6391,9 @@ mod tests {
             let resp: serde_json::Value =
                 serde_json::from_str(&lines.next().expect("tools/list reply").expect("readable"))
                     .expect("valid JSON");
-            // Order 779-3trn: the host-services trio plus the eight
-            // browser.* tools now compose on this socket (was 3).
-            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 11);
+            // Host-service lifecycle tools plus the eight browser.* tools
+            // compose on this socket (the lifecycle family includes reload).
+            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 12);
 
             drop(writer);
             drop(lines);
@@ -6279,6 +6458,59 @@ mod tests {
             "socket permissions must be 0600, got: {:o}",
             mode
         );
+    }
+
+    /// A failed bind/setup must not poison the in-memory idempotence registry:
+    /// restoring a usable runtime directory lets the exact same lane retry.
+    #[test]
+    fn mcp_listener_failed_start_rolls_back_registry_for_retry() {
+        let _env_lock = crate::runtime_assets::env_lock();
+        let temp = tempfile::tempdir().expect("temporary runtime root");
+        let blocked = temp.path().join("not-a-directory");
+        std::fs::write(&blocked, "file prevents mkdir below it").expect("blocked marker");
+        let runtime = temp.path().join("runtime");
+        std::fs::create_dir(&runtime).expect("runtime directory");
+        let project = format!("retry-{}", std::process::id());
+        let instance = "registry-rollback";
+        let prior = std::env::var_os("XDG_RUNTIME_DIR");
+
+        unsafe { std::env::set_var("XDG_RUNTIME_DIR", &blocked) };
+        let first = start_mcp_socket_server_for_lane(&project, instance);
+        assert!(
+            first.is_err(),
+            "blocked runtime directory must fail startup"
+        );
+        assert!(
+            !lane_listener_registry()
+                .lock()
+                .expect("lane registry lock")
+                .contains(&(project.clone(), instance.to_string())),
+            "failed startup must not be cached as active"
+        );
+
+        unsafe { std::env::set_var("XDG_RUNTIME_DIR", &runtime) };
+        let retry = start_mcp_socket_server_for_lane(&project, instance);
+        assert!(
+            retry.is_ok(),
+            "same lane must retry after failure: {retry:?}"
+        );
+        let socket = mcp_socket_path_for_lane(&project, instance);
+        assert!(socket.exists(), "successful retry must create its socket");
+
+        if let Some(value) = prior {
+            unsafe { std::env::set_var("XDG_RUNTIME_DIR", value) };
+        } else {
+            unsafe { std::env::remove_var("XDG_RUNTIME_DIR") };
+        }
+        let _ = std::fs::remove_file(socket);
+    }
+
+    #[test]
+    fn mcp_lane_registry_key_preserves_project_instance_boundaries() {
+        let mut lanes = HashSet::new();
+        lanes.insert(("alpha-beta".to_string(), "gamma".to_string()));
+        lanes.insert(("alpha".to_string(), "beta-gamma".to_string()));
+        assert_eq!(lanes.len(), 2, "hyphen display forms must not alias lanes");
     }
 
     /// Order 505: Listener-derived project attribution ignores forged peer environment.

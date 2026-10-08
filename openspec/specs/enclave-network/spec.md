@@ -60,6 +60,17 @@ The attach sites are these run-argument builders, named by SYMBOL so the list su
 - `main.rs` `fn build_forge_agent_run_args_with_vault`
 - `main.rs` `fn build_stack_common_args` — the shared prefix, not a service of its own
 - `vault_bootstrap.rs` `fn launch_vault_container`
+- `local_web_preview.rs` `fn build_local_preview_run_args` — enclave-only local
+  preview runtime; candidate and published sibling share this builder
+
+The local preview configuration-inspector container in `source_mounts` uses
+`--network=none`
+deliberately: it parses untrusted configuration without starting a network
+service and is not an enclave member.
+
+The preview builder uses the guard-supported `build_` symbol population. Its
+former `run_args` spelling and the discovered scanning gap are recorded in
+`plan/issues/local-web-preview-core-review-2026-10-07.md`.
 
 A new enclave member MUST be added to this list in the same commit that attaches it; `scripts/lua/check-enclave-membership-documented.lua` refuses the divergence in both directions.
 

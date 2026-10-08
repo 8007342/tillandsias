@@ -21,6 +21,15 @@ use std::path::PathBuf;
 
 use tillandsias_control_wire::LocalProjectEntry;
 
+/// A per-lane bounded tmpfs volume, never a disk-backed source volume. Hash the
+/// tuple (not a concatenated label) so project/instance hyphens cannot alias.
+/// @trace spec:local-web-preview, spec:forge-hot-cold-split
+pub(crate) fn ram_workspace_volume(project: &str, instance: &str) -> String {
+    use sha2::Digest;
+    let digest = sha2::Sha256::digest(format!("{project}\0{instance}"));
+    format!("tillandsias-source-{:x}", digest)
+}
+
 #[cfg(feature = "tray")]
 pub const HOST_PROJECT_ROOT_ENV: &str = "TILLANDSIAS_HOST_PROJECT_ROOT";
 
