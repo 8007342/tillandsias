@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-windows-installer-prints-only-end-user-lines
+    field: status
+    value: in_progress
+    ts: "2026-10-08T21:24:21Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: the-windows-installer-prints-only-end-user-lines
+    event:
+      type: note
+      ts: "2026-10-08T21:24:21Z"
+      host: yolanda-windows
+      summary: |-
+        yolanda-windows: Windows installer end-user output, test-first, on work/1561-47a8 (stacked on #247)
+  - packet_id: the-windows-installer-prints-only-end-user-lines
+    event:
+      type: note
+      ts: "2026-10-08T21:24:21Z"
+      host: yolanda-windows
+      summary: |-
+        wip-override by yolanda-windows: held packets are READY/draft PRs in the coordinator's post-cut queue; coordinator sequenced this before 1553-q3wi (2026-10-08) — admitted past: refused:set-field:wip-limit:11/3 — yolanda-windows already holds 11 in_progress packet(s) outside a story: 798-vxj5, 1437-3iux, 1553-gsp2, 1553-5x9x, 1553-6e3q, 1554-prxf, 1556-b2tq, 1559-9uvb, 1559-sqzp, 1559-2uw3, 1560-g5d9 (1367-2sbc; the limit is 3, from methodology/distributed-work.yaml packet_discipline.wip_limit).
