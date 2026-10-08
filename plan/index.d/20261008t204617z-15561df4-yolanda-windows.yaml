@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: 1437-3iux-s3-install-windows-ps1-runs-the-soft-reset-by-default-and-hard-only-on-request-with-the-approval-passed-through
+    field: title
+    value: '1437-3iux S3: install-windows.ps1 runs the SOFT reset (--reset-state, stdin from NUL) on every install, ALWAYS, never prompts and prints no power-user text (no reset kind, no flag names, no echo of the tray reset log); operator ruling 2026-10-08 ("SOFT reset is the default only and forever")'
+    ts: "2026-10-08T20:46:17Z"
+    host: yolanda-windows
+    replaces_sha256: "d84952cffd5bef6377ff18d4343288add86bdd9c29ca9559611a1dc2c057a144"
+
+events:
+  - packet_id: 1437-3iux-s3-install-windows-ps1-runs-the-soft-reset-by-default-and-hard-only-on-request-with-the-approval-passed-through
+    event:
+      type: note
+      ts: "2026-10-08T20:46:17Z"
+      host: yolanda-windows
+      summary: |-
+        operator ruling 2026-10-08 supersedes the HARD-on-request title
