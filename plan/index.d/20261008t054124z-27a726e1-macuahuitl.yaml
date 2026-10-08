@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-lua-process-spawn-that-takes-more-than-one-second-to-set-up-is-raised-as-an-error-and-closes-the-script-scope
+    field: status
+    value: completed
+    ts: "2026-10-08T05:41:24Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-lua-process-spawn-that-takes-more-than-one-second-to-set-up-is-raised-as-an-error-and-closes-the-script-scope
+    event:
+      type: completed
+      ts: "2026-10-08T05:41:24Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: ebdb59149 + reproduction on macuahuitl (Linux), debug plan binary: gdb -batch -nx -x slow.gdb --args tillandsias-plan script run probe.lua --timeout 60s, slow.gdb = break _Fork; run; shell sleep 2; delete 1; continue (SIGCHLD nostop). Before ebdb59149: pcall(proc.spawn,{argv={'true'}}) false after 2012 ms, "proc-spawn-setup-failed:timed out waiting on channel", next proc.run script-scope-closed. After: a handle after 2010 ms, next proc.run exited. cargo test -p tillandsias-exec --lib a_slow_spawn_setup_is_latency_not_a_failure ok on ebdb59149, red before the fix (Io proc-spawn-setup-failed); exec crate and plan Lua suites green, fmt and clippy clean
+  - packet_id: a-lua-process-spawn-that-takes-more-than-one-second-to-set-up-is-raised-as-an-error-and-closes-the-script-scope
+    event:
+      type: note
+      ts: "2026-10-08T05:41:24Z"
+      host: macuahuitl
+      summary: |-
+        Research result: REPRODUCED by holding the supervisor thread at fork (gdb), recorded in the audit note's F7 with the command file. Not reproduced by load: systemd-run --user --scope -p CPUQuota=2% -p CPUQuotaPeriodSec=1s with a CPU loop before each spawn gave a worst spawn of 982 ms (one quota period). Folded the fix in rather than filing a bug row: SPAWN_SETUP_BOUND in the managed supervisor is 30 s (capped by the scope deadline), so slow setup is latency and the true outcome is returned; past the bound it stays a raised, scope-closing failure, because a spawn_failed value would claim the child never ran while a late child may still start. Spec command-runtime states the rule. Native Windows (yolanda) not measured. Not yet landed: on work/1551-af3e.
