@@ -1256,13 +1256,16 @@ pub fn help_text() -> String {
             (no flags)              Launch the interactive tray (GUI subsystem).\n    \
             --provision-once        Provision the WSL utility VM to Ready, print\n                            \
             progress, exit. Exit: 0 = Ready, 1 = failed.\n    \
-            --reset-state           EPHEMERAL RESET (canonical name, all platforms):\n                            \
-            wipe ALL local state and reprovision, exiting with the provision's\n                            \
-            status. Honors TILLANDSIAS_DESTRUCTIVE_RESET_OK=0, which skips the\n                            \
-            wipe and provisions the existing state. PRESERVES the installation\n                            \
-            identity (tillandsias-vm-uuid). Exit: 0 = Ready, 1 = failed.\n    \
-            --reset-guest           Alias for --reset-state, kept for scripts that\n                            \
-            already use it. Same body, so the two cannot drift.\n    \
+            --reset-state           SOFT RESET (canonical name, all platforms): keep the\n                            \
+            distro, the Vault store, Credential Manager and the downloads; wipe\n                            \
+            derived state inside the guest, inject this tray's headless binary\n                            \
+            and reprovision, exiting with the provision's status. No prompt.\n                            \
+            Honors TILLANDSIAS_DESTRUCTIVE_RESET_OK=0, which skips the wipe and\n                            \
+            provisions the existing state. Exit: 0 = Ready, 1 = failed.\n    \
+            --reset-guest           HARD RESET: unregister the distro, which destroys its\n                            \
+            Vault store and every sign-in, clear the store's Credential Manager\n                            \
+            share and token, and reprovision. Keeps tillandsias-vm-uuid and the\n                            \
+            downloads. Exit: 0 = Ready, 1 = failed.\n    \
             --forge <project>       Open a forge PTY for <project> without a tray click.\n                            \
             Add --shell (default), --claude, --codex or --opencode to pick\n                            \
             the intent. Runs the SAME launch path as the tray menu item.\n                            \

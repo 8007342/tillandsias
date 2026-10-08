@@ -333,8 +333,13 @@ pub const DISTRO_NAME: &str = tillandsias_vm_layer::wsl::DEFAULT_WSL_DISTRO;
 /// It matches the Linux SOFT reset's destroyed set without its trailing init;
 /// see `WslLifecycle::soft_wipe_guest` for why the init is left to
 /// provisioning. The `podman system reset` exit status decides the result; the
-/// stops and the marker removal are best-effort.
+/// stops, the `reset-failed` and the marker removal are best-effort.
+/// `reset-failed` clears a unit stuck at its start limit: a SOFT reset is what
+/// an operator runs on a crash-looping guest, and the re-injection's
+/// `enable --now` fails against a unit systemd has given up on (measured on
+/// yolanda 2026-10-08: "Start request repeated too quickly", then exit 1).
 pub const SOFT_GUEST_WIPE: &str = "systemctl stop tillandsias-headless-ready.service tillandsias-headless.service 2>/dev/null; \
+     systemctl reset-failed tillandsias-headless-ready.service tillandsias-headless.service 2>/dev/null; \
      podman system reset --force && \
      rm -f /root/.cache/tillandsias/init-build-state.json /root/.cache/tillandsias/cache_version";
 
@@ -1310,7 +1315,14 @@ impl WslLifecycle {
             );
             return Ok(());
         }
-        self.wsl_root_sh(SOFT_GUEST_WIPE).await
+        self.wsl_root_sh(SOFT_GUEST_WIPE).await?;
+        // "Inject the tray's current headless binary" is part of SOFT, and it
+        // is UNCONDITIONAL. The provisioning reconcile leaves a version-EQUAL
+        // guest untouched, so a same-version rebuild kept a stale guest binary:
+        // measured on yolanda 2026-10-08, a guest daemon built 2026-10-07 and a
+        // tray built from trunk, both 56.9.27.2, refused each other's secure
+        // handshake ("early eof" / "peer sent no readable Noise frame").
+        self.inject_bootstrap_logic().await
     }
 
     /// Discard the damaged guest: `wsl --shutdown`-free targeted unregister
