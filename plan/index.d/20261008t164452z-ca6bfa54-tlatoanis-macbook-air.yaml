@@ -1,0 +1,93 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: preflight-header-sed-blocks-fail-on-bsd-and-lose-gate-only-and-serial-classification
+    field: status
+    value: in_progress
+    ts: "2026-10-08T16:44:52Z"
+    host: tlatoanis-macbook-air
+  - packet_id: preflight-header-sed-blocks-fail-on-bsd-and-lose-gate-only-and-serial-classification
+    field: verifiable_closure
+    value: >
+      litmus:preflight-declarations-host-sed passes on darwin (5/5: gate-only,
+      gate-only-decider and serial each read with their reason, the undeclared
+      negative control runs, the host sed accepts every program). Against the
+      pre-fix build.sh on darwin it fails 4 of 5 arms (BSD sed: "bad flag in
+      substitute command: '}'") while the negative control passes. Receipts are in
+      plan/issues/evidence/1545-qdb5-darwin-20261008/. The GNU regime is the Linux gate.
+    ts: "2026-10-08T16:44:52Z"
+    host: tlatoanis-macbook-air
+
+packets:
+  - packet_id: deadline-killed-preflight-steps-skip-their-cleanup-traps-and-leak-mutants-and-registered-worktrees
+    order: 1553-xs63
+    title: Deadline-killed preflight steps skip their cleanup traps, leaking mutant files and registered git worktrees
+    status: ready
+    kind: bug
+    priority: p2
+    pickup_role: any
+    capability_tags: [bash, preflight]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+      - scripts/test-awk-float-lc-numeric.sh
+      - scripts/test-scorable-closure-quoting.sh
+      - scripts/test-closure-guards-name-the-way-out.sh
+    context: >
+      The door group-kills a guard at its deadline, so the guard's EXIT trap
+      never runs. Instances observed on tlatoanis-macbook-air on 2026-10-08,
+      after ./build.sh --preflight on work/1375-amye: three untracked
+      .mutant-lcnum-*.sh files left in the checkout by
+      test-awk-float-lc-numeric.sh (scripts/.mutant-lcnum-freshness-inventory.sh,
+      scripts/.mutant-lcnum-select-work-batch.sh,
+      scripts/refusal-calibration/.mutant-lcnum-measure-bands.sh), and two
+      REGISTERED git worktrees under $TMPDIR/scorable-quoting.*/wt left by
+      test-scorable-closure-quoting.sh. Later the same day, after two more
+      preflights and one interrupted front-door fixture run: six more
+      registered worktrees, closure-guards.*/wt from
+      test-closure-guards-name-the-way-out.sh, and six more scorable-quoting.*/wt.
+      Two run-litmus-test.sh processes also outlived the group kill. The leaked files make the next
+      worktree removal refuse, and the leaked worktrees stay in git worktree
+      list. Both were removed by hand. Filed only, per coordinator; not fixed.
+    depends_on: []
+    exit_criteria:
+      - A guard killed at the door's deadline leaves no file in the checkout and no registered worktree.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Future litmus filename:
+      preflight-deadline-kill-leaves-no-residue. It should plant a guard that
+      creates a file in the checkout and registers a worktree, and then outlives
+      the deadline. Assert that after the door returns neither exists. PRE-FIX
+      RESULT: both remain, as observed with the two fixtures named above.
+    next_action: Unassigned; coordinator to schedule.
+  - packet_id: deadline-killed-preflight-steps-skip-their-cleanup-traps-and-leak-mutants-and-registered-worktrees
+    event:
+      type: note
+      ts: "2026-10-08T15:51:00Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        filed by macbookair-macos on coordinator instruction; file only, not claimed.
+
+events:
+  - packet_id: preflight-header-sed-blocks-fail-on-bsd-and-lose-gate-only-and-serial-classification
+    event:
+      type: note
+      ts: "2026-10-08T16:44:52Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        claimed by macbookair-macos on coordinator assignment. The fix was first done under a duplicate order (1553-w84p, never pushed, dropped by ruling) and is re-keyed here.
+        Fix: ';}' on the six header-scan sed groups in _pf_predecide (build.sh), the same in scripts/test-deciders-within-door-deadline.sh:54, and one more found by a repo-wide BSD compile of every single-quoted sed program (litmus-expert-groundtruth-harness.yaml w4 arm). Sweep: 7 rejected of 50 pre-fix, 0 of 50 post-fix.
+        Fixture: scripts/test-preflight-declarations-host-sed.sh lifts the door's own _pf_predecide and asks it to decide planted headers under the host sed; no live guard is executed. Darwin pre-fix 1 passed / 4 failed; post-fix 5/5.
+        Door counts on darwin with a plan binary built in the worktree: declared-skip rose from 3 to 10, and sed errors went to 0. ci-release instant tier: 10 failed on base, 8 with the fix (deciders-within-door-deadline goes green); the remaining 8 are pre-existing.
+  - packet_id: preflight-header-sed-blocks-fail-on-bsd-and-lose-gate-only-and-serial-classification
+    event:
+      type: note
+      ts: "2026-10-08T16:44:52Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        DISCLOSURE: macbookair-macos's earlier preflight runs today ("refused=0" with could-not-run=52-60) ran in fresh worktrees with NO plan binary in target/. The door could not classify those guards, so those runs vouched for nothing. That includes the 1553-a9n6 (PR #224) preflight. 1553-a9n6's darwin clippy before/after and the coordinator's Linux clippy and fmt arms still stand; its preflight line does not. The 1375-amye preflights also ran under the pre-fix door and are to be re-run after this lands.
+  - packet_id: deadline-killed-preflight-steps-skip-their-cleanup-traps-and-leak-mutants-and-registered-worktrees
+    event:
+      type: note
+      ts: "2026-10-08T16:44:52Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        filed by macbookair-macos on coordinator instruction; file only, not claimed.

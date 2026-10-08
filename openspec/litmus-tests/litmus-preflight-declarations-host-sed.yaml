@@ -1,0 +1,25 @@
+# @trace spec:ci-release, order:1545-qdb5
+name: litmus:preflight-declarations-host-sed
+spec: ci-release
+phase: pre-build
+size: instant
+severity: high
+description: >
+  ORDER 1545-qdb5. The preflight door reads `# preflight: gate-only`,
+  `gate-only-decider` and `serial` from a guard's own header, using the HOST's
+  sed. BSD sed rejected the `1,40{...p}` groups (it wants `;}`) and printed
+  nothing, so every darwin preflight read no declaration at all: serial guards
+  ran concurrently and gate-only guards were run, and nothing refused. GNU sed
+  accepted the same text, so the Linux gate could not see it. The fixture lifts
+  the door's own _pf_predecide out of build.sh, plants one guard per
+  declaration, and asserts the decision under whatever sed the host has. A
+  negative control (an undeclared guard still runs) keeps a broken harness from
+  passing as a fixed parser. Pre-fix on darwin it fails 4 of 5 arms.
+preconditions:
+  - workspace contains scripts/test-preflight-declarations-host-sed.sh
+  - build.sh defines _pf_predecide
+critical_path:
+  - step: "the door reads gate-only, gate-only-decider and serial under the host sed"
+    command: "bash scripts/test-preflight-declarations-host-sed.sh"
+    timeout_ms: 30000
+    expected_behavior: "ok:preflight-declarations-host-sed:5"
