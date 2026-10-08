@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: executor-contract-a-sigpipe-killed-producer-keeps-its-own-status-asserts-signaled-13-unconditionally-and-is-red-on-native-windows-where-msys-sh-reports-exited-3328
+    order: 1553-5x9x
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [tests, windows, exec, signals]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-exec/tests/executor_contract.rs
+    title: |
+      executor_contract a_sigpipe_killed_producer_keeps_its_own_status (98d8734dc, 1252-fg9e) asserts Completion::Signaled(13) on every OS; on native Windows there are no signals and MSYS sh reports its own SIGPIPE death as Exited(3328) = 13 << 8, so the test is red there
+    context: |
+      MEASURED on yolanda-windows 2026-10-08 (native cargo test -p
+      tillandsias-exec --no-fail-fast, item 2 of the coordinator's queue):
+        executor_contract.rs:251  left: Exited(3328)  right: Signaled(13)
+      The test came from 98d8734dc (1252-fg9e, 2026-09-28), not from the
+      2026-10-08 Lua landings (git log -S). completion_of() decodes signals
+      only under cfg(unix), which is correct: the contract the test pins (a
+      producer killed by a signal keeps its OWN status, separate from its
+      consumer's) is a Unix contract. On Windows the property that still
+      holds is that the producer's own non-zero exit code is kept,
+      unrelabelled. The executor must NOT decode 3328 back into a signal,
+      because a native Windows program can exit 3328 on its own.
+    exit_criteria:
+      - 'cfg(unix) keeps asserting Signaled(13); cfg(windows) asserts Exited(13 << 8) kept as the producer status, with a comment saying why it is not decoded (a native program can exit 3328 on its own)'
+      - 'the executor gains no Windows signal decoding'
+      - 'green natively on Windows and on Linux; pre-fix red on Windows as measured above'
+    verifiable_closure: |
+      cargo test -p tillandsias-exec --test executor_contract
+      a_sigpipe_killed_producer_keeps_its_own_status, natively on Windows and
+      on Linux. Pre-fix: Exited(3328) != Signaled(13) on yolanda-windows.
+    events:
+      - type: filed
+        ts: "2026-10-08T15:53:00Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's request after the native item-2 run;
+          case (a), a Unix-only contract, accepted by the coordinator.
