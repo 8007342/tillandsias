@@ -80,7 +80,10 @@ use tillandsias_secure_channel::{
     PeerRefused, StaticKeypair, client_handshake_xx, parse_static_hex, server_handshake_xx,
     static_fingerprint,
 };
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use bytes::Bytes;
+use futures::{SinkExt, StreamExt};
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 /// Where the static key lives in the host's own Vault (KV v2 logical path).
 pub const MSG_STATIC_PATH: &str = "secret/fleet/msg/static";
@@ -427,30 +430,48 @@ pub fn mint(
 
 // ── the in-tunnel frames ─────────────────────────────────────────────────────
 
-async fn write_frame<S: AsyncWrite + Unpin>(s: &mut S, body: &[u8]) -> io::Result<()> {
-    let len = u32::try_from(body.len()).map_err(|_| io::Error::other("frame too large"))?;
-    s.write_all(&len.to_be_bytes()).await?;
-    s.write_all(body).await?;
-    s.flush().await
+/// The tunnel framed ONCE per session. The in-tunnel frames are the shared
+/// u32-BE length prefix decoded by `LengthDelimitedCodec`, not by hand
+/// (order 795-5itp's ratchet, scripts/framing-raw-decode-baseline.tsv). One
+/// `Framed` for the whole session, never one per call: a per-call `Framed`
+/// drops whatever it buffered past the frame it returned.
+type MsgFramed<S> = Framed<S, LengthDelimitedCodec>;
+
+/// The fleet-msg codec. Not `control_frame_codec()`: that one is pinned to the
+/// control wire's 64 KiB `MAX_MESSAGE_BYTES`, while this rung's frames are
+/// bounded by [`MAX_FRAME`]. Every parameter is still pinned explicitly, and
+/// the bound applies on encode as well as decode, so an oversize outbound
+/// frame fails here instead of being refused by the peer.
+fn msg_frame_codec() -> LengthDelimitedCodec {
+    LengthDelimitedCodec::builder()
+        .length_field_length(4)
+        .big_endian()
+        .length_adjustment(0)
+        .max_frame_length(MAX_FRAME)
+        .new_codec()
 }
 
-/// Read one frame, adding every byte read to `counter` (the counting seam the
-/// zero-bytes arm asserts on).
-async fn read_frame<S: AsyncRead + Unpin>(s: &mut S, counter: &mut usize) -> io::Result<Vec<u8>> {
-    let mut len = [0u8; 4];
-    s.read_exact(&mut len).await?;
-    *counter += 4;
-    let n = u32::from_be_bytes(len) as usize;
-    if n > MAX_FRAME {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "frame exceeds maximum",
-        ));
+async fn write_frame<S: AsyncRead + AsyncWrite + Unpin>(
+    s: &mut MsgFramed<S>,
+    body: &[u8],
+) -> io::Result<()> {
+    s.send(Bytes::copy_from_slice(body)).await
+}
+
+/// Read one frame, adding its bytes (length prefix included) to `counter`
+/// (the counting seam the zero-bytes arm asserts on).
+async fn read_frame<S: AsyncRead + AsyncWrite + Unpin>(
+    s: &mut MsgFramed<S>,
+    counter: &mut usize,
+) -> io::Result<Vec<u8>> {
+    match s.next().await {
+        Some(Ok(frame)) => {
+            *counter += 4 + frame.len();
+            Ok(frame.to_vec())
+        }
+        Some(Err(e)) => Err(e),
+        None => Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
     }
-    let mut buf = vec![0u8; n];
-    s.read_exact(&mut buf).await?;
-    *counter += n;
-    Ok(buf)
 }
 
 /// The proto major of a hello frame, or the refusal naming why not.
@@ -508,7 +529,8 @@ impl SessionSeams {
 pub const LOOKUP_AFTER_READ_COMPILED: bool = cfg!(debug_assertions);
 
 /// What one accepted session ended as. `envelope_bytes_read` counts EVERY
-/// plaintext byte read from the tunnel (hello included) — zero for any peer
+/// plaintext byte of every frame decoded from the tunnel (length prefixes and
+/// the hello included) — zero for any peer
 /// refused at the handshake.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AcceptReport {
@@ -564,7 +586,7 @@ where
         })
         .await
     };
-    let mut st = match hs {
+    let mut st = match hs.map(|st| Framed::new(st, msg_frame_codec())) {
         Ok(st) => st,
         Err(e) => {
             return AcceptReport {
@@ -623,7 +645,7 @@ where
     }
     let envelope = read_frame(&mut st, &mut read).await;
     if late {
-        let Some(remote) = st.remote_static() else {
+        let Some(remote) = st.get_ref().remote_static() else {
             return refuse("refused:msg:no-remote-static".into(), read, proto);
         };
         match peers.admit(&remote) {
@@ -662,12 +684,13 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let mut admitted: Option<Peer> = None;
-    let mut st = client_handshake_xx(stream, local, |k: &[u8; 32]| {
+    let st = client_handshake_xx(stream, local, |k: &[u8; 32]| {
         admitted = Some(peers.admit(k)?);
         Ok(())
     })
     .await
     .map_err(|e| refusal_of(&e).unwrap_or_else(|| format!("refused:msg:handshake:{e}")))?;
+    let mut st = Framed::new(st, msg_frame_codec());
     let peer = admitted.ok_or("refused:msg:not-admitted")?;
     write_frame(
         &mut st,
@@ -689,7 +712,8 @@ where
     write_frame(&mut st, envelope)
         .await
         .map_err(|e| format!("refused:msg:envelope-write:{}", e.kind()))?;
-    let _ = st.shutdown().await;
+    // SinkExt::close flushes the codec, then shuts the tunnel down.
+    let _ = st.close().await;
     Ok(format!(
         "ok:msg:dial:peer={}:fp={}:proto={}",
         peer.host,
