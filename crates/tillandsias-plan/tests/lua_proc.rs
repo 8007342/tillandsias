@@ -41,6 +41,86 @@ fn lua_path(p: &std::path::Path) -> String {
     p.display().to_string().replace('\\', "/")
 }
 
+/// What a liveness probe saw.
+#[cfg(unix)]
+#[derive(Debug, PartialEq, Eq)]
+enum Liveness {
+    Alive,
+    Zombie,
+    Gone,
+    Unobservable(String),
+}
+
+/// ORDER 1543-f44v. Existence from kill(pid, 0), never from a file's absence:
+/// ESRCH is the only "gone". Success or EPERM means the pid exists, and then
+/// the state separates a zombie from a live process (/proc on Linux, `ps`
+/// elsewhere). A read that fails is Unobservable, NOT dead. The previous probe
+/// mapped a missing /proc/<pid>/stat to dead, so on darwin every process,
+/// including a known-live one, was reported dead.
+#[cfg(unix)]
+fn liveness(pid: i32) -> Liveness {
+    fn exists(pid: i32) -> Result<bool, String> {
+        // SAFETY: kill with signal 0 sends nothing and takes no pointers.
+        if unsafe { libc::kill(pid, 0) } == 0 {
+            return Ok(true);
+        }
+        match std::io::Error::last_os_error().raw_os_error() {
+            Some(libc::ESRCH) => Ok(false),
+            Some(libc::EPERM) => Ok(true),
+            other => Err(format!("kill({pid}, 0) failed: errno {other:?}")),
+        }
+    }
+    match exists(pid) {
+        Ok(false) => return Liveness::Gone,
+        Err(why) => return Liveness::Unobservable(why),
+        Ok(true) => {}
+    }
+    #[cfg(target_os = "linux")]
+    let state = std::fs::read_to_string(format!("/proc/{pid}/stat"))
+        .map_err(|e| format!("/proc/{pid}/stat: {e}"))
+        .map(|s| s.rsplit(')').next().unwrap_or("").trim_start().to_string());
+    #[cfg(not(target_os = "linux"))]
+    let state = std::process::Command::new("ps")
+        .args(["-o", "stat=", "-p", &pid.to_string()])
+        .output()
+        .map_err(|e| format!("ps -p {pid}: {e}"))
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+    match state {
+        Ok(s) if s.starts_with('Z') => Liveness::Zombie,
+        Ok(s) if !s.is_empty() => Liveness::Alive,
+        // Exists by kill(0) but no state: it may have died in between.
+        _ if exists(pid) == Ok(false) => Liveness::Gone,
+        Ok(_) => Liveness::Unobservable(format!("pid {pid} exists but reported no state")),
+        Err(why) => Liveness::Unobservable(why),
+    }
+}
+
+/// ORDER 1543-f44v. THE PROBE MUST SEE A PROCESS THAT IS CERTAINLY ALIVE.
+/// Without this control, "the grandchild is gone" can be the probe's blindness
+/// rather than the runtime's cleanup: a missing /proc on darwin read as death.
+#[cfg(unix)]
+#[test]
+fn liveness_sees_a_known_live_scratch_process_and_its_death() {
+    let mut child = std::process::Command::new("sleep")
+        .arg("30")
+        .spawn()
+        .expect("spawn sleep");
+    let pid = child.id() as i32;
+    let seen = liveness(pid);
+    child.kill().expect("kill the scratch sleep");
+    child.wait().expect("reap the scratch sleep");
+    assert_eq!(
+        seen,
+        Liveness::Alive,
+        "a live scratch process {pid} was not seen alive"
+    );
+    assert_eq!(
+        liveness(pid),
+        Liveness::Gone,
+        "a reaped scratch process {pid} was not seen gone"
+    );
+}
+
 // @trace order:1534-puyz
 // Linux-only slice evidence. Native Mac/Windows measurement remains open.
 #[cfg(target_os = "linux")]
@@ -2234,15 +2314,15 @@ fn a_grandchild_neither_times_out_nor_outlives_proc_run() {
         "took {:?}",
         t0.elapsed()
     );
-    let pid = pid.trim();
+    let pid: i32 = pid
+        .trim()
+        .parse()
+        .expect("the script printed the grandchild's pid");
     std::thread::sleep(Duration::from_millis(50));
-    let alive = std::fs::read_to_string(format!("/proc/{pid}/stat"))
-        .map(|s| {
-            s.rsplit(')')
-                .next()
-                .map(|r| !r.trim_start().starts_with('Z'))
-                .unwrap_or(false)
-        })
-        .unwrap_or(false);
-    assert!(!alive, "grandchild {pid} outlived proc.run");
+    // 1543-f44v: a probe that cannot see the grandchild must not pass as "dead".
+    match liveness(pid) {
+        Liveness::Gone | Liveness::Zombie => {}
+        Liveness::Alive => panic!("grandchild {pid} outlived proc.run"),
+        Liveness::Unobservable(why) => panic!("could not observe grandchild {pid}: {why}"),
+    }
 }

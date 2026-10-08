@@ -1,0 +1,43 @@
+   Compiling tillandsias-exec v0.1.0 (/Users/tlatoani/claudia/wt-f44v/crates/tillandsias-exec)
+warning: unreachable statement
+   --> crates/tillandsias-exec/src/lib.rs:186:5 <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+    |
+184 |     return; // MUTANT 1543-f44v: cleanup disabled
+    |     ------ any code following this expression is unreachable
+185 |     // SAFETY: killpg takes no pointers; a stale or empty pgid fails with ESRCH.
+186 |     let alive = |sig| unsafe { libc::killpg(pgid, sig) == 0 };
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unreachable statement
+    |
+    = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `pgid`
+   --> crates/tillandsias-exec/src/lib.rs:183:21 <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+    |
+183 | async fn reap_group(pgid: libc::pid_t) {
+    |                     ^^^^ help: if this is intentional, prefix it with an underscore: `_pgid`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling tillandsias-plan v0.1.0 (/Users/tlatoani/claudia/wt-f44v/crates/tillandsias-plan)
+warning: `tillandsias-exec` (lib) generated 2 warnings (run `cargo fix --lib -p tillandsias-exec` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 44.86s
+     Running tests/lua_proc.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/lua_proc-3a446b499d78ca26)
+
+running 1 test
+test a_grandchild_neither_times_out_nor_outlives_proc_run ... FAILED
+
+failures:
+
+---- a_grandchild_neither_times_out_nor_outlives_proc_run stdout ----
+
+thread 'a_grandchild_neither_times_out_nor_outlives_proc_run' (6406922) panicked at crates/tillandsias-plan/tests/lua_proc.rs:2311:28: <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+grandchild 61658 outlived proc.run
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_grandchild_neither_times_out_nor_outlives_proc_run
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.78s
+
+error: test failed, to rerun pass `-p tillandsias-plan --test lua_proc`

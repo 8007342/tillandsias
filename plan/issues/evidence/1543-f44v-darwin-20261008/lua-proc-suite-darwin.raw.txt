@@ -1,0 +1,21 @@
+   Compiling tillandsias-plan v0.1.0 (/Users/tlatoani/claudia/wt-f44v/crates/tillandsias-plan)
+   Compiling tillandsias-exec v0.1.0 (/Users/tlatoani/claudia/wt-f44v/crates/tillandsias-exec)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 06s
+     Running tests/lua_proc.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/lua_proc-3a446b499d78ca26)
+
+running 12 tests
+test arm7_cacheable_has_no_proc ... ok
+test liveness_sees_a_known_live_scratch_process_and_its_death ... ok
+test programmer_errors_raise_and_operational_failures_do_not ... ok
+test arm2_both_fds_drain_concurrently_in_full ... ok
+test arm6_stdin_from_a_variable_has_no_pipe_to_invert ... ok
+test arm1_a_failing_program_is_a_value_and_argv_is_not_reparsed ... ok
+test the_child_environment_is_the_base_set ... ok
+test capture_bytes_a_clipped_capture_is_not_ok ... ok
+test arm5_a_shell_string_is_refused ... ok
+test a_grandchild_neither_times_out_nor_outlives_proc_run ... ok
+test a_piped_caller_is_not_held_by_a_leaked_grandchild ... ok
+test arm3_a_deadline_kills_the_whole_group ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.27s
+
