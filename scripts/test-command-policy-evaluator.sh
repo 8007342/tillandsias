@@ -12,8 +12,11 @@
 #     why: + remedy: naming `tillandsias --github-login --with-token`
 #   2 bash -c "a | b": refused:policy:no-shell-strings, remedy names the argv form
 #   3 soft and hard reset per host kind, and no env variable pre-authorises HARD
-#   4 a seed that loosens a floor rule is refused WHOLE at load; the answer comes
-#     from the floor alone, and the seed's other (tightening) rule is dropped too
+#   4 a seed that loosens a floor rule is refused WHOLE at load, and a refused
+#     seed is never treated as absent (1531-ae4a): EVERY request evaluated
+#     against it is refused:policy-seed:cannot-loosen:<rule>, exit 1, with the
+#     seed's repair remedy -- the loosened gh auth refresh AND the unmatched make
+#     that a floor-alone answer would have allowed
 #   5 proc.run{gh auth login}: status=policy_denied with rule/why/remedy, and the
 #     fake gh on PATH never runs (it would write a marker); premise: an allowed
 #     gh call through the same PATH DOES write it
@@ -95,13 +98,17 @@ p4="$OUT"
 ev --seed "$T/loosen.yaml" -- gh auth refresh
 o4="$OUT"; r4=$RC; e4="$ERR"
 ev --seed "$T/loosen.yaml" -- make
-m4="$OUT"
+m4="$OUT"; mr4=$RC
+# Before 1531-ae4a the floor answered alone and make came back
+# ok:policy:allow:default: a corrupt or loosening seed silently dropped every
+# project restriction (lua-migration-fresh-eyes-review-2026-10-01.md finding 1).
+want4="refused:policy-seed:cannot-loosen:no-credential-mutation"
 if [ "$p4" = "refused:policy:tighten-make" ] \
-   && [ "$o4" = "refused:policy:no-credential-mutation" ] && [ "$r4" = 1 ] \
-   && has "refused:policy-seed:cannot-loosen:no-credential-mutation" "$e4" \
-   && [ "$m4" = "ok:policy:allow:default" ]; then
-    ok "4 a loosening seed is refused whole at load; floor answers, and its tightening rule is dropped too"
-else bad "4 premise=[$p4] out=[$o4] rc=$r4 make=[$m4] err=[$e4]"; fi
+   && [ "$o4" = "$want4" ] && [ "$r4" = 1 ] \
+   && has "$want4" "$e4" && has "  remedy: repair the command policy seed" "$e4" \
+   && [ "$m4" = "$want4" ] && [ "$mr4" = 1 ]; then
+    ok "4 a loosening seed is refused whole at load, and every request against it is refused, never answered from the floor alone"
+else bad "4 premise=[$p4] out=[$o4] rc=$r4 make=[$m4] rc=$mr4 err=[$e4]"; fi
 
 # ── arm 5 ────────────────────────────────────────────────────────────────────
 mkdir -p "$T/bin"
