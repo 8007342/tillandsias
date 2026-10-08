@@ -73,15 +73,15 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
+use futures::{SinkExt, StreamExt};
 use serde_yaml::{Mapping, Value};
 use tillandsias_msg::store;
 use tillandsias_secure_channel::{
     PeerRefused, StaticKeypair, client_handshake_xx, parse_static_hex, server_handshake_xx,
     static_fingerprint,
 };
-use bytes::Bytes;
-use futures::{SinkExt, StreamExt};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
