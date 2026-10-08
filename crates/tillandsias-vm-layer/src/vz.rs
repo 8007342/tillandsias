@@ -1267,6 +1267,10 @@ Environment=HOME=/root
 Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200
 Environment=TILLANDSIAS_SECURE_CONTROL_WIRE=__SECURE_CONTROL_WIRE__
+# 1430-rnpd: the guest may power itself off when the tray asks it to stop.
+# The headless refuses that action without this opt-in, so no other host or
+# guest (WSL included) can be powered off by it.
+Environment=TILLANDSIAS_GUEST_POWEROFF=1
 ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
 Restart=on-failure
 RestartSec=2s
@@ -3134,14 +3138,24 @@ impl VmRuntime for VzRuntime {
         // 211531.ips). On the main thread the call runs inline, exactly as
         // before; off it, the call hops to the main queue and this thread
         // waits for the answer.
-        let request_result = on_vm_queue(vm, |vm| {
-            unsafe { vm.requestStopWithError() }.map_err(|e| e.localizedDescription().to_string())
-        })?;
-        if let Err(msg) = request_result {
-            // The VM may already be stopped or in an invalid state for stop.
-            // Returning here would leak the VM in a weird state; better to
-            // surface and let the caller decide.
-            return Err(format!("VzRuntime::stop: requestStop failed: {msg}"));
+        // ORDER 1430-rnpd: the guest now powers itself off once the tray's
+        // VmShutdownRequest is acked, so the VM may already be Stopped (state 0)
+        // here, or stop between this check and requestStop. Both are a CLEAN
+        // stop, not a requestStop failure; the poll below then sees state 0.
+        let already_stopped = on_vm_queue(vm, |vm| unsafe { vm.state() }.0)? == 0;
+        if !already_stopped {
+            let request_result = on_vm_queue(vm, |vm| {
+                unsafe { vm.requestStopWithError() }
+                    .map_err(|e| e.localizedDescription().to_string())
+            })?;
+            if let Err(msg) = request_result {
+                // The VM may already be stopped or in an invalid state for stop.
+                // Returning here would leak the VM in a weird state; better to
+                // surface and let the caller decide.
+                if on_vm_queue(vm, |vm| unsafe { vm.state() }.0)? != 0 {
+                    return Err(format!("VzRuntime::stop: requestStop failed: {msg}"));
+                }
+            }
         }
 
         let deadline = Instant::now() + drain_timeout;
@@ -5171,6 +5185,12 @@ mod tests {
         assert!(
             headless_unit.contains("Environment=XDG_RUNTIME_DIR=/run/user/0"),
             "headless unit must pin XDG_RUNTIME_DIR to the satisfier's lock namespace (order 259)"
+        );
+        // 1430-rnpd: the guest's poweroff-on-shutdown-request is opt-in, and
+        // this unit is the only place that opts in.
+        assert!(
+            headless_unit.contains("Environment=TILLANDSIAS_GUEST_POWEROFF=1"),
+            "the VZ guest unit must opt in to guest poweroff (1430-rnpd)"
         );
         assert!(
             !headless_unit.contains("Requires=podman.socket"),

@@ -1513,10 +1513,29 @@ async fn serve_ready_stream(
                 // observers (e.g. the host tray polling on a different
                 // connection) see the right state.
                 state.set_phase(VmPhase::Draining);
-                info!(
-                    spec = "vsock-transport",
-                    "VmShutdownRequest received; phase=Draining; closing connection (drain happens via signal path)"
-                );
+                // ORDER 1430-rnpd. ONE FRAME, THEN THE SHUTDOWN IT PROMISES.
+                // Silent, this left the tray waiting 10 s for a reply, and the
+                // "signal path" below only runs during an OS shutdown that
+                // nothing started, so every quit ended in a 65 s force-stop.
+                let ack = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: env.seq,
+                    body: ControlMessage::IssueAck { seq_acked: env.seq },
+                };
+                let _ = write_envelope_with_shutdown(&mut write_half, &ack, &mut shutdown).await;
+                // systemd stops the units: headless gets SIGTERM and drains
+                // podman on the signal path, then the VM powers off. Refused
+                // (logged) anywhere but an opted-in Linux guest.
+                match crate::guest_poweroff::request_poweroff() {
+                    Ok(()) => info!(
+                        spec = "vsock-transport",
+                        "VmShutdownRequest received; phase=Draining; acked; guest poweroff started (drain happens via signal path)"
+                    ),
+                    Err(why) => warn!(
+                        spec = "vsock-transport",
+                        "VmShutdownRequest received; phase=Draining; acked; guest poweroff NOT started: {why} — the host's requestStop/force-stop path decides"
+                    ),
+                }
                 break 'connection;
             }
             // l3: PTY-attach variants (control-wire-pty-attach Tasks 4.x).
@@ -2588,6 +2607,85 @@ mod tests {
             matches!(env.body, ControlMessage::HelloAck { .. }),
             "a matching peer must receive HelloAck; got {:?}",
             env.body
+        );
+    }
+
+    /// ORDER 1430-rnpd. THE SHUTDOWN REQUEST IS ANSWERED, AND THE SHUTDOWN IT
+    /// PROMISES IS STARTED. The handler used to set Draining and close the
+    /// connection, so the tray waited out 10 s for no reply, and nothing began
+    /// the OS shutdown whose SIGTERM drains headless. On a real guest VZ then
+    /// ignored requestStop for 65 s and every quit was force-stopped (10 of 10,
+    /// 2026-09-28..30). Under cfg(test) the poweroff action is a recorder.
+    #[tokio::test]
+    async fn vm_shutdown_request_is_acked_and_starts_the_guest_poweroff() {
+        let state = VmStateHandle::new();
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let _server_task = tokio::spawn(handle_connection_with_mode(
+            Ok(SecureControlWireMode::Off),
+            Box::new(server),
+            state.clone(),
+            shutdown_rx,
+        ));
+        let calls_before = crate::guest_poweroff::fake_poweroff_calls();
+
+        write_envelope(
+            &mut client,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::Hello {
+                    from: "a-tray".to_string(),
+                    capabilities: Vec::new(),
+                    build_version: None,
+                },
+            },
+        )
+        .await
+        .expect("write Hello");
+        let ack = tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+            .await
+            .expect("HelloAck in time")
+            .expect("HelloAck decodes");
+        assert!(
+            matches!(ack.body, ControlMessage::HelloAck { .. }),
+            "got {:?}",
+            ack.body
+        );
+
+        write_envelope(
+            &mut client,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 2,
+                body: ControlMessage::VmShutdownRequest {
+                    seq: 2,
+                    drain_timeout_ms: 60_000,
+                },
+            },
+        )
+        .await
+        .expect("write VmShutdownRequest");
+        let reply = tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+            .await
+            .map_err(|_| "no frame within 2s".to_string())
+            .and_then(|r| r.map_err(|e| format!("read: {e}")));
+        assert!(
+            matches!(
+                reply.as_ref().map(|e| &e.body),
+                Ok(ControlMessage::IssueAck { seq_acked: 2 })
+            ),
+            "VmShutdownRequest must be answered with IssueAck {{ seq_acked: 2 }}; got {reply:?}"
+        );
+        assert_eq!(
+            state.current_phase(),
+            VmPhase::Draining,
+            "the phase still reports Draining"
+        );
+        assert_eq!(
+            crate::guest_poweroff::fake_poweroff_calls() - calls_before,
+            1,
+            "the guest poweroff must be started exactly once"
         );
     }
 

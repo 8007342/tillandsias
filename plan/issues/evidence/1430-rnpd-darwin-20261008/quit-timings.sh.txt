@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Tabulate tray quit sequences from tray.log (timestamped lines only).
+# $1 = tray.log. Columns: quit ts | shutdown-request outcome (s) | force-stop (s after requestStop) | outcome
+set -uo pipefail
+to_s() { # ISO8601 with ms -> epoch seconds (float), BSD date
+  local base="${1%.*}" ms="${1##*.}"; ms="${ms%Z}"
+  printf '%s.%s' "$(date -j -u -f '%Y-%m-%dT%H:%M:%S' "$base" +%s)" "$ms"
+}
+quit=""; req=""
+while IFS= read -r line; do
+  ts="${line%% *}"
+  case "$ts" in 20??-??-??T*Z) ;; *) continue ;; esac
+  case "$line" in
+    *"Quit ("*"draining"*) quit="$(to_s "$ts")"; qts="$ts"; req="" ;;
+    *"proceeding to VZ.requestStop"*) [ -n "$quit" ] && req="$(to_s "$ts")" ;;
+    *"force-stop dispatched"*)
+      if [ -n "$quit" ] && [ -n "$req" ]; then
+        f="$(to_s "$ts")"
+        printf '%s  no-reply-after=%.1fs  requestStop->force-stop=%.1fs  quit->force-stop=%.1fs  FORCE-STOP\n' \
+          "$qts" "$(echo "$req - $quit" | bc)" "$(echo "$f - $req" | bc)" "$(echo "$f - $quit" | bc)"
+      fi
+      quit="" ;;
+    *"Quit: VM stopped"*|*"stopped cleanly"*|*"guest powered off"*)
+      [ -n "$quit" ] && printf '%s  CLEAN STOP: %s\n' "$qts" "$line"; quit="" ;;
+  esac
+done < "$1"

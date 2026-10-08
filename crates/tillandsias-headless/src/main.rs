@@ -18946,6 +18946,8 @@ pub(crate) fn spawn_terminal_and_reap(mut child: Command) -> Result<(), String> 
 /// host — `pty_handler` is gated on the `listen-vsock`+unix combo that order
 /// 254 recorded as never linted or tested in CI.
 pub mod exec_allowlist;
+#[cfg(feature = "listen-vsock")]
+mod guest_poweroff;
 #[cfg(all(feature = "listen-vsock", unix))]
 mod pty_handler;
 /// Order 723-54zj. Declared unconditionally: the classification half is pure
