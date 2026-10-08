@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: exec-group-exit-test-liveness-reads-a-failed-ps-spawn-as-death
+    order: 1558-ixih
+    title: tillandsias-exec group_exit's liveness probe reads a failed ps spawn (or /proc read) as death
+    status: in_progress
+    kind: defect
+    priority: p3
+    pickup_role: macos
+    capability_tags: [rust, tests, process-lifecycle, macos]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-exec/tests/group_exit.rs
+    context: >
+      The smaller sibling of 1543-f44v, found while fixing it. The alive()
+      helper in tillandsias-exec tests/group_exit.rs mapped a failed
+      observation to "not alive": Err(_) => false for both the /proc read and a
+      `ps` that could not be spawned. "The grandchild did not survive the run"
+      could therefore be the probe's blindness rather than the runtime's
+      cleanup. Test-only change. The helper is a LOCAL COPY of 1543-f44v's
+      liveness(), because the two live in different crates' test trees and
+      sharing one would need a test-support crate or a public production API.
+      Its doc says the two must stay in step.
+    depends_on: []
+    exit_criteria:
+      - A live process whose state reader cannot be spawned is reported Unobservable, never dead (pre-fix FAILS on darwin).
+      - A known-live process is seen Alive and, once reaped, Gone.
+      - With group cleanup disabled, the detached-grandchild arm fails.
+    verifiable_closure: >
+      cargo test -p tillandsias-exec --test group_exit.
+      a_failed_observation_of_a_live_process_is_not_reported_dead FAILS on the
+      pre-fix probe on darwin ("a live process 75253 was reported dead because
+      its state could not be read") and passes post-fix.
+      liveness_sees_a_known_live_process_and_its_death passes. Under the
+      cleanup-disabled mutant (reap_group returns at once),
+      a_detached_grandchild_does_not_outlive_the_run fails ("grandchild 77950
+      survived the run"). Receipts and the mutant diff are in
+      plan/issues/evidence/1558-ixih-darwin-20261008/.
+    next_action: Land work/1558-ixih; the coordinator runs the Linux side.
+
+events:
+  - packet_id: exec-group-exit-test-liveness-reads-a-failed-ps-spawn-as-death
+    event:
+      type: note
+      ts: "2026-10-08T18:34:57Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Filed and fixed by macbookair-macos on coordinator ruling (p3, reuse the 1543-f44v helper or keep a local copy with a note). liveness_with(pid, ps): kill(pid, 0) for existence (ESRCH is the only Gone, EPERM means it exists), the state from /proc or an injectable ps, and a failed read is Unobservable, which the grandchild arm panics on. Darwin: group_exit 5/5, exec suite 38/38, strict clippy 0, fmt clean.

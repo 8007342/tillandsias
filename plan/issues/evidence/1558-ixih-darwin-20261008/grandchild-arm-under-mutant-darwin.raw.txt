@@ -1,0 +1,42 @@
+   Compiling tillandsias-exec v0.1.0 (/Users/tlatoani/claudia/wt-1558-ixih/crates/tillandsias-exec)
+warning: unreachable statement
+   --> crates/tillandsias-exec/src/lib.rs:186:5 <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+    |
+184 |     return; // MUTANT 1558-ixih: cleanup disabled
+    |     ------ any code following this expression is unreachable
+185 |     // SAFETY: killpg takes no pointers; a stale or empty pgid fails with ESRCH.
+186 |     let alive = |sig| unsafe { libc::killpg(pgid, sig) == 0 };
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unreachable statement
+    |
+    = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `pgid`
+   --> crates/tillandsias-exec/src/lib.rs:183:21 <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+    |
+183 | async fn reap_group(pgid: libc::pid_t) {
+    |                     ^^^^ help: if this is intentional, prefix it with an underscore: `_pgid`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `tillandsias-exec` (lib) generated 2 warnings (run `cargo fix --lib -p tillandsias-exec` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.65s
+     Running tests/group_exit.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/group_exit-9d28f738212dfffb)
+
+running 1 test
+test a_detached_grandchild_does_not_outlive_the_run ... FAILED
+
+failures:
+
+---- a_detached_grandchild_does_not_outlive_the_run stdout ----
+
+thread 'a_detached_grandchild_does_not_outlive_the_run' (6622936) panicked at crates/tillandsias-exec/tests/group_exit.rs:155:28: <!-- cite-ok: raw compiler/test output, the location is part of the receipt -->
+grandchild 77950 survived the run
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_detached_grandchild_does_not_outlive_the_run
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.27s
+
+error: test failed, to rerun pass `-p tillandsias-exec --test group_exit`
