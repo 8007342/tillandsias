@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-native-windows-a-timed-out-command-whose-grandchild-holds-the-pipe-leaks-a-blocking-reader-thread-and-the-orphan-so-a-400ms-timeout-test-takes-120s-to-finish
+    field: verifiable_closure
+    value: |-
+      cargo test -p tillandsias-exec --test executor_contract --test group_kill
+      natively on Windows and on Linux: a_timeout_does_not_leave_the_pipe_held_past_the_run
+      green within its 15 s bound (pre-fix 60.05 s on yolanda-windows), the
+      executor_contract suite in seconds (pre-fix 120.09 s), and both group_kill
+      arms green: the grouped deadline leaves no descendant, while the ungrouped
+      control keeps its documented survivor (1384-aixy).
+      unscoreable: unpinnable-until-the-guard-exists — the bound test is the
+      deliverable; it lands in executor_contract.rs in the same commit as the fix.
+    ts: "2026-10-08T16:43:18Z"
+    host: yolanda-windows
+    replaces_sha256: "25d3f0f6197aa0e7ea859269be4b462c1609aedbbbdad7748e6f0caae07dd86e"
+
+events:
+  - packet_id: on-native-windows-a-timed-out-command-whose-grandchild-holds-the-pipe-leaks-a-blocking-reader-thread-and-the-orphan-so-a-400ms-timeout-test-takes-120s-to-finish
+    event:
+      type: note
+      ts: "2026-10-08T16:43:18Z"
+      host: yolanda-windows
+      summary: |-
+        coordinator ruling 2026-10-08 option A keeps 1384-aixy: an ungrouped deadline's survivor is documented, so the closure no longer asks for no surviving sleep
