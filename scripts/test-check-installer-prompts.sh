@@ -5,21 +5,30 @@
 # Operator ruling 2026-10-08: "we do not ask end users to do power user stuff
 # ... No prompts like those, we make all the decisions for them".
 #
-# Runs the REAL scripts/check-installer-prompts.sh over the real tree and over
-# scratch copies of the population (TILLANDSIAS_INSTALLER_PROMPT_ROOT seam):
-#   1 the real tree, at the floor                      -> ok
-#   2 a `read -p ... [y/N]` added to install.sh        -> refused, naming file:line
-#   3 a Read-Host added to install-windows.ps1         -> refused, naming file:line
-#   4 a prompt quoted only in a comment                -> ok (comments are stripped)
-#   5 one existing prompt removed (below the floor)    -> ok, with the lower-the-floor note
+# Runs the REAL scripts/lua/check-installer-prompts.lua through
+# `tillandsias-plan script run` (1384-bqhy) over the real tree and over scratch
+# copies of the population (TILLANDSIAS_INSTALLER_PROMPT_ROOT seam):
+#   1 the real tree, at the floor                       -> ok
+#   2 a `read -r -p ... [y/N]` added to install.sh      -> refused, naming file:line
+#   3 a Read-Host added to install-windows.ps1          -> refused, naming file:line
+#   4 a prompt quoted only in a comment                 -> ok (comments are stripped)
+#   5 one existing prompt removed (below the floor)     -> ok, with the lower-the-floor note
+#   6 prose "could not read this host's ... guest-shape" -> ok (the false positive
+#     the first shell version had, install-windows.ps1:437, 2026-10-08)
 # Each mutant asserts its own edit landed exactly once.
-# Pre-fix: FAILS — the guard does not exist.
+# Pre-fix: FAILS — the decider does not exist.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-GUARD="$ROOT/scripts/check-installer-prompts.sh"
-if [ ! -f "$GUARD" ]; then
-    echo "fail:installer-prompts-fixture:guard-missing:scripts/check-installer-prompts.sh"
+SUT="$ROOT/scripts/lua/check-installer-prompts.lua"
+if [ ! -f "$SUT" ]; then
+    echo "fail:installer-prompts-fixture:decider-missing:scripts/lua/check-installer-prompts.lua"
     exit 1
+fi
+PLAN_BIN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+case "$PLAN_BIN" in ./*) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+if [ -z "$PLAN_BIN" ]; then
+    echo "skip:installer-prompts-fixture:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+    exit 0
 fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -35,9 +44,9 @@ scratch() { # scratch <dir>: a copy of the population under <dir>
 }
 guard() { # guard [root] -> RC, OUT
     if [ -n "${1:-}" ]; then
-        OUT="$(cd "$ROOT" && TILLANDSIAS_INSTALLER_PROMPT_ROOT="$1" bash "$GUARD" 2>&1)"; RC=$?
+        OUT="$(cd "$ROOT" && TILLANDSIAS_INSTALLER_PROMPT_ROOT="$1" "$PLAN_BIN" script run "$SUT" 2>&1)"; RC=$?
     else
-        OUT="$(cd "$ROOT" && bash "$GUARD" 2>&1)"; RC=$?
+        OUT="$(cd "$ROOT" && "$PLAN_BIN" script run "$SUT" 2>&1)"; RC=$?
     fi
 }
 append_once() { # append_once <file> <line>: append and assert it landed once
@@ -91,8 +100,15 @@ else
     esac
 fi
 
+# 6 — prose that merely contains "read ... -...p" is not a prompt.
+scratch "$TMP/e"
+if append_once "$TMP/e/scripts/install.sh" 'say "  could not read this host'"'"'s CPU/memory; no guest-shape advice given."'; then
+    guard "$TMP/e"
+    if [ "$RC" -eq 0 ]; then pass "6 prose with read ... -shape is not a prompt"; else bad "6 prose counted: rc=$RC out=[$OUT]"; fi
+else bad "6 mutant did not land once"; fi
+
 if [ "$fails" -ne 0 ]; then
     echo "fail:installer-prompts-fixture:$fails"
     exit 1
 fi
-echo "ok:installer-prompts-fixture:5 arms"
+echo "ok:installer-prompts-fixture:6 arms"
