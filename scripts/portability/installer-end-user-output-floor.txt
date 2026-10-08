@@ -1,0 +1,7 @@
+# Floors for scripts/check-installer-end-user-output.sh (order 1561-9f4x).
+# "<installer> <diagnostic output lines allowed>". Only ever lower a floor;
+# each platform slice of 1561-9f4x drops its installer to 0 (Windows: 1561-47a8,
+# macOS: 1561-kfgk, Linux: 1561-y6f9). Counts measured 2026-10-08.
+scripts/install-windows.ps1 0
+scripts/install.sh 10
+scripts/install-macos.sh 16
