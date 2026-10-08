@@ -348,4 +348,140 @@ mod tests {
             "the module edge must be DECLARED, not merely implied (798-emje)"
         );
     }
+
+    // ORDER 798-vxj5. The probe's expiry must NAME the budget that ran out, and
+    // each budget must be small enough to expire inside a test. These run the
+    // REAL script with a stubbed `socat` on PATH. Unix only: the script is a
+    // guest script, and on Windows `bash` can resolve to System32\bash.exe (the
+    // WSL launcher), the namesake trap of 1386-iubj.
+    #[cfg(unix)]
+    fn run_probe(socat_body: &str, envs: &[(&str, &str)]) -> (i32, String, std::time::Duration) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        for (name, body) in [("socat", socat_body), ("modprobe", "exit 0")] {
+            let p = bin.join(name);
+            std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let script = dir.path().join("ready.sh");
+        std::fs::write(&script, READY_SCRIPT).unwrap();
+        let path = format!(
+            "{}:{}",
+            bin.display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+        let started = std::time::Instant::now();
+        let mut cmd = std::process::Command::new("/bin/bash");
+        cmd.arg(&script)
+            .arg("42420")
+            .env("PATH", path)
+            .env_remove("TILLANDSIAS_READY_TIMEOUT")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        for (k, v) in envs {
+            cmd.env(k, v);
+        }
+        let mut child = cmd.spawn().expect("spawn bash");
+        // A hard wall: pre-fix the loop runs for the flat 900 s, and a test that
+        // hangs for 15 minutes is not a failing test anyone sees.
+        let wall = std::time::Duration::from_secs(30);
+        loop {
+            if child.try_wait().unwrap().is_some() {
+                break;
+            }
+            if started.elapsed() > wall {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("the probe did not expire within {wall:?}: a budget is not honoured");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let out = child.wait_with_output().unwrap();
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        (out.status.code().unwrap_or(-1), text, started.elapsed())
+    }
+
+    /// A transport that works and a port nobody accepts on expires the BIND
+    /// budget, by name, as NOT-BOUND.
+    #[cfg(unix)]
+    #[test]
+    fn an_unbound_port_expires_the_bind_budget_by_name() {
+        let (rc, out, took) = run_probe(
+            "echo 'Connection refused' >&2; exit 1",
+            &[
+                ("TILLANDSIAS_READY_TRANSPORT_BUDGET", "1"),
+                ("TILLANDSIAS_READY_BIND_BUDGET", "2"),
+            ],
+        );
+        assert_eq!(rc, 1, "NOT-BOUND keeps exit 1: {out}");
+        assert!(out.contains("vsock_listener=NOT-BOUND"), "{out}");
+        assert!(
+            out.contains("bind-budget=2s"),
+            "the expiry must name its budget: {out}"
+        );
+        assert!(took < std::time::Duration::from_secs(12), "took {took:?}");
+    }
+
+    /// No vsock loopback transport expires the TRANSPORT budget, by name, as
+    /// INDETERMINATE, and never as NOT-BOUND.
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_transport_expires_the_transport_budget_by_name() {
+        let (rc, out, _) = run_probe(
+            "echo 'Network is unreachable' >&2; exit 1",
+            &[
+                ("TILLANDSIAS_READY_TRANSPORT_BUDGET", "1"),
+                ("TILLANDSIAS_READY_BIND_BUDGET", "1"),
+            ],
+        );
+        assert_eq!(rc, 2, "INDETERMINATE keeps exit 2: {out}");
+        assert!(out.contains("vsock_listener=INDETERMINATE"), "{out}");
+        assert!(
+            out.contains("transport-budget=1s"),
+            "the expiry must name its budget: {out}"
+        );
+        assert!(!out.contains("NOT-BOUND"), "{out}");
+    }
+
+    /// TILLANDSIAS_READY_TIMEOUT stays, as a NAMED override of the whole wait.
+    #[cfg(unix)]
+    #[test]
+    fn the_ready_timeout_override_is_named_on_expiry() {
+        let (rc, out, _) = run_probe(
+            "echo 'Connection refused' >&2; exit 1",
+            &[("TILLANDSIAS_READY_TIMEOUT", "1")],
+        );
+        assert_eq!(rc, 1, "{out}");
+        assert!(
+            out.contains("TILLANDSIAS_READY_TIMEOUT=1s"),
+            "the override must be named: {out}"
+        );
+    }
+
+    /// Control: a listener that accepts passes at once, whatever the budgets.
+    #[cfg(unix)]
+    #[test]
+    fn a_bound_listener_passes_without_spending_a_budget() {
+        let (rc, out, took) = run_probe("exit 0", &[]);
+        assert_eq!(rc, 0, "{out}");
+        assert!(out.contains("vsock_listener=bound"), "{out}");
+        assert!(took < std::time::Duration::from_secs(5), "took {took:?}");
+    }
+
+    /// The defaults are the MEASURED budgets, not the flat 900 s (798-vxj5).
+    #[test]
+    fn the_flat_900s_deadline_is_gone() {
+        assert!(
+            !READY_SCRIPT.contains(":-900}"),
+            "the flat 900 s default must be gone"
+        );
+        assert!(READY_SCRIPT.contains("TILLANDSIAS_READY_TRANSPORT_BUDGET:-"));
+        assert!(READY_SCRIPT.contains("TILLANDSIAS_READY_BIND_BUDGET:-"));
+    }
 }
