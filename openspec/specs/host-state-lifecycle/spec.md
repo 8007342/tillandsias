@@ -276,29 +276,42 @@ keep pre-authorizing SOFT RESET always. HARD RESET should require explicit
 approval each time." A SOFT reset needs NO consent: it destroys only derived
 state, so a forge (`TILLANDSIAS_HOST_KIND=forge`), a smoke skill, and the
 installer's update path run it without asking and without any approval
-variable, and nothing SHALL ever add a prompt to it. A HARD reset requires
-an EXPLICIT, PER-RUN operator approval: on a TTY it asks
-`HARD reset destroys the guest, its Vault store and every sign-in. Type HARD to continue:`
-and proceeds only on that exact word; without a TTY it proceeds only when
-`TILLANDSIAS_HARD_RESET_APPROVED=1` is present on THAT invocation's
-environment (or the binary's `--approve-hard-reset` argument). The approval
-is never read from a config file, a settings file, a forge image, a
-persisted environment or a previous run; `TILLANDSIAS_INSTALL_RESET=hard`
-SELECTS the hard kind and does NOT approve it; and a forge SHALL never carry
-the approval variable (the forge-launch argv builders SHALL strip it). The
-1004-vsh2 per-run-consent ruling for destructive smokes stands and is the
-same shape.
+variable, and nothing SHALL ever add a prompt to it.
 
-Installer decision point: an install over an existing install is an UPDATE
-and SHALL run the SOFT reset (`--reset-state`), pre-authorised; the installer
-SHALL run the HARD reset only on explicit request (`TILLANDSIAS_INSTALL_RESET=hard`,
-or the installer's `--hard-reset` argument) AND with the per-run approval
-above, and SHALL name which it is running on its first line, with the escape
-it already has (`TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`). This spec RECOMMENDS
-the default stay SOFT: an update must not cost the operator a sign-in, and
-the HARD path exists for a guest that is itself broken. The 1286-4437
-wording "the reset destroys the vault store, mirrors and images" is
-superseded for the vault store.
+AMENDED 2026-10-08 (1559-9uvb), operator verbatim: "we do not ask end users
+to do power user stuff. That's our guideline. An install prompt asking for
+destructive cases should not be an acceptable case. End user is NOT a power
+user. No prompts like those, we make all the decisions for them, on their
+behalf, for their best interests. So SOFT reset is the default only and
+forever. A power user wanting to do a hard reset should be capable of
+figuring out where to place a flag and which flag, we do not need to print
+any power user messages during install, at all. Install should be for END
+USER (NOT POWER USER) and be a pretty installer, rather than an
+informational/debugging installer. As frictionless as possible for end
+users." A HARD reset therefore runs ONLY on an explicit, NON-INTERACTIVE,
+per-run approval: the binary's `--approve-hard-reset` argument, or
+`TILLANDSIAS_HARD_RESET_APPROVED=1` present on THAT invocation's environment.
+NOTHING EVER PROMPTS: no binary, installer or skill asks for a typed word or
+any other confirmation, and without the approval a HARD reset refuses
+non-interactively, exit 1, before touching anything. The approval is never
+read from a config file, a settings file, a forge image, a persisted
+environment or a previous run, and a forge SHALL never carry the approval
+variable (the forge-launch argv builders SHALL strip it). The 1004-vsh2
+per-run-consent ruling for destructive smokes stands and is the same shape.
+(Superseded: the 2026-09-27 wording that HARD asks
+`... Type HARD to continue:` on a TTY.)
+
+Installers, AMENDED 2026-10-08 (same ruling): an install, fresh or over an
+existing install, SHALL run the SOFT reset (`--reset-state`) and ONLY the
+SOFT reset, always. Installers SHALL NOT offer a reset kind, SHALL NOT
+prompt, and SHALL NOT print power-user or diagnostic text about resets or
+flags (no reset-kind line, no flag names). The HARD path is the binary's
+power-user CLI above and is never reached from an installer. The escape
+`TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` is honoured by the binary itself. The
+1286-4437 wording "the reset destroys the vault store, mirrors and images" is
+superseded for the vault store. (Superseded: the 2026-09-27 installer
+decision point with `TILLANDSIAS_INSTALL_RESET=hard`, `--hard-reset` and a
+first line naming the kind.)
 
 @trace spec:host-state-lifecycle, spec:tillandsias-vault, spec:inference-container
 
@@ -353,19 +366,17 @@ superseded for the vault store.
   today; both fall through to `keychain_set_blocking`'s fallback file, and
   the reset then clears the store regardless.
 
-#### Scenario: SOFT reset is pre-authorised everywhere, HARD asks every time
+#### Scenario: SOFT reset is pre-authorised everywhere, HARD never asks
 - **WHEN** `--reset-state` runs inside a forge, from a smoke skill, or from
-  an installer's update path
+  an installer
 - **THEN** it SHALL run with no prompt and no approval variable
-- **AND** **WHEN** `--reset-guest` (HARD) runs on a guest regime on a TTY
-- **THEN** it SHALL ask for the literal word `HARD` and refuse any other
-  input
-- **AND** **WHEN** it runs without a TTY and `TILLANDSIAS_HARD_RESET_APPROVED=1`
-  is absent from that invocation — including when `TILLANDSIAS_INSTALL_RESET=hard`
-  IS set
-- **THEN** it SHALL refuse with `reset: HARD requires per-run approval
+- **AND** **WHEN** `--reset-guest` (HARD) runs on a guest regime without
+  `--approve-hard-reset` and without `TILLANDSIAS_HARD_RESET_APPROVED=1` on
+  that invocation, whether or not a TTY is attached
+- **THEN** it SHALL NOT prompt, SHALL refuse with `reset: HARD requires per-run approval
   (TILLANDSIAS_HARD_RESET_APPROVED=1 or --approve-hard-reset)` and exit 1
   before touching anything
+- **AND** with either approval it SHALL proceed without asking anything
 - **AND** a forge-launch argv builder SHALL strip `TILLANDSIAS_HARD_RESET_APPROVED`
   from the container environment, proven by a fixture arm that sets it on the
   host and reads the container's `/proc/1/environ`.
@@ -404,7 +415,7 @@ superseded for the vault store.
 
 #### Scenario: macOS HARD reset destroys the guest and says the store goes with it
 - **WHEN** `tillandsias-tray --reset-guest` runs on macOS with the per-run
-  approval given (the typed `HARD`, or `TILLANDSIAS_HARD_RESET_APPROVED=1`
+  approval given (`--approve-hard-reset`, or `TILLANDSIAS_HARD_RESET_APPROVED=1`
   on this invocation) and the Keychain reachable
 - **THEN** the announcement SHALL say `reset: HARD` and that the Vault store
   inside the guest and its Keychain share will be removed
@@ -431,7 +442,7 @@ superseded for the vault store.
 
 #### Scenario: Windows HARD reset destroys the distro and says the store goes with it
 - **WHEN** `tillandsias-tray.exe --reset-guest` runs on Windows with the
-  per-run approval given (the typed `HARD`, or `TILLANDSIAS_HARD_RESET_APPROVED=1`
+  per-run approval given (`--approve-hard-reset`, or `TILLANDSIAS_HARD_RESET_APPROVED=1`
   on this invocation) and Credential Manager reachable
 - **THEN** the announcement SHALL say `reset: HARD` and that the Vault store
   inside the distro and its Credential Manager share will be removed
@@ -443,22 +454,16 @@ superseded for the vault store.
   today's `reset_state_once`), FAILS for the announcement and for preserving
   the downloads.
 
-#### Scenario: The installer runs SOFT for an update and HARD only when asked
+#### Scenario: Installers run SOFT only, never prompt, and print no power-user text
 - **WHEN** `scripts/install.sh`, `scripts/install-macos.sh` or
-  `scripts/install-windows.ps1` runs over an existing install with no
-  reset-kind request
-- **THEN** it SHALL run `--reset-state` (SOFT) with no prompt and no approval
-  variable, and its first line SHALL say
-  `install: SOFT reset (stores and sign-ins kept); TILLANDSIAS_INSTALL_RESET=hard for a full guest wipe`
-- **AND** with `TILLANDSIAS_INSTALL_RESET=hard` (or `--hard-reset`) it SHALL
-  run `--reset-guest` on a guest regime, say so, and pass the per-run
-  approval question through to the operator: on a TTY the `HARD` prompt is
-  shown by the reset itself; without a TTY the installer SHALL refuse the
-  hard kind unless `TILLANDSIAS_HARD_RESET_APPROVED=1` is on that invocation,
-  and SHALL NOT set that variable itself.
-- Pre-fix result: FAILS — the installers run `--reset-state`, which today
-  clears the store on every platform, offer no reset-kind choice, and ask
-  no approval for anything.
+  `scripts/install-windows.ps1` runs, fresh or over an existing install,
+  whatever `TILLANDSIAS_INSTALL_RESET` or any other variable says
+- **THEN** it SHALL run `--reset-state` (SOFT) and never `--reset-guest`
+- **AND** it SHALL NOT prompt for anything about the reset, SHALL NOT accept a
+  reset-kind argument, and SHALL NOT print a reset-kind line or any flag name
+  (operator ruling 2026-10-08, quoted above)
+- Pre-fix result: FAILS — the 2026-09-27 shape offered a HARD kind through
+  `TILLANDSIAS_INSTALL_RESET=hard` and printed a reset-kind first line.
 
 #### Scenario: The opt-out still opts out of everything
 - **WHEN** `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` is set and either reset runs

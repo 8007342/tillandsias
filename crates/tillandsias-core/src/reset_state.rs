@@ -64,13 +64,15 @@ pub const RESET_SKIPPED_LINE: &str = "[tillandsias] --reset-state: reset skipped
 pub const RESET_NO_REPROVISION_PATH: &str = "[tillandsias] --reset-state: REFUSING to destroy anything — the reprovision \
      path is missing or not executable:";
 
-/// ORDER 1437-3iux S2 (host-state-lifecycle "SOFT reset is pre-authorised
-/// everywhere, HARD asks every time"; operator ruling 1443-bs9z, 2026-09-27).
-/// The prompt and the refusals are interface strings, shared by every tray
-/// that has a HARD reset, so they are spelled once here.
-pub const HARD_PROMPT: &str =
-    "HARD reset destroys the guest, its Vault store and every sign-in. Type HARD to continue: ";
-
+/// ORDER 1437-3iux S2 / 1559-9uvb (host-state-lifecycle, operator rulings
+/// 1443-bs9z 2026-09-27 and 2026-10-08). HARD NEVER ASKS. Operator, verbatim,
+/// 2026-10-08: "we do not ask end users to do power user stuff. ... No prompts
+/// like those ... A power user wanting to do a hard reset should be capable of
+/// figuring out where to place a flag and which flag". So a HARD reset runs only
+/// on a non-interactive, per-run approval, and there is no prompt string to
+/// show. The refusals are interface strings shared by every tray with a HARD
+/// reset, so they are spelled once here.
+///
 /// Printed, and exit 1, when a HARD reset has no per-run approval.
 pub const HARD_REFUSED_NO_APPROVAL: &str = "reset: HARD requires per-run approval (TILLANDSIAS_HARD_RESET_APPROVED=1 or --approve-hard-reset)";
 
@@ -93,30 +95,18 @@ pub const HARD_APPROVAL_ARG: &str = "--approve-hard-reset";
 pub enum HardApproval {
     Argument,
     Environment,
-    TypedAtPrompt,
 }
 
-/// Decide a HARD reset's per-run approval. Pure: the caller passes whether the
-/// argument was given, this invocation's value of [`HARD_APPROVAL_ENV`],
-/// whether stdin is a TTY, and a reader that prompts and returns the typed
-/// line (called only on a TTY with no other approval). Only the argument, the
-/// literal value `1`, or the exact word `HARD` approve; anything else, including
-/// `TILLANDSIAS_INSTALL_RESET=hard` (which selects the kind and does not
-/// approve it), refuses.
-pub fn hard_reset_approval(
-    approve_arg: bool,
-    env_value: Option<&str>,
-    stdin_is_tty: bool,
-    read_typed: impl FnOnce() -> Option<String>,
-) -> Option<HardApproval> {
+/// Decide a HARD reset's per-run approval. Pure and NON-INTERACTIVE: the caller
+/// passes whether [`HARD_APPROVAL_ARG`] was given and this invocation's value of
+/// [`HARD_APPROVAL_ENV`]. Only the argument or the literal value `1` approve;
+/// anything else refuses. Nothing here, or anywhere, asks.
+pub fn hard_reset_approval(approve_arg: bool, env_value: Option<&str>) -> Option<HardApproval> {
     if approve_arg {
         return Some(HardApproval::Argument);
     }
     if env_value == Some("1") {
         return Some(HardApproval::Environment);
-    }
-    if stdin_is_tty && read_typed().as_deref().map(str::trim) == Some("HARD") {
-        return Some(HardApproval::TypedAtPrompt);
     }
     None
 }
@@ -215,50 +205,31 @@ mod tests {
         assert!(RESET_NO_REPROVISION_PATH.contains("REFUSING to destroy anything"));
     }
 
-    /// ORDER 1437-3iux S2. Every approval path, and every refusal the spec
-    /// names: no TTY without the variable, the wrong word at the prompt, the
-    /// variable set to anything but `1`, and an install-kind selection that
-    /// is not an approval. The prompt reader runs only on a TTY with no other
-    /// approval.
+    /// ORDER 1559-9uvb. The two non-interactive approvals, and the refusals:
+    /// no flag and no variable, and the variable set to anything but `1`.
+    /// There is no third path: nothing prompts (operator ruling 2026-10-08).
     #[test]
-    fn hard_reset_needs_an_explicit_per_run_approval() {
-        let never = || -> Option<String> { panic!("the prompt must not be shown") };
+    fn hard_reset_needs_an_explicit_non_interactive_approval() {
         assert_eq!(
-            hard_reset_approval(true, None, false, never),
+            hard_reset_approval(true, None),
             Some(HardApproval::Argument)
         );
         assert_eq!(
-            hard_reset_approval(false, Some("1"), false, never),
+            hard_reset_approval(false, Some("1")),
             Some(HardApproval::Environment)
         );
         assert_eq!(
-            hard_reset_approval(false, None, true, || Some("HARD\n".into())),
-            Some(HardApproval::TypedAtPrompt)
-        );
-        // Refusals.
-        assert_eq!(
-            hard_reset_approval(false, None, false, never),
+            hard_reset_approval(false, None),
             None,
-            "no TTY, no variable"
+            "no flag, no variable"
         );
-        assert_eq!(
-            hard_reset_approval(false, Some("true"), false, never),
-            None,
-            "only the literal 1"
-        );
-        assert_eq!(hard_reset_approval(false, Some("0"), false, never), None);
-        for typed in ["hard", "yes", "", "HARD!"] {
+        for v in ["true", "0", "HARD", "yes", ""] {
             assert_eq!(
-                hard_reset_approval(false, None, true, || Some(typed.into())),
+                hard_reset_approval(false, Some(v)),
                 None,
-                "only the exact word HARD, not {typed:?}"
+                "only the literal 1, not {v:?}"
             );
         }
-        assert_eq!(
-            hard_reset_approval(false, None, true, || None),
-            None,
-            "EOF at the prompt"
-        );
     }
 
     /// The refusal strings are interfaces: the spec quotes them verbatim.
@@ -268,7 +239,6 @@ mod tests {
             HARD_REFUSED_NO_APPROVAL,
             "reset: HARD requires per-run approval (TILLANDSIAS_HARD_RESET_APPROVED=1 or --approve-hard-reset)"
         );
-        assert!(HARD_PROMPT.ends_with("Type HARD to continue: "));
         assert!(HARD_REFUSED_KEYRING_UNREACHABLE.contains("open question, host-state-lifecycle"));
         assert!(HARD_REFUSED_NO_APPROVAL.contains(HARD_APPROVAL_ENV));
         assert!(HARD_REFUSED_NO_APPROVAL.contains(HARD_APPROVAL_ARG));
