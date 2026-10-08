@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-lua-spawned-process-deadline-is-charged-for-the-hosts-own-line-delivery-so-a-chatty-child-that-already-exited-reads-as-timed-out-with-its-output-discarded
+    field: status
+    value: completed
+    ts: "2026-10-08T05:12:47Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-lua-spawned-process-deadline-is-charged-for-the-hosts-own-line-delivery-so-a-chatty-child-that-already-exited-reads-as-timed-out-with-its-output-discarded
+    event:
+      type: completed
+      ts: "2026-10-08T05:12:47Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: ff0b4af4b + cargo test -p tillandsias-exec an_exited_child_is_not_timed_out_by_slow_line_delivery ok on ff0b4af4b, red on the parent 95350b0c8 code with the test added (TimedOut { after: 301ms } vs Exited(0)); throughput (a), release tillandsias-plan script run on macuahuitl, Lua spawn{argv={'seq','1','400000'},timeout_ms=3000} + on_line counter + p:wait(): before 156114 lines in 3004 ms timed_out (audit, ~52k lines/s); after 400000 lines exited 0 in 287/336/442 ms on 95350b0c8 and 301/498/311 ms on ff0b4af4b (~0.8-1.4M lines/s)
+  - packet_id: a-lua-spawned-process-deadline-is-charged-for-the-hosts-own-line-delivery-so-a-chatty-child-that-already-exited-reads-as-timed-out-with-its-output-discarded
+    event:
+      type: note
+      ts: "2026-10-08T05:12:47Z"
+      host: macuahuitl
+      summary: |-
+        (b) decided per coordinator ruling: after the leader exits its timeout_ms no longer applies; only the scope deadline can cut delivery, keeping the real exit status with truncated=true. seq 1 2000 timeout_ms=200 waited after proc.run sleep 0.5: before timed_out with 32 lines (wall 501 ms), after exited 0 with 2000 lines. Comment in read_stream and command-runtime spec agree. Not yet landed: on work/1551-sprq.
