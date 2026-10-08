@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: on-native-windows-a-timed-out-command-whose-grandchild-holds-the-pipe-leaks-a-blocking-reader-thread-and-the-orphan-so-a-400ms-timeout-test-takes-120s-to-finish
+    order: 1553-6e3q
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: any
+    capability_tags: [exec, windows, timeout, process-lifecycle]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-exec/src/lib.rs
+      - crates/tillandsias-exec/tests/executor_contract.rs
+    title: |
+      On native Windows, Command::timeout kills the direct child but not a grandchild that holds the stdout pipe, and the pipe reader is a blocking thread that outlives the call: run() returns at 430 ms, yet the tokio runtime cannot shut down until the orphaned grandchild exits (timeout_on_a_sigterm_ignoring_child_reports_killed: 400 ms deadline, 120 s test)
+    context: |
+      MEASURED on yolanda-windows 2026-10-08, native:
+        cargo test -p tillandsias-exec --test executor_contract timeout_on_a_sigterm
+        -> ok, finished in 120.09s   (child: sh -c "trap '' TERM; sleep 120")
+      With a probe around the call: "run returned after 429.729ms". So the
+      deadline works. The remaining 120 s is runtime shutdown waiting on the
+      stdout/stderr reader, which on Windows is a blocking-pool thread
+      (dropping the future does not cancel it). The reader holds a pipe the
+      orphaned "sleep 120" keeps open, because the timeout path kills sh
+      (start_kill) and, without .group(true), there is no job object to take
+      the grandchild with it.
+      CONSEQUENCES: every such timeout leaks one blocking thread AND one
+      live orphan until the grandchild exits on its own. A long-lived
+      runtime (the tray, the plan binary's script host) accumulates both. A
+      short-lived one (a test, a CLI) hangs at exit for as long as the
+      grandchild lives, and that looks like the deadlock the executor exists
+      to prevent. The test passes, so nothing reports it, except the
+      harness's "has been running for over 60 seconds".
+      On Unix the reader is async and the drop is instant, so the same test
+      finishes promptly there; the orphan is still left behind without
+      .group(true).
+    exit_criteria:
+      - 'a test asserts the WHOLE call (including runtime shutdown or reader release) completes within a stated bound after a timeout whose grandchild holds the pipe; pre-fix it takes ~120 s natively on Windows'
+      - 'the fix either puts every timed child in a job object (Windows) / process group (Unix) so the kill takes the tree, or detaches the reader so the timeout path does not wait on it; whichever, the orphan is not left running'
+      - 'timeout_on_a_sigterm_ignoring_child_reports_killed finishes in seconds natively on Windows'
+    verifiable_closure: |
+      time cargo test -p tillandsias-exec --test executor_contract
+      timeout_on_a_sigterm natively on Windows: seconds, not 120 s, and no
+      surviving sleep process afterwards. Pre-fix: 120.09s (yolanda-windows
+      2026-10-08).
+      unscoreable: unpinnable-until-the-guard-exists — the bound test named in
+      exit_criteria 1 is the deliverable; it lands in executor_contract.rs in
+      the same commit as the fix.
+    events:
+      - type: filed
+        ts: "2026-10-08T15:53:00Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Found during the coordinator's item-2 native run. The test is green,
+          so the defect showed only as a 120 s wall clock; the probe split
+          run() (430 ms) from runtime shutdown (120 s).
