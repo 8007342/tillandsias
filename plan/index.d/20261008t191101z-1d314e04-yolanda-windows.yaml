@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: 1437-3iux-s2-the-windows-hard-reset-asks-every-run-refuses-an-unreachable-keyring-and-announces-before-destroying
+    field: status
+    value: in_progress
+    ts: "2026-10-08T19:11:01Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: 1437-3iux-s2-the-windows-hard-reset-asks-every-run-refuses-an-unreachable-keyring-and-announces-before-destroying
+    event:
+      type: note
+      ts: "2026-10-08T19:11:01Z"
+      host: yolanda-windows
+      summary: |-
+        yolanda-windows: S2 implemented test-first on work/1559-9uvb (stacked on work/1437-3iux)
+  - packet_id: 1437-3iux-s2-the-windows-hard-reset-asks-every-run-refuses-an-unreachable-keyring-and-announces-before-destroying
+    event:
+      type: note
+      ts: "2026-10-08T19:11:01Z"
+      host: yolanda-windows
+      summary: |-
+        wip-override by yolanda-windows: held packets are READY PRs in the coordinator's post-cut queue (#226 #227 #228 #229 #233 #236 #243); S2 is the next slice of the approved 1437-3iux plan — admitted past: refused:set-field:wip-limit:6/3 — yolanda-windows already holds 6 in_progress packet(s) outside a story: 798-vxj5, 1437-3iux, 1553-gsp2, 1553-5x9x, 1553-6e3q, 1554-prxf (1367-2sbc; the limit is 3, from methodology/distributed-work.yaml packet_discipline.wip_limit).
