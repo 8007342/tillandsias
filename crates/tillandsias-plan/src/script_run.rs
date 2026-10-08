@@ -802,6 +802,15 @@ fn run_to_verdict(
         }
         Err(e) => Err(e),
     };
+    // ORDER 1551-7hyq. Test-only seam: end the script worker WITHOUT a
+    // verdict, after the script ran and before its scope is cleaned up, which
+    // is where an unwinding panic would skip that cleanup. Compiled into debug
+    // builds only (`cfg(debug_assertions)`); a release binary has neither the
+    // branch nor the variable name.
+    #[cfg(debug_assertions)]
+    if std::env::var_os("TILLANDSIAS_TEST_SCRIPT_WORKER_PANIC").is_some() {
+        panic!("script-worker-panic: forced by TILLANDSIAS_TEST_SCRIPT_WORKER_PANIC");
+    }
     host.scope.close();
     let cleanup = host.scope.cleanup();
     host.release_callbacks();
@@ -827,6 +836,27 @@ fn run_to_verdict(
             1,
         ),
     }
+}
+
+/// ORDER 1551-7hyq. `run_to_verdict` with a panic caught and named instead of
+/// unwinding past the caller: `Err` carries the panic message, so the caller
+/// can close and reap the scope and report a crash, never a timeout.
+fn run_guarded(
+    path: &str,
+    src: &str,
+    args: &[String],
+    host: crate::lua_predicate::script_process::Host,
+) -> Result<(String, Option<String>, i32), String> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_to_verdict(path, src, args, host)
+    }))
+    .map_err(|payload| {
+        payload
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| payload.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "a panic with no message".to_owned())
+    })
 }
 
 /// One JSON line into TILLANDSIAS_TIMING_LOG, and only there: a runner never
@@ -973,17 +1003,29 @@ pub fn cli_run(args: &[String]) -> ! {
     let host = crate::lua_predicate::script_process::Host::new(deadline);
     #[cfg(unix)]
     reap_on_termination(host.clone());
-    let (line, detail, code) = match timeout {
-        None => run_to_verdict(&path, &src, &rest, host.clone()),
+    // ORDER 1551-7hyq. A worker that ends WITHOUT a verdict (a panic) is a
+    // crash and is reported as one: `refused:script-worker-died:<name>`, exit
+    // 1, after the scope is closed and its children reaped. It used to share
+    // the deadline's arm when --timeout was given (a dropped channel read as
+    // an elapsed one: status=timed_out, exit 124, which the door files as
+    // slowness), and without --timeout the panic unwound past the scope
+    // cleanup. A verdict the script recorded before the crash is NOT reported:
+    // the runner did not finish, so nothing it says can be green.
+    let outcome = match timeout {
+        None => run_guarded(&path, &src, &rest, host.clone()),
         Some(d) => {
             let (tx, rx) = std::sync::mpsc::channel();
             let (p2, s2, r2) = (path.clone(), src.clone(), rest.clone());
             let worker_host = host.clone();
             std::thread::spawn(move || {
-                let _ = tx.send(run_to_verdict(&p2, &s2, &r2, worker_host));
+                let _ = tx.send(run_guarded(&p2, &s2, &r2, worker_host));
             });
             match rx.recv_timeout(deadline.unwrap().saturating_duration_since(Instant::now())) {
-                Ok(v) if Instant::now() < deadline.unwrap() => v,
+                Ok(Err(died)) => Err(died),
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    Err("the worker thread ended without sending an outcome".to_owned())
+                }
+                Ok(Ok(v)) if Instant::now() < deadline.unwrap() => Ok(v),
                 _ => {
                     // Do not abandon the worker and exit with owned groups alive.
                     // Reap supervision is independent of Lua; joining arbitrary
@@ -1004,6 +1046,22 @@ pub fn cli_run(args: &[String]) -> ! {
                     std::process::exit(124);
                 }
             }
+        }
+    };
+    let (line, detail, code) = match outcome {
+        Ok(v) => v,
+        Err(died) => {
+            if let Err(e) = host.scope.cleanup() {
+                eprintln!("{e}");
+            }
+            let line = format!("refused:script-worker-died:{name}");
+            println!("{line}");
+            eprintln!("  why: the runner's script worker ended without a verdict: {died}");
+            eprintln!(
+                "  remedy: this is a runner defect, not slowness and not the script's verdict — report it with the script and this message"
+            );
+            emit_timing(&name, &line, 1, t0.elapsed());
+            std::process::exit(1);
         }
     };
     if trace {
