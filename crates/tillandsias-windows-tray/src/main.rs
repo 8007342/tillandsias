@@ -808,6 +808,60 @@ fn ",
         }
     }
 
+    /// The body of one `pub fn` in notify_icon.rs, with `//` comments stripped
+    /// so a comment quoting a forbidden call can neither satisfy nor fail a pin.
+    fn notify_fn_body(sig: &str, next_sig: &str) -> String {
+        let src = include_str!("notify_icon.rs");
+        let body = src
+            .split(sig)
+            .nth(1)
+            .unwrap_or_else(|| panic!("{sig} present"))
+            .split(next_sig)
+            .next()
+            .unwrap();
+        body.lines()
+            .map(|l| l.split("//").next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// ORDER 1437-3iux S1 (host-state-lifecycle "Windows SOFT reset keeps the
+    /// distro, the store and the downloads"). `--reset-state` is SOFT: it does
+    /// not unregister the distro, calls no credential clearer, keeps the
+    /// download cache, wipes only derived state inside the guest, and says
+    /// `reset: SOFT`. Pre-fix: FAILS, because reset_state_once unregisters,
+    /// clears Credential Manager and removes the cache.
+    #[test]
+    fn reset_state_is_soft_on_windows() {
+        let soft = notify_fn_body("pub fn reset_state_once() -> i32 {", "pub fn reset_guest_once()");
+        for forbidden in ["wipe_guest(", "clear_guest_vault_credentials(", "remove_dir_all("] {
+            assert!(
+                !soft.contains(forbidden),
+                "SOFT reset must not call {forbidden}: it destroys operator data"
+            );
+        }
+        assert!(soft.contains("soft_wipe_guest("), "SOFT wipes derived state inside the guest");
+        assert!(soft.contains("reset: SOFT"), "SOFT must announce its kind");
+    }
+
+    /// ORDER 1437-3iux S1. `--reset-guest` stays HARD in its OWN body: it
+    /// unregisters the distro and clears the dead store's share, as today.
+    /// Pre-fix: FAILS, because reset_guest_once only delegates to
+    /// reset_state_once, so SOFT could not exist without taking HARD with it.
+    #[test]
+    fn reset_guest_stays_hard_in_its_own_body() {
+        let hard = notify_fn_body("pub fn reset_guest_once() -> i32 {", "\n}\n");
+        assert!(hard.contains("wipe_guest()"), "HARD unregisters the distro");
+        assert!(
+            hard.contains("clear_guest_vault_credentials("),
+            "HARD clears the share of the store it destroys (803-49re)"
+        );
+        assert!(
+            !hard.trim().starts_with("reset_state_once()"),
+            "HARD must not delegate to the SOFT body"
+        );
+    }
+
     /// windows-260723-1: the registered-distro integrity probe's Windows
     /// bodies are cfg-gated away on Linux. Keep a portable wiring pin so the
     /// Linux-host test suite still proves that timeouts remain inconclusive,
