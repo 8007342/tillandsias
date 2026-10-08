@@ -1,0 +1,3 @@
+command=CARGO_TARGET_DIR=/Users/tlatoani/opencode/tillandsias/target cargo clippy -p tillandsias-macos-tray --all-targets -- -D warnings
+timestamp_utc=2026-10-03T17:20:24Z
+exit=0

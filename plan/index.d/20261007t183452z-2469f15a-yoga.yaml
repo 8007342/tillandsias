@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: local-web-preview-runtime
+    field: verifiable_closure
+    value: |-
+      Record passing behavioral source/lifecycle/router tests and acceptance matrix A/C/D in plan/issues/local-web-preview-design-2026-10-07.md; contrast against the pre-fix HTTP/host-root behavior. Browser trust evidence is separately owned by local-web-preview-live-acceptance.
+
+
+      [2026-10-07T18:34:52Z yoga] unscoreable: unpinnable-until-the-guard-exists; future openspec/litmus-tests/litmus-local-web-preview.yaml must be implemented and bound with the behavior it tests before this row closes. Prior acceptance matrix remains required; this is not a passing or existing litmus pin.
+    ts: "2026-10-07T18:34:52Z"
+    host: yoga
+
+events:
+  - packet_id: local-web-preview-runtime
+    event:
+      type: note
+      ts: "2026-10-07T18:34:52Z"
+      host: yoga
+      summary: |-
+        Append explicit scoring refusal and future guard, preserving original acceptance prose

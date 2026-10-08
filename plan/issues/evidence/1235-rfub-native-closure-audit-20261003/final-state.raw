@@ -1,0 +1,11 @@
+timestamp_utc=2026-10-03T17:21:18Z
+git_status:
+?? plan/issues/evidence/1235-rfub-native-closure-audit-20261003/
+tracked_source_diff:
+receipt_counts:
+8
+ok:native-lint-attested-fixture:8/8
+exit=0
+exit=0
+clippy_raw_sha256:
+634eb277f32afc6ebc6ea446094495692641bfc721ac883f9d0084416ae13b05  plan/issues/evidence/1235-rfub-native-closure-audit-20261003/clippy-tray.raw

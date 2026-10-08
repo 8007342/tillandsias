@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: decision-record-names-the-machine-checked-model-claim-strength-and-rules-on-mathlib-kani-the-lanes-cadence-and-statement-review-signed-by-the-operator
+    event:
+      type: note
+      ts: "2026-10-04T19:14:42Z"
+      agent_id: claude-fable-yoga-20261004t180632z
+      host: yoga
+      summary: |
+        OPERATOR RULINGS on D1 and D2, 2026-10-04 (yoga session), verbatim:
+        "The image size for the builders only (no user runtime) doesn't matter, even if
+        it's several gb. For dev environments it's fine. The machine_checked_model is
+        a good one to start with."
+        D1 — RULED: the claim strength is named machine_checked_model, "to start
+        with" (the name may be revisited; the limit sentence in design note §6.1
+        stands). This unblocks the naming in 1550-jsvt; that row still waits for the
+        theorems to be registered and green before any claim carries the strength.
+        D2 — RULED IN EFFECT: image size is not a constraint for builder-only
+        tooling, so Mathlib may be used in the pinned formal image. 1550-n4eb still
+        measures and records the size, as a fact rather than as a gate on the
+        decision. The runtime boundary is unchanged: builders only, nothing in the
+        user runtime.
+        STILL OPEN: D3 (adopt Kani), D4 (cadence of the lane), D5 (statement
+        review). 1550-5sek stays blocked on D3.

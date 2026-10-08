@@ -1,0 +1,42 @@
+packets:
+  - packet_id: audit-affordance-scanner-selected-input-vanishing-during-read
+    order: 1549-i4va
+    status: ready
+    kind: investigation
+    priority: p2
+    desired_release: v0.6
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [bash, tests, guard, plan-only-peer-ok]
+    size: L
+    implementer_tier: opus
+    estimated_hours: 1
+    owned_files:
+      - plan/issues/affordance-scanner-vanished-input-audit-2026-10-03.md
+    title: "Characterize the affordance scanner's unreadable-input race before changing its gate contract"
+    context: |
+      During the bounded1539 trace pass the parent mistakenly ran
+      check-refusal-affordance-added.sh beside preflight fixtures. Its
+      enumerated temporary .znbn-prefix-runner disappeared during the loop;
+      repeated sed read failures were followed by an ok token. Raw evidence:
+      plan/evidence/lua-terminal-trace-20261003/overlapping-affordance-scan-not-accepted.log.txt.
+      The overlapping observation is not accepted as gate evidence. A serialized
+      retry passed with no read errors. Production false-green causality is
+      not yet deterministically established; do not conflate this with1547-ynn5,
+      whose separate Lua pipeline guard contract correction awaits approval.
+      This packet authorizes only deterministic audit/characterization and a
+      proposed smallest contract correction, not a gate refusal rewrite.
+    unscoreable: "Deterministic audit report; a vanished-input contract pin is unpinnable-until-the-guard-exists. If a production correction is approved, introduce openspec/litmus-tests/litmus-affordance-selected-input-vanishes.yaml with its implementation, not an imaginary test now."
+    verifiable_closure:
+      - "Pin the scanner source and selected-input enumeration, then deterministically reproduce disappearance after enumeration or report why this observation cannot be reproduced."
+      - "Record actual typed process status plus separate output/error bytes; known-clean and known-refusal controls must retain their assertions."
+      - "Determine whether the final ok token can certify an unreadable selected input, distinguish parent overlap misuse from production semantics, and propose the smallest fail-loud contract with approval/ownership prerequisites."
+      - "Push cited audit and evidence, without silently changing the gate, removing fixture assertions, or claiming the incidental race closes1547-ynn5."
+    next_action: |
+      A Linux peer claims this investigation in a disjoint worktree, reads the
+      scanner's emits/covered/added-lines loop and fixture enumeration, and
+      builds deterministic two-sided controls. Seek coordinator/operator
+      approval separately if a production gate contract must change.
+    notes: |
+      Filed by linux-macuahuitl-opencode-20261003t225958z during1539 checkpoint.
+      No implementation claim, native evidence, or production repair is asserted.

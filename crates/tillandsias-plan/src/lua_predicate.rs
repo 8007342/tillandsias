@@ -183,6 +183,77 @@ pub const PROC_RUN_BASE_ENV_FIXED: &[(&str, &str)] = &[
     ("GIT_TERMINAL_PROMPT", "0"),
 ];
 
+/// A child command that starts from the base environment and nothing else
+/// (design section 5.3). EVERY Lua door builds its command here — proc.run,
+/// proc.spawn, proc.chain and the legacy sh.run / expert.shell — so "which
+/// variables leak into a check" has one answer (order 1551-nyzb: sh.run used
+/// to inherit the caller's whole environment, measured as a secret set in the
+/// runner's environment arriving in the child's `printenv`).
+pub(crate) fn base_env_command(argv: Vec<String>) -> tillandsias_exec::Command {
+    let mut cmd = tillandsias_exec::Command::new(argv).env_clear();
+    for key in PROC_RUN_BASE_ENV_PASSTHROUGH {
+        if let Some(v) = std::env::var_os(key) {
+            cmd = cmd.env(key, v);
+        }
+    }
+    for (k, v) in std::env::vars_os() {
+        if k.to_string_lossy().starts_with("TILLANDSIAS_") {
+            cmd = cmd.env(k, v);
+        }
+    }
+    for (k, v) in PROC_RUN_BASE_ENV_FIXED {
+        cmd = cmd.env(k, v);
+    }
+    cmd
+}
+
+/// The cwd a door runs in when the call names none: the repository root, else
+/// the process cwd. Resolve it ONCE per call and hand that same value to the
+/// policy gate and to the child, or the policy judges one directory while the
+/// child acts in another (order 1551-nyzb).
+pub(crate) fn default_cwd() -> std::io::Result<PathBuf> {
+    find_repo_root().or_else(|_| std::env::current_dir())
+}
+
+/// ORDER 1551-nyzb. `sh.run{...}` / `expert.shell{...}`: the legacy positional
+/// door, held to the same three rules as `proc.run`. Both installers (the
+/// predicate environment below and the script host in lua_process.rs) call
+/// this, so the rules cannot drift between them again.
+///
+/// MEASURED BEFORE THE FIX, runner started in a directory other than the
+/// repository root: `proc.run{argv={'rm','-r','victim'}}` answered
+/// `consent:policy:workspace-destroy` while `sh.run{'rm','-r','victim'}`
+/// exited 0 and the directory was gone — the gate was asked about the root
+/// (`cwd: None`) and the child ran in the inherited cwd. So:
+///
+/// 1. the cwd is resolved once and is the cwd of BOTH the policy request and
+///    the child;
+/// 2. the child starts from the base environment, not the caller's;
+/// 3. a call without `timeout_ms` gets the default deadline, and `0` means no
+///    deadline and has to be written out (it used to mean "already expired").
+pub(crate) fn prepare_shell(
+    argv: Vec<String>,
+    timeout_ms: Option<u64>,
+) -> LuaResult<tillandsias_exec::Command> {
+    let cwd = default_cwd().map_err(|e| {
+        mlua::Error::RuntimeError(format!("sh.run: cannot resolve effective cwd: {e}"))
+    })?;
+    if let Some(d) = policy_gate(&argv, Some(&cwd), "sh.run") {
+        return Err(mlua::Error::RuntimeError(format!(
+            "{}\n  why: {}\n  remedy: {}",
+            d.token,
+            d.why.unwrap_or_default(),
+            d.remedy.unwrap_or_default()
+        )));
+    }
+    let mut cmd = base_env_command(argv).current_dir(&cwd);
+    let timeout_ms = timeout_ms.unwrap_or(PROC_RUN_DEFAULT_TIMEOUT_MS);
+    if timeout_ms > 0 {
+        cmd = cmd.timeout(std::time::Duration::from_millis(timeout_ms));
+    }
+    Ok(cmd)
+}
+
 /// ORDER 1443-isrk: ask the command policy before spawning. `None` means the
 /// request is allowed; `Some` carries the deny or consent decision, and the
 /// caller must NOT spawn. The host kind comes from the host's own evidence
@@ -340,26 +411,11 @@ pub(crate) fn validate_proc(
             )));
         }
     };
-    let mut cmd = tillandsias_exec::Command::new(argv.clone()).env_clear();
-    for key in PROC_RUN_BASE_ENV_PASSTHROUGH {
-        if let Some(v) = std::env::var_os(key) {
-            cmd = cmd.env(key, v);
-        }
-    }
-    for (k, v) in std::env::vars_os() {
-        if k.to_string_lossy().starts_with("TILLANDSIAS_") {
-            cmd = cmd.env(k, v);
-        }
-    }
-    for (k, v) in PROC_RUN_BASE_ENV_FIXED {
-        cmd = cmd.env(k, v);
-    }
+    let mut cmd = base_env_command(argv.clone());
 
     let cwd = match cwd_path {
         Some(p) => p,
-        None => find_repo_root()
-            .or_else(|_| std::env::current_dir())
-            .map_err(|e| err(format!("cannot resolve effective cwd: {e}")))?,
+        None => default_cwd().map_err(|e| err(format!("cannot resolve effective cwd: {e}")))?,
     };
     cmd = cmd.current_dir(&cwd);
 
@@ -1125,6 +1181,7 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                             "warn",
                             "load",
                             "collectgarbage",
+                            // Narrowed to `yield` alone just below (1551-pemw).
                             "coroutine",
                         ]
                         .contains(&name.as_str())))
@@ -1137,6 +1194,62 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
             globals
                 .set(name.as_str(), LuaValue::Nil)
                 .map_err(|e| LuaError::VmError(format!("remove {name}: {e}")))?;
+        }
+        // ORDER 1551-pemw. A script may not CREATE a coroutine. The runner's
+        // instruction hook is what stops a script after its verdict or its
+        // deadline, and mlua 0.10 keeps ONE hook thread: a hook that fires on
+        // a script-created coroutine removes itself. Measured before this:
+        // after a caught verdict, code inside coroutine.wrap ran 20 million
+        // more iterations and wrote a file; and an async door called inside
+        // one returned a truthy userdata instead of waiting, so a script could
+        // go green without having waited. No shipped .lua used the library.
+        //
+        // The table cannot simply be dropped: mlua builds every async function
+        // from `coroutine.yield`, read from the GLOBALS at creation time
+        // (state/raw.rs, create_async_callback), and process handles create
+        // theirs while the script runs. So the global stays and holds `yield`
+        // and nothing else. A bare yield from script code is resumed at once
+        // by the async driver, on the thread the hook covers.
+        if observing && let Ok(original) = globals.get::<LuaTable>("coroutine") {
+            let narrowed = lua
+                .create_table()
+                .map_err(|e| LuaError::VmError(format!("coroutine: {e}")))?;
+            let yield_fn: LuaFunction = original
+                .get("yield")
+                .map_err(|e| LuaError::VmError(format!("coroutine.yield: {e}")))?;
+            narrowed
+                .set("yield", yield_fn)
+                .map_err(|e| LuaError::VmError(format!("coroutine.yield: {e}")))?;
+            globals
+                .set("coroutine", narrowed)
+                .map_err(|e| LuaError::VmError(format!("coroutine: {e}")))?;
+        }
+        // ORDER 1551-8gkg. Lua 5.4 does not verify bytecode, so a binary chunk
+        // is a way around every restriction this function builds. `string.dump`
+        // (which produces one) goes in BOTH classes, and Observing `load` — the
+        // Cacheable class has none — is narrowed to text chunks whatever mode
+        // the caller asks for. An explicit env argument is passed through, and
+        // an ABSENT one stays absent (a nil env would strip the chunk's _ENV).
+        if let Ok(string) = globals.get::<LuaTable>("string") {
+            string
+                .set("dump", LuaValue::Nil)
+                .map_err(|e| LuaError::VmError(format!("string.dump: {e}")))?;
+        }
+        if observing && let Ok(raw) = globals.get::<LuaFunction>("load") {
+            let text_only: LuaFunction = lua
+                .load(
+                    "local raw = ...\n\
+                     return function(chunk, chunkname, _mode, ...)\n\
+                       if select('#', ...) > 0 then return raw(chunk, chunkname, 't', (...)) end\n\
+                       return raw(chunk, chunkname, 't')\n\
+                     end",
+                )
+                .set_name("=text-only-load")
+                .call(raw)
+                .map_err(|e| LuaError::VmError(format!("load: {e}")))?;
+            globals
+                .set("load", text_only)
+                .map_err(|e| LuaError::VmError(format!("load: {e}")))?;
         }
         if !observing && let Ok(math) = globals.get::<LuaTable>("math") {
             math.set("random", LuaValue::Nil)
@@ -1363,19 +1476,9 @@ pub fn build_environment_logged(class: PredicateClass, reads: ReadLog) -> Result
                     }
                     let timeout_ms: Option<u64> = spec.get("timeout_ms").ok().flatten();
                     // 1443-isrk: the policy decides before anything spawns.
-                    if let Some(d) = policy_gate(&argv, None, "sh.run") {
-                        return Err(mlua::Error::RuntimeError(format!(
-                            "{}\n  why: {}\n  remedy: {}",
-                            d.token,
-                            d.why.unwrap_or_default(),
-                            d.remedy.unwrap_or_default()
-                        )));
-                    }
-
-                    let mut cmd = tillandsias_exec::Command::new(argv);
-                    if let Some(ms) = timeout_ms {
-                        cmd = cmd.timeout(std::time::Duration::from_millis(ms));
-                    }
+                    // 1551-nyzb: against the cwd the child will run in, from
+                    // the base environment, with the default deadline.
+                    let cmd = prepare_shell(argv, timeout_ms)?;
 
                     // A dedicated current-thread runtime: this is called from
                     // synchronous Lua, and block_on inside an existing runtime

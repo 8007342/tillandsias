@@ -1,0 +1,42 @@
+status:
+  - packet_id: local-web-preview-runtime
+    field: verifiable_closure
+    value: >
+      litmus:local-web-preview passed the real target live MCP/TLS lifecycle.
+      Complete acceptance A/C/D and the remaining injected cleanup/deadline,
+      source-generation and cross-lane controls recorded in
+      plan/issues/local-web-preview-design-2026-10-07.md before full closure.
+      Browser trust is separately owned by the acceptance packet.
+    ts: "2026-10-07T21:49:28Z"
+    host: yoga
+  - packet_id: local-web-preview-image-mcp
+    field: verifiable_closure
+    value: >
+      litmus:local-web-preview passed the actual target image/MCP path.
+      Preserve independent Worker/watch, exact parser, remote-binding and
+      static compatibility evidence for acceptance B/C/E in
+      plan/issues/local-web-preview-design-2026-10-07.md before full closure.
+      The positive target test does not imply every negative control passes.
+    ts: "2026-10-07T21:49:28Z"
+    host: yoga
+  - packet_id: local-web-preview-live-acceptance
+    field: verifiable_closure
+    value: >
+      litmus:local-web-preview is implemented and passed real-lane basic
+      acceptance. Complete the A-E negative controls, normal-launcher version
+      compatibility and canonical source-mechanism reconciliation in
+      plan/issues/local-web-preview-design-2026-10-07.md. Keep draft unactivated
+      and host-browser trust unknown until separately verified; no trust install.
+    ts: "2026-10-07T21:49:28Z"
+    host: yoga
+events:
+  - packet_id: local-web-preview-live-acceptance
+    event:
+      type: note
+      ts: "2026-10-07T21:49:28Z"
+      host: yoga
+      summary: >
+        Executable live guard now exists and passed. Update field closures on
+        LWW channel and original unpublished declarations with truthful direct
+        pins for source-only guard population; preserve pending negative criteria.
+        Neither duplicate packet declaration nor complete-coverage claim is made.
