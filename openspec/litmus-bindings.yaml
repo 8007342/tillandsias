@@ -1032,6 +1032,12 @@ specs:
   - litmus:browser-isolation-e2e
   coverage_ratio: 60
   last_verified: '2026-05-14'
+- spec_id: local-web-preview
+  status: draft
+  litmus_tests:
+  - litmus:local-web-preview
+  coverage_ratio: 0
+  last_verified: null
 - spec_id: tools-overlay-fast-reuse
   status: obsolete
   litmus_tests: []

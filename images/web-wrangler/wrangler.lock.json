@@ -1,0 +1,13 @@
+{
+  "schema": "tillandsias.web-wrangler-lock/v1",
+  "node": {
+    "image": "docker.io/library/node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90"
+  },
+  "wrangler": {
+    "version": "4.42.0",
+    "tarball": "https://registry.npmjs.org/wrangler/-/wrangler-4.42.0.tgz",
+    "integrity": "sha512-OZXiUSfGD66OVkncDbjZtqrsH6bWPRQMYc6RmMbkzYm/lEvJ8lvARKcqDgEyq8zDAgJAivlMQLyPtKQoVjQ/4g==",
+    "node_engine": ">=18.0.0",
+    "workerd": "1.20251001.0"
+  }
+}

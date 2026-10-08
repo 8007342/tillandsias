@@ -22,10 +22,21 @@ same router/session gate as OpenCode Web.
 
 ### Requirement: Reverse-proxy container and binding
 <!-- req-id: 0eca9cfe -->
-A new reverse-proxy container (Caddy 2.x) MUST publish exactly one host address, and it MUST be loopback-only:
+A reverse-proxy container (Caddy 2.x) MUST preserve exactly one HTTP ingress
+mapping, and every host ingress mapping MUST be loopback-only:
 
 1. `127.0.0.1:<host_port>` on the host, where `<host_port>` is chosen by `select_router_host_port()` from the fallback chain `80 -> 8080 -> --port`. The IN-CONTAINER listener is `:8080` and does not vary.
 2. `router:8080` on the enclave network (reachable by forge agents; the enclave alias is `router`).
+
+Narrow additive mechanism amendment, 2026-10-07 (local preview design,
+`plan/issues/local-web-preview-core-review-2026-10-07.md`): an explicitly
+published local preview MAY add one `127.0.0.1:<tls_host_port>:8443` mapping
+on this SAME router. It MUST preserve the existing HTTP mapping and routes.
+No third ingress, wildcard bind, service-container host port or Caddy admin
+publication is permitted. Preview TLS sites use an exact-hostname local-CA leaf;
+host trust installation is not implied. This amendment admits the additional
+listener only; it does not activate `local-web-preview` or claim runtime
+acceptance. Without preview TLS, the original single HTTP mapping remains.
 
 CORRECTED 2026-09-02 (standing freshness audit). This requirement previously specified `127.0.0.1:80` and `proxy:80`, and both literals had drifted. Port 80 is privileged, so a rootless host cannot always bind it — the fallback chain exists for exactly that, and pinning `80` would have made a spec-conformant launch impossible on a host where 80 is taken. What did NOT change, and what the requirement is actually protecting, is the loopback-only invariant: the publish is `127.0.0.1:{host_port}:8080` in every branch.
 
