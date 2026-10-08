@@ -58,13 +58,6 @@ packets:
       the deadline. Assert that after the door returns neither exists. PRE-FIX
       RESULT: both remain, as observed with the two fixtures named above.
     next_action: Unassigned; coordinator to schedule.
-  - packet_id: deadline-killed-preflight-steps-skip-their-cleanup-traps-and-leak-mutants-and-registered-worktrees
-    event:
-      type: note
-      ts: "2026-10-08T15:51:00Z"
-      host: tlatoanis-macbook-air
-      summary: |-
-        filed by macbookair-macos on coordinator instruction; file only, not claimed.
 
 events:
   - packet_id: preflight-header-sed-blocks-fail-on-bsd-and-lose-gate-only-and-serial-classification
