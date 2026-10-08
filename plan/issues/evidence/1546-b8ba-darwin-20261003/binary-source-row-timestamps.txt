@@ -1,0 +1,9 @@
+binary_path=/Users/tlatoani/opencode/tillandsias/target/debug/tillandsias
+binary_mtime_epoch=1791047160 binary_mtime=2026-10-03T10:06:00Z binary_size=48419120
+source_checkout_head=e1b8ec2385028af0d12380fc87401b942a022b1e
+source_accel_probe_blob=36781b75faf2ddd99480a6253cc090a74835a56e
+source_accel_probe_mtime_epoch=1791046136 source_accel_probe_mtime=2026-10-03T09:48:56Z source_accel_probe_size=422648
+generated_row_path=plan/issues/evidence/1546-b8ba-darwin-20261003/darwin-capability-row.generated.yaml
+generated_row_timestamp=2026-10-03T17:12:27Z
+2549985c723ecc9c621c477e498d2445293278a1f2a880112fe376b1c0be5895  plan/issues/evidence/1546-b8ba-darwin-20261003/darwin-capability-row.generated.yaml
+note=The row timestamp is the --fresh observation time, not a claim that the binary was built from the currently-read source checkout.

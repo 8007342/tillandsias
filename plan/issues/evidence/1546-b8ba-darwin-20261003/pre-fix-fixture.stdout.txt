@@ -1,0 +1,11 @@
+ok: a stale candidate is refused (rc=2) rather than published
+ok: the refusal NAMES the candidate it refused
+ok: the refusal says WHICH contract the candidate predates
+ok: a current candidate is still ADMITTED by the resolver (rc=1, not the resolver's 2)
+ok: and is not reported as stale
+ok: two candidates of identical age get opposite RESOLVER verdicts — the check reads output, not mtime
+ok: a non-running candidate is not misreported as stale
+ok: a current binary in the install dir is CONSULTED (rc=1, not the resolver's 2)
+ok: a STALE binary in the install dir is refused by name, not admitted for its location
+ok: with LOCALAPPDATA unset the install candidate does not exist (rc=2)
+ok:probe-stale-candidate-fixture:all
