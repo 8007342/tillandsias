@@ -573,6 +573,7 @@ mod tests {
         );
         // 6. The CLI verb exists and main dispatches it.
         assert!(
+            // source-pin-ok: the verb's entry point must exist by name (its args changed in 1559-9uvb); what it does is pinned by reset_guest_never_asks
             notify.contains("pub fn reset_guest_once("),
             "--reset-guest CLI mode must exist"
         );
