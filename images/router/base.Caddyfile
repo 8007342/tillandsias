@@ -15,9 +15,9 @@
 #     network.
 
 {
-    # Disable auto-https — we serve plain HTTP on :80 only. *.localhost is
-    # always loopback per RFC 6761; TLS would require a CA dance for
-    # hostnames that browsers already treat as secure contexts.
+    # Keep existing HTTP ingress unchanged; local-web-preview adds explicit
+    # :8443 TLS sites with host-signed exact-hostname certificates. No ACME,
+    # automatic redirect, CA installation, or host trust mutation is performed.
     auto_https off
 
     # Admin API on container loopback only — `caddy reload` from inside

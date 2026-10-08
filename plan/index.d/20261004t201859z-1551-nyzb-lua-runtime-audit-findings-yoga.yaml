@@ -1,0 +1,545 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator request 2026-10-04 (yoga session): audit the Lua runtime layer's
+# recent changes (written by a Codex agent, landed on linux-next as
+# 1534-puyz, 1538-pwdr and the first slice of 1539-dt84) with an independent
+# Fable sub-agent, fix what is found, and track it durably.
+# Ten findings: seven confirmed by measurement (the tenth was raised by the
+# operator, not by the audit), three plausible by reading. Six are FIXED IN
+# THE LANDING THAT CARRIES THIS FRAGMENT, one is partly fixed, three are open.
+# Audit note with every measurement:
+# plan/issues/lua-runtime-audit-2026-10-04.md
+packets:
+  - packet_id: the-legacy-lua-shell-door-is-authorised-against-the-repository-root-but-runs-in-the-inherited-cwd-with-the-callers-environment-and-no-deadline
+    order: 1551-nyzb
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [rust, lua, plan, security, command-policy, sandbox]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+    title: |
+      sh.run / expert.shell asks the command policy about the repository root and then runs the child in the inherited process cwd with the caller's whole environment and no default deadline — measured: with the runner started outside the root, proc.run of rm -r victim answered consent:policy:workspace-destroy while sh.run of the same argv exited 0 and the directory was gone; a secret set on the runner reached the child's printenv; timeout_ms=0 meant already expired
+    context: |
+      Audit note §2 F1 has the table. Both installers of the door
+      (build_environment_logged in lua_predicate.rs, Host::install in
+      lua_process.rs) called policy_gate with cwd None, which substitutes
+      the root, and built the command with no current_dir, no env_clear and
+      a timeout only when named. openspec/specs/command-runtime already
+      required the opposite for every door. Confirmed independently by the
+      coordinating session before the fix. No shipped .lua calls the door
+      (0 of 37), so the exposure is agent-authored scripts.
+      NOT RUN, by reading only: under regime=fixture the same substitution
+      feeds the rule that asks whether a request touches the real checkout,
+      so a git push through this door would be judged against the scratch
+      root while running in the real one. The fix removes the mismatch for
+      every regime; nobody has run that case.
+      FIX (in this landing): prepare_shell in lua_predicate.rs, called by
+      both installers — one cwd for the policy request and the child,
+      base_env_command, the default deadline, 0 meaning none.
+      WHAT THE POLICY SAYS, so the test is not misread: rm -r of a
+      directory INSIDE the workspace is allowed; from a cwd outside it the
+      same argv needs consent. The defect was never that the policy was too
+      loose, it was that it was asked about one directory while the child
+      acted in another. The test therefore puts the victim only in the
+      inherited cwd and asserts nothing there is touched.
+    exit_criteria:
+      - 'with the runner started outside the repository root, sh.run of pwd prints the same directory as proc.run of pwd, and sh.run of rm -r victim, with a victim only in the inherited cwd, fails in the root and removes nothing; pre-fix: different directories, exited 0, the inherited-cwd copy deleted (measured 2026-10-04 at 0.1.0+579b43ef754b46de)'
+      - 'a variable set on the runner is absent from the child of sh.run; pre-fix: present'
+      - 'sh.run with timeout_ms=0 runs to completion and a call with no timeout_ms carries the 300000 ms default; pre-fix: 0 was timed_out and absent was no deadline'
+      - 'both installers of the door go through one function, so the rules cannot differ between the predicate environment and the script host'
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test lua_proc the_legacy_shell_door_runs_where_it_was_authorised_from_the_base_environment
+      passes on the fixed tree; run with TILLANDSIAS_LUA_PROC_TEST_BIN
+      pointing at a 0.1.0+579b43ef754b46de binary it fails at the first
+      assertion.
+    depends_on: []
+    next_action: >
+      FIXED IN THE LANDING THAT FILES THIS ROW - do not claim it. Close with
+      the landed SHA and the test verdict.
+    notes: |
+      size: S
+      implementer_tier: opus
+      Filed with the other 1551 rows although several share files: each is
+      a separate defect with its own test, and five of them close together.
+    events:
+      - type: filed
+        ts: "2026-10-04T20:18:59Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Audit finding F1, measured twice; fixed in the same landing.
+
+  - packet_id: an-external-term-to-the-lua-script-runner-ends-the-runner-and-leaves-every-script-owned-child-running-because-each-child-is-in-its-own-process-group
+    order: 1551-n45s
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: linux
+    capability_tags: [rust, lua, plan, process-supervision, signals, preflight]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/script_run.rs
+    title: |
+      tillandsias-plan script run had no signal handling while every script-owned child runs in its own process group, so a TERM, INT or HUP delivered to the runner or to the runner's group — which is how the preflight door stops a guard past its deadline — ended the runner and reached none of its children; measured: kill -TERM to the runner group, runner gone, child still alive one second later and re-parented
+    context: |
+      Audit note §2 F2. 1534-puyz's stated outcome is that the script
+      lifetime owns cleanup "even when Lua drops a handle or exits by
+      verdict/error/outer timeout"; an external signal was the one exit it
+      did not cover. Control: with --timeout 1s the runner exits 124 and the
+      child is gone. Live exposure today: _pf_run_guard in build.sh runs a
+      .lua guard under setsid with no --timeout and stops it with a group
+      TERM, and check-centicolon-ratchet.lua runs bash centicolon-grade.sh
+      through proc.run. It is also the premise of 1520-z95v (the preflight
+      door ported to proc.spawn).
+      FIX (in this landing): reap_on_termination in script_run.rs — TERM,
+      INT and HUP close the scope (bounded by the executor's cleanup bound)
+      and exit 128+signal; the handlers are installed before any script
+      code runs. Unix only; on Windows the job object owns the group.
+      NOT CHANGED: _pf_run_guard still passes no --timeout to a .lua guard.
+    exit_criteria:
+      - 'a runner started without --timeout whose script holds a child in its own process group exits 143 on SIGTERM and the child is gone within the cleanup bound; pre-fix: the runner died by the signal and the child survived (measured 2026-10-04)'
+      - 'the premise is asserted before the verdict: the child is alive and is NOT in the runner process group'
+      - 'cargo test and clippy for the Windows target still compile the runner (the handler is cfg unix)'
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test lua_proc a_terminated_runner_takes_its_script_owned_child_with_it
+      passes on the fixed tree and fails against a 0.1.0+579b43ef754b46de
+      binary (TILLANDSIAS_LUA_PROC_TEST_BIN).
+    depends_on: []
+    next_action: >
+      FIXED IN THE LANDING THAT FILES THIS ROW - do not claim it. Close with
+      the landed SHA and the test verdict. A macOS host should run the same
+      test natively; it is Linux-gated today like the rest of its module.
+    notes: |
+      size: S
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-04T20:18:59Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Audit finding F2; fixed in the same landing with a signal handler.
+
+  - packet_id: killing-a-lua-process-handle-whose-child-already-exited-with-lines-still-undelivered-returns-ok-true-with-an-empty-capture-and-truncated-false
+    order: 1551-mkr9
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [rust, exec, lua, process-supervision, verdict-integrity]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-exec/src/managed.rs
+    title: |
+      In the managed supervisor a cancellation that arrives after the child has exited but before its output is drained publishes the child's real exit status with an EMPTY capture and truncated=false, so p:kill() on a finished chatty child returns ok=true and stdout "" — measured: seq 1 2000, half a second of other work, kill gave status=exited code=0 ok=true stdout_len=0 truncated=false with 32 of 2000 lines delivered
+    context: |
+      Audit note §2 F3. The spec says ok is true only for exited with code
+      0 and not truncated, and that a clipped capture cannot look whole.
+      Control with p:wait(): 8893 bytes and 2000 lines. The natural pattern
+      that hits it: select the winner, kill the rest, read .ok or .stdout.
+      FIX (in this landing): in supervise, a capture abandoned by a kill or
+      a scope close is reported truncated. A deadline is already typed as
+      timed_out and is left alone. A handle killed while its child is still
+      running was already not ok (signaled); it now also says truncated.
+    exit_criteria:
+      - 'a streaming process whose child exited 0 while its lines are parked on an unread queue, then killed, publishes Exited(0) with truncated true; pre-fix: truncated false (measured 2026-10-04)'
+      - 'the test asserts its premise first: no result is published before the kill'
+      - 'the existing supervisor and Lua process tests still pass'
+    verifiable_closure: |
+      cargo test -p tillandsias-exec a_kill_after_exit_with_undelivered_lines_is_not_a_whole_capture
+      passes on the fixed tree; reverting the one-line change in supervise
+      turns it red.
+    depends_on: []
+    next_action: >
+      FIXED IN THE LANDING THAT FILES THIS ROW - do not claim it. Close with
+      the landed SHA and the test verdict.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-04T20:18:59Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Audit finding F3, measured twice; fixed in the same landing.
+
+  - packet_id: a-lua-spawned-process-deadline-is-charged-for-the-hosts-own-line-delivery-so-a-chatty-child-that-already-exited-reads-as-timed-out-with-its-output-discarded
+    order: 1551-sprq
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [rust, exec, lua, process-supervision, performance, deadlines]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-exec/src/managed.rs
+      - crates/tillandsias-plan/src/lua_process.rs
+    title: |
+      timeout_ms on proc.spawn bounds line delivery to Lua as well as the child, and delivery was capped near 40-50 thousand lines a second by a 1 ms sleep after every pump — measured: proc.run of seq 1 400000 with timeout_ms=3000 exited in 10 ms while proc.spawn of the same argv was timed_out after 3004 ms with 156114 lines delivered and an empty capture; seq 1 2000 with timeout_ms=200, waited after half a second of other work, was timed_out although the child had long exited
+    context: |
+      Audit note §2 F4. Two causes.
+      (a) FIXED in the landing that files this row: Host::wait and the
+      proc.select loop slept 1 ms after every pump, including one that had
+      just dispatched a full batch. They now yield while events flow and
+      sleep only when the queue was empty. No throughput number has been
+      re-measured after the change; that is this row's first step.
+      (b) OPEN: the per-process timer in supervise keeps running after the
+      leader has exited, so the deadline covers delivery. A comment in
+      read_stream says that is intended ("Sending queued lines may take
+      arbitrarily long within the process deadline"), while the design
+      says timed_out means the child produced no exit code. Those disagree,
+      and the choice belongs to whoever takes the row: after the leader
+      exits, either only the scope deadline applies, or the result keeps
+      the real exit status and is marked truncated. It fails closed today.
+    exit_criteria:
+      - 'the row records lines per second for proc.spawn of seq 1 400000 before and after change (a), each with its command; the pre-change figure is 156114 lines in 3004 ms'
+      - 'a child that exits 0 well inside its timeout_ms is never reported timed_out, however slowly its lines are consumed, asserted by a test whose consumer is deliberately slow; pre-fix: timed_out (measured 2026-10-04)'
+      - 'the rule that survives is stated in the comment in read_stream and in the spec; the two no longer disagree'
+    verifiable_closure: |
+      cargo test -p tillandsias-exec an_exited_child_is_not_timed_out_by_slow_line_delivery
+      passes on the fixed tree and fails on the tree of this landing.
+    depends_on: []
+    next_action: >
+      Measure the throughput after change (a), then decide (b) and write the
+      failing test first.
+    notes: |
+      size: S
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-04T20:18:59Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Audit finding F4; the pump sleep is fixed, the timer rule is open.
+
+  - packet_id: one-lua-managed-childs-pipe-anomaly-or-the-64-process-limit-closes-the-whole-script-scope-and-the-same-anomaly-is-raised-from-proc-run-instead-of-returned
+    order: 1551-af3e
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [rust, exec, lua, process-supervision, error-model]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-exec/src/managed.rs
+      - crates/tillandsias-plan/src/lua_process.rs
+      - crates/tillandsias-plan/src/lua_predicate.rs
+    title: |
+      An operational condition on ONE child — a session-detached descendant still holding its stdout after the leader exits (group-pipe-eof-timeout), or the 65th live process (script-process-limit) — is raised as a Lua error and closes the whole script scope, so every other handle and every later call answers script-scope-closed; the same pipe condition makes proc.run RAISE through script run while the legacy lua door returns exited with an empty capture
+    context: |
+      Audit note §2 F5, measured by the audit agent, not re-run by the
+      coordinating session. Design §4.1 says an operational outcome is
+      "always returned, never raised". Where it comes from: read_stream
+      returns an error on drain-grace expiry; proc_result_to_lua raises
+      every error that is not a spawn failure; Host::check_failures closes
+      the scope on any handler's error; the spawn closure closes it on
+      script-process-limit. MAX_ACTIVE_PROCESSES = 64 has no test and is
+      not documented.
+      WHY NOT FIXED WITH THE OTHERS: the repair changes what the doors
+      return — a drain-grace expiry would become a result with the bytes
+      read and truncated=true, the limit a typed refusal — and the closed
+      status vocabulary in openspec/specs/command-runtime has no word for
+      either. That is a decision about the interface.
+      A preflight that runs guards concurrently through proc.spawn
+      (1520-z95v) loses ALL of them to one such child.
+    exit_criteria:
+      - 'a child that leaves a detached descendant on its pipe yields a RESULT from proc.run and from p:wait(), with the bytes read and truncated true, on both the script-run and the legacy door; pre-fix: raised on script run, exited with an empty capture and truncated false on the legacy door'
+      - 'that condition on one handle leaves an unrelated live handle waitable and later proc.run calls working; pre-fix: script-scope-closed'
+      - 'the 65th proc.spawn is refused as a value and does not close the scope; the limit is documented and pinned by a test'
+      - 'openspec/specs/command-runtime names the status or field each condition is reported with'
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test lua_proc one_childs_pipe_anomaly_does_not_close_the_scope
+      passes on the fixed tree and fails on the tree of this landing.
+    depends_on: []
+    next_action: >
+      Decide the vocabulary first (a status, or truncated plus a reason
+      field), with 1520-z95v's implementer, since that row depends on it.
+    notes: |
+      size: M
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-04T20:18:59Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Audit finding F5; open, because the repair changes the interface.
+
+  - packet_id: the-lua-runners-instruction-hook-does-not-follow-script-created-coroutines-so-code-keeps-running-after-a-caught-verdict-and-an-async-door-inside-one-returns-a-truthy-value-without-waiting
+    order: 1551-pemw
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [rust, lua, plan, sandbox, verdict-integrity]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/tests/lua_proc.rs
+    title: |
+      The Observing class exposed the coroutine library while the runner's stop mechanism is an instruction hook that mlua 0.10 keeps on one thread — measured: after pcall(verdict.ok) the main thread stopped, but inside coroutine.wrap the script ran 20,000,000 more iterations and fs.write succeeded; and p:wait() called inside a coroutine returned a truthy userdata instead of waiting, so a script can go green without having waited for the process it judges
+    context: |
+      Audit note §2 F6, confirmed independently before the fix. The comment
+      in run_to_verdict says a caught verdict or error "cannot keep
+      executing or launch a new child"; the second half held, the first
+      did not. Without --timeout a CPU loop inside a coroutine was
+      unbounded.
+      FIX (in this landing): the Observing coroutine table is narrowed to
+      yield alone in build_environment_logged, so script code cannot CREATE
+      a coroutine. No shipped .lua used the library (0 of 37, counted two
+      ways). The Cacheable class never had it.
+      WHY NOT REMOVED OUTRIGHT, measured the hard way: dropping the global
+      made EVERY Observing script fail to start ("error converting Lua nil
+      to table"), because mlua builds each async function from
+      coroutine.yield read from the GLOBALS at creation time, and process
+      handles create theirs while the script runs. A bare yield from script
+      code is resumed at once by the async driver, on the thread the hook
+      covers; the test calls one.
+      IF COROUTINES ARE EVER WANTED BACK they need a hook that covers every
+      thread, which mlua 0.10 does not offer; that is a new row, not a
+      revert.
+    exit_criteria:
+      - 'in the Observing class the coroutine table holds yield and nothing else, and the Cacheable class has no coroutine table, asserted by scripts through the runner; pre-fix: the whole library in Observing'
+      - 'the measured probe (run past a caught verdict inside coroutine.wrap) can no longer be written, and a bare coroutine.yield does not stop or hang a script'
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test lua_proc script_code_has_no_coroutines_and_cannot_load_bytecode
+      passes on the fixed tree and fails against a 0.1.0+579b43ef754b46de
+      binary (TILLANDSIAS_LUA_PROC_TEST_BIN).
+    depends_on: []
+    next_action: >
+      FIXED IN THE LANDING THAT FILES THIS ROW - do not claim it. Close with
+      the landed SHA and the test verdict.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-04T20:18:59Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Audit finding F6, measured twice; fixed by narrowing the library to yield.
+
+  - packet_id: a-lua-process-spawn-that-takes-more-than-one-second-to-set-up-is-raised-as-an-error-and-closes-the-script-scope
+    order: 1551-333i
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [research, rust, exec, lua, process-supervision, windows]
+    estimated_hours: 3
+    owned_files: []
+    title: |
+      PLAUSIBLE, by reading only — Scope::spawn_observed waits at most SPAWN_SETUP_BOUND (one second) for the supervisor thread to report the child started, and on expiry returns an error that proc.run raises and proc.spawn turns into a closed scope, so a loaded host or a Windows antivirus scan would turn latency into a script failure; nobody has measured it because no way was found to slow exec on demand
+    context: |
+      Audit note §2 F7. The legacy door has no such bound. This row is
+      research: its first deliverable is a way to make setup slow on
+      purpose (a wrapper program that sleeps before exec does NOT do it —
+      the bound covers spawn, not the child's own start), and then the
+      measurement. If it reproduces, the repair is a typed spawn_failed
+      result for that call, which belongs with 1551-af3e's vocabulary.
+    exit_criteria:
+      - 'a note records either a reproduction (command, output, host) or the reason it cannot occur; a reproduction is filed as a bug row or folded into 1551-af3e'
+    unscoreable: |
+      a research row for a defect seen only by reading: its deliverable is a reproduction or a reasoned refutation, and no fixture can assert either until one exists.
+    depends_on: []
+    next_action: >
+      Try it on yolanda (native Windows), where process creation is slowest.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-04T20:18:59Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Audit finding F7; plausible, unmeasured.
+
+  - packet_id: the-observing-lua-class-load-accepts-binary-chunks-and-string-dump-produces-them-so-unverified-bytecode-is-reachable-from-script-code
+    order: 1551-8gkg
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [rust, lua, plan, sandbox, hardening]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+    title: |
+      Observing-class load accepted a binary chunk and returned a callable (measured: 42), and string.dump was reachable in both classes; Lua 5.4 does not verify bytecode, so a crafted chunk is a way around the capability allow-list that build_environment_logged constructs, contradicting its comment that no loader alias is in the reachable set
+    context: |
+      Audit note §2 F8, confirmed independently. No exploit was built; the
+      finding is that the door is open, not that it has been used.
+      FIX (in this landing): string.dump is removed in both classes, and
+      Observing load is replaced by a wrapper that forces text mode
+      whatever mode the caller asks for, passes an explicit env through,
+      and leaves an absent env absent. The Cacheable class has no load.
+    exit_criteria:
+      - 'load of a string starting with the binary-chunk signature returns nil and a message naming a binary chunk, through the runner; pre-fix: a callable'
+      - 'string.dump is nil in both classes'
+      - 'load of text still works, with and without an env argument, and a requested binary mode cannot widen it'
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test lua_proc script_code_has_no_coroutines_and_cannot_load_bytecode
+      passes on the fixed tree and fails against a 0.1.0+579b43ef754b46de
+      binary (TILLANDSIAS_LUA_PROC_TEST_BIN).
+    depends_on: []
+    next_action: >
+      FIXED IN THE LANDING THAT FILES THIS ROW - do not claim it. Close with
+      the landed SHA and the test verdict.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-04T20:18:59Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Audit finding F8, measured twice; fixed in the same landing.
+
+  - packet_id: a-lua-script-worker-that-panics-under-a-runner-timeout-is-reported-as-timed-out-and-without-a-timeout-a-panic-unwinds-past-the-scope-cleanup
+    order: 1551-7hyq
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [rust, lua, plan, verdict-integrity, error-model]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/script_run.rs
+    title: |
+      PLAUSIBLE, by reading only — in cli_run a worker thread that ends without sending a verdict (a panic) disconnects the channel, and the disconnected case shares one match arm with an elapsed deadline, so the runner prints status=timed_out and exits 124 for a crash; and when no --timeout is given the script runs on the main thread, where a panic unwinds past the scope cleanup with no drop guard
+    context: |
+      Audit note §2 F9. Not measured: there is no seam that makes the
+      worker panic, and the coordinating session declined to ship a branch
+      it could not reach in a test. The door classifies rc 124 as a
+      timeout, so a crash would be retried or excused as slowness.
+      The repair has two parts: a distinct verdict and exit status for a
+      worker that died, and a guard that runs the scope cleanup on unwind.
+    exit_criteria:
+      - 'a test forces the worker to end without a verdict and the runner prints a verdict that is not timed_out with an exit status that is not 124; pre-fix (by reading): status=timed_out, 124'
+      - 'the same forced failure without --timeout still reaps script-owned children'
+      - 'the seam that forces it is absent from release builds'
+    verifiable_closure: |
+      cargo test -p tillandsias-plan --test lua_proc a_dead_script_worker_is_not_a_timeout
+      passes on the fixed tree and fails on the tree of this landing.
+    depends_on: []
+    next_action: >
+      Find the smallest seam first (a debug-only panic verb is one option);
+      then write the failing test.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-04T20:18:59Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Audit finding F9; plausible, unmeasured, deliberately not fixed
+          without a test.
+
+  - packet_id: the-lua-process-tests-wrote-thirteen-python-programs-to-temp-files-and-ran-them-with-python3-and-the-no-python-guard-reported-ok-because-it-never-scanned-rust-test-sources-or-argv-strings
+    order: 1551-geib
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    release_target: lua-bash-replacement-and-policies-2026-09-27
+    pickup_role: any
+    capability_tags: [rust, lua, plan, policy, no-python, test-harness, methodology]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-plan/tests/support/fixture_child.rs
+      - crates/tillandsias-plan/tests/lua_proc.rs
+      - crates/tillandsias-policy/src/main.rs
+    title: |
+      crates/tillandsias-plan/tests/lua_proc.rs ran thirteen distinct Python programs (ten written into its fixture directory at seventeen sites, three passed inline with -c) through twenty-three python3 invocations as the child processes the Lua runtime supervises — forty lines naming python in the test suite of the runtime that exists to retire ad hoc scripting, against tlatoani_hard_no_python — and scripts/check-no-python-scripts.sh reported "ok: no Python runtime references" on that tree, because the guard scans scripts/ and the litmus YAML for LINES BEGINNING with python and never a Rust test source or an interpreter named as an argv string
+    context: |
+      RAISED BY THE OPERATOR, 2026-10-04, verbatim: "I see some tests
+      sneaking in python. What's that about? The whole reason of gettig rid
+      of BASH in favor of LUA is for it to work along with our ban of
+      python. We don't like random scripting languages in this project.
+      Justify sneaking in pythin inside another scripted language". There
+      is no justification. Neither the audit sub-agent nor the coordinating
+      session flagged it, and the coordinating session had the lines on
+      screen while reading the test file.
+      WHERE IT CAME FROM (git log -S python3 on the file): the 1534-puyz
+      commits from d3dd5f676 (2026-10-02) and the 1538-pwdr commits
+      (2026-10-03). The likely reason, read from the code: the command
+      policy refuses sh -c <string>, so the tests needed a program in a
+      FILE and wrote Python ones; the later 1538 tests in the same file
+      use sh files instead.
+      WHY THE GUARD SAID OK (read from check_no_python_scripts in the
+      policy crate): is_script_or_harness covers script extensions,
+      scripts/, the litmus YAML and a few named files;
+      has_python_runtime_reference matches a line that starts with python
+      or contains forms like "python3 -c". A Rust file under
+      crates/*/tests/ is not scanned, and "python3" as a quoted argv entry
+      matches none of the forms. Measured: guard rc 0 on linux-next
+      724309173.
+      FIX (in this landing): every child program is a mode of one Rust
+      helper, tests/support/fixture_child.rs, built as a [[bin]] of the
+      plan crate (integration tests get CARGO_BIN_EXE only for bins) and
+      copied by no installer; the thirteen programs and the python3 argv
+      entries are gone from lua_proc.rs; the guard now scans
+      crates/*/tests/**.rs for a quoted interpreter name or a quoted *.py
+      file name, with unit tests holding the exact lines that landed.
+      DECLARED LIMIT of the widened guard: unit tests inside src/ are not
+      scanned (src/ holds two legitimate mentions: the matcher itself and
+      the methodology router's keyword).
+      NOT DONE HERE: the later tests in the same file still write small sh
+      files (select-producer.sh and others). sh is not banned; whether the
+      Lua runtime's tests should use the Rust helper for those too is a
+      follow-up for this row's reader to raise, not a silent rewrite.
+      The gate also depended on python3 being present in the builder
+      toolbox for these tests; nothing declares that dependency.
+    exit_criteria:
+      - 'no file under crates/*/tests names python3, python or a *.py file as a string literal; pre-fix: 40 lines in tests/lua_proc.rs (counted with git grep on linux-next 724309173)'
+      - 'the tests that used the Python programs pass with the Rust helper, each call site naming the mode that replaced its program'
+      - 'scripts/check-no-python-scripts.sh refuses a tree where a Rust integration test runs python3 as an argv entry or writes a *.py file, shown by unit tests holding the lines that landed; pre-fix: ok'
+      - 'the helper binary is not copied by any install or packaging path'
+    verifiable_closure: |
+      bash scripts/check-no-python-scripts.sh exits 0 on the fixed tree,
+      and cargo test -p tillandsias-policy flags_python_as_an_argv_entry_or_a_source_file_in_rust_tests
+      passes; that test also asserts the OLD matcher saw none of the lines.
+    depends_on: []
+    next_action: >
+      FIXED IN THE LANDING THAT FILES THIS ROW - do not claim it. Close with
+      the landed SHA and the two verdicts. Then decide the two follow-ups
+      named in the context (sh fixtures in the same file; the unscanned
+      unit tests in src/).
+    notes: |
+      size: M
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-04T20:18:59Z"
+        agent_id: claude-fable-yoga-20261004t180632z
+        host: yoga
+        summary: |-
+          Raised by the operator; the audit and the guard both missed it.
+          Fixed in the same landing, with the guard widened.

@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: progress
+      ts: "2026-10-03T18:31:02Z"
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      host: macuahuitl
+      summary: |
+        READY WITHDRAWN: PR212 is back to DRAFT. The serialized queue completed, but landed0/evicted1: target+candidate21eb9f88c5cf13cdc3d5f9de252c8c4473f099e5 at basec78493e4a rejected the workspace callback cleanup control. Actual queue wrapper run2efc6d78-d85b-4a38-9fd3-c21ac5b9ead2 exited0; that is queue execution success, NOT landing success. PR remains OPEN, source4db70d7d3fcb7e59b026b2fd384f80e9712c6798 is NOT an ancestor of origin/linux-next, and no1538 status closure or test-file ownership release has occurred.
+
+        Landing workspace ran2891/new-red1/tolerated0/stale0. lua_proc::managed_script::callbacks_cancel_owned_groups_even_when_caught_or_cpu_bound failed because the first immediate /proc identity read saw an acknowledged grandchild in stateR, not Z. The stat retains actualpid740726, pgid740596 and start13423205. This is an observed not-yet-stopped process, not by itself evidence of a persistent descendant leak; diagnosis must distinguish signal-delivery observation race from surviving child. Full2891 transcript and PR comment were copied byte-for-byte into parent boundary scratch before any rerun. The queue deletes its temporary full gate log, so only workspace transcript and retained PR tail remain; no fabricated full diagnostic claim. Previous forced-green gates remain evidence of their exact candidates, not a waiver of this landing red.
+
+        Next_action: parent independently reproduce callback cleanup under repeated/parallel load, inspect real process-group kill/reap and observer timing; change only a demonstrably faulty observer or repair a proved runtime defect with bounded ownership, preserve known-live positive control, PID identity, delayed-marker and no-tolerance assertions, then re-run full verification/preflight and target+candidate queue. Eight delegated invocations are exhausted; do not start a ninth. Native1543/1544 and Mac1543-f44v remain dependency/ownership gated, tracing1539 and parent1384 remain open. No UX/defaultflip/destructiveE2E/release or gate/landing rewrite.

@@ -1,0 +1,1027 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator direction 2026-10-03 (yoga session, rulings 1-14 in the design
+# note): Cloudflare Worker rendezvous as the control plane, per-service
+# leases preferring always-on hosts, macuahuitl as the first git-mirror and
+# local-experts holder, LAN-direct data with Cloudflare Mesh for off-LAN
+# hosts, connection-time trust by pinned per-host CAs only.
+# Milestone 1548-9n28 and its children, plus two goals and two findings.
+# Research and sources: plan/issues/fleet-wan-rendezvous-design-2026-10-03.md
+# Change: openspec/changes/fleet-wan-rendezvous/
+packets:
+  - packet_id: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    order: 1548-9n28
+    status: ready
+    kind: milestone
+    priority: p1
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [fleet, rendezvous, cloudflare, workers, durable-objects, ssh, vault, git-mirror, fleet-experts, leader-election, milestone]
+    estimated_hours: 6
+    owned_files:
+      - openspec/changes/fleet-wan-rendezvous/
+      - plan/issues/fleet-wan-rendezvous-design-2026-10-03.md
+    title: |
+      MILESTONE — every host enrolled by the operator's --github-login and --cloudflare-login announces itself to a signed Cloudflare Worker + Durable Object rendezvous (rendezvous.tlatoani.net, failsafe workers.dev), the fleet elects a holder per service preferring always-on hosts (macuahuitl first for git-mirror and local-experts), and host-to-host traffic goes LAN-direct or over Cloudflare Mesh off-LAN, trusted only by per-host CAs pinned in plan/fleet/peers; today no host knows another's address or keys, plan/fleet does not exist, and each host's experts see only its own refs
+    context: |
+      OPERATOR (2026-10-03, rulings numbered in the design note): Cloudflare,
+      not Tailscale; Cloudflare carries the CONTROL plane (discovery, CA
+      exchange, leases, status page) and never bulk data; heartbeats slow
+      (15 min), leases about an hour, several hours of presence before a
+      takeover; leadership per service with operator affinity; macuahuitl
+      (24/7, strongest GPU/CPU/RAM) is the first git-mirror (read AND write,
+      GitHub the source of truth, every host keeps its local mirror as a
+      failsafe) and local-experts holder, so the experts see the whole
+      fleet's refs; push identity is the shared Tillandsias GitHub App
+      credential with per-host committer identity preserved; LAN direct is
+      the primary data path and the one or two off-LAN laptops use
+      Cloudflare Mesh for ALL host-to-host traffic in v1 (downloads and
+      images never use Mesh; direct IPv6 WAN is a later goal); the logins
+      gate ENROLLMENT only — connections trust the CA pinned in the peer
+      record and never a live token; the Pi is out of scope for v1.
+      RESEARCH (2026-10-03, design note §1-§4): a Worker + one SQLite
+      Durable Object is on the Workers Free plan and is a strongly
+      consistent compare-and-set store with alarms; at a 15-min heartbeat
+      for 10 hosts it uses about 1 % of requests and 2.2 % of rows written;
+      Ed25519 is in Workers WebCrypto, so the control plane needs no Zero
+      Trust identity; DNS-only records with TTL 60 written by the Durable
+      Object are the only rootless floating name that works on every
+      platform; OpenSSH has no CA chaining and Vault never exports a CA key,
+      so each host's own CA vouches only for its own names.
+      WHAT EXISTS (models, not re-filed): the PKCE login and its Vault
+      bundle (1505-kc5f etc., landed 7985e2469); the fake Cloudflare
+      (1505-svve); cloudflare_names (1505-iky3); the per-host Vault ssh
+      signer mounts (vault_bootstrap.rs:5752-5754); the mirror's pre-receive
+      relay (openspec/specs/git-mirror-service/spec.md:171-200); the Noise
+      identity plan (1506-32k5) and the LAN rung (1506-7tq4); the Mesh
+      sidecar research and join (1506-euvq, 1506-t97c) and Zero Trust init
+      (1505-6w7d), all ON this milestone's critical path for off-LAN hosts.
+      DESIGN PRINCIPLES (binding on every child): no fixture needs the real
+      Cloudflare account (fakes for OAuth, rendezvous and DNS); the host,
+      the fake and the Worker share ONE pure core crate; no timer in the
+      Durable Object; no host holds a DNS token; discovery never confers
+      trust; no connection path consults a live login; every fallback is
+      printed, never silent; bulk data never crosses Cloudflare.
+    children:
+      - 1548-ym32
+      - 1548-h7qh
+      - 1548-cii8
+      - 1548-ciq2
+      - 1548-dylo
+      - 1548-5t00
+      - 1548-2ilf
+      - 1548-pg32
+      - 1548-u5wv
+      - 1548-vpe4
+      - 1548-7onc
+      - 1548-q2fr
+      - 1548-1oq2
+      - 1548-6auk
+      - 1548-mhyk
+      - 1548-i07i
+    exit_criteria:
+      - 'against the fake rendezvous, three enrolled hosts heartbeat and tillandsias fleet status on each prints the same roster and the same holder per service with its epoch (pre-fix: no fleet verb, no plan/fleet)'
+      - 'live: macuahuitl holds git-mirror and local-experts on the real rendezvous; git-mirror.fleet.tlatoani.net and local-experts.fleet.tlatoani.net resolve to it with TTL 60 and TXT epoch=<n> holder=macuahuitl (pre-fix: no such records)'
+      - 'live: a forge push on yoga on the LAN is acknowledged only after GitHub holds the ref and macuahuitl''s mirror log names yoga''s principal; the same push from yoga off-LAN goes via:mesh; with macuahuitl stopped it succeeds through GitHub with fallback:git-mirror:<reason> printed'
+      - 'live: an experts query from yoga answers from macuahuitl with a freshness envelope naming refs pushed from at least two hosts, authenticated by yoga''s pinned CA certificate, with both hosts'' GitHub and Cloudflare tokens expired'
+      - 'every child order is completed or superseded and the three deltas in openspec/changes/fleet-wan-rendezvous/ are synced into openspec/specs/'
+    unscoreable: milestone-scored-by-its-children — this row owns no fixture; each child names its scripts/test-*.sh; the live arms are multi-host measurements recorded in this row's events.
+    next_action: >
+      The operator completes the Cloudflare setup checklist (design note
+      §5) whenever convenient; children drain in dependency order starting
+      with the pure ones that need nothing from the operator: 1548-dylo
+      (score), 1548-cii8 (peer records), 1548-mhyk (IPv6 probe defect), and
+      the decision record 1548-ym32 for the operator's signature.
+    notes: |
+      size: L
+      implementer_tier: opus
+      Coordinator note: the operator first asked about Tailscale and then
+      ruled Cloudflare; the first draft of this note demoted Mesh, and the
+      operator reversed that (ruling 12). Say both plainly when relaying.
+    provenance: |
+      Filed by the yoga-silverblue Opus session (fork worker) on yoga,
+      2026-10-03, branch work/fleet-wan-rendezvous off linux-next 08b8862e4.
+      Research: three agents (Cloudflare rendezvous, IPv6 and floating
+      address, trust and election) distilled into the design note. No
+      Cloudflare API was called with credentials; no host, router or Pi
+      configuration was changed.
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Milestone for the fleet WAN rendezvous; sixteen children, two
+          goals and two findings filed in the same fragment; design note and
+          OpenSpec change written alongside.
+
+  - packet_id: decision-record-answers-orders-563-564-and-595-6y8b-enrollment-with-pinned-per-host-cas-measured-availability-and-per-service-leases-and-is-signed-by-the-operator
+    order: 1548-ym32
+    status: ready
+    kind: research
+    priority: p1
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: any
+    capability_tags: [research, decision, security, ssh, mesh, identity, operator-decision]
+    estimated_hours: 3
+    owned_files:
+      - plan/issues/fleet-wan-rendezvous-decision-record-2026-10.md
+    title: |
+      A Tlatoani-signable decision record answers every exit criterion of order 563 (mesh identity plane), order 564 (discovery and uptime affinity) and the enrollment half of 595-6y8b from the 2026-10-03 design note — per-host CAs pinned by the tree, enrollment by the two operator logins, connection-time trust never a live token, measured availability, per-service leases — and records the amendment to SSH-CA design §3 item 2 (federated CAs, not one fleet CA); the authorization model for til:compute:* principals is named as the one explicit remainder
+    context: |
+      Research C showed the brief's questions are the exit criteria of 563
+      and 564 (plan/index.yaml:11863-11935) and the enrollment half of
+      595-6y8b (:12775-12800); this row converts the design note into their
+      deliverable instead of opening a parallel thread. The amendment: the
+      signed SSH-CA design says "The same CA, different roles"
+      (plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md:774-776);
+      within one host that still holds; across hosts the CA set is
+      federated, because Vault never exports a CA key (D2) and OpenSSH has
+      no certificate chaining.
+    exit_criteria:
+      - 'plan/issues/fleet-wan-rendezvous-decision-record-2026-10.md has one section per exit criterion of 563, 564 and 595-6y8b (14 sections, each citing the design note span that answers it, or naming it as the explicit remainder)'
+      - 'an operator signature event on 563, 564 and 595-6y8b naming the record; until then their status is unchanged (pre-fix: all three ready, unanswered)'
+    verifiable_closure: |
+      the record exists and the fragment carrying the operator's signature
+      events on 563, 564 and 595-6y8b is on linux-next; a reviewer can map
+      each of the 14 exit criteria to a section heading by name.
+    unscoreable: |
+      a decision record signed by the operator. Its closure is a human signature event on 563, 564 and 595-6y8b, which no litmus can produce or check.
+    depends_on: []
+    next_action: >
+      Write the record from the design note; send it to the operator for
+      signature; do not change 563/564/595-6y8b status without the signature.
+    notes: |
+      size: S
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Decision record that closes the research halves of 563/564/595-6y8b.
+
+  - packet_id: fleet-sshd-git-mirror-and-experts-endpoints-are-reachable-from-a-second-host-over-the-lan-and-over-the-mesh-sidecar-recorded-per-substrate-as-one-of-five-named-outcomes
+    order: 1548-h7qh
+    status: ready
+    kind: research
+    priority: p1
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: any
+    capability_tags: [research, measurement, ssh, mesh, networking, rootless]
+    estimated_hours: 5
+    owned_files:
+      - scripts/research-fleet-endpoint-reachability.sh
+      - plan/issues/fleet-wan-rendezvous-design-2026-10-03.md
+    title: |
+      A rootless user-mode sshd on port 48622, a git-upload-pack forced command and an expert-serve port on one host are reached from a second host over the LAN and, through the 1506-t97c Mesh sidecar that shares the router network namespace, over Mesh — recorded per substrate (Silverblue, Fedora Workstation, WSL2 guest, macOS VZ guest) as one of reachable | reachable-after-consented-firewall-step | needs-host-forward | needs-router-netns-forward | blocked
+    context: |
+      Design note §3 measured on yoga: system sshd disabled, the
+      FedoraWorkstation firewalld zone opens 1025-65535, FedoraServer does
+      not. The Mesh sidecar (1506-t97c) lives in the router's network
+      namespace, so whether a host service is reachable FROM the Mesh
+      depends on a forward through that namespace — unmeasured, and it gates
+      1548-7onc and 1548-q2fr off-LAN. Guests: macOS VZ is NAT with fd22::
+      (research-macos-vz-dnssec-ipv6-2026-07-07.md:19-22); WSL2 NAT has no
+      v6 and mirrored mode was reverted.
+    exit_criteria:
+      - 'the design note gains a table: one row per substrate x rung (lan, mesh) with the outcome name, the exact client command (ssh -p 48622 …, git ls-remote ssh://…, curl to the experts port) and its rc measured from a second host (pre-fix: unmeasured)'
+      - 'every arm has a premise guard: the mesh arm asserts the client''s route to the target goes via the 100.96.0.0/12 interface, else it records unmeasured:not-via-mesh rather than reachable'
+    verifiable_closure: |
+      the table is in the design note with commands and rcs; the research
+      script prints one line per arm and refuses to print reachable when the
+      premise guard fails (a run with the Mesh sidecar stopped prints
+      unmeasured:not-via-mesh, proving the guard is reached).
+    unscoreable: |
+      a per-substrate MEASUREMENT recorded as one of five named outcomes from a second host over the LAN and the Mesh sidecar; the outcome is data, not a pass/fail property a fixture can assert.
+    depends_on:
+      - fleet-vpn-join-leave-status-launches-the-warp-sidecar-beside-the-router-from-secret-cloudflare-mesh-on-linux-and-inside-the-macos-and-windows-guests-so-no-host-os-ever-runs-a-cloudflare-daemon
+    next_action: >
+      Measure the LAN rung first (needs no Cloudflare); add the Mesh rung
+      once 1506-t97c joins one Linux host.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Reachability matrix that gates the off-LAN arms of the mirror and experts.
+
+  - packet_id: plan-fleet-peers-records-carry-every-public-key-a-peer-needs-and-fleet-peers-check-refuses-a-malformed-or-mismatched-record
+    order: 1548-cii8
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: any
+    capability_tags: [fleet, schema, identity, plan]
+    estimated_hours: 4
+    owned_files:
+      - plan/fleet/README.md
+      - crates/tillandsias-headless/src/fleet_peers.rs
+      - scripts/test-fleet-peers-check.sh
+    title: |
+      plan/fleet/peers/<host>.yaml carries host, announce_pub (Ed25519), noise_pub and noise_fp (1506-32k5), ssh_host_ca_pub, ssh_user_ca_pub, class_declared, substrate and admitted {date, by}, plan/fleet/owner.yaml carries github_user_id and a salted cloudflare_user_sha256, and tillandsias fleet peers check refuses a record with a missing field, a non-canonical host label, or a noise_fp that does not hash its noise_pub, naming each refusal
+    context: |
+      The record, not a shared key, binds a host's per-purpose keys (design
+      note §3: the SSH CA keys never leave Vault, the Noise static must be
+      raw in memory). Host labels go through cloudflare_names (1505-iky3)
+      so the same string is valid as a DNS label in <host>.fleet.tlatoani.net.
+      No account id or email ever appears in a name.
+    exit_criteria:
+      - 'scripts/test-fleet-peers-check.sh exits 0 over a temp peers dir: one good record passes; records missing ssh_host_ca_pub, with host Yoga_Laptop, with a noise_fp not matching noise_pub, and with an email in any field produce exactly four named refusals (pre-fix: no plan/fleet, no verb)'
+    verifiable_closure: |
+      bash scripts/test-fleet-peers-check.sh exits 0 on the fixed tree; a
+      mutation that skips the fp check (TILLANDSIAS_FLEET_PEERS_LAX=1 seam)
+      turns the fp arm red, proving the arm reaches the check.
+    depends_on:
+      - every-host-holds-one-x25519-msg-identity-in-its-own-vault-publishes-the-public-half-in-plan-fleet-peers-and-two-hosts-authenticate-with-noise-xx-pinned-to-that-directory
+      - cloudflare-names-is-the-one-normalizer-every-cloudflare-object-name-passes-through-with-typed-label-and-display-classes-and-the-canonical-tillandsias-vpn-name-table
+    next_action: >
+      Define the schema with 1506-32k5's implementer (same directory, one
+      record); write the checker as pure Rust over a directory path.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          The peer record schema and its checker.
+
+  - packet_id: fleet-enroll-mints-keys-only-when-both-the-github-and-cloudflare-logins-match-the-owner-pins-and-fleet-leave-removes-the-record
+    order: 1548-ciq2
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: any
+    capability_tags: [fleet, enrollment, vault, oauth, github, cloudflare, security]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-headless/src/fleet_enroll.rs
+      - scripts/test-fleet-enroll.sh
+    title: |
+      tillandsias fleet enroll refuses with refused:fleet:not-owner:<github|cloudflare> and mints nothing unless the stored GitHub bundle's user id equals the owner pin AND the stored Cloudflare bundle's user id hashes to the owner pin (the first enroll writes both pins), then mints the announce key into secret/fleet/announce in the host's own Vault and emits the peer record on a work ref; tillandsias fleet leave and both logouts remove the record on a work ref
+    context: |
+      Operator ruling 14: the two logins gate ENROLLMENT only; connection
+      trust is the pinned CA. The GitHub check reuses the stored bundle's
+      GET /user; the Cloudflare check reads /oauth2/userinfo through
+      cloudflare_oauth. The pin is a salted SHA-256 so no Cloudflare id
+      appears in the tree. Fixtures run against the fake Cloudflare
+      (1505-svve) and a fake GitHub /user.
+    exit_criteria:
+      - 'scripts/test-fleet-enroll.sh exits 0: wrong GitHub id -> refused:fleet:not-owner:github and vault has no secret/fleet/announce; right GitHub id but wrong Cloudflare id -> refused:fleet:not-owner:cloudflare, same assertion; both right -> a peer record whose ssh_host_ca_pub equals vault read of the host signer mount; fleet leave produces a work-ref commit deleting that record (pre-fix: no verb)'
+    verifiable_closure: |
+      bash scripts/test-fleet-enroll.sh exits 0 with four named arms; the
+      refusal arms assert the absence of the Vault path AFTER the command,
+      so an implementation that mints before checking fails them.
+    depends_on:
+      - plan-fleet-peers-records-carry-every-public-key-a-peer-needs-and-fleet-peers-check-refuses-a-malformed-or-mismatched-record
+      - tillandsias-cloudflare-login-completes-the-pkce-flow-through-one-of-three-receivers-loopback-qr-to-an-operator-relay-page-or-paste-stores-the-bundle-and-cloudflare-logout-revokes-it
+    next_action: >
+      Implement against the fakes; the work-ref emission reuses the plan-only
+      lane the fragments already use.
+    notes: |
+      size: M
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Enrollment gated on both operator logins; leave removes the record.
+
+  - packet_id: fleet-score-orders-hosts-by-measured-class-first-so-a-transient-laptop-never-outranks-an-always-on-host-and-services-yaml-names-macuahuitl-preferred
+    order: 1548-dylo
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: any
+    capability_tags: [fleet, leader-election, scoring, pure]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-fleet-core/src/score.rs
+      - plan/fleet/services.yaml
+    title: |
+      tillandsias-fleet-core::score derives class_measured from 672 fifteen-minute presence slots (2 at >=0.95, 1 at >=0.60, else 0; 0 before 24 h observed), uses min(class_declared, class_measured), orders hosts by (class, reachability bucket, substrate, log2 RAM, log2 free disk, os, host id), and plan/fleet/services.yaml names macuahuitl preferred for git-mirror and local-experts with min_presence 4h
+    context: |
+      Operator ruling 3: always-on hosts beat powerful transient laptops.
+      Order 564: uptime is measured, not self-reported. Buckets so jitter
+      never reorders. The crate is pure (no I/O) and compiles natively and
+      to wasm32 (1548-5t00 consumes it in the Worker).
+    exit_criteria:
+      - 'cargo test -p tillandsias-fleet-core score passes: a property test over 10,000 random attribute sets finds no class-0 host outranking a class-2 host; a host declaring class 2 with 0.5 measured availability scores as class 0; ordering is total and stable (pre-fix: crate absent)'
+      - 'cargo build -p tillandsias-fleet-core --target wasm32-unknown-unknown succeeds'
+    verifiable_closure: |
+      cargo test -p tillandsias-fleet-core score exits 0; a mutation moving
+      RAM before class in the tuple makes the property test fail (asserted
+      once and recorded in the closing event).
+    depends_on: []
+    next_action: >
+      Create the crate with the score module only; 1548-5t00 adds the
+      canonical encoder and the lease state machine to the same crate.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Pure score and the first affinity file; can start immediately.
+
+  - packet_id: a-cloudflare-worker-with-one-durable-object-verifies-signed-heartbeats-and-grants-at-most-one-live-lease-per-service-with-monotone-epochs-proved-against-a-fake-sharing-the-same-core
+    order: 1548-5t00
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: linux
+    capability_tags: [fleet, rendezvous, cloudflare, workers, durable-objects, wasm, crypto, fixture]
+    estimated_hours: 16
+    owned_files:
+      - crates/tillandsias-fleet-core/
+      - cloud/rendezvous/
+      - crates/tillandsias-headless/src/bin/tillandsias-fake-rendezvous.rs
+      - scripts/test-fleet-rendezvous.sh
+    title: |
+      tillandsias-fleet-core's canonical encoder and lease state machine run unchanged in a Cloudflare Worker with ONE SQLite Durable Object (rendezvous.tlatoani.net, workers_dev failsafe) and in tillandsias-fake-rendezvous: a heartbeat signed by an unknown key, a stale ts or a replayed seq is refused storing nothing, the roster comes back signed by the rendezvous key, at most one live holder exists per service with strictly increasing epochs, expiry is driven by one alarm and no timer, and tillandsias fleet deploy-rendezvous / publish-roster upload the Worker and the tree's keys and services.yaml
+    context: |
+      Design note §1 and design Decisions 1-3: Workers Free 100k req/day,
+      DO 100k req and 100k rows written/day, SQLite backend only on Free;
+      single-threaded DO makes compare-and-set a plain event; setTimeout
+      makes the object non-hibernateable (billed up to 140 s per wake).
+      Constants: HEARTBEAT 900 s, LEASE_TTL 3600 s, MIN_PRESENCE 4 h.
+      Auth is Ed25519 over canonical bytes (Workers WebCrypto) — no Access,
+      no service token. Deploy uses the operator's Cloudflare bundle
+      (Workers Scripts Write); the DNS token is set by the operator as a
+      Worker secret and is 1548-pg32's.
+    exit_criteria:
+      - 'scripts/test-fleet-rendezvous.sh exits 0 against the fake: unknown key -> 401 refused:rendezvous:unknown-host and an unchanged host table; ts 301 s off -> refused:rendezvous:stale-ts; seq repeated -> refused:rendezvous:replay; 1,000 random interleavings of 5 contenders for one service show zero overlapping live holders and strictly increasing epochs; native and wasm encoders agree byte-for-byte on 1,000 random bodies (pre-fix: no crate, no Worker)'
+      - '/usr/bin/grep -rnE ''setTimeout|setInterval'' cloud/rendezvous/ prints nothing, asserted by the fixture'
+      - 'one live smoke on the real Worker recorded in the milestone events: two hosts heartbeat, the roster lists both, wrangler tail shows zero errors'
+    verifiable_closure: |
+      bash scripts/test-fleet-rendezvous.sh exits 0 with its named arms; a
+      negative control with TILLANDSIAS_RENDEZVOUS_SKIP_SIG=1 (a fake-only
+      seam) makes the unknown-key arm FAIL, proving the arm reaches the
+      verifier; the live smoke is a recorded measurement, not a gate.
+    depends_on:
+      - fleet-score-orders-hosts-by-measured-class-first-so-a-transient-laptop-never-outranks-an-always-on-host-and-services-yaml-names-macuahuitl-preferred
+      - plan-fleet-peers-records-carry-every-public-key-a-peer-needs-and-fleet-peers-check-refuses-a-malformed-or-mismatched-record
+      - a-fake-cloudflare-server-serves-openid-discovery-oauth-and-the-zero-trust-api-routes-the-bootstrap-calls-so-every-login-and-fleet-vpn-fixture-runs-without-the-real-app
+    next_action: >
+      Write the state machine and encoder in the core crate with the fake
+      first; the Worker is a thin workers-rs adapter added last.
+    notes: |
+      size: L
+      implementer_tier: opus
+      The lease state machine is the safety-critical piece; review it
+      against the 1,000-interleaving fixture before the Worker exists.
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          The rendezvous itself: shared core, Worker + DO, fake.
+
+  - packet_id: the-resident-heartbeats-every-15-minutes-and-leadership-moves-only-after-4-hours-of-presence-so-a-waking-laptop-never-takes-a-service-and-failover-completes-within-75-minutes
+    order: 1548-2ilf
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: any
+    capability_tags: [fleet, leader-election, resident, timing]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-headless/src/fleet_heartbeat.rs
+      - scripts/test-fleet-election.sh
+    title: |
+      The host resident heartbeats every 900 s with its addresses, attributes, the services it holds and the services its affinity lets it request; under a simulated clock a class-0 laptop heartbeating for 12 h never takes git-mirror from macuahuitl, macuahuitl stopping hands each of its services to the best eligible host within 75 minutes, a preferred host returning takes its service back only after 4 h of presence and at the holder's next renew, and tillandsias fleet status prints each service's holder, epoch and expiry
+    context: |
+      Operator ruling 4: heartbeats slow, leases about an hour, hours of
+      presence before a takeover. Bound: LEASE_TTL 3600 + HEARTBEAT 900 =
+      75 min. A host is eligible only while its last egress probe passed
+      (1548-mhyk), so a half-blackholed host never holds a service. The
+      resident is the same process that runs the token rotation schedulers
+      (1461-8tyy is the model for a resident due-check).
+    exit_criteria:
+      - 'scripts/test-fleet-election.sh exits 0 with a simulated clock and three scripted hosts against the fake rendezvous: laptop-wakes arm (holder and epoch unchanged after 12 h); failover arm (prints handover latency <= 4500 s); return arm (preferred host regains the lease no earlier than 4 h after its first heartbeat); egress-failed arm (a host whose probe fails is never granted) (pre-fix: no resident heartbeat)'
+    verifiable_closure: |
+      bash scripts/test-fleet-election.sh exits 0 with four named arms; a
+      mutation setting MIN_PRESENCE to 0 makes the return arm FAIL.
+    depends_on:
+      - a-cloudflare-worker-with-one-durable-object-verifies-signed-heartbeats-and-grants-at-most-one-live-lease-per-service-with-monotone-epochs-proved-against-a-fake-sharing-the-same-core
+      - is-ipv6-functional-parses-unbracketed-socket-addresses-so-init-writes-ipv4-only-on-every-linux-host-and-the-repair-must-probe-every-default-router
+    next_action: >
+      Add the heartbeat loop to the resident behind an injected clock; the
+      fixture drives the clock, never sleeps.
+    notes: |
+      size: M
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Election timing in the resident, proved under a simulated clock.
+
+  - packet_id: the-durable-object-is-the-only-fleet-dns-writer-and-fleet-resolve-picks-lan-first-then-mesh-printing-the-rung-it-used
+    order: 1548-pg32
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: any
+    capability_tags: [fleet, dns, cloudflare, mesh, networking]
+    estimated_hours: 6
+    owned_files:
+      - cloud/rendezvous/src/dns.rs
+      - crates/tillandsias-headless/src/fleet_resolve.rs
+      - scripts/test-fleet-dns-resolve.sh
+    title: |
+      The Durable Object alone writes <host>.fleet.tlatoani.net AAAA, <host>.mesh.fleet.tlatoani.net A and per-service CNAMEs plus TXT epoch=<n> holder=<host>, all proxied:false TTL 60, only on change and never deleting a service record (stale=<ts> instead); tillandsias fleet resolve <host|service> prints the LAN address when it shares the target's /64 and a 2 s connect succeeds, else the Mesh IP, else unreachable:<name>:<reason>, with via:lan|via:mesh
+    context: |
+      Design note §4 and Decision 4: no host holds a DNS token (Worker
+      secret CF_DNS_TOKEN, zone-scoped Zone > DNS > Edit); proxied records
+      carry only HTTP so must never be used; minimum TTL 60. Operator ruling
+      12: LAN direct is primary, Mesh for off-LAN. Mesh IPs come from the
+      host's heartbeat once 1506-t97c has joined it. ssh/git configs call
+      resolve as a ProxyCommand; a floating name is never certified
+      (HostKeyAlias to the holder's real name).
+    exit_criteria:
+      - 'scripts/test-fleet-dns-resolve.sh exits 0: against a fake DNS API a handover writes exactly one call per changed record, every body has proxied:false and ttl:60, and a vacancy writes stale= without a DELETE; resolve prints via:lan for a same-/64 reachable target, via:mesh when the LAN connect fails and a Mesh IP is known, and unreachable:<name>:no-route when neither (pre-fix: no records, no verb)'
+    verifiable_closure: |
+      bash scripts/test-fleet-dns-resolve.sh exits 0 with its named arms; the
+      fake DNS ledger is the evidence for the write arms; a mutation that
+      sends proxied:true fails the body assertion.
+    depends_on:
+      - a-cloudflare-worker-with-one-durable-object-verifies-signed-heartbeats-and-grants-at-most-one-live-lease-per-service-with-monotone-epochs-proved-against-a-fake-sharing-the-same-core
+      - fleet-vpn-join-leave-status-launches-the-warp-sidecar-beside-the-router-from-secret-cloudflare-mesh-on-linux-and-inside-the-macos-and-windows-guests-so-no-host-os-ever-runs-a-cloudflare-daemon
+    next_action: >
+      DNS writes first (fake DNS API in the fake rendezvous), then resolve;
+      the Mesh arm can use a fixture-supplied Mesh IP before 1506-t97c lands.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          DNS by the DO only; client-side LAN-then-Mesh path choice.
+
+  - packet_id: rendered-fleet-ssh-trust-lets-a-to-reach-b-with-strict-host-key-checking-while-a-third-hosts-ca-can-vouch-for-neither-bs-name-nor-a-principal-the-tree-did-not-grant
+    order: 1548-u5wv
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: linux
+    capability_tags: [fleet, ssh, vault, certificates, security, rootless]
+    estimated_hours: 12
+    owned_files:
+      - crates/tillandsias-headless/src/fleet_ssh.rs
+      - scripts/test-fleet-ssh-trust.sh
+    title: |
+      tillandsias fleet trust renders ~/.config/tillandsias/ssh/fleet.conf with one name-scoped @cert-authority line per landed peer, a rootless fleet sshd on 48622 (AuthorizedKeysFile none, TrustedUserCAKeys from the tree, AuthorizedPrincipalsCommand tillandsias fleet principals %F %u), 7-day host and 16-hour user certificates from each host's own Vault CA, and three loopback sshds prove A reaches B with StrictHostKeyChecking=yes and no prompt while C's CA vouching for B's name and C's user cert asserting a principal not granted to C are both refused — with every token expired and the rendezvous unreachable
+    context: |
+      Design note §3 and ruling 14: connection-time trust is the pinned CA,
+      never a live login; the logins gate enrollment only. Inherits the
+      signed SSH-CA design D1-D10 (ssh-ca-forge-mirror-push-design-2026-07-31.md)
+      with the federated-CA amendment of 1548-ym32. Client consent: one
+      Include line in ~/.ssh/config, asked once and printed. The system sshd
+      is never touched without operator consent.
+    exit_criteria:
+      - 'scripts/test-fleet-ssh-trust.sh exits 0 with three loopback sshds and three Vault dev servers: accept arm (A->B, StrictHostKeyChecking=yes, BatchMode=yes, rc 0); cross-name arm (C serves a cert for B''s name -> refused, client log quoted); cross-principal arm (C''s user cert asserting til:fleet-mirror:B -> refused, sshd log quoted); no-token arm (all bundles absent, rendezvous fake stopped, accept arm still rc 0) (pre-fix: no verb)'
+    verifiable_closure: |
+      bash scripts/test-fleet-ssh-trust.sh exits 0 with four named arms; the
+      premise of each refusal arm is asserted first (C's cert really names
+      B; the principal really is absent from C's grant), so a refusal for an
+      unrelated reason cannot pass.
+    depends_on:
+      - plan-fleet-peers-records-carry-every-public-key-a-peer-needs-and-fleet-peers-check-refuses-a-malformed-or-mismatched-record
+      - fleet-sshd-git-mirror-and-experts-endpoints-are-reachable-from-a-second-host-over-the-lan-and-over-the-mesh-sidecar-recorded-per-substrate-as-one-of-five-named-outcomes
+    next_action: >
+      Reuse the SSH-CA design's loopback-sshd fixture pattern (V7: non-root
+      sshd on 127.0.0.1) with three CAs.
+    notes: |
+      size: L
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Pinned per-host CA trust for SSH, with the negative matrix.
+
+  - packet_id: removing-a-peer-record-makes-every-online-host-refuse-that-hosts-certificates-after-its-next-fetch-and-a-relayed-notice-only-suspends
+    order: 1548-vpe4
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: any
+    capability_tags: [fleet, ssh, revocation, security]
+    estimated_hours: 5
+    owned_files:
+      - crates/tillandsias-headless/src/fleet_revoke.rs
+      - scripts/test-fleet-revocation.sh
+    title: |
+      After host C's record is removed (fleet leave, logout, or plan/fleet/revoked.yaml), every host re-renders its trust files and KRL on its next fetch and the next connection from or to C is refused with the KRL reason; a revoke notice relayed by the rendezvous, signed by a non-revoked admitted announce key, only suspends C for new sessions until the tree confirms or 24 h pass, and a notice signed by C itself is ignored
+    context: |
+      Design note §3: TTL first, KRL second (SSH-CA D8); removal of the
+      record is the revocation (ruling 14). The suspend-not-revoke rule
+      bounds a stolen enrolled host's ability to grief others.
+    exit_criteria:
+      - 'scripts/test-fleet-revocation.sh exits 0: removal arm (connection from C refused after re-render, sshd log shows the KRL reason); suspend arm (relayed notice -> refused for new sessions, lapses after a simulated 24 h with no tree change); self-signed arm (a notice signed by C changes nothing); restore arm (re-admitting C restores access) (pre-fix: no verb)'
+    verifiable_closure: |
+      bash scripts/test-fleet-revocation.sh exits 0 with four named arms;
+      the removal arm first asserts C connects successfully before the
+      removal (the premise), so a broken fixture cannot pass it.
+    depends_on:
+      - rendered-fleet-ssh-trust-lets-a-to-reach-b-with-strict-host-key-checking-while-a-third-hosts-ca-can-vouch-for-neither-bs-name-nor-a-principal-the-tree-did-not-grant
+      - fleet-enroll-mints-keys-only-when-both-the-github-and-cloudflare-logins-match-the-owner-pins-and-fleet-leave-removes-the-record
+    next_action: >
+      Render the KRL from the tree inside fleet trust; the notice path reads
+      the roster's revocations table.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Revocation by record removal; relayed notices only suspend.
+
+  - packet_id: macuahuitls-mirror-serves-the-fleet-read-and-write-as-a-pass-through-acknowledged-only-after-github-accepts-and-every-host-falls-back-loudly-to-its-local-mirror
+    order: 1548-7onc
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: linux
+    capability_tags: [fleet, git-mirror, ssh, durability, github]
+    estimated_hours: 12
+    owned_files:
+      - crates/tillandsias-headless/src/fleet_mirror.rs
+      - scripts/test-fleet-git-mirror.sh
+    title: |
+      The git-mirror holder serves its per-project mirrors over the fleet sshd to til:fleet-mirror:<host> principals through a forced command admitting only git-upload-pack and git-receive-pack, relays every push with the existing atomic pre-receive relay using the shared Tillandsias GitHub App credential and logs the pushing host's principal; every other host's local mirror relays to it LAN-first or via Mesh and falls back to GitHub with fallback:git-mirror:<reason>, and a forge push is never acknowledged before GitHub holds the ref
+    context: |
+      Operator rulings 7 and 11: read AND write, GitHub the source of truth,
+      local mirror failsafe as always; push credential is the shared App
+      login; attribution is the committer's per-host identity, preserved
+      unchanged. Measured (design note §4): 371 of the last 400 linux-next
+      commits carry a host-qualified identity, 29 do not (27 shared gmail,
+      2 land-queue), so the mirror ALSO logs the pushing principal — no
+      commit rewrite, no trailer. The relay contract is unchanged
+      (openspec/specs/git-mirror-service/spec.md:171-200); only the local
+      mirror's upstream becomes an ordered chain. Off-LAN reachability
+      through the Mesh sidecar is 1548-h7qh's outcome.
+    exit_criteria:
+      - 'scripts/test-fleet-git-mirror.sh exits 0 with two mirrors and a fake GitHub (bare repo behind a delaying hook): chain arm (a forge push through local -> fleet -> fake GitHub returns only after the fake holds the ref; asserted by timestamps); fallback arm (fleet mirror stopped -> push succeeds directly, status prints fallback:git-mirror:unreachable); forced-command arm (ssh <holder> sh -c id refused); attribution arm (the relayed commit is byte-identical and the fleet mirror log names til:fleet-mirror:<pusher>) (pre-fix: no fleet mirror access)'
+      - 'live: one push from yoga on the LAN and one off-LAN (via:mesh) recorded in the milestone events'
+    verifiable_closure: |
+      bash scripts/test-fleet-git-mirror.sh exits 0 with four named arms; a
+      mutation that acknowledges in post-receive instead of pre-receive
+      makes the chain arm FAIL.
+    depends_on:
+      - the-resident-heartbeats-every-15-minutes-and-leadership-moves-only-after-4-hours-of-presence-so-a-waking-laptop-never-takes-a-service-and-failover-completes-within-75-minutes
+      - rendered-fleet-ssh-trust-lets-a-to-reach-b-with-strict-host-key-checking-while-a-third-hosts-ca-can-vouch-for-neither-bs-name-nor-a-principal-the-tree-did-not-grant
+      - the-durable-object-is-the-only-fleet-dns-writer-and-fleet-resolve-picks-lan-first-then-mesh-printing-the-rung-it-used
+    next_action: >
+      Add the forced command and principal grant; then the local mirror's
+      upstream chain; keep the relay helper untouched.
+    notes: |
+      size: L
+      implementer_tier: opus
+      1541-qg7u (reconcile fetches heads only) affects the same reconcile
+      path; read it before changing fetch preference.
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          The shared fleet git mirror as a durable pass-through.
+
+  - packet_id: fleet-experts-follow-the-local-experts-lease-index-every-fleet-ref-relayed-through-the-shared-mirror-and-admit-only-pinned-ca-certificates-replacing-the-shared-bearer
+    order: 1548-q2fr
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: linux
+    capability_tags: [fleet, fleet-experts, expert-serve, tls, certificates, security]
+    estimated_hours: 10
+    owned_files:
+      - crates/tillandsias-plan/src/expert_fleet.rs
+      - scripts/test-fleet-experts.sh
+    title: |
+      The local-experts holder serves expert-serve only to clients presenting a certificate from a CA pinned in a landed peer record (mutual TLS with certificates from each host's own Vault, or an SSH-forwarded port with a fleet user certificate), refuses the 1505-br88 shared bearer, builds its index over linux-next, main and every branch relayed through the fleet mirror in the last 14 days and names those refs in each answer's freshness envelope, and a spoke falls back to its own experts with fallback:local-experts:<reason>
+    context: |
+      Operator ruling 14 (closed 2026-10-03): experts and every host-to-host
+      service authenticate with certificates from each host's own Vault CA,
+      pinned in plan/fleet/peers and the roster; the logins gate enrollment
+      only, a lapsed token must not break the experts; 1505-br88's shared
+      bearer is replaced. App-level auth is required regardless because Mesh
+      service-token devices share one identity. Ruling 7: the experts see
+      the whole fleet's refs through the shared mirror.
+    exit_criteria:
+      - 'scripts/test-fleet-experts.sh exits 0: cert arm (a client with a pinned-CA cert gets an answer whose freshness envelope lists refs pushed from two fixture hosts); bearer arm (the old bearer without a cert is refused before any retrieval); foreign-CA arm (a cert from an unpinned CA is refused); fallback arm (holder stopped -> spoke answers locally with fallback:local-experts:unreachable); no-token arm (all bundles absent, cert arm still passes) (pre-fix: bearer-only design, no fleet index)'
+    verifiable_closure: |
+      bash scripts/test-fleet-experts.sh exits 0 with five named arms; the
+      bearer arm asserts the retrieval counter is unchanged, so a
+      refuse-after-retrieve implementation fails it.
+    depends_on:
+      - the-resident-heartbeats-every-15-minutes-and-leadership-moves-only-after-4-hours-of-presence-so-a-waking-laptop-never-takes-a-service-and-failover-completes-within-75-minutes
+      - macuahuitls-mirror-serves-the-fleet-read-and-write-as-a-pass-through-acknowledged-only-after-github-accepts-and-every-host-falls-back-loudly-to-its-local-mirror
+      - rendered-fleet-ssh-trust-lets-a-to-reach-b-with-strict-host-key-checking-while-a-third-hosts-ca-can-vouch-for-neither-bs-name-nor-a-principal-the-tree-did-not-grant
+      - expert-serve-binds-the-mesh-only-behind-a-bearer-and-tillandsias-fleet-experts-serve-runs-it-on-the-hub-mesh-ip-advertising-fleet-experts-tillandsias-vpn-internal
+    next_action: >
+      Take 1505-br88's bind plumbing, replace its bearer check with the
+      pinned-CA check, then widen the index to the fleet refs.
+    notes: |
+      size: L
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Fleet experts with certificate auth over the whole fleet's refs.
+
+  - packet_id: with-the-rendezvous-unreachable-or-over-quota-hosts-keep-the-last-signed-roster-and-keep-reaching-the-last-holder-reporting-blocked-rendezvous-with-the-reason
+    order: 1548-1oq2
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: any
+    capability_tags: [fleet, rendezvous, partition, quota, resilience]
+    estimated_hours: 4
+    owned_files:
+      - scripts/test-fleet-partition.sh
+    title: |
+      With the rendezvous blackholed, or answering 1027 / 429, every host keeps its last signed roster, backs off (to 00:00 UTC on 1027), keeps resolving and reaching the last known holder directly, falls back to its local mirror and experts when that holder does not answer, and prints blocked:rendezvous:unreachable:<reason> or blocked:rendezvous:quota:<code>, never a silent stall
+    context: |
+      Design Decision 9: fenced duties are the DO's and simply freeze; the
+      git mirror and experts are duplicable, so serving from the last holder
+      is safe; no LAN election runs. LAN discovery hints from 1506-7tq4
+      still work. Free quotas fail with errors, never bills (design note §1).
+    exit_criteria:
+      - 'scripts/test-fleet-partition.sh exits 0 against the fake rendezvous: blackhole arm (resolve still prints the last holder, status prints blocked:rendezvous:unreachable:<reason>); 1027 arm (no further heartbeat until the simulated 00:00 UTC, status blocked:rendezvous:quota:1027); holder-down arm (blackhole plus holder stopped -> fallback:git-mirror and fallback:local-experts lines) (pre-fix: no rendezvous client)'
+    verifiable_closure: |
+      bash scripts/test-fleet-partition.sh exits 0 with three named arms;
+      the 1027 arm counts heartbeats sent by the client, so a client that
+      ignores the code fails it.
+    depends_on:
+      - the-resident-heartbeats-every-15-minutes-and-leadership-moves-only-after-4-hours-of-presence-so-a-waking-laptop-never-takes-a-service-and-failover-completes-within-75-minutes
+      - the-lan-rung-msg-serve-listens-on-tcp-discovers-peers-from-the-directory-and-mdns-hints-forwards-outboxes-with-stored-receipts-and-end-to-end-acks-and-drops-replays-by-id-and-sequence
+    next_action: >
+      Write the fixture over the resident's injected clock and the fake's
+      blackhole / 1027 switches.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Partition and quota behaviour, loud by construction.
+
+  - packet_id: status-tlatoani-net-and-the-oauth-relay-page-are-static-assets-of-the-rendezvous-worker-and-the-status-page-shows-every-host-and-holder-with-its-age
+    order: 1548-6auk
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: any
+    capability_tags: [fleet, status-page, cloudflare, workers, oauth]
+    estimated_hours: 4
+    owned_files:
+      - cloud/rendezvous/public/
+      - scripts/test-fleet-status-page.sh
+    title: |
+      status.tlatoani.net serves a static page that reads one roster endpoint and shows every enrolled host (last seen, measured class, rung) and every service's holder, epoch and lease age, exposing no address beyond what DNS already publishes, and the existing relay page (assets/cloudflare-relay/index.html) is served unchanged at https://rendezvous.tlatoani.net/tillandsias/cloudflare/callback, both as static assets that consume no Worker quota
+    context: |
+      Operator ruling 9: status.tlatoani.net is the landing page; the relay
+      needs a domain for QR login (1505-sm2j open question 1, answered by
+      tlatoani.net). Static assets are free and unlimited (design note §1);
+      the roster read is one Worker + one DO request per view. The relay
+      URL must be registered on the OAuth client (design note §5 item 3).
+    exit_criteria:
+      - 'scripts/test-fleet-status-page.sh exits 0 against the fake: the page''s roster fetch returns every fixture host and holder; the rendered page contains no IPv6 address that is not also in the fake DNS ledger; the relay asset is byte-identical to assets/cloudflare-relay/index.html (pre-fix: no Worker)'
+    verifiable_closure: |
+      bash scripts/test-fleet-status-page.sh exits 0 with three named arms;
+      a mutation adding a host's claimed-but-unobserved address to the page
+      fails the address arm.
+    depends_on:
+      - a-cloudflare-worker-with-one-durable-object-verifies-signed-heartbeats-and-grants-at-most-one-live-lease-per-service-with-monotone-epochs-proved-against-a-fake-sharing-the-same-core
+    next_action: >
+      Copy the relay asset into the Worker's public directory at build time
+      (never fork it); write the status page with no framework.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          The landing page and the relay page on tlatoani.net.
+
+  - packet_id: is-ipv6-functional-parses-unbracketed-socket-addresses-so-init-writes-ipv4-only-on-every-linux-host-and-the-repair-must-probe-every-default-router
+    order: 1548-mhyk
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: linux
+    capability_tags: [bug, ipv6, podman, rootless, init, networking]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+      - scripts/test-ipv6-probe.sh
+    title: |
+      is_ipv6_functional (crates/tillandsias-headless/src/main.rs:8746-8760) parses "2001:4860:4860::8888:53" and "2606:4700:4700::1111:53" as SocketAddr, which Rust rejects without brackets, so it can never return true and tillandsias --init writes pasta_options = ["--ipv4-only"] on every Linux host; the repair must use bracketed addresses AND probe egress through every default router, because on a LAN with a non-forwarding second router (yoga today) a single probe is a coin flip
+    context: |
+      Measured on yoga 2026-10-03 (design note §2): a scratch rustc probe
+      gave Err(AddrParseError(Socket)) for the unbracketed form and Ok for
+      "[2001:4860:4860::8888]:53"; ~/.config/containers/containers.conf:3
+      reads pasta_options = ["--ipv4-only"]; main.rs:9105 calls the injector
+      whenever the probe fails. Two ECMP default routers on yoga, one (the
+      Pi) black-holing: flow-label-pinned probes lost 9/9 via the Pi and
+      0/7 via the Motorola. The repair reports per-router results
+      (egress=<ok>/<routers>) and is also the egress signal 1548-2ilf uses
+      for service eligibility. Rootless containers have had no IPv6 on any
+      Linux host since this probe shipped (9b493d7a5).
+    exit_criteria:
+      - 'scripts/test-ipv6-probe.sh exits 0: a unit test proves the probe''s address list parses; with a stub route table of two routers where one black-holes, the probe reports egress=1/2 and does NOT declare IPv6 functional; with both working it reports 2/2 and init leaves containers.conf without --ipv4-only (pre-fix: the parse fails and the injector always runs)'
+    verifiable_closure: |
+      bash scripts/test-ipv6-probe.sh exits 0 with its named arms; the parse
+      arm fails on today's tree (assert once and record it), proving the
+      fixture reaches the defect.
+    depends_on: []
+    next_action: >
+      Bracket the addresses; replace the two-connect probe with a per-router
+      probe behind an injectable route table; decide with the operator
+      whether init removes an earlier --ipv4-only it wrote.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Dead IPv6 self-check found by research B; source and measurement cited.
+
+  - packet_id: the-dmz-raspberry-pi-advertises-itself-as-a-default-ipv6-router-without-forwarding-so-about-half-of-every-lan-hosts-ipv6-flows-black-hole
+    order: 1548-i07i
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.6
+    release_target: every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    pickup_role: operator
+    capability_tags: [operator-action, ipv6, networking, raspberry-pi, lan]
+    estimated_hours: 1
+    owned_files: []
+    title: |
+      OPERATOR ACTION — the DMZ Raspberry Pi (MAC 2c:cf:67:c1:3a:8c, 192.168.0.250, link-local fe80::2ecf:67ff:fec1:3a8c) sends IPv6 router advertisements with a non-zero router lifetime but does not forward, so every LAN host installs it as a second ECMP default router and about half of all IPv6 flows black-hole; set dnsmasq ra-param=<iface>,0,0 (or radvd AdvDefaultLifetime 0) on the Pi
+    context: |
+      Measured on yoga 2026-10-03 (design note §2): flow-label-pinned probes
+      lost 9/9 via the Pi and 0/7 via the Motorola gateway; tracepath via
+      the Pi got no reply at hop 1; curl -6 -m 20 failed 3/4 to
+      ipv6.google.com. The Pi runs Ubuntu Server with hand-run containers
+      today (operator, 2026-10-03); it is out of scope for v1 except this
+      fix. Distinguishing evidence the operator can read on the Pi: sysctl
+      net.ipv6.conf.all.forwarding, grep -E 'enable-ra|ra-param|constructor'
+      /etc/dnsmasq*, systemctl status radvd. Linked goal: 1548-y56i.
+    exit_criteria:
+      - 'on yoga, ip -6 route show default lists exactly one next hop (the Motorola gateway) after the fix, and 8 of 8 flow-label-pinned pings to 2606:4700:4700::1111 succeed (pre-fix: two next hops, about half lost)'
+    verifiable_closure: |
+      a closing event quotes ip -6 route show default and the eight pinned
+      pings from a LAN host, both measured after the change on the Pi.
+    unscoreable: |
+      an OPERATOR action on the DMZ Raspberry Pi (router-advertisement configuration); no repository code changes, so nothing in the tree can score it. Evidence is the per-router egress measurement of 1548-mhyk run on a LAN host after the change.
+    depends_on: []
+    next_action: >
+      Operator edits the Pi's dnsmasq/radvd configuration; any agent then
+      records the measurement.
+    notes: |
+      size: S
+      implementer_tier: operator
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Operator action item; breaks LAN IPv6 today.
+
+  - packet_id: goal-research-direct-ipv6-wan-between-fleet-hosts-through-pinholes-or-coordinated-udp-simultaneous-open-for-metered-or-heavy-traffic-measured-from-off-prefix
+    order: 1548-v453
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.7
+    pickup_role: any
+    capability_tags: [research, goal, ipv6, networking, wan, measurement]
+    estimated_hours: 8
+    owned_files:
+      - scripts/measure-ipv6-path.sh
+    title: |
+      GOAL (later rung, operator ruling 12) — research whether fleet hosts off the home LAN can reach each other over direct IPv6 (router pinhole, PCP or UPnP-IGD v6 pinhole, or UDP simultaneous open coordinated over the rendezvous) for metered or heavy cases, measured by a read-only per-host instrument that emits one line with egress per router and refuses to report inbound pass or fail unless the prober is outside the target's /64
+    context: |
+      Ruling 12: v1 uses Mesh off-LAN; direct IPv6 WAN is a later
+      optimisation; no router pinholes in v1. Design note §2 keeps the
+      candidate order and the instrument sketch (fields with their producers'
+      rcs; inbound=unmeasured reason=same-prefix premise guard). The prefix
+      on yoga was stable for 15 days but is not guaranteed; certificates
+      name hosts, never addresses.
+    exit_criteria:
+      - 'a findings note records, per pair of fleet hosts on different networks, one of direct-pinhole | direct-punch | mesh-only with the instrument''s line from both ends'
+    verifiable_closure: |
+      the instrument's premise-guard arm prints inbound=unmeasured
+      reason=same-prefix when run between two LAN hosts (asserted once),
+      and the findings note cites both ends' lines.
+    unscoreable: |
+      a GOAL research packet for a later release; its deliverable is a measured recommendation from an off-prefix peer, not code a litmus can pin.
+    depends_on: []
+    next_action: >
+      Not before the v1 milestone closes; the operator decides when metered
+      or heavy cases justify it.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Later rung; kept so the IPv6 research is not lost.
+
+  - packet_id: goal-the-raspberry-pi-runs-fedora-44-aarch64-is-enrolled-by-the-two-operator-logins-and-starts-its-fleet-services-with-high-affinity
+    order: 1548-y56i
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.8
+    pickup_role: any
+    capability_tags: [research, goal, raspberry-pi, aarch64, fleet, enrollment]
+    estimated_hours: 8
+    owned_files: []
+    title: |
+      GOAL (far-off, operator ruling 13) — the DMZ Raspberry Pi, today Ubuntu Server with hand-run docker containers, runs a Fedora 44 aarch64 cloud image; the operator runs tillandsias --github-login and --cloudflare-login on it and it then enrolls and starts its fleet services automatically with high affinity; requires an aarch64 Tillandsias build, which does not exist today
+    context: |
+      Order 595-6y8b records five Raspberry Pi 5s with 1 TB NVMe drives
+      (plan/index.yaml:12795): natural always-on hosts, and with three of
+      them a Raft quorum becomes thinkable (rejected for v1). This row is a
+      goal: it is decomposed into an aarch64 build packet and an
+      enrollment-on-Pi packet when the operator schedules it.
+    exit_criteria:
+      - 'a decomposition into at least an aarch64 build packet and a Pi enrollment packet, each with a verifiable closure, filed when the operator schedules this goal'
+    verifiable_closure: |
+      the child packets exist in the ledger with this row in their
+      depends_on or release_target.
+    unscoreable: |
+      a far-off GOAL (Pi on Fedora 44 aarch64); it needs an aarch64 build and hardware the fleet does not yet run, so no litmus can be named now.
+    depends_on:
+      - every-enrolled-host-discovers-the-fleet-through-a-signed-cloudflare-worker-rendezvous-and-reaches-per-service-holders-lan-first-and-over-mesh-off-lan-trusting-only-pinned-per-host-cas
+    next_action: >
+      Wait for the v1 milestone and the operator's scheduling decision; the
+      router-advertisement fix (1548-i07i) is independent and urgent.
+    notes: |
+      size: L
+      implementer_tier: opus
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Far-off goal recorded so the Pi's role is not re-asked.
+
+  - packet_id: the-four-cloudflare-login-chain-rows-still-fold-ready-though-their-code-landed-at-7985e2469-and-kc5f-still-lacks-the-tray-signal
+    order: 1548-8ii6
+    status: ready
+    kind: finding
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [finding, plan, bookkeeping, cloudflare]
+    estimated_hours: 1
+    owned_files: []
+    title: |
+      FINDING — 1505-svve, 1505-kyx8, 1505-iysn and 1505-kc5f still fold as ready although their code landed as 7985e2469 (land96, an ancestor of origin/linux-next) on 2026-09-30 and the landing note says "The row author closes from the ledger"; nobody closed them, and 1505-kc5f is not cleanly complete because tasks.md 5.1 records the tray-side stored signal as not done (1505-hfim's row)
+    context: |
+      Measured 2026-10-03 on yoga: tillandsias-plan status prints ready for
+      all four; git merge-base --is-ancestor 7985e2469 origin/linux-next
+      exits 0; plan/index.d/20260930t004826z-31eebbb9-macuahuitl.yaml:17 is
+      the landing note. This session did NOT close them: completion needs
+      each verifiable_closure script run on trunk (scripts/test-fake-cloudflare.sh,
+      test-cloudflare-oauth-core.sh, test-cloudflare-token-rotation.sh,
+      test-cloudflare-login.sh), which a design session did not do. The
+      stale ready rows make the 1505 milestone look unstarted to every
+      reader and to plan_next.
+    exit_criteria:
+      - 'svve, kyx8 and iysn carry completed events citing 7985e2469 and a trunk run of their closure scripts with rc; kc5f carries either completed (with the tray signal split out to 1505-hfim by an event) or a note naming what remains'
+    verifiable_closure: |
+      tillandsias-plan status on the four ids prints the new statuses, and
+      each completed event quotes its closure script's rc on trunk.
+    unscoreable: |
+      a bookkeeping finding: its closure is completion events on four existing rows, each backed by those rows own closure scripts run on trunk; it adds no testable property of its own.
+    depends_on: []
+    next_action: >
+      The row author (macuahuitl) or any Linux host runs the four closure
+      scripts on trunk and closes from the ledger.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Bookkeeping finding; not closed here for lack of trunk closure runs.
+
+  - packet_id: plan-answer-cites-a-rows-definition-span-for-a-status-set-by-a-later-fragment-so-its-own-citation-check-refuses-every-obsoleted-row
+    order: 1548-twha
+    status: ready
+    kind: finding
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [finding, plan-expert, citations, mcp]
+    estimated_hours: 3
+    owned_files: []
+    title: |
+      FINDING — plan_answer "status of every packet under milestone 1505-sm2j and 1506-3xu7" returned confidence=unsupported with three violations "cited span does not substantiate authority status=obsoleted": it cited the rows' definition spans (20260929t205532z-1505-sm2j-…-macuahuitl.yaml:435-489, :491-540, :542-589, each reading status: ready) for a status that the 1506-3xu7 fragment set later; the checker is right and the composer picks the wrong span, so any question touching a row whose status was changed by a later fragment is refused
+    context: |
+      Observed 2026-10-03 on yoga through the forge-plan MCP (freshness
+      source_commit 08b8862e4); the fallback tillandsias-plan status
+      answered correctly (1505-m63i, 1505-bhsb, 1505-g6zc obsoleted). The
+      citation must be the span of the fragment entry that set the folded
+      status (a status:/fields: or completed/obsoleted event), not the
+      packets: definition.
+    exit_criteria:
+      - 'plan_answer on the same question returns confidence other than unsupported and cites, for each obsoleted row, a span in the fragment that set the status; a fixture asks about one row obsoleted by a later fragment and asserts the citation path differs from the definition fragment (pre-fix: refused)'
+    verifiable_closure: |
+      the fixture passes on the fixed tree and fails on today's tree with
+      the quoted violation text.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. The defect is in plan_answer citation spans for statuses set by later fragments; no fixture yet asks plan_answer about an obsoleted row. FUTURE LITMUS FILENAME: scripts/test-plan-answer-cites-status-setting-fragment.sh, written in the same commit as the fix (1136-n8sh).
+    depends_on: []
+    next_action: >
+      Locate where plan_answer selects the citation span for a folded
+      status; prefer the span of the last status-setting entry.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    events:
+      - type: filed
+        ts: "2026-10-03T18:39:41Z"
+        agent_id: claude-opus-yoga-20261003t183941z
+        host: yoga
+        summary: |-
+          Plan expert citation defect, observed live this session.

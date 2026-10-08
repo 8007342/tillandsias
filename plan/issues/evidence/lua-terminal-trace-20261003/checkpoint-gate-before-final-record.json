@@ -1,0 +1,1 @@
+{"run_id":"5ad45297-44bf-4ffd-8f5c-177857302766","status":"exited","code":0,"signal":null,"ok":true,"stdout":"","stderr":"","truncated":false,"wall_ms":944234,"argv":["bash","/tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/checkpoint-gate.sh"],"policy":{"decision":"allow","rule_id":"default","why":null,"remedy":null}}

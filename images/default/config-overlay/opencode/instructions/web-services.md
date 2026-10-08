@@ -13,11 +13,14 @@ Two distinct web flows exist — pick by the user's intent:
    by the host. Delegate through the Tillandsias MCP tools (the
    `host-browser` MCP server carries them):
 
-   - `publish_local {"category": "WEB"}` — the host launches
-     `tillandsias-<project>-web` serving your project's worktree and
-     returns `https://www.<project>.localhost` for the user. Idempotent:
-     re-publishing replaces the container, same URL.
+   - `publish_local {"category": "WEB", "runtime": "auto"}` — the host
+     selects the managed static or local-Wrangler profile for this authenticated
+     lane's live worktree and returns its actual local preview URL. `auto` is
+     the default; `static` and `wrangler` are the only explicit choices.
+     Re-publishing reconciles the same service.
    - `service_status {}` — the published service's state.
+   - `service_reload {"category": "WEB"}` — restart/reload the existing
+     preview runtime while retaining its authenticated lane and live source.
    - `service_stop {"category": "WEB"}` — stop it and remove its route.
 
    Safety model: the host attributes the project from **your session**
@@ -26,7 +29,10 @@ Two distinct web flows exist — pick by the user's intent:
    here — that is by design; don't try to work around it with raw podman
    (there is no podman in the forge) or port publishing.
 
-   Publishing is **local-only by default** (`*.localhost`, loopback).
+   Publishing is **local-only by default** (`*.localhost`, loopback). The
+   Wrangler profile runs `wrangler dev --local`; it never deploys, logs in, or
+   uses Cloudflare production bindings. Do not pass commands, paths, tokens,
+   ports, or remote flags to these tools: the host deliberately refuses them.
    Public sharing via Cloudflare tunnels is a planned capability — when a
    user asks to share publicly today, publish locally and tell them the
    public-share flow is coming.

@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: native-macos-managed-lua-composition-and-completion-only-capture-conformance
+    event:
+      type: note
+      ts: "2026-10-03T23:19:28Z"
+      agent_id: linux-macuahuitl-opencode-20261003t225958z
+      host: macuahuitl
+      summary: |
+        LANDED COMPOSITION HANDOFF:1538-pwdr is completed on linux-next; exact published head10d2890ed708e144cd7aa194425338246bedd1ea and PR212 merge f4f106c73400197364f1a6e17723bbdd439d3e99 are ancestors of refreshed trunk e889a1c0ef94c8a1fba0c3b8623d6e07964613fd. Native packet is ready/unclaimed and its dependency is resolved. Linux is now taking only the first1539 trace slice; it will use disjoint tests/lua_proc_trace.rs, not Mac lua_proc_macos.rs, Windows lua_proc_windows.rs, or Mac1543-f44v observer scope in lua_proc.rs. No native conformance is asserted by this handoff.
+
+        Next_action: native peer refreshes its inbox and sibling claims, claims its own packet, pins landed composition source, and records nonempty native test executions with actual receipt/status/architecture and omitted coverage. Do not substitute cfg-skipped zero-test runs or a Linux gate for native runtime conformance. Coordinate any shared-runtime repair via ASK before widening ownership.

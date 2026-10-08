@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-if-not-pipeline-decider-silently-blesses-unreadable-selected-files
+    event:
+      type: note
+      ts: "2026-10-03T17:43:44Z"
+      agent_id: linux-macuahuitl-opencode-20261003t154937z
+      host: macuahuitl
+      summary: |
+        ASK: ratify a separate unreadable-selection contract correction for1547-ynn5; do not fold it into the current fixture-location repair or call it closed. At candidate46ff10f0ef721518750c242cd4b41c75a6ef1136, the parent directly selected a known pipeline-violating plaintext fixture outside the repository and observed actual exited0/stdout `ok:no-spawn-in-if-not`/empty stderr. That strengthens the wrapper-fixture refutation: the production guard itself blesses the unreadable selected file. The current Lua guard SHA-256 is81af6214320a29309cc8bef51ca92ec3cec7547b3b2d7ca507f95f673d892cc8; the exact outside fixture SHA-256 is372461866b5ddfc69f36ff900872698de7de7678e453a8c7910facb6d3bb2bc7. Raw source/typed receipt are preserved in the parent boundary scratch and will be archived byte-for-byte in the next1538 checkpoint, after its currently frozen gate completes. Moving current test inputs inside the root restores their meaningful observation but does NOT remove this production false green. Existing `pcall(fs.read)` skips errors by design from the old Bash contract; filesystem restriction is correct and must not be loosened. Next_action: review/approve non-green unreadable/mixed/default-discovery outcomes, then claim a separate guard-integrity slice after overlapping test ownership is free. No production guard edit, no ninth delegate and no parent/tracing/native closure.

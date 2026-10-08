@@ -1,0 +1,1 @@
+{"run_id":"e325b18b-ac87-42e0-ac91-fe5b77cec9ca","status":"exited","code":1,"signal":null,"ok":false,"stdout":"","stderr":"violation:if-not-pipeline-guard: failed to refuse pipeline\n","truncated":false,"wall_ms":10,"argv":["bash","scripts/test-if-not-pipeline-guard.sh"],"policy":{"decision":"allow","rule_id":"default","why":null,"remedy":null}}

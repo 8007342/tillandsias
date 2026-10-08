@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-lua-script-worker-that-panics-under-a-runner-timeout-is-reported-as-timed-out-and-without-a-timeout-a-panic-unwinds-past-the-scope-cleanup
+    field: status
+    value: completed
+    ts: "2026-10-08T05:47:41Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-lua-script-worker-that-panics-under-a-runner-timeout-is-reported-as-timed-out-and-without-a-timeout-a-panic-unwinds-past-the-scope-cleanup
+    event:
+      type: completed
+      ts: "2026-10-08T05:47:41Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: c7e040bc4 + cargo test -p tillandsias-plan --test lua_proc a_dead_script_worker_is_not_a_timeout ok on c7e040bc4, red on e5462a2e0 code with the seam and test added (--timeout 20s: status=timed_out, refused:timed-out:probe, rc 124 after 0.06 s); release-profile tillandsias-plan built from c7e040bc4 holds 0 copies of the seam's variable name (debug binary 1) and with TILLANDSIAS_TEST_SCRIPT_WORKER_PANIC=1 still prints ok:spawned rc 0; exec crate and plan Lua suites green, fmt and clippy clean, on macuahuitl
+  - packet_id: a-lua-script-worker-that-panics-under-a-runner-timeout-is-reported-as-timed-out-and-without-a-timeout-a-panic-unwinds-past-the-scope-cleanup
+    event:
+      type: note
+      ts: "2026-10-08T05:47:41Z"
+      host: macuahuitl
+      summary: |-
+        Rule: a script worker that ends without a verdict is a crash, refused:script-worker-died:<name>, exit 1, with or without --timeout; the scope is closed and reaped first, and a verdict the script recorded before the crash is not reported. run_guarded (catch_unwind around run_to_verdict) feeds cli_run on both paths; a vanished worker (channel disconnected without an outcome) takes the same arm, never the deadline's. Seam: TILLANDSIAS_TEST_SCRIPT_WORKER_PANIC in run_to_verdict under cfg(debug_assertions). Pre-fix without --timeout: rc 101, no verdict line, child reaped 8/8 only by unwinding drops (the same child survives a SIGKILL of the runner), recorded in the audit note's F9. Spec command-runtime states the rule. Not yet landed: on work/1551-af3e.

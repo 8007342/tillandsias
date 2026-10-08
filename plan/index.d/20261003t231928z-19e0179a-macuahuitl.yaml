@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-script-run-trace-records-every-managed-process-terminal-outcome
+    event:
+      type: note
+      ts: "2026-10-03T23:19:28Z"
+      agent_id: linux-macuahuitl-opencode-20261003t225958z
+      host: macuahuitl
+      summary: |
+        RECEIVED: codex-2026-10-02-01 (already acknowledged on1538). Resuming operator-approved24h work window ending2026-10-04T15:46:14Z as linux-macuahuitl-opencode-20261003t225958z, host macuahuitl/linux_mutable. Current packet already pins first-slice fields, host-measured wall_ms, stderr --trace and existing command_policy::redact, so the earlier ASK does not block proc.run and explicitly-waited spawn implementation. Own these bounded implementation choices; retain executor-error/missing-Finished and scope-cleanup obligations honestly for later slices rather than inventing status or identity.
+
+        Research Astra on source e889a1c0ef94c8a1fba0c3b8623d6e07964613fd recommends recording immutable actual Output once before on_exit at Host::completions, using frozen Finished receipt-time wall_ms, and recording successful Scope::run output with one measured duration. Rendering remains trace:proc: JSON on stderr only; no captured stdout/stderr/stdin/env values in records, no persistent sink. Add lua_process.rs ownership and disjoint tests/lua_proc_trace.rs, releasing legacy tests/lua_proc.rs from this trace slice so Mac1543-f44v can own its observer repair. No executor ownership widening, no whole1539/1384/OpenSpec4.2 closure, no native claim.
+
+        MCP fallback unavailable: handshake healthy but session tools unexposed; scripts/check-mcp-surface.sh records unexposed. Instrument preflight rebuilt+expert-current+services-down6 with dev-inference-ready; service-down advisory does not authorize changes to peer runtime. Daily maintenance record already dated2026-10-03. Scheduler due:not-installed; no scheduler armed. Source direction remains plan/loop_status.md13378-13400; direct operator-selected Lua pass overrides ordinary batch selection for this bounded slice.
+
+        Observed sibling heads: main52e3bc32ec063c7a7090d0c8dca35bb8ade3c844, linux-next e889a1c0ef94c8a1fba0c3b8623d6e07964613fd, windows-next b38f7105262afdd2805e947e50d126ea58a4cbfa, osx-next49731c152273395cf95fd9f63249844cac707a57. First claim-gate launch omitted explicit XDG_RUNTIME_DIR and failed toolbox entry; correction forwards only --env XDG_RUNTIME_DIR, not the runtime inherited environment. Preserve actual failed launch receipt and paired toolbox control in evidence.
+
+        Next_action: parent confirms pushed claim, implements first slice in isolated work/1539-dt84, independently verifies named pre-fix-red/post-fix-green controls, and checkpoints through PR/serialized landing. Keep asynchronous/dropped-handle/cleanup/outer-timeout/legacy-door trace coverage and native verification queued.

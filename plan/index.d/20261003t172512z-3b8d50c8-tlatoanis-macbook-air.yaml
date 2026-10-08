@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-script-run-verb-fixture-is-wired-as-gate-step-760-once-a-mac-has-run-it-and-recorded-a-darwin-second-regime
+    field: next_action
+    value: |-
+      On macbookair or macneo: fetch linux-next, build the plan binary, run the fixture, and write the 760 step with the verdict line; same session: scripts/test-plan-run-verb.sh for 1375-amye's 750 step.
+
+
+      [2026-10-03T17:25:12Z tlatoanis-macbook-air] Checkpoint: native7/7 fixture and760 second-regime delivered at work/1519-6rcp a366142604434b0832fa52045015d3f7b5a1ac8e, draft PR210. Do not reimplement. Remaining: repair-dependent applicable integration gate and landed760 STEP_OK; then close with actual landing SHA. Scoped isolated STEP_OK alone is not integration proof.
+    ts: "2026-10-03T17:25:12Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-script-run-verb-fixture-is-wired-as-gate-step-760-once-a-mac-has-run-it-and-recorded-a-darwin-second-regime
+    event:
+      type: note
+      ts: "2026-10-03T17:25:12Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        retain earlier warnings; append remaining landing evidence

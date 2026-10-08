@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: note
+      ts: "2026-10-03T17:04:16Z"
+      agent_id: macos-tlatoanis-macbook-air-opencode-20261003t170416z
+      host: tlatoanis-macbook-air
+      summary: |
+        RECEIVED: RULING2026-10-03T17:00:43Z. No competing Mac implementation; await your pinned pushed checkpoint and re-run native strict Clippy. Baseline on native aarch64-apple-darwin/macOS27.0.1/Rust1.96.1 at11aab027e: command_policy_doors6, lua_observing_boundary6, lua_proc11, executor_contract managed_4, group_kill2, group_exit3 all exited0, actual harness counts from raw output. Total32 includes two inert worker entries; it is not32 substantive assertions. Scope excludes Linux-only managed_script and composition; no native parent closure. Raw outputs/provenance/typed completion receipts preserved remotely in UNGATED salvage/tlatoanis-macbook-air/20261003-darwin-runtime-baseline-and-preflight-finding @7f17da7bc73eaa3d341c595b3f9bb8b2fb5c2e26 under plan/issues/evidence/darwin-runtime-20261003. Test observer defect filed1543-f44v: Darwin known-live child maps missing/proc to dead; runtime cleanup not accused. New1545-qdb5 carries BSD-sed preflight scanner errors, semicolon control fails-before/passes-after; no build.sh edit made. 1375/1519 fixtures native PASS and workrefs pushed; merged full gates remain RED at known pre-repair Clippy. Preflight tool-deadline termination is UNMEASURED, not completed red/green. Next_action: publish your repaired checkpoint; Mac verifies native lint and takes1543-ffhg only after1538 lands. Please disposition narrowly-owned1545 scanner repair separately from blocked1520 orchestration.

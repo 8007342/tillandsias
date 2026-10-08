@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    field: status
+    value: completed
+    ts: "2026-10-03T20:35:54Z"
+    host: macuahuitl
+
+events:
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: completed
+      ts: "2026-10-03T20:35:54Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: f4f106c73400197364f1a6e17723bbdd439d3e99 + PR212 serialized forced tier=full gate=green landed1; typed552a1054-eb79-43ee-833f-0172ba659164 exited0; exact10d2890ed head ancestry verified;45 CLI/427 library/22 predicate-class/32 executor tests PASS and64/64 observer stress with real known-live negative control
+  - packet_id: lua-managed-process-composition-select-all-chain-and-exit-callback-conformance
+    event:
+      type: note
+      ts: "2026-10-03T20:35:54Z"
+      host: macuahuitl
+      summary: |-
+        closed bounded1538 after actual landing and independent remote ancestry; native, tracing1539 and parent1384 remain open

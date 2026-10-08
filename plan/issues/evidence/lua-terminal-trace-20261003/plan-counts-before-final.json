@@ -1,0 +1,22 @@
+{
+  "measurement_scope": "Default bounded query projection: 20 rows, not the whole ledger. Whole-ledger totals are in cycle-metrics-before-final.txt.",
+  "measurement_command": "tillandsias-plan query --json | jq 'group_by(.status) | map({status: .[0].status, count: length})'",
+  "status_counts": [
+  {
+    "status": "completed",
+    "count": 3
+  },
+  {
+    "status": "obsoleted",
+    "count": 2
+  },
+  {
+    "status": "pending",
+    "count": 7
+  },
+  {
+    "status": "ready",
+    "count": 8
+  }
+  ]
+}

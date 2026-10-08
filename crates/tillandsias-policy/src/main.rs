@@ -1126,11 +1126,69 @@ fn scan_dir(root: &Path, dir: &Path, violations: &mut Vec<String>) {
             scan_dir(root, &path, violations);
             continue;
         }
+        if is_rust_test_source(root, &path) {
+            inspect_rust_test_source(root, &path, violations);
+            continue;
+        }
         if !is_script_or_harness(root, &path) {
             continue;
         }
         inspect_file(root, &path, violations);
     }
+}
+
+/// ORDER 1551-geib. A Rust integration-test source: `crates/<crate>/tests/…rs`.
+///
+/// WHY THESE ARE SCANNED. This guard looked at `scripts/`, script extensions
+/// and the litmus YAML, for LINES THAT BEGIN WITH `python`. The Lua runtime's
+/// own test suite then wrote sixteen Python programs into temp files and ran
+/// them with `python3` as an ARGV ENTRY inside a Rust string — forty lines the
+/// guard reported `ok` over, because neither the file nor the shape was in
+/// what it could see (measured 2026-10-04 on linux-next 724309173).
+///
+/// SCOPE, stated so the green is not read as more than it is: integration
+/// tests only. Unit tests inside `src/` are NOT scanned — `src/` holds two
+/// legitimate mentions (this matcher and the methodology router's keyword),
+/// and separating those from a real invocation needs more than a line scan.
+fn is_rust_test_source(root: &Path, path: &Path) -> bool {
+    let rel = path.strip_prefix(root).unwrap_or(path);
+    let mut parts = rel.components().map(|c| c.as_os_str());
+    parts.next().is_some_and(|first| first == "crates")
+        && path.extension().and_then(|ext| ext.to_str()) == Some("rs")
+        && parts.any(|part| part == "tests")
+}
+
+fn inspect_rust_test_source(root: &Path, path: &Path, violations: &mut Vec<String>) {
+    let Ok(content) = fs::read_to_string(path) else {
+        return;
+    };
+    let rel = path.strip_prefix(root).unwrap_or(path).display();
+    for (idx, line) in content.lines().enumerate() {
+        if has_python_argv_reference(line) {
+            violations.push(format!("{rel}:{}: {}", idx + 1, line.trim()));
+        }
+    }
+}
+
+/// Python as a PROGRAM or a SOURCE FILE inside a string literal: the quoted
+/// interpreter name (`"python3"` in a `Command::new` or a Lua `argv`), or a
+/// quoted `*.py` file name. A `//` comment is prose, not an invocation.
+fn has_python_argv_reference(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.starts_with("//") {
+        return false;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    [
+        "\"python\"",
+        "\"python3\"",
+        "'python'",
+        "'python3'",
+        ".py\"",
+        ".py'",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
 }
 
 fn should_skip_dir(name: &str, path: &Path) -> bool {
@@ -5515,6 +5573,58 @@ mod tests {
             "python3 /tmp/opencode-mock.py"
         ));
         assert!(!has_python_runtime_reference("# python3 in a comment"));
+    }
+
+    // ORDER 1551-geib. The exact shapes that reached trunk under an `ok`.
+    #[test]
+    fn flags_python_as_an_argv_entry_or_a_source_file_in_rust_tests() {
+        for landed in [
+            r#"local p = proc.spawn{{argv={{"python3", "{producer}"}}, capture_bytes=17}}"#,
+            r#"local p=proc.spawn{{argv={{'python3','{producer}'}}}}"#,
+            r#"std::process::Command::new("python3")"#,
+            r#"let producer = f.write("producer.py", "import os\n");"#,
+            r#"format!(r#"{door}{{"python3", "{producer}", timeout_ms=4000}}"#,
+        ] {
+            assert!(has_python_argv_reference(landed), "missed: {landed}");
+            // The OLD matcher is why they landed: it saw none of them.
+            assert!(
+                !has_python_runtime_reference(landed),
+                "old matcher saw: {landed}"
+            );
+        }
+        for innocent in [
+            "// the producers used to be python3 programs",
+            r#"let child = fixture_child();"#,
+            r#"assert!(name.ends_with(".pyc_is_not_a_py_literal"));"#,
+            "let python_is_banned = true;",
+        ] {
+            assert!(
+                !has_python_argv_reference(innocent),
+                "false hit: {innocent}"
+            );
+        }
+    }
+
+    #[test]
+    fn rust_integration_tests_are_scanned_and_sources_are_not() {
+        let root = Path::new("/repo");
+        assert!(is_rust_test_source(
+            root,
+            Path::new("/repo/crates/tillandsias-plan/tests/lua_proc.rs")
+        ));
+        assert!(is_rust_test_source(
+            root,
+            Path::new("/repo/crates/tillandsias-plan/tests/support/fixture_child.rs")
+        ));
+        // Declared out of scope: the guard's own matcher lives in src/.
+        assert!(!is_rust_test_source(
+            root,
+            Path::new("/repo/crates/tillandsias-policy/src/main.rs")
+        ));
+        assert!(!is_rust_test_source(
+            root,
+            Path::new("/repo/scripts/tests/not-a-crate.rs")
+        ));
     }
 
     #[test]

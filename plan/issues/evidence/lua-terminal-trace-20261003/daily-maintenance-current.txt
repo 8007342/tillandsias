@@ -1,0 +1,1 @@
+date=2026-10-04 utc=2026-10-04T00:28:50Z host=macuahuitl steps=delegate-sweep:no-registered-runs,capability:current,proxy-env:absent,headroom:24731m,experts:healthy-unexposed-to-harness,preflight:rebuilt,cargo-gc:deferred-checkpoint-builds,podman-prune:deferred-peer-runtime,nix-gc:deferred-peer-runtime,nix-guards:deferred-scoped-lua-pass

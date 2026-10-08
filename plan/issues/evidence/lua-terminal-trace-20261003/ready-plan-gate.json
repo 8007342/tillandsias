@@ -1,0 +1,1 @@
+{"run_id":"fffe546f-3ebf-4983-bf42-c056a04ceb18","status":"exited","code":0,"signal":null,"ok":true,"stdout":"","stderr":"","truncated":false,"wall_ms":5036,"argv":["bash","/tmp/opencode/lua-trace-boundary-20261003.WHlcMa/tmp/ready-gate.sh"],"policy":{"decision":"allow","rule_id":"default","why":null,"remedy":null}}

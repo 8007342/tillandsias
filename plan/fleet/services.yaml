@@ -1,0 +1,7 @@
+# Per-service operator affinity for the fleet rendezvous (1548-dylo).
+# Tree data: published to the rendezvous with `fleet publish-roster`.
+# Parsed by tillandsias-fleet-core::score::parse_services.
+services:
+  git-mirror:    {preferred: [macuahuitl], eligible: any, min_presence: 4h}
+  local-experts: {preferred: [macuahuitl], eligible: any, min_presence: 4h}
+  status:        {preferred: [], eligible: any, min_presence: 4h}

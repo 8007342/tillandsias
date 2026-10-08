@@ -131,6 +131,154 @@ deadline passes the runtime SHALL kill the process GROUP and report
 - **THEN** `stdout` holds 1 MiB, `truncated` is true, `dropped` is 2 MiB,
   `status` is `exited` and `ok` is false
 
+A capture ABANDONED before it was drained — because the handle was killed or
+the script scope closed — SHALL be reported `truncated:true`, and therefore
+`ok:false`, whatever exit status the child had already produced (order
+1551-mkr9). A per-process deadline that passes while the child still runs
+is reported as `timed_out` and is not this case.
+
+A per-process deadline (`timeout_ms`) bounds the CHILD, not the delivery of
+its output to the script. Once the leader has exited, its `timeout_ms` no
+longer applies: a child that exited inside its `timeout_ms` SHALL keep its
+real exit status and SHALL NOT be reported `timed_out`, however slowly the
+script consumes its lines. Only the enclosing scope deadline can still cut
+delivery off; when it does, the result SHALL keep the real exit status and
+SHALL be reported `truncated:true` (an abandoned capture), never `timed_out`
+(order 1551-sprq).
+
+A capture CUT OFF because a descendant that left the process group still
+holds the child's pipe when the group drain grace expires is ONE child's
+condition, not a runtime failure. On every door (`proc.run`, `p:wait()`,
+`proc.all`, `proc.chain` and the legacy `lua` door) the result SHALL keep the
+leader's real status, SHALL hold the bytes read before the cut, and SHALL be
+reported `truncated:true` (so `ok:false`); it SHALL NOT be raised, and it
+SHALL NOT close the script scope or affect any other handle (order
+1551-af3e).
+
+At most `MAX_ACTIVE_PROCESSES` (64) script-owned processes SHALL be live in
+one script scope; a process counts until it has been reaped and its result
+published. A spawn past the limit SHALL be refused for that call only, as a
+`spawn_failed` result whose `stderr` names `script-process-limit`; it SHALL
+NOT be raised and SHALL NOT close the scope, and a slot freed by a wait or a
+kill SHALL be usable again (order 1551-af3e).
+
+A spawn whose setup is slow (a loaded host, an antivirus scan at process
+creation) is LATENCY: the spawning door SHALL wait for the supervisor to
+report the child started, up to `SPAWN_SETUP_BOUND` (30 s) capped by the
+scope deadline, and SHALL then return the child's true outcome. Only a setup
+stalled past that bound is a failure; it is raised and closes the scope,
+because a late child may still start and a `spawn_failed` value would claim
+it never ran (order 1551-333i).
+
+#### Scenario: One child's held pipe does not close the scope
+
+- **WHEN** a script-owned child exits 0 while a session-detached descendant
+  still holds its stdout, and an unrelated handle is live
+- **THEN** that child's result carries `status:"exited"`, `code:0`, the
+  bytes it wrote, `truncated:true` and `ok:false`
+- **AND** the unrelated handle is still waitable and later calls still run
+
+#### Scenario: The 65th live process is a value
+
+- **WHEN** a script holds 64 live `proc.spawn` handles and spawns once more
+- **THEN** the call returns `status:"spawn_failed"`, `ok:false`, with
+  `script-process-limit` in `stderr`, and the scope stays open
+
+#### Scenario: A kill after exit does not return a whole-looking empty capture
+
+- **WHEN** a script-owned child has exited 0 while its output is still queued
+  for delivery, and the script kills its handle
+- **THEN** the result carries `status:"exited"`, `truncated:true` and
+  `ok:false`
+
+#### Scenario: Slow line delivery does not turn an exited child into a timeout
+
+- **WHEN** a script-owned child exits 0 well inside its `timeout_ms` and the
+  script consumes its lines more slowly than that timeout
+- **THEN** the result carries `status:"exited"`, `code:0` and the whole
+  capture, not `timed_out`
+- **AND** if the scope deadline passes before delivery completes, the result
+  carries `status:"exited"` and `truncated:true`
+
+### Requirement: Every Lua door judges and runs in one directory, from one environment, under one deadline rule
+<!-- req-id: 231502c2 -->
+
+`proc.run`, `proc.spawn`, `proc.chain` and the positional `sh.run` /
+`expert.shell` SHALL each resolve the child's working directory ONCE per call
+— the call's `cwd` where the door has one, else the repository root, else the
+process cwd — and SHALL use that same value both as the cwd of the policy
+request and as the cwd the child runs in. Each SHALL start the child from the
+base environment (`PROC_RUN_BASE_ENV_PASSTHROUGH` plus `TILLANDSIAS_*` plus
+`PROC_RUN_BASE_ENV_FIXED`) and the call's own additions only, and SHALL apply
+the default deadline when the call names none; `timeout_ms = 0` SHALL mean no
+deadline on every door (order 1551-nyzb).
+
+#### Scenario: The positional door acts where it was judged
+
+- **WHEN** the runner is started in a directory other than the repository
+  root and a script calls `sh.run{'pwd'}` and `proc.run{argv={'pwd'}}`
+- **THEN** both print the same directory
+- **AND** `sh.run{'rm','-r','victim'}` removes nothing in the directory the
+  runner was started in
+
+#### Scenario: The caller's environment does not reach a child through any door
+
+- **WHEN** the runner's environment carries a variable outside the base set
+- **THEN** it is absent from the child of `sh.run`, as it is from the child
+  of `proc.run`
+
+### Requirement: Script code cannot outrun its verdict or load bytecode
+<!-- req-id: a7234e98 -->
+
+A script SHALL NOT be able to keep executing after its verdict or its
+deadline. The script environments SHALL therefore expose no way to create a
+coroutine: the Cacheable class has no `coroutine` table, and the Observing
+class's table holds `yield` alone (the host's async doors are built from it).
+`string.dump` SHALL be absent from both classes and Observing `load` SHALL
+accept text chunks only, whatever mode the caller requests (orders 1551-pemw,
+1551-8gkg).
+
+#### Scenario: Nothing runs after a caught verdict
+
+- **WHEN** a script catches its own `verdict.ok` with `pcall` and continues
+- **THEN** no further script code runs, on any thread the script could create
+
+#### Scenario: A binary chunk is refused
+
+- **WHEN** a script calls `load` on a string that begins with the binary-chunk
+  signature
+- **THEN** `load` returns nil and a message naming a binary chunk
+
+### Requirement: A terminated runner leaves no script-owned process behind
+<!-- req-id: d38fb023 -->
+
+When `tillandsias-plan script run` receives SIGTERM, SIGINT or SIGHUP it
+SHALL close its script scope, kill and reap every script-owned process group
+within the executor's cleanup bound, and exit with 128 plus the signal
+number. The handlers SHALL be installed before any script code runs. On
+Windows the job object owns the group and this requirement is met by it
+(order 1551-n45s).
+
+A script worker that ends WITHOUT a verdict (a panic in the runner) SHALL be
+reported as a crash, `refused:script-worker-died:<name>` with exit status 1,
+with or without `--timeout`; it SHALL NOT be reported `timed_out` or exit
+124, SHALL NOT report a verdict the script recorded before the crash, and the
+runner SHALL close its scope and reap every script-owned process group first
+(order 1551-7hyq).
+
+#### Scenario: A dead worker is a crash, not a timeout
+
+- **WHEN** the runner's script worker panics after the script spawned a
+  child, with or without `--timeout`
+- **THEN** the runner prints `refused:script-worker-died:<name>` and exits 1
+- **AND** the child is gone when the runner exits
+
+#### Scenario: A TERM to the runner reaches the child in its own group
+
+- **WHEN** a script holds a child that runs in its own process group and the
+  runner receives SIGTERM
+- **THEN** the runner exits 143 and the child is gone within the cleanup bound
+
 ### Requirement: The runtime runs identically on every locus
 <!-- req-id: 54d853a1 -->
 

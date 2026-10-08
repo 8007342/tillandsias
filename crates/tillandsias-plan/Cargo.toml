@@ -12,10 +12,28 @@ license = "GPL-3.0-or-later"
 authors = ["Tlatoani"]
 description = "Deterministic query/validation engine for the Tillandsias plan ledger"
 publish = false
+# ORDER 1551-geib. The crate has a second [[bin]] (the test fixture child), and
+# twelve callers — build.sh's ledger integrity step among them — run
+# `cargo run -p tillandsias-plan -- …` with no --bin. Without this line cargo
+# refuses ("could not determine which binary to run"); measured as the first
+# land gate of 1551 failing at that step, 2026-10-04.
+default-run = "tillandsias-plan"
 
 [[bin]]
 name = "tillandsias-plan"
 path = "src/main.rs"
+
+# ORDER 1551-geib. The child programs the Lua process tests supervise, in Rust
+# (they were Python sources run with python3). A [[bin]] and not an example or
+# a test target because integration tests get CARGO_BIN_EXE_<name> for bins
+# only. It is a TEST FIXTURE: nothing installs or packages it — every install
+# path copies `tillandsias-plan` by name — and it lives under tests/ so it is
+# outside the validator surface (src/*.rs).
+[[bin]]
+name = "tillandsias-plan-fixture-child"
+path = "tests/support/fixture_child.rs"
+test = false
+doc = false
 
 [dependencies]
 serde = { workspace = true }

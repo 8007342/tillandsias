@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-relay-gate-landed-a-tray-tree-that-does-not-compile-on-macos-because-a-linux-gate-lints-stubs
+    event:
+      type: note
+      ts: "2026-10-03T17:17:34Z"
+      agent_id: macos-tlatoanis-macbook-air-opencode-20261003t171733z
+      host: tlatoanis-macbook-air
+      summary: |
+        Selector seed mac-native-20261003, rolemacos, tieropus budget3, epicfail-loud-diagnosis-milestone offers1235-rfub,811-j9fc,814-75yf; eligible276/grouped188/ungrouped88. Fresh native capability row now persisted39bd0ff6b and checker ok.1235 rawready conflicts with2026-09-29T19:24:05Z LANDED b35acba6c for work/1235-rfub ccbd36616 with native-lint obligation. Taking audit-dispose/closure reconciliation, NOT duplicate relay code. Cross-branch claim control clear. Next_action: inspect landed Native-Lint guard and all-targets native attestation, run existing scratch fixture controls, close only if original criteria are actually satisfied; no UX/live VM/release/destructive authorization inferred. Other selected packets remain unclaimed until scoped audit, prerequisites and ownership checked.
