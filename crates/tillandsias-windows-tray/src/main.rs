@@ -913,6 +913,38 @@ fn ",
         );
     }
 
+    /// ORDER 1437-3iux S2 (host-state-lifecycle "SOFT reset is pre-authorised
+    /// everywhere, HARD asks every time"; 1443-bs9z). The HARD body asks for
+    /// its per-run approval, refuses when Credential Manager is unreachable
+    /// (named reason, spec open question), and announces `reset: HARD`, all
+    /// BEFORE it destroys anything; and it keeps the download cache. Pre-fix:
+    /// FAILS, because today's --reset-guest destroys with no approval of any
+    /// kind, says nothing about HARD and removes the cache.
+    #[test]
+    fn reset_guest_asks_refuses_and_announces_before_destroying() {
+        let hard = notify_fn_body("pub fn reset_guest_once() -> i32 {", "\n}\n");
+        let destroy_at = hard
+            .find("wipe_guest()")
+            .expect("HARD unregisters the distro");
+        for (what, needle) in [
+            ("the per-run approval", "hard_reset_approval("),
+            (
+                "the unreachable-keyring refusal",
+                "HARD_REFUSED_KEYRING_UNREACHABLE",
+            ),
+            ("the HARD announcement", "reset: HARD"),
+        ] {
+            let at = hard
+                .find(needle)
+                .unwrap_or_else(|| panic!("HARD must carry {what} ({needle})"));
+            assert!(at < destroy_at, "{what} must come BEFORE the wipe");
+        }
+        assert!(
+            !hard.contains("remove_dir_all("),
+            "HARD keeps the download cache (host-state-lifecycle)"
+        );
+    }
+
     /// windows-260723-1: the registered-distro integrity probe's Windows
     /// bodies are cfg-gated away on Linux. Keep a portable wiring pin so the
     /// Linux-host test suite still proves that timeouts remain inconclusive,
