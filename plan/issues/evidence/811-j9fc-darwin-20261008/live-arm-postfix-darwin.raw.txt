@@ -1,0 +1,8 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.44s
+     Running tests/vz_entitlement_preflight.rs (/Users/tlatoani/claudia/tillandsias/target/debug/deps/vz_entitlement_preflight-7864388cfc97b059)
+
+running 1 test
+test an_unentitled_binary_is_refused_by_name_before_touching_the_image_root ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+

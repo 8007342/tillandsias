@@ -1,0 +1,6 @@
+ProductName:		macOS
+ProductVersion:		27.0.1
+BuildVersion:		26A434
+arm64
+rustc 1.96.1 (31fca3adb 2026-06-26)
+base: origin/linux-next 777b424db
