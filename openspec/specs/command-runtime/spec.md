@@ -146,6 +146,36 @@ delivery off; when it does, the result SHALL keep the real exit status and
 SHALL be reported `truncated:true` (an abandoned capture), never `timed_out`
 (order 1551-sprq).
 
+A capture CUT OFF because a descendant that left the process group still
+holds the child's pipe when the group drain grace expires is ONE child's
+condition, not a runtime failure. On every door (`proc.run`, `p:wait()`,
+`proc.all`, `proc.chain` and the legacy `lua` door) the result SHALL keep the
+leader's real status, SHALL hold the bytes read before the cut, and SHALL be
+reported `truncated:true` (so `ok:false`); it SHALL NOT be raised, and it
+SHALL NOT close the script scope or affect any other handle (order
+1551-af3e).
+
+At most `MAX_ACTIVE_PROCESSES` (64) script-owned processes SHALL be live in
+one script scope; a process counts until it has been reaped and its result
+published. A spawn past the limit SHALL be refused for that call only, as a
+`spawn_failed` result whose `stderr` names `script-process-limit`; it SHALL
+NOT be raised and SHALL NOT close the scope, and a slot freed by a wait or a
+kill SHALL be usable again (order 1551-af3e).
+
+#### Scenario: One child's held pipe does not close the scope
+
+- **WHEN** a script-owned child exits 0 while a session-detached descendant
+  still holds its stdout, and an unrelated handle is live
+- **THEN** that child's result carries `status:"exited"`, `code:0`, the
+  bytes it wrote, `truncated:true` and `ok:false`
+- **AND** the unrelated handle is still waitable and later calls still run
+
+#### Scenario: The 65th live process is a value
+
+- **WHEN** a script holds 64 live `proc.spawn` handles and spawns once more
+- **THEN** the call returns `status:"spawn_failed"`, `ok:false`, with
+  `script-process-limit` in `stderr`, and the scope stays open
+
 #### Scenario: A kill after exit does not return a whole-looking empty capture
 
 - **WHEN** a script-owned child has exited 0 while its output is still queued

@@ -21,6 +21,11 @@ pub enum Event {
 
 /// A bound on an individual unterminated line, independent of capture.
 pub const MAX_LINE_BYTES: usize = 1024 * 1024;
+/// How many script-owned processes may be live at once in one scope (a
+/// process counts until its supervisor has published and reaped it). The
+/// next spawn is REFUSED for that call only, as `ExecError::Spawn` whose
+/// source reads `script-process-limit`; the Lua doors return it as a
+/// `spawn_failed` value and the scope stays open (order 1551-af3e).
 pub const MAX_ACTIVE_PROCESSES: usize = 64;
 pub const CLEANUP_BOUND: Duration = Duration::from_secs(2);
 pub const SPAWN_SETUP_BOUND: Duration = Duration::from_secs(1);
@@ -150,7 +155,17 @@ impl Scope {
             !p.state.finished.load(Ordering::Acquire) || !p.state.reaped.load(Ordering::Acquire)
         });
         if processes.len() >= MAX_ACTIVE_PROCESSES {
-            return Err(scope_error(&command, "script-process-limit"));
+            // ORDER 1551-af3e. A refusal of THIS call, typed as a spawn
+            // failure, so no door mistakes it for a scope failure. It used to
+            // be an Io error, which the Lua doors raise and which closed the
+            // whole scope: every sibling handle then answered
+            // script-scope-closed.
+            return Err(ExecError::Spawn {
+                argv: command.argv.clone(),
+                source: std::io::Error::other(format!(
+                    "script-process-limit: {MAX_ACTIVE_PROCESSES} script-owned processes are live; wait on or kill one first"
+                )),
+            });
         }
         let id = self.0.next.fetch_add(1, Ordering::Relaxed);
         let (cancel, rx) = watch::channel(Stop::Running);
@@ -314,7 +329,7 @@ async fn read_stream<R: tokio::io::AsyncRead + Unpin>(
     fd: &'static str,
     events: Option<mpsc::Sender<Event>>,
     mut leader: watch::Receiver<bool>,
-) -> std::io::Result<(Vec<u8>, u64)> {
+) -> std::io::Result<(Vec<u8>, u64, bool)> {
     use tokio::io::AsyncReadExt;
     let mut kept = Vec::new();
     let mut dropped = 0;
@@ -326,22 +341,33 @@ async fn read_stream<R: tokio::io::AsyncRead + Unpin>(
         // (1551-sprq): sending queued lines may take as long as the consumer
         // needs, bounded only by the enclosing scope deadline, and a cut-off
         // there keeps the real exit status and marks the capture truncated.
+        //
+        // ORDER 1551-af3e. A drain grace that expires — a descendant that left
+        // the group (setsid) still holds the pipe after the group reap — is
+        // THIS child's condition, not a supervisor failure. Reading stops; the
+        // bytes already read are kept and the capture is reported incomplete
+        // (`truncated`), with the leader's real exit status. It used to be an
+        // error, which proc.run raised and which closed the whole script
+        // scope, so every sibling handle answered script-scope-closed. An
+        // unterminated tail is NOT emitted as a line: it was cut, not ended.
         let read = async {
             if *leader.borrow() {
                 tokio::time::timeout(GROUP_DRAIN_GRACE, pipe.read(&mut buf))
                     .await
-                    .map_err(|_| std::io::Error::other("group-pipe-eof-timeout"))?
+                    .ok()
             } else {
                 tokio::select! {
-                    r = pipe.read(&mut buf) => r,
+                    r = pipe.read(&mut buf) => Some(r),
                     _ = leader.changed() => {
-                        tokio::time::timeout(GROUP_DRAIN_GRACE, pipe.read(&mut buf)).await
-                            .map_err(|_| std::io::Error::other("group-pipe-eof-timeout"))?
+                        tokio::time::timeout(GROUP_DRAIN_GRACE, pipe.read(&mut buf)).await.ok()
                     }
                 }
             }
         };
-        let n = read.await?;
+        let Some(n) = read.await else {
+            return Ok((kept, dropped, false));
+        };
+        let n = n?;
         let take = cap.saturating_sub(kept.len()).min(n);
         kept.extend_from_slice(&buf[..take]);
         dropped += (n - take) as u64;
@@ -378,7 +404,7 @@ async fn read_stream<R: tokio::io::AsyncRead + Unpin>(
         .await
         .map_err(|_| std::io::Error::other("script-stream-closed"))?;
     }
-    Ok((kept, dropped))
+    Ok((kept, dropped, true))
 }
 
 async fn supervise(
@@ -527,7 +553,7 @@ async fn supervise(
             ),
             feed
         )?;
-        Ok::<_, std::io::Error>((a.0, b.0, a.1 + b.1))
+        Ok::<_, std::io::Error>((a.0, b.0, a.1 + b.1, a.2 && b.2))
     };
     let mut io = Box::pin(io);
     tokio::pin!(timer);
@@ -615,10 +641,13 @@ async fn supervise(
             // deadline that cuts delivery off after the leader exited
             // (1551-sprq) is an abandoned capture like a kill.
             let abandoned = !timed_out && drained.is_none();
-            let (stdout, stderr, dropped) = match (timed_out, drained) {
+            // `complete` is false when a drain grace expired (1551-af3e):
+            // the bytes read so far are kept, and the capture is truncated.
+            let (stdout, stderr, dropped, complete) = match (timed_out, drained) {
                 (false, Some(capture)) => capture,
-                _ => (Vec::new(), Vec::new(), 0),
+                _ => (Vec::new(), Vec::new(), 0, true),
             };
+            let abandoned = abandoned || !complete;
             Ok(Output {
                 completion: if timed_out {
                     Completion::TimedOut {

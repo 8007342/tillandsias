@@ -136,7 +136,7 @@ fixes; before them the spec had no requirement about script-owned processes.
       Rust helper; the no-Python guard scans Rust integration tests.
 - [ ] 6.6 `1551-sprq` a process deadline that also bounds line delivery (the
       pump no longer sleeps while events flow; the timer rule is open).
-- [ ] 6.7 `1551-af3e` one child's pipe anomaly or the process limit closes
+- [x] 6.7 `1551-af3e` one child's pipe anomaly or the process limit closes
       the whole scope; `proc.run` raises it.
 - [ ] 6.8 `1551-333i` (plausible) spawn setup bound; `1551-7hyq` (plausible)
       a dead worker reported as a timeout.
