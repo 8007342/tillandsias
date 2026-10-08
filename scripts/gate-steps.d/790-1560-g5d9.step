@@ -1,0 +1,21 @@
+# Gate step 1560-g5d9 — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. No new interactive prompt in the END-USER installers
+# (scripts/install.sh, install-macos.sh, install-windows.ps1). Operator ruling
+# 2026-10-08: "we do not ask end users to do power user stuff ... No prompts like
+# those, we make all the decisions for them". The floor
+# (scripts/portability/installer-prompt-floor.txt) is 2: the .wslconfig and
+# Hyper-V prompts in install-windows.ps1, left "for now" (removal: 1560-uam3).
+#
+# The fixture runs the REAL scripts/check-installer-prompts.sh over the real tree
+# (so the ratchet is enforced here) and over scratch copies: a new read -p and a
+# new Read-Host are refused by file:line, a commented prompt does not count, and
+# one removed prompt passes with the lower-the-floor note. Pre-fix: FAILS, the
+# guard does not exist. Pure source reads, so it runs on every regime.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the end-user installers add no interactive prompt (1560-g5d9)"
+STEP_SCRIPT="scripts/test-check-installer-prompts.sh"
+STEP_ERROR="an end-user installer gained an interactive prompt, or the prompt ratchet broke (1560-g5d9); see the file:line above"
+STEP_OK="the end-user installers are at or below the prompt floor"
+STEP_SECOND_REGIME="yolanda 2026-10-08 msys ok:installer-prompts-fixture:5 arms"
