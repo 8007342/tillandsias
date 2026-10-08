@@ -197,3 +197,52 @@ Next action: claim another bounded registered-async cleanup/timeout trace
 slice under1539's existing contract, preserve the remaining registration,
 identity, legacy/native gaps, and checkpoint through a separately verified PR.
 Do not close the whole trace or parent from this partial Linux evidence.
+
+## Second slice (2026-10-08)
+
+Delivered on `work/1539-dt84` (Linux only, macuahuitl): the registered
+async-handle slice proposed under "Unmeasured follow-on design".
+
+- `Host::collect_terminals` (backed by `Host::collect_locked`) runs after
+  `Scope::cleanup`. For each handler still registered in `Dispatch`, it records
+  the authentic published `Ok(Output)`. It never pumps the closed dispatcher,
+  invokes a callback, sets `delivered`, or waits on a supervisor.
+  `Err` and `None` publications produce no record.
+- `Host::release_callbacks` now collects under the same dispatch lock before
+  it clears handlers. A second collection is therefore serialized with release,
+  and `push_terminal` de-duplicates on the actual `Output.run`. Redaction still
+  goes through `terminal_record`.
+- Duration: a `Completed` or pending `Finished` receipt keeps its frozen
+  `wall_ms` and is labelled `wall_basis: finished_receipt`. Otherwise
+  `wall_ms` is the time from the launch request to host collection, labelled
+  `wall_basis: launch_request_to_host_collection`. That figure is not the OS
+  lifetime. Records produced by the normal dispatcher path carry no
+  `wall_basis` and keep their shape unchanged.
+- In `cli_run`, the outer-timeout branch now renders `trace:proc:` records and
+  the `[script-run]` summary to stderr when `--trace` is given. It does this
+  after `Scope::cleanup` and the collection. Stdout, the refusal line and
+  exit 124 are unchanged.
+
+Red/green: these controls failed against the unfixed trunk:
+`trace_outer_timeout_renders_collected_outstanding_async_terminals`,
+`trace_dropped_unwaited_handle_is_collected_on_verdict_and_on_error` and the
+strengthened `trace_outer_timeout_preserves_stdout_and_exit_and_renders_held_records`.
+On the unfixed trunk the outer timeout printed zero records and the dropped
+handle was absent. The other 12 trace controls stayed green, including the new
+`trace_already_delivered_handle_is_not_duplicated_or_relabelled_by_collection`.
+After the fix, all 15 trace controls, 49 `lua_proc` tests and 11
+`script_process` unit tests pass. The new unit test
+`cleanup_collection_keeps_receipts_labels_fallback_and_never_fabricates`
+covers Err and None absence, the preserved pending-receipt duration and
+callback-free collection. A mutation that ignored pending receipts made it
+fail (31 ms against 1 ms).
+
+A child that was still running at the outer timeout is recorded only with
+the completion the executor actually published when cleanup ended it
+(`timed_out` or `signaled`, with a null code). The collector never relabels it.
+
+Still open: handles whose registration follows executor setup; the blocking
+`proc.run` post-result-recording race under the outer timeout; executor errors
+without an intact Output identity; chain/select/all comprehensiveness and the
+legacy/standalone doors; and native Mac/Windows conformance. None of these
+needs, or received, an executor API change in this slice. The row stays open.
