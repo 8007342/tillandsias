@@ -715,12 +715,17 @@ async fn supervise(
     result
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
     use super::*;
 
+    // ORDER 1554-prxf. These tests ran on Unix only and named "/bin/cat", so
+    // 1551-333i's slow-setup fix was never measured on Windows. A bare `cat`
+    // runs on both, but a bare name runs whatever the host resolves first
+    // (1386-iubj: System32\sort.exe), so `the_cat_these_tests_run_is_a_cat`
+    // pins which program a green came from.
     fn cat(bytes: Vec<u8>) -> Command {
-        Command::new(["/bin/cat"])
+        Command::new(["cat"])
             .stdin_bytes(bytes)
             .group(true)
             .timeout(Duration::from_secs(2))
@@ -745,6 +750,36 @@ mod tests {
             events.try_recv(),
             Err(mpsc::error::TryRecvError::Empty)
         ));
+    }
+
+    /// The program `cat()` resolves to is a byte-faithful cat: CR, LF and NUL
+    /// come back untouched, which a text-mode namesake would not do. On
+    /// Windows the first `cat` on PATH must also live outside SystemRoot.
+    #[tokio::test]
+    async fn the_cat_these_tests_run_is_a_cat() {
+        let bytes = b"a\r\nb\0c\n".to_vec();
+        let output = cat(bytes.clone()).run().await.expect("spawn cat");
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert_eq!(output.stdout, bytes, "cat altered its input");
+        #[cfg(windows)]
+        {
+            let root = std::env::var("SystemRoot")
+                .unwrap_or_else(|_| r"C:\Windows".into())
+                .to_ascii_lowercase();
+            let path = std::env::var_os("PATH").expect("PATH is set");
+            let first = std::env::split_paths(&path)
+                .map(|dir| dir.join("cat.exe"))
+                .find(|p| p.is_file())
+                .expect("no cat.exe on PATH");
+            assert!(
+                !first
+                    .to_string_lossy()
+                    .to_ascii_lowercase()
+                    .starts_with(&root),
+                "cat resolves to a Windows program: {}",
+                first.display()
+            );
+        }
     }
 
     #[tokio::test]
