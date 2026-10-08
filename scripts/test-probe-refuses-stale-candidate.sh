@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:1172-dyvd, spec:accel-capability-probe
+# @trace order:1172-dyvd, order:1546-b8ba, spec:accel-capability-probe
 #
 # Fixture for order 1172-dyvd: host-capability-probe.sh's resolver must REFUSE a
 # candidate it cannot show is CURRENT, and must say which one and why.
@@ -35,7 +35,7 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROBE="$REPO_ROOT/scripts/host-capability-probe.sh"
+PROBE="${PROBE:-$REPO_ROOT/scripts/host-capability-probe.sh}"
 fail=0
 ok()  { echo "ok: $1"; }
 bad() { echo "FAIL: $1" >&2; fail=1; }
@@ -65,7 +65,38 @@ case "${1:-}" in
 esac
 exit 0
 EOF
-chmod +x "$TMP/stale" "$TMP/current"
+
+# A complete, current document whose envelope is followed by enough JSON to
+# outlive a close-early matcher. The real Darwin binary has this shape: grep -q
+# sees accel_side in the first line while the producer is still writing JSON.
+cat > "$TMP/current-long" <<'EOF'
+#!/usr/bin/env bash
+case "${1:-}" in
+  --inference-tier) echo "cpu"; exit 0 ;;
+  --capabilities)
+      printf '%s\n' 'accel_class=cpu-only accel_gpu=none accel_npu=none accel_side=macos-host'
+      printf '%s' '{"schema_version":2,"host":{"host_id":"fixture-current-long","host_kind":"macos"},"padding":"'
+      i=0
+      while [ "$i" -lt 20000 ]; do printf x; i=$((i + 1)); done
+      printf '%s\n' '"}'
+      exit 0 ;;
+esac
+exit 0
+EOF
+
+# A producer may print the vocabulary before failing. Its partial output is not
+# evidence that a usable capability document was produced.
+cat > "$TMP/failing-partial" <<'EOF'
+#!/usr/bin/env bash
+case "${1:-}" in
+  --inference-tier) echo "cpu"; exit 0 ;;
+  --capabilities)
+      echo 'accel_class=cpu-only accel_gpu=none accel_npu=none accel_side=macos-host'
+      exit 73 ;;
+esac
+exit 0
+EOF
+chmod +x "$TMP/stale" "$TMP/current" "$TMP/current-long" "$TMP/failing-partial"
 
 # ISOLATE THE RESOLVER FROM THE HOST (macuahuitl, 2026-09-13, first Linux run
 # of this fixture). resolve_probe REFUSES a stale candidate and CONTINUES to
@@ -157,7 +188,37 @@ case "$out3" in
     *)  ok "a non-running candidate is not misreported as stale" ;;
 esac
 
-# ── 5. ORDER 1171-ccf2: the resolver consults the WINDOWS INSTALL DIR.
+# ── 5. A current producer with a long document must be admitted. Before
+# 1546-b8ba, grep -q read the envelope, closed its pipe, and pipefail converted
+# the producer's broken-pipe status into a false stale refusal.
+out4="$(run_probe "$TMP/current-long")"
+rc4=$?
+if [ "$rc4" -eq 0 ]; then
+    ok "a current long-output producer is admitted without a broken-pipe stale refusal"
+else
+    bad "a current long-output producer produced rc=$rc4: $out4"
+fi
+case "$out4" in
+    *refused:probe:stale-candidate:*)
+        bad "a current long-output producer was reported stale: $out4" ;;
+    *)  ok "the long-output producer is not reported as stale" ;;
+esac
+
+# ── 6. Partial current-looking output does not override producer failure.
+out_partial="$(run_probe "$TMP/failing-partial")"
+rc_partial=$?
+if [ "$rc_partial" -eq 2 ]; then
+    ok "a failing producer with partial accel_side output is not admitted"
+else
+    bad "a failing partial-output producer produced rc=$rc_partial, want resolver refusal 2: $out_partial"
+fi
+case "$out_partial" in
+    *refused:probe:stale-candidate:*failing-partial*)
+        ok "the failing partial-output producer is refused by name" ;;
+    *)  bad "the failing partial-output producer was not refused by name: $out_partial" ;;
+esac
+
+# ── 7. ORDER 1171-ccf2: the resolver consults the WINDOWS INSTALL DIR.
 #
 # install-windows.ps1 extracts into $LOCALAPPDATA\Programs\Tillandsias, which is
 # NOT on PATH — so before this order a Windows host with a tray installed had no

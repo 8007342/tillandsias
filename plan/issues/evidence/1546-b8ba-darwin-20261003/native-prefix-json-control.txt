@@ -1,0 +1,2 @@
+accel_class=cpu-only accel_gpu=present-unusable accel_gpu_name=Apple_Metal_GPU accel_npu=unknown accel_npu_name=- accel_reason=metal-not-reachable-from-linux-aarch64-guest accel_cpu_cores=10 accel_ram_gb=16 accel_proof=unknown accel_side=macos-host accel_gpu_path=metal accel_gpu_engine=ollama accel_mem_model=unified accel_mem_budget_gb=16 accel_prefill_dev=cpu accel_decode_dev=cpu accel_decode_crossover_b=unmeasured accel_source=measured
+json_control_exit=0

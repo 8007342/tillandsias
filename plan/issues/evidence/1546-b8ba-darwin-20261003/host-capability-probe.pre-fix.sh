@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace order:850-bif2, spec:accel-capability-probe, order:1125-wi4d, order:1546-b8ba
+# @trace order:850-bif2, spec:accel-capability-probe, order:1125-wi4d
 #
 # host-capability-probe.sh — emit this host's capability row (Linux/macOS
 # bare-metal and forge loci), the sibling of
@@ -140,18 +140,11 @@ _windows_install_candidate() {
 }
 
 resolve_probe() {
-    local candidate capabilities capabilities_rc
+    local candidate
     for candidate in "${TILLANDSIAS_HEADLESS_BIN:-}" ./target/release/tillandsias "$(_windows_install_candidate)" tillandsias; do
         [ -n "$candidate" ] || continue
         "$candidate" --inference-tier >/dev/null 2>&1 || continue
-        # Do not put this producer behind `grep -q`: on a current, large
-        # capability document grep exits after the envelope and closes stdout.
-        # With pipefail that reports the producer's SIGPIPE (Darwin: 101) as
-        # a stale candidate. Capture first, preserve its actual exit status,
-        # then match the complete output without a pipe.
-        capabilities="$("$candidate" --capabilities 2>/dev/null)"
-        capabilities_rc=$?
-        if [ "$capabilities_rc" -eq 0 ] && grep -q 'accel_side=' <<<"$capabilities"; then
+        if "$candidate" --capabilities 2>/dev/null | grep -q 'accel_side='; then
             printf '%s\n' "$candidate"
             return 0
         fi

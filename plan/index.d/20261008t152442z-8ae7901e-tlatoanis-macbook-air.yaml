@@ -27,6 +27,12 @@ packets:
       clippy::double_must_use exits 0 on darwin; pre-fix: dead_code on
       TWO_ROUTERS, introduced by 2256c54da (1548-mhyk). Linux-side strict
       clippy with --features listen-vsock stays green.
+    unscoreable: |
+      already-guarded-off-litmus. The guard is build.sh's existing strict
+      clippy --all-targets step, not a litmus, and it exercises this defect only
+      when run on darwin. A litmus wrapping cargo clippy would duplicate that
+      step and add no independent evidence. Closure is the darwin clippy exit
+      measured before and after the fix, recorded in this row's events.
     next_action: Land work/1553-a9n6; coordinator runs the Linux listen-vsock clippy arm.
 
 events:

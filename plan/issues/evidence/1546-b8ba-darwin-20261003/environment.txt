@@ -1,0 +1,9 @@
+subject_head=e56fe6b6bfe7e746a118ffaa69400053fb04f264
+subject_branch=work/1546-b8ba
+origin_linux_next=e56fe6b6bfe7e746a118ffaa69400053fb04f264
+binary_path=/Users/tlatoani/opencode/tillandsias/target/debug/tillandsias
+3feef413cea3e4bf61ebac5ff530a63f1aeff6a27bbee05b242ac133b262a856  /Users/tlatoani/opencode/tillandsias/target/debug/tillandsias
+binary_mtime_epoch=1791047160 binary_mtime=2026-10-03T10:06:00Z binary_size=48419120
+Tillandsias v56.9.27.2
+Darwin Tlatoanis-MacBook-Air.local 27.0.0 Darwin Kernel Version 27.0.0: Tue Aug 11 21:02:59 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T8142 arm64
+GNU bash, version 3.2.57(1)-release (arm64-apple-darwin26)
