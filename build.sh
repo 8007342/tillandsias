@@ -665,7 +665,7 @@ _preflight_preconditions() {
     cat <<'PRECONDS'
 check-no-python-scripts.sh|policy-binary|compiles before it resolves (its first command is `cargo build -p tillandsias-policy`); runs only when that binary already exists
 check-no-competing-gate.sh|gate-context|answers about a RUNNING gate's dispatch, not about the tree; it has no subject outside one
-check-tracked-files-unwritten.sh|gate-context|compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
+check-tracked-files-unwritten.lua|gate-context|compares against a snapshot the gate takes at its own start; outside a gate there is nothing to compare
 PRECONDS
 }
 
@@ -1966,7 +1966,7 @@ fi
 # binary on a Mac must never wave a bash-4 idiom through by reading as a pass.
 # The literal `_run_lua_decider "scripts/lua/…"` form is what the preflight
 # door's roster scans for (source 5), so a Lua decider cannot drop out of it.
-_run_lua_decider() {  # $1 = scripts/lua/<name>.lua, relative to the checkout
+_run_lua_decider() {  # $1 = scripts/lua/<name>.lua, relative to the checkout; "${@:2}", if any, are passed to the script after --
     local _ld_bin=""
     _ld_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _ld_bin=""
     case "$_ld_bin" in ./*) _ld_bin="$SCRIPT_DIR/${_ld_bin#./}" ;; esac
@@ -1976,7 +1976,11 @@ _run_lua_decider() {  # $1 = scripts/lua/<name>.lua, relative to the checkout
             "cargo build --release -p tillandsias-plan (or refresh the installed copy), then re-run"
         return 3
     fi
-    _run "$_ld_bin" script run "$SCRIPT_DIR/$1"
+    if [ "$#" -gt 1 ]; then
+        _run "$_ld_bin" script run "$SCRIPT_DIR/$1" -- "${@:2}"
+    else
+        _run "$_ld_bin" script run "$SCRIPT_DIR/$1"
+    fi
 }
 
 _run_litmus_phase() {
@@ -2133,7 +2137,8 @@ _write_gate_stamp() {
     # that lets it push.
     if [ -n "${_TRACKED_STATE:-}" ]; then
         _step "Checking the gate did not write into the checkout (1063-363b)..."
-        if ! _run bash "$SCRIPT_DIR/scripts/check-tracked-files-unwritten.sh" verify "$_TRACKED_STATE" 2>&1; then
+        # PORTED to Lua (1528-ekri): scripts/lua/check-tracked-files-unwritten.lua.
+        if ! _run_lua_decider "scripts/lua/check-tracked-files-unwritten.lua" verify "$_TRACKED_STATE" 2>&1; then
             _error "the gate modified tracked files while measuring them (1063-363b) — every verdict after the write is suspect; restore with 'git checkout --' and see the named paths above"
             exit 1
         fi
@@ -2690,7 +2695,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # after the write measured something other than the tree under test, and
     # said so confidently. 61ms against a 254s gate.
     _TRACKED_STATE="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-tracked-baseline"
-    bash "$SCRIPT_DIR/scripts/check-tracked-files-unwritten.sh" snapshot "$_TRACKED_STATE" >/dev/null 2>&1 || true
+    # PORTED to Lua (1528-ekri): scripts/lua/check-tracked-files-unwritten.lua.
+    _run_lua_decider "scripts/lua/check-tracked-files-unwritten.lua" snapshot "$_TRACKED_STATE" >/dev/null 2>&1 || true
 
     _step "Fast refusals: sub-second deciders before any compile (1009-gccx)..."
 
@@ -2840,7 +2846,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
-    if ! _run bash "$SCRIPT_DIR/scripts/check-script-exec-bits.sh" 2>&1; then
+    # PORTED to Lua (1528-ekri): scripts/lua/check-script-exec-bits.lua.
+    if ! _run_lua_decider "scripts/lua/check-script-exec-bits.lua" 2>&1; then
         _error "a script is invoked by path but tracked non-executable (731-d89b) — see the verdict line above"
         exit 1
     fi
@@ -2876,7 +2883,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # missing must not be hoisted above the build. Speed is not the only axis —
     # a faster check that cannot fail is worse than a slow one that can.
 
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
+    # PORTED to Lua (1528-ekri): scripts/lua/check-litmus-pin-claims.lua.
+    if ! _run_lua_decider "scripts/lua/check-litmus-pin-claims.lua" 2>&1; then
         _error "a litmus pin claim does not resolve or execute (721-77yu) — see the verdict line above"
         exit 1
     fi
@@ -4997,7 +5005,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # unrelated routes before this was mechanised. Sub-second; the fixture
     # carries the real pre-fix arm from git history as its positive control.
     _step "Checking litmus steps named MUTATION/SABOTAGE actually mutate (1059-pb2j)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-mutation-arms-mutate.sh" 2>&1; then
+    # PORTED to Lua (1528-ekri): scripts/lua/check-litmus-mutation-arms-mutate.lua.
+    if ! _run_lua_decider "scripts/lua/check-litmus-mutation-arms-mutate.lua" 2>&1; then
         _error "a litmus step named for a mutation performs none (1059-pb2j) — rename it to what it asserts; see the verdict line above"
         exit 1
     fi
@@ -5346,7 +5355,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # pin-claim gate (721-77yu, moved to the fast-refusal phase by 1009-gccx):
     # both ask whether an assertion can still fail.
     _step "Checking source-slice bounds still resolve (797-8dzt)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-source-slice-bounds.sh" 2>&1; then
+    # PORTED to Lua (1528-ekri): scripts/lua/check-source-slice-bounds.lua.
+    if ! _run_lua_decider "scripts/lua/check-source-slice-bounds.lua" 2>&1; then
         _error "a source-slicing test is bounded by a symbol that no longer exists (797-8dzt) — see the verdict line above"
         exit 1
     fi

@@ -66,12 +66,17 @@ critical_path:
     # hermetic tree — a name no test declares, a test no spec binds, and a
     # correct claim — asserting three DIFFERENT verdicts. One fixture would be
     # satisfied by a checker that refuses everything.
-    command: "d=$(mktemp -d); mkdir -p \"$d/scripts\" \"$d/probe\" \"$d/openspec/litmus-tests\"; cp scripts/check-litmus-pin-claims.sh \"$d/scripts/\"; printf 'name: litmus:real-and-bound\\n' > \"$d/openspec/litmus-tests/a.yaml\"; printf 'name: litmus:real-but-unbound\\n' > \"$d/openspec/litmus-tests/b.yaml\"; printf -- '- spec_id: s\\n  litmus_tests:\\n  - litmus:real-and-bound\\n' > \"$d/openspec/litmus-bindings.yaml\"; r=''; for n in does-not-exist real-but-unbound real-and-bound; do printf '#!/bin/sh\\n# Pinned by litmus:%s\\n' \"$n\" > \"$d/probe/fake.sh\"; r=\"$r$( cd \"$d\" && TILLANDSIAS_PIN_SCAN_DIR=probe bash scripts/check-litmus-pin-claims.sh 2>/dev/null )|\"; done; rm -rf \"$d\"; [ \"$r\" = 'violation:litmus-pin-unresolvable:1|violation:litmus-pin-unbound:1|ok:litmus-pin-claims:1 checked|' ] && echo 'ok: pin claims get three distinct verdicts'"
+    # PORTED to Lua (1528-ekri): the guard is scripts/lua/check-litmus-pin-claims.lua,
+    # run through the one runner. Its directories are read through
+    # `-- @read-env`, which widens for an ABSOLUTE env value — so each
+    # scratch dir is passed by its absolute path directly rather than by
+    # `cd`-ing into it and passing a relative one.
+    command: ". scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\" || b=; [ -n \"$b\" ] || { echo 'ok: skipped-no-plan-binary'; exit 0; }; d=$(mktemp -d); mkdir -p \"$d/scripts\" \"$d/probe\" \"$d/openspec/litmus-tests\"; printf 'name: litmus:real-and-bound\\n' > \"$d/openspec/litmus-tests/a.yaml\"; printf 'name: litmus:real-but-unbound\\n' > \"$d/openspec/litmus-tests/b.yaml\"; printf -- '- spec_id: s\\n  litmus_tests:\\n  - litmus:real-and-bound\\n' > \"$d/openspec/litmus-bindings.yaml\"; r=''; for n in does-not-exist real-but-unbound real-and-bound; do printf '#!/bin/sh\\n# Pinned by litmus:%s\\n' \"$n\" > \"$d/probe/fake.sh\"; r=\"$r$( TILLANDSIAS_PIN_SCAN_DIR=\"$d/probe\" TILLANDSIAS_LITMUS_DIR=\"$d/openspec/litmus-tests\" TILLANDSIAS_LITMUS_BINDINGS=\"$d/openspec/litmus-bindings.yaml\" \"$b\" script run scripts/lua/check-litmus-pin-claims.lua 2>/dev/null )|\"; done; rm -rf \"$d\"; [ \"$r\" = 'violation:litmus-pin-unresolvable:1|violation:litmus-pin-unbound:1|ok:litmus-pin-claims:1 checked|' ] && echo 'ok: pin claims get three distinct verdicts'"
     timeout_ms: 30000
     expected_behavior: "ok: pin claims get three distinct verdicts"
 
   - step: "POSITIVE CONTROL: every pin claim in this tree resolves to a bound test"
-    command: "mf_stage prod 0 OUT -- scripts/check-litmus-pin-claims.sh && mf_holds_ere OUT '^ok:litmus-pin-claims:[0-9]+ checked$' && echo 'ok: live pin claims all executable'"
+    command: ". scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\"; mf_stage prod 0 OUT -- \"$b\" script run scripts/lua/check-litmus-pin-claims.lua && mf_holds_ere OUT '^ok:litmus-pin-claims:[0-9]+ checked$' && echo 'ok: live pin claims all executable'"
     timeout_ms: 30000
     expected_behavior: "ok: live pin claims all executable"
 

@@ -414,8 +414,6 @@ scripts scripts/check-litmus-bindings.sh 7
 scripts scripts/check-litmus-expression-pinning-added.sh 5
 scripts scripts/check-litmus-grep-escapes.sh 1
 scripts scripts/check-litmus-line-windows.sh 8
-scripts scripts/check-litmus-mutation-arms-mutate.sh 3
-scripts scripts/check-litmus-pin-claims.sh 5
 scripts scripts/check-litmus-steps-can-fail.sh 2
 scripts scripts/check-litmus-yaml-parses.sh 1
 scripts scripts/check-local-expert-health.sh 1
@@ -458,12 +456,10 @@ scripts scripts/check-rust-source-pin-added.sh 2
 scripts scripts/check-salvage-refs-ledger.sh 3
 scripts scripts/check-scorable-obligation-added.sh 21
 scripts scripts/check-scratchpad-headroom.sh 7
-scripts scripts/check-script-exec-bits.sh 6
 scripts scripts/check-secure-wire-single-reader.sh 5
 scripts scripts/check-sigpipe-verdict-pipelines-added.sh 15
 scripts scripts/check-skill-canonicalization.sh 4
 scripts scripts/check-skills-single-source.sh 8
-scripts scripts/check-source-slice-bounds.sh 2
 scripts scripts/check-spec-index-resolution-agreement.sh 4
 scripts scripts/check-spec-script-paths.sh 7
 scripts scripts/check-stale-ready-rows.sh 3
@@ -472,7 +468,6 @@ scripts scripts/check-stranded-in-progress.sh 5
 scripts scripts/check-stranded-plan-writes.sh 3
 scripts scripts/check-terminology.sh 4
 scripts scripts/check-test-baseline.sh 8
-scripts scripts/check-tracked-files-unwritten.sh 4
 scripts scripts/check-tray-import-surface.sh 25
 scripts scripts/check-tray-refresh-no-polling.sh 2
 scripts scripts/check-tray-string-corpus-drift.sh 2

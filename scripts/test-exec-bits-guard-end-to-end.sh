@@ -2,7 +2,7 @@
 # freshness: added 2026-09-06 macneo-macos (order 1116-vps5)
 # @trace order:731-d89b, order:1116-vps5
 #
-# END-TO-END arm for check-script-exec-bits.sh: drive the WHOLE guard against a
+# END-TO-END arm for check-script-exec-bits.lua: drive the WHOLE guard against a
 # real non-executable script in a scratch repo, not its regex in isolation.
 #
 # WHY THIS ARM EXISTS. Closing 1116-vps5 produced a patch that widened the
@@ -13,26 +13,34 @@
 # downstream changed is the exact shape 1080-4deb is about, and it was built
 # into the fix for a blind spot.
 #
-# THE HARNESS MUST COPY THE GUARD IN. It resolves REPO_ROOT from its own script
-# path, so invoking the real checkout's copy from a scratch directory scans the
-# REAL tree — macuahuitl measured that as "6111 files" and a positive control
-# that passed when it had to fail. A harness whose control cannot fail is worth
-# less than no harness.
+# PORTED to Lua (1528-ekri): the guard finds its repo root from the process's
+# CWD (find_repo_root), not from its own script path, so this harness no
+# longer copies the guard into the scratch repo — it runs the REAL checkout's
+# .lua by absolute path with TILLANDSIAS_REPO_ROOT pinned at the scratch tree
+# (the same seam every other scratch-repo fixture in this batch uses). The
+# awk filter dependency still needs copying in, unchanged.
 set -uo pipefail
 _fail=0; _n=0
 ok()  { _n=$((_n+1)); echo "ok: $1"; }
 bad() { echo "FAIL: $1"; _fail=1; }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GUARD="$ROOT/scripts/check-script-exec-bits.sh"
+GUARD="$ROOT/scripts/lua/check-script-exec-bits.lua"
 FILTER="$ROOT/scripts/lib/exec-bits-filter.awk"
 [ -r "$GUARD" ] && [ -r "$FILTER" ] || { echo "refused:missing-guard-or-filter"; exit 2; }
+PLAN_BIN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+case "$PLAN_BIN" in ./*) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev/null)"; then
+    echo "skip:exec-bits-guard-end-to-end:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+    exit 0
+fi
 
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/scripts/lib"
-cp "$GUARD" "$WORK/scripts/"; cp "$FILTER" "$WORK/scripts/lib/"
+cp "$FILTER" "$WORK/scripts/lib/"
 git -C "$WORK" init -q 2>/dev/null || { echo "refused:no-git"; exit 2; }
 git -C "$WORK" config user.email t@e; git -C "$WORK" config user.name t
+_run_guard() { TILLANDSIAS_REPO_ROOT="$WORK" "$PLAN_BIN" script run "$GUARD" "$@"; }
 
 # A script invoked in a form the guard SEES (bare, at line start), left
 # NON-EXECUTABLE. This is the condition the guard exists to refuse.
@@ -51,7 +59,7 @@ fi
 ok "harness: victim.sh is tracked NON-executable (100644)"
 
 # ARM 1. The guard must REFUSE. Pre-fix of 731-d89b this was the live breach.
-out="$(cd "$WORK" && bash scripts/check-script-exec-bits.sh 2>&1)"; rc=$?
+out="$(cd "$WORK" && _run_guard 2>&1)"; rc=$?
 if [ "$rc" = 0 ]; then
     bad "arm1: the guard PASSED a non-executable script invoked by path — verdict: $(printf '%s' "$out" | tail -1)"
 else
@@ -68,7 +76,7 @@ fi
 # catching a defect in its own harness, which is what it is for.
 git -C "$WORK" update-index --chmod=+x scripts/victim.sh
 chmod +x "$WORK/scripts/victim.sh"
-out2="$(cd "$WORK" && bash scripts/check-script-exec-bits.sh 2>&1)"; rc2=$?
+out2="$(cd "$WORK" && _run_guard 2>&1)"; rc2=$?
 if [ "$rc2" != 0 ]; then
     bad "arm2 (control): the guard still refuses after chmod +x — it is not testing the bit: $(printf '%s' "$out2" | tail -1)"
 else
@@ -85,7 +93,7 @@ chmod -x "$WORK/scripts/victim.sh"
 printf '# see `scripts/victim.sh` for details\n' > "$WORK/scripts/doc-caller.sh"
 rm -f "$WORK/scripts/caller.sh"
 git -C "$WORK" add -A >/dev/null 2>&1; git -C "$WORK" commit -qm doc >/dev/null 2>&1
-out3="$(cd "$WORK" && bash scripts/check-script-exec-bits.sh 2>&1)"; rc3=$?
+out3="$(cd "$WORK" && _run_guard 2>&1)"; rc3=$?
 if [ "$rc3" = 0 ]; then
     ok "arm3 (contract): a backticked mention does not make a script a caller — documented non-goal, priced"
 else

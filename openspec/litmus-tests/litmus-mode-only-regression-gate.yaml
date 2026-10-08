@@ -9,7 +9,8 @@
 # permission error rather than a verdict.
 #
 # TWO BLIND SPOTS COMPOSED, and the pin covers both because neither alone did it:
-#   1. check-script-exec-bits.sh read only the INDEX (git ls-files -s), while the
+#   1. check-script-exec-bits (scripts/lua/check-script-exec-bits.lua since
+#      1528-ekri) read only the INDEX (git ls-files -s), while the
 #      skill runs the gate BEFORE `git add` — so a worktree-only chmod passed.
 #   2. gate-stamp.sh hashed path + kind + CONTENT and never st_mode, so the
 #      `git add` that wrote 100644 changed no bytes, the stamp stayed fresh, and
@@ -23,7 +24,7 @@ spec: ci-release
 phase: pre-build
 description: >
   Pin that a mode-only regression cannot cross the gate: gate-stamp.sh
-  fingerprints st_mode so a chmod goes stale, and check-script-exec-bits.sh
+  fingerprints st_mode so a chmod goes stale, and check-script-exec-bits
   reads the WORKTREE as well as the index so the refusal lands before staging.
   The fixture carries a mutation control proving the index-only guard misses the
   incident tree, and negative controls for the clean tree and for shebang-less
@@ -33,13 +34,14 @@ size: instant
 
 preconditions:
   - workspace contains scripts/gate-stamp.sh
-  - workspace contains scripts/check-script-exec-bits.sh
+  - workspace contains scripts/lua/check-script-exec-bits.lua (1528-ekri port of the .sh)
   - workspace contains scripts/test-mode-only-regression-887-bz88.sh
   - git and bash are available in PATH
 
 critical_path:
   - step: "guards and fixture parse and the fixture is executable"
-    command: "bash -n scripts/gate-stamp.sh && bash -n scripts/check-script-exec-bits.sh && bash -n scripts/test-mode-only-regression-887-bz88.sh && test -x scripts/test-mode-only-regression-887-bz88.sh && echo 'ok: parses'"
+    # PORTED to Lua (1528-ekri): a .lua decider has no `bash -n` syntax check.
+    command: "bash -n scripts/gate-stamp.sh && test -f scripts/lua/check-script-exec-bits.lua && bash -n scripts/test-mode-only-regression-887-bz88.sh && test -x scripts/test-mode-only-regression-887-bz88.sh && echo 'ok: parses'"
     timeout_ms: 5000
     expected_behavior: "ok: parses"
 
@@ -97,12 +99,16 @@ critical_path:
   # only the skip form across many runs, the memo behaviour is going unobserved
   # and that is worth filing — the skip text names itself so it can be grepped.
   - step: "1036-e5w9a: a worktree-only chmod does NOT move the stamp digest (889-8tcb's index-sourced rule)"
-    command: "set -e; v=scripts/check-litmus-pin-claims.sh; test -x \"$v\"; before=$(bash scripts/gate-stamp.sh compute); chmod -x \"$v\"; after=$(bash scripts/gate-stamp.sh compute); chmod +x \"$v\"; test \"$before\" = \"$after\" || { echo \"FAIL: the chmod moved the digest ($before -> $after) — 889-8tcb's index-sourced rule is broken\"; exit 1; }; echo 'ok: worktree chmod leaves the digest unchanged'"
+    # The victim just needs to be SOME tracked, executable .sh file; it was
+    # scripts/check-litmus-pin-claims.sh until 1528-ekri ported that to Lua,
+    # where it is never tracked executable (no shebang, run through `script
+    # run`) and so can no longer serve this role.
+    command: "set -e; v=scripts/check-added-fragments-parse.sh; test -x \"$v\"; before=$(bash scripts/gate-stamp.sh compute); chmod -x \"$v\"; after=$(bash scripts/gate-stamp.sh compute); chmod +x \"$v\"; test \"$before\" = \"$after\" || { echo \"FAIL: the chmod moved the digest ($before -> $after) — 889-8tcb's index-sourced rule is broken\"; exit 1; }; echo 'ok: worktree chmod leaves the digest unchanged'"
     timeout_ms: 30000
     expected_behavior: "ok: worktree chmod leaves the digest unchanged"
 
   - step: "1036-e5w9b: with a warm stamp, a worktree-only chmod makes the memo refuse"
-    command: "v=scripts/check-litmus-pin-claims.sh; clean=$(bash scripts/gate-stamp.sh memo-check check 2>&1 || true); case \"$clean\" in ok:gate-fresh*) : ;; *) echo \"skip:1036-e5w9b:no-warm-stamp memo says '$clean' — memo arm not exercised (arm 1036-e5w9a still proved digest invariance)\"; exit 0 ;; esac; chmod -x \"$v\"; out=$(bash scripts/gate-stamp.sh memo-check check 2>&1 || true); chmod +x \"$v\"; case \"$out\" in stale:worktree-mode-drift*) echo 'ok: memo refuses on worktree mode drift' ;; *) echo \"FAIL: memo said '$out' for a worktree-only chmod\"; exit 1 ;; esac"
+    command: "v=scripts/check-added-fragments-parse.sh; clean=$(bash scripts/gate-stamp.sh memo-check check 2>&1 || true); case \"$clean\" in ok:gate-fresh*) : ;; *) echo \"skip:1036-e5w9b:no-warm-stamp memo says '$clean' — memo arm not exercised (arm 1036-e5w9a still proved digest invariance)\"; exit 0 ;; esac; chmod -x \"$v\"; out=$(bash scripts/gate-stamp.sh memo-check check 2>&1 || true); chmod +x \"$v\"; case \"$out\" in stale:worktree-mode-drift*) echo 'ok: memo refuses on worktree mode drift' ;; *) echo \"FAIL: memo said '$out' for a worktree-only chmod\"; exit 1 ;; esac"
     timeout_ms: 30000
     success_pattern: "^(ok: memo refuses on worktree mode drift|skip:1036-e5w9b:no-warm-stamp )"
 
@@ -114,7 +120,7 @@ critical_path:
     success_pattern: "^(ok: clean tree still memoises|skip:1036-e5w9c:no-warm-stamp )"
 
 evidence:
-  artifact: "scripts/gate-stamp.sh + scripts/check-script-exec-bits.sh + scripts/test-mode-only-regression-887-bz88.sh"
+  artifact: "scripts/gate-stamp.sh + scripts/lua/check-script-exec-bits.lua + scripts/test-mode-only-regression-887-bz88.sh"
   measured_on: >
     lenovinha (Fedora Silverblue) 2026-08-25 — fixture 9/9 green. End-to-end on a
     scratch clone with a local bare remote and the real pre-push hook installed:

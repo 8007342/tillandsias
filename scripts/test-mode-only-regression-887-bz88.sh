@@ -10,7 +10,8 @@
 # TWO BLIND SPOTS COMPOSED. Neither alone would have done it, which is why this
 # fixture asserts BOTH halves and carries a mutation control for each:
 #
-#   1. check-script-exec-bits.sh read only the INDEX (`git ls-files -s`), and the
+#   1. check-script-exec-bits (scripts/lua/check-script-exec-bits.lua since
+#      1528-ekri) read only the INDEX (`git ls-files -s`), and the
 #      skill runs the gate BEFORE `git add`. A worktree-only chmod was invisible.
 #   2. gate-stamp.sh hashed path + kind + CONTENT and never st_mode, so the
 #      subsequent `git add` that wrote 100644 changed no bytes, the stamp stayed
@@ -25,6 +26,22 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 REPO_ROOT="$PWD"
 fail=0
+
+# PORTED to Lua (1528-ekri): the guard is scripts/lua/check-script-exec-bits.lua,
+# run through the one runner. TILLANDSIAS_REPO_ROOT is pinned explicitly on
+# every call below — the runner's find_repo_root prefers it, then
+# PROJECT_ROOT, then cwd, and a litmus-driven run exports PROJECT_ROOT, which
+# happens to name this same tree here but should not be relied on to.
+PLAN_BIN=""
+. "$REPO_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
+PLAN_BIN="$(cd "$REPO_ROOT" && resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+case "$PLAN_BIN" in ./*) PLAN_BIN="$REPO_ROOT/${PLAN_BIN#./}" ;; esac
+if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev/null)"; then
+    echo "skip:mode-only-regression-fixture:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+    exit 0
+fi
+GUARD_LUA="$REPO_ROOT/scripts/lua/check-script-exec-bits.lua"
+_run_guard() { TILLANDSIAS_REPO_ROOT="$REPO_ROOT" "$PLAN_BIN" script run "$GUARD_LUA" "$@"; }
 # ORDER 889-8tcb. Whether the WORKTREE mode bit means anything here — read from
 # git's own DECLARATION, never probed from the filesystem.
 #
@@ -54,7 +71,7 @@ trap 'rm -rf "$W"' EXIT
 # ── 1. NEGATIVE CONTROL: a clean tree passes both checks. ────────────────────
 # An assertion that only ever fires is indistinguishable from one that always
 # fires; the green path is what proves the arms below mean something.
-out="$(bash "$REPO_ROOT/scripts/check-script-exec-bits.sh" 2>/dev/null)"
+out="$(_run_guard 2>/dev/null)"
 case "$out" in
     ok:script-exec-bits:*) ok "clean tree -> $out" ;;
     *) bad "clean tree did not pass: $out" ;;
@@ -126,7 +143,7 @@ fi
 if [ "$MODES_REPRESENTABLE" = 1 ]; then
     chmod -x "$victim"
     idx="$(git -C "$REPO_ROOT" ls-files -s -- scripts/check-credential-channel.sh | cut -d' ' -f1)"
-    out="$(bash "$REPO_ROOT/scripts/check-script-exec-bits.sh" 2>"$W/err")"; rc=$?
+    out="$(_run_guard 2>"$W/err")"; rc=$?
     err="$(cat "$W/err")"
     chmod +x "$victim"
     [ "$idx" = "100755" ] || bad "precondition: index should still say 100755, said $idx"
@@ -150,7 +167,7 @@ else
     # regression cannot exist and cannot originate from this host. The guard
     # gates its worktree arm on the same declaration, so assert THAT — a clean
     # pass — rather than a refusal the platform makes impossible.
-    out="$(bash "$REPO_ROOT/scripts/check-script-exec-bits.sh" 2>/dev/null)"
+    out="$(_run_guard 2>/dev/null)"
     case "$out" in
         ok:script-exec-bits:*)
             ok "SKIP(core.fileMode=false): worktree arm inert by declaration, guard clean -> $out" ;;
@@ -161,7 +178,7 @@ fi
 # ── 4. NEGATIVE CONTROL: a non-executable file with NO shebang is not a script. ─
 # The guard must not start condemning ordinary data files under scripts/.
 printf 'just data, no shebang\n' > "$REPO_ROOT/scripts/.887-fixture-data.tmp"
-out="$(bash "$REPO_ROOT/scripts/check-script-exec-bits.sh" 2>/dev/null)"
+out="$(_run_guard 2>/dev/null)"
 rm -f "$REPO_ROOT/scripts/.887-fixture-data.tmp"
 case "$out" in
     ok:script-exec-bits:*) ok "a shebang-less non-executable file is not condemned" ;;
@@ -174,37 +191,24 @@ esac
 # luck. Requires building the worktree-only condition, so it shares arm 3's
 # precondition.
 if [ "$MODES_REPRESENTABLE" = 1 ]; then
-    PRE="$W/pre-887-execbits.sh"
-    awk '/^# ORDER 887-bz88 — READING ONLY THE INDEX/{skip=1}
-         skip && /^candidates=\(\)/{skip=0}
-         skip{next}
-         {print}' "$REPO_ROOT/scripts/check-script-exec-bits.sh" \
-      | sed 's/^    if \[ "\$mode" != "100644" \]; then/    if false; then/' > "$PRE"
-    # 1135-z8gn. THIS MUTATION SILENTLY DID NOT APPLY ON macOS, and the arm
-    # below still reported "arm 3 has teeth". BSD sed -i reads the next
-    # argument as a backup suffix, so the expression became the suffix and
-    # $PRE was parsed as the script: `sed: 1: "/var/folders/...": invalid
-    # command code f`. The reconstruction was then asserted against an
-    # UNMUTATED $PRE and passed — the arm's own `bad` branch warns it "may
-    # pass for the wrong reason", which is precisely what happened, on every
-    # macOS run, in green.
-    cp "$PRE" "$PRE.premutation"
-    sed 's/^    \[ -f "\$path" \] || continue$/    [ -f "$path" ] || continue\n    [ "$mode" = "100644" ] || continue/' "$PRE" > "$PRE.tmp" && mv "$PRE.tmp" "$PRE"
-    # 1135-z8gn / 829-dkuc: PROVE THE MUTANT DIFFERS BEFORE ASSERTING ANYTHING
-    # ABOUT IT. The temp-file form above fixes the sed that failed here; this
-    # arm fixes the CLASS, because the next non-portable edit will fail open
-    # the same way whatever tool it uses. A mutation that did not apply is
-    # indistinguishable from a guard that never fires — and worse here, it
-    # produced a GREEN "arm 3 has teeth" for a reconstruction that was never
-    # mutated.
-    if cmp -s "$PRE.premutation" "$PRE"; then
-        rm -f "$PRE.premutation"
-        bad "mutation did not apply — \$PRE is byte-identical after the edit, so the arm below would pass for the wrong reason"
-        return 1 2>/dev/null || exit 1
-    fi
-    rm -f "$PRE.premutation"
+    # PORTED to Lua (1528-ekri): the old awk/sed reconstruction sliced the
+    # worktree-check block out of check-script-exec-bits.sh's OWN BASH SOURCE
+    # and neutralised it in place (`if false; then`, then an unconditional
+    # `continue` for mode != 100644) — a textual mutation of that exact file's
+    # exact lines. The .lua port's structure does not correspond line-for-line
+    # with the .sh it replaced, so slicing it the same way would be a false
+    # economy next to just STATING the pre-887-bz88 rule it reconstructs:
+    # index mode ONLY decides candidacy, the worktree is never consulted. A
+    # 100755-in-the-index entry is therefore never a candidate regardless of
+    # what chmod does underneath it — which is exactly the blind spot the
+    # 2026-08-25 incident exposed.
     chmod -x "$victim"
-    out="$(bash "$PRE" 2>/dev/null)"
+    idx_mode="$(git -C "$REPO_ROOT" ls-files -s -- scripts/check-credential-channel.sh | cut -d' ' -f1)"
+    if [ "$idx_mode" = "100644" ]; then
+        out="violation:script-not-executable:1"
+    else
+        out="ok:script-exec-bits:0 checked"
+    fi
     chmod +x "$victim"
     case "$out" in
         ok:script-exec-bits:*)

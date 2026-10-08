@@ -34,7 +34,13 @@ pass=0; fail=0
 ok()  { echo "  ok: $1"; pass=$((pass+1)); }
 bad() { echo "  FAIL: $1"; fail=$((fail+1)); }
 
-VICTIM="scripts/check-litmus-pin-claims.sh"
+# check-litmus-pin-claims.sh was the victim before order 1528-ekri ported it
+# to Lua, where it is never bare-invoked (no shebang, run through `script
+# run`) and so is no longer a candidate for check-script-exec-bits at all.
+# check-added-fragments-parse.sh is bare-invoked from
+# litmus-added-fragment-parse-gate-shape.yaml, is not one of this batch's
+# ports, and is otherwise an ordinary stable fast-lane .sh guard.
+VICTIM="scripts/check-added-fragments-parse.sh"
 if [ ! -f "$VICTIM" ]; then
     echo "skip:test-gate-fast-refusals:victim-absent:$VICTIM"
     exit 0
@@ -75,10 +81,17 @@ fi
 # duplicate inside the hoisted phase is still caught, and a guard smuggled into
 # the memo arm that is NOT in the fast lane's subject is still visible.
 _hoisted_src="$(awk '/"ok:gate-fresh-except-plan "\*\)/{inarm=1} inarm&&/^[[:space:]]*;;[[:space:]]*$/{inarm=0;next} !inarm' build.sh)"
-for g in check-scorable-obligation-added check-issue-citation-convention \
-         check-script-exec-bits check-litmus-pin-claims; do
+for g in check-scorable-obligation-added check-issue-citation-convention; do
     n="$(printf '%s\n' "$_hoisted_src" | /usr/bin/grep -cE "_run bash .*$g\.sh" 2>/dev/null || echo 0)"
     [ "$n" = "1" ] || bad "$g.sh is invoked $n times in build.sh outside the memoised-plan arm (expected exactly 1)"
+done
+# check-script-exec-bits and check-litmus-pin-claims are PORTED to Lua
+# (1528-ekri): their call site is `_run_lua_decider "scripts/lua/$g.lua"`,
+# not `_run bash .../$g.sh` — matched separately so the same "exactly once,
+# outside the memoised-plan arm" rule still applies to the new form.
+for g in check-script-exec-bits check-litmus-pin-claims; do
+    n="$(printf '%s\n' "$_hoisted_src" | /usr/bin/grep -cE "_run_lua_decider \"scripts/lua/$g\.lua\"" 2>/dev/null || echo 0)"
+    [ "$n" = "1" ] || bad "$g.lua is invoked $n times in build.sh outside the memoised-plan arm (expected exactly 1)"
 done
 
 # THE EXCISION MUST ACTUALLY EXCISE SOMETHING. Without this, an awk that matched
@@ -103,8 +116,16 @@ fi
 # to a built binary by another name. The two fail differently: the specific arm
 # cannot be fooled about 885-92iu, the general one catches the class
 # approximately. Replacing either with the other would lose real coverage.
-for _h in check-scorable-obligation-added check-issue-citation-convention \
-          check-script-exec-bits check-litmus-pin-claims; do
+# check-script-exec-bits and check-litmus-pin-claims are EXCLUDED here
+# (1528-ekri): they DO depend on a resolved plan binary now, through
+# build.sh's own `_run_lua_decider`, and that is new and intentional — not
+# the 885-92iu shape this loop exists to catch. The difference is the
+# failure mode: `_run_lua_decider` prints `could-not-run:lua-decider:...`
+# and returns 3, which build.sh's caller treats as a REFUSAL (exit 1), never
+# as a silent pass. A SOURCE-SHAPE grep over scripts/check-X.sh cannot even
+# express this guard any more, since the file is scripts/lua/check-X.lua and
+# the binary-resolving code lives in build.sh's wrapper, not in the decider.
+for _h in check-scorable-obligation-added check-issue-citation-convention; do
     if /usr/bin/grep -q 'resolve_plan_binary' "scripts/$_h.sh" 2>/dev/null; then
         bad "hoisted guard $_h.sh calls resolve_plan_binary — on a cold tree it would SKIP, not refuse (the 885-92iu shape)"
     fi

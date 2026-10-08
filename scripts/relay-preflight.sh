@@ -330,8 +330,24 @@ _run_decider() { # name -> sets DEC_OUT, returns rc
             _cap env TILLANDSIAS_REPO_ROOT="$ROOT" "$_lb" script run "$SELF_DIR/lua/check-bash-dialect.lua" ;;
         check-sigpipe-verdict-pipelines-added) DEC_OUT="$(TILLANDSIAS_SIGPIPE_BASE="$BASE" bash "$SELF_DIR/check-sigpipe-verdict-pipelines-added.sh" 2>&1)"; return $? ;;
         check-plan-binary-probe-usage) _cap bash "$SELF_DIR/check-plan-binary-probe-usage.sh" ;;
-        check-litmus-pin-claims) _cap bash "$SELF_DIR/check-litmus-pin-claims.sh" ;;
-        check-script-exec-bits) _cap bash "$SELF_DIR/check-script-exec-bits.sh" ;;
+        # PORTED to Lua (1528-ekri): scripts/lua/check-litmus-pin-claims.lua.
+        check-litmus-pin-claims)
+            local _lb=""
+            command -v resolve_plan_binary >/dev/null 2>&1 && _lb="$(resolve_plan_binary 2>/dev/null || true)"
+            if [ -z "$_lb" ] || ! grep -qx script <<<"$("$_lb" capabilities 2>/dev/null)"; then
+                DEC_OUT="could-not-run:check-litmus-pin-claims:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+                return 3
+            fi
+            _cap env TILLANDSIAS_REPO_ROOT="$ROOT" "$_lb" script run "$SELF_DIR/lua/check-litmus-pin-claims.lua" ;;
+        # PORTED to Lua (1528-ekri): scripts/lua/check-script-exec-bits.lua.
+        check-script-exec-bits)
+            local _lb=""
+            command -v resolve_plan_binary >/dev/null 2>&1 && _lb="$(resolve_plan_binary 2>/dev/null || true)"
+            if [ -z "$_lb" ] || ! grep -qx script <<<"$("$_lb" capabilities 2>/dev/null)"; then
+                DEC_OUT="could-not-run:check-script-exec-bits:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+                return 3
+            fi
+            _cap env TILLANDSIAS_REPO_ROOT="$ROOT" "$_lb" script run "$SELF_DIR/lua/check-script-exec-bits.lua" ;;
         check-added-fragments-parse) DEC_OUT="$(TILLANDSIAS_FRAGMENT_PARSE_BASE="$BASE" bash "$SELF_DIR/check-added-fragments-parse.sh" 2>&1)"; return $? ;;
         check-scorable-obligation-added) _cap bash "$SELF_DIR/check-scorable-obligation-added.sh" "$BASE" ;;
         check-gate-step-regimes) _cap bash "$SELF_DIR/check-gate-step-regimes.sh" ;;

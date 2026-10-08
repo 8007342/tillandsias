@@ -23,29 +23,31 @@ description: >
   fixture fragments, the report-vs-gate split (full-ledger report never fails,
   fragment gate exits 1), the field-scoped extraction that ignores prose and
   spec shorthands elsewhere in the ledger, the corpus-selector fix in
-  check-litmus-pin-claims.sh (which must select by FILENAME, not by matching
+  check-litmus-pin-claims.lua (which must select by FILENAME, not by matching
   its own grep output), and the build.sh wiring of both.
 severity: high
 size: instant
 
 preconditions:
   - workspace contains scripts/check-declared-closures-added.sh
-  - workspace contains scripts/check-litmus-pin-claims.sh
+  - workspace contains scripts/lua/check-litmus-pin-claims.lua (1528-ekri port of the .sh)
   - shell utilities (bash, grep, sed, find, mktemp) are available in PATH
 
 critical_path:
-  - step: "both guards parse, are executable, and build.sh invokes each by name (an orphaned guard is fixed by invoking it, not by mentioning it)"
-    command: "bash -n scripts/check-declared-closures-added.sh && bash -n scripts/check-litmus-pin-claims.sh && test -x scripts/check-declared-closures-added.sh && grep -q 'check-declared-closures-added.sh' build.sh && grep -q 'check-litmus-pin-claims.sh' build.sh && echo 'ok: guards-wired'"
+  - step: "both guards parse, exist, and build.sh invokes each by name (an orphaned guard is fixed by invoking it, not by mentioning it)"
+    # PORTED to Lua (1528-ekri): a .lua decider has no `bash -n` syntax check
+    # or exec bit of its own — it is interpreted through `script run`.
+    command: "bash -n scripts/check-declared-closures-added.sh && test -x scripts/check-declared-closures-added.sh && test -f scripts/lua/check-litmus-pin-claims.lua && grep -q 'check-declared-closures-added.sh' build.sh && grep -q 'check-litmus-pin-claims.lua' build.sh && echo 'ok: guards-wired'"
     timeout_ms: 5000
     expected_behavior: "ok: guards-wired"
 
   - step: "CORPUS SELECTOR (885-92iu criterion 1): pointed at a directory with no shell or C sources the pin checker reports 0, not a count of prose lines that merely mention a .sh path"
-    command: ". scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\" || b=; [ -n \"$b\" ] || { echo 'ok: skipped-no-plan-binary'; exit 0; }; d=$(mktemp -d); mkdir -p \"$d/sub\"; printf 'see scripts/foo.sh: it claims litmus:totally-invented-name\\n' > \"$d/sub/notes.md\"; out=$(TILLANDSIAS_PIN_SCAN_DIR=\"$d\" scripts/check-litmus-pin-claims.sh 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:litmus-pin-claims:0 checked' ] && echo 'ok: corpus-by-filename' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    command: ". scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\" || b=; [ -n \"$b\" ] || { echo 'ok: skipped-no-plan-binary'; exit 0; }; d=$(mktemp -d); mkdir -p \"$d/sub\"; printf 'see scripts/foo.sh: it claims litmus:totally-invented-name\\n' > \"$d/sub/notes.md\"; out=$(TILLANDSIAS_PIN_SCAN_DIR=\"$d\" \"$b\" script run scripts/lua/check-litmus-pin-claims.lua 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:litmus-pin-claims:0 checked' ] && echo 'ok: corpus-by-filename' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 20000
     expected_behavior: "ok: corpus-by-filename"
 
   - step: "the pin checker still scans real shell sources (the selector fix must not have emptied the corpus it was written for)"
-    command: "out=$(scripts/check-litmus-pin-claims.sh 2>/dev/null); n=$(printf '%s' \"$out\" | sed 's/^ok:litmus-pin-claims:\\([0-9]*\\) checked$/\\1/'); case \"$out\" in ok:litmus-pin-claims:*) [ \"$n\" -gt 20 ] && echo 'ok: real-corpus-nonempty' || { echo \"FAIL: only $n checked\"; exit 1; } ;; *) echo \"FAIL: $out\"; exit 1 ;; esac"
+    command: ". scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\" || b=; [ -n \"$b\" ] || { echo 'ok: skipped-no-plan-binary'; exit 0; }; out=$(\"$b\" script run scripts/lua/check-litmus-pin-claims.lua 2>/dev/null); n=$(printf '%s' \"$out\" | sed 's/^ok:litmus-pin-claims:\\([0-9]*\\) checked$/\\1/'); case \"$out\" in ok:litmus-pin-claims:*) [ \"$n\" -gt 20 ] && echo 'ok: real-corpus-nonempty' || { echo \"FAIL: only $n checked\"; exit 1; } ;; *) echo \"FAIL: $out\"; exit 1 ;; esac"
     timeout_ms: 20000
     expected_behavior: "ok: real-corpus-nonempty"
 
@@ -87,7 +89,7 @@ observability:
   log_fields:
     spec: "spec-traceability"
     test: "declared-closure-resolves"
-    artifact: "crates/tillandsias-plan/src/main.rs (declared-closures) + scripts/check-declared-closures-added.sh + scripts/check-litmus-pin-claims.sh"
+    artifact: "crates/tillandsias-plan/src/main.rs (declared-closures) + scripts/check-declared-closures-added.sh + scripts/lua/check-litmus-pin-claims.lua"
 
 rollback:
   on_failure: >
@@ -98,6 +100,7 @@ rollback:
     `tillandsias-plan declared-closures` (full-ledger REPORT, exit 0) and
     `declared-closures-check <fragment.yaml>` (single-fragment GATE, exit 1),
     both extracting tokens from the `verifiable_closure` FIELD only, and keep
-    check-litmus-pin-claims.sh selecting its corpus with `find -name` rather
-    than by filtering its own grep output.
-  command: "bash -c '. scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" declared-closures'; scripts/check-litmus-pin-claims.sh; scripts/check-declared-closures-added.sh"
+    check-litmus-pin-claims.lua selecting its corpus with `fs.walk` (the
+    repo-relative directory walk the one runner exposes) rather than by
+    filtering its own grep output.
+  command: "bash -c '. scripts/plan-binary-probe.sh; b=\"$(resolve_plan_binary)\"; \"$b\" declared-closures; \"$b\" script run scripts/lua/check-litmus-pin-claims.lua'; scripts/check-declared-closures-added.sh"

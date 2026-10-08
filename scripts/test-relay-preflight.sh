@@ -48,7 +48,10 @@ case "$_pb" in ./*) _pb="$ROOT/${_pb#./}" ;; esac
 # The deciders relay-preflight.sh shells out to, by their OWN relative
 # location — copied into every scratch repo's scripts/ dir so they judge the
 # SCRATCH tree, never this checkout's.
-DECIDER_FILES="timing-log.sh plan-binary-probe.sh check-sigpipe-verdict-pipelines-added.sh check-plan-binary-probe-usage.sh check-litmus-pin-claims.sh check-script-exec-bits.sh check-added-fragments-parse.sh check-scorable-obligation-added.sh check-gate-step-regimes.sh check-added-test-is-referenced.sh check-refusal-affordance-added.sh check-rust-source-pin-added.sh check-no-python-scripts.sh check-jq-callsite-ratchet.sh preflight-fixtures-default-target.sh check-issue-citation-convention.sh trace-coverage.sh litmus-covering-specs.sh"
+# check-litmus-pin-claims.sh and check-script-exec-bits.sh are PORTED to Lua
+# (1528-ekri) and no longer in this list — they are copied into
+# scripts/lua/ below, beside check-bash-dialect.lua.
+DECIDER_FILES="timing-log.sh plan-binary-probe.sh check-sigpipe-verdict-pipelines-added.sh check-plan-binary-probe-usage.sh check-added-fragments-parse.sh check-scorable-obligation-added.sh check-gate-step-regimes.sh check-added-test-is-referenced.sh check-refusal-affordance-added.sh check-rust-source-pin-added.sh check-no-python-scripts.sh check-jq-callsite-ratchet.sh preflight-fixtures-default-target.sh check-issue-citation-convention.sh trace-coverage.sh litmus-covering-specs.sh"
 
 # _seed <dir>: a fresh repo at <dir> with relay-preflight.sh and every decider
 # it calls, one base commit, branch "linux-next".
@@ -74,8 +77,11 @@ _seed() {
     # script calls, so DECIDER_FILES (a list of .sh basenames) never covers
     # them.
     # 1384-ddua: check-bash-dialect is a Lua decider on the one runner.
+    # 1528-ekri: check-litmus-pin-claims and check-script-exec-bits too.
     mkdir -p "$d/scripts/lua"
     cp "$ROOT/scripts/lua/check-bash-dialect.lua" "$d/scripts/lua/"
+    cp "$ROOT/scripts/lua/check-litmus-pin-claims.lua" "$d/scripts/lua/"
+    cp "$ROOT/scripts/lua/check-script-exec-bits.lua" "$d/scripts/lua/"
     [ -f "$ROOT/scripts/lib/exec-bits-filter.awk" ] && cp "$ROOT/scripts/lib/exec-bits-filter.awk" "$d/scripts/lib/"
     [ -f "$ROOT/scripts/test-reference-surfaces.manifest" ] && cp "$ROOT/scripts/test-reference-surfaces.manifest" "$d/scripts/"
     chmod +x "$d"/scripts/*.sh

@@ -1,6 +1,9 @@
 # @trace order:758-jw6v, spec:ci-release
 #
-# Filter half of scripts/check-script-exec-bits.sh.
+# Filter half of scripts/lua/check-script-exec-bits.lua (scripts/check-script-exec-bits.sh
+# until its 1528-ekri port), run through proc.run exactly as the .sh ran it as
+# a subprocess. Unchanged by the port — a byte-for-byte port of the CALLER is
+# a safer bet than a parallel port of this file's own intricate logic.
 #
 # Usage: awk -f exec-bits-filter.awk <candidates-file> <hits-file>
 #   candidates-file: one candidate script path per line

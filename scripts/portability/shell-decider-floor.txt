@@ -79,8 +79,6 @@ scripts/check-litmus-dead-inputs.sh
 scripts/check-litmus-expression-pinning-added.sh
 scripts/check-litmus-grep-escapes.sh
 scripts/check-litmus-line-windows.sh
-scripts/check-litmus-mutation-arms-mutate.sh
-scripts/check-litmus-pin-claims.sh
 scripts/check-litmus-steps-can-fail.sh
 scripts/check-litmus-yaml-parses.sh
 scripts/check-local-expert-health.sh
@@ -129,12 +127,10 @@ scripts/check-rust-source-pin-added.sh
 scripts/check-salvage-refs-ledger.sh
 scripts/check-scorable-obligation-added.sh
 scripts/check-scratchpad-headroom.sh
-scripts/check-script-exec-bits.sh
 scripts/check-secure-wire-single-reader.sh
 scripts/check-sigpipe-verdict-pipelines-added.sh
 scripts/check-skill-canonicalization.sh
 scripts/check-skills-single-source.sh
-scripts/check-source-slice-bounds.sh
 scripts/check-spec-index-resolution-agreement.sh
 scripts/check-spec-registry-status.sh
 scripts/check-spec-script-paths.sh
@@ -144,7 +140,6 @@ scripts/check-stranded-in-progress.sh
 scripts/check-stranded-plan-writes.sh
 scripts/check-terminology.sh
 scripts/check-test-baseline.sh
-scripts/check-tracked-files-unwritten.sh
 scripts/check-tray-import-surface.sh
 scripts/check-tray-process-running-naming.sh
 scripts/check-tray-refresh-no-polling.sh

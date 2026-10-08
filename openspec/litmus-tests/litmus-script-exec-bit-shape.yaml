@@ -17,11 +17,14 @@ size: instant
 phase: pre-build
 
 preconditions:
-  - workspace contains scripts/check-script-exec-bits.sh
+  - workspace contains scripts/lua/check-script-exec-bits.lua (1528-ekri port of the .sh)
 
 critical_path:
-  - step: "Req: the guard exists, is itself executable, and emits its pinned grammar"
-    command: "test -x scripts/check-script-exec-bits.sh && scripts/check-script-exec-bits.sh | grep -qE '^(ok:script-exec-bits:[0-9]+ checked|violation:script-not-executable:[0-9]+)$' && echo 'ok: guard present and grammar pinned'"
+  - step: "Req: the guard exists through the one runner, and emits its pinned grammar"
+    # PORTED to Lua (1528-ekri): a .lua decider is never itself executable —
+    # it is interpreted through `script run`, never invoked bare — so this no
+    # longer asserts `test -x` on the guard's own file.
+    command: ". scripts/plan-binary-probe.sh; _b=\"$(resolve_plan_binary)\"; out=$(\"$_b\" script run scripts/lua/check-script-exec-bits.lua) && printf '%s' \"$out\" | grep -qE '^(ok:script-exec-bits:[0-9]+ checked|violation:script-not-executable:[0-9]+)$' && echo 'ok: guard present and grammar pinned'"
     timeout_ms: 30000
     expected_behavior: "ok: guard present and grammar pinned"
 
@@ -49,12 +52,12 @@ critical_path:
     # unreachable for the same reason `: "` was. Pinned as NAMED awk variables
     # (`dotslash`, `envpfx`) rather than inlined regex, precisely so this grep
     # can see them.
-    command: "grep -q 'openspec/litmus-tests/\\*.yaml' scripts/check-script-exec-bits.sh && grep -q '.github/workflows/\\*.yml' scripts/check-script-exec-bits.sh && grep -q 'yamlcmd' scripts/lib/exec-bits-filter.awk && grep -q 'dotslash' scripts/lib/exec-bits-filter.awk && grep -q 'envpfx' scripts/lib/exec-bits-filter.awk && echo 'ok: non-shell caller surfaces covered'"
+    command: "grep -q 'openspec/litmus-tests/\\*.yaml' scripts/lua/check-script-exec-bits.lua && grep -q '.github/workflows/\\*.yml' scripts/lua/check-script-exec-bits.lua && grep -q 'yamlcmd' scripts/lib/exec-bits-filter.awk && grep -q 'dotslash' scripts/lib/exec-bits-filter.awk && grep -q 'envpfx' scripts/lib/exec-bits-filter.awk && echo 'ok: non-shell caller surfaces covered'"
     timeout_ms: 5000
     expected_behavior: "ok: non-shell caller surfaces covered"
 
   - step: "LIVE: every bare-invoked script in this tree is tracked executable"
-    command: "mf_stage prod 0 OUT -- scripts/check-script-exec-bits.sh && mf_holds_ere OUT '^ok:script-exec-bits:[0-9]+ checked$' && echo 'ok: tree clean'"
+    command: ". scripts/plan-binary-probe.sh; _b=\"$(resolve_plan_binary)\"; mf_stage prod 0 OUT -- \"$_b\" script run scripts/lua/check-script-exec-bits.lua && mf_holds_ere OUT '^ok:script-exec-bits:[0-9]+ checked$' && echo 'ok: tree clean'"
     timeout_ms: 30000
     expected_behavior: "ok: tree clean"
 
@@ -73,7 +76,10 @@ critical_path:
     # env-assignment-prefix scenarios plus the `bash ./` narrowness control;
     # 14 -> 17 with order 1321-2ixp's `test -x` requirement form, its `[ -x ]`
     # spelling, and the narrowness control that an interpreter-prefixed caller
-    # with NO assertion must stay silent.
+    # with NO assertion must stay silent; 17 -> 16 with order 1528-ekri's Lua
+    # port — the portable-xargs pin (851-gpb5: no GNU-only `xargs -r`) has no
+    # subject once the checker spawns no xargs at all, and is dropped rather
+    # than retargeted at nothing.
     # The count is pinned deliberately: it is how a wholesale fixture rewrite
     # that drops coverage gets caught, which already happened once under
     # 758-jw6v.
@@ -84,7 +90,7 @@ critical_path:
     # in fact added, ran, passed, and were reported as 14. The count is now
     # derived from the scenarios that actually ran — verified against the PASS
     # lines the run prints — so a drop moves the token and this line catches it.
-    expected_behavior: "ok:script-exec-bits-fixture:17"
+    expected_behavior: "ok:script-exec-bits-fixture:16"
 
 observability:
   traces:
@@ -93,8 +99,8 @@ observability:
   log_fields:
     spec: "ci-release"
     test: "script-exec-bit-shape"
-    artifact: "scripts/check-script-exec-bits.sh"
+    artifact: "scripts/lua/check-script-exec-bits.lua"
 
 rollback:
-  on_failure: "run scripts/check-script-exec-bits.sh — it names each offending path and prints the one-line git update-index --chmod=+x fix"
-  command: "scripts/check-script-exec-bits.sh"
+  on_failure: "run `tillandsias-plan script run scripts/lua/check-script-exec-bits.lua` — it names each offending path and prints the one-line git update-index --chmod=+x fix"
+  command: ". scripts/plan-binary-probe.sh && \"$(resolve_plan_binary)\" script run scripts/lua/check-script-exec-bits.lua"

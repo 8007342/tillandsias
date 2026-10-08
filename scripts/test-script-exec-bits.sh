@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
-# @trace order:731-d89b, spec:ci-release
+# @trace order:731-d89b, spec:ci-release, order:1528-ekri
 set -uo pipefail
 
-# Fixture for scripts/check-script-exec-bits.sh.
+# Fixture for scripts/lua/check-script-exec-bits.lua.
+#
+# PORTED to Lua (1528-ekri): the guard is now scripts/lua/check-script-exec-bits.lua,
+# run through the one runner. It finds its repo root from the process's CWD
+# (find_repo_root), not from its own script path, so each scratch repo below
+# runs the REAL checkout's .lua by absolute path rather than a copy of it —
+# only scripts/lib/exec-bits-filter.awk (its unported dependency) still needs
+# copying into the scratch repo, exactly as before.
 #
 # This ABSORBS the four-scenario fixture order 731-d89b wrote here. A rewrite
 # under 758-jw6v replaced the file wholesale instead of extending it, which
@@ -34,7 +41,13 @@ set -uo pipefail
 #   * a 100755 script invoked by path is fine
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CHECK="$ROOT/scripts/check-script-exec-bits.sh"
+PLAN_BIN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+case "$PLAN_BIN" in ./*) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev/null)"; then
+    echo "skip:script-exec-bits-fixture:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+    exit 0
+fi
+GUARD_LUA="$ROOT/scripts/lua/check-script-exec-bits.lua"
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/script-exec-bits-fixture.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
@@ -59,10 +72,10 @@ scenario() {
     git -C "$repo" init -q -b main
     git -C "$repo" config user.email f@example.invalid
     git -C "$repo" config user.name fixture
-    cp "$CHECK" "$repo/scripts/check-script-exec-bits.sh"
-    # The checker gained a helper file (758-jw6v). A fixture that copies the
-    # script but not its dependency exercises the missing-dependency path and
-    # calls it a pass — which is how 752-8hqx wasted a diagnosis.
+    # The checker reaches for a helper file (758-jw6v) by a repo-relative path.
+    # A fixture that copies the script but not its dependency exercises the
+    # missing-dependency path and calls it a pass — which is how 752-8hqx
+    # wasted a diagnosis.
     mkdir -p "$repo/scripts/lib"
     cp "$ROOT/scripts/lib/exec-bits-filter.awk" "$repo/scripts/lib/"
     printf '#!/usr/bin/env bash\necho target\n' > "$repo/scripts/target.sh"
@@ -91,8 +104,13 @@ scenario() {
         chmod +x "$repo/scripts/target.sh"
     fi
 
+    # TILLANDSIAS_REPO_ROOT is pinned explicitly: the runner's find_repo_root
+    # prefers it, then PROJECT_ROOT, then cwd — and a litmus-driven run
+    # exports PROJECT_ROOT for the REAL checkout, which would otherwise win
+    # over this scratch repo's own `cd` (the same seam check-bash-dialect's
+    # relay-preflight call already pins).
     local rc=0 out
-    out="$(cd "$repo" && bash scripts/check-script-exec-bits.sh 2>/dev/null)" || rc=$?
+    out="$(cd "$repo" && TILLANDSIAS_REPO_ROOT="$repo" "$PLAN_BIN" script run "$GUARD_LUA" 2>/dev/null)" || rc=$?
     if [ "$rc" = "$want_rc" ] && printf '%s' "$out" | grep -q "$want"; then
         echo "PASS  $name"
         ran+=("$name")
@@ -215,7 +233,6 @@ rm -rf "$repo"; mkdir -p "$repo/scripts"
 git -C "$repo" init -q -b main
 git -C "$repo" config user.email f@example.invalid
 git -C "$repo" config user.name fixture
-cp "$CHECK" "$repo/scripts/check-script-exec-bits.sh"
 printf '#!/usr/bin/env bash
 echo target
 ' > "$repo/scripts/target.sh"
@@ -225,7 +242,7 @@ scripts/target.sh
 git -C "$repo" add -A >/dev/null 2>&1
 git -C "$repo" update-index --chmod=-x scripts/target.sh
 rc=0
-out="$(cd "$repo" && bash scripts/check-script-exec-bits.sh 2>/dev/null)" || rc=$?
+out="$(cd "$repo" && TILLANDSIAS_REPO_ROOT="$repo" "$PLAN_BIN" script run "$GUARD_LUA" 2>/dev/null)" || rc=$?
 if [ "$rc" = 2 ] && printf '%s' "$out" | grep -q "violation:script-not-executable:0"; then
     echo "PASS  missing-helper-refuses"
     ran+=("missing-helper-refuses")
@@ -233,21 +250,6 @@ else
     echo "FAIL  missing-helper-refuses: want rc=2 with a violation line, got rc=$rc [$out]"
     failures+=("missing-helper-refuses")
     ran+=("missing-helper-refuses")
-fi
-
-# ── portable-xargs (order 851-gpb5) ──────────────────────────────────────────
-# `xargs -r` is GNU findutils syntax; the first macOS host hit it during fleet
-# onboarding. The empty-input case -r guards against is unreachable in the
-# checker ($caller_files is verified non-empty before the sweep), so the flag
-# was dropped rather than emulated. Pinned so it cannot come back: re-adding
-# -r turns this line red on every host.
-if grep -q 'xargs -r' "$CHECK"; then
-    echo "FAIL  portable-xargs: GNU-only 'xargs -r' reappeared in the checker"
-    failures+=("portable-xargs")
-    ran+=("portable-xargs")
-else
-    echo "PASS  portable-xargs"
-    ran+=("portable-xargs")
 fi
 
 if [ "${#failures[@]}" -gt 0 ]; then

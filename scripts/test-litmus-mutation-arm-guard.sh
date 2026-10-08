@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# @trace order:1059-pb2j
+# @trace order:1059-pb2j, order:1528-ekri
 #
-# Fixture for check-litmus-mutation-arms-mutate.sh.
+# Fixture for check-litmus-mutation-arms-mutate.lua.
 #
 # ARM 1 IS THE REAL POSITIVE CONTROL: the actual pre-fix text of
 # litmus-lww-channel-fields-alias.yaml, read out of git history at 5083b2649^,
@@ -15,11 +15,23 @@
 # pass: the renamed SOURCE PIN, an arm that mutates inline, and an arm that
 # DELEGATES its mutation to a fixture (which is how
 # litmus-fragment-status-loss-attribution-shape.yaml is written today).
+#
+# PORTED to Lua (1528-ekri): the guard is
+# scripts/lua/check-litmus-mutation-arms-mutate.lua, run through the one
+# runner. The directory is now a TEST SEAM env var
+# (TILLANDSIAS_LITMUS_MUTATION_DIR, widened by the guard's `-- @read-env`)
+# rather than a positional argument, since the runner's `script run` has no
+# notion of a decider-specific CLI arg the way `bash foo.sh "$dir"` did.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT" || exit 2
-GUARD="$ROOT/scripts/check-litmus-mutation-arms-mutate.sh"
+PLAN_BIN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN_BIN=""
+case "$PLAN_BIN" in ./*) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev/null)"; then
+    echo "skip:litmus-mutation-arm-guard-fixture:no-script-runner — no tillandsias-plan with \`script run\` resolves; rebuild it (cargo build --release -p tillandsias-plan)"
+    exit 0
+fi
+GUARD_LUA="$ROOT/scripts/lua/check-litmus-mutation-arms-mutate.lua"
 fail=0; pass=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
@@ -28,7 +40,7 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/mutation-arm-guard.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 
 _verdict() { # dir -> exit code, output discarded
-    bash "$GUARD" "$1" >/dev/null 2>&1
+    TILLANDSIAS_LITMUS_MUTATION_DIR="$1" "$PLAN_BIN" script run "$GUARD_LUA" >/dev/null 2>&1
     echo $?
 }
 
