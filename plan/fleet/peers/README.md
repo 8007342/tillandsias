@@ -52,11 +52,10 @@ Then land `plan/fleet/peers/<host>.yaml` by the normal flow. A refusal names
 the fingerprint, so the remedy for `refused:msg:unknown-peer:<fp>` is to land
 (or merge) the record whose `noise_fp` is `<fp>`.
 
-## Open naming conflict
+## Field name: `noise_fp` (ruled 2026-10-07)
 
-1506-32k5's title and the fleet-messaging design and spec delta call the
-fingerprint field `fp`; 1548-cii8 and fleet-wan-rendezvous Decision 6 call
-it `noise_fp`. The code writes and reads `noise_fp`, the name used by the
-packet that owns the schema. The fleet-messaging design and spec delta still
-say `fp` and need reconciling before that delta is synced. The mDNS TXT key
-stays `fp=`, as the design names it.
+The operator ruled on 2026-10-07 that the record field is `noise_fp`, the
+name the code, 1548-cii8 and fleet-wan-rendezvous Decision 6 already use.
+The fleet-messaging design and spec delta were changed to match. `<fp>` in
+`refused:msg:unknown-peer:<fp>` is a placeholder for the fingerprint value,
+not a field name, and the mDNS TXT key stays `fp=`, as the design names it.

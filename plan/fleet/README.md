@@ -32,9 +32,8 @@ unreadable or non-mapping file is `unreadable` / `not-yaml` /
 `not-a-mapping`; an empty directory is `no-records` (a check over nothing is
 refused, not passed).
 
-The fingerprint field is named `noise_fp`. The fleet-messaging design calls
-it `fp`; that conflict is open (see `peers/README.md`) and no second name
-exists in the record.
+The fingerprint field is named `noise_fp` (operator ruling 2026-10-07, see
+`peers/README.md`); no second name exists in the record.
 
 Enrollment (1548-ciq2) is what writes the CA, `announce_pub`, `admitted`
 fields; until it lands a record carries them by hand.
