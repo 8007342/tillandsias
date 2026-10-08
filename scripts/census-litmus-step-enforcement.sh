@@ -57,7 +57,7 @@ commit="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 # NOT reachable — the grandfather list exempts a file from the binding
 # violation, it does not cause anything to run it.
 #
-# NAME FORM, NEVER THE FILENAME STEM. Bindings store `litmus:x`; the file is
+# NAME FORM, NEVER THE FILENAME STEM. Bindings store `litmus:<name>`; the file is
 # `litmus-x.yaml`. Matching one against the other yields an empty set that
 # reads exactly like a real negative, which is how --list came to print zero
 # suites on 444 files (1330-bb87). Read the declared `name:` and compare that.

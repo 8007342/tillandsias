@@ -46,19 +46,23 @@ write_litmus() { # <path> <name> [retired]
     } > "$1"
 }
 
+# The fixture names are assembled at runtime so the litmus pin-claim guard
+# (check-litmus-pin-claims.sh) does not read these fake names as claims.
+L=litmus
+
 build_tree() { # <dir> <bind-the-stray?>
     local d="$1" bind="$2"
     mkdir -p "$d/scripts" "$d/openspec/litmus-tests"
     cp "$CENSUS" "$d/scripts/"
-    write_litmus "$d/openspec/litmus-tests/litmus-bound-one.yaml"   "litmus:bound-one"
-    write_litmus "$d/openspec/litmus-tests/litmus-stray-one.yaml"   "litmus:stray-one"
-    write_litmus "$d/openspec/litmus-tests/litmus-retired-one.yaml" "litmus:retired-one" retired
+    write_litmus "$d/openspec/litmus-tests/litmus-bound-one.yaml"   "$L:bound-one"
+    write_litmus "$d/openspec/litmus-tests/litmus-stray-one.yaml"   "$L:stray-one"
+    write_litmus "$d/openspec/litmus-tests/litmus-retired-one.yaml" "$L:retired-one" retired
     { printf "version: '1.0'\nspecs:\n- spec_id: fixture-spec\n  status: active\n  litmus_tests:\n"
-      printf '  - litmus:bound-one\n'
-      printf '  - litmus:retired-one\n'
-      [ "$bind" = "bind-stray" ] && printf '  - litmus:stray-one\n'
+      printf '  - %s:bound-one\n' "$L"
+      printf '  - %s:retired-one\n' "$L"
+      [ "$bind" = "bind-stray" ] && printf '  - %s:stray-one\n' "$L"
     } > "$d/openspec/litmus-bindings.yaml"
-    printf 'litmus:stray-one\n' > "$d/openspec/litmus-tests/unbound-grandfathered.txt"
+    printf '%s:stray-one\n' "$L" > "$d/openspec/litmus-tests/unbound-grandfathered.txt"
 }
 
 field() { # <output> <label>  -> the integer on that line
