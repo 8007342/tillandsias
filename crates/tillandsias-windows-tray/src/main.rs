@@ -80,6 +80,7 @@ const KNOWN_FLAGS: &[&str] = &[
     "--logs",
     "--forge",
     // mode modifiers
+    "--approve-hard-reset",
     "--json",
     "--tail",
     "--bak",
@@ -167,7 +168,8 @@ fn main() {
     // checked FIRST so a command line carrying both gets the stronger reset
     // (which asks for its own approval) rather than silently the weaker one.
     if std::env::args().any(|a| a == "--reset-guest") {
-        std::process::exit(notify_icon::reset_guest_once());
+        let approve_arg = std::env::args().any(|a| a == "--approve-hard-reset");
+        std::process::exit(notify_icon::reset_guest_once(approve_arg));
     }
     if std::env::args().any(|a| a == "--reset-state") {
         std::process::exit(notify_icon::reset_state_once());
@@ -571,7 +573,7 @@ mod tests {
         );
         // 6. The CLI verb exists and main dispatches it.
         assert!(
-            notify.contains("pub fn reset_guest_once()"),
+            notify.contains("pub fn reset_guest_once("),
             "--reset-guest CLI mode must exist"
         );
         let main_src = include_str!("main.rs");
@@ -841,7 +843,7 @@ fn ",
     fn reset_state_is_soft_on_windows() {
         let soft = notify_fn_body(
             "pub fn reset_state_once() -> i32 {",
-            "pub fn reset_guest_once()",
+            "pub fn reset_guest_once(",
         );
         // `soft_wipe_guest(` contains `wipe_guest(`; take the allowed call out
         // before looking for the forbidden one, or the pin reds on its own fix.
@@ -869,7 +871,10 @@ fn ",
     /// reset_state_once, so SOFT could not exist without taking HARD with it.
     #[test]
     fn reset_guest_stays_hard_in_its_own_body() {
-        let hard = notify_fn_body("pub fn reset_guest_once() -> i32 {", "\n}\n");
+        let hard = notify_fn_body(
+            "pub fn reset_guest_once(approve_arg: bool) -> i32 {",
+            "\n}\n",
+        );
         assert!(hard.contains("wipe_guest()"), "HARD unregisters the distro");
         assert!(
             hard.contains("clear_guest_vault_credentials("),
@@ -904,13 +909,24 @@ fn ",
             .expect("main must test for --reset-guest on its own");
         let hard_call = hard_branch.split('}').next().unwrap();
         assert!(
-            hard_call.contains("notify_icon::reset_guest_once()"),
+            hard_call.contains("notify_icon::reset_guest_once(approve_arg)"),
             "--reset-guest must reach the HARD body: {hard_call}"
         );
         assert!(
             !code.contains("a == \"--reset-state\" || a == \"--reset-guest\""),
             "the two flags must not share one dispatch"
         );
+    }
+
+    /// ORDER 1437-3iux S2. main reads the approval flag by its literal (the
+    /// KNOWN_FLAGS pin wants it consumed here); that literal must be core's.
+    #[test]
+    fn the_approval_flag_main_reads_is_cores() {
+        assert_eq!(
+            "--approve-hard-reset",
+            tillandsias_core::reset_state::HARD_APPROVAL_ARG
+        );
+        assert!(KNOWN_FLAGS.contains(&tillandsias_core::reset_state::HARD_APPROVAL_ARG));
     }
 
     /// ORDER 1437-3iux S2 (host-state-lifecycle "SOFT reset is pre-authorised
@@ -922,7 +938,10 @@ fn ",
     /// kind, says nothing about HARD and removes the cache.
     #[test]
     fn reset_guest_asks_refuses_and_announces_before_destroying() {
-        let hard = notify_fn_body("pub fn reset_guest_once() -> i32 {", "\n}\n");
+        let hard = notify_fn_body(
+            "pub fn reset_guest_once(approve_arg: bool) -> i32 {",
+            "\n}\n",
+        );
         let destroy_at = hard
             .find("wipe_guest()")
             .expect("HARD unregisters the distro");
