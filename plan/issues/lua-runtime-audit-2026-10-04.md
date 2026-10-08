@@ -141,6 +141,11 @@ error and every later call answers `script-scope-closed`; the 65th
 says an operational outcome is "always returned, never raised". Not fixed
 here: turning these into typed results changes the door's vocabulary.
 
+FIXED 2026-10-08 (`1551-af3e`, on `work/1551-af3e`): the cut-off capture is
+the child's result (real status, the bytes read, `truncated:true`) on both
+doors, and the 65th live process is a `spawn_failed` value naming
+`script-process-limit`. No new status word.
+
 ### F6 — the instruction hook does not follow script-created coroutines — CONFIRMED, FIXED (`1551-pemw`)
 
 Measured (two sessions): after `pcall(verdict.ok, …)` on the main thread
@@ -158,6 +163,33 @@ used it.
 
 By reading `Scope::spawn_observed` (`SPAWN_SETUP_BOUND`). Not measured: no
 way was found to slow `exec` on demand.
+
+REPRODUCED 2026-10-08 on macuahuitl (Linux), the debug plan binary at
+`dff7585e3`: under `gdb -batch` with a breakpoint on glibc `_Fork` that holds
+the `proc-1` supervisor thread for 2 s (`shell sleep 2`, then `continue`),
+`pcall(proc.spawn, {argv={'true'}})` returned false after 2012 ms with
+`proc-spawn-setup-failed:timed out waiting on channel`, and the next
+`proc.run` answered `script-scope-closed`. The bound covers the supervisor
+thread, not the child's own start, so the hold has to be on that thread;
+gdb in all-stop mode holds every thread, and the waiting caller's monotonic
+timeout still expires. Command file, run as `gdb -batch -nx -x slow.gdb
+--args tillandsias-plan script run probe.lua --timeout 60s`:
+
+```
+set breakpoint pending on
+handle SIGCHLD nostop noprint pass
+break _Fork
+run
+shell sleep 2
+delete 1
+continue
+```
+
+A CPU quota
+(`systemd-run --user --scope -p CPUQuota=2% -p CPUQuotaPeriodSec=1s`) did not:
+the worst spawn was 982 ms, one period. FIXED under the same row:
+`SPAWN_SETUP_BOUND` is 30 s, so slow setup is latency; after the fix the same
+gdb run gave a handle after 2010 ms and the later `proc.run` exited 0.
 
 ### F8 — Observing `load` accepts binary chunks — CONFIRMED, FIXED (`1551-8gkg`)
 

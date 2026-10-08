@@ -28,7 +28,17 @@ pub const MAX_LINE_BYTES: usize = 1024 * 1024;
 /// `spawn_failed` value and the scope stays open (order 1551-af3e).
 pub const MAX_ACTIVE_PROCESSES: usize = 64;
 pub const CLEANUP_BOUND: Duration = Duration::from_secs(2);
-pub const SPAWN_SETUP_BOUND: Duration = Duration::from_secs(1);
+/// How long a spawning caller waits for its supervisor thread to report that
+/// the child started (capped by the scope deadline). ORDER 1551-333i: it was
+/// one second, and a supervisor held 2 s at fork (reproduced under gdb on
+/// Linux; a loaded host or an antivirus scan at process creation is the same
+/// shape) made proc.spawn RAISE proc-spawn-setup-failed and close the script
+/// scope although the child then started. Slow setup is LATENCY: the caller
+/// waits for the true outcome. Only a setup stalled past this bound is a
+/// failure, and it stays a raised, scope-closing one, because a refusal value
+/// such as spawn_failed would claim the child never ran while a late child
+/// may still start (the scope then kills and reaps it).
+pub const SPAWN_SETUP_BOUND: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Copy, PartialEq)]
 enum Stop {
@@ -97,6 +107,11 @@ struct Inner {
     next: AtomicU64,
     deadline: Option<Instant>,
     events: mpsc::Sender<Event>,
+    // Test-only seam (1551-333i): hold every supervisor thread of this scope
+    // before setup, so a slow host is reproducible on demand. Absent from
+    // every non-test build.
+    #[cfg(test)]
+    setup_delay: Duration,
 }
 
 #[derive(Clone)]
@@ -113,6 +128,26 @@ impl Scope {
                 next: AtomicU64::new(1),
                 deadline,
                 events,
+                #[cfg(test)]
+                setup_delay: Duration::ZERO,
+            })),
+            rx,
+        )
+    }
+    #[cfg(test)]
+    fn with_setup_delay(
+        deadline: Option<Instant>,
+        setup_delay: Duration,
+    ) -> (Self, mpsc::Receiver<Event>) {
+        let (events, rx) = mpsc::channel(32);
+        (
+            Self(Arc::new(Inner {
+                closed: AtomicBool::new(false),
+                processes: Mutex::new(Vec::new()),
+                next: AtomicU64::new(1),
+                deadline,
+                events,
+                setup_delay,
             })),
             rx,
         )
@@ -193,9 +228,13 @@ impl Scope {
         processes.push(process.clone());
         drop(processes); // No OS thread/process setup holds the close gate.
         let worker_state = state.clone();
+        #[cfg(test)]
+        let setup_delay = self.0.setup_delay;
         let spawned = std::thread::Builder::new()
             .name(format!("proc-{id}"))
             .spawn(move || {
+                #[cfg(test)]
+                std::thread::sleep(setup_delay);
                 let result = match tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
@@ -864,6 +903,30 @@ mod tests {
         .unwrap();
         assert_eq!(output.completion, Completion::Exited(0));
         assert!(output.truncated, "a cut-off delivery looked whole");
+        scope.cleanup().unwrap();
+    }
+
+    // ORDER 1551-333i. A spawn whose setup is slow — a loaded host, an
+    // antivirus scan at process creation — is latency, not a failure. The
+    // supervisor thread is held 1.5 s before setup; the child then runs and
+    // its real result is returned. PRE-FIX: Err("proc-spawn-setup-failed:
+    // timed out waiting on channel") after the 1 s handshake bound, which the
+    // Lua doors raised and which closed the script scope.
+    #[tokio::test]
+    async fn a_slow_spawn_setup_is_latency_not_a_failure() {
+        let (scope, _events) = Scope::with_setup_delay(
+            Some(Instant::now() + Duration::from_secs(10)),
+            Duration::from_millis(1500),
+        );
+        let started = Instant::now();
+        let process = scope
+            .spawn(cat(b"hello\n".to_vec()), false)
+            .expect("a slow setup was reported as a spawn failure");
+        assert!(started.elapsed() >= Duration::from_millis(1500));
+        let output = published(&process).await.unwrap();
+        assert_eq!(output.completion, Completion::Exited(0));
+        assert_eq!(output.stdout, b"hello\n");
+        assert!(!scope.stopped());
         scope.cleanup().unwrap();
     }
 

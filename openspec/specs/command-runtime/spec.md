@@ -162,6 +162,14 @@ published. A spawn past the limit SHALL be refused for that call only, as a
 NOT be raised and SHALL NOT close the scope, and a slot freed by a wait or a
 kill SHALL be usable again (order 1551-af3e).
 
+A spawn whose setup is slow (a loaded host, an antivirus scan at process
+creation) is LATENCY: the spawning door SHALL wait for the supervisor to
+report the child started, up to `SPAWN_SETUP_BOUND` (30 s) capped by the
+scope deadline, and SHALL then return the child's true outcome. Only a setup
+stalled past that bound is a failure; it is raised and closes the scope,
+because a late child may still start and a `spawn_failed` value would claim
+it never ran (order 1551-333i).
+
 #### Scenario: One child's held pipe does not close the scope
 
 - **WHEN** a script-owned child exits 0 while a session-detached descendant
