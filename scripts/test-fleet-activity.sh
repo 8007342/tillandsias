@@ -60,6 +60,12 @@ esac
 # EVERY ./build.sh --check red. The window now reaches back to the newest
 # shared-provider commit plus an hour, and an arm with no such commit in
 # all of history is a named skip, not a pass and not a red.
+# THE WINDOW AND THE READ USE ONE REF (relay-fix, 2026-10-08). The timestamp
+# came from HEAD while the check read its default origin/linux-next, so a
+# candidate branch whose own commits carry a shared-provider author (914-ahsy,
+# cherry-picked from lenovinha) moved the window past every such commit the
+# check could see, and the arm went red in the landing gate. Both now read
+# HEAD.
 _shared_ct="$(git -C "$ROOT" log -1 --format=%ct --author='@gmail\.com' 2>/dev/null)"
 case "$_shared_ct" in
     ''|*[!0-9]*)
@@ -67,7 +73,7 @@ case "$_shared_ct" in
         out="" ;;
     *)
         _win=$(( $(date +%s) - _shared_ct + 3600 ))
-        out="$(timeout 120 bash "$CHECK" --since "${_win}.seconds" 2>&1)" ;;
+        out="$(timeout 120 bash "$CHECK" --ref HEAD --since "${_win}.seconds" 2>&1)" ;;
 esac
 if [ -z "$out" ]; then
     :   # skipped above, by name
