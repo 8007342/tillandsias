@@ -1218,7 +1218,13 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # of recompiling — and coverage strictly widens (trunk is already held
     # clean at --all-targets -D warnings by the local gate). The heavy
     # --all-features flavor below is deliberately untouched.
-    if run_rust_on_host cargo clippy --workspace --all-targets -- -D warnings 2>&1 | tee /tmp/clippy-check.log; then
+    # ALLOW double_must_use in BOTH flavors, for the reason build.sh --check
+    # records beside its own clippy line (relay-fix 2b57c3304, 2026-10-01):
+    # clippy 1.99 fires it on the #[must_use] that async_trait's own expansion
+    # adds, across 22 trait sites in 11 files. That relay-fix changed build.sh
+    # only, so the release tier went red on code the landing gate had accepted
+    # (v56.10.8.1 cut, 2026-10-08). Remove both allows together.
+    if run_rust_on_host cargo clippy --workspace --all-targets -- -D warnings -A clippy::double_must_use 2>&1 | tee /tmp/clippy-check.log; then
         log_pass "Clippy checks pass (no warnings)"
         archive_check_log "rust-clippy" "pass" /tmp/clippy-check.log
     else
@@ -1238,7 +1244,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     if [[ "$FAST_MODE" == "1" ]]; then
         log_skip "All-features clippy lane (deep lane, skipped in fast mode)"
         archive_check_log "rust-clippy-all-features" "skipped"
-    elif run_rust_on_host cargo clippy --workspace --all-targets --all-features -- -D warnings 2>&1 | tee /tmp/clippy-all-features-check.log; then
+    elif run_rust_on_host cargo clippy --workspace --all-targets --all-features -- -D warnings -A clippy::double_must_use 2>&1 | tee /tmp/clippy-all-features-check.log; then
         log_pass "All-features clippy lane passes (no warnings)"
         archive_check_log "rust-clippy-all-features" "pass" /tmp/clippy-all-features-check.log
     else
