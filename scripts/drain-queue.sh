@@ -100,6 +100,10 @@ fi
 
 LOGFILE="drain-queue-$(date -u '+%Y%m%d').log"
 DRAIN_COUNT=0
+# One lease id for this whole drain, so the release at the end of a packet is
+# recognised as the holder of the claim at its start (1553-q7f4: a release
+# refuses a lease the caller does not hold).
+export TILLANDSIAS_LEDGER_LEASE_ID="${TILLANDSIAS_LEDGER_LEASE_ID:-drain-$(hostname 2>/dev/null || echo unknown)-$$}"
 
 log() {
   local ts
@@ -184,14 +188,24 @@ echo "$PACKETS" | while IFS=$'\t' read -r ord pid rel tags; do
 
   log "=== Draining [$ord] $pid ==="
 
-  # Claim the node first
-  CLAIM_RESULT=$(scripts/claim-ledger-node.sh claim "$pid" 2>&1 || true)
+  # Claim the node first. The VERDICT is stdout alone; the claim's stderr notes
+  # go to the log. Merged (2>&1), an "unverifiable id" note came BEFORE
+  # in-flight:, the prefix test missed it, and a held node was worked (1553-q7f4).
+  # Fail closed: only claimed:/reclaimed: proceed.
+  CLAIM_RESULT=$(scripts/claim-ledger-node.sh claim "$pid" 2>>"$LOGFILE" || true)
   log "Claim: $CLAIM_RESULT"
 
-  if [[ "$CLAIM_RESULT" == in-flight:* ]]; then
-    log "SKIP: $pid is already claimed by another agent."
-    continue
-  fi
+  case "$CLAIM_RESULT" in
+    "claimed:$pid"|"reclaimed:$pid") ;;
+    "in-flight:$pid")
+      log "SKIP: $pid is already claimed by another agent."
+      continue
+      ;;
+    *)
+      log "SKIP: $pid — the claim gave no claimed:/reclaimed: verdict ('$CLAIM_RESULT'); not working it."
+      continue
+      ;;
+  esac
 
   # Run one agent cycle for this packet
   PROMPT="Use the /advance-work-from-plan skill to work on packet $ord $pid"

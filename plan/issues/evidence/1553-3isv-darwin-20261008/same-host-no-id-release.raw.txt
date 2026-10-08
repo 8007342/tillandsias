@@ -1,0 +1,4 @@
+code: work/1553-q7f4 @ 2a36c4af5 (the q7f4 fix)
+agent A (id agent-A) claim: claimed:held-node
+agent B, same host, NO id, release: released:held-node rc=0
+status after: free:held-node

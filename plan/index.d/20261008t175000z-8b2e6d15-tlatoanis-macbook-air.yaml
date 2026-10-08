@@ -1,0 +1,117 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: lua-runtime-gains-exclusive-mkdir-mtime-remove-tree-a-declared-write-root-a-legacy-verdict-grammar-and-host-identity
+    order: 1553-r26s
+    title: Lua runtime API for lease-style scripts — fs.mkdir_excl, fs.mtime, fs.remove_tree, @write-env, legacy emit, host.name/pid
+    status: ready
+    kind: feature
+    priority: p1
+    pickup_role: any
+    capability_tags: [rust, lua, runtime, portability, security]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-plan/src/lua_predicate.rs
+      - crates/tillandsias-plan/src/script_run.rs
+      - crates/tillandsias-plan/src/lua_std.rs
+    context: >
+      Operator directive: move BSD/GNU-flaky shell onto the cross-platform Lua
+      runtime. The first stateful candidate, claim-ledger-node.sh (1553-jbnt),
+      cannot be ported without weakening its single-winner guarantee, because a
+      non-cacheable script today lacks the primitives a lease needs. Its own
+      order, NOT under 1539-dt84 (that row is the trace contract); it depends
+      on 1539-dt84's landing because both edit script_run.rs and
+      lua_predicate.rs.
+      PRE-FIX EVIDENCE, measured on darwin with a probe run through
+      `tillandsias-plan script run` (plan/issues/evidence/1553-r26s-darwin-20261008/):
+      (1) fs.mkdir is create_dir_all (lua_predicate.rs:776), NOT a test-and-set:
+      "mkdir#1 new: ret=true" and "mkdir#2 existing: ret=true". All 8
+      concurrent claimants would win.
+      (2) every write verb is repo-confined (resolve_write_path,
+      lua_predicate.rs:703): "fs.mkdir: refused — path '/tmp/…' is outside the
+      repository root".
+      (3) "fs.mtime=nil fs.stat=nil fs.remove=nil fs.rmdir=nil fs.rename=nil";
+      "os.remove=nil os.rename=nil io.open=nil".
+      (4) verdict.emit refuses any line outside ok:/skip:/refused:/blocked:/
+      could-not-run:/violation: and any code outside 0-3 (script_run.rs:345-352):
+      "verdict.emit: 'claimed:x' with code 0 — …" and "'ok:x' with code 64 — …".
+      (5) "host=nil": there is no hostname or pid for a lease holder record.
+      SECURITY NOTE for @write-env: a declared write root WIDENS the write
+      sandbox. The declared root must be refused unless, after realpath, it
+      sits under $XDG_RUNTIME_DIR (or the platform's per-user runtime dir) or
+      inside the repository root. Symlink escapes must be refused by realpath
+      containment, as @read-env already does (script_run.rs:567-606). A refused
+      declaration must be a loud could-not-run, never a silent fallback to the
+      repo root. A `@class cacheable` script must not be able to declare one.
+    depends_on: [lua-script-run-trace-records-every-managed-process-terminal-outcome]
+    exit_criteria:
+      - fs.mkdir_excl(path) creates exactly one directory (parent must exist) and returns false,"exists" when it is already there; 8 concurrent scripts on one path yield exactly one true.
+      - fs.mtime(path) returns epoch seconds from metadata().modified() on Linux, macOS and Windows, and nil for a missing path.
+      - fs.remove_tree(path) removes a directory tree inside a permitted write root and refuses outside it.
+      - "-- @write-env NAME widens the write verbs to the named root only when it realpaths under XDG_RUNTIME_DIR or the repo; anything else, a symlink escape, or a cacheable script declaring it, is refused loudly."
+      - verdict.emit can be put in a declared legacy-grammar mode that allows claimed:/reclaimed:/in-flight:/unknown:/released:/free: lines and exits {0,1,2,64}, and only in that declared mode.
+      - host.name() and host.pid() return the machine name and the script runner's pid.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Future litmus filename:
+      lua-runtime-lease-primitives. Write one test per verb that fails today
+      (the pre-fix result for each is the probe output above):
+      mkdir_excl-single-winner (8 concurrent, exactly 1 true);
+      mtime-cross-platform; remove-tree-contained;
+      write-env-root-refused-outside-xdg-and-repo, with a symlink-escape
+      negative; legacy-emit-only-when-declared; host-identity.
+      Write the litmus in the same change as the API (1136-n8sh).
+    next_action: Do not start before 1539-dt84 lands; the coordinator schedules it after the release cut. It unblocks 1553-jbnt.
+    notes: 'Probe source is retained as runtime-probe.lua.txt next to its output.'
+
+  - packet_id: claim-ledger-node-is-ported-to-lua-with-byte-identical-lease-verdicts-and-darwin-orphan-reclaim
+    order: 1553-jbnt
+    title: Port claim-ledger-node.sh to the Lua runtime, keeping the lease contract byte-for-byte
+    status: blocked
+    kind: refactor
+    priority: p1
+    pickup_role: macos
+    capability_tags: [lua, claims, portability]
+    estimated_hours: 5
+    owned_files:
+      - scripts/claim-ledger-node.sh
+      - scripts/drain-queue.sh
+      - scripts/reclaim-stranded-claims.sh
+    context: >
+      Operator-directed Lua migration, coordinator slice C. The port removes
+      the GNU-only `stat -c` at its root (interim BSD fallback: 1553-kvmf). An
+      agent run on 2026-10-08 stopped at the atomicity hard stop, before any
+      code: the runtime cannot host the lease without weakening the
+      single-winner guarantee. See 1553-r26s for the five measured gaps. The
+      contract to keep, read from the script: claimed:/reclaimed: rc 0;
+      in-flight: rc 1 (claim) or 0 (status); unknown: rc 2 with two stderr
+      lines; released: rc 0; free: rc 1; usage rc 64. The lock is an atomic
+      mkdir of <root>/<id with / as __>.lease under
+      ${TILLANDSIAS_LEDGER_LEASE_ROOT:-${XDG_RUNTIME_DIR:-/tmp}/tillandsias-locks/ledger-nodes}.
+      The holder file is parsed by tillandsias-plan (main.rs inspect_lease).
+      The port must preserve or deliberately fix the semantics in 1553-q7f4
+      (release does not check the holder).
+    depends_on: [lua-runtime-gains-exclusive-mkdir-mtime-remove-tree-a-declared-write-root-a-legacy-verdict-grammar-and-host-identity]
+    exit_criteria:
+      - A parity fixture runs the bash and the Lua over the same scratch ledger on darwin and Linux, with identical rc/stdout/stderr per scenario except the declared darwin orphan divergence.
+      - All callers switch, the .sh is deleted in the same change, and the no-plan-binary path is a loud could-not-run.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Future litmus filename:
+      claim-ledger-node-lua-parity. Scenarios: fresh, contended (8-way single
+      winner), own re-claim, held live, expired, orphaned (aged and fresh),
+      malformed holder, release. Write it in the same change as the port.
+    next_action: Blocked on 1553-r26s (the Lua runtime API). Resume once it lands.
+
+events:
+  - packet_id: lua-runtime-gains-exclusive-mkdir-mtime-remove-tree-a-declared-write-root-a-legacy-verdict-grammar-and-host-identity
+    event:
+      type: note
+      ts: "2026-10-08T17:50:00Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        filed by macbookair-macos on coordinator ruling (a). The five gaps were first reported by the slice-C agent and then independently re-measured by macbookair-macos with its own probe (evidence dir). Not implemented: scheduled after the cut.
+  - packet_id: claim-ledger-node-is-ported-to-lua-with-byte-identical-lease-verdicts-and-darwin-orphan-reclaim
+    event:
+      type: note
+      ts: "2026-10-08T17:50:00Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        filed blocked by macbookair-macos. The 2026-10-08 slice-C attempt committed nothing (stopped at the atomicity hard stop). Its local worktree wt-claimC is empty and will be removed.

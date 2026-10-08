@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: every-lease-release-carries-the-agent-lease-id-and-a-release-without-one-is-refused
+    order: 1553-3isv
+    title: Exact holder match everywhere — every agent session sets one lease id (stage 1); release with no id refuses (stage 2)
+    status: ready
+    kind: bug
+    priority: p1
+    pickup_role: any
+    capability_tags: [bash, claims, coordination, skills]
+    estimated_hours: 3
+    owned_files:
+      - scripts/claim-ledger-node.sh
+      - skills/meta-orchestration/SKILL.md
+      - skills/advance-work-from-plan/SKILL.md
+      - skills/join-the-fleet/SKILL.md
+      - openspec/litmus-tests/litmus-ledger-node-claim-shape.yaml
+      - scripts/test-claim-release-holder-safety.sh
+      - scripts/test-ledger-node-claim-resolution.sh
+      - scripts/test-drain-queue-bare-refuses.sh
+    context: >
+      Coordinator design ruling on 1553-q7f4: the holder match must be EXACT
+      everywhere. q7f4 refuses a non-holder's release when
+      TILLANDSIAS_LEDGER_LEASE_ID is set. With no id, it falls back to a
+      same-host match, because the default lease_id is hostname-pid, new in
+      every process, and today's callers claim and release in separate
+      processes. That fallback leaves a hole, MEASURED on darwin against the
+      q7f4 fix (work/1553-q7f4 @ 2a36c4af5): agent A claims with id agent-A
+      (claimed:held-node); agent B on the SAME host with NO id runs release and
+      gets released:held-node rc 0; status goes free. Agent A's live lease was
+      destroyed. Evidence is in plan/issues/evidence/1553-3isv-darwin-20261008/.
+      Identity: derive the lease id from the canonical agent id,
+      TILLANDSIAS_AGENT_ID, the same one append-event's --agent defaults from
+      (tillandsias-plan main.rs writer_agent_from). Export it once per agent
+      session. One option: claim-ledger-node defaults LEASE_ID to
+      TILLANDSIAS_AGENT_ID when that is set.
+      RELEASE CALLERS AUDITED (2026-10-08, linux-next plus q7f4):
+      scripts/drain-queue.sh (both releases; since q7f4 it exports its own
+      id); skills/meta-orchestration/SKILL.md claim/release instructions
+      (claim-ledger-node claim, then release after the closure, as separate
+      commands, no id today); litmus:ledger-node-claim-shape inline steps
+      "a held node reports in-flight on status, and release frees it" and
+      "every verdict line is well-formed" (claim then release, no id);
+      scripts/test-ledger-node-claim-resolution.sh arms 5 and 8 (release, no
+      id); scripts/test-claim-release-holder-safety.sh ARM 4 (same-host
+      no-id release, which pins TODAY's fallback and must be inverted in stage
+      2); scripts/test-drain-queue-bare-refuses.sh (a stub only).
+      advance-work-from-plan and join-the-fleet do not call release directly
+      today. They are named because they start agent sessions that later run
+      the meta-orchestration claim flow, so they must export the id.
+      scripts/reclaim-stranded-claims.sh works on ledger claim STATUS, not on
+      lease dirs, and is out of scope.
+    depends_on: [drain-queue-misreads-a-held-claim-as-free-when-the-unverifiable-note-precedes-in-flight-and-then-releases-the-holders-lease]
+    exit_criteria:
+      - "Stage 1: meta-orchestration, advance-work-from-plan and join-the-fleet export one TILLANDSIAS_LEDGER_LEASE_ID per agent session, derived from TILLANDSIAS_AGENT_ID. Every audited caller above releases with that id, and its fixture or litmus step sets one."
+      - "Stage 2, only after stage 1 has landed: release with NO lease id refuses by name, with refused:release:no-lease-id:<id>, a non-zero exit and why/remedy lines, removing nothing. A second same-host agent with no id can no longer release another agent's lease. This criterion FAILS on today's fallback: the measured released:held-node rc 0, status free."
+      - Own release with the matching id still frees the node, and a missing or stale lease is still released.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Future arm: in
+      scripts/test-claim-release-holder-safety.sh, invert ARM 4 into
+      "same-host-no-id-release-is-refused". Agent A claims with an id. A
+      same-host release with no id must print refused:release:no-lease-id:held-node,
+      exit non-zero, and status must stay in-flight under agent A. PRE-FIX
+      RESULT: released:held-node rc 0 and status free (measured, evidence dir).
+      Write the arm in the stage-2 change, not before stage 1 lands, or the
+      gate goes red on today's callers.
+    next_action: After the release cut, implement stage 1, then stage 2 once stage 1 has landed (coordinator ruling).
+
+events:
+  - packet_id: every-lease-release-carries-the-agent-lease-id-and-a-release-without-one-is-refused
+    event:
+      type: note
+      ts: "2026-10-08T17:49:17Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        filed by macbookair-macos on the coordinator's design ruling for 1553-q7f4. The same-host hole was measured on the q7f4 fix, not inferred. Not implemented: scheduled after the cut, in two stages.

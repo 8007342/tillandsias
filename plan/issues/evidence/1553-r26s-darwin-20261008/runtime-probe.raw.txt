@@ -1,0 +1,29 @@
+mkdir#1 new: pcall_ok=true ret=true 
+mkdir#2 existing: pcall_ok=true ret=true 
+mkdir outside repo: pcall_ok=false ret=runtime error: fs.mkdir: refused — path '/tmp/r26s-probe-outside' is outside the repository root (or is the root itself)
+stack traceback:
+	[C]: in field 'mkdir'
+	[string "target/probe/runtime-probe.lua"]:8: in function <[string "target/probe/runtime-probe.lua"]:8>
+	[C]: in function 'pcall'
+	[string "target/probe/runtime-probe.lua"]:3: in local 'try'
+	[string "target/probe/runtime-probe.lua"]:8: in main chunk
+ 
+fs.mtime=nil fs.stat=nil fs.remove=nil fs.rmdir=nil fs.rename=nil
+os.remove=nil os.rename=nil io.open=nil host=nil
+emit claimed:x 0: pcall_ok=false ret=runtime error: verdict.emit: 'claimed:x' with code 0 — the line must start with ok:/skip:/refused:/blocked:/could-not-run:/violation: and the code be 0-3
+stack traceback:
+	[C]: in field 'emit'
+	[string "target/probe/runtime-probe.lua"]:11: in function <[string "target/probe/runtime-probe.lua"]:11>
+	[C]: in function 'pcall'
+	[string "target/probe/runtime-probe.lua"]:3: in local 'try'
+	[string "target/probe/runtime-probe.lua"]:11: in main chunk
+ 
+emit ok:x 64: pcall_ok=false ret=runtime error: verdict.emit: 'ok:x' with code 64 — the line must start with ok:/skip:/refused:/blocked:/could-not-run:/violation: and the code be 0-3
+stack traceback:
+	[C]: in field 'emit'
+	[string "target/probe/runtime-probe.lua"]:12: in function <[string "target/probe/runtime-probe.lua"]:12>
+	[C]: in function 'pcall'
+	[string "target/probe/runtime-probe.lua"]:3: in local 'try'
+	[string "target/probe/runtime-probe.lua"]:12: in main chunk
+ 
+ok:runtime-probe:1
