@@ -1,0 +1,40 @@
+name: litmus:census-enforced-reachability-split
+spec: ci-release
+phase: pre-build
+description: >
+  The enforcement census must say whether an ENFORCED step can actually run.
+  An assert in a litmus nothing executes is correct and inert; counting it
+  beside a real one overstates enforcement, and a closure expressed as an
+  enforced count inherits the overstatement.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/census-litmus-step-enforcement.sh
+  - workspace contains scripts/test-census-enforced-reachability-split.sh
+
+critical_path:
+  - step: "the fixture parses and is executable"
+    command: "bash -n scripts/test-census-enforced-reachability-split.sh && test -x scripts/test-census-enforced-reachability-split.sh && echo 'ok: reachability-split-fixture-parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: reachability-split-fixture-parses"
+    assert_exit: 0
+    assert_output_contains: "ok: reachability-split-fixture-parses"
+
+  - step: "every arm passes, including the mutation arm and the real-corpus reconcile"
+    command: "bash scripts/test-census-enforced-reachability-split.sh 2>&1 | tail -1"
+    timeout_ms: 120000
+    expected_behavior: "census-enforced-reachability-split: 7 passed, 0 failed"
+    assert_exit: 0
+    assert_output_contains: "7 passed, 0 failed"
+
+  - step: "the census names both halves on the real corpus"
+    command: "bash scripts/census-litmus-step-enforcement.sh | grep -c ENFORCED-"
+    timeout_ms: 120000
+    expected_behavior: "2"
+    assert_exit: 0
+    assert_output_contains: "2"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"

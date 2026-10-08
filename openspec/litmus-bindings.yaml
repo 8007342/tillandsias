@@ -162,6 +162,7 @@ specs:
   - litmus:decider-retirement-shape
   - litmus:cosign-arrives-verified
   - litmus:scorable-obligation-splitter
+  - litmus:census-enforced-reachability-split
   - litmus:added-test-is-referenced-shape
   - litmus:verify-closure-shape
   - litmus:reset-flags-accepted

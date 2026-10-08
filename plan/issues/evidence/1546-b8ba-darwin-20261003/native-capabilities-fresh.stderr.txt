@@ -1,0 +1,1 @@
+[tillandsias] XDG_RUNTIME_DIR /run/user/501 could not be created (Read-only file system (os error 30)); continuing with per-consumer fallbacks
