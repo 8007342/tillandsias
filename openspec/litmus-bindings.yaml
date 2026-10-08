@@ -208,6 +208,7 @@ specs:
   - litmus:fragment-ts-skew
   - litmus:preflight-front-door
   - litmus:preflight-declarations-host-sed
+  - litmus:preflight-declarations-lua
   - litmus:preflight-runs-or-names-the-capability
   - litmus:litmus-expression-pinning-enforcement-shape
   - litmus:litmus-bindings-reconciliation-shape
