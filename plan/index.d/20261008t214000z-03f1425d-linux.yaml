@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-uninstall-flag-on-every-binary-removes-everything-manifest-driven
+    event:
+      type: note
+      ts: "2026-10-08T21:40:00Z"
+      agent_id: linux-macuahuitl-opus5-20261008t212908z
+      host: linux
+      summary: |
+        RE-SCOPED 2026-10-08 by operator ruling, verbatim: "a destructive approval on uninstall, particularly since the vault getting destroyed means even on reinstall a user would need to re-login, so on uninstall a big detailed prompt is acceptable. Make sure it has big shiny red signs to make sure that this is a destructive step and cannot be undone, although it is intended during uninstall."
+        CHANGE TO THE DELIVERABLE: today the spec (host-state-lifecycle, "--uninstall is the preferred removal ...", step 3) removes the Vault store and keyring entries unconditionally BEFORE any question. Add ONE up-front destructive confirmation, shown before anything is deleted:
+        - a big, red, boxed warning (ANSI red + bold on a TTY; red Write-Host on Windows), sized to the terminal, with warning signs, that says plainly: this deletes your Vault and every sign-in (GitHub and model providers); it CANNOT BE UNDONE; even if you reinstall you will have to sign in again; followed by the detailed list from step 1 (every path, registration and keyring entry that goes);
+        - then the ask, default NO; anything except an explicit yes aborts having touched nothing;
+        - no TTY: abort having touched nothing, unless the run carries an explicit non-interactive approval flag (proposed: --yes; the power user finds it, the uninstaller does not advertise it in its normal output);
+        - the existing [y/N] about ~/.tillandsias and the large leftover notice stay as specified.
+        The installer rule is unchanged: installers SOFT only, never prompt, no power-user output (2026-10-08). This exception is for UNINSTALL only, where destruction is the intent.
+        NEW CRITERIA (in addition to the existing ones): confirm arm, answer anything but yes -> nothing removed, keyring entries and Vault store byte-identical (pre-fix: FAILS, uninstall deletes without asking); no-TTY arm without the flag -> nothing removed, rc != 0, one line naming why (pre-fix: FAILS); no-TTY arm with the flag -> proceeds; the warning text names the Vault, the sign-ins and "cannot be undone", and is red on a TTY (assert the escape bytes). Same behaviour in uninstall.sh and install-windows.ps1 -Uninstall/-Purge when they fall back to their own path list. Spec amendment quotes this ruling verbatim and names the 2026-09-27 "removed unconditionally, before any question" wording it supersedes.
