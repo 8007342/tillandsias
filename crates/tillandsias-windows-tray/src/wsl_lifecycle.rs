@@ -338,10 +338,20 @@ pub const DISTRO_NAME: &str = tillandsias_vm_layer::wsl::DEFAULT_WSL_DISTRO;
 /// an operator runs on a crash-looping guest, and the re-injection's
 /// `enable --now` fails against a unit systemd has given up on (measured on
 /// yolanda 2026-10-08: "Start request repeated too quickly", then exit 1).
+///
+/// The enclave resolver drop-in goes too, because it is derived state of the
+/// network the podman reset destroys. It sets `DNS=10.0.42.1`, the enclave
+/// network's own DNS, as systemd-resolved's only global upstream. After the
+/// reset that address answers nothing, so every lookup in the guest fails and
+/// the Vault image cannot be pulled to rebuild the enclave: measured on
+/// yolanda 2026-10-08 ("Resolving timed out", `resolvectl dns` showing only
+/// 10.0.42.1). Headless rewrites the drop-in when it re-creates the network.
 pub const SOFT_GUEST_WIPE: &str = "systemctl stop tillandsias-headless-ready.service tillandsias-headless.service 2>/dev/null; \
      systemctl reset-failed tillandsias-headless-ready.service tillandsias-headless.service 2>/dev/null; \
      podman system reset --force && \
-     rm -f /root/.cache/tillandsias/init-build-state.json /root/.cache/tillandsias/cache_version";
+     rm -f /root/.cache/tillandsias/init-build-state.json /root/.cache/tillandsias/cache_version \
+           /etc/systemd/resolved.conf.d/tillandsias-enclave.conf && \
+     { systemctl try-restart systemd-resolved 2>/dev/null; true; }";
 
 /// Attempts for the control-wire connect loop (see `connect_with_backoff`).
 /// With `connect_backoff_delay`'s 1,2,4,8,16,30…30s capped-exponential
