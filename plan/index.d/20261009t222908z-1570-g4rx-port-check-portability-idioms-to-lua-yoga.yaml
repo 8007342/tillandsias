@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed 2026-10-09 on yoga from the Lua-runtime audit: the single slowest
+# pure text scanner in --check, and the most pipe-heavy shell decider.
+packets:
+  - packet_id: check-portability-idioms-the-advisory-scanner-for-shell-idioms-that-fail-on-another-host-is-itself-the-most-pipe-heavy-shell-decider-and-costs-21-s-per-check-so-it-is-ported-to-scripts-lua-on-script-run
+    order: 1570-g4rx
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, ci-gate, portability, ratchet, performance]
+    estimated_hours: 5
+    owned_files:
+      - scripts/check-portability-idioms.sh
+      - scripts/lua/check-portability-idioms.lua
+      - build.sh
+      - scripts/portability/pipe-site-floor.txt
+      - scripts/portability/shell-decider-floor.txt
+    title: |
+      scripts/check-portability-idioms.sh (1130-i6xj, advisory, runs on every ./build.sh --check) takes 21.3 s on yoga, carries 41 pipe sites (the highest per-file floor of any check-*.sh in pipe-site-floor.txt), shells out to rg 13 times and sed 13 times, and build.sh reads its verdict through `| head -1` — the exact SIGPIPE shape the scanner warns about. Port it to scripts/lua/check-portability-idioms.lua on `tillandsias-plan script run`, same verdict grammar, with the .sh deleted and both floors lowered
+    context: |
+      Measured on yoga 2026-10-09T22:20Z, linux-next 4b76eb15f:
+        - `bash scripts/check-portability-idioms.sh`: rc=0, 21,272 ms. For
+          scale, the ported scripts/lua/check-bash-dialect.lua scans 910
+          files (population=910 bootstrap=13) in 2,568 ms with compiled
+          regexes (text.is_match, 1384-ddua), and the whole shell ratchet
+          runs in 956 ms.
+        - pipe-site-floor.txt: `scripts scripts/check-portability-idioms.sh
+          41` — the largest floor of any check-*.sh. shell-decider-floor.txt
+          lists it (one of 664).
+        - tool calls in the file: rg 13, sed 13, awk 3, git 1 (repo root);
+          the population is `find -L scripts build.sh -type f -name '*.sh'`
+          (line 411), which fs.walk gives for free.
+        - build.sh 4414-4419 consumes it as
+          `_portability="$(bash scripts/check-portability-idioms.sh
+          2>/dev/null | head -1 || true)"` and only warns — advisory, so a
+          port cannot redden a gate, and verdict.advisory (1528-gxzf) is the
+          right door.
+        - Ratchet totals the port lowers: sh=668:floor:664
+          pipes=3922:floor:3914.
+      Why it is the right first large port: it is pure (no git history, no
+      network, no podman), its whole job is regex over scripts/**/*.sh —
+      exactly what text.* was built for (1384-ddua) — and its 21 s is paid
+      on every land of every host. The bash-dialect port already proved the
+      idiom-by-idiom byte-identical port shape (1384-ddua, test fixture
+      33/33 in 313 ms).
+      Flakiness lineage this port makes unrepresentable: `\b` on BSD
+      grep/awk (1132-r4mt), rg-with-no-path blocking forever under a pipe
+      (1087-h2z9, the scanner's own header), `| head -1` SIGPIPE at the
+      consumer. Related, not duplicated: 1384-ddua (three pilot ports,
+      completed), 1525-c6jm (batch A, completed), 1533-ew3n (batch B).
+    exit_criteria:
+      - 'scripts/lua/check-portability-idioms.lua on `tillandsias-plan script run` prints the same `portability-idioms:...` line as the .sh over the same tree (byte-identical on 4b76eb15f, compared by a fixture that runs both on a scratch tree seeded with one instance of each flagged idiom); pre-fix: no .lua exists'
+      - 'wall time on yoga under 5 s (measured pre-fix: 21,272 ms for the .sh); the number is recorded on the closing event beside the .sh number'
+      - 'build.sh calls it through `_run_lua_decider "scripts/lua/check-portability-idioms.lua"` reading the verdict as a value, not through `| head -1`; the .sh is deleted in the same commit; shell-decider-floor.txt loses its line and pipe-site-floor.txt loses the 41-site entry through `check-shell-ratchet.lua --dump-floors`; pre-fix: floors 664 and 3914'
+      - 'NEGATIVE CONTROL: the fixture''s negative arm (a script with `find -printf`) still produces the silent-degrade count the .sh produced; a clean scratch tree produces silent-degrade=0 loud-fail=0'
+    verifiable_closure: |
+      bash scripts/test-portability-idioms-lua-port.sh (or its Lua
+      successor under 1570-k5yt) exits 0 with one arm per idiom class the
+      .sh names, plus the byte-identity arm. Pre-fix: no fixture, no .lua,
+      21,272 ms.
+    depends_on: []
+    next_action: >
+      Port idiom by idiom from the .sh case statement into a table of
+      {pattern, fallback_pattern, message} entries evaluated with
+      text.is_match over fs.walk("scripts", {suffix=".sh"}) plus build.sh;
+      keep `_has_fallback`'s same-line semantics; end with verdict.advisory
+      so the line stays non-gating; then rewire build.sh and dump floors.
+    events:
+      - type: filed
+        ts: "2026-10-09T22:29:08Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed from the Lua-runtime audit on yoga. Measured: 21,272 ms per --check, 41 pipe sites (largest check-*.sh floor), rg x13 sed x13, consumed via `| head -1` in build.sh; comparable Lua scanner (check-bash-dialect.lua) does 910 files in 2,568 ms.
