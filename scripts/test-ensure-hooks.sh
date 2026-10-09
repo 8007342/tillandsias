@@ -55,8 +55,12 @@ seed() {
     mkdir -p "$d/src/crates/x/src"; echo "// code" > "$d/src/crates/x/src/lib.rs"
     git -C "$d/src" init -q -b linux-next
     git -C "$d/src" add -A && git -C "$d/src" commit -q -m seed
-    git clone -q --bare "$d/src" "$d/bare.git"
-    git clone -q "$d/bare.git" "$d/wc"
+    # --no-local: a local clone HARDLINKS objects, and on macOS git intermittently
+    # aborts it ("hardlink different from source") — measured once in three runs.
+    # A scaffold that fails must say so, not surface as a subject failure.
+    git clone -q --no-local --bare "$d/src" "$d/bare.git" \
+        && git clone -q --no-local "$d/bare.git" "$d/wc" \
+        || { echo "FAIL: scaffold $1 — could not clone the scratch repo" >&2; exit 1; }
     printf '%s' "$d/wc"
 }
 hooks_dir() { git -C "$1" rev-parse --path-format=absolute --git-path hooks; }
@@ -68,7 +72,7 @@ ensure() { # ensure <wc> [args...] -> OUT ERR RC
 sum() { cksum < "$1" 2>/dev/null; }
 
 # ── 1. RED -> GREEN ─────────────────────────────────────────────────────────
-wc="$(seed red)"
+wc="$(seed red)" || exit 1
 n="$(ls "$(hooks_dir "$wc")" | grep -vc '\.sample$')"
 echo "// change 1" >> "$wc/crates/x/src/lib.rs"; git -C "$wc" commit -q -am "code 1"
 if [ "$n" = "0" ] && git -C "$wc" push -q origin linux-next >/dev/null 2>&1; then
@@ -105,7 +109,7 @@ else
 fi
 
 # ── 3. an older marker of ours is upgraded ──────────────────────────────────
-wc="$(seed upgrade)"; h="$(hooks_dir "$wc")/pre-push"; mkdir -p "$(dirname "$h")"
+wc="$(seed upgrade)" || exit 1; h="$(hooks_dir "$wc")/pre-push"; mkdir -p "$(dirname "$h")"
 printf '#!/usr/bin/env bash\n# tillandsias-pre-push-v7\nexit 0\n' > "$h"; chmod +x "$h"
 ensure "$wc"
 if [ "$RC" -eq 0 ] && [ "$OUT" = "upgraded:hooks:tillandsias-pre-push-v7->$WANT" ] && grep -qF "# $WANT" "$h"; then
@@ -115,7 +119,7 @@ else
 fi
 
 # ── 4. a foreign pre-push is refused and untouched ──────────────────────────
-wc="$(seed foreign)"; h="$(hooks_dir "$wc")/pre-push"; mkdir -p "$(dirname "$h")"
+wc="$(seed foreign)" || exit 1; h="$(hooks_dir "$wc")/pre-push"; mkdir -p "$(dirname "$h")"
 printf '#!/bin/sh\n# the operator'"'"'s own hook\nexit 0\n' > "$h"; chmod +x "$h"
 before="$(sum "$h")"
 ensure "$wc"
@@ -127,7 +131,7 @@ else
 fi
 
 # ── 5. NEGATIVE CONTROL: local core.hooksPath ───────────────────────────────
-wc="$(seed shared)"; shared="$TMP/shared/hooks"; mkdir -p "$shared"
+wc="$(seed shared)" || exit 1; shared="$TMP/shared/hooks"; mkdir -p "$shared"
 git -C "$wc" config core.hooksPath "$shared"
 ensure "$wc"
 first_out="$OUT"; first_rc="$RC"
@@ -140,7 +144,7 @@ else
 fi
 
 # ── 6. a global core.hooksPath is refused ───────────────────────────────────
-wc="$(seed global)"; gdir="$TMP/global-hooks"; mkdir -p "$gdir"
+wc="$(seed global)" || exit 1; gdir="$TMP/global-hooks"; mkdir -p "$gdir"
 git config --global core.hooksPath "$gdir"
 ensure "$wc"
 git config --global --unset core.hooksPath
@@ -152,7 +156,7 @@ else
 fi
 
 # ── 7. --prelude ────────────────────────────────────────────────────────────
-wc="$(seed prelude)"; h="$(hooks_dir "$wc")/pre-push"
+wc="$(seed prelude)" || exit 1; h="$(hooks_dir "$wc")/pre-push"
 ensure "$wc" --prelude
 if [ "$RC" -eq 0 ] && [ -z "$OUT" ] && [ -z "$ERR" ] && [ ! -f "$h" ]; then
     ok "arm 7a: --prelude is silent and inert when origin is not the GitHub repo (fixtures stay hookless)"
