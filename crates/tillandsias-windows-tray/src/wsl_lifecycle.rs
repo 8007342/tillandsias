@@ -1317,6 +1317,7 @@ impl WslLifecycle {
     /// rebuilt" guard, which would destroy the very store SOFT keeps. The
     /// caller re-provisions instead: the daemon restarts, the tray delivers the
     /// share, and only then does the vault bootstrap.
+    /// @trace spec:host-state-lifecycle, order:1437-3iux
     pub async fn soft_wipe_guest(&self) -> Result<(), String> {
         if !self.runtime.is_registered().await {
             tracing::info!(
