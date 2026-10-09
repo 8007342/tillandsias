@@ -3326,6 +3326,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "append-event archived-refusal fixture passed"
 
+    # The fixture above must not be able to dirty THIS checkout however it dies
+    # (1564-lk9f): a SIGKILL after its live-accept arm left a host: fixture
+    # fragment in macuahuitl's plan/index.d on 2026-10-09 and land-queue refused
+    # the dirty tree. Arm 1 SIGKILLs it in a scratch repo; arm 2 is the negative
+    # control that keeps 699-usxc asserted.
+    _step "Checking the append-event archived-refusal fixture is hermetic (1564-lk9f)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-append-event-archived-refusal-is-hermetic.sh" 2>&1; then
+        _error "the append-event archived-refusal fixture can leave a write in the checkout it runs from, or no longer asserts that a fragment-only packet accepts events"
+        exit 1
+    fi
+    _info "append-event archived-refusal hermetic fixture passed"
+
     _step "Checking the checkout-lock attested-release fixture (899-q9di)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-lock-attested-release.sh" 2>&1; then
         _error "the checkout-lock attested-release fixture regressed — either a finished cycle strands its lock again, or the lock stopped refusing concurrent agents"
@@ -5281,6 +5293,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _step "Checking test-guest-unit-hardening (1063-nraf; 62ms)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-guest-unit-hardening.sh" 2>&1; then
         _error "scripts/test-guest-unit-hardening.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+        exit 1
+    fi
+    _step "Checking test-release-freeze-audit (1255-s4im)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-release-freeze-audit.sh" 2>&1; then
+        _error "scripts/test-release-freeze-audit.sh failed — the server-visible freeze audit may no longer name a breach, or the release preflight may no longer refuse one (1255-s4im); read the fixture output above"
+        exit 1
+    fi
+    # test-land-queue.sh was bound by no gate, so its arms — now including the
+    # freeze hold and the mid-gate re-check (1255-s4im) — ran only by hand. 14 s.
+    _step "Checking test-land-queue (1316-bnzt, 1255-s4im; ~14s)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-land-queue.sh" 2>&1; then
+        _error "scripts/test-land-queue.sh failed — the landing queue may land into a frozen trunk or mis-order, evict or re-queue candidates; read the fixture output above"
         exit 1
     fi
     _step "Checking test-ensure-hooks (1255-s4im)..."
