@@ -50,10 +50,20 @@ bad() { echo "FAIL: $1" >&2; fail=1; }
 # probe's fallback is the cwd-relative ./target/release path, so a run from any
 # other cwd found nothing and SKIPPED wherever no CARGO_TARGET_DIR or installed
 # copy masked it. An explicit TILLANDSIAS_PLAN_BIN keeps its own meaning.
+# The case lives in a function, not inside $( ): bash 3.2 (macOS) ends a
+# substitution at an unparenthesised case pattern's ')' (check-bash-dialect).
+plan_bin_from_checkout() {
+    local p
+    p="$(cd "$ROOT" && resolve_plan_binary)" || return 1
+    case "$p" in
+        /*) printf '%s\n' "$p" ;;
+        *)  printf '%s/%s\n' "$ROOT" "${p#./}" ;;
+    esac
+}
 if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
     BIN="$(resolve_plan_binary)" || BIN=""
 else
-    BIN="$(cd "$ROOT" && _p="$(resolve_plan_binary)" && case "$_p" in /*) printf '%s' "$_p" ;; *) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || BIN=""
+    BIN="$(plan_bin_from_checkout)" || BIN=""
 fi
 if [ -z "$BIN" ]; then
     echo "skip:append-event-archived-refusal:no-plan-binary"
