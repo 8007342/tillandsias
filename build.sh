@@ -5283,6 +5283,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "scripts/test-guest-unit-hardening.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
+    _step "Checking test-release-freeze-audit (1255-s4im)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-release-freeze-audit.sh" 2>&1; then
+        _error "scripts/test-release-freeze-audit.sh failed — the server-visible freeze audit may no longer name a breach, or the release preflight may no longer refuse one (1255-s4im); read the fixture output above"
+        exit 1
+    fi
+    # test-land-queue.sh was bound by no gate, so its arms — now including the
+    # freeze hold and the mid-gate re-check (1255-s4im) — ran only by hand. 14 s.
+    _step "Checking test-land-queue (1316-bnzt, 1255-s4im; ~14s)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-land-queue.sh" 2>&1; then
+        _error "scripts/test-land-queue.sh failed — the landing queue may land into a frozen trunk or mis-order, evict or re-queue candidates; read the fixture output above"
+        exit 1
+    fi
     _step "Checking test-ensure-hooks (1255-s4im)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-ensure-hooks.sh" 2>&1; then
         _error "scripts/test-ensure-hooks.sh failed — a toolchain-less checkout may no longer arm its push guards (1255-s4im); read the fixture output above"

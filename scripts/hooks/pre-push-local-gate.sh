@@ -2025,19 +2025,19 @@ fi
 # on a host that cannot push at all, which is the failure that cost four hours
 # in 872-c9nd. The warning names the check so a host that sees it knows the
 # freeze was not consulted.
-_freeze_t() { # bounded, so a hung network cannot hang every push
-    local s="$1"; shift
-    if command -v timeout >/dev/null 2>&1; then timeout "$s" "$@"
-    elif command -v gtimeout >/dev/null 2>&1; then gtimeout "$s" "$@"
-    else "$@"; fi
-}
-
-_freeze_path_is_exempt() { # <path> -> 0 when a freeze does not hold it
-    case "$1" in
-        plan/*|docs/*|skills/*|cheatsheets/*) return 0 ;;
-        *) return 1 ;;
-    esac
-}
+# _freeze_t and _freeze_path_is_exempt come from the ONE shared definition
+# (1255-s4im): release-freeze.sh audit, release-preflight and land-queue read
+# the same predicate, so the hook and the server-visible audit cannot disagree.
+# A tree without the lib (a hermetic fixture copy of this hook) fails STRICT:
+# every path is held, so a missing predicate can only tighten a freeze, never
+# loosen one. Fixtures that never freeze are unaffected either way.
+if [[ -f "$REPO_ROOT/scripts/lib-freeze-paths.sh" ]]; then
+    # shellcheck source=../lib-freeze-paths.sh
+    . "$REPO_ROOT/scripts/lib-freeze-paths.sh"
+else
+    _freeze_path_is_exempt() { return 1; }
+    _freeze_t() { shift; "$@"; }
+fi
 
 enforce_release_freeze() {
     local remote="$1"
