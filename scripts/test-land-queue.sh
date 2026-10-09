@@ -615,7 +615,7 @@ git -C "$WORK_DIR" push -q origin "$frozen11:refs/tillandsias/freeze/linux-next/
 out11="$(run_queue)"
 git -C "$WORK_DIR" fetch -q origin linux-next
 after11="$(git -C "$WORK_DIR" rev-parse origin/linux-next)"
-if printf '%s' "$out11" | grep -q '^hold:land-queue:1:frozen:refs/tillandsias/freeze/linux-next/fixture/1700000000' \
+if grep -q '^hold:land-queue:1:frozen:refs/tillandsias/freeze/linux-next/fixture/1700000000' <<<"$out11" \
    && [ "$after11" = "$frozen11" ] && [ ! -s "$GATE_LOG" ]; then
     ok "ARM 11: a code candidate into a frozen trunk is HELD before the gate (gate not run, trunk unchanged), naming the marker"
 else
@@ -657,7 +657,7 @@ GATE
 out12="$(run_queue)"
 git -C "$WORK_DIR" fetch -q origin linux-next
 after12="$(git -C "$WORK_DIR" rev-parse origin/linux-next)"
-if printf '%s' "$out12" | grep -q '^requeue:land-queue:1:frozen-mid-gate:refs/tillandsias/freeze/linux-next/cut/1700000001' \
+if grep -q '^requeue:land-queue:1:frozen-mid-gate:refs/tillandsias/freeze/linux-next/cut/1700000001' <<<"$out12" \
    && [ "$after12" = "$before12" ]; then
     ok "ARM 12: a freeze set DURING the gate is honoured at push — re-queued, nothing pushed, the marker named"
 else
