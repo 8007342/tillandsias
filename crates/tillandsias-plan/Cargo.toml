@@ -78,3 +78,6 @@ libc = "0.2"
 # and a failing case must survive the run that found it.
 proptest = "1"
 tempfile = "3"
+
+[lints]
+workspace = true
