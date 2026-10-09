@@ -34,7 +34,7 @@
     irm https://github.com/8007342/tillandsias/releases/latest/download/install-windows.ps1 | iex
     irm https://.../install-windows.ps1 | iex  # (same URL, short form)
 
-# @trace spec:windows-native-tray, spec:vm-provisioning-lifecycle
+# @trace spec:windows-native-tray, spec:vm-provisioning-lifecycle, spec:host-state-lifecycle
 #>
 [CmdletBinding()]
 param(
@@ -940,36 +940,38 @@ try {
     # flag, so the flag ran and failed: proceed to the full reset.
     $ProbeAccepted = $ProbeOut -match [regex]::Escape('reset skipped by TILLANDSIAS_DESTRUCTIVE_RESET_OK=0')
     $HasResetState = ($ProbeExit -eq 0) -or $ProbeAccepted
-    if ($HasResetState -and $ProbeExit -ne 0) {
-        SayWn "  probe: this tray knows --reset-state; its re-init of the existing state failed (exit $ProbeExit)."
-        SayWn "  proceeding to the full reset, which is the repair for exactly that."
-    }
-    if (-not $HasResetState) {
-        SayWn "  probe: --reset-state not usable on this tray (exit $ProbeExit)."
-        if ($ProbeOut) { SayWn ("  probe said: " + (($ProbeOut -split "`n")[0]).Trim()) }
-    }
+    # The probe's outcome is a decision, not news for the end user: it prints
+    # nothing (operator ruling 2026-10-08, below).
 # END-RESET-PROBE
+    # @trace spec:host-state-lifecycle, order:1559-sqzp, order:1437-3iux
+    # SOFT, ALWAYS, AND QUIET. Operator ruling 2026-10-08, verbatim: "we do not
+    # ask end users to do power user stuff. That's our guideline. An install
+    # prompt asking for destructive cases should not be an acceptable case. End
+    # user is NOT a power user. No prompts like those, we make all the decisions
+    # for them, on their behalf, for their best interests. So SOFT reset is the
+    # default only and forever. A power user wanting to do a hard reset should be
+    # capable of figuring out where to place a flag and which flag, we do not
+    # need to print any power user messages during install, at all. Install
+    # should be for END USER (NOT POWER USER) and be a pretty installer, rather
+    # than an informational/debugging installer. As frictionless as possible for
+    # end users." So: the SOFT reset (it keeps the distro, the Vault store, the
+    # sign-ins and the downloads), no reset kind, no prompt, no flag names, and
+    # the tray's own reset log stays in a file, shown by path only on failure.
+    # stdin is NUL so the GUI-subsystem tray can never wait on a prompt nobody
+    # can see. scripts/test-installer-reset-kind.sh pins all of it.
     if (-not $HasResetState) {
-        SayWn "this tray predates --reset-state (order 1286-4437); skipping the state reset."
-        SayWn "  the install is complete, but a broken local state was NOT repaired."
-        SayWn "  install a release that carries --reset-state to get the repair."
+        SayWn "Tillandsias is installed. Restart it from the Start menu to finish setting up."
     }
     if ($HasResetState) {
-    Say "Resetting local state and reprovisioning (--reset-state)..."
-    Say "  preserved: tillandsias-vm-uuid (the installation identity)"
-    Say "  destroyed: the WSL2 distro and its disk, the two host vault credentials, the download cache"
-    Say "  set TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 to skip the destructive half"
-    $ResetLog = Join-Path $env:TEMP "tillandsias-reset-state.log"
-    & cmd.exe /c "`"$InstalledExe`" --reset-state > `"$ResetLog`" 2>&1"
+    Say "Getting Tillandsias ready..."
+    $ResetLog = Join-Path $env:TEMP "tillandsias-setup.log"
+    & cmd.exe /c "`"$InstalledExe`" --reset-state < NUL > `"$ResetLog`" 2>&1"
     $ResetExit = $LASTEXITCODE
-    if (Test-Path $ResetLog) {
-        Get-Content $ResetLog | ForEach-Object { Write-Host "  $_" }
-        Remove-Item $ResetLog -Force -ErrorAction SilentlyContinue
-    }
     if ($ResetExit -ne 0) {
-        Die "tillandsias-tray --reset-state failed (exit $ResetExit); the local state was not reprovisioned."
+        Die "Tillandsias could not finish setting up (exit $ResetExit). Details: $ResetLog"
     }
-    SayOk "reset-state: provisioned and ready (exit $ResetExit)"
+    Remove-Item $ResetLog -Force -ErrorAction SilentlyContinue
+    SayOk "Tillandsias is ready."
     }
 
     # -- Installed-Software registration (windows-260722-3) -------------------

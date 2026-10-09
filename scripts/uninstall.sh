@@ -62,8 +62,25 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
 fi
 
 WIPE=false
-[[ "${1:-}" == "--wipe" ]] && WIPE=true
+ASSUME_YES=false
+# 1437-evzi: both flags, in any order. $1 alone used to be read for --wipe, so
+# a second flag could never have been parsed. Unknown arguments are ignored as
+# before. --yes is deliberately not advertised in the normal output (see the
+# confirmation block below).
+for _arg in "$@"; do
+    case "$_arg" in
+        --wipe) WIPE=true ;;
+        --yes) ASSUME_YES=true ;;
+    esac
+done
 
+# 1437-evzi seam: where the confirmation answer is read from. Default is the
+# controlling terminal, because this script is often run as `curl ... | bash`
+# and stdin is then the script, not the user. A fixture points it at a file. The
+# seam only chooses WHERE the answer comes from; it can never answer for the
+# user, so it cannot skip the confirmation (a path with no readable answer
+# source refuses, exactly like a missing terminal).
+CONFIRM_TTY="${TILLANDSIAS_UNINSTALL_TTY:-/dev/tty}"
 # 1181-bkem: opt-in, per-run, never the default. See the seams comment above.
 KEEP_MODELS=false
 [[ "${TILLANDSIAS_RESET_KEEP_MODELS:-}" == "1" ]] && KEEP_MODELS=true
@@ -71,6 +88,44 @@ KEEP_MODELS=false
 echo ""
 echo "  Tillandsias Uninstaller"
 echo "  ======================"
+echo ""
+# ── 1437-evzi: the destructive warning, BEFORE the listing ─────
+# Operator ruling 2026-10-08, verbatim: "a destructive approval on uninstall,
+# particularly since the vault getting destroyed means even on reinstall a user
+# would need to re-login, so on uninstall a big detailed prompt is acceptable.
+# Make sure it has big shiny red signs to make sure that this is a destructive
+# step and cannot be undone, although it is intended during uninstall."
+# Colour only when stdout is a terminal (and NO_COLOR is unset); the words are
+# identical either way. Right edges are left open on purpose: a padded box
+# misaligns on wide glyphs (the warning sign), a left bar never does.
+_red="" _rst=""
+# Colour: on when stdout is a terminal or CLICOLOR_FORCE is non-empty and not 0;
+# NO_COLOR (any value) wins over both.
+if [ -z "${NO_COLOR:-}" ] && { [ -t 1 ] || { [ -n "${CLICOLOR_FORCE:-}" ] && [ "${CLICOLOR_FORCE}" != "0" ]; }; }; then
+    _red=$'\033[1;31m'
+    _rst=$'\033[0m'
+fi
+_cols="$(tput cols 2>/dev/null || true)"
+[[ "$_cols" =~ ^[0-9]+$ ]] || _cols=80
+[ "$_cols" -gt 100 ] && _cols=100
+[ "$_cols" -lt 50 ] && _cols=50
+_bar=""
+_i=0
+while [ "$_i" -lt $((_cols - 4)) ]; do _bar="${_bar}█"; _i=$((_i + 1)); done
+_wline() { printf '%s\n' "  ${_red}██  $1${_rst}"; }
+echo ""
+printf '%s\n' "  ${_red}${_bar}${_rst}"
+_wline ""
+_wline "⚠  ⚠  ⚠   DESTRUCTIVE STEP — THIS CANNOT BE UNDONE   ⚠  ⚠  ⚠"
+_wline ""
+_wline "This permanently deletes Tillandsias, your Vault, and every"
+_wline "sign-in kept in it (GitHub and your model providers)."
+_wline ""
+_wline "THIS CANNOT BE UNDONE."
+_wline "Even if you reinstall later, you will have to sign in again."
+_wline "Your project files are NOT touched."
+_wline ""
+printf '%s\n' "  ${_red}${_bar}${_rst}"
 echo ""
 
 # ── Show what will be removed ──────────────────────────────────
@@ -81,7 +136,7 @@ echo ""
 [ -d "$LIB_DIR" ] && echo "    - $LIB_DIR/ (libraries)"
 # 804-bpke: on macOS DATA_DIR is the VM home and is preserved without --wipe,
 # so it must not be listed as "will be removed" on that path — the preamble is
-# the only warning the user gets, and there is no confirmation prompt.
+# the only warning the user gets (the up-front confirmation below asks once, 1437-evzi).
 if [[ "$IS_MACOS" == true && "$WIPE" != true ]]; then
     [ -d "$LOG_DIR" ] && echo "    - $LOG_DIR/ (logs)"
 else
@@ -119,6 +174,29 @@ fi
 echo ""
 echo "  Your project files will NOT be touched."
 echo ""
+
+# ── 1437-evzi: ask ONCE, before anything is removed or stopped ──
+# Default is NO. The answer is read from the terminal (CONFIRM_TTY), never from
+# stdin, so `curl ... | bash` can ask. No readable terminal and no --yes means
+# refuse with nothing touched: a destructive step must never run unasked.
+if [[ "$ASSUME_YES" != true ]]; then
+    if { : < "$CONFIRM_TTY"; } 2>/dev/null; then
+        printf '%s' "  Type \"delete\" to uninstall, or press Enter to cancel: "
+        _answer=""
+        IFS= read -r _answer < "$CONFIRM_TTY" || _answer=""
+        echo ""
+        _answer="$(tr "[:upper:]" "[:lower:]" <<<"$_answer")"
+        _answer="${_answer//[[:space:]]/}"
+        if [[ "$_answer" != "delete" ]]; then
+            echo "  Uninstall cancelled. Nothing was removed."
+            exit 1
+        fi
+    else
+        echo "  Uninstall refused: no terminal is available to ask for confirmation. Nothing was removed." >&2
+        echo "  Run it from a terminal, or add --yes to confirm in a script." >&2
+        exit 1
+    fi
+fi
 
 # ── Remove binaries ───────────────────────────────────────────
 rm -f "$INSTALL_DIR/tillandsias" "$INSTALL_DIR/tillandsias-uninstall"

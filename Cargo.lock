@@ -3702,6 +3702,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "embed-resource",
+ "futures-util",
  "png 0.17.16",
  "resvg",
  "serde",
@@ -3716,6 +3717,7 @@ dependencies = [
  "tillandsias-vm-layer",
  "tiny-skia",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
