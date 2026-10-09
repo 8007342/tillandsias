@@ -20,6 +20,8 @@
 #     which is the only writer of the file. wsl.exe stays a direct child, so
 #     TERM/INT/HUP to this shell are forwarded to it (an orphaned guest build
 #     would be a new bug), and its exit code is this shell's.
+#     Forwarding ends wsl.exe only; the GUEST run is bound to this shell by
+#     scripts/wsl-guest-session.sh (1567-9fgi), which also covers a hard kill.
 #   - anything else (a terminal, a pipe, two distinct files): plain exec, so
 #     tty detection, colour and the progress renderer are unchanged.
 # TILLANDSIAS_WSL_EXE overrides the binary (the fixture stubs it).
