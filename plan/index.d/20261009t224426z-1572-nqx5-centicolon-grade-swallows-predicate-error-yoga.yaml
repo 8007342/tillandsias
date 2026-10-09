@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found 2026-10-09 on yoga during the Lua runtime audit, filed at the
+# coordinator's direction (p3, pickup linux).
+packets:
+  - packet_id: centicolon-grade-prints-blocked-static-with-an-empty-reason-because-its-pred-helper-keeps-only-verdict-prefixed-lines-and-drops-the-lua-vm-error-that-names-the-cause
+    order: 1572-nqx5
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [centicolon, lua-runtime, diagnostics, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/centicolon-grade.sh
+    title: |
+      scripts/centicolon-grade.sh with TILLANDSIAS_CENTICOLON_DIR set to an absolute path outside the repo prints "blocked:centicolon-grade:static:" with an EMPTY reason: the static grader dies with a Lua runtime error (fs.read refuses a path outside the repository root), and pred() keeps only ^(ok|refused|blocked): lines, so the one line that names the cause is discarded
+    context: |
+      Measured on yoga 2026-10-09T22:44Z, linux-next 76d121cd0:
+        TILLANDSIAS_CENTICOLON_DIR=<scratchpad>/cc-out bash scripts/centicolon-grade.sh
+        -> rc=1, stdout exactly "blocked:centicolon-grade:static:"
+      The extractor's obligations.json (530,973 bytes) IS written there (the
+      shell redirect is unrooted), and static.json is 0 bytes. Running the
+      static predicate directly shows the swallowed cause:
+        error: predicate failed: lua vm error: predicate centicolon-grade-static:
+        runtime error: fs.read: refused — path '<scratchpad>/cc-out/obligations.json'
+        is outside repository root
+      Two separable defects: (1) pred() discards any predicate failure that is
+      not a verdict line, so every vm error, panic or missing-binary reason
+      reaches the operator as an empty blocked line; (2) the documented knob
+      ("Outputs land in <out> = $TILLANDSIAS_CENTICOLON_DIR") accepts a value
+      the Lua fs rooting cannot read back. The default target/centicolon works
+      (warn:zero-resolved-requirement-keys + ok:centicolon-grade:R=1515 ...).
+      First noted by the yoga Lua audit as an event on 1474-p9rz.
+    exit_criteria:
+      - 'a predicate that fails without a verdict line yields a blocked line whose reason carries its first error line (e.g. "fs.read: refused ... outside repository root"); pre-fix: "blocked:centicolon-grade:static:" with nothing after the colon (yoga 2026-10-09T22:44Z)'
+      - 'an absolute TILLANDSIAS_CENTICOLON_DIR outside the repository root is either refused up front with a named reason (blocked:centicolon-grade:out-dir-outside-root:<dir>) or made to work; it never reaches the static grader to fail silently'
+      - 'NEGATIVE CONTROL: the default target/centicolon run still prints ok:centicolon-grade:R=... and exit 0'
+    unscoreable: "unpinnable-until-the-guard-exists: future arm in scripts/test-centicolon-grade.sh that runs the grader with TILLANDSIAS_CENTICOLON_DIR=<absolute dir outside the scratch repo> and asserts a non-empty reason after blocked:centicolon-grade:; pre-fix result: 'blocked:centicolon-grade:static:' with an empty reason. NEGATIVE CONTROL: default dir still ok."
+    depends_on: []
+    next_action: >
+      In pred(), when the predicate exits non-zero with no verdict line, echo
+      blocked:<name>:<first stderr line>; and validate OUT_REL against the repo
+      root before running any predicate.
+    events:
+      - type: filed
+        ts: "2026-10-09T22:44:26Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed at the coordinator's direction (p3, pickup linux) from the yoga forge Lua runtime audit; reproduced and root-caused by the parent session.
