@@ -579,14 +579,16 @@ mod managed_script {
             while true do end
         "#
             ),
-            "2s",
+            "20s",
         );
         let elapsed = t0.elapsed();
         assert_acknowledged_tasks_stopped(&f);
         assert_eq!(out.status.code(), Some(0));
         assert_eq!(out.stdout, b"scope-probe (advisory)\n");
+        // 1568-wclk: outer deadline 20 s, bound 10 s (was 2 s / 1 s, a 1 s margin
+        // a loaded gate can eat); waiting for the deadline still fails it.
         assert!(
-            elapsed < Duration::from_millis(1000),
+            elapsed < Duration::from_secs(10),
             "advisory waited for outer deadline: {elapsed:?}"
         );
     }
@@ -610,15 +612,17 @@ mod managed_script {
             verdict.ok("wrong")
         "#
             ),
-            "2s",
+            "20s",
         );
         let elapsed = t0.elapsed();
         assert_acknowledged_tasks_stopped(&f);
         assert_eq!(out.status.code(), Some(0));
         assert_eq!(out.stdout, b"callback scope-probe (advisory)\n");
         assert!(!f.dir.path().join("escaped").exists());
+        // 1568-wclk: outer deadline 20 s, bound 10 s (was 2 s / 1 s, a 1 s margin
+        // a loaded gate can eat); waiting for the deadline still fails it.
         assert!(
-            elapsed < Duration::from_millis(1000),
+            elapsed < Duration::from_secs(10),
             "callback advisory waited for deadline: {elapsed:?}"
         );
     }
@@ -2169,8 +2173,12 @@ fn a_piped_caller_is_not_held_by_a_leaked_grandchild() {
         out.contains("timed_out"),
         "the deadline must have fired: {out:?}"
     );
+    // A CEILING, NOT A LATENCY TARGET (1568-wclk): `< 3 s` failed at 4.04 s
+    // under the landing queue's CPUWeight=20 scope and evicted #275 (no
+    // lua_proc change). The defect this pins holds the pipe for the
+    // grandchild's whole `sleep 30` (30.4 s measured), so 15 s still splits them.
     assert!(
-        eof_after < Duration::from_secs(3),
+        eof_after < Duration::from_secs(15),
         "the caller's pipe stayed open {eof_after:?}: a leaked grandchild holds it"
     );
 }
