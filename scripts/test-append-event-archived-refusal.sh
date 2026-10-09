@@ -46,7 +46,15 @@ bad() { echo "FAIL: $1" >&2; fail=1; }
 # bit is a claim; running the binary is evidence (704-zcgi, 721-nyev, 751-vega).
 # shellcheck source=scripts/plan-binary-probe.sh
 . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
-BIN="$(resolve_plan_binary)" || BIN=""
+# Resolved INSIDE the checkout and made absolute (84f37ff24, 1401-x76w): the
+# probe's fallback is the cwd-relative ./target/release path, so a run from any
+# other cwd found nothing and SKIPPED wherever no CARGO_TARGET_DIR or installed
+# copy masked it. An explicit TILLANDSIAS_PLAN_BIN keeps its own meaning.
+if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    BIN="$(resolve_plan_binary)" || BIN=""
+else
+    BIN="$(cd "$ROOT" && _p="$(resolve_plan_binary)" && case "$_p" in /*) printf '%s' "$_p" ;; *) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || BIN=""
+fi
 if [ -z "$BIN" ]; then
     echo "skip:append-event-archived-refusal:no-plan-binary"
     exit 0
