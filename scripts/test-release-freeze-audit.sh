@@ -53,9 +53,11 @@ printf 'plan_index:\n  steps: []\n' > "$R/plan/index.yaml"
 printf 'name: release\n' > "$R/.github/workflows/release.yml"
 echo "// code" > "$R/crates/x/src/lib.rs"
 git init -q -b linux-next "$R" && git -C "$R" add -A && git -C "$R" commit -q -m seed
-git clone -q --bare "$R" "$TMP/bare.git"
-git clone -q "$TMP/bare.git" "$TMP/coord"     # the coordinator's clone
-git clone -q "$TMP/bare.git" "$TMP/floor"     # a hookless floor host
+# --no-local throughout: a local clone hardlinks objects, and on macOS git
+# intermittently aborts that ("hardlink different from source").
+git clone -q --no-local --bare "$R" "$TMP/bare.git"
+git clone -q --no-local "$TMP/bare.git" "$TMP/coord"     # the coordinator's clone
+git clone -q --no-local "$TMP/bare.git" "$TMP/floor"     # a hookless floor host
 C="$TMP/coord"; F="$TMP/floor"
 
 audit() { # audit <clone> -> OUT RC
@@ -111,7 +113,7 @@ fi
 coord_verdict="$(last "$OUT")"
 
 # 5. the same answer from a host that never fetched the breach
-git clone -q "$TMP/bare.git" "$TMP/late"; git -C "$TMP/late" reset -q --hard "$frozen_at"
+git clone -q --no-local "$TMP/bare.git" "$TMP/late"; git -C "$TMP/late" reset -q --hard "$frozen_at"
 git -C "$TMP/late" update-ref refs/remotes/origin/linux-next "$frozen_at"
 audit "$TMP/late"
 [ "$RC" -eq 1 ] && [ "$(last "$OUT")" = "$coord_verdict" ] \
