@@ -136,6 +136,8 @@ _git_reason() {
     printf '%s' "$why" | tr '\n' ' ' | sed 's/  */ /g; s/ $//'
 }
 
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 _markers() { # -> "<sha>\t<ref>" lines, oldest first, empty when not frozen
     freeze_markers "$REMOTE" "$BRANCH"
 }
@@ -145,21 +147,21 @@ _markers() { # -> "<sha>\t<ref>" lines, oldest first, empty when not frozen
 _audit() {
     local out rc oldest frozen_at ref tip held n k moved commits paths p
     rc=0; out="$(_markers)" || rc=$?
-    if [ "$rc" -ne 0 ]; then echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; return 3; fi
+    if [ "$rc" -ne 0 ]; then echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; _afford "$REMOTE did not answer, so whether the freeze held is unknown — never clean (1255-s4im)" "check the network and credentials for $REMOTE (git ls-remote $REMOTE), then re-run scripts/release-freeze.sh audit $BRANCH"; return 3; fi
     if [ -z "$out" ]; then echo "ok:freeze-none:$BRANCH"; return 0; fi
     # The OLDEST marker is when the freeze began; a later marker cannot excuse
     # what arrived between the two.
     oldest="$(printf '%s\n' "$out" | head -n 1)"
     frozen_at="$(printf '%s' "$oldest" | cut -f1)"; ref="$(printf '%s' "$oldest" | cut -f2)"
     rc=0; tip="$(_t 10 git ls-remote "$REMOTE" "refs/heads/$BRANCH" 2>/dev/null | cut -f1)" || rc=$?
-    if [ "$rc" -ne 0 ]; then echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; return 3; fi
-    if [ -z "$tip" ]; then echo "refused:freeze:unreachable:$BRANCH is gone from $REMOTE while $ref still marks it"; return 3; fi
+    if [ "$rc" -ne 0 ]; then echo "refused:freeze:unreachable:git ls-remote $REMOTE failed or timed out"; _afford "$REMOTE did not answer, so whether the freeze held is unknown — never clean (1255-s4im)" "check the network and credentials for $REMOTE (git ls-remote $REMOTE), then re-run scripts/release-freeze.sh audit $BRANCH"; return 3; fi
+    if [ -z "$tip" ]; then echo "refused:freeze:unreachable:$BRANCH is gone from $REMOTE while $ref still marks it"; _afford "a freeze marker names $BRANCH but $REMOTE has no such branch, so there is nothing to compare the freeze against" "if the branch was deleted on purpose, clear the stale marker: scripts/release-freeze.sh clear $BRANCH"; return 3; fi
     if [ "$tip" = "$frozen_at" ]; then echo "ok:freeze-audit:clean:$BRANCH:moved=0"; return 0; fi
     # Both objects from origin itself, so every host computes the same answer.
     if ! git cat-file -e "$frozen_at^{commit}" 2>/dev/null || ! git cat-file -e "$tip^{commit}" 2>/dev/null; then
         rc=0; err="$(_t 60 git fetch --quiet "$REMOTE" "refs/heads/$BRANCH" "$ref" 2>&1)" || rc=$?
         if [ "$rc" -ne 0 ] || ! git cat-file -e "$frozen_at^{commit}" 2>/dev/null || ! git cat-file -e "$tip^{commit}" 2>/dev/null; then
-            echo "refused:freeze:unreachable:could not fetch $BRANCH and $ref from $REMOTE: $(_git_reason "${err:-}")"; return 3
+            echo "refused:freeze:unreachable:could not fetch $BRANCH and $ref from $REMOTE: $(_git_reason "${err:-}")"; _afford "$REMOTE did not answer, so whether the freeze held is unknown — never clean (1255-s4im)" "check the network and credentials for $REMOTE (git ls-remote $REMOTE), then re-run scripts/release-freeze.sh audit $BRANCH"; return 3
         fi
     fi
     moved="$(git rev-list --count "$frozen_at..$tip" 2>/dev/null || echo '?')"
