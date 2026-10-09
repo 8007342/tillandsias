@@ -95,6 +95,14 @@ retirement, Lua land rewrite or draft-spec activation is implied.
       902-5bf9 litmus `steps:`; 1384-j3cv build.sh launcher.
       <!-- Runner/ratchet/narrowed pilot landed; split preflight 1520-z95v,
            litmus steps and build.sh launcher remain open. -->
+      <!-- 2026-10-09 (1570-k5yt, yoga audit): the durable rule the ratchet
+           enforces is now a requirement of openspec/specs/ci-release
+           (req-id: ec267f02, "A new gate decider or gate fixture runs on
+           the Lua runner"); the audit's port candidates are 1570-g4rx,
+           1570-mxcg, 1570-25iq, 1570-k4fx, 1570-qutp. -->
+      <!-- Note: the "proc.spawn is unlanded" premise behind the ratchet's
+           fixture arm is stale since 1534-puyz / 1538-pwdr; what remains
+           open is native macOS/Windows conformance (1543-ffhg, 1544-cnae). -->
       (Streaming/lifetime child `1534-puyz` subsequently landed in PR #207
       after independent parent controls and a forced integration gate.
       Runtime parent `1384-aixy` remains open for composition `1538-pwdr`,
