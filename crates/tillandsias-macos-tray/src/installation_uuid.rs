@@ -673,29 +673,33 @@ mod tests {
     /// with `outcome`; returns whether the tray went on to ask for the handover
     /// (and answers it with fresh credentials when it did).
     async fn fake_guest(
-        mut io: tokio::io::DuplexStream,
+        io: tokio::io::DuplexStream,
         outcome: tillandsias_control_wire::DeliverCredentialsOutcome,
     ) -> bool {
+        use futures_util::{SinkExt, StreamExt};
         use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        async fn recv(io: &mut tokio::io::DuplexStream) -> Option<ControlEnvelope> {
-            let mut len = [0u8; 4];
-            io.read_exact(&mut len).await.ok()?;
-            let mut buf = vec![0u8; u32::from_be_bytes(len) as usize];
-            io.read_exact(&mut buf).await.ok()?;
-            tillandsias_control_wire::decode(&buf).ok()
+        // The shared codec, not a hand-rolled length prefix (framing ratchet
+        // 1527-v7cy): the fake speaks exactly what the real guest speaks.
+        type Io = tokio_util::codec::Framed<
+            tokio::io::DuplexStream,
+            tokio_util::codec::LengthDelimitedCodec,
+        >;
+        let mut io: Io = tokio_util::codec::Framed::new(
+            io,
+            tillandsias_control_wire::transport::control_frame_codec(),
+        );
+        async fn recv(io: &mut Io) -> Option<ControlEnvelope> {
+            let frame = io.next().await?.ok()?;
+            tillandsias_control_wire::decode(&frame).ok()
         }
-        async fn send(io: &mut tokio::io::DuplexStream, seq: u64, body: ControlMessage) {
+        async fn send(io: &mut Io, seq: u64, body: ControlMessage) {
             let bytes = tillandsias_control_wire::encode(&ControlEnvelope {
                 wire_version: WIRE_VERSION,
                 seq,
                 body,
             })
             .unwrap();
-            io.write_all(&(bytes.len() as u32).to_be_bytes())
-                .await
-                .unwrap();
-            io.write_all(&bytes).await.unwrap();
+            io.send(bytes.into()).await.unwrap();
         }
         let Some(env) = recv(&mut io).await else {
             return false;
