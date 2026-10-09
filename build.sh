@@ -3326,6 +3326,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "append-event archived-refusal fixture passed"
 
+    # The fixture above must not be able to dirty THIS checkout however it dies
+    # (1564-lk9f): a SIGKILL after its live-accept arm left a host: fixture
+    # fragment in macuahuitl's plan/index.d on 2026-10-09 and land-queue refused
+    # the dirty tree. Arm 1 SIGKILLs it in a scratch repo; arm 2 is the negative
+    # control that keeps 699-usxc asserted.
+    _step "Checking the append-event archived-refusal fixture is hermetic (1564-lk9f)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-append-event-archived-refusal-is-hermetic.sh" 2>&1; then
+        _error "the append-event archived-refusal fixture can leave a write in the checkout it runs from, or no longer asserts that a fragment-only packet accepts events"
+        exit 1
+    fi
+    _info "append-event archived-refusal hermetic fixture passed"
+
     _step "Checking the checkout-lock attested-release fixture (899-q9di)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-lock-attested-release.sh" 2>&1; then
         _error "the checkout-lock attested-release fixture regressed — either a finished cycle strands its lock again, or the lock stopped refusing concurrent agents"
