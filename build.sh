@@ -3326,6 +3326,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "append-event archived-refusal fixture passed"
 
+    # The fixture above must not be able to dirty THIS checkout however it dies
+    # (1564-lk9f): a SIGKILL after its live-accept arm left a host: fixture
+    # fragment in macuahuitl's plan/index.d on 2026-10-09 and land-queue refused
+    # the dirty tree. Arm 1 SIGKILLs it in a scratch repo; arm 2 is the negative
+    # control that keeps 699-usxc asserted.
+    _step "Checking the append-event archived-refusal fixture is hermetic (1564-lk9f)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-append-event-archived-refusal-is-hermetic.sh" 2>&1; then
+        _error "the append-event archived-refusal fixture can leave a write in the checkout it runs from, or no longer asserts that a fragment-only packet accepts events"
+        exit 1
+    fi
+    _info "append-event archived-refusal hermetic fixture passed"
+
     _step "Checking the checkout-lock attested-release fixture (899-q9di)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-cycle-lock-attested-release.sh" 2>&1; then
         _error "the checkout-lock attested-release fixture regressed — either a finished cycle strands its lock again, or the lock stopped refusing concurrent agents"
@@ -5283,6 +5295,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "scripts/test-guest-unit-hardening.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
+    _step "Checking test-release-freeze-audit (1255-s4im)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-release-freeze-audit.sh" 2>&1; then
+        _error "scripts/test-release-freeze-audit.sh failed — the server-visible freeze audit may no longer name a breach, or the release preflight may no longer refuse one (1255-s4im); read the fixture output above"
+        exit 1
+    fi
+    # test-land-queue.sh was bound by no gate, so its arms — now including the
+    # freeze hold and the mid-gate re-check (1255-s4im) — ran only by hand. 14 s.
+    _step "Checking test-land-queue (1316-bnzt, 1255-s4im; ~14s)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-land-queue.sh" 2>&1; then
+        _error "scripts/test-land-queue.sh failed — the landing queue may land into a frozen trunk or mis-order, evict or re-queue candidates; read the fixture output above"
+        exit 1
+    fi
+    _step "Checking test-ensure-hooks (1255-s4im)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-ensure-hooks.sh" 2>&1; then
+        _error "scripts/test-ensure-hooks.sh failed — a toolchain-less checkout may no longer arm its push guards (1255-s4im); read the fixture output above"
+        exit 1
+    fi
     _step "Checking test-litmus-steps-can-fail (1063-nraf; 38ms)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-steps-can-fail.sh" 2>&1; then
         _error "scripts/test-litmus-steps-can-fail.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
@@ -5396,6 +5425,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "wsl.exe single-constructor check passed"
+
+    # Order 1562-tc7p. Every build reads ONE Rust toolchain, pinned in
+    # rust-toolchain.toml. v56.10.8.1's macOS job floated to `stable` (rustc
+    # 1.99.0) while this host gated on 1.96.1 and the Nix release on 1.98.0, and
+    # the cut failed after every gate passed. This refuses a workflow, flake or
+    # build script that stops reading the pin.
+    _step "Checking every build reads the pinned Rust toolchain (1562-tc7p)..."
+    if ! _run_lua_decider "scripts/lua/check-toolchain-pinned.lua" 2>&1; then
+        _error "a build no longer reads the pinned toolchain in rust-toolchain.toml (1562-tc7p) — see the violation lines above"
+        exit 1
+    fi
+    _info "toolchain pin check passed"
+    _step "Checking test-check-toolchain-pinned (1562-tc7p)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-check-toolchain-pinned.sh" 2>&1; then
+        _error "scripts/test-check-toolchain-pinned.sh failed — the toolchain-pin guard no longer refuses a float it must refuse; read the fixture output above"
+        exit 1
+    fi
 
     # Order 803-49re. A purge that destroys the guest must also clear the host's
     # copy of that guest's Vault identity. Part A landed the clearing in ONE of

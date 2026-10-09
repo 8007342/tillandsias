@@ -11535,6 +11535,82 @@ impl CodexDeviceQrScanner {
     }
 }
 
+/// Rows in one [`big_glyph`].
+const BIG_GLYPH_ROWS: usize = 5;
+
+/// A 5x5 block glyph for one device-code character (order 1569-bgcd).
+/// GitHub user codes are `XXXX-XXXX` over upper-case letters and digits; a
+/// lower-case letter is drawn as its capital, and anything else as `?` so a
+/// surprise character is visible instead of silently blank. Zero is slashed
+/// so it can never be read as O.
+fn big_glyph(c: char) -> [&'static str; BIG_GLYPH_ROWS] {
+    match c.to_ascii_uppercase() {
+        'A' => [" ### ", "#   #", "#####", "#   #", "#   #"],
+        'B' => ["#### ", "#   #", "#### ", "#   #", "#### "],
+        'C' => [" ####", "#    ", "#    ", "#    ", " ####"],
+        'D' => ["#### ", "#   #", "#   #", "#   #", "#### "],
+        'E' => ["#####", "#    ", "#### ", "#    ", "#####"],
+        'F' => ["#####", "#    ", "#### ", "#    ", "#    "],
+        'G' => [" ####", "#    ", "#  ##", "#   #", " ####"],
+        'H' => ["#   #", "#   #", "#####", "#   #", "#   #"],
+        'I' => ["#####", "  #  ", "  #  ", "  #  ", "#####"],
+        'J' => ["#####", "   # ", "   # ", "#  # ", " ##  "],
+        'K' => ["#   #", "#  # ", "###  ", "#  # ", "#   #"],
+        'L' => ["#    ", "#    ", "#    ", "#    ", "#####"],
+        'M' => ["#   #", "## ##", "# # #", "#   #", "#   #"],
+        'N' => ["#   #", "##  #", "# # #", "#  ##", "#   #"],
+        'O' => [" ### ", "#   #", "#   #", "#   #", " ### "],
+        'P' => ["#### ", "#   #", "#### ", "#    ", "#    "],
+        'Q' => [" ### ", "#   #", "# # #", "#  # ", " ## #"],
+        'R' => ["#### ", "#   #", "#### ", "#  # ", "#   #"],
+        'S' => [" ####", "#    ", " ### ", "    #", "#### "],
+        'T' => ["#####", "  #  ", "  #  ", "  #  ", "  #  "],
+        'U' => ["#   #", "#   #", "#   #", "#   #", " ### "],
+        'V' => ["#   #", "#   #", "#   #", " # # ", "  #  "],
+        'W' => ["#   #", "#   #", "# # #", "## ##", "#   #"],
+        'X' => ["#   #", " # # ", "  #  ", " # # ", "#   #"],
+        'Y' => ["#   #", " # # ", "  #  ", "  #  ", "  #  "],
+        'Z' => ["#####", "   # ", "  #  ", " #   ", "#####"],
+        '0' => [" ### ", "#  ##", "# # #", "##  #", " ### "],
+        '1' => ["  #  ", " ##  ", "  #  ", "  #  ", " ### "],
+        '2' => [" ### ", "#   #", "  ## ", " #   ", "#####"],
+        '3' => ["#### ", "    #", " ### ", "    #", "#### "],
+        '4' => ["#   #", "#   #", "#####", "    #", "    #"],
+        '5' => ["#####", "#    ", "#### ", "    #", "#### "],
+        '6' => [" ### ", "#    ", "#### ", "#   #", " ### "],
+        '7' => ["#####", "    #", "   # ", "  #  ", "  #  "],
+        '8' => [" ### ", "#   #", " ### ", "#   #", " ### "],
+        '9' => [" ### ", "#   #", " ####", "    #", " ### "],
+        '-' => ["     ", "     ", " ### ", "     ", "     "],
+        _ => [" ### ", "#   #", "  ## ", "     ", "  #  "],
+    }
+}
+
+/// The one-time code drawn in large block letters (order 1569-bgcd): the
+/// operator failed a GitHub device login several times on 2026-10-09 because
+/// the one-line code was too hard to read. Five rows of `█`, blush on a colour
+/// tier; the Plain tier carries no escape bytes, matching the QR beside it.
+/// The caller still prints the plain one-line code, so it stays copyable.
+fn big_user_code(code: &str, tier: tillandsias_progress_tty::Tier) -> String {
+    let open = qr_sgr(tier, tillandsias_progress_tty::palette::TIP_BLUSH, None);
+    let mut out = String::new();
+    for row in 0..BIG_GLYPH_ROWS {
+        let mut line = String::from("  ");
+        for c in code.chars() {
+            line.push_str(&big_glyph(c)[row].replace('#', "█"));
+            line.push(' ');
+        }
+        let line = line.trim_end();
+        if open.is_empty() {
+            out.push_str(line);
+        } else {
+            out.push_str(&format!("{open}{line}\x1b[0m"));
+        }
+        out.push('\n');
+    }
+    out
+}
+
 /// The one-time code, in blush on a colour tier and plain otherwise.
 fn styled_user_code(code: &str, tier: tillandsias_progress_tty::Tier) -> String {
     let open = qr_sgr(tier, tillandsias_progress_tty::palette::TIP_BLUSH, None);
@@ -11767,6 +11843,9 @@ fn run_github_device_login(container: &str, debug: bool) -> Result<(), String> {
     print!("{qr_code_str}");
     println!();
     println!("  Or in any browser, visit: {}", dc.verification_uri);
+    println!("  Enter this one-time code:\n");
+    print!("{}", big_user_code(&dc.user_code, tier));
+    println!();
     println!(
         "  Enter one-time code:      {}\n",
         styled_user_code(&dc.user_code, tier)
@@ -25470,6 +25549,50 @@ mod tests {
             styled_user_code("ABCD-1234", tillandsias_progress_tty::Tier::TrueColor),
             "\x1b[38;2;232;99;122mABCD-1234\x1b[0m"
         );
+    }
+
+    /// Order 1569-bgcd: the device code is drawn as five rows of block
+    /// letters, one 5-wide glyph per character, and the Plain tier carries no
+    /// escape bytes.
+    #[test]
+    fn big_user_code_draws_five_block_rows_per_character() {
+        use tillandsias_progress_tty::Tier;
+        let code = "WDJB-MJHT";
+        let plain = super::big_user_code(code, Tier::Plain);
+        let rows: Vec<&str> = plain.lines().collect();
+        assert_eq!(rows.len(), super::BIG_GLYPH_ROWS);
+        assert!(!plain.contains('\x1b'), "Plain tier must carry no escapes");
+        assert!(plain.contains('█'));
+        // Two leading spaces, then 9 glyphs of 5 columns with a 1-column gap.
+        let widest = rows.iter().map(|r| r.chars().count()).max().unwrap();
+        assert_eq!(widest, 2 + 9 * 6 - 1);
+        assert!(widest <= 80, "must fit an 80-column terminal");
+        let coloured = super::big_user_code(code, Tier::Ansi256);
+        assert!(coloured.contains("\x1b[0m"));
+        assert_eq!(coloured.lines().count(), super::BIG_GLYPH_ROWS);
+    }
+
+    /// Every character GitHub can put in a user code has its own glyph, and
+    /// no two of them are drawn the same, so the big code can never be more
+    /// ambiguous than the small one (O and 0 in particular).
+    #[test]
+    fn big_glyphs_are_distinct_and_cover_the_code_alphabet() {
+        let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-";
+        let unknown = super::big_glyph('?');
+        let mut seen = std::collections::HashMap::new();
+        for c in alphabet.chars() {
+            let g = super::big_glyph(c);
+            assert_ne!(g, unknown, "{c} fell through to the unknown glyph");
+            assert!(
+                g.iter().all(|r| r.chars().count() == 5),
+                "{c} is not 5 wide"
+            );
+            if let Some(prev) = seen.insert(g, c) {
+                panic!("{c} and {prev} share a glyph");
+            }
+        }
+        assert_eq!(super::big_glyph('a'), super::big_glyph('A'));
+        assert_ne!(super::big_glyph('O'), super::big_glyph('0'));
     }
 
     /// The tier decision itself: NO_COLOR and a non-TTY each force Plain.
