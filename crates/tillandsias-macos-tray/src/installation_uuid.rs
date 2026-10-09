@@ -38,11 +38,15 @@ pub const KEYCHAIN_SERVICE: &str = "tillandsias";
 ///
 /// @trace spec:host-shell-architecture.security.no-host-credentials@v1
 pub fn read_or_generate() -> std::io::Result<String> {
-    if let Some(existing) = read_credential_string(KEYCHAIN_ACCOUNT)? {
+    read_or_generate_in(KEYCHAIN_SERVICE)
+}
+
+fn read_or_generate_in(service: &str) -> std::io::Result<String> {
+    if let Some(existing) = read_credential_string_in(service, KEYCHAIN_ACCOUNT)? {
         return Ok(existing);
     }
     let new = generate_uuid();
-    write_credential_string(KEYCHAIN_ACCOUNT, &new)?;
+    write_credential_string_in(service, KEYCHAIN_ACCOUNT, &new)?;
     Ok(new)
 }
 
@@ -126,14 +130,11 @@ fn spawn_bounded(
 
 /// Read a generic string credential stored under `target` from the macOS keychain.
 pub fn read_credential_string(target: &str) -> std::io::Result<Option<String>> {
-    let output = security_bounded(&[
-        "find-generic-password",
-        "-a",
-        target,
-        "-s",
-        KEYCHAIN_SERVICE,
-        "-w",
-    ])?;
+    read_credential_string_in(KEYCHAIN_SERVICE, target)
+}
+
+fn read_credential_string_in(service: &str, target: &str) -> std::io::Result<Option<String>> {
+    let output = security_bounded(&["find-generic-password", "-a", target, "-s", service, "-w"])?;
     if !output.status.success() {
         // `security` exits 44 (errSecItemNotFound) when the entry is missing.
         return Ok(None);
@@ -150,12 +151,16 @@ pub fn read_credential_string(target: &str) -> std::io::Result<Option<String>> {
 
 /// Persist a generic string credential `value` under `target` in the macOS keychain.
 pub fn write_credential_string(target: &str, value: &str) -> std::io::Result<()> {
+    write_credential_string_in(KEYCHAIN_SERVICE, target, value)
+}
+
+fn write_credential_string_in(service: &str, target: &str, value: &str) -> std::io::Result<()> {
     let status = security_bounded(&[
         "add-generic-password",
         "-a",
         target,
         "-s",
-        KEYCHAIN_SERVICE,
+        service,
         "-w",
         value,
         "-U",
@@ -171,13 +176,11 @@ pub fn write_credential_string(target: &str, value: &str) -> std::io::Result<()>
 
 /// Remove the credential stored under `target` from the macOS keychain.
 pub fn delete_credential_string(target: &str) -> std::io::Result<()> {
-    let _status = security_bounded(&[
-        "delete-generic-password",
-        "-a",
-        target,
-        "-s",
-        KEYCHAIN_SERVICE,
-    ]);
+    delete_credential_string_in(KEYCHAIN_SERVICE, target)
+}
+
+fn delete_credential_string_in(service: &str, target: &str) -> std::io::Result<()> {
+    let _status = security_bounded(&["delete-generic-password", "-a", target, "-s", service]);
     // Already-absent, successfully deleted, and a bound that fired are all Ok
     // for idempotency — the caller is removing a credential and any of those
     // leaves it removed or absent. The bound still did its job: the child was
@@ -190,10 +193,22 @@ pub fn delete_credential_string(target: &str) -> std::io::Result<()> {
 pub async fn deliver_credentials_and_check_handover(
     client: &mut tillandsias_host_shell::vsock_client::Client,
 ) -> Result<(), String> {
-    let uuid = read_or_generate().map_err(|e| format!("read_or_generate UUID failed: {e}"))?;
-    let share = read_credential_string("vault-shamir-share-v1")
+    deliver_and_handover_in(client, KEYCHAIN_SERVICE).await
+}
+
+/// The delivery and handover against the Keychain service `service`.
+/// Production passes [`KEYCHAIN_SERVICE`]; tests pass a scratch
+/// `tillandsias-scratch-test-...` service they remove, so a test never reads or
+/// writes the operator's real credentials (order 1562-bqcm).
+pub(crate) async fn deliver_and_handover_in(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+    service: &str,
+) -> Result<(), String> {
+    let uuid =
+        read_or_generate_in(service).map_err(|e| format!("read_or_generate UUID failed: {e}"))?;
+    let share = read_credential_string_in(service, "vault-shamir-share-v1")
         .map_err(|e| format!("read share failed: {e}"))?;
-    let token = read_credential_string("vault-root-token-v1")
+    let token = read_credential_string_in(service, "vault-root-token-v1")
         .map_err(|e| format!("read token failed: {e}"))?;
 
     let seq = client.allocate_seq();
@@ -243,7 +258,7 @@ pub async fn deliver_credentials_and_check_handover(
         }
     }
 
-    capture_vault_handover(client).await.map(|_| ())
+    capture_vault_handover_in(client, service).await.map(|_| ())
 }
 
 /// The CAPTURE half of the handover, without the deliver half (701-g98y).
@@ -271,6 +286,13 @@ pub async fn deliver_credentials_and_check_handover(
 pub async fn capture_vault_handover(
     client: &mut tillandsias_host_shell::vsock_client::Client,
 ) -> Result<bool, String> {
+    capture_vault_handover_in(client, KEYCHAIN_SERVICE).await
+}
+
+async fn capture_vault_handover_in(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+    service: &str,
+) -> Result<bool, String> {
     let seq = client.allocate_seq();
     let env = tillandsias_control_wire::ControlEnvelope {
         wire_version: tillandsias_control_wire::WIRE_VERSION,
@@ -290,12 +312,12 @@ pub async fn capture_vault_handover(
         } => {
             let mut wrote = false;
             if let Some(s) = unseal_share_b64 {
-                write_credential_string("vault-shamir-share-v1", &s)
+                write_credential_string_in(service, "vault-shamir-share-v1", &s)
                     .map_err(|e| format!("write share failed: {e}"))?;
                 wrote = true;
             }
             if let Some(t) = root_token {
-                write_credential_string("vault-root-token-v1", &t)
+                write_credential_string_in(service, "vault-root-token-v1", &t)
                     .map_err(|e| format!("write token failed: {e}"))?;
                 wrote = true;
             }
@@ -515,5 +537,285 @@ mod tests {
     #[test]
     fn keychain_account_matches_spec_wording() {
         assert_eq!(KEYCHAIN_ACCOUNT, "tillandsias-vm-uuid");
+    }
+
+    // ─── ORDER 1562-bqcm: the Superseded handover, driven end to end ──────
+
+    /// Every scratch service starts with this, and the production service
+    /// ([`KEYCHAIN_SERVICE`]) does not, so a sweep by this prefix cannot reach
+    /// the operator's real `tillandsias` entries.
+    const SCRATCH_SERVICE_PREFIX: &str = "tillandsias-scratch-test-";
+
+    /// `tillandsias-scratch-test-<pid>-<uuid>`: the pid lets a later run tell
+    /// a dead run's leftovers from a sibling test that is still running.
+    fn scratch_service() -> String {
+        format!(
+            "{SCRATCH_SERVICE_PREFIX}{}-{}",
+            std::process::id(),
+            generate_uuid()
+        )
+    }
+
+    /// Every (service, account) generic-password item whose service starts
+    /// with the scratch prefix. `dump-keychain` without `-d` reads attributes
+    /// only, never a secret, so it cannot raise a prompt for one.
+    ///
+    /// The dump goes to a FILE, not through `security_bounded`'s pipe: on this
+    /// host it is ~90 KB, past a pipe buffer, and spawn_bounded reads the pipe
+    /// only after the child exits — so the child blocks on a full pipe and the
+    /// bound kills it every time. Bounded the same way: killed and reaped.
+    fn scratch_items() -> Vec<(String, String)> {
+        let path = std::env::temp_dir().join(format!(
+            "tillandsias-scratch-dump-{}-{}",
+            std::process::id(),
+            generate_uuid()
+        ));
+        let file = std::fs::File::create(&path).expect("scratch dump file");
+        let mut child = Command::new("/usr/bin/security")
+            .arg("dump-keychain")
+            .stdout(file)
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("security dump-keychain must spawn");
+        let deadline = Instant::now() + SECURITY_CALL_BUDGET;
+        while child.try_wait().expect("try_wait").is_none() {
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = std::fs::remove_file(&path);
+                panic!(
+                    "security dump-keychain exceeded {SECURITY_CALL_BUDGET:?} (locked keychain?)"
+                );
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        let _ = std::fs::remove_file(&path);
+        let quoted = |line: &str, key: &str| -> Option<String> {
+            let rest = line.trim().strip_prefix(key)?;
+            let v = rest.strip_prefix("<blob>=\"")?.strip_suffix('"')?;
+            Some(v.to_string())
+        };
+        let mut items = Vec::new();
+        let (mut svce, mut acct) = (None::<String>, None::<String>);
+        let mut flush = |svce: &mut Option<String>, acct: &mut Option<String>| {
+            if let (Some(s), Some(a)) = (svce.take(), acct.take())
+                && s.starts_with(SCRATCH_SERVICE_PREFIX)
+            {
+                items.push((s, a));
+            }
+        };
+        for line in text.lines() {
+            if line.starts_with("keychain:") {
+                flush(&mut svce, &mut acct);
+            } else if let Some(v) = quoted(line, "\"svce\"") {
+                svce = Some(v);
+            } else if let Some(v) = quoted(line, "\"acct\"") {
+                acct = Some(v);
+            }
+        }
+        flush(&mut svce, &mut acct);
+        items
+    }
+
+    fn pid_alive(pid: &str) -> bool {
+        std::process::Command::new("/bin/ps")
+            .args(["-p", pid])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(true)
+    }
+
+    /// Delete scratch items. `own` set: exactly that service's items. `own`
+    /// unset: the items of every run that is no longer alive — the leftovers
+    /// of a run killed before its cleanup ran (order 1562-uxhc: a Drop-only
+    /// cleanup is not a cleanup when the process dies).
+    fn sweep_scratch(own: Option<&str>) {
+        for (service, account) in scratch_items() {
+            let doomed = match own {
+                Some(mine) => service == mine,
+                None => {
+                    let pid = service[SCRATCH_SERVICE_PREFIX.len()..]
+                        .split('-')
+                        .next()
+                        .unwrap_or("");
+                    pid.is_empty() || !pid.chars().all(|c| c.is_ascii_digit()) || !pid_alive(pid)
+                }
+            };
+            if doomed {
+                assert!(
+                    service.starts_with(SCRATCH_SERVICE_PREFIX) && service != KEYCHAIN_SERVICE,
+                    "refusing to delete a non-scratch keychain item: {service}"
+                );
+                let _ = delete_credential_string_in(&service, &account);
+            }
+        }
+    }
+
+    /// Before: sweep dead runs. After (Drop, so a failed assertion still
+    /// cleans): sweep this test's own service.
+    struct ScratchService(String);
+    impl ScratchService {
+        fn new() -> Self {
+            sweep_scratch(None);
+            Self(scratch_service())
+        }
+    }
+    impl Drop for ScratchService {
+        fn drop(&mut self) {
+            sweep_scratch(Some(&self.0));
+        }
+    }
+
+    /// The guest's side of deliver-then-handover. Answers DeliverCredentials
+    /// with `outcome`; returns whether the tray went on to ask for the handover
+    /// (and answers it with fresh credentials when it did).
+    async fn fake_guest(
+        io: tokio::io::DuplexStream,
+        outcome: tillandsias_control_wire::DeliverCredentialsOutcome,
+    ) -> bool {
+        use futures_util::{SinkExt, StreamExt};
+        use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+        // The shared codec, not a hand-rolled length prefix (framing ratchet
+        // 1527-v7cy): the fake speaks exactly what the real guest speaks.
+        type Io = tokio_util::codec::Framed<
+            tokio::io::DuplexStream,
+            tokio_util::codec::LengthDelimitedCodec,
+        >;
+        let mut io: Io = tokio_util::codec::Framed::new(
+            io,
+            tillandsias_control_wire::transport::control_frame_codec(),
+        );
+        async fn recv(io: &mut Io) -> Option<ControlEnvelope> {
+            let frame = io.next().await?.ok()?;
+            tillandsias_control_wire::decode(&frame).ok()
+        }
+        async fn send(io: &mut Io, seq: u64, body: ControlMessage) {
+            let bytes = tillandsias_control_wire::encode(&ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq,
+                body,
+            })
+            .unwrap();
+            io.send(bytes.into()).await.unwrap();
+        }
+        let Some(env) = recv(&mut io).await else {
+            return false;
+        };
+        let ControlMessage::DeliverCredentials { seq, .. } = env.body else {
+            panic!("expected DeliverCredentials first, got {:?}", env.body)
+        };
+        send(
+            &mut io,
+            env.seq,
+            ControlMessage::DeliverCredentialsReply {
+                seq_in_reply_to: seq,
+                success: true,
+                outcome,
+            },
+        )
+        .await;
+        let Some(env) = recv(&mut io).await else {
+            return false;
+        };
+        let ControlMessage::GetVaultHandover { seq } = env.body else {
+            panic!("expected GetVaultHandover, got {:?}", env.body)
+        };
+        send(
+            &mut io,
+            env.seq,
+            ControlMessage::VaultHandoverReply {
+                seq_in_reply_to: seq,
+                unseal_share_b64: Some("fresh-share".into()),
+                root_token: Some("fresh-token".into()),
+            },
+        )
+        .await;
+        true
+    }
+
+    /// Runs the production delivery against `service` and a fake guest that
+    /// answers `outcome`. Returns (result, whether the handover was asked for).
+    async fn deliver_against_fake_guest(
+        service: &str,
+        outcome: tillandsias_control_wire::DeliverCredentialsOutcome,
+    ) -> (Result<(), String>, bool) {
+        let (host, guest) = tokio::io::duplex(1 << 16);
+        let guest = tokio::spawn(fake_guest(guest, outcome));
+        let mut client = tillandsias_host_shell::vsock_client::Client::from_stream(
+            Box::new(host),
+            tillandsias_control_wire::transport::Transport::Vsock { cid: 0, port: 0 },
+        );
+        let result = deliver_and_handover_in(&mut client, service).await;
+        drop(client);
+        (result, guest.await.unwrap())
+    }
+
+    /// ORDER 1562-bqcm (child of 1562-bqcg), the macOS twin of #255's Windows
+    /// test. `Superseded` means the guest holds a NEWER handover (890-y72v), so
+    /// the tray must go on to GetVaultHandover and write what it returns to the
+    /// Keychain. Pre-fix (`is_accepted()`): FAILS — the tray returned Err
+    /// before the handover, so after a reinstall cleared the host credentials
+    /// the Keychain was never repopulated. Scratch Keychain service only.
+    #[tokio::test]
+    async fn a_superseded_delivery_repopulates_the_keychain_from_the_handover() {
+        let scratch = ScratchService::new();
+        assert_eq!(
+            read_credential_string_in(&scratch.0, "vault-shamir-share-v1").unwrap(),
+            None,
+            "the scratch service starts empty, as a reinstalled host does"
+        );
+        let (result, asked) = deliver_against_fake_guest(
+            &scratch.0,
+            tillandsias_control_wire::DeliverCredentialsOutcome::Superseded,
+        )
+        .await;
+        assert_eq!(result, Ok(()), "Superseded must not fail the delivery");
+        assert!(asked, "Superseded must go on to GetVaultHandover");
+        assert_eq!(
+            read_credential_string_in(&scratch.0, "vault-shamir-share-v1")
+                .unwrap()
+                .as_deref(),
+            Some("fresh-share"),
+            "the handover's share must be written to the Keychain"
+        );
+        assert_eq!(
+            read_credential_string_in(&scratch.0, "vault-root-token-v1")
+                .unwrap()
+                .as_deref(),
+            Some("fresh-token"),
+            "the handover's root token must be written to the Keychain"
+        );
+    }
+
+    /// ORDER 1562-bqcm, the fail-closed side: a REJECTED delivery is still an
+    /// error, and the handover is neither asked for nor written.
+    #[tokio::test]
+    async fn a_rejected_delivery_still_fails_closed_on_macos() {
+        let scratch = ScratchService::new();
+        let (result, asked) = deliver_against_fake_guest(
+            &scratch.0,
+            tillandsias_control_wire::DeliverCredentialsOutcome::Rejected {
+                reason: "share does not open the store".into(),
+            },
+        )
+        .await;
+        assert!(result.is_err(), "Rejected must fail closed");
+        assert!(!asked, "a rejected delivery must not go on to the handover");
+        assert_eq!(
+            read_credential_string_in(&scratch.0, "vault-shamir-share-v1").unwrap(),
+            None
+        );
+    }
+
+    /// The sweep's own guard: a scratch name can never equal, or be a prefix
+    /// match for, the production service.
+    #[test]
+    fn the_scratch_prefix_cannot_reach_the_production_service() {
+        assert!(!KEYCHAIN_SERVICE.starts_with(SCRATCH_SERVICE_PREFIX));
+        assert!(scratch_service().starts_with(SCRATCH_SERVICE_PREFIX));
+        assert_ne!(scratch_service(), KEYCHAIN_SERVICE);
     }
 }
