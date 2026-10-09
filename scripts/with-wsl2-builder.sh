@@ -329,12 +329,17 @@ fi
 
 echo "[wsl2-builder] Re-execing inside '$BUILD_DISTRO' WSL2 distro..."
 
+# ORDER 1563-u2yx: every build-path wsl.exe goes through this lib, because
+# wsl.exe writes stdout and stderr at independent offsets and a caller's
+# `> log 2>&1` lost refusal lines (25600 of 38000 bytes, measured).
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-wsl-capture.sh"
+
 if [[ "$_W2_DIRECT" == 1 ]]; then
     if [[ $# -eq 0 ]]; then
         echo "usage: $WSL2_SELF <command> [args...]" >&2
         exit 2
     fi
-    exec wsl.exe -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
+    tillandsias_wsl_exec -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
         bash -c "$_ENV_PREFIX exec $ARGS_QUOTED"
 fi
 
@@ -360,9 +365,9 @@ if [[ "$(basename "$SCRIPT_REL")" == build.sh ]]; then
     done
 fi
 if [[ "$_w2_refresh_native" == 1 && "${TILLANDSIAS_WSL2_NO_NATIVE_REFRESH:-}" != 1 ]]; then
-    wsl.exe -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
-        bash -c "$_ENV_PREFIX exec bash $(printf '%q' "./$SCRIPT_REL") $ARGS_QUOTED"
-    _w2_rc=$?
+    _w2_rc=0
+    tillandsias_wsl_run -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
+        bash -c "$_ENV_PREFIX exec bash $(printf '%q' "./$SCRIPT_REL") $ARGS_QUOTED" || _w2_rc=$?
     [[ "$_w2_rc" -eq 0 ]] || exit "$_w2_rc"
     echo "[wsl2-builder] gate passed in '$BUILD_DISTRO'; refreshing the native plan binary this host's lanes resolve (1267-uafx)..."
     if ! command -v cargo >/dev/null 2>&1; then
@@ -376,5 +381,5 @@ if [[ "$_w2_refresh_native" == 1 && "${TILLANDSIAS_WSL2_NO_NATIVE_REFRESH:-}" !=
     bash scripts/check-plan-binary-current.sh
     exit $?
 fi
-exec wsl.exe -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
+tillandsias_wsl_exec -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
     bash -c "$_ENV_PREFIX exec bash $(printf '%q' "./$SCRIPT_REL") $ARGS_QUOTED"

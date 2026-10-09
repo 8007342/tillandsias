@@ -5414,6 +5414,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "wsl.exe single-constructor check passed"
 
+    # Order 1562-tc7p. Every build reads ONE Rust toolchain, pinned in
+    # rust-toolchain.toml. v56.10.8.1's macOS job floated to `stable` (rustc
+    # 1.99.0) while this host gated on 1.96.1 and the Nix release on 1.98.0, and
+    # the cut failed after every gate passed. This refuses a workflow, flake or
+    # build script that stops reading the pin.
+    _step "Checking every build reads the pinned Rust toolchain (1562-tc7p)..."
+    if ! _run_lua_decider "scripts/lua/check-toolchain-pinned.lua" 2>&1; then
+        _error "a build no longer reads the pinned toolchain in rust-toolchain.toml (1562-tc7p) — see the violation lines above"
+        exit 1
+    fi
+    _info "toolchain pin check passed"
+    _step "Checking test-check-toolchain-pinned (1562-tc7p)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-check-toolchain-pinned.sh" 2>&1; then
+        _error "scripts/test-check-toolchain-pinned.sh failed — the toolchain-pin guard no longer refuses a float it must refuse; read the fixture output above"
+        exit 1
+    fi
+
     # Order 803-49re. A purge that destroys the guest must also clear the host's
     # copy of that guest's Vault identity. Part A landed the clearing in ONE of
     # the two installers and the packet read as fixed; the other one went on

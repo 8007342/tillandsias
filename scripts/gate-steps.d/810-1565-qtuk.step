@@ -1,0 +1,21 @@
+# Gate step 1565-qtuk — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. One install-windows.ps1 install provisions the guest ONCE,
+# and that once is the SOFT reset. The --reset-state capability probe ran with
+# TILLANDSIAS_DESTRUCTIVE_RESET_OK=0, which skips the wipe but still provisions
+# to Ready, so every install provisioned twice (yolanda 2026-10-09, two
+# v56.10.9.1 SOFT installs: two "reset-state (SOFT): VM Ready" cycles each).
+# The SOFT call is now its own probe: exit 2 is the parser's refusal.
+#
+# The fixture cuts the reset path and RUNS it in PowerShell against a stub tray
+# (.cmd) that logs every invocation, wipe and provisioning: a supporting tray
+# provisions once AND wipes once, a failed provisioning Dies without a second
+# attempt, an exit-2 tray provisions nothing. Pre-fix: arms 1-2 FAIL
+# (provisions=2). Without PowerShell and cmd.exe (a Linux gate) it skips by name.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking one Windows install provisions the guest once, through the SOFT reset (1565-qtuk)"
+STEP_SCRIPT="scripts/test-installer-provisions-once.sh"
+STEP_ERROR="install-windows.ps1 again provisions the guest more than once per install, skips the SOFT reset, or Dies on a tray that predates --reset-state (1565-qtuk); see which arm failed above"
+STEP_OK="one install, one provisioning, and it is the SOFT reset"
+STEP_SECOND_REGIME="yolanda-windows 2026-10-09 msys ok:provisions-once-fixture:3"

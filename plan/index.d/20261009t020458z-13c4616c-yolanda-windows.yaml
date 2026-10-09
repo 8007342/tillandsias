@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: preflight-emits-every-refused-guards-name-line-whole-so-a-deadline-skip-notice-cannot-cut-it
+    field: context
+    value: |-
+      Measured on yolanda-windows 2026-10-08 in all five stack-ref logs: the
+      summary read refused=2 but only refused:preflight:test-native-lint-attested
+      was printed whole; test-pre-push-main-branch-affordance's FAIL arm 2 was
+      visible, then its arm-5 line was cut mid-line by
+      "skip:preflight:test-project-info-grep-code-recall:deadline:183s", and its
+      refused:preflight:<name> line never appeared.
+
+
+      [2026-10-09T02:04:58Z yolanda-windows] ROOT CAUSE MEASURED (yolanda-windows 2026-10-08, tillandsias-build, 400 alternating stdout/stderr lines, 38000 bytes expected): wsl.exe ... > f 2>&1 kept 25600 bytes, 3/3 runs (= the stderr total, 400x64); >> f 2>&1 kept 25600 (append does not help); 2>&1 | cat > f kept 38000; plain bash with no wsl hop kept 38000. wsl.exe writes its two streams at INDEPENDENT offsets into one file, so stderr overwrites stdout; build.sh prints refusals on stderr and skips on stdout, so the cut was not build.sh interleaving.
+      AMENDED EXIT CRITERION (coordinator-approved 2026-10-09, replacing "atomic per guard / collect after the parallel section"): the builder hop never lets two independent-offset writers share one capture file; every refused:preflight:<name> line survives a Windows '> log 2>&1' capture. The same-file path applies ONLY when fd1 and fd2 resolve to the same regular file (terminals, pipes, distinct files keep exec); the exit code propagates; a signal to the wrapper reaches wsl.exe; the stub-wsl.exe fixture (independent-offset reopen) runs in the gate's Linux regime.
+    ts: "2026-10-09T02:04:58Z"
+    host: yolanda-windows
