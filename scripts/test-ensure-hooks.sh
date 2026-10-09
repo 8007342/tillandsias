@@ -35,7 +35,9 @@ export HOME="$TMP/home" GIT_CONFIG_GLOBAL="$TMP/home/.gitconfig" GIT_CONFIG_NOSY
 mkdir -p "$HOME"; : > "$GIT_CONFIG_GLOBAL"
 export GIT_AUTHOR_NAME=fixture GIT_AUTHOR_EMAIL=fixture@example.invalid
 export GIT_COMMITTER_NAME=fixture GIT_COMMITTER_EMAIL=fixture@example.invalid
-unset TILLANDSIAS_ENSURE_HOOKS TILLANDSIAS_PLAN_BIN
+# CARGO_TARGET_DIR too: a shared target dir lets the scratch hook resolve a real
+# plan binary, and arm 1 asserts the refusal of a host that has NONE.
+unset TILLANDSIAS_ENSURE_HOOKS TILLANDSIAS_PLAN_BIN CARGO_TARGET_DIR
 
 # A PATH with no Rust toolchain: only the system dirs.
 NOTC_PATH="/usr/bin:/bin:/usr/sbin:/sbin"
