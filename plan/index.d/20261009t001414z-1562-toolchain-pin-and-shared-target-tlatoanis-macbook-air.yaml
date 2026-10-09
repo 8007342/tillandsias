@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed at the coordinator's request after the v56.10.8.1 macOS release-job failure (PR #256).
+packets:
+  - packet_id: release-builds-float-on-toolchain-stable-so-a-rustc-release-can-break-a-cut-every-local-gate-passed
+    order: 1562-tc7p
+    title: Release builds float on `toolchain stable`, so a rustc release can break a cut that every local gate passed
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [release, ci, toolchain, macos, windows, build]
+    estimated_hours: 3
+    owned_files:
+      - .github/workflows/release.yml
+      - build.sh
+      - scripts/build-macos-tray.sh
+      - scripts/build-windows-tray.ps1
+    context: >
+      MEASURED 2026-10-08: the v56.10.8.1 macOS release job (release.yml run
+      37852581825, job 113580173317, step "Build Tillandsias.app + tarball")
+      failed with exit 101. Its log shows dtolnay/rust-toolchain with
+      `toolchain: stable` updating the runner from rustc 1.98.1 to 1.99.0
+      (2026-09-28). rustc 1.99.0 denies `invalid_runtime_symbol_definitions`
+      on a non-variadic `open` declaration in crates/tillandsias-vm-layer/src/vz.rs
+      (vz::boot, macOS-only since 3db11291b). The darwin builder host runs
+      rustc 1.96.1. No rust-toolchain.toml exists, and both release.yml
+      toolchain sites (the macOS job and the job after it) say `stable`, so
+      every local gate compiled with a different rustc than the cut. Reproduced
+      red at the tag with RUSTUP_TOOLCHAIN=1.99.0 scripts/build-macos-tray.sh;
+      fixed forward by PR #256. The tag passed every gate that ran and still
+      could not build, because the compiler is an input no gate pins.
+    exit_criteria:
+      - One pinned toolchain version, read from a single source (rust-toolchain.toml or equivalent), is used by release.yml, build.sh, scripts/build-macos-tray.sh and the Windows build script.
+      - A check fails when any release.yml toolchain input is `stable` (or any value other than the pinned source). It is red on today's tree.
+      - Moving the pin is a deliberate PR. Nothing advances it implicitly.
+    verifiable_closure: |
+      The new check, run on today's tree (release.yml lines with `toolchain: stable`), refuses and names both sites. After the fix it passes, and a mutation that sets either site back to `stable` refuses again. `rustc --version` under build.sh and build-macos-tray.sh prints the pinned version on a host whose default is different.
+      unscoreable: unpinnable-until-the-guard-exists — the future check scripts/check-toolchain-pinned.sh with its fixture scripts/test-check-toolchain-pinned.sh is the deliverable, written in the same commit as the pin.
+    next_action: The coordinator schedules it. Its natural owner is whoever lands #256's follow-up.
+    events:
+      - type: filed
+        ts: "2026-10-09T00:14:14Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Filed at the coordinator's request with the PR #256 evidence: red at tag v56.10.8.1 under rustc 1.99.0 (the runner's stable), green on the fix. The host's 1.96.1 never saw it.
+
+  - packet_id: a-shared-cargo-target-dir-makes-the-plan-binary-judge-its-currency-against-the-wrong-checkout
+    order: 1562-ctdr
+    title: A shared CARGO_TARGET_DIR makes the plan binary judge its currency against the wrong checkout
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [plan, preflight, worktree, build-hygiene]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    context: >
+      MEASURED 2026-10-08 on tlatoanis-macbook-air, worktree wt-macrel (PR #256).
+      The host shares CARGO_TARGET_DIR=/Users/tlatoani/claudia/tillandsias/target
+      across worktrees (serial builds, one cache). `./build.sh --preflight`
+      refused test-pre-push-plan-lane-fails-closed-without-binary: "plan-only
+      lane: REFUSED — the resolved plan binary is STALE ... built-from=c331daf4aab2944a
+      checkout=718ac7108a0006a1". Rebuilding didn't help: cargo reported
+      tillandsias-plan Fresh, and a forced rebuild from wt-macrel embedded
+      c331daf4aab2944a, which is wt-macrel's own surface. The binary was
+      current. The checkout it compared against was wrong. `validator-surface-hash
+      --check` resolves the root with main.rs find_repo_root, which walks up
+      from current_exe(). For a shared target dir that reaches the MAIN
+      checkout (/Users/tlatoani/claudia/tillandsias), not the worktree being
+      gated. That checkout was behind origin/linux-next, so its surface hashed
+      to 718ac7108a0006a1. A `git pull --ff-only` of the main checkout made
+      --check answer ok:validator-surface:c331daf4aab2944a with no rebuild,
+      and the next preflight ran refused=0. The answer depended on the state
+      of an unrelated checkout. It can also go the other way: it passes a
+      binary that is stale for the worktree whenever the main checkout matches it.
+    exit_criteria:
+      - The currency check compares the binary against the checkout being gated (cwd's repository root, or an explicit root), not the checkout that happens to contain the target dir.
+      - With a shared CARGO_TARGET_DIR, a worktree whose surface differs from the main checkout's gets the right answer in both directions (stale is refused, current is accepted).
+    verifiable_closure: |
+      A fixture with two checkouts and one CARGO_TARGET_DIR under the first. Build from the second checkout; `--check` run in the second answers ok and run in the first answers stale. Then edit a surface file in the second only: `--check` in the second answers stale. On today's tree the first assertion is red (it answers from the first checkout either way).
+      unscoreable: unpinnable-until-the-guard-exists — the future fixture scripts/test-plan-binary-currency-shared-target-dir.sh is the deliverable.
+    next_action: The coordinator schedules it. Workaround until then is to keep the checkout that holds the shared target dir fast-forwarded to origin/linux-next.
+    events:
+      - type: filed
+        ts: "2026-10-09T00:14:14Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Filed at the coordinator's request. False stale-binary refusal during #256's preflight, cleared by fast-forwarding the main checkout with no rebuild.
