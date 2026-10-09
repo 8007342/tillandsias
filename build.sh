@@ -5283,6 +5283,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "scripts/test-guest-unit-hardening.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
+    _step "Checking test-ensure-hooks (1255-s4im)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-ensure-hooks.sh" 2>&1; then
+        _error "scripts/test-ensure-hooks.sh failed — a toolchain-less checkout may no longer arm its push guards (1255-s4im); read the fixture output above"
+        exit 1
+    fi
     _step "Checking test-litmus-steps-can-fail (1063-nraf; 38ms)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-steps-can-fail.sh" 2>&1; then
         _error "scripts/test-litmus-steps-can-fail.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
