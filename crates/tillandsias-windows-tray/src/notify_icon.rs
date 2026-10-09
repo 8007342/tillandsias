@@ -1265,7 +1265,10 @@ pub fn help_text() -> String {
             --reset-guest           HARD RESET: unregister the distro, which destroys its\n                            \
             Vault store and every sign-in, clear the store's Credential Manager\n                            \
             share and token, and reprovision. Keeps tillandsias-vm-uuid and the\n                            \
-            downloads. Exit: 0 = Ready, 1 = failed.\n    \
+            downloads. Runs only with --approve-hard-reset (or\n                            \
+            TILLANDSIAS_HARD_RESET_APPROVED=1) on that invocation; otherwise\n                            \
+            it refuses before touching anything. It never prompts.\n                            \
+            Exit: 0 = Ready, 1 = failed or refused.\n    \
             --forge <project>       Open a forge PTY for <project> without a tray click.\n                            \
             Add --shell (default), --claude, --codex or --opencode to pick\n                            \
             the intent. Runs the SAME launch path as the tray menu item.\n                            \
@@ -1603,7 +1606,7 @@ pub fn reset_state_once() -> i32 {
 /// The per-run approval and the `reset: HARD` announcement are S2.
 ///
 /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
-pub fn reset_guest_once() -> i32 {
+pub fn reset_guest_once(approve_arg: bool) -> i32 {
     use crate::provision_console::{PhaseConsole, process_tier, render_line};
 
     init_tracing();
@@ -1645,14 +1648,49 @@ pub fn reset_guest_once() -> i32 {
     let wipe = tillandsias_core::reset_state::destructive_reset_allowed();
 
     if wipe {
-        tillandsias_core::reset_state::announce_reset_plan(
+        // ORDER 1437-3iux S2 / 1559-9uvb (host-state-lifecycle; operator
+        // rulings 1443-bs9z and 2026-10-08). All three gates run BEFORE
+        // anything is destroyed, and each refusal exits 1 having touched
+        // nothing. NOTHING ASKS: operator, 2026-10-08, "No prompts like those
+        // ... A power user wanting to do a hard reset should be capable of
+        // figuring out where to place a flag and which flag".
+        use tillandsias_core::reset_state as rs;
+        // 1. Per-run, NON-INTERACTIVE approval: the argument or the variable
+        //    on THIS invocation. Never a prompt, a file or a prior run.
+        let approval = rs::hard_reset_approval(
+            approve_arg,
+            std::env::var(rs::HARD_APPROVAL_ENV).ok().as_deref(),
+        );
+        let Some(approval) = approval else {
+            eprintln!("{}", rs::HARD_REFUSED_NO_APPROVAL);
+            return 1;
+        };
+        // 2. HARD destroys the store, so the share for it must be clearable
+        //    afterwards; a share for a dead store delivered into the new guest
+        //    is the 803-49re incident. With Credential Manager unreachable that
+        //    cannot be promised. The refusal is the spec's OPEN QUESTION, kept
+        //    behind one named constant so the operator can flip it in one place.
+        if crate::installation_uuid::read_credential_string(
+            crate::installation_uuid::VAULT_SHARE_TARGET,
+        )
+        .is_err()
+        {
+            eprintln!("{}", rs::HARD_REFUSED_KEYRING_UNREACHABLE);
+            return 1;
+        }
+        // 3. Say what goes, naming the store loss, before it goes.
+        eprintln!("[tillandsias] reset: HARD (approved by {approval:?})");
+        rs::announce_reset_plan(
             &[
-                "the WSL2 distro and its disk",
+                "the WSL2 distro and its disk (wsl --unregister)",
+                "the Vault store inside the distro, and every sign-in it holds",
                 crate::installation_uuid::VAULT_SHARE_TARGET,
                 crate::installation_uuid::VAULT_ROOT_TOKEN_TARGET,
-                "the download cache",
             ],
-            &[crate::installation_uuid::TARGET_NAME],
+            &[
+                crate::installation_uuid::TARGET_NAME,
+                "the download cache (the rebuilt guest reuses it)",
+            ],
         );
     } else {
         eprintln!("{}", tillandsias_core::reset_state::RESET_SKIPPED_LINE);
@@ -1701,27 +1739,10 @@ pub fn reset_guest_once() -> i32 {
                     tracing::warn!(%err, "reset-state could not clear host vault credentials");
                 }
             }
-            // THE DOWNLOAD CACHE, AND ONLY IT. cache_root() is
-            // %LOCALAPPDATA%\tillandsias\cache, a SIBLING of wsl-build, which
-            // holds the BUILDER distro's disk on a developer host -- 142.9 GB of
-            // gate toolchain on yolanda (1295-b4i8). Removing the shared parent
-            // would take the builder with it, so this names the child.
-            let cache = WslLifecycle::cache_root();
-            match std::fs::remove_dir_all(&cache) {
-                Ok(()) => {
-                    println!("[reset-state] removed download cache {}", cache.display());
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    println!("[reset-state] no download cache to remove");
-                }
-                Err(err) => {
-                    eprintln!(
-                        "[reset-state] WARNING: could not remove download cache {}: {err}",
-                        cache.display()
-                    );
-                    tracing::warn!(%err, "reset-state could not remove download cache");
-                }
-            }
+            // The download cache (%LOCALAPPDATA%\tillandsias\cache) is KEPT:
+            // host-state-lifecycle preserves host downloads under HARD too,
+            // because the rebuilt guest reuses them (1437-3iux S2). This body
+            // used to remove it.
             println!(
                 "{}",
                 render_line(
