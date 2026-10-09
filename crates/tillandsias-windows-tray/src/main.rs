@@ -163,7 +163,13 @@ fn main() {
     // Destructive by design, and TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 is the one
     // documented opt-out; the BINARY owns that decision, so the installer
     // calls this unconditionally and never reads the variable itself.
-    if std::env::args().any(|a| a == "--reset-state" || a == "--reset-guest") {
+    // ORDER 1437-3iux: the two flags are two bodies now. --reset-guest is
+    // checked FIRST so a command line carrying both gets the stronger reset
+    // (which asks for its own approval) rather than silently the weaker one.
+    if std::env::args().any(|a| a == "--reset-guest") {
+        std::process::exit(notify_icon::reset_guest_once());
+    }
+    if std::env::args().any(|a| a == "--reset-state") {
         std::process::exit(notify_icon::reset_state_once());
     }
     // 945-vpg3: headless forge launch. Until this existed, the ONLY way to
@@ -806,6 +812,109 @@ fn ",
                 "the {which} must name tillandsias-vm-uuid as preserved"
             );
         }
+    }
+
+    /// The body of one `pub fn` in notify_icon.rs, with `//` comments stripped
+    /// so a comment quoting a forbidden call can neither satisfy nor fail a pin.
+    fn notify_fn_body(sig: &str, next_sig: &str) -> String {
+        let src = include_str!("notify_icon.rs");
+        let body = src
+            .split(sig)
+            .nth(1)
+            .unwrap_or_else(|| panic!("{sig} present"))
+            .split(next_sig)
+            .next()
+            .unwrap();
+        body.lines()
+            .map(|l| l.split("//").next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// ORDER 1437-3iux S1 (host-state-lifecycle "Windows SOFT reset keeps the
+    /// distro, the store and the downloads"). `--reset-state` is SOFT: it does
+    /// not unregister the distro, calls no credential clearer, keeps the
+    /// download cache, wipes only derived state inside the guest, and says
+    /// `reset: SOFT`. Pre-fix: FAILS, because reset_state_once unregisters,
+    /// clears Credential Manager and removes the cache.
+    #[test]
+    fn reset_state_is_soft_on_windows() {
+        let soft = notify_fn_body(
+            "pub fn reset_state_once() -> i32 {",
+            "pub fn reset_guest_once()",
+        );
+        // `soft_wipe_guest(` contains `wipe_guest(`; take the allowed call out
+        // before looking for the forbidden one, or the pin reds on its own fix.
+        let without_soft = soft.replace("soft_wipe_guest(", "");
+        for forbidden in [
+            "wipe_guest(",
+            "clear_guest_vault_credentials(",
+            "remove_dir_all(",
+        ] {
+            assert!(
+                !without_soft.contains(forbidden),
+                "SOFT reset must not call {forbidden}: it destroys operator data"
+            );
+        }
+        assert!(
+            soft.contains("soft_wipe_guest("),
+            "SOFT wipes derived state inside the guest"
+        );
+        assert!(soft.contains("reset: SOFT"), "SOFT must announce its kind");
+    }
+
+    /// ORDER 1437-3iux S1. `--reset-guest` stays HARD in its OWN body: it
+    /// unregisters the distro and clears the dead store's share, as today.
+    /// Pre-fix: FAILS, because reset_guest_once only delegates to
+    /// reset_state_once, so SOFT could not exist without taking HARD with it.
+    #[test]
+    fn reset_guest_stays_hard_in_its_own_body() {
+        let hard = notify_fn_body("pub fn reset_guest_once() -> i32 {", "\n}\n");
+        assert!(hard.contains("wipe_guest()"), "HARD unregisters the distro");
+        assert!(
+            hard.contains("clear_guest_vault_credentials("),
+            "HARD clears the share of the store it destroys (803-49re)"
+        );
+        assert!(
+            !hard.trim().starts_with("reset_state_once()"),
+            "HARD must not delegate to the SOFT body"
+        );
+    }
+
+    /// ORDER 1437-3iux S1. Each flag reaches its OWN body. Read from main.rs's
+    /// NON-TEST code with comments stripped: the older pin
+    /// `main_src.contains("notify_icon::reset_guest_once()")` was satisfied by
+    /// its own assertion string in this very file, while the real dispatch
+    /// sent `--reset-guest` to `reset_state_once()`, harmless while the two
+    /// were one body and wrong once SOFT and HARD split. Pre-fix: FAILS.
+    #[test]
+    fn each_reset_flag_dispatches_to_its_own_body() {
+        let src = include_str!("main.rs");
+        let code: String = src
+            .split("#[cfg(test)]\nmod tests {")
+            .next()
+            .unwrap()
+            .lines()
+            .map(|l| l.split("//").next().unwrap_or(""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let hard_branch = code
+            .split("a == \"--reset-guest\"")
+            .nth(1)
+            .expect("main must test for --reset-guest on its own");
+        let hard_call = hard_branch.split('}').next().unwrap();
+        // WHICH body a flag dispatches to is the contract, and the behavioural
+        // alternative spawns the tray with --reset-guest, which destroys the
+        // distro; this pin was red before the dispatch fix (076c5773d).
+        assert!(
+            // source-pin-ok: the dispatch target text is the contract (see above)
+            hard_call.contains("notify_icon::reset_guest_once()"),
+            "--reset-guest must reach the HARD body: {hard_call}"
+        );
+        assert!(
+            !code.contains("a == \"--reset-state\" || a == \"--reset-guest\""),
+            "the two flags must not share one dispatch"
+        );
     }
 
     /// windows-260723-1: the registered-distro integrity probe's Windows
