@@ -1961,7 +1961,8 @@ fn arm2_both_fds_drain_concurrently_in_full() {
     assert_eq!((o, e, ok), (1_048_576, 1_048_576, true));
 }
 
-/// ARM 3: a deadline kills the GROUP: timed_out, no code, under 2 s, and the
+/// ARM 3: a deadline kills the GROUP: timed_out, no code, well under the
+/// fixture's 30 s sleep, and the
 /// grandchild never writes its marker. The control runs the same fixture with
 /// group = false, and the grandchild survives, which proves the grouped arm
 /// is not passing because the grandchild never started.
@@ -1988,9 +1989,16 @@ fn arm3_a_deadline_kills_the_whole_group() {
             !has_code,
             "a timed-out child produced no exit code (group={group})"
         );
+        // A CEILING, NOT A LATENCY TARGET (1568-wclk). This was `< 2 s`, a
+        // wall-clock bound on a 500 ms deadline: under the landing queue's
+        // CPUWeight=20 scope with gate steps beside it, it took 2.27 s and
+        // evicted a shell-only PR (#272) twice. The PROPERTY is that the
+        // deadline fires at all (status timed_out above) and takes the group
+        // (the marker asserts below). A deadline that never fired would wait
+        // out the fixture's `sleep 30`, so 15 s still separates the two.
         assert!(
-            elapsed < Duration::from_secs(2),
-            "deadline took {elapsed:?}"
+            elapsed < Duration::from_secs(15),
+            "deadline took {elapsed:?}: the fixture sleeps 30 s, so this means the deadline never fired"
         );
         std::thread::sleep(Duration::from_secs(6));
         assert_eq!(
