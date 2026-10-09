@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Finding from yolanda-windows 2026-10-09 (1565-qtuk preflights), filed at the
+# coordinator's direction (p2, pickup windows).
+packets:
+  - packet_id: killing-a-windows-host-build-sh-leaves-its-guest-build-running-in-tillandsias-build-so-a-memory-reap-frees-nothing-and-the-orphan-keeps-compiling
+    order: 1567-9fgi
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [gate, preflight, windows, wsl, process-lifecycle, memory]
+    estimated_hours: 3
+    owned_files:
+      - scripts/with-wsl2-builder.sh
+      - scripts/lib-wsl-capture.sh
+      - scripts/test-wsl-builder-kill-reaches-guest.sh
+    title: |
+      Killing the Windows host side of ./build.sh (TaskStop, a harness memory reap, Ctrl-C on a piped run) leaves the guest's bash ./build.sh tree running in tillandsias-build: it keeps compiling and spawning guards, so a reap for low memory frees nothing and the next run competes with the orphan
+    context: |
+      Measured on yolanda-windows 2026-10-09, twice in one hour, both
+      "./build.sh --preflight 2>&1 | cat > log" (a pipe caller, so
+      with-wsl2-builder.sh EXECs wsl.exe; 1563-u2yx's TERM forwarding covers
+      only the same-file capture path, and forwards to the wsl.exe CLIENT):
+        1. host run stopped with TaskStop: the guest still held
+           "bash ./build.sh --preflight" (x4), "bash scripts/release-preflight.sh"
+           and a test-pending-capability-row-does-not-wedge.sh that kept
+           re-spawning release-preflight after the first pkill.
+        2. host run reaped by Claude Code for low host memory (3.4 of 15.5 GB
+           free) about 3.5 min in, while the guest cold-rebuilt the workspace
+           under the newly pinned rustc 1.99.0 (#258): the guest still ran
+           "cargo build -p tillandsias-policy" + rustc (325 MB RSS) and
+           check-cheatsheet-sources.sh after the reap.
+      Both were cleaned by hand with repeated pkill -KILL in the guest.
+      Same shape first seen 2026-09-13 (1174-u5wp: a land reaped for memory,
+      "build.sh --check" ran on 2476 s in the guest); 1174-u5wp made the land
+      tool ADOPT such an orphan's stamp, which stays valid, but an orphan that
+      outlives a MEMORY reap defeats the reap, and one that outlives a
+      deliberate stop races the next run on the same CARGO_TARGET_DIR.
+    exit_criteria:
+      - 'TERM, INT or HUP to the host build.sh (or its with-wsl2-builder.sh hop), on the exec path AND on the same-file capture path, ends the guest build tree within 15 s: no bash ./build.sh, cargo, rustc or scripts/ guard of that run survives in tillandsias-build'
+      - 'a hard kill of the host side (TaskStop / SIGKILL, which cannot be trapped) is also covered: the guest run is bound to its host session (e.g. the guest side watches its stdin or a host pid/lease and kills its own process group when the host goes away), and the guest tree is gone within 30 s'
+      - 'an uninterrupted run is unchanged: exit code, stdout/stderr content, tty/colour on a terminal, the 1563-u2yx same-file capture and its fixture (scripts/test-preflight-refused-name-lines-whole.sh 7/7) all as before'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-the-guard-exists — the future fixture
+      scripts/test-wsl-builder-kill-reaches-guest.sh starts a long guest run
+      through with-wsl2-builder.sh, kills the host side (TERM, then a separate
+      arm with SIGKILL), and counts the run's guest processes before and after;
+      red pre-fix (survivors > 0), green post-fix; a named skip without wsl.exe
+      and the tillandsias-build distro (any non-Windows host).
+    events:
+      - type: filed
+        ts: "2026-10-09T18:29:28Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's direction (p2, pickup windows) after two orphaned guest preflights during 1565-qtuk (PR #273).
