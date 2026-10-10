@@ -1,0 +1,4 @@
+    Checking tillandsias-vm-layer v0.1.0 (/Users/tlatoani/claudia/wt-j9fc/crates/tillandsias-vm-layer)
+   Compiling tillandsias-macos-tray v0.1.0 (/Users/tlatoani/claudia/wt-j9fc/crates/tillandsias-macos-tray)
+    Checking tillandsias-host-shell v0.1.0 (/Users/tlatoani/claudia/wt-j9fc/crates/tillandsias-host-shell)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.41s
