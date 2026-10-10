@@ -66,7 +66,6 @@ scripts/check-landed-but-open.sh
 scripts/check-landing-provenance.sh
 scripts/check-launch-artifacts-untracked.sh
 scripts/check-ledger-distillation.sh
-scripts/check-litmus-bindings.sh
 scripts/check-litmus-dead-inputs.sh
 scripts/check-litmus-expression-pinning-added.sh
 scripts/check-litmus-grep-escapes.sh
@@ -90,7 +89,6 @@ scripts/check-nix-builder-e2e.sh
 scripts/check-nix-deps-stability.sh
 scripts/check-no-base64-script-injection.sh
 scripts/check-no-competing-gate.sh
-scripts/check-no-end-user-brew-instruction.sh
 scripts/check-no-fixture-writes-live-ledger.sh
 scripts/check-no-python-scripts.sh
 scripts/check-no-spawn-in-if-not.sh

@@ -4768,7 +4768,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # retired files are exempt, historical strays are grandfathered (ratchet
     # list — deletions only), NEW unbound files refuse here.
     _step "Checking every litmus file is bound, retired, or grandfathered (660-ryhn)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-bindings.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-litmus-bindings.lua" 2>&1; then
         _error "a litmus file exists that no suite will ever run, or a binding names no file (660-ryhn) — see the verdict line above"
         exit 1
     fi
