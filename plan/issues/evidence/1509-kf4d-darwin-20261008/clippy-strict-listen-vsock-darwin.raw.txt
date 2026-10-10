@@ -1,0 +1,35 @@
+    Checking tokio v1.52.2
+   Compiling crc32fast v1.5.0
+    Checking objc2-foundation v0.2.2
+   Compiling tillandsias-headless v56.9.27 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-headless)
+   Compiling flate2 v1.1.9
+   Compiling png v0.17.16
+   Compiling usvg v0.45.1
+warning: tillandsias-headless@56.9.27: router sidecar absent: not embedded for target_os=macos (a Linux container-lane artifact; only Linux targets require it; 1269-6fcn)
+    Checking objc2-virtualization v0.2.2
+   Compiling tiny-skia v0.11.4
+   Compiling resvg v0.45.1
+   Compiling tillandsias-core v56.9.27 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-core)
+    Checking tokio-util v0.7.18
+    Checking tillandsias-logging v0.1.260513 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-logging)
+    Checking tokio-rustls v0.24.1
+    Checking tillandsias-secure-channel v0.1.0 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-secure-channel)
+    Checking tillandsias-otp v0.1.170 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-otp)
+    Checking deadpool v0.12.3
+    Checking h2 v0.3.27
+    Checking tillandsias-control-wire v0.1.170 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-control-wire)
+    Checking h2 v0.4.14
+    Checking hyper v0.14.32
+    Checking hyper v1.9.0
+    Checking tillandsias-vm-layer v0.1.0 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-vm-layer)
+    Checking tillandsias-podman v56.9.27 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-podman)
+    Checking tillandsias-scanner v56.9.27 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-scanner)
+    Checking tillandsias-browser-mcp v0.1.170 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-browser-mcp)
+    Checking hyper-util v0.1.20
+    Checking wiremock v0.6.5
+    Checking hyper-rustls v0.24.2
+    Checking reqwest v0.11.27
+    Checking tillandsias-host-shell v0.1.0 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-host-shell)
+    Checking tillandsias-vault-client v0.1.1 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-vault-client)
+    Checking tillandsias-metrics v0.1.260513 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-metrics)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.14s

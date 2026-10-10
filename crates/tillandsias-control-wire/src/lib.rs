@@ -715,6 +715,12 @@ pub enum ControlMessage {
     /// field that says so is cheaper than a constant nobody can find when it
     /// changes.
     ///
+    /// The guest ALWAYS answers exactly one frame: `IssueAck { seq_acked }`
+    /// once the target is recorded, or `Error`. It was silent on success until
+    /// 1509-kf4d, and the host client's `request` (which returns the NEXT
+    /// inbound frame) then took the reply owed to the request after it. The
+    /// version binding above is why adding the ack needs no wire bump.
+    ///
     /// @trace spec:vsock-transport
     SetVsockForwardTarget { cid: u32, port: u32 },
     /// In-VM headless → host: emitted when a flow or dependency state transition occurs.
@@ -768,7 +774,7 @@ pub enum ControlMessage {
     /// clock now reads `host_unix_ms`". Sent by the macOS tray on every
     /// NSWorkspace did-wake notification. The guest ALWAYS answers exactly one
     /// frame: `IssueAck { seq_acked }` on success (including "within 1 s, left
-    /// alone") or `Error`. Not silent-on-success like `SetVsockForwardTarget`:
+    /// alone") or `Error`, as `SetVsockForwardTarget` now does too (1509-kf4d):
     /// the host client's `request` returns the NEXT inbound frame, so a silent
     /// success would hand the caller's next reply to this request.
     ///
