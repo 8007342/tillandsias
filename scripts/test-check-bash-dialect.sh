@@ -20,10 +20,12 @@ fi
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/bash-dialect-fixture.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 fails=0
+scenarios=0
 
 expect() {
   # expect <name> <want-verdict> <want-exit>
   local name="$1" want="$2" want_rc="$3" got rc
+  scenarios=$((scenarios + 1))
   got="$(TILLANDSIAS_DIALECT_SCAN_DIR="$TMP" "$PLAN" script run "$CHECKER" 2>/dev/null)"
   rc=$?
   if [ "$got" != "$want" ] || [ "$rc" -ne "$want_rc" ]; then
@@ -209,6 +211,7 @@ expect "case-outside-cs-passes" "ok:bash-dialect-clean" 0
 # litmus used that name, which was never read: a "one-file" check scanned the
 # whole tree). Ignored, this falls back to the clean live tree and reads ok.
 printf '#!/usr/bin/env bash\nx=$(%s "$1" in /*) echo a ;; esac)\n' "$C" > "$TMP/cics.sh"
+scenarios=$((scenarios + 1))
 got="$(TILLANDSIAS_DIALECT_SCAN_FILES="$TMP/cics.sh" "$PLAN" script run "$CHECKER" 2>/dev/null)"
 [ "$got" = "blocked:bash4-unguarded:1" ] \
   || { echo "FAIL: scan-files-alias-scopes — got '$got'" >&2; fails=$((fails + 1)); }
@@ -221,9 +224,163 @@ printf '#!/usr/bin/env bash\nx="$1"\nprintf %%s "${x,,}"\n' > "$TMP/two-b.sh"
 expect "two-files-count-two" "blocked:bash4-unguarded:2" 1
 rm "$TMP/two-a.sh" "$TMP/two-b.sh"
 
+# ── 1553-x8js: sed brace groups, suffixless sed -i, stat -c without -f ─────
+# Each rule goes RED on a planted violation and GREEN on the portable form: a
+# rule that never fires is not a guard. Every planted file is checked to be
+# the file intended (non-empty, holding the construct) before its verdict
+# counts, so a heredoc that silently wrote nothing cannot pass for a refusal.
+plant() { # plant <file> <must-contain> ; content on stdin
+  cat > "$1"
+  if [ ! -s "$1" ] || ! grep -qF -- "$2" "$1"; then
+    echo "FAIL: MUTATION SETUP $1 is empty or lacks '$2' — the arm proves nothing" >&2
+    fails=$((fails + 1))
+  fi
+}
+S=sed   # spliced, so this file never spells an invocation it refuses
+X="$TMP/x8.sh"
+plant "$X" '{p}' <<EOF
+#!/usr/bin/env bash
+$S -n '/a/{p}' "\$1"
+EOF
+expect "sed-brace-p-refused" "blocked:bash4-unguarded:1" 1
+plant "$X" '{p;}' <<EOF
+#!/usr/bin/env bash
+$S -n '/a/{p;}' "\$1"
+EOF
+expect "sed-brace-p-terminated-passes" "ok:bash-dialect-clean" 0
+# The 1545-qdb5 / test-plan-only-lane-structural.sh:99 shape, verbatim in form.
+plant "$X" 'return 1#}' <<EOF
+#!/usr/bin/env bash
+$S "\\\\#marker line#{n;s#return 0#return 1#}" "\$G" > "\$M"
+EOF
+expect "sed-brace-hash-delim-refused" "blocked:bash4-unguarded:1" 1
+plant "$X" 'return 1#;}' <<EOF
+#!/usr/bin/env bash
+$S "\\\\#marker line#{n;s#return 0#return 1#;}" "\$G" > "\$M"
+EOF
+expect "sed-brace-hash-delim-terminated-passes" "ok:bash-dialect-clean" 0
+plant "$X" '{s/x/y/}' <<EOF
+#!/usr/bin/env bash
+$S '/a/{s/x/y/}' "\$1"
+EOF
+expect "sed-brace-subst-refused" "blocked:bash4-unguarded:1" 1
+plant "$X" '{p;}}' <<EOF
+#!/usr/bin/env bash
+$S -n '1{/a/{p;}}' "\$1"
+EOF
+expect "sed-brace-nested-close-refused" "blocked:bash4-unguarded:1" 1
+plant "$X" '{p;};}' <<EOF
+#!/usr/bin/env bash
+$S -n '1{/a/{p;};}' "\$1"
+x="\${HOME}/s/{a}"; $S "s/\${x}/{lit}/" "\$1"
+EOF
+expect "sed-brace-nested-terminated-and-braces-in-text-pass" "ok:bash-dialect-clean" 0
+# Several -e scripts are one script joined by newlines (check-claim-protocol-agrees.sh:58).
+plant "$X" "-e '}'" <<EOF
+#!/usr/bin/env bash
+$S -e ':a' -e '/\\\\\$/{N;s/\\\\\\n//;ba' -e '}' "\$1"
+EOF
+expect "sed-brace-multi-e-newline-passes" "ok:bash-dialect-clean" 0
+# A brace group closed on its own line inside a multi-line quoted script.
+plant "$X" '/a/{' <<EOF
+#!/usr/bin/env bash
+$S -n '/a/{
+p
+}' "\$1"
+EOF
+expect "sed-brace-multi-line-passes" "ok:bash-dialect-clean" 0
+plant "$X" "sed-brace: ok (" <<EOF
+#!/usr/bin/env bash
+$S -n '/a/{p}' "\$1" # sed-brace: ok (fixture: GNU-only tool, never run on darwin)
+EOF
+expect "sed-brace-marker-with-reason-passes" "ok:bash-dialect-clean" 0
+plant "$X" "sed-brace: ok" <<EOF
+#!/usr/bin/env bash
+$S -n '/a/{p}' "\$1" # sed-brace: ok
+EOF
+expect "sed-brace-marker-without-reason-refused" "blocked:bash4-unguarded:1" 1
+
+for form in "-i 's/a/b/' \"\$f\"" "-i \"s/a/\$v/\" \"\$f\"" "-i '2i cat >/dev/null' \"\$f\"" "-i '' 's/a/b/' \"\$f\"" "-n -i 's/a/b/' \"\$f\""; do
+  printf '#!/usr/bin/env bash\n%s %s\n' "$S" "$form" | plant "$X" "$S -"
+  expect "sed-i-suffixless-refused[$form]" "blocked:bash4-unguarded:1" 1
+done
+plant "$X" ' > "$f.tmp" && mv' <<EOF
+#!/usr/bin/env bash
+$S 's/a/b/' "\$f" > "\$f.tmp" && mv "\$f.tmp" "\$f"
+$S -i.bak 's/a/b/' "\$f" && rm -f "\$f.bak"
+echo "never write $S -i 's/a/b/' here"
+EOF
+expect "sed-i-portable-forms-and-mention-pass" "ok:bash-dialect-clean" 0
+
+T=stat
+plant "$X" "$T -c" <<EOF
+#!/usr/bin/env bash
+m="\$($T -c %Y "\$d" 2>/dev/null || echo '')"
+EOF
+expect "stat-c-no-fallback-refused" "blocked:bash4-unguarded:1" 1
+plant "$X" "$T -f -c" <<EOF
+#!/usr/bin/env bash
+t="\$($T -f -c %T "\$d" 2>/dev/null)" || t=""
+EOF
+expect "stat-f-c-gnu-filesystem-mode-refused" "blocked:bash4-unguarded:1" 1
+plant "$X" "|| $T -f" <<EOF
+#!/usr/bin/env bash
+m="\$($T -c %Y "\$d" 2>/dev/null || $T -f %m "\$d" 2>/dev/null)"
+if ! mode="\$($T -c '%a' "\$f" 2>/dev/null)"; then
+    mode="\$($T -f '%Lp' "\$f")"
+fi
+EOF
+expect "stat-c-with-bsd-fallback-passes" "ok:bash-dialect-clean" 0
+plant "$X" "_mt()" <<EOF
+#!/usr/bin/env bash
+_mt() {
+  local m
+  m="\$($T -c %Y "\$1" 2>/dev/null)" && { echo "\$m"; return; }
+  :
+  :
+  :
+  :
+  $T -f %m "\$1"
+}
+EOF
+expect "stat-c-fallback-in-same-function-passes" "ok:bash-dialect-clean" 0
+plant "$X" "stat-c: ok (" <<EOF
+#!/usr/bin/env bash
+t="\$($T -c %a /dev/net/tun 2>/dev/null)" # stat-c: ok (linux-only device probe)
+EOF
+expect "stat-c-marker-with-reason-passes" "ok:bash-dialect-clean" 0
+rm -f "$X"
+
+# HOST REALITY, so the rule answers the question that matters (does THIS sed
+# refuse it?) and not only the question it was written to (does it match?).
+# On BSD sed every refused script must FAIL and every passing one succeed; on
+# GNU sed only the passing half is decidable. The red forms are BSD-fatal by
+# measurement, not by assertion, on every darwin run of this fixture.
+printf 'a\nreturn 0\nb\n' > "$TMP/in.txt"
+if sed --version >/dev/null 2>&1; then BSD=0; else BSD=1; fi
+for red in '/a/{p}' '/a/{n;s#return 0#return 1#}' '/a/{s/a/X/}' '1{/a/{p;}}'; do
+  scenarios=$((scenarios + 1))
+  if [ "$BSD" = 1 ] && sed -n "$red" "$TMP/in.txt" >/dev/null 2>&1; then
+    echo "FAIL: host-reality: BSD sed ACCEPTED '$red', which the rule refuses — the rule is wrong" >&2
+    fails=$((fails + 1))
+  fi
+done
+for green in '/a/{p;}' '/a/{n;s#return 0#return 1#;}' '/a/{s/a/X/;}' '1{/a/{p;};}'; do
+  scenarios=$((scenarios + 1))
+  if ! sed -n "$green" "$TMP/in.txt" >/dev/null 2>&1; then
+    echo "FAIL: host-reality: this host's sed REFUSED '$green', which the rule passes" >&2
+    fails=$((fails + 1))
+  fi
+done
+scenarios=$((scenarios + 1))
+cp "$TMP/in.txt" "$TMP/in2.txt"
+sed 's/return 0/return 1/' "$TMP/in2.txt" > "$TMP/in2.txt.tmp" && mv "$TMP/in2.txt.tmp" "$TMP/in2.txt"
+grep -qx 'return 1' "$TMP/in2.txt" \
+  || { echo "FAIL: host-reality: the portable 'sed EXPR f > f.tmp && mv' form did not edit" >&2; fails=$((fails + 1)); }
+
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: check-bash-dialect fixture: $fails scenario(s) diverged" >&2
   exit 1
 fi
-echo "PASS: check-bash-dialect fixture 33/33 scenarios green"
+echo "PASS: check-bash-dialect fixture $scenarios/$scenarios scenarios green"
 exit 0

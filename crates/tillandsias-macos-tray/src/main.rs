@@ -192,9 +192,10 @@ fn main() {
              FLAGS:\n    \
              (no flags)    Launch the menu-bar tray and auto-boot the VM\n    \
              --provision   Provision the VM disk from the manifest, then exit\n    \
-             --reset-guest EPHEMERAL RESET: wipe the guest disk (and with it the\n                  \
-             in-VM vault) and reprovision from scratch. Destructive by design;\n                  \
-             you'll re-authenticate once\n    \
+             --reset-guest HARD RESET: wipe the guest disk (and with it the\n                  \
+             in-VM vault), clear the vault Keychain items, and reprovision\n                  \
+             from scratch. Needs a per-run approval: add --approve-hard-reset\n                  \
+             (or set TILLANDSIAS_HARD_RESET_APPROVED=1). You'll sign in again\n    \
              --reset-state SOFT RESET (order 1437-8c6p): keeps the VM, its guest\n                  \
              and Vault store, your sign-ins and the downloads; the guest\n                  \
              rebuilds its containers at its next boot. The installer runs it on\n                  \

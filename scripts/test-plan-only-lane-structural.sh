@@ -96,17 +96,46 @@ sed 's/&& _lane_staleness_check "\$plan_bin"; then/\&\& plan_binary_is_stale "$p
 # MUTATION D: keep the validator-surface machinery but make the "differs"
 # verdict (case arm `1)`) report FRESH instead of STALE — the shape of bug
 # that would silently readmit a changed validator.
-sed "\\#validate-yaml/check --strict-fragments/the fragment checkers' own sources changed#{n;s#return 0#return 1#}" \
+# 1553-x8js: the brace group closes with ';}'. Written '#}' it is fatal on BSD
+# sed (the sed macOS ships): sed wrote NOTHING, MUT_D was an EMPTY file, cmp
+# called that a real strip, an empty file parses, and an empty hook accepts
+# every push — so "arm D has teeth" passed 14/14 on darwin with no mutation at
+# all. check-bash-dialect.lua now refuses the unterminated group.
+sed "\\#validate-yaml/check --strict-fragments/the fragment checkers' own sources changed#{n;s#return 0#return 1#;}" \
     "$GUARD" > "$MUT_D"
 
+# THE INTENDED LINE CHANGED. cmp only proves the bytes differ, and an EMPTY or
+# truncated mutant differs too. Each mutation names the edit it was meant to
+# make, and the setup refuses unless the mutant is non-empty, kept the hook's
+# length within the strip's size, and carries THAT edit.
+_mut_intended() { # _mut_intended <name> <mutant> -> 0 when the named edit is present
+    local m="$2"
+    case "$1" in
+        MUT_A) grep -qF '# ORDER 1152-y3bv. A non-plan path is not automatically' "$GUARD" \
+                   && ! grep -qF '# ORDER 1152-y3bv. A non-plan path is not automatically' "$m" \
+                   && grep -qF '_lane_staleness_check' "$m" ;;
+        MUT_B) grep -qF 'if [[ -n "$_1152_trunk_blob" ]]; then' "$m" \
+                   && ! grep -qF '"$_1152_trunk_blob" == "$_1152_push_blob"' "$m" ;;
+        MUT_C) grep -qF '&& plan_binary_is_stale "$plan_bin"; then' "$m" \
+                   && ! grep -qF ']] && _lane_staleness_check "$plan_bin"; then' "$m" ;;
+        MUT_D) [ "$(grep -A1 -F "the fragment checkers' own sources changed" "$GUARD" | sed -n '2s/^[[:space:]]*//p')" = "return 0" ] \
+                   && [ "$(grep -A1 -F "the fragment checkers' own sources changed" "$m" | sed -n '2s/^[[:space:]]*//p')" = "return 1" ] \
+                   && [ "$(wc -l < "$m" | tr -d ' ')" = "$(wc -l < "$GUARD" | tr -d ' ')" ] ;;
+        *) return 1 ;;
+    esac
+}
 for _mp in "MUT_A:$MUT_A" "MUT_B:$MUT_B" "MUT_C:$MUT_C" "MUT_D:$MUT_D"; do
     _mname="${_mp%%:*}"; _mfile="${_mp#*:}"
-    if cmp -s "$GUARD" "$_mfile"; then
+    if [ ! -s "$_mfile" ]; then
+        bad "MUTATION SETUP $_mname is EMPTY — the sed that builds it failed on this host's sed (rc lost to the redirect); this mutation's arm proves nothing"
+    elif cmp -s "$GUARD" "$_mfile"; then
         bad "MUTATION SETUP $_mname is a NO-OP strip — the sed pattern no longer matches scripts/hooks/pre-push-local-gate.sh; this mutation's arm proves nothing until the pattern is updated"
+    elif ! _mut_intended "$_mname" "$_mfile"; then
+        bad "MUTATION SETUP $_mname differs from the hook but does NOT carry its intended edit — truncated or mis-targeted; this mutation's arm proves nothing"
     elif ! bash -n "$_mfile" 2>/dev/null; then
         bad "MUTATION SETUP $_mname produced a syntactically broken script"
     else
-        ok "MUTATION SETUP $_mname: cmp confirms a real strip, and it still parses"
+        ok "MUTATION SETUP $_mname: non-empty, differs, carries its intended edit, and still parses"
     fi
 done
 
@@ -467,6 +496,17 @@ case "$rc:$out" in
         bad "ARM D: a real validator-surface change was refused, but did not name the exact remedy (rc=$rc)"
         printf '%s\n' "$out" | sed 's/^/      /' >&2 ;;
 esac
+
+# CONTROL D (1553-x8js): the SAME swap harness with the UNMUTATED hook must
+# refuse. Without it, "MUTATION D accepted" cannot tell a real inversion from
+# a harness that accepts anything — which is what an empty MUT_D was.
+out="$(run_guard_cd_with "$GUARD")"
+rc="$(printf '%s' "$out" | sed -n 's/^GUARDRC=//p')"
+if [ -n "$rc" ] && [ "$rc" != "0" ]; then
+    ok "CONTROL D: the swap harness with the UNMUTATED hook refuses arm D's push (rc=$rc), so an acceptance under MUT_D is the mutation's doing"
+else
+    bad "CONTROL D: the swap harness ACCEPTED arm D's push with the UNMUTATED hook (rc=${rc:-none}) — mutation D's verdict below proves nothing"
+fi
 
 out="$(run_guard_cd_with "$MUT_D")"
 rc="$(printf '%s' "$out" | sed -n 's/^GUARDRC=//p')"

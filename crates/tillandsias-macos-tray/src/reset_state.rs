@@ -258,6 +258,139 @@ fn provision_now() -> Result<(), String> {
     }
 }
 
+// ─── ORDER 1574-mrst: the HARD reset (`--reset-guest`) ──────────────────────
+//
+// Parity with the Windows HARD reset (1437-3iux S2/S3; operator rulings
+// 1443-bs9z and 2026-10-08). The installer runs SOFT only and cannot reach
+// this; it runs only on an explicit `--reset-guest`. Every gate runs BEFORE
+// anything is destroyed, and each refusal exits having touched nothing.
+// NOTHING ASKS: the approval is per-run and non-interactive.
+
+/// Why a HARD reset refused before destroying anything. Each carries the
+/// shared, fleet-wide refusal string.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum HardRefusal {
+    NoApproval,
+    KeyringUnreachable,
+}
+
+impl HardRefusal {
+    pub(crate) fn line(&self) -> &'static str {
+        match self {
+            Self::NoApproval => tillandsias_core::reset_state::HARD_REFUSED_NO_APPROVAL,
+            Self::KeyringUnreachable => {
+                tillandsias_core::reset_state::HARD_REFUSED_KEYRING_UNREACHABLE
+            }
+        }
+    }
+}
+
+/// The two gates, pure. `approve_arg`/`env_value` are THIS invocation's; the
+/// probe is a read of the share. HARD destroys the store, so the share for it
+/// must be clearable afterwards: a share for a dead store delivered into the
+/// new guest is the 803-49re incident, and an unreachable Keychain cannot
+/// promise that.
+pub(crate) fn hard_reset_gate<T>(
+    approve_arg: bool,
+    env_value: Option<&str>,
+    keychain_probe: &std::io::Result<T>,
+) -> Result<tillandsias_core::reset_state::HardApproval, HardRefusal> {
+    let approval = tillandsias_core::reset_state::hard_reset_approval(approve_arg, env_value)
+        .ok_or(HardRefusal::NoApproval)?;
+    if keychain_probe.is_err() {
+        return Err(HardRefusal::KeyringUnreachable);
+    }
+    Ok(approval)
+}
+
+/// What a HARD reset destroys and keeps, announced before it destroys.
+pub(crate) fn hard_reset_plan(cache_root: &Path) -> (Vec<String>, Vec<String>) {
+    let mut destroyed = vec![
+        "the guest disk (rootfs.img) and the Vault store inside it, with every sign-in it holds"
+            .to_string(),
+    ];
+    for t in KEPT_CREDENTIALS {
+        destroyed.push(format!("keychain: {t}"));
+        destroyed.push(
+            cache_root
+                .join(format!("fallback_{t}"))
+                .display()
+                .to_string(),
+        );
+    }
+    destroyed.push(cache_root.join("vault-data").display().to_string());
+    let preserved = vec![
+        format!("keychain: {PRESERVED_ANCHOR} (anchors this INSTALLATION; 803-49re)"),
+        "the download cache and models (the rebuilt guest reuses them)".to_string(),
+    ];
+    (destroyed, preserved)
+}
+
+/// Clear the vault Keychain items in `service`, their fallback files and
+/// `vault-data` under `cache_root`, then READ BACK each item: the delete is
+/// Ok-on-timeout by design, so "deleted" is only claimed when a read sees it
+/// gone. Returns what could not be cleared.
+pub(crate) fn clear_vault_credentials_in(service: &str, cache_root: &Path) -> Vec<String> {
+    let mut left = Vec::new();
+    for t in KEPT_CREDENTIALS {
+        let _ = crate::installation_uuid::delete_credential_string_in(service, t);
+        match crate::installation_uuid::read_credential_string_in(service, t) {
+            Ok(None) => {}
+            Ok(Some(_)) => left.push(format!("keychain: {t} (still present after delete)")),
+            Err(e) => left.push(format!("keychain: {t} (could not confirm: {e})")),
+        }
+        if let Err(e) = remove_file(&cache_root.join(format!("fallback_{t}"))) {
+            left.push(e);
+        }
+    }
+    let vd = cache_root.join("vault-data");
+    match std::fs::remove_dir_all(&vd) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => left.push(format!("{}: {e}", vd.display())),
+    }
+    left
+}
+
+/// The HARD reset up to (not including) the reprovision, against explicit
+/// roots so a darwin test can run it on a scratch Keychain service and scratch
+/// directories. `wipe` destroys the guest disk. On a refusal nothing has been
+/// touched; the caller exits 1.
+pub(crate) fn run_hard_reset_in(
+    approve_arg: bool,
+    env_value: Option<&str>,
+    service: &str,
+    cache_root: &Path,
+    wipe: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let probe = crate::installation_uuid::read_credential_string_in(service, KEPT_CREDENTIALS[0]);
+    let approval = hard_reset_gate(approve_arg, env_value, &probe).map_err(|r| {
+        eprintln!("{}", r.line());
+        r.line().to_string()
+    })?;
+    eprintln!("[tillandsias] reset: HARD (approved by {approval:?})");
+    let (destroyed, preserved) = hard_reset_plan(cache_root);
+    let d: Vec<&str> = destroyed.iter().map(String::as_str).collect();
+    let p: Vec<&str> = preserved.iter().map(String::as_str).collect();
+    tillandsias_core::reset_state::announce_reset_plan(&d, &p);
+
+    wipe().map_err(|e| format!("reset-guest: wipe failed: {e}"))?;
+    // The wipe just invalidated the host's copy of THIS guest's vault identity.
+    // Left in place, the tray delivers the stale share into the fresh guest and
+    // every sign-in breaks (803-49re). Non-fatal, as on Windows: a reprovisioned
+    // guest beats an aborted reset, and the line names what to clear by hand.
+    let left = clear_vault_credentials_in(service, cache_root);
+    if left.is_empty() {
+        eprintln!("[reset-guest] vault Keychain items, fallbacks and vault-data cleared");
+    } else {
+        eprintln!(
+            "[reset-guest] WARNING: not cleared, remove by hand before the next launch: {}",
+            left.join("; ")
+        );
+    }
+    Ok(())
+}
+
 /// Absent is success: this is a reset, and a file that is already gone is the
 /// state we want. Only an existing file we cannot remove is an error.
 fn remove_file(p: &Path) -> Result<(), String> {
@@ -418,5 +551,153 @@ mod tests {
                 "SOFT reset must not call {forbidden}"
             );
         }
+    }
+
+    // ─── ORDER 1574-mrst: the HARD reset, on a scratch Keychain service ────
+    //
+    // Every Keychain item below lives under a `tillandsias-scratch-test-*`
+    // service (installation_uuid's ScratchService), never the production
+    // `tillandsias` service, and every directory is a scratch one.
+
+    use crate::installation_uuid::tests::ScratchService;
+    use crate::installation_uuid::{read_credential_string_in, write_credential_string_in};
+
+    /// Seed a scratch service and a scratch cache root with everything HARD
+    /// must clear, plus the anchor it must keep.
+    fn seeded(label: &str) -> (ScratchService, PathBuf) {
+        let svc = ScratchService::new();
+        for t in KEPT_CREDENTIALS {
+            write_credential_string_in(&svc.0, t, "scratch-secret").expect("seed item");
+        }
+        write_credential_string_in(&svc.0, PRESERVED_ANCHOR, "scratch-anchor")
+            .expect("seed anchor");
+        let cache = scratch(label);
+        for t in KEPT_CREDENTIALS {
+            std::fs::write(cache.join(format!("fallback_{t}")), b"x").unwrap();
+        }
+        std::fs::create_dir_all(cache.join("vault-data/core")).unwrap();
+        std::fs::write(cache.join("vault-data/core/seal"), b"x").unwrap();
+        (svc, cache)
+    }
+
+    fn all_present(svc: &str, cache: &Path) -> bool {
+        KEPT_CREDENTIALS.iter().all(|t| {
+            matches!(read_credential_string_in(svc, t), Ok(Some(_)))
+                && cache.join(format!("fallback_{t}")).exists()
+        }) && cache.join("vault-data").exists()
+    }
+
+    /// Exit criterion 1: no per-run approval, no destruction. Pre-fix
+    /// `--reset-guest` had no approval step at all and wiped straight away.
+    #[test]
+    fn hard_reset_without_approval_refuses_and_touches_nothing() {
+        let (svc, cache) = seeded("hard-noapprove");
+        for env in [None, Some(""), Some("0"), Some("yes"), Some("true")] {
+            let mut wiped = false;
+            let r = run_hard_reset_in(false, env, &svc.0, &cache, || {
+                wiped = true;
+                Ok(())
+            });
+            assert_eq!(
+                r,
+                Err(tillandsias_core::reset_state::HARD_REFUSED_NO_APPROVAL.to_string()),
+                "env {env:?} must not approve"
+            );
+            assert!(!wiped, "a refused HARD reset must not wipe (env {env:?})");
+            assert!(
+                all_present(&svc.0, &cache),
+                "a refused HARD reset must clear nothing"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&cache);
+    }
+
+    /// Exit criteria 2 and 3: approved by the argument OR the variable, HARD
+    /// wipes, then clears the Keychain items, their fallbacks and vault-data,
+    /// and keeps the installation anchor.
+    #[test]
+    fn approved_hard_reset_clears_the_vault_credentials_and_keeps_the_anchor() {
+        for (arg, env) in [(true, None), (false, Some("1"))] {
+            let (svc, cache) = seeded("hard-approved");
+            let mut wiped = false;
+            run_hard_reset_in(arg, env, &svc.0, &cache, || {
+                wiped = true;
+                Ok(())
+            })
+            .expect("an approved HARD reset over a reachable Keychain proceeds");
+            assert!(wiped, "HARD must wipe the guest");
+            for t in KEPT_CREDENTIALS {
+                assert_eq!(
+                    read_credential_string_in(&svc.0, t).expect("read"),
+                    None,
+                    "keychain {t} must be gone"
+                );
+                assert!(
+                    !cache.join(format!("fallback_{t}")).exists(),
+                    "fallback_{t} must be gone"
+                );
+            }
+            assert!(
+                !cache.join("vault-data").exists(),
+                "vault-data must be gone"
+            );
+            assert_eq!(
+                read_credential_string_in(&svc.0, PRESERVED_ANCHOR).expect("read anchor"),
+                Some("scratch-anchor".to_string()),
+                "the installation anchor must survive HARD (803-49re)"
+            );
+            let _ = std::fs::remove_dir_all(&cache);
+        }
+    }
+
+    /// A failed wipe clears nothing: the credentials go only once the guest
+    /// they belong to is gone.
+    #[test]
+    fn a_failed_wipe_clears_no_credentials() {
+        let (svc, cache) = seeded("hard-wipefail");
+        let r = run_hard_reset_in(true, None, &svc.0, &cache, || Err("disk busy".to_string()));
+        assert!(r.is_err_and(|e| e.contains("disk busy")));
+        assert!(all_present(&svc.0, &cache));
+        let _ = std::fs::remove_dir_all(&cache);
+    }
+
+    /// The Keychain gate, pure: an unreachable Keychain refuses even with
+    /// approval; approval is checked first.
+    #[test]
+    fn an_unreachable_keychain_refuses_hard() {
+        let unreachable: std::io::Result<Option<String>> =
+            Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "locked"));
+        assert_eq!(
+            hard_reset_gate(true, None, &unreachable),
+            Err(HardRefusal::KeyringUnreachable)
+        );
+        assert_eq!(
+            hard_reset_gate(false, None, &unreachable),
+            Err(HardRefusal::NoApproval)
+        );
+        assert!(hard_reset_gate(true, None, &Ok(None::<String>)).is_ok());
+    }
+
+    /// Exit criterion 4: the installer cannot reach the HARD path. It runs
+    /// SOFT only and never names the HARD verb or its approval.
+    #[test]
+    fn the_installer_cannot_reach_the_hard_reset() {
+        let installer = include_str!("../../../scripts/install-macos.sh");
+        for hard in [
+            "--reset-guest",
+            tillandsias_core::reset_state::HARD_APPROVAL_ARG,
+            tillandsias_core::reset_state::HARD_APPROVAL_ENV,
+        ] {
+            // source-pin-ok: the installer's own text is the contract — a HARD verb or approval named in it is the defect
+            assert!(
+                !installer.contains(hard),
+                "install-macos.sh must not reach HARD ({hard})"
+            );
+        }
+        // NEGATIVE CONTROL: the scan reads the real installer, which runs SOFT.
+        assert!(
+            installer.contains("--reset-state"),
+            "the installer must still run the SOFT reset"
+        );
     }
 }

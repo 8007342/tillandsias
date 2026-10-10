@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed 2026-10-10 on yoga at the coordinator's direction, found relaying
+# work/1577-568c from a forge.
+packets:
+  - packet_id: relay-preflight-reports-a-merge-that-failed-for-a-missing-git-identity-as-merge-conflict-and-must-name-the-real-reason
+    order: 1579-ih2h
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [relay, affordance, forge, git-identity, name-the-real-reason]
+    estimated_hours: 1
+    owned_files:
+      - scripts/relay-preflight.sh
+      - scripts/test-relay-preflight.sh
+    depends_on: []
+    title: |
+      scripts/relay-preflight.sh refuses any failed `git merge --no-ff` as `refused:relay-preflight:merge:merge-conflict:<ref>` with the remedy "resolve the conflict", exit 2; in a forge (read-only ~/.gitconfig, no user.name/email, 1569-citv) the merge fails because git cannot write the merge commit, not because anything conflicts, and the refusal sends the reader to look for a conflict that does not exist
+    context: |
+      Measured on yoga 2026-10-10 relaying work/1577-568c onto origin/linux-next
+      384882364 from a forge: rc=2,
+      `refused:relay-preflight:merge:merge-conflict:origin/work/1577-568c`, and
+      the captured merge output on stderr ended in "fatal: unable to
+      auto-detect email address (got 'forge@forge-tillandsias.(none)')".
+      `git merge-tree --write-tree` of the same pair was clean, and the same
+      run with GIT_AUTHOR_*/GIT_COMMITTER_* in env reached
+      ok:relay-preflight. The merge branch at scripts/relay-preflight.sh:235
+      judges `_cap git merge` by rc alone; `git diff --name-only
+      --diff-filter=U` after the failure is what tells a conflict (paths
+      listed) from anything else (none), the test land-queue.sh already uses
+      to name conflicting paths.
+    exit_criteria:
+      - 'a test-relay-preflight.sh arm running a clean, non-conflicting ref with no git identity available (HOME pointed at an empty dir, GIT_CONFIG_NOSYSTEM=1, no user.* in the clone, no GIT_AUTHOR_*/GIT_COMMITTER_* in env) prints refused:relay-preflight:merge:no-git-identity:<ref> with a remedy naming GIT_AUTHOR_*/GIT_COMMITTER_* or a repo-local user.name/email; pre-fix: refused:relay-preflight:merge:merge-conflict:<ref>'
+      - 'NEGATIVE CONTROL: arm 5 (a real conflict) still prints refused:relay-preflight:merge:merge-conflict:work/conflict, exit 2, and names the conflicting path'
+      - 'any other merge failure with no unmerged paths prints refused:relay-preflight:merge:merge-failed:<ref> with git''s own last line, never merge-conflict'
+    unscoreable: "unpinnable-until-the-guard-exists: the no-identity arm of scripts/test-relay-preflight.sh is written with the fix; pre-fix result: merge-conflict for a clean merge in a forge."
+    next_action: >
+      After a failed merge, list `git diff --name-only --diff-filter=U`: paths
+      means merge-conflict (name them); none plus "unable to auto-detect email
+      address" or "Please tell me who you are" in the capture means
+      no-git-identity; anything else is merge-failed with git's last line.
+    events:
+      - type: filed
+        ts: "2026-10-10T19:58:00Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed at the coordinator's direction: relaying 1577-568c from a forge, a clean merge with no git identity was refused as merge-conflict.

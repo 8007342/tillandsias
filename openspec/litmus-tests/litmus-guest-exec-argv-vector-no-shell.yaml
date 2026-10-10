@@ -36,7 +36,7 @@ phase: pre-build
 preconditions:
   - workspace contains crates/tillandsias-host-shell/src/pty/mod.rs
   - workspace contains crates/tillandsias-headless/src/exec_allowlist.rs
-  - workspace contains scripts/check-exec-argv-vector-workarounds.sh
+  - workspace contains scripts/lua/check-exec-argv-vector-workarounds.lua
   - a cargo toolchain is available
 
 critical_path:
@@ -73,14 +73,14 @@ critical_path:
     timeout_ms: 240000
 
   - step: "SOURCE SCAN: the retired escaping workarounds are not defined anywhere"
-    command: "mf_stage prod 0 OUT -- scripts/check-exec-argv-vector-workarounds.sh crates && mf_holds_ere OUT '^ok:exec-argv-workarounds-absent:[0-9]+ checked$' && echo 'ok: workarounds absent'"
+    command: ". scripts/plan-binary-probe.sh; mf_stage prod 0 OUT -- \"$(resolve_plan_binary)\" script run scripts/lua/check-exec-argv-vector-workarounds.lua -- crates && mf_holds_ere OUT '^ok:exec-argv-workarounds-absent:[0-9]+ checked$' && echo 'ok: workarounds absent'"
     expected_behavior: "ok: workarounds absent"
     timeout_ms: 30000
 
   - step: "SCAN NEGATIVE CONTROL: reintroducing a workaround DEFINITION turns the scan red"
     # Hermetic throwaway tree. Without this the scan leg would pass on any tree
     # where the grep simply never matches — including a broken grep.
-    command: "d=$(mktemp -d); mkdir -p \"$d/src\"; printf 'fn argv_survives_wt_reparse(a: &str) -> bool { true }\\n' > \"$d/src/x.rs\"; out=$(scripts/check-exec-argv-vector-workarounds.sh \"$d\" 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -qE '^violation:exec-argv-workaround-reintroduced:[0-9]+$' && echo 'ok: reintroduction refused'"
+    command: ". scripts/plan-binary-probe.sh; d=$(mktemp -d); mkdir -p \"$d/src\"; printf 'fn argv_survives_wt_reparse(a: &str) -> bool { true }\\n' > \"$d/src/x.rs\"; out=$(TILLANDSIAS_EXEC_ARGV_SCAN_ROOT=\"$d\" \"$(resolve_plan_binary)\" script run scripts/lua/check-exec-argv-vector-workarounds.lua 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -qE '^violation:exec-argv-workaround-reintroduced:[0-9]+$' && echo 'ok: reintroduction refused'"
     expected_behavior: "ok: reintroduction refused"
     timeout_ms: 30000
 
@@ -88,6 +88,6 @@ critical_path:
     # The comments recording why these went away are the institutional memory
     # this packet exists to protect. A scan that reddened on a mention would be
     # deleted by the first person who read a code comment.
-    command: "d=$(mktemp -d); mkdir -p \"$d/src\"; printf '// argv_survives_wt_reparse was deleted by 795-zshi; do not bring it back\\n' > \"$d/src/x.rs\"; out=$(scripts/check-exec-argv-vector-workarounds.sh \"$d\" 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -qE '^ok:exec-argv-workarounds-absent:[0-9]+ checked$' && echo 'ok: mention tolerated'"
+    command: ". scripts/plan-binary-probe.sh; d=$(mktemp -d); mkdir -p \"$d/src\"; printf '// argv_survives_wt_reparse was deleted by 795-zshi; do not bring it back\\n' > \"$d/src/x.rs\"; out=$(TILLANDSIAS_EXEC_ARGV_SCAN_ROOT=\"$d\" \"$(resolve_plan_binary)\" script run scripts/lua/check-exec-argv-vector-workarounds.lua 2>/dev/null); rc=$?; rm -rf \"$d\"; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -qE '^ok:exec-argv-workarounds-absent:[0-9]+ checked$' && echo 'ok: mention tolerated'"
     expected_behavior: "ok: mention tolerated"
     timeout_ms: 30000

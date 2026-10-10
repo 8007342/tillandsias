@@ -162,7 +162,10 @@ pub fn read_credential_string(target: &str) -> std::io::Result<Option<String>> {
     read_credential_string_in(KEYCHAIN_SERVICE, target)
 }
 
-fn read_credential_string_in(service: &str, target: &str) -> std::io::Result<Option<String>> {
+pub(crate) fn read_credential_string_in(
+    service: &str,
+    target: &str,
+) -> std::io::Result<Option<String>> {
     let output = security_bounded(&["find-generic-password", "-a", target, "-s", service, "-w"])?;
     if !output.status.success() {
         // `security` exits 44 (errSecItemNotFound) when the entry is missing.
@@ -183,7 +186,11 @@ pub fn write_credential_string(target: &str, value: &str) -> std::io::Result<()>
     write_credential_string_in(KEYCHAIN_SERVICE, target, value)
 }
 
-fn write_credential_string_in(service: &str, target: &str, value: &str) -> std::io::Result<()> {
+pub(crate) fn write_credential_string_in(
+    service: &str,
+    target: &str,
+    value: &str,
+) -> std::io::Result<()> {
     let status = security_bounded(&[
         "add-generic-password",
         "-a",
@@ -208,7 +215,7 @@ pub fn delete_credential_string(target: &str) -> std::io::Result<()> {
     delete_credential_string_in(KEYCHAIN_SERVICE, target)
 }
 
-fn delete_credential_string_in(service: &str, target: &str) -> std::io::Result<()> {
+pub(crate) fn delete_credential_string_in(service: &str, target: &str) -> std::io::Result<()> {
     let _status = security_bounded(&["delete-generic-password", "-a", target, "-s", service]);
     // Already-absent, successfully deleted, and a bound that fired are all Ok
     // for idempotency — the caller is removing a credential and any of those
@@ -402,7 +409,7 @@ fn generate_uuid() -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{SECURITY_CALL_BUDGET, spawn_bounded};
     use std::time::{Duration, Instant};
 
@@ -719,9 +726,9 @@ mod tests {
 
     /// Before: sweep dead runs. After (Drop, so a failed assertion still
     /// cleans): sweep this test's own service.
-    struct ScratchService(String);
+    pub(crate) struct ScratchService(pub(crate) String);
     impl ScratchService {
-        fn new() -> Self {
+        pub(crate) fn new() -> Self {
             sweep_scratch(None);
             Self(scratch_service())
         }

@@ -1,0 +1,4 @@
+command=bash scripts/check-gate-step-regimes.sh
+timestamp_utc=2026-10-03T16:56:35Z
+ok:gate-step-regimes:153
+exit=0

@@ -1,0 +1,7 @@
+timestamp_utc=2026-10-03T16:57:45Z
+git_status:
+?? plan/issues/evidence/1519-6rcp-darwin-20261003/
+?? scripts/gate-steps.d/760-1384-bqhy.step
+diff_check:
+diff_check_rc=0
+source_diff:

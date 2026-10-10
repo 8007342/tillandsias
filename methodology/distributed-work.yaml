@@ -2225,7 +2225,7 @@ distributed_work:
       UNBUILDABLE on darwin under -D dead-code until the fleet's one Apple
       host happened to compile. The author's own gates could not catch it:
       the Windows lane never compiles the non-Linux arm of files it edits,
-      check-cross-target-build.sh is single-target, and no Apple target is
+      check-cross-target-build.lua is single-target, and no Apple target is
       reachable from a non-Apple host. STATE THE STRUCTURAL FACT PLAINLY:
       for some platforms, ONE host is the sole detector of the entire
       compile surface. The cheap mitigation is a review-time convention,

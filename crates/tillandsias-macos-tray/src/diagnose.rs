@@ -1342,13 +1342,22 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
 ///
 /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
 pub fn reset_guest_main() -> i32 {
-    eprintln!(
-        "[reset-guest] This discards the local guest and its cached credentials. \
-         Everything lives in the cloud \u{2014} you'll re-authenticate once."
-    );
+    // ORDER 1574-mrst: HARD needs a per-run approval and a reachable Keychain,
+    // and clears the vault Keychain items, fallbacks and vault-data after the
+    // wipe (parity with the Windows HARD reset, 1437-3iux S2/S3).
+    use tillandsias_core::reset_state as rs;
+    let approve_arg = std::env::args().any(|a| a == rs::HARD_APPROVAL_ARG);
+    let env = std::env::var(rs::HARD_APPROVAL_ENV).ok();
+    let cache_root = tillandsias_core::cache_root::cache_root();
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
-    if let Err(err) = vz.wipe_provisioned_artifacts() {
-        eprintln!("[reset-guest] RESULT: FAILED \u{2014} wipe: {err}");
+    if let Err(err) = crate::reset_state::run_hard_reset_in(
+        approve_arg,
+        env.as_deref(),
+        crate::installation_uuid::KEYCHAIN_SERVICE,
+        &cache_root,
+        || vz.wipe_provisioned_artifacts().map_err(|e| e.to_string()),
+    ) {
+        eprintln!("[reset-guest] RESULT: FAILED \u{2014} {err}");
         return 1;
     }
     let _ = std::fs::remove_file(crashloop_state_path());

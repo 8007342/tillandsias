@@ -488,7 +488,21 @@ GATE
 # when this arm was written. gh is invoked inside the loop with no such
 # redirect, so a hungry gh tests the fd the LIST is read on rather than one
 # subprocess's plumbing. Two guards, and the arm must fail if EITHER is removed.
-sed -i '2i cat >/dev/null 2>&1 || true' "$GH_BIN"
+#
+# 1553-x8js: this was GNU `sed -i '2i ...'`. BSD sed read the script as a
+# backup suffix and the path as the script, failed ("invalid command code f"),
+# and left gh NOT hungry — so on darwin ARM 9 ran with only the gate draining
+# stdin, the shape the paragraph above measured as passing even with the fd-3
+# read reverted. Built portably now, and the build is checked before the arm's
+# verdict is allowed to mean anything.
+_gh9_before="$(cat "$GH_BIN")"
+awk 'NR == 2 { print "cat >/dev/null 2>&1 || true" } { print }' "$GH_BIN" > "$GH_BIN.tmp" \
+    && mv "$GH_BIN.tmp" "$GH_BIN" && chmod +x "$GH_BIN"
+if [ ! -s "$GH_BIN" ] || [ "$(cat "$GH_BIN")" = "$_gh9_before" ] \
+   || [ "$(sed -n 2p "$GH_BIN")" != 'cat >/dev/null 2>&1 || true' ] \
+   || [ "$(sed -n 1p "$GH_BIN")" != '#!/usr/bin/env bash' ] || [ ! -x "$GH_BIN" ]; then
+    bad "ARM 9 SETUP: the stdin-hungry gh stub was NOT built (empty, unchanged, wrong line 2, or not executable) — ARM 9's verdict below proves nothing"
+fi
 
 # BOUNDED, BECAUSE THE DEFECT'S FAILURE MODE IS A HANG AND NOT A WRONG ANSWER.
 # Measured 2026-09-21: with the fd-3 read reverted and a stdin-hungry gh, this

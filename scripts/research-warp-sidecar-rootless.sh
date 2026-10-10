@@ -140,7 +140,7 @@ echo "regime:kernel=$(uname -r)"
 echo "regime:podman=$(podman version --format '{{.Client.Version}}' 2>/dev/null)"
 echo "regime:rootless=$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null)"
 echo "regime:selinux=$(getenforce 2>/dev/null || echo unknown)"
-echo "regime:dev-net-tun=$(stat -c '%A %t,%T' /dev/net/tun 2>/dev/null || echo absent)"
+echo "regime:dev-net-tun=$(stat -c '%A %t,%T' /dev/net/tun 2>/dev/null || echo absent)"  # stat-c: ok (Linux-only rootless podman research probe; /dev/net/tun is a Linux device)
 echo "regime:posture=$posture_name"
 
 if [ "$do_build" -eq 1 ]; then

@@ -59,14 +59,29 @@ async fn a_child_that_ignores_stdin_is_not_an_error() {
     assert!(out.completion.is_success());
 }
 
-/// Pipeline composition: stage N's stdout feeds stage N+1's stdin.
+/// Pipeline composition: stage N's stdout feeds stage N+1's stdin, and every
+/// stage's status is kept. "ALPHA\n" can only come out of the last stage if
+/// stage 2 filtered stage 1's output and stage 3 transformed stage 2's.
+///
+/// Two Windows traps made this test fail as if the Pipeline were broken
+/// (1386-iubj, measured on native Windows):
+/// - a bare `sort` resolves to C:\Windows\System32\sort.exe, so the stages are
+///   programs with NO Windows namesake; do not reintroduce `sort`, `find` or
+///   `more` here;
+/// - an argv entry with an EMBEDDED NEWLINE reaches an MSYS child split into
+///   several arguments (printf: "ignoring excess arguments, starting with
+///   'alpha'"), so stage 1 printed only "beta". printf expands the `\n`
+///   escapes itself instead.
+/// The stage-1 assertion pins the input, so neither trap can hide again.
 #[tokio::test]
 async fn pipeline_feeds_each_stage() {
-    let p = Pipeline::new(Command::new(["printf", "beta\nalpha\ngamma\n"]))
-        .pipe_to(Command::new(["sort"]))
-        .pipe_to(Command::new(["head", "-n", "1"]));
+    let p = Pipeline::new(Command::new(["printf", r"beta\nalpha\ngamma\n"]))
+        .pipe_to(Command::new(["grep", "alpha"]))
+        .pipe_to(Command::new(["tr", "a-z", "A-Z"]));
     let out = p.run().await.expect("spawn");
-    assert_eq!(out.last().stdout_lossy(), "alpha\n");
+    assert_eq!(out.stages[0].stdout_lossy(), "beta\nalpha\ngamma\n");
+    assert_eq!(out.stages[1].stdout_lossy(), "alpha\n");
+    assert_eq!(out.last().stdout_lossy(), "ALPHA\n");
     assert!(out.all_succeeded());
     assert_eq!(out.stages.len(), 3);
 }

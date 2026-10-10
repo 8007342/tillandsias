@@ -61,8 +61,11 @@ _pre_fix="Pushes fall ""back to the anonymous mirror redirect"
 # inverted verdict — a mutation that silently did not apply would read as a
 # passing guard. Hazard shape 3 of 1252-r72q, written here by the person who
 # filed that order.
-sed -i "s|Pushes REFUSE\. The anonymous mirror redirect above is NOT used in their|${_pre_fix}|" "$SRC"
+# 1553-x8js: portable (BSD sed -i took the script as a backup suffix and failed).
+sed "s|Pushes REFUSE\. The anonymous mirror redirect above is NOT used in their|${_pre_fix}|" "$SRC" > "$SRC.x8tmp" \
+    && [ -s "$SRC.x8tmp" ] && ! cmp -s "$SRC" "$SRC.x8tmp" && mv "$SRC.x8tmp" "$SRC"
 _mutation_rc=$?
+rm -f "$SRC.x8tmp"
 # A zero exit from sed is not proof the text changed — sed succeeds on no match.
 # Verify the mutation is PRESENT before drawing any conclusion from the tests.
 _mutation_present=1

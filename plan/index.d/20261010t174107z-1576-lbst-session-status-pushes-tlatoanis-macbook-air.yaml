@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# 1576-lbst on work/1576-lbst.
+status:
+  - packet_id: after-a-successful-forge-launch-the-tray-label-sticks-on-the-last-build-status-because-the-guest-cannot-see-the-clis-rootless-containers
+    field: status
+    value: in_progress
+    ts: "2026-10-10T17:41:07Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: after-a-successful-forge-launch-the-tray-label-sticks-on-the-last-build-status-because-the-guest-cannot-see-the-clis-rootless-containers
+    event:
+      type: note
+      ts: "2026-10-10T17:41:07Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Fix on work/1576-lbst (crates/tillandsias-headless/src/main.rs).
+        - run_forge_agent_cli_mode, the CLI lane the macOS tray's Attach runs, now pushes a status event right BEFORE run_agent_container_attached ("<Agent> session open") and right AFTER it ("<Agent> session ended"). For the maintenance lane the events are "Terminal open" and "Terminal closed".
+        - The tray's label is the last pushed event. Pre-fix, the last push before a session was the image build's start ("Building Forge"), and the guest daemon's podman events cannot see the CLI's rootless containers, so nothing moved it.
+        - The events come from ForgeAgentMode::session_status_events.
+        MEASURED, darwin rustc 1.99.0:
+        - the_forge_session_attach_is_bracketed_by_status_pushes (a source pin, marked source-pin-ok because the attach needs podman and a TTY) is FAILED when spliced into the pre-fix main.rs ("a status push must precede the forge attach") and ok post-fix.
+        - forge_session_events_are_plain_and_never_a_build_label checks distinct, plain, never one of the 10 build labels.
+        - headless 745 passed, 0 failed. clippy -D warnings (bin) and fmt are clean. The aarch64-musl cross-build of the tests is clean. check-rust-source-pin-added is ok.
+        NOT MEASURED: the live label change on a Mac, within 10 s of a session starting (the row's exit criterion). It needs a real attach.

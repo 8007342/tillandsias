@@ -155,7 +155,7 @@ for cargo_toml in \
         # Replace version = "x.y.z" in [package] section (first occurrence)
         # BSD sed (macOS) requires '' after -i; GNU sed does not.
         if sed --version 2>/dev/null | grep -q GNU; then
-            sed -i "0,/^version = \"[0-9]*\.[0-9]*\.[0-9]*\"/s//version = \"${SEMVER}\"/" "$cargo_toml"
+            sed -i "0,/^version = \"[0-9]*\.[0-9]*\.[0-9]*\"/s//version = \"${SEMVER}\"/" "$cargo_toml"  # sed-i: ok (GNU branch only: guarded by sed --version | grep GNU; BSD takes the awk branch below)
         else
             # BSD sed: can't use 0,/pat/ address — use awk for first-occurrence replace
             awk -v ver="$SEMVER" '!done && /^version = "[0-9]+\.[0-9]+\.[0-9]+"/ { sub(/version = "[0-9]+\.[0-9]+\.[0-9]+"/, "version = \""ver"\""); done=1 } 1' "$cargo_toml" > "${cargo_toml}.tmp" && mv "${cargo_toml}.tmp" "$cargo_toml"
