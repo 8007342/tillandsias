@@ -4553,6 +4553,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Guard-activation auditor fixture passed"
 
+    # ORDER 1268-fx87. A litmus step's verdict is read from STDOUT only; its
+    # stderr is kept and named on failure. The fixture runs the REAL runner over
+    # a throwaway corpus with a manufactured stderr contaminant, plus a mutant
+    # runner with the merged capture restored, so the control cannot pass
+    # vacuously on a host whose build writes nothing to stderr.
+    _step "Checking a litmus verdict is read from stdout only (1268-fx87)..."
+    if ! _run_lua_decider "scripts/lua/test-litmus-verdict-reads-stdout-only.lua" 2>&1; then
+        _error "a litmus step's verdict again reads stderr, or a failing step no longer names its stderr log — see the FAIL lines above (1268-fx87)"
+        exit 1
+    fi
+    _info "Litmus stdout-verdict fixture passed"
+
     _step "Checking the litmus step model (901-jtvi)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then
         _error "the litmus step model regressed — a producer's failure or its stderr can go missing again (901-jtvi)"
