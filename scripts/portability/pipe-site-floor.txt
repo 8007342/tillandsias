@@ -434,7 +434,6 @@ scripts scripts/check-pickup-role-grammar.sh 3
 scripts scripts/check-plan-binary-current.sh 5
 scripts scripts/check-plan-binary-probe-usage.sh 8
 scripts scripts/check-plan-schema-divergence.sh 2
-scripts scripts/check-portability-idioms.sh 41
 scripts scripts/check-proxy-permissive-port-routing.sh 2
 scripts scripts/check-purge-clears-vault-credentials.sh 1
 scripts scripts/check-readme-discipline.sh 3

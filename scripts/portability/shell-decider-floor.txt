@@ -104,7 +104,6 @@ scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
 scripts/check-plan-ledger-readers.sh
 scripts/check-plan-schema-divergence.sh
-scripts/check-portability-idioms.sh
 scripts/check-proxy-permissive-port-routing.sh
 scripts/check-purge-clears-vault-credentials.sh
 scripts/check-readme-discipline.sh

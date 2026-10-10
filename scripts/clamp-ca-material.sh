@@ -19,7 +19,7 @@
 # so the selftest's literal "700"/"600"/"644" comparisons keep their meaning.
 #
 # BOTH FORMS ON ONE LINE is deliberate and not merely tidy:
-# check-portability-idioms.sh's _has_fallback matches the counterpart on the
+# check-portability-idioms.lua's fallback rule matches the counterpart on the
 # SAME LINE, so a wrapper whose fallback sat on a second line would still be
 # flagged. One line, one helper, seven call sites cleared.
 #
