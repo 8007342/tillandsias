@@ -35,6 +35,7 @@ pub use tillandsias_core::wsl::{
 // `WslRuntime` / `VzRuntime` symbols and tests can verify the trait impl
 // shape on Linux. Real backend bodies are cfg-gated inside the modules.
 pub mod vz;
+pub mod vz_entitlement;
 pub mod wsl;
 
 // The bound-listener readiness assertion both of those paths install

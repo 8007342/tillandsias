@@ -2710,6 +2710,14 @@ impl VmRuntime for VzRuntime {
             }
         }
 
+        // ORDER 811-j9fc. Before anything WRITES the image root (the read-only
+        // checks above may answer first): an unentitled binary (a plain
+        // `cargo build` tray) used to grow the disk, regenerate cidata.iso and
+        // create the swap image, then fail inside VZ's validate with a message
+        // that never named the signed build.
+        let exe = crate::vz_entitlement::current_exe_display();
+        crate::vz_entitlement::preflight_with(crate::vz_entitlement::probe_running_process, &exe)?;
+
         // Order 1481-2bth: grow the disk before it is attached.
         // A failure here is reported, never fatal: the VM boots at its
         // current size.
@@ -2959,8 +2967,11 @@ impl VmRuntime for VzRuntime {
         };
 
         let cfg = boot::build_vm_configuration(&spec)?;
-        unsafe { cfg.validateWithError() }
-            .map_err(|e| format!("validate: {}", e.localizedDescription()))?;
+        unsafe { cfg.validateWithError() }.map_err(|e| {
+            let raw = format!("validate: {}", e.localizedDescription());
+            // 811-j9fc backstop, for when the probe above answered Unknown.
+            crate::vz_entitlement::name_vz_entitlement_error(&raw, &exe).unwrap_or(raw)
+        })?;
 
         let alloc = VZVirtualMachine::alloc();
         let vm = unsafe { VZVirtualMachine::initWithConfiguration(alloc, &cfg) };
