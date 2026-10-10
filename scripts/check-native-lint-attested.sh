@@ -19,7 +19,7 @@
 # lint, and this check can only require that SOME host did. It says so in its
 # verdict: an attestation is the author's word, bound to content, not a run.
 # If the builder later lints darwin, replace this with a real clippy arm in
-# scripts/check-cross-target-build.sh (656-spux).
+# scripts/lua/check-cross-target-build.lua (656-spux).
 #
 # THE ATTESTATION is a commit trailer written ONLY by scripts/attest-native-lint.sh,
 # after its clippy run exits 0:

@@ -4434,9 +4434,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Its first run found a live break on linux-next: a `#[cfg(unix)]`
     # definition with three unguarded callers and no fallback arm, invisible to
     # every host's gate. Same shape as 653-7rag.
-    _step "Cross-target workspace check (656-spux)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-cross-target-build.sh" 2>&1; then
-        _error "the workspace does not compile for a non-host target (656-spux) — a cfg arm is missing a fallback"
+    _step "Cross-target workspace clippy (656-spux, 958-w4kq)..."
+    # PORTED to Lua and upgraded to clippy -D warnings (958-w4kq):
+    # scripts/lua/check-cross-target-build.lua. A host with the mingw C
+    # toolchain now gets the target for the PINNED toolchain added, so the
+    # check refuses instead of skipping on every gate since 1562-tc7p.
+    if ! _run_lua_decider "scripts/lua/check-cross-target-build.lua" 2>&1; then
+        _error "the workspace does not compile or lint clean for a non-host target (656-spux, 958-w4kq) — a cfg arm is missing a fallback, or cfg(windows) code fails clippy"
         exit 1
     fi
 
