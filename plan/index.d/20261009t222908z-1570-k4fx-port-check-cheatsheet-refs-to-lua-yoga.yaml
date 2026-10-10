@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed 2026-10-09 on yoga from the Lua-runtime audit: a gate step whose
+# only host dependency (ripgrep) reddened Windows mid-gate.
+packets:
+  - packet_id: check-cheatsheet-refs-hard-requires-ripgrep-which-reddened-the-windows-gate-twenty-minutes-in-and-is-a-pure-reference-resolver-over-cheatsheets-and-sources-so-it-is-ported-to-scripts-lua-with-no-host-tool-at-all
+    order: 1570-k4fx
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, ci-gate, gate-steps, portability, windows, cheatsheets]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-cheatsheet-refs.sh
+      - scripts/lua/check-cheatsheet-refs.lua
+      - scripts/gate-steps.d/165-1087-h2z9.step
+      - scripts/portability/shell-decider-floor.txt
+    title: |
+      scripts/check-cheatsheet-refs.sh (gate step 165-1087-h2z9 "Checking cheatsheet references resolve", every --check) resolves `@cheatsheet <path>` annotations and `## See also` bullets against cheatsheets/ — a pure text scan — but reaches rg 10 times and refuses the gate when neither the host nor the builder toolbox has ripgrep, which is how a Windows host "is told ~20 minutes in" (ledger, 1087-h2z9 lineage) and why rg had to be added to the toolbox (799-tb7q). Port it to scripts/lua/check-cheatsheet-refs.lua as STEP_LUA: fs.walk + text.captures_all, no host tool, same verdict
+    context: |
+      Measured on yoga 2026-10-09T22:20Z, linux-next 4b76eb15f:
+        - `bash scripts/check-cheatsheet-refs.sh`: rc=0, 654 ms (it prints
+          no ok: line; silence is its green, which 1174-jd8n names as the
+          shape a runner should refuse — verdict.ok fixes that for free).
+        - Not in pipe-site-floor.txt (0 pipe sites); in
+          shell-decider-floor.txt (one of 664), so the port lowers sh=
+          (668:floor:664) by one.
+        - Tool calls: rg 10 (through resolve_tool, else the toolbox, else
+          refuse at lines 64-70), git 2 (repo root only), awk 1.
+        - Ledger lineage: "`rg` (ripgrep) is not declared anywhere in
+          check-host-tools.sh ... yet ./build.sh --check needs it:
+          scripts/check-cheatsheet-refs.sh hard-requires ripgrep and refuses
+          the gate without it ... on Windows the gate re-execs into the
+          tillandsias-build WSL2 distro"; and the exit criterion of the row
+          that fixed it reads "a Windows host whose build distro lacks rg is
+          told at preflight, not by a gate refusal ~20 minutes in;
+          pre-fix result: FAILS (measured: the refusal came from
+          check-cheatsheet-refs.sh mid-gate)". The port removes the
+          dependency instead of declaring it.
+        - rg's one genuine advantage here (fast multi-file search) is moot:
+          the population is cheatsheets/**/*.md plus src-tauri/src/**/*.rs
+          and images/default/**/*.sh, which fs.walk enumerates and
+          text.captures_all scans with a compiled regex.
+      Related, not duplicated: 1384-ddua, 1525-c6jm, 1533-ew3n (decider
+      ports); 1570-k5yt (STEP_LUA fixture pattern); 799-tb7q (toolbox rg).
+    exit_criteria:
+      - 'scripts/gate-steps.d/165-1087-h2z9.step names STEP_LUA="scripts/lua/check-cheatsheet-refs.lua"; on 4b76eb15f it resolves the same reference set the .sh resolves (pre-fix: both run and the unresolved list is diffed empty) and ends with verdict.ok("cheatsheet-refs", <n>) instead of silence; the .sh is deleted; pre-fix: STEP_SCRIPT, 654 ms, rg x10'
+      - 'the Lua decider runs green on a PATH with no rg and no toolbox (the arm is a fixture that empties PATH of rg); pre-fix: the .sh refuses with "ripgrep (rg) is available neither on this host nor in the tillandsias-builder toolbox"'
+      - 'a fixture cheatsheet with one dangling `@cheatsheet missing/x.md` is refused by name; NEGATIVE CONTROL: the same tree with the file present is ok'
+      - 'shell-decider-floor.txt loses the line via --dump-floors; pre-fix: sh=668:floor:664'
+    unscoreable: "unpinnable-until-the-guard-exists: future STEP_LUA step 165 with a no-rg-on-PATH arm; pre-fix result: the .sh refuses without rg and prints nothing when green. NEGATIVE CONTROL: a dangling reference still refuses."
+    depends_on: []
+    next_action: >
+      Port the two annotation grammars (`@cheatsheet <path>` and the two
+      `## See also` bullet shapes) as text.captures_all patterns over
+      fs.walk of the three roots; resolve against fs.exists; keep the
+      unresolved-list diagnostics on stderr; switch step 165 to STEP_LUA;
+      dump floors; delete the .sh.
+    events:
+      - type: filed
+        ts: "2026-10-09T22:29:08Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed from the Lua-runtime audit on yoga. Measured: 654 ms per --check as gate step 165, rg x10 hard dependency with a recorded Windows mid-gate refusal, silent green; a fs.walk + text.captures_all port needs no host tool and gains a verdict line.

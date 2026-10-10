@@ -54,5 +54,6 @@ images/router/entrypoint.sh
 images/vault/entrypoint.sh
 images/warp/entrypoint.sh
 images/web/entrypoint.sh
+images/web-wrangler/entrypoint.sh
 # Creates the toolbox that carries the tools (§6.5 row 5).
 scripts/ensure_toolbox.sh

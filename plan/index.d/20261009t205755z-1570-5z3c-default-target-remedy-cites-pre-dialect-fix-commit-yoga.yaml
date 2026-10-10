@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Found 2026-10-09 on yoga while fixing PR #276 (1564-lk9f), filed at the
+# coordinator's direction (p3, pickup linux).
+packets:
+  - packet_id: preflight-fixtures-default-target-remedy-cites-84f37ff24-whose-case-inside-command-substitution-fails-check-bash-dialect-so-following-the-remedy-verbatim-trades-one-eviction-for-another
+    order: 1570-5z3c
+    status: ready
+    kind: defect
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, fixture-hygiene, bash-dialect, remedy-text]
+    estimated_hours: 1
+    owned_files:
+      - scripts/preflight-fixtures-default-target.sh
+    title: |
+      The 1401-x76w refusal prints "remedy: resolve the plan binary inside the checkout and absolutise it before any cd (see 84f37ff24)", but 84f37ff24's pattern puts an unparenthesised case pattern inside $( ), which check-bash-dialect refuses (bash 3.2); its own author fixed that one commit later in b17f6a8a3, and the remedy still cites the broken commit
+    context: |
+      Measured on yoga 2026-10-09 during PR #276 (1564-lk9f): the queue evicted
+      head 704537880 at full tier with refused:fixture-default-target; the fix
+      copied 84f37ff24's line,
+        BIN="$(cd "$ROOT" && _p="$(resolve_plan_binary)" && case "$_p" in /*) ... esac)"
+      and the next queue run (same PR) evicted it with
+        [check-bash-dialect] UNPARENTHESISED case pattern inside $( ) in
+        'scripts/test-append-event-archived-refusal.sh' ... blocked:bash4-unguarded:1
+      git log -- scripts/hardware-fingerprint.sh shows b17f6a8a3 "fix(1375-2x4e):
+      the absolutising case moves into a function — bash 3.2 cannot parse an
+      unparenthesised case pattern inside $( )", directly after 84f37ff24. The
+      remedy string at scripts/preflight-fixtures-default-target.sh:127 was
+      never updated, so a remedy followed verbatim costs one more full-tier
+      gate run per author.
+    exit_criteria:
+      - 'following the 1401-x76w remedy text verbatim yields a fixture that passes check-bash-dialect: the remedy cites a bash-3.2-clean pattern (b17f6a8a3, or the shape inline: the case in a function called from the substitution); pre-fix: it cites 84f37ff24, whose shape check-bash-dialect refuses (yoga, PR #276 head 704537880)'
+      - 'NEGATIVE CONTROL: the 1401-x76w refusal itself still fires on a fixture that resolves the plan binary in the caller''s cwd'
+    unscoreable: "unpinnable-until-the-guard-exists: future arm in scripts/test-preflight-fixtures-default-target.sh that applies the printed remedy's cited pattern to a scratch fixture and runs scripts/lua/check-bash-dialect.lua over it, expecting ok:bash-dialect-clean; pre-fix result: the cited 84f37ff24 shape yields blocked:bash4-unguarded. NEGATIVE CONTROL: the cwd-relative fixture is still refused."
+    depends_on: []
+    next_action: >
+      Point the remedy at b17f6a8a3 (or spell the function shape inline) in
+      scripts/preflight-fixtures-default-target.sh, and add the arm above.
+    events:
+      - type: filed
+        ts: "2026-10-09T20:57:55Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed at the coordinator's direction (p3, pickup linux) after PR #276 was evicted twice in a row by following the remedy text.

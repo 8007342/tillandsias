@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-credential-manager-retains-stale-unseal-share-across-guest-wipe
+    field: status
+    value: completed
+    ts: "2026-10-08T17:41:05Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: windows-credential-manager-retains-stale-unseal-share-across-guest-wipe
+    event:
+      type: completed
+      ts: "2026-10-08T17:41:05Z"
+      host: yolanda-windows
+      summary: |-
+        status 'completed' with evidence_refs: a8cd8cc32 (Part A) + 4fc7be930 (890-y72v, Part B): does-not-reproduce esmeraldinha v56.9.5.1 2026-09-05; windows-tray bin suite green since 2026-09-04
+  - packet_id: windows-credential-manager-retains-stale-unseal-share-across-guest-wipe
+    event:
+      type: note
+      ts: "2026-10-08T17:41:05Z"
+      host: yolanda-windows
+      summary: |-
+        Completed (coordinator ruling 2026-10-08). Both halves of the deliverable are on trunk: - Part A, every Windows wipe path clears the host's vault credentials: a8cd8cc32 (pinned by scripts/check-purge-clears-vault-credentials.sh). - Part B, the handover reconciles instead of overwriting: 890-y72v, landed 4fc7be930 (completed 2026-09-15). DeliverCredentialsOutcome {Accepted, Rejected{reason}, Superseded, Unstated} means the guest refuses a delivered share that does not open its vault, and the host learns why, fail-closed (Unstated is never success). - Evidence the failure is gone: walked on the Windows floor and does NOT reproduce (esmeraldinha, v56.9.5.1, 2026-09-05 finding); the windows-tray bin suite has been green since 2026-09-04. CONSIDERED AND DEFERRED: a host-side binding of the stored share to the vault STORE id (store-scoped, never the guest instance, because 1437-3iux makes the store outlive the guest). It would refuse the same push one hop earlier than Rejected does, at the cost of a WIRE_VERSION bump plus a guest and a tray change, and no case is known that Rejected misses. If 1437-3iux, once landed, produces a case Rejected handles badly (a retry loop, a reason too vague to act on), file it then with that measurement.

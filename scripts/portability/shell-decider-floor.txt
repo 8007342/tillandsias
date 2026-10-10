@@ -51,7 +51,6 @@ scripts/check-fragment-backlog.sh
 scripts/check-fragment-closure-evidence-added.sh
 scripts/check-fragment-events-land.sh
 scripts/check-fragment-keys-are-read.sh
-scripts/check-fragment-status-loss.sh
 scripts/check-fragment-ts-skew.sh
 scripts/check-gate-memory-floor.sh
 scripts/check-gate-step-prefix-across-refs.sh
@@ -105,7 +104,6 @@ scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
 scripts/check-plan-ledger-readers.sh
 scripts/check-plan-schema-divergence.sh
-scripts/check-portability-idioms.sh
 scripts/check-proxy-permissive-port-routing.sh
 scripts/check-purge-clears-vault-credentials.sh
 scripts/check-readme-discipline.sh

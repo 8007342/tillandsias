@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-core"
-version = "56.9.27"
+version = "56.10.9"
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -28,3 +28,6 @@ tempfile = "3"
 [build-dependencies]
 resvg = "0.45"
 tiny-skia = "0.11"
+
+[lints]
+workspace = true

@@ -486,10 +486,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
+      # ORDER 1562-tc7p: the toolchain is PINNED in rust-toolchain.toml, the one
+      # source every build reads. `toolchain: stable` floated this job to rustc
+      # 1.99.0 under v56.10.8.1 and broke a cut every local gate had passed.
+      - name: Read the pinned Rust toolchain
+        id: rust-pin
+        shell: bash
+        run: |
+          channel="$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' rust-toolchain.toml)"
+          if [[ ! "$channel" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::rust-toolchain.toml channel '${channel}' is not an exact X.Y.Z pin (1562-tc7p)"
+            exit 1
+          fi
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+
+      - name: Install the pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
         with:
-          toolchain: stable
+          toolchain: ${{ steps.rust-pin.outputs.channel }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
@@ -612,10 +626,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
+      # ORDER 1562-tc7p: the toolchain is PINNED in rust-toolchain.toml, the one
+      # source every build reads. `toolchain: stable` floated this job to rustc
+      # 1.99.0 under v56.10.8.1 and broke a cut every local gate had passed.
+      - name: Read the pinned Rust toolchain
+        id: rust-pin
+        shell: bash
+        run: |
+          channel="$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' rust-toolchain.toml)"
+          if [[ ! "$channel" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::rust-toolchain.toml channel '${channel}' is not an exact X.Y.Z pin (1562-tc7p)"
+            exit 1
+          fi
+          echo "channel=${channel}" >> "$GITHUB_OUTPUT"
+
+      - name: Install the pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
         with:
-          toolchain: stable
+          toolchain: ${{ steps.rust-pin.outputs.channel }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2

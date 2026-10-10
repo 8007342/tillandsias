@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed 2026-10-09 on yoga from the Lua-runtime audit: the gate step with
+# the clearest cross-platform reddening record among pure scanners.
+packets:
+  - packet_id: audit-guard-activation-the-gate-step-that-falsely-accused-five-guards-and-blocked-every-macos-land-on-2026-09-12-is-a-pure-scan-over-the-tree-and-is-ported-to-scripts-lua-with-fs-walk-and-json-so-gnu-bsd-grep-and-jq-leave-the-gate
+    order: 1570-25iq
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, ci-gate, gate-steps, portability, macos]
+    estimated_hours: 4
+    owned_files:
+      - scripts/audit-guard-activation.sh
+      - scripts/lua/audit-guard-activation.lua
+      - scripts/gate-steps.d/190-1087-h2z9.step
+      - scripts/portability/pipe-site-floor.txt
+    title: |
+      scripts/audit-guard-activation.sh (599-4wzr; gate step 190-1087-h2z9 "Auditing that every guard is actually wired", every --check) is a pure scan — enumerate check-*.sh, grep the activation surfaces, emit a jq-shaped report — that reddened every macOS land on 2026-09-12 when GNU `grep -Rl` descended a symlink farm BSD does not, and was patched to search skills/ first; it takes 2.85 s on yoga with 4 jq calls and 3 pipe sites. Port it to scripts/lua/audit-guard-activation.lua as STEP_LUA with fs.walk + text.is_match + json.encode, same verdict
+    context: |
+      Measured on yoga 2026-10-09T22:20Z, linux-next 4b76eb15f:
+        - `bash scripts/audit-guard-activation.sh`: rc=0, 2,853 ms.
+        - pipe-site-floor.txt: `scripts scripts/audit-guard-activation.sh
+          3`. It is NOT in shell-decider-floor.txt (its prefix is audit-,
+          not check-/test-/verify-/guard-), so the ratchet neither counts
+          nor would refuse a sibling: the port does not change sh=, only
+          pipes= (3922:floor:3914) and gate-steps:sh=156:lua=1.
+        - Tool calls: jq 4, git 1 (repo root), no awk/sed; the activation
+          surfaces it reads are build.sh, scripts/**, openspec/litmus-tests/
+          *.yaml, .github/workflows/*.yml, scripts/install-hooks.sh,
+          .claude/skills/** and methodology* — all under the repo, all
+          readable with fs.walk/fs.read.
+        - Reddening record (ledger, verbatim): "MACOS REGIME: THE
+          GUARD-ACTIVATION AUDIT FALSELY ACCUSES 5 GUARDS AND BLOCKS EVERY
+          MACOS LAND. Measured on tlatoanis-macbook-air 2026-09-12 after
+          eca8c7276 reached trunk"; fix 7b9b58e55 "makes
+          scripts/audit-guard-activation.sh search the canonical skills/
+          tree before the .claude mirror". check-portability-idioms.sh's
+          header names the same incident: "grep -Rl over a symlink farm:
+          GNU descends symlinked dirs, BSD does not — five wired guards
+          reported ORPHAN, macOS lands refused (1087-h2z9)".
+        - A Lua port walks with ONE walker on every host (fs.walk, the
+          binary's), matches with ONE regex engine (text.is_match), and
+          encodes its report with json.encode (lua_std) — the three
+          platform seams the incident crossed are gone, not guarded.
+      Related, not duplicated: 1384-ddua, 1525-c6jm, 1533-ew3n (decider
+      ports); 1570-k5yt (STEP_LUA fixture pattern).
+    exit_criteria:
+      - 'scripts/gate-steps.d/190-1087-h2z9.step names STEP_LUA="scripts/lua/audit-guard-activation.lua" and the step prints the same total=/active=/orphan= verdict as the .sh on the same tree (pre-fix measured by running both on 4b76eb15f and diffing); the .sh is deleted; pre-fix: STEP_SCRIPT, 2,853 ms, no .lua'
+      - 'a fixture tree with a symlinked directory containing a guard reference is judged the same whether or not the walker follows links (the 2026-09-12 shape is a named arm); pre-fix: the .sh''s answer depended on GNU vs BSD grep'
+      - 'wall time on yoga recorded on the closing event beside 2,853 ms; pipe-site-floor.txt loses the 3-site entry via --dump-floors'
+      - 'NEGATIVE CONTROL: a scratch tree with an unreferenced check-x.sh is still reported orphan=1 and the step still refuses'
+    unscoreable: "unpinnable-until-the-guard-exists: future STEP_LUA step 190 whose Lua fixture carries the symlink-farm arm; pre-fix result: STEP_SCRIPT runs the .sh in 2,853 ms and the symlink arm has no fixture. NEGATIVE CONTROL: orphan=1 still refuses."
+    depends_on: []
+    next_action: >
+      Port the surface list and the per-guard match loop to Lua over
+      fs.walk; keep the verdict line and the orphan listing byte-identical;
+      switch step 190 to STEP_LUA; add the symlink arm to the fixture;
+      dump floors; delete the .sh.
+    events:
+      - type: filed
+        ts: "2026-10-09T22:29:08Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed from the Lua-runtime audit on yoga. Measured: 2,853 ms per --check as gate step 190, jq x4, 3 pipe sites; recorded macOS reddening 2026-09-12 (GNU/BSD grep -Rl over a symlink farm) that a fs.walk + text.is_match port removes rather than guards.

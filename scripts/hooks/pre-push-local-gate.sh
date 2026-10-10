@@ -1447,8 +1447,16 @@ attempt_plan_only_lane() {
             LANE_NOTES+=("scripts/check-fragment-ts-skew.sh absent — skipped")
         fi
 
-        if [[ -f scripts/check-fragment-status-loss.sh ]]; then
-            if ! out="$(bash scripts/check-fragment-status-loss.sh 2>&1)"; then
+        if [[ -f scripts/lua/check-fragment-status-loss.lua ]]; then
+            # ORDER 1570-mxcg: the guard is Lua on `script run`, asking the same
+            # plan_bin this lane already resolved and ran above. A binary too
+            # old to carry `script` cannot run it, and a guard that cannot run
+            # is a refusal here, never a skip (787-f7dh).
+            if ! grep -qx script <<<"$("$plan_bin" capabilities 2>/dev/null)"; then
+                echo "plan-only lane: validation FAILED — $plan_bin has no \`script run\`, so check-fragment-status-loss cannot run (rebuild: cargo build --release -p tillandsias-plan; full gate required)" >&2
+                return 1
+            fi
+            if ! out="$("$plan_bin" script run scripts/lua/check-fragment-status-loss.lua -- --plan "$plan_bin" 2>&1)"; then
                 echo "plan-only lane: validation FAILED — check-fragment-status-loss refused (full gate required):" >&2
                 echo "$out" | head -6 | sed 's/^/  /' >&2
                 return 1
@@ -1472,7 +1480,7 @@ attempt_plan_only_lane() {
             # refuse here, and broke test-gate-stamp-scope.sh case 7, whose tree
             # legitimately provisions a minimal set. Scope kept to the binary,
             # which is what 1124-7f3u is about.
-            LANE_NOTES+=("scripts/check-fragment-status-loss.sh absent — skipped")
+            LANE_NOTES+=("scripts/lua/check-fragment-status-loss.lua absent — skipped")
         fi
     else
         # ORDER 1124-7f3u: A SKIP HERE IS A REFUSAL, because yq cannot stand in
@@ -1483,7 +1491,7 @@ attempt_plan_only_lane() {
         # above, which asks "is this YAML, and is it a map" — yq answers that.
         # It is wrong here. The two checks below are the FOLD: `check
         # --strict-fragments` reads every fragment together, and
-        # check-fragment-status-loss.sh asks whether a status transition a
+        # check-fragment-status-loss.lua asks whether a status transition a
         # fragment declares actually survives folding. Neither is a property of
         # any single blob, and no YAML parser can compute either. So a host with
         # yq and no plan binary passed the fail-closed test and then skipped the
@@ -1492,8 +1500,8 @@ attempt_plan_only_lane() {
         # MEASURED 2026-09-12: yoga's honest reopen of 1115-yvrq reached
         # origin/linux-next carrying a 'completed' event beside a status that
         # folds as in_progress. build.sh --check refuses that shape
-        # (check-fragment-status-loss.sh exits 2 unbuilt, and build.sh runs it
-        # through _run, which honours the rc) — but a fragment-only push never
+        # (check-fragment-status-loss.lua exits 2 unbuilt, and build.sh runs it
+        # through _run_lua_decider, which honours the rc) — but a fragment-only push never
         # runs build.sh, and a ledger reopen is EXACTLY a fragment-only push.
         # Every host that then obeyed the pre-push merge rule was refused at its
         # own gate for about an hour, for a shape this lane let through.
@@ -1906,7 +1914,7 @@ if [[ -f scripts/gate-stamp.sh ]]; then
                     # measured at 132 s here against this form's 2.3 s.
                     #
                     # WHY NOT `stat -c`: GNU-only.
-                    # scripts/check-portability-idioms.sh flags it, and this hook
+                    # scripts/lua/check-portability-idioms.lua flags it, and this hook
                     # runs on every platform. `find -newer` is POSIX.
                     _movers="$(
                         git ls-files -z --cached --others --exclude-standard 2>/dev/null \
@@ -2025,19 +2033,19 @@ fi
 # on a host that cannot push at all, which is the failure that cost four hours
 # in 872-c9nd. The warning names the check so a host that sees it knows the
 # freeze was not consulted.
-_freeze_t() { # bounded, so a hung network cannot hang every push
-    local s="$1"; shift
-    if command -v timeout >/dev/null 2>&1; then timeout "$s" "$@"
-    elif command -v gtimeout >/dev/null 2>&1; then gtimeout "$s" "$@"
-    else "$@"; fi
-}
-
-_freeze_path_is_exempt() { # <path> -> 0 when a freeze does not hold it
-    case "$1" in
-        plan/*|docs/*|skills/*|cheatsheets/*) return 0 ;;
-        *) return 1 ;;
-    esac
-}
+# _freeze_t and _freeze_path_is_exempt come from the ONE shared definition
+# (1255-s4im): release-freeze.sh audit, release-preflight and land-queue read
+# the same predicate, so the hook and the server-visible audit cannot disagree.
+# A tree without the lib (a hermetic fixture copy of this hook) fails STRICT:
+# every path is held, so a missing predicate can only tighten a freeze, never
+# loosen one. Fixtures that never freeze are unaffected either way.
+if [[ -f "$REPO_ROOT/scripts/lib-freeze-paths.sh" ]]; then
+    # shellcheck source=../lib-freeze-paths.sh
+    . "$REPO_ROOT/scripts/lib-freeze-paths.sh"
+else
+    _freeze_path_is_exempt() { return 1; }
+    _freeze_t() { shift; "$@"; }
+fi
 
 enforce_release_freeze() {
     local remote="$1"

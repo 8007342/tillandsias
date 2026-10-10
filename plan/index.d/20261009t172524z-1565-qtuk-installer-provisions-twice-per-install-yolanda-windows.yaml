@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Finding from yolanda-windows' v56.10.9.1 W1 SOFT smoke (2026-10-09), filed at
+# the coordinator's direction (option b; the image re-pull itself is by design).
+packets:
+  - packet_id: windows-installer-provisions-the-guest-twice-per-install-because-the-reset-probe-runs-a-full-init-before-the-soft-reset-runs-another
+    order: 1565-qtuk
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [installer, windows, provisioning, reset, performance]
+    estimated_hours: 2
+    owned_files:
+      - scripts/install-windows.ps1
+      - scripts/test-installer-provisions-once.sh
+    title: |
+      install-windows.ps1 provisions the guest twice per install: the reset-state capability probe (TILLANDSIAS_DESTRUCTIVE_RESET_OK=0) runs a full init to Ready, then the SOFT --reset-state wipes and provisions again, about 50 s on yolanda
+    context: |
+      Measured on yolanda-windows 2026-10-09, v56.10.9.1 W1 SOFT install from
+      56.10.8.1. Tray log: two cycles, 17:18:13.710Z "VM handshake success
+      (phase=Ready) wire_version=4 attempt=1" + "reset-state (SOFT): VM Ready",
+      then 17:18:59.778Z the same pair again. Guest journal: 17:17:59-17:18:09Z
+      the probe pass re-ensures the Vault from local images; 17:18:44Z one
+      podman process (the SOFT pass's podman system reset --force) removes every
+      image; 17:18:47Z "vault image missing — building on demand"; ready again
+      17:18:59Z. The probe is the BEGIN-RESET-PROBE block of
+      scripts/install-windows.ps1 (1323-5taw, 1449-4qqu): with the opt-out set,
+      a supporting tray prints the skip line and then runs init on the EXISTING
+      state (headless run_reset_state -> run_init), so the probe alone is one
+      whole provisioning cycle. The image wipe in the SOFT pass is BY DESIGN
+      (host-state-lifecycle "Reset is the baseline", 900-z3kv; the operator's
+      2026-09-27 ruling) and is NOT this row.
+    exit_criteria:
+      - 'one install of install-windows.ps1 logs exactly ONE provisioning cycle: one "VM handshake success" followed by "reset-state (SOFT): VM Ready" in tray.log between the install start and the tray launch (pre-fix: two, 17:18:13Z and 17:18:59Z on yolanda 2026-10-09)'
+      - 'the SOFT reset and its guarantees are unchanged: podman system reset --force still runs once per install (every image, container, volume, secret and network gone, as host-state-lifecycle requires), and the Vault store survives with the same seal ("provisioning persisted from a prior boot", no new "vault initialized"); a fix that skips or weakens the reset fails this criterion'
+      - 'the probe still distinguishes a tray that rejects --reset-state (exit 2, unknown flag) from one that accepts it, including the 1449-4qqu accepted-but-init-failed case; scripts/test-installer-reset-probe.sh and scripts/test-installer-reset-kind.sh stay green'
+    verifiable_closure: |
+      unscoreable: unpinnable-until-the-guard-exists — the future fixture
+      scripts/test-installer-provisions-once.sh (stub tray recording each
+      invocation and whether it provisioned; red pre-fix with 2 provisioning
+      invocations per install, green with 1, and red if the SOFT reset is not
+      invoked) lands in the same commit as the fix. Live confirmation: a W1 SOFT
+      smoke on a Windows host showing one cycle in tray.log.
+    events:
+      - type: filed
+        ts: "2026-10-09T17:25:24Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Filed at the coordinator's direction (p3, pickup windows) from the v56.10.9.1 W1 SOFT smoke; the image re-pull is by design and not filed.

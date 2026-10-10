@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# 1437-8c6p (umbrella) / 1437-av8u (macOS child): the macOS --reset-state becomes SOFT and the installer goes quiet.
+status:
+  - packet_id: macos-vault-store-and-download-cache-are-host-persistent-across-reset
+    field: status
+    value: in_progress
+    ts: "2026-10-09T21:03:28Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: macos-vault-store-and-download-cache-are-host-persistent-across-reset
+    event:
+      type: note
+      ts: "2026-10-09T21:03:28Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        work/1437-8c6p, one story assigned by the coordinator 2026-10-09: (1) macOS --reset-state is the SOFT reset, (2) the installer prints no power-user text, (3) the pin doc is fixed.
+        RED, measured on the v56.10.9.1 smoke (macbookair, 2026-10-09). A default reinstall over a running tray destroyed rootfs.img and cleared vault-shamir-share-v1 and vault-root-token-v1. Before the reinstall the vault said "vault is unsealed and serving (provisioning persisted from a prior boot)"; after it, "first boot: running vault operator init". The installer terminal printed "TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 skips the destruction" and the banner's "Skip the reset with TILLANDSIAS_DESTRUCTIVE_RESET_OK=0".
+        DESIGN, the smallest the spec allows:
+        - The host body (crates/tillandsias-macos-tray/src/reset_state.rs) keeps the VM and guest (so the guest-resident Vault store), both Keychain items, the anchor, nvram.bin, provision/, console.log and ~/Library/Caches/tillandsias. It calls no credential clearer and no VM wipe.
+        - It announces "reset: SOFT", both sets and the store disposition (Verified:KEEP / Unverified:KEEP / Absent:REINIT-AT-INIT, the Windows and Linux tokens), removes only heartbeat.state and crashloop.state, and reprovisions; with the rootfs present, that is "already provisioned".
+        - The guest half is DEFERRED to the next boot. macOS has no host-to-guest shell (order 272), so the host leaves a nonce in the guest-bin share (core guest_bin_path::SOFT_RESET_REQUEST_FILE). tillandsias-headless --listen-vsock applies it once per nonce BEFORE it binds the control wire: podman system reset --force, the build markers and the enclave resolver drop-in, with no init. So the tray delivers the share before the vault bootstraps, the same ordering Windows' soft_wipe_guest uses.
+        - TILLANDSIAS_RESET_KEEP_MODELS becomes a no-op with one stderr line.
+        - The preserved anchor was "installation-uuid-v1", the Linux name, while the tray writes "tillandsias-vm-uuid" (installation_uuid::KEYCHAIN_ACCOUNT). Every macOS reset therefore announced the anchor "ABSENT BEFORE THIS RESET" (seen twice on the smoke). It now uses the constant the tray writes.
+        - install-macos.sh: the reset runs with stdin from /dev/null, its output goes to ~/Library/Logs/Tillandsias/setup.log (KEPT, unlike Windows' tillandsias-setup.log, as the one record of what the reset kept), and the terminal says "Getting Tillandsias ready..." and names the log; a failure dies naming only the log. The flag names in the --diagnose/--init/codesign lines are gone. The line-22 pin doc reads `curl … | TILLANDSIAS_VERSION=v… bash`.
+        MEASURED (pre-fix origin/linux-next 259869048 → this branch):
+        - scripts/test-install-macos-setup-is-quiet.sh (new, 7 arms; it RUNS the installer's own marked reset block against a scratch HOME and a stub tray, with a negative control): pre-fix FAIL 6 arms (both measured lines on the terminal, no log, no /dev/null stdin); post-fix ok 7/7.
+        - scripts/test-reset-state-contract.sh: ARM8 for the macOS body went from a named PENDING to a hard arm. Pre-fix FAIL on ARM4/ARM5/ARM8 (2 clearer sites); post-fix PASS. scripts/test-reset-state-no-home-refusal.sh ARM3 now anchors on apply_soft_reset and is PASS.
+        - Unit tests: macos-tray reset_state (5: guest/caches/provision/console byte-identical and only derived files removed; no request without a guest; every disposition preserves store/keychain/caches; disposition mapping; no clearer/wipe in the body) and headless soft_reset_request_tests (2: once per nonce; share path). cargo test -p tillandsias-macos-tray -p tillandsias-core is green, and cargo zigbuild -p tillandsias-headless --target x86_64-unknown-linux-musl --tests is clean.
+        NOT MEASURED, and not claimable until a release smoke on a Mac:
+        - the live exit criterion: a default reinstall over a signed-in install leaves vault-shamir-share-v1 present and the Vault says "persisted from a prior boot";
+        - the guest half actually running podman system reset at the next boot, and the vault unsealing over the kept store afterwards.
+        OPEN, deliberately out of this story:
+        - macOS --reset-guest is not yet the spec's HARD: no per-run approval gate and no Keychain clearing. Nothing reaches it from an installer.
+        - litmus-reset-keeps-models-macos guards scripts/e2e-step2-macos.sh, the smoke destroy path, not this body, so it is left as-is.
+        - The Vault store still lives inside rootfs.img; the av8u virtiofs/evacuate measurement for HARD survival is not done.

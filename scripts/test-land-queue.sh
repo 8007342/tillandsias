@@ -608,6 +608,89 @@ case "$out10b" in
     *)  bad "ARM 10b: neither adopted nor re-queued (did the mover run?): $(printf '%s' "$out10b" | tail -2)" ;;
 esac
 
+# ──────────────────────────────────────────────────────────── ARM 11
+# A FROZEN TARGET HOLDS CODE, and the queue asks ORIGIN itself (1255-s4im).
+# The pre-push hook refuses this only on a hooked host; the queue must not
+# depend on which host runs it. Held BEFORE the gate: no gate is spent.
+# 11b is the NEGATIVE CONTROL: a plan-only candidate under the same live freeze
+# lands — the plan lane is how coordination keeps moving during a cut.
+scaffold arm11
+candidate arm11 1101-aaaa a.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":1,"headRefName":"work/1101-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo gated >> "$GATE_LOG"
+exit 0
+GATE
+frozen11="$(git -C "$WORK_DIR" rev-parse origin/linux-next)"
+git -C "$WORK_DIR" push -q origin "$frozen11:refs/tillandsias/freeze/linux-next/fixture/1700000000"
+out11="$(run_queue)"
+git -C "$WORK_DIR" fetch -q origin linux-next
+after11="$(git -C "$WORK_DIR" rev-parse origin/linux-next)"
+if grep -q '^hold:land-queue:1:frozen:refs/tillandsias/freeze/linux-next/fixture/1700000000' <<<"$out11" \
+   && [ "$after11" = "$frozen11" ] && [ ! -s "$GATE_LOG" ]; then
+    ok "ARM 11: a code candidate into a frozen trunk is HELD before the gate (gate not run, trunk unchanged), naming the marker"
+else
+    bad "ARM 11: wanted hold + no gate + unchanged trunk; gate=$(wc -l < "$GATE_LOG" | tr -d ' ') after=$after11 frozen=$frozen11
+$out11"
+fi
+mkdir -p "$WORK_DIR/plan/index.d"
+git -C "$WORK_DIR" checkout -q -B work/1102-bbbb origin/linux-next
+mkdir -p "$WORK_DIR/plan/index.d"; echo "x: 1" > "$WORK_DIR/plan/index.d/frag.yaml"
+git -C "$WORK_DIR" add -A && git -C "$WORK_DIR" commit -q -m "work(1102-bbbb): plan only"
+git -C "$WORK_DIR" push -q origin work/1102-bbbb
+git -C "$WORK_DIR" checkout -q linux-next
+cat > "$GH_PRS" <<JSON
+[{"number":2,"headRefName":"work/1102-bbbb","isDraft":false}]
+JSON
+out11b="$(run_queue)"
+case "$out11b" in
+    *"land:2 "*) ok "ARM 11b (control): a plan-only candidate lands under the same live freeze — the hold is about held paths, not about the freeze existing" ;;
+    *)           bad "ARM 11b (control): the plan-only candidate did not land under the freeze
+$out11b" ;;
+esac
+
+# ──────────────────────────────────────────────────────────── ARM 12
+# A FREEZE SET WHILE THE CANDIDATE GATES IS NOT PUSHED THROUGH. The gate is
+# green; the cut froze the branch inside the 40-minute window; the queue must
+# re-ask at push. The stub gate sets the freeze, exactly where the window is.
+scaffold arm12
+candidate arm12 1201-aaaa a.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":1,"headRefName":"work/1201-aaaa","isDraft":false}]
+JSON
+before12="$(git -C "$WORK_DIR" rev-parse origin/linux-next)"
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+# The cut freezes the trunk while this candidate is gating.
+git --git-dir="$REMOTE_DIR" update-ref refs/tillandsias/freeze/linux-next/cut/1700000001 "$before12"
+exit 0
+GATE
+out12="$(run_queue)"
+git -C "$WORK_DIR" fetch -q origin linux-next
+after12="$(git -C "$WORK_DIR" rev-parse origin/linux-next)"
+if grep -q '^requeue:land-queue:1:frozen-mid-gate:refs/tillandsias/freeze/linux-next/cut/1700000001' <<<"$out12" \
+   && [ "$after12" = "$before12" ]; then
+    ok "ARM 12: a freeze set DURING the gate is honoured at push — re-queued, nothing pushed, the marker named"
+else
+    bad "ARM 12: wanted requeue frozen-mid-gate and an unchanged trunk; before=$before12 after=$after12
+$out12"
+fi
+# ARM 12b, NEGATIVE CONTROL: the same scaffold with the freeze cleared lands.
+git --git-dir="$REMOTE_DIR" update-ref -d refs/tillandsias/freeze/linux-next/cut/1700000001
+cat > "$GATE_BIN" <<'GATE'
+#!/usr/bin/env bash
+exit 0
+GATE
+out12b="$(run_queue)"
+case "$out12b" in
+    *"land:1 "*) ok "ARM 12b (control): with no freeze the same candidate lands — arm 12 detects the freeze, not refusing everything" ;;
+    *)           bad "ARM 12b (control): did not land with no freeze
+$out12b" ;;
+esac
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then

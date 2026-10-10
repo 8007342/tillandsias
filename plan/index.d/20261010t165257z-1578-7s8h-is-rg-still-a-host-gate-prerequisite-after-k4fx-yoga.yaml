@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed 2026-10-10 on yoga at the coordinator's direction, as the follow-up
+# to 1570-k4fx's re-scope (p3, pickup linux).
+packets:
+  - packet_id: once-check-cheatsheet-refs-is-lua-decide-whether-check-ripgrep-available-and-the-rg-row-of-check-host-tools-spec-are-still-a-host-gate-prerequisite
+    order: 1578-7s8h
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [host-tools, ripgrep, gate, lua, windows]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-ripgrep-available.sh
+      - scripts/check-host-tools.sh
+      - scripts/test-forge-config-trust-cross-platform-parity.sh
+    depends_on: [check-cheatsheet-refs-hard-requires-ripgrep-which-reddened-the-windows-gate-twenty-minutes-in-and-is-a-pure-reference-resolver-over-cheatsheets-and-sources-so-it-is-ported-to-scripts-lua-with-no-host-tool-at-all]
+    title: |
+      After 1570-k4fx ports check-cheatsheet-refs.sh to Lua with no host tool, decide whether ripgrep is still a host GATE prerequisite: check-ripgrep-available.sh and the `rg|binary|gate|linux|check-ripgrep-available.sh|missing:rg` row of check-host-tools.sh's SPEC exist because that one checker hard-required rg (1129-xm5z), and a refusal for a tool nothing in the gate uses is a red with no subject
+    context: |
+      Measured on yoga 2026-10-10 over linux-next 14d929254: invocations of rg
+      in command position across scripts/, build.sh and images/ are
+      check-cheatsheet-refs.sh (RG via resolve_tool rg), check-ripgrep-
+      available.sh itself, and test-forge-config-trust-cross-platform-
+      parity.sh (a fixture, RG via resolve_tool rg); every other hit is in
+      images/default — forge help text, shell helpers and cheatsheets for the
+      USER inside the forge, which is not a host gate dependency.
+      check-host-tools.sh:105 records the reason the row exists: "ORDER
+      1129-xm5z. check-cheatsheet-refs.sh hard-requires rg". Once k4fx lands,
+      the remaining gate-side user is one fixture, which can use the Lua
+      runtime or a plain fixed-string search instead.
+    exit_criteria:
+      - 'a decision is recorded on this row: either rg is still a host gate prerequisite (naming the gate-side user that needs it), or check-ripgrep-available.sh and the rg SPEC row are removed and the last gate-side user stops needing rg; pre-fix: the SPEC row cites check-cheatsheet-refs.sh, which after 1570-k4fx no longer uses rg'
+      - 'if removed: a host with no rg on PATH and no toolbox passes ./build.sh --check (the Windows/WSL refusal ~20 min into the gate that 1570-k4fx measured is gone); NEGATIVE CONTROL: the forge image still ships rg for its users (images/default is untouched)'
+    unscoreable: "unpinnable-until-the-guard-exists: future arm that runs check-host-tools with PATH stripped of rg and no toolbox and asserts no missing:rg refusal; pre-fix result: missing:rg via check-ripgrep-available.sh. NEGATIVE CONTROL: the forge image keeps rg."
+    next_action: >
+      After 1570-k4fx lands, re-run the rg invocation census; move
+      test-forge-config-trust-cross-platform-parity.sh off rg; then drop the
+      SPEC row and check-ripgrep-available.sh (itself a decider, so its
+      removal also lowers the shell floor).
+    events:
+      - type: filed
+        ts: "2026-10-10T16:52:57Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed at the coordinator's direction as the follow-up to 1570-k4fx's re-scope: rg's only gate-side reasons are k4fx's checker and one fixture.

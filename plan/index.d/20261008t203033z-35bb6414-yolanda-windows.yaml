@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: 1437-3iux-s2-the-windows-hard-reset-asks-every-run-refuses-an-unreachable-keyring-and-announces-before-destroying
+    field: context
+    value: |-
+      Slice of 1437-3iux (host-state-lifecycle "SOFT reset is pre-authorised
+      everywhere, HARD asks every time" and "Windows HARD reset destroys the
+      distro and says the store goes with it"; operator ruling 1443-bs9z). These
+      exit criteria are MOVED here from 1437-3iux's HARD arm.
+      FORGE STRIP (1443-bs9z item 3), measured by source scan on yolanda
+      2026-10-08: the Windows tray forwards NO host environment into the guest
+      (no std::env::vars, no WSLENV, no forwarding helper in
+      crates/tillandsias-windows-tray/src); a forge's argv is built by the guest
+      headless from control-wire requests. So the variable cannot reach a
+      Windows forge through the tray. The container /proc/1/environ fixture arm
+      belongs to the headless forge-launch builder (linux lane), not this slice.
+
+
+      [2026-10-08T20:30:33Z yolanda-windows] OPERATOR RULING 2026-10-08, verbatim (relayed by the coordinator; it supersedes the coordinator's earlier approval of an installer HARD prompt): "we do not ask end users to do power user stuff. That's our guideline. An install prompt asking for destructive cases should not be an acceptable case. End user is NOT a power user. No prompts like those, we make all the decisions for them, on their behalf, for their best interests. So SOFT reset is the default only and forever. A power user wanting to do a hard reset should be capable of figuring out where to place a flag and which flag, we do not need to print any power user messages during install, at all. Install should be for END USER (NOT POWER USER) and be a pretty installer, rather than an informational/debugging installer. As frictionless as possible for end users."
+      REWORK on this row: HARD never asks. It runs only with --approve-hard-reset or TILLANDSIAS_HARD_RESET_APPROVED=1 on that invocation, and without either it refuses non-interactively (exit 1, nothing touched). Core drops HARD_PROMPT and the typed-HARD path. host-state-lifecycle's consent paragraph and its installer paragraph are amended with the quote. The exit criterion "at a TTY only the exact word HARD approves" is SUPERSEDED: nothing prompts.
+    ts: "2026-10-08T20:30:33Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: 1437-3iux-s2-the-windows-hard-reset-asks-every-run-refuses-an-unreachable-keyring-and-announces-before-destroying
+    event:
+      type: note
+      ts: "2026-10-08T20:30:33Z"
+      host: yolanda-windows
+      summary: |-
+        operator ruling 2026-10-08: no prompts; S2 reworked
