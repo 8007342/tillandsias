@@ -661,7 +661,7 @@ Write-Host ""
 if ($env:TILLANDSIAS_VERSION) {
     $Version = $env:TILLANDSIAS_VERSION.TrimStart('v')
     $Base = "https://github.com/$Repo/releases/download/v$Version"
-    Say "Pinned to v$Version"
+    Log "Pinned to v$Version"
 } else {
     $Base = $ChannelBase
     Log "Channel: $Channel"
@@ -670,7 +670,7 @@ if ($env:TILLANDSIAS_VERSION) {
         SayWn "  !! Preview build: the newest daily version, not yet released as stable."
         SayWn "     It may have problems."
     }
-    Say "Resolving latest release..."
+    Log "Resolving latest release..."
 }
 
 # -- Temp workspace ------------------------------------------------------------
@@ -681,7 +681,12 @@ try {
     # -- Download SHA256SUMS-windows -------------------------------------------
 # BEGIN-SUMS-DOWNLOAD
     $SumsUrl = "$Base/SHA256SUMS-windows"
-    Say "Fetching SHA256SUMS-windows..."
+    # ONE end-user line for resolve, fetch, download and verify (coordinator
+    # ruling 2026-10-10 under the SOFT installer rule): the steps, the URLs, the
+    # asset name and the digest go to the install log; a failure says what
+    # happened in plain words and shows the log by path.
+    Say "Getting Tillandsias ready..."
+    Log "Fetching $SumsUrl"
     try {
         # ORDER 1420-jmp4: Invoke-WebRequest's own bar is slow and flickers on
         # PowerShell 5, so it runs silenced in a child scope; the script's
@@ -691,7 +696,8 @@ try {
             Invoke-WebRequest -Uri $SumsUrl -OutFile "$Tmp\SHA256SUMS-windows" -UseBasicParsing -ErrorAction Stop
         }
     } catch {
-        Die "Could not download SHA256SUMS-windows from $SumsUrl -- check network or version."
+        Log "Could not download $SumsUrl ($_)"
+        Die "Tillandsias could not be downloaded. Check your internet connection and try again. Details: $InstallLog"
     }
 # END-SUMS-DOWNLOAD
 
@@ -699,12 +705,15 @@ try {
     $SumsContent = Get-Content "$Tmp\SHA256SUMS-windows" -Raw
     $ZipName = ($SumsContent -split "`n" | Where-Object { $_ -match 'tillandsias-tray-.*-windows-x64\.zip' } |
                 Select-Object -First 1 | ForEach-Object { ($_ -split '\s+')[1] }).Trim()
-    if (-not $ZipName) { Die "No tillandsias-tray-*-windows-x64.zip entry in SHA256SUMS-windows." }
-    Say "Asset: $ZipName"
+    if (-not $ZipName) {
+        Log "No tillandsias-tray-*-windows-x64.zip entry in $SumsUrl"
+        Die "This Tillandsias release is incomplete, so nothing was installed. Details: $InstallLog"
+    }
+    Log "Asset: $ZipName"
 
     # -- Download zip ----------------------------------------------------------
     $ZipUrl = "$Base/$ZipName"
-    Say "Downloading $ZipUrl..."
+    Log "Downloading $ZipUrl"
 # BEGIN-PROGRESS-DOWNLOAD
     # ORDER 1420-jmp4: one clean progress bar for the release zip. The download
     # is streamed here and reported with Write-Progress once per whole percent,
@@ -755,19 +764,20 @@ try {
     try {
         Save-WithProgress -Url $ZipUrl -OutFile "$Tmp\$ZipName" -Activity "Downloading Tillandsias"
     } catch {
-        Die "Download failed: $_"
+        Log "Download of $ZipUrl failed ($_)"
+        Die "Tillandsias could not be downloaded. Check your internet connection and try again. Details: $InstallLog"
     }
 # END-PROGRESS-DOWNLOAD
 
     # -- Verify SHA-256 --------------------------------------------------------
-    Say "Verifying SHA-256..."
     $Expected = ($SumsContent -split "`n" | Where-Object { $_ -match [regex]::Escape($ZipName) } |
                  Select-Object -First 1 | ForEach-Object { ($_ -split '\s+')[0] }).ToLower()
     $Actual = (Get-FileHash "$Tmp\$ZipName" -Algorithm SHA256).Hash.ToLower()
     if ($Expected -ne $Actual) {
-        Die "SHA-256 mismatch: expected $Expected, got $Actual"
+        Log "SHA-256 mismatch for ${ZipName}: expected $Expected, got $Actual"
+        Die "The download was damaged, so nothing was installed. Please try again. Details: $InstallLog"
     }
-    SayOk "sha256: ok ($Expected)"
+    Log "sha256: ok ($Expected)"
 
     # -- Stop running tray + back up --------------------------------------------
     Get-Process -Name 'tillandsias-tray' -ErrorAction SilentlyContinue | Stop-Process -Force
@@ -952,8 +962,8 @@ try {
     # stdin is NUL so the GUI-subsystem tray can never wait on a prompt nobody
     # can see. scripts/test-installer-reset-kind.sh pins all of it, and
     # scripts/test-installer-provisions-once.sh pins ONE provisioning per
-    # install, through the SOFT reset.
-    Say "Getting Tillandsias ready..."
+    # install, through the SOFT reset. No line of its own: "Getting Tillandsias
+    # ready..." was said once, before the download, and covers this step too.
     $ResetLog = Join-Path $env:TEMP "tillandsias-setup.log"
     & cmd.exe /c "`"$InstalledExe`" --reset-state < NUL > `"$ResetLog`" 2>&1"
     $ResetExit = $LASTEXITCODE

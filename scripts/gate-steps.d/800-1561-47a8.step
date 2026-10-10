@@ -6,18 +6,20 @@
 # informational/debugging installer"). Diagnostic detail goes to the install log
 # and is shown by path only on failure.
 #
-# The fixture runs the REAL scripts/check-installer-end-user-output.sh over the
-# real tree (enforcing the per-installer floors: install-windows.ps1 0;
+# The step runs scripts/lua/check-installer-end-user-output.lua over the real
+# tree (enforcing the per-installer floors: install-windows.ps1 0;
 # install.sh and install-macos.sh at today's counts until their slices
-# 1561-y6f9 / 1561-kfgk drop them) and over scratch copies: a flag-naming line
-# is refused by file:line, a `# power-user-only` line and the PENDING-1560-UAM3
-# region are exempt, a commented line does not count, and install.sh above its
-# floor is refused. Pre-fix: FAILS, install-windows.ps1 printed 21. Pure
-# source reads, so it runs on every regime.
+# 1561-y6f9 / 1561-kfgk drop them). Its fixture (scratch copies: a flag-naming
+# line refused by file:line, the `# power-user-only` and PENDING-1560-UAM3
+# exemptions, a comment not counted, install.sh above its floor refused) is
+# scripts/lua/test-check-installer-end-user-output.lua, run inline by build.sh
+# because it needs the runner binary a STEP_LUA does not receive. Both are Lua:
+# the first draft's .sh pair would have added two items to the shell ratchet.
+# Pre-fix: FAILS, install-windows.ps1 printed 21. Pure source reads.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the end-user installers print only end-user lines (1561-47a8)"
-STEP_SCRIPT="scripts/test-check-installer-end-user-output.sh"
+STEP_LUA="scripts/lua/check-installer-end-user-output.lua"
 STEP_ERROR="an end-user installer prints power-user or diagnostic text again (1561-9f4x); see the file:line above"
 STEP_OK="the end-user installers print only end-user lines (at or below their floors)"
-STEP_SECOND_REGIME="yolanda 2026-10-08 msys ok:installer-end-user-output-fixture:6 arms"
+STEP_SECOND_REGIME="yolanda-windows 2026-10-10 msys ok:installer-end-user-output"
