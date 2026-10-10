@@ -28,7 +28,7 @@ W="$(mktemp -d "$_tmpbase/relay-preflight.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 
 pass=0
-total=10
+total=11
 ok()  { echo "ok:   $1"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $1: $2"; }
 
@@ -398,6 +398,43 @@ if [ "$RC" = 0 ] && grep -q '^ok:relay-preflight:' <<<"$OUT" && grep -q '^item: 
     ok "arm10: the same change with a Carried-Waiver trailer passes the guard"
 else
     bad "arm10" "rc=$RC out=[$OUT]"
+    printf '%s\n' "$ERR" | grep -vE '^item: .* ok ' | sed 's/^/    err: /' | head -12
+fi
+
+# ── arm 11: the re-exec marker is consumed, never inherited (1577-568c) ────
+# A ref that changes relay-preflight.sh makes it exec the merged copy with
+# TILLANDSIAS_RELAY_PREFLIGHT_REEXEC exported. A selected fixture that runs
+# relay-preflight itself (this file) inherited it, and its inner runs skipped
+# their merge: measured relaying 1577-568c, 5 of 10 arms red. Here the selected
+# fixture refuses if the marker reached it. PRE-FIX: refused at that fixture.
+V_SEED="$W/v-seed"
+_seed "$V_SEED"
+printf '#!/usr/bin/env bash\necho v1\n' > "$V_SEED/scripts/vv-subject.sh"
+cat > "$V_SEED/scripts/test-vv-env.sh" <<'EOF'
+#!/usr/bin/env bash
+# exercises scripts/vv-subject.sh; refuses if the relay's re-exec marker leaked
+[ -z "${TILLANDSIAS_RELAY_PREFLIGHT_REEXEC:-}" ] || { echo "FAIL: inherited the re-exec marker"; exit 1; }
+echo "ok: vv-env 1"
+EOF
+chmod +x "$V_SEED"/scripts/vv-subject.sh "$V_SEED"/scripts/test-vv-env.sh
+git -C "$V_SEED" "${GC[@]}" add -A
+git -C "$V_SEED" "${GC[@]}" commit -qm "vv-subject and an env-probing fixture"
+V_BARE="$W/vv-origin.git"
+_origin "$V_SEED" "$V_BARE"
+CLONE_V="$W/clone-v"
+_clone "$V_BARE" "$CLONE_V"
+git -C "$CLONE_V" "${GC[@]}" checkout -qb work/vv
+printf '#!/usr/bin/env bash\necho v2\n' > "$CLONE_V/scripts/vv-subject.sh"
+printf '# a merged copy that differs, so the relay re-executes it\n' >> "$CLONE_V/scripts/relay-preflight.sh"
+git -C "$CLONE_V" "${GC[@]}" add -A
+git -C "$CLONE_V" "${GC[@]}" commit -qm "work/vv: touch vv-subject and the tool"
+git -C "$CLONE_V" "${GC[@]}" checkout -q linux-next
+_run "$CLONE_V" work/vv --base origin/linux-next
+if [ "$RC" = 0 ] && grep -q '^ok:relay-preflight:' <<<"$OUT" && grep -q '^item: reexec:merged-copy ok' <<<"$ERR" \
+   && grep -q '^item: fixture:test-vv-env ok' <<<"$ERR"; then
+    ok "arm11: after the re-exec, a selected fixture does not inherit TILLANDSIAS_RELAY_PREFLIGHT_REEXEC"
+else
+    bad "arm11" "rc=$RC out=[$OUT]"
     printf '%s\n' "$ERR" | grep -vE '^item: .* ok ' | sed 's/^/    err: /' | head -12
 fi
 

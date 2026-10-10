@@ -102,6 +102,13 @@ RP_ORIG_ARGS=("$@")
 RP_SNAPSHOT="$(mktemp "${TMPDIR:-/tmp}/relay-preflight-self.XXXXXX")" || RP_SNAPSHOT=""
 [ -n "$RP_SNAPSHOT" ] && cat "${BASH_SOURCE[0]}" > "$RP_SNAPSHOT" 2>/dev/null
 RP_REEXEC="${TILLANDSIAS_RELAY_PREFLIGHT_REEXEC:-}"
+RP_REEXEC_ORIG_REF="${TILLANDSIAS_RELAY_PREFLIGHT_ORIG_REF:-}"
+# Consumed, never inherited: every fixture and decider below is a child, and
+# a relay-preflight a fixture runs (test-relay-preflight.sh) that inherits the
+# marker skips its own fetch/merge and judges the bare base. Measured
+# 2026-10-10 relaying 1577-568c: 5 of that fixture's 10 arms red under relay,
+# 10/10 standalone.
+unset TILLANDSIAS_RELAY_PREFLIGHT_REEXEC TILLANDSIAS_RELAY_PREFLIGHT_ORIG_REF
 
 # ── affordance + timing, best-effort, never disturb the wrapped rc ─────────
 _afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
@@ -177,7 +184,7 @@ if [ -n "$RP_REEXEC" ]; then
     # Re-executed by the pre-merge copy (1522-ey4h): already merged, on the
     # relay branch. Take the restore point from it; do not fetch or merge again.
     RELAY_BRANCH="$RP_REEXEC"
-    ORIG_REF="${TILLANDSIAS_RELAY_PREFLIGHT_ORIG_REF:-}"
+    ORIG_REF="$RP_REEXEC_ORIG_REF"
     [ -n "$ORIG_REF" ] || ORIG_REF="$(git rev-parse HEAD)"
     _item reexec:merged-copy ok 0
 fi
