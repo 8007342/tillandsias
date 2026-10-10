@@ -3094,7 +3094,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # `grep -Rl` saw the name and nothing ever ran the file. A negative control
     # nobody executes cannot protect the hole it names (calmecacpilli).
     #
-    # scripts/audit-guard-activation.sh did not catch it for two reasons, both
+    # The guard-activation audit (then scripts/audit-guard-activation.sh, now
+    # scripts/lua/audit-guard-activation.lua) did not catch it for two reasons, both
     # worth knowing: its population is the 76 `check-*` guards, so `test-*`
     # fixtures are not audited at all; and its own source (line ~74) records that
     # it decides activation by `grep -Rl <basename>`, which cannot tell an
@@ -4529,6 +4530,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Shell ratchet passed"
+
+    # The guard-activation auditor's own fixture (1570-25iq), a Lua fixture on
+    # the one runner: parity with the pre-port .sh, an orphan that refuses, the
+    # 1087-h2z9 symlink-farm shape, an empty population refused. The auditor
+    # itself runs as gate step 190.
+    _step "Checking the guard-activation auditor's fixture (1570-25iq)..."
+    if ! _run_lua_decider "scripts/lua/test-audit-guard-activation.lua" 2>&1; then
+        _error "the guard-activation auditor no longer agrees with its pre-port .sh, or stopped refusing an orphan — see the FAIL lines above (1570-25iq)"
+        exit 1
+    fi
+    _info "Guard-activation auditor fixture passed"
 
     _step "Checking the litmus step model (901-jtvi)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-litmus-step-model.sh" 2>&1; then

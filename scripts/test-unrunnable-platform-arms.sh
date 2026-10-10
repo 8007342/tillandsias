@@ -166,15 +166,26 @@ echo "ARM 11: the repo's OWN orphan auditor agrees the guard is active."
 # guard while it was wired and running, and that is what refused the first land.
 # Asserting against the auditor's own verdict is what makes ARM 9 more than a
 # restatement of my own assumption.
-if [ -f scripts/audit-guard-activation.sh ]; then
-    _av="$(bash scripts/audit-guard-activation.sh 2>/dev/null | /usr/bin/grep '^orphans:' || true)"
+# ORDER 1570-25iq: the auditor is scripts/lua/audit-guard-activation.lua on
+# `tillandsias-plan script run`; its `orphans:` line is unchanged.
+_auditor_plan() {
+    local p
+    p="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || return 1
+    case "$p" in
+        /*) printf '%s\n' "$p" ;;
+        *)  printf '%s/%s\n' "$PWD" "${p#./}" ;;
+    esac
+}
+_ap="$(_auditor_plan)" || _ap=""
+if [ -f scripts/lua/audit-guard-activation.lua ] && [ -n "$_ap" ]; then
+    _av="$("$_ap" script run scripts/lua/audit-guard-activation.lua 2>/dev/null | /usr/bin/grep '^orphans:' || true)"
     if printf '%s' "$_av" | /usr/bin/grep -q 'check-unrunnable-platform-arms.sh'; then
         bad "the orphan auditor reports this guard as an ORPHAN: $_av"
     else
-        ok "audit-guard-activation.sh does not list it as an orphan"
+        ok "audit-guard-activation does not list it as an orphan"
     fi
 else
-    echo "  skip: audit-guard-activation.sh absent — auditor agreement not checked"
+    echo "  skip: audit-guard-activation.lua or a plan binary is absent — auditor agreement not checked"
 fi
 
 echo
