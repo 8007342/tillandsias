@@ -42,7 +42,6 @@ scripts/check-enclave-network-internal.sh
 scripts/check-enclave-service-health.sh
 scripts/check-engine-cpu-dispatch.sh
 scripts/check-exact-version-literal-added.sh
-scripts/check-exec-argv-vector-workarounds.sh
 scripts/check-fleet-membership.sh
 scripts/check-forge-expert-base.sh
 scripts/check-forge-findings-persisted.sh
