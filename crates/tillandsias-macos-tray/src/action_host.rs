@@ -575,6 +575,45 @@ async fn open_control_wire_stream(
 ///
 /// @trace spec:vsock-transport,
 ///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)
+/// Tell the guest where the host-native inference endpoint is, and read its
+/// ONE answer (order 1509-kf4d). The guest acks with
+/// `IssueAck { seq_acked }` or answers `Error`. Anything else means the frame
+/// belongs to someone else, so say so instead of treating it as success.
+/// Best-effort: every outcome is logged and none fails the caller.
+async fn set_vsock_forward_target(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+    port: u32,
+) {
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+
+    let seq = client.allocate_seq();
+    let env = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        // CID 2 is the host as seen from the guest. Carried in the message
+        // rather than assumed guest-side so the value is greppable from one end.
+        body: ControlMessage::SetVsockForwardTarget { cid: 2, port },
+    };
+    match client.request(&env).await {
+        Ok(reply) => match reply.body {
+            ControlMessage::IssueAck { seq_acked } if seq_acked == seq => {}
+            ControlMessage::Error { code, message, .. } => tracing::warn!(
+                port,
+                error = %describe_wire_error(code, &message),
+                "the guest refused the host-native inference target"
+            ),
+            other => tracing::warn!(
+                port,
+                reply = ?other,
+                "unexpected reply to SetVsockForwardTarget (expected IssueAck for seq {seq})"
+            ),
+        },
+        Err(err) => {
+            tracing::warn!(%err, port, "could not set the guest's host-native inference target")
+        }
+    }
+}
+
 async fn poll_vm_status_once(
     vz: &VzRuntime,
 ) -> Result<(tillandsias_control_wire::VmPhase, bool, Option<String>), String> {
@@ -629,17 +668,7 @@ async fn poll_vm_status_once(
     if let Ok(port_s) = std::env::var("TILLANDSIAS_HOST_VSOCK_PORT")
         && let Ok(port) = port_s.trim().parse::<u32>()
     {
-        let set_env = ControlEnvelope {
-            wire_version: WIRE_VERSION,
-            seq: client.allocate_seq(),
-            // CID 2 is the host as seen from the guest. Carried in the
-            // message rather than assumed guest-side so the value is
-            // greppable from one end.
-            body: ControlMessage::SetVsockForwardTarget { cid: 2, port },
-        };
-        if let Err(err) = client.request(&set_env).await {
-            tracing::warn!(%err, port, "could not set the guest's host-native inference target");
-        }
+        set_vsock_forward_target(&mut client, port).await;
     }
 
     let envelope = ControlEnvelope {
@@ -3132,17 +3161,10 @@ async fn run_push_listener(
             if let Ok(port_s) = std::env::var("TILLANDSIAS_HOST_VSOCK_PORT")
                 && let Ok(port) = port_s.trim().parse::<u32>()
             {
-                    let set_env = ControlEnvelope {
-                        wire_version: WIRE_VERSION,
-                        seq: client.allocate_seq(),
-                        body: ControlMessage::SetVsockForwardTarget { cid: 2, port },
-                    };
-                    // Best-effort: the subscription is what this connection is
-                    // for, and an inference lane that could not be configured
-                    // must not cost the operator their status pushes.
-                if let Err(err) = client.request(&set_env).await {
-                    tracing::warn!(%err, port, "could not set the guest's host-native inference target");
-                }
+                // Best-effort: the subscription is what this connection is
+                // for, and an inference lane that could not be configured
+                // must not cost the operator their status pushes.
+                set_vsock_forward_target(&mut client, port).await;
             }
 
             let sub = ControlEnvelope {
