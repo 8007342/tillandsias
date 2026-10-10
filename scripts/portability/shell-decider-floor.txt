@@ -51,7 +51,6 @@ scripts/check-fragment-backlog.sh
 scripts/check-fragment-closure-evidence-added.sh
 scripts/check-fragment-events-land.sh
 scripts/check-fragment-keys-are-read.sh
-scripts/check-fragment-status-loss.sh
 scripts/check-fragment-ts-skew.sh
 scripts/check-gate-memory-floor.sh
 scripts/check-gate-step-prefix-across-refs.sh
