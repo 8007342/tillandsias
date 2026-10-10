@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air at macuahuitl's request, 2026-10-10.
+packets:
+  - packet_id: macos-bash-3-2-ends-a-command-substitution-at-an-unparenthesised-case-pattern-and-carries-on-with-garbage-rc-0
+    order: 1582-c32p
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [bash-dialect, darwin-regime, portability, ledger, lua-runtime]
+    estimated_hours: 2
+    owned_files:
+      - images/default/lib-ledger-freshness.sh
+      - scripts/lua/check-bash-dialect.lua
+    title: |
+      macOS /bin/bash 3.2 ends a $( ... ) at the ')' of an unparenthesised case pattern inside it, prints a syntax error, and CONTINUES with rc=0 and garbage; lib-ledger-freshness.sh carries the shape and a pre-build litmus sources it on darwin
+    context: |
+      MEASURED on tlatoanis-macbook-air 2026-10-10 (/bin/bash 3.2.57; no other bash on the host):
+      - Minimal: x="$(_p=./a && case "$_p" in /*) printf A ;; *) printf B ;; esac)" under set -u gives "command substitution: syntax error near unexpected token `newline'", then "_p: unbound variable".
+      - The multi-line form inside $( ... | while ...; do case "$_ref" in origin | origin/HEAD) continue ;; esac ...; done) prints the syntax error and then rc=0, with x set to the TEXT " continue ;; esac ... done)". It fails silently in effect.
+      - LIVE: /bin/bash -c '. images/default/lib-ledger-freshness.sh; tillandsias_ledger_freshness .' printed "line 59: syntax error near unexpected token `newline'" and returned rc=0 with TILLANDSIAS_LEDGER_NEWEST=" continue ;; esac / printf '%s %s\n' / break". litmus-forge-ledger-freshness-shape (pre-build, instant) sources this file on every host, darwin included. The forge itself runs it under Fedora bash 5, where it is fine.
+      - FIX, measured: a POSIX leading '(' on the pattern, `case "$_ref" in (origin | origin/HEAD) continue ;; esac`, gives x=[feat] under bash 3.2.
+      - Prior instance, already fixed: hardware-fingerprint.sh (b17f6a8a3 moved its absolutising case into a function). Found while fixing 1553-kvmf's fixture (#234), whose first fix attempt hit the same shape.
+      - SCAN of every tracked *.sh/*.step: 8 candidates by paren matching. 1 is REAL (lib-ledger-freshness.sh:51-59). 7 are false positives (the case sits inside a quoted bash -c string, a comment, a regex or awk).
+      - `bash -n` does NOT catch it: bash 3.2 parses a $( ) body only at run time.
+    exit_criteria:
+      - 'under /bin/bash 3.2, tillandsias_ledger_freshness on a checkout with origin refs sets TILLANDSIAS_LEDGER_NEWEST to "<ref> <ts>" and prints no syntax error (pre-fix: syntax error at line 59, TILLANDSIAS_LEDGER_NEWEST holds source text, rc=0)'
+      - 'scripts/lua/check-bash-dialect.lua refuses an unparenthesised case pattern inside $( ), with a fixture arm (red on the pre-fix shape, green on the (pattern) form and on a case inside a quoted bash -c string)'
+    unscoreable: "unpinnable-until-the-guard-exists: the check-bash-dialect arm is the deliverable (pre-fix result: the shape is not refused; the live function returns garbage under bash 3.2)"
+    depends_on: []
+    next_action: >
+      Parenthesise the two patterns in lib-ledger-freshness.sh, then add the
+      bash-3.2 shape to check-bash-dialect.lua with fixture arms.
+    provenance: |
+      Filed by tlatoanis-macbook-air, 2026-10-10.
+    events:
+      - type: filed
+        ts: "2026-10-10T23:18:05Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          bash 3.2 ends $( ) at an unparenthesised case pattern; one real instance in the forge's lib-ledger-freshness.sh, reached on darwin via a pre-build litmus.
