@@ -12467,6 +12467,35 @@ fn run_codex_device_login_with_qr(
     }
 }
 
+/// ORDER 1571-lgex. What an end user sees, and what the tray's status label
+/// becomes, when a provider's interactive sign-in step ends without a
+/// credential — most often because its window expired (Claude closes it at
+/// 300 s). One plain line: no flag or variable names (operator rule,
+/// 2026-10-08), and it says what to do next.
+#[derive(Debug, PartialEq, Eq)]
+struct SignInUnfinished {
+    terminal_line: String,
+    status_event: &'static str,
+}
+
+impl SignInUnfinished {
+    /// The tray paints this as the VM status event, replacing the last build
+    /// label; `run_provider_login` pushes it before the login container is
+    /// removed, so the tray recovers at once instead of staying on
+    /// "Building Forge" (measured 2026-10-09: 170 s and counting).
+    const STATUS_EVENT: &'static str = "Sign-in did not finish";
+
+    fn for_provider(provider_name: &str) -> Self {
+        Self {
+            terminal_line: format!(
+                "{provider_name} sign-in did not finish (it may have timed out). \
+                 Choose it again in the Tillandsias menu to try again."
+            ),
+            status_event: Self::STATUS_EVENT,
+        }
+    }
+}
+
 fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), String> {
     let provider_name = config.provider.name();
     let flag = format!("--{}-login", config.provider.id_str());
@@ -12668,12 +12697,25 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &config.token_script,
             config.input_mode,
         ));
-        if matches!(config.provider, ProviderId::Codex)
+        let interactive = if matches!(config.provider, ProviderId::Codex)
             && matches!(config.input_mode, LoginInputMode::Terminal)
         {
-            run_codex_device_login_with_qr(login, debug)?;
+            run_codex_device_login_with_qr(login, debug)
         } else {
-            run_podman_command(login, debug)?;
+            run_podman_command(login, debug)
+        };
+        // ORDER 1571-lgex. This step waits on the PERSON: the provider CLI
+        // holds its sign-in window open (Claude's closes at 300 s) and exits
+        // non-zero when it expires. Its raw error is a podman exec line, and
+        // the tray's status label was left on whatever the last build pushed
+        // ("Building Forge"), so an expired window read as a wedge. Name it.
+        if let Err(detail) = interactive {
+            let unfinished = SignInUnfinished::for_provider(provider_name);
+            if debug {
+                eprintln!("[tillandsias] {provider_name} sign-in step failed: {detail}");
+            }
+            push_udp_event(unfinished.status_event);
+            return Err(unfinished.terminal_line);
         }
     }
 
@@ -19650,6 +19692,10 @@ fn maybe_spawn_vsock_listener(
                 let mut buf = [0; 1024];
                 while let Ok((len, _)) = socket.recv_from(&mut buf).await {
                     if let Ok(msg) = std::str::from_utf8(&buf[..len]) {
+                        // ORDER 1571-lgex: name every pushed status in the
+                        // guest log. An expired sign-in used to leave no
+                        // trace here at all.
+                        eprintln!("[tillandsias] status event: {msg}");
                         udp_state.set_last_event(msg.to_string());
                     }
                 }
@@ -25266,6 +25312,61 @@ mod tests {
         );
     }
 
+    /// ORDER 1571-lgex. The interactive sign-in step waits on the person and
+    /// its window expires (Claude: 300 s). Pre-fix its error propagated raw
+    /// with `?` — a podman exec line on the user's terminal and no status
+    /// push, so the tray stayed on "Building Forge". Scanned in the SOURCE so
+    /// this arm compiles, and fails, against the pre-fix tree.
+    #[test]
+    fn an_unfinished_sign_in_step_is_named_and_pushed_not_propagated_raw() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let login_window = source_window(
+            source,
+            "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
+        );
+        for raw in [
+            "run_podman_command(login, debug)?",
+            "run_codex_device_login_with_qr(login, debug)?",
+        ] {
+            assert!(
+                !login_window.contains(raw),
+                "the interactive sign-in step must not propagate its raw error ({raw}); \
+                 an expired window must reach the user as one plain line (1571-lgex)"
+            );
+        }
+        assert!(
+            login_window.contains("push_udp_event(unfinished.status_event)"),
+            "an unfinished sign-in must push a status event so the tray leaves the last \
+             build label (1571-lgex)"
+        );
+    }
+
+    /// ORDER 1571-lgex. The end-user line: one line, names the provider, says
+    /// what to do, and carries no flag, variable or podman text.
+    #[test]
+    fn the_sign_in_unfinished_line_is_plain_and_actionable() {
+        for provider in [
+            ProviderId::Claude,
+            ProviderId::Codex,
+            ProviderId::Antigravity,
+            ProviderId::GitHub,
+        ] {
+            let u = SignInUnfinished::for_provider(provider.name());
+            let line = &u.terminal_line;
+            assert!(!line.contains('\n'), "one line: {line:?}");
+            assert!(line.starts_with(provider.name()), "{line:?}");
+            assert!(line.contains("try again"), "{line:?}");
+            for banned in ["--", "TILLANDSIAS_", "podman", "exec"] {
+                assert!(
+                    !line.contains(banned),
+                    "{banned:?} in an end-user line: {line:?}"
+                );
+            }
+            assert_eq!(u.status_event, "Sign-in did not finish");
+            assert_ne!(u.status_event, "Building Forge");
+        }
+    }
+
     #[test]
     fn provider_login_persists_only_provider_scoped_tool_cache() {
         let codex = provider_login_tool_cache_mount(&ProviderId::Codex).expect("codex cache mount");
@@ -26236,7 +26337,9 @@ mod tests {
                 .unwrap_or_else(|| panic!("run_provider_login must contain {needle:?}"))
         };
         let stdin_identity_idx = find("Some(resolve_existing_git_identity()?)");
-        let login_exec_idx = find("run_podman_command(login, debug)?");
+        // 1571-lgex: the exec's error is mapped, not `?`-propagated, so anchor
+        // on the call itself.
+        let login_exec_idx = find("run_podman_command(login, debug)");
         let verify_persisted_idx = find("in-container vault write verification failed");
         let terminal_identity_idx = find("None => prompt_and_store_git_identity()");
         let stdin_store_idx = find("store_git_identity(&name, &email)");
