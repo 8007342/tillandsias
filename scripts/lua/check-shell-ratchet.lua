@@ -1,4 +1,4 @@
--- @trace order:1384-bxhk
+-- @trace order:1384-bxhk, order:1577-57u3
 --
 -- check-shell-ratchet.lua — the Lua migration's forcing function and its score.
 --
@@ -36,6 +36,8 @@
 --   violation:shell-ratchet:new-pipes:<path>:<n>>floor:<f> exit 1
 --   violation:shell-ratchet:new-piped-command:<path>      exit 1
 --   violation:shell-ratchet:floor-raised:<file>:<key>     exit 1
+--   violation:shell-ratchet:stale-floor:<path>            exit 1  (a floor line
+--                                                         names a deleted file)
 --   could-not-run:shell-ratchet:empty-population          exit 3
 local function err(s) log.raw(s) end
 local function read(p) local ok, s = pcall(fs.read, p); if ok then return s end; return nil end
@@ -192,6 +194,26 @@ if n_steps > 0 then
               "  " .. f .. " adds a `command:` with a pipe outside quotes. Use the steps: form, or a fixture script.")
         end
     end
+end
+
+-- (5) a floor line naming a file that no longer exists is STALE (1577-57u3):
+-- it overstates the backlog and readmits the deleted file under its old
+-- allowance, so a decider re-added by name is never refused as new. Measured
+-- 2026-10-10: 9 decider-floor lines and 7 pipe-floor lines named .sh files
+-- already ported to Lua and deleted. The port that deletes a file lowers its
+-- floor lines in the same commit; --dump-floors writes them from the tree.
+local stale = {}
+for p in pairs(dfloor) do if not fs.exists(p) then stale[#stale + 1] = DFLOOR .. ":" .. p end end
+for k in pairs(pfloor) do
+    local p = k:match("^%a+ (.+)$")
+    if p and not fs.exists(p) then stale[#stale + 1] = PFLOOR .. ":" .. p end
+end
+table.sort(stale)
+local stale_seen = {}
+for _, sk in ipairs(stale) do
+    local p = sk:match(":(.+)$")
+    err("  " .. sk .. " names a file that does not exist. Drop the line: `tillandsias-plan script run scripts/lua/check-shell-ratchet.lua -- --dump-floors` prints both floors for this tree.")
+    if not stale_seen[p] then stale_seen[p] = true; v("violation:shell-ratchet:stale-floor:" .. p) end
 end
 
 -- (4) floors only descend, over each floor file's own history (no moving ref).

@@ -67,36 +67,54 @@ The shell corpus is also the first backlog of methodology
 `carried_obligations` (methodology/convergence.yaml), named `shell-to-lua`,
 at the GENTLE stage since 2026-10-10. A change whose own diff against its base
 adds, edits or deletes a file under `scripts/check-*.sh`, `test-*.sh`,
-`verify-*.sh`, `guard-*.sh`, `scripts/lua/` or `scripts/gate-steps.d/` is DUE,
-and MUST carry one of: one port (a file from the ratchet's `sh=` population
-ported to `scripts/lua/` with the same verdict grammar, or retired, its `.sh`
-deleted and both floors lowered through `--dump-floors`, so `sh=` at the head
-is below `sh=` at the base), or one commit trailer
+`verify-*.sh`, `guard-*.sh`, `audit-*.sh`, `census-*.sh`, `preflight-*.sh`,
+`scripts/lua/` or `scripts/gate-steps.d/` is DUE, and MUST carry one of: one
+port (a file from the backlog's counted population ported to `scripts/lua/`
+with the same verdict grammar, or retired, its `.sh` deleted and both floors
+lowered through `--dump-floors`, so the backlog counter at the head is below
+the counter at the base), or one commit trailer
 `Carried-Waiver: shell-to-lua <reason>`. Waivers are counted, not judged. A
 change that touches none of those paths owes nothing. The carried item SHOULD
 be the smallest in reach and MUST be at most 150 lines; when it is larger than
 the change's own diff, the change waives with `too-big:<item>:<lines>` instead
-of growing. Paid is measured on `sh=`, never on the floor's length: on
-2026-10-10 nine floor lines name `.sh` files already ported and deleted, so a
-shorter floor can mean no port at all. The move to ENFORCED (only a port, or a
+of growing. Paid is measured on the backlog counter
+(`counter=shell-to-lua:<n>` on the carried-obligation guard's ok: line, over
+the `population` globs in convergence.yaml, with an exec wrapper counted once
+with its callee), never on the floor's length. A floor line naming a deleted
+file is refused as `violation:shell-ratchet:stale-floor:<path>` (1577-57u3; on
+2026-10-10 sixteen such lines stood across both floors). The move to ENFORCED (only a port, or a
 waiver citing `blocked-by:<order>`, passes) is an operator bar raise, proposed
-when `sh=` does not descend across ten consecutive due integrations. Provenance:
+when the counter does not descend across ten consecutive due integrations,
+as `check-carried-obligations.lua --burndown` reports (`trigger=fired`). Provenance:
 operator 2026-10-09, "new gates in lua only, and each new lua requires to
 retroactively update 1+ of old ones"; operator 2026-10-10, withdrawing that
 wording but not its intent, "I just want to automatically do backlog to LUA
 migration as agents do progress" and "migrate +1 with your PR". What enforces
-this today: nothing beyond the ratchet. The guard that prints and judges the
-carried item is 1577-g96z, the landing tally 1577-568c, the honest counter
-1577-57u3; until they land the clause is binding convention.
+this: `scripts/lua/check-carried-obligations.lua` (1577-g96z) prints what a
+change owes in `./build.sh --preflight` and warns on a work-ref push; at
+landing, `scripts/relay-preflight.sh` refuses a due, silent change and
+`scripts/land-queue.sh` evicts it before its gate, and every land commit
+records a `Carried: <backlog> <state> [<item-or-reason>]` trailer per backlog
+(1577-568c). The honest counter is 1577-57u3.
 
 The bootstrap and installer shell in
 `scripts/portability/bootstrap-shell-allowlist.txt` is outside this
 requirement by design (it runs before any binary exists).
 
+#### Scenario: A due, silent change is evicted at landing and a waived one is recorded
+- **WHEN** the land queue merges a work ref that edits `scripts/check-<name>.sh`, ports nothing and carries no `Carried-Waiver:` trailer
+- **THEN** it prints `evict:land-queue:<n>:carried-silent:shell-to-lua` and the waiver line to add, comments it on the PR, and runs no gate for it
+- **AND** the same change carrying `Carried-Waiver: shell-to-lua <reason>` in its last paragraph lands with the trailer `Carried: shell-to-lua waived <reason>` on the land commit
+
 #### Scenario: A new shell decider is refused by name
 - **WHEN** a commit adds `scripts/check-<name>.sh` not present in `shell-decider-floor.txt`
 - **THEN** `./build.sh --check` prints `violation:shell-ratchet:new-decider:scripts/check-<name>.sh` and exits non-zero
 - **AND** the refusal names `scripts/lua/check-<name>.lua` on `tillandsias-plan script run` as the remedy
+
+#### Scenario: A floor line naming a deleted file is refused
+- **WHEN** a commit deletes `scripts/check-<name>.sh` and leaves its line in `shell-decider-floor.txt` or `pipe-site-floor.txt`
+- **THEN** `check-shell-ratchet.lua` prints `violation:shell-ratchet:stale-floor:scripts/check-<name>.sh`, names `--dump-floors` as the remedy, and exits non-zero
+- **AND** the same commit with the file's floor lines dropped passes
 
 #### Scenario: A ported decider lowers its floors in the same commit
 - **WHEN** a commit replaces `scripts/check-<name>.sh` with `scripts/lua/check-<name>.lua` and deletes the `.sh`
@@ -105,16 +123,16 @@ requirement by design (it runs before any binary exists).
 
 #### Scenario: A change that touches a gate script carries one port or one waiver
 - **WHEN** a change's diff against its base touches `scripts/check-<x>.sh`, `scripts/lua/check-<y>.lua` or a `scripts/gate-steps.d/` step
-- **THEN** either the ratchet's `sh=` count at the change's head is below its count at the base, with the ported `.sh` deleted and both floors lowered by `--dump-floors`, or a commit in the change carries the trailer `Carried-Waiver: shell-to-lua <reason>`
+- **THEN** either the backlog counter at the change's head is below its count at the base, with the ported `.sh` deleted and both floors lowered by `--dump-floors`, or a commit in the change carries the trailer `Carried-Waiver: shell-to-lua <reason>`
 - **AND** the carried-obligation guard prints `carried:shell-to-lua:paid:<path>` or `carried:shell-to-lua:waived:<reason>`, and a due change with neither prints `carried:shell-to-lua:due:<path> (<n> lines)` with the waiver line to paste
 
 #### Scenario: A change outside the gate scripts owes nothing
-- **WHEN** a change's diff touches no path under `scripts/check-*.sh`, `test-*.sh`, `verify-*.sh`, `guard-*.sh`, `scripts/lua/` or `scripts/gate-steps.d/`
+- **WHEN** a change's diff touches no path under `scripts/check-*.sh`, `test-*.sh`, `verify-*.sh`, `guard-*.sh`, `audit-*.sh`, `census-*.sh`, `preflight-*.sh`, `scripts/lua/` or `scripts/gate-steps.d/`
 - **THEN** the carried-obligation guard prints `carried:shell-to-lua:not-due`
 - **AND** no port or waiver is asked of it
 
 #### Scenario: A stalled backlog is proposed for enforcement, not enforced by the loop
-- **WHEN** `sh=` does not descend across ten consecutive due integrations on linux-next
+- **WHEN** the backlog counter does not descend across ten consecutive due integrations on linux-next
 - **THEN** the coordinator puts one plain ask to the operator carrying the window's paid, waived and silent counts
 - **AND** the stage stays gentle until the operator's approval is recorded in methodology `approved_bar_raises`
 

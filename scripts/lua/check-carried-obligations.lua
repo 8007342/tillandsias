@@ -1,4 +1,4 @@
--- @trace order:1577-g96z, order:1570-k5yt, spec:ci-release
+-- @trace order:1577-g96z, order:1570-k5yt, order:1577-57u3, spec:ci-release
 -- @env TILLANDSIAS_CARRIED_BASE TILLANDSIAS_CARRIED_HEAD TILLANDSIAS_CARRIED_REF
 --
 -- check-carried-obligations.lua — what does THIS change owe each carried
@@ -25,6 +25,10 @@
 --                                                                   Carried-Waiver line git did not
 --                                                                   parse: not in the last paragraph)
 --   skip:carried-obligations:no-base:<ref>                          exit 0
+-- The ok: line ends ` counter=<backlog>:<n>` for each backlog it can count.
+-- --burndown prints one burndown:<backlog>:... line per backlog (the stall
+-- trigger, from the land commits' Carried trailers) and
+-- ok:carried-burndown:backlogs=<n> fired=<k>; see the --burndown block.
 --
 -- DUE is the change's own diff, `git diff --name-only BASE...HEAD` (BASE
 -- defaults to origin/linux-next, as the -added deciders do), against the
@@ -66,7 +70,11 @@ if not BASE or BASE == "" then BASE = "origin/linux-next" end
 local HEAD = env.get("TILLANDSIAS_CARRIED_HEAD")
 if not HEAD or HEAD == "" then HEAD = "HEAD" end
 local LANDING = false
-for i = 1, #arg do if arg[i] == "--landing" then LANDING = true end end
+local BURNDOWN = false
+for i = 1, #arg do
+    if arg[i] == "--landing" then LANDING = true end
+    if arg[i] == "--burndown" then BURNDOWN = true end
+end
 
 local function git(args)
     local argv = { "git" }
@@ -135,26 +143,125 @@ local function in_area(area)
 end
 
 -- ── the shell-to-lua counter, at a ref ─────────────────────────────────────
-local function shell_population(ref)
-    local _, allow = git({ "show", ref .. ":scripts/portability/bootstrap-shell-allowlist.txt" })
+-- The POPULATION is data on the backlog (convergence.yaml `population` globs,
+-- `population_excludes` allowlist), so the guard, the burndown and any reader
+-- count one set (1577-57u3). Read at a REF with `git ls-tree -l`/`git show`,
+-- so the merge base, the head and every burndown window end are measured the
+-- same way. A backlog with no `population` keeps the four ratchet prefixes.
+local DEFAULT_POPULATION = { "scripts/check-*.sh", "scripts/test-*.sh", "scripts/verify-*.sh", "scripts/guard-*.sh" }
+
+-- A WRAPPER is at most WRAPPER_MAX_CODE code lines (not blank, not a comment)
+-- whose exec names another population file. It is counted ONCE, with its
+-- callee: porting the callee alone leaves the wrapper, which then counts in
+-- the callee's place, so only porting (or retiring) both pays. A wrapper onto
+-- a script OUTSIDE the population is that script's only representative and
+-- stays counted (test-mo-full-attest.sh -> mo-full-attest.sh).
+local WRAPPER_MAX_CODE, WRAPPER_MAX_BYTES = 10, 4096
+local function exec_callee_of(content)
+    local code, callee = 0, nil
+    for _, l in ipairs(text.lines(content)) do
+        if l:match("%S") and not l:match("^%s*#") then
+            code = code + 1
+            callee = callee or l:match("^%s*exec%s.-([%w%-_.]+%.sh)")
+        end
+    end
+    if code <= WRAPPER_MAX_CODE and callee then return "scripts/" .. callee end
+    return nil
+end
+
+local function shell_population(ref, b)
+    local globs = (type(b) == "table" and type(b.population) == "table" and #b.population > 0) and b.population or DEFAULT_POPULATION
+    local pats = {}
+    for _, g in ipairs(globs) do pats[#pats + 1] = glob_to_pattern(g) end
+    local excl = (type(b) == "table" and type(b.population_excludes) == "string") and b.population_excludes
+        or "scripts/portability/bootstrap-shell-allowlist.txt"
+    local _, allow = git({ "show", ref .. ":" .. excl })
     local boot = {}
     for _, l in ipairs(text.lines(allow)) do
         local f = l:match("^%s*(%S+)")
         if f and not f:find("^#") then boot[f] = true end
     end
-    local _, tree = git({ "ls-tree", "--name-only", ref, "scripts/" })
-    local pop = {}
-    for _, f in ipairs(lines(tree)) do
-        local leaf = f:match("^scripts/([^/]+)$")
-        if leaf and leaf:match("%.sh$") and not boot[f]
-            and (leaf:match("^check%-") or leaf:match("^test%-") or leaf:match("^verify%-") or leaf:match("^guard%-")) then
-            pop[#pop + 1] = f
+    local _, tree = git({ "ls-tree", "-l", ref, "scripts/" })
+    local set, sizes = {}, {}
+    for _, row in ipairs(lines(tree)) do
+        local size, f = row:match("^%S+%s+blob%s+%S+%s+(%d+)\t(.+)$")
+        if f and f:match("^scripts/[^/]+$") and not boot[f] then
+            for _, pat in ipairs(pats) do
+                if f:match(pat) then set[f] = true; sizes[f] = tonumber(size); break end
+            end
         end
+    end
+    local pop = {}
+    for f in pairs(set) do
+        local wrapped = false
+        if sizes[f] and sizes[f] <= WRAPPER_MAX_BYTES then
+            local _, c = git({ "show", ref .. ":" .. f })
+            local callee = exec_callee_of(c)
+            wrapped = callee ~= nil and callee ~= f and set[callee] == true
+        end
+        if not wrapped then pop[#pop + 1] = f end
     end
     table.sort(pop)
     return pop
 end
 local COUNTERS = { ["shell-to-lua"] = shell_population }
+
+-- ── --burndown: has the stall trigger fired? (1577-57u3) ──────────────────
+-- Per backlog, the last `window_size` DUE integrations on BASE's first-parent
+-- history, read from the `Carried:` trailers the land queue writes (1577-568c):
+--   burndown:<b>:count=<n>:stage=<s>:window=<k>:paid=<p>:waived=<v>:silent=<q>:trigger=<fired|clear>
+-- count is the counter at BASE. The trigger FIRES when the window is full
+-- (k = window_size) and the counter at BASE is not below the counter at the
+-- first parent of the window's oldest landing, at stage advisory or gentle
+-- (triggers.advisory_to_gentle / gentle_to_enforced). A short window is clear:
+-- landings before 1577-568c carry no trailer and are not counted, never
+-- guessed. A fired trigger is not a failure (exit 0); the coordinator turns it
+-- into one plain ask to the operator (governance).
+if BURNDOWN then
+    local W = tonumber(conv.carried_obligations.window_size) or 10
+    local _, hist = git({ "log", "--first-parent", "--format=%H%x1f%(trailers:key=Carried,valueonly,separator=%x1e)", BASE })
+    local fired = 0
+    for _, b in ipairs(backlogs) do
+        local name = tostring(b.name)
+        local stage = tostring(b.stage or "gentle")
+        local counter = COUNTERS[name]
+        local k, paid, waived, silent_n, oldest = 0, 0, 0, 0, nil
+        for _, row in ipairs(lines(hist)) do
+            if k >= W then break end
+            local sha, tr = row:match("^(%x+)\31(.*)$")
+            for entry in ((tr or "") .. "\30"):gmatch("(.-)\30") do
+                local bn, state = text.trim(entry):match("^(%S+)%s+(%S+)")
+                if bn == name and (state == "paid" or state == "waived" or state == "due") then
+                    k = k + 1; oldest = sha
+                    if state == "paid" then paid = paid + 1
+                    elseif state == "waived" then waived = waived + 1
+                    else silent_n = silent_n + 1 end
+                    break
+                end
+            end
+        end
+        if not counter then
+            out.line("burndown:" .. name .. ":count=unsupported:stage=" .. stage .. ":window=" .. k .. ":paid=" .. paid ..
+                ":waived=" .. waived .. ":silent=" .. silent_n .. ":trigger=clear")
+        else
+            local n_end = #counter(BASE, b)
+            local n_start = n_end
+            if oldest then
+                local has_parent = git({ "rev-parse", "--verify", "--quiet", oldest .. "^1" })
+                if has_parent then n_start = #counter(oldest .. "^1", b) end
+            end
+            local trig = (k >= W and n_end >= n_start and (stage == "advisory" or stage == "gentle")) and "fired" or "clear"
+            if trig == "fired" then fired = fired + 1 end
+            out.line("burndown:" .. name .. ":count=" .. n_end .. ":stage=" .. stage .. ":window=" .. k .. ":paid=" .. paid ..
+                ":waived=" .. waived .. ":silent=" .. silent_n .. ":trigger=" .. trig)
+            if trig == "fired" then
+                log.raw("  " .. name .. ": the counter did not descend across the last " .. W .. " due integrations (" .. n_start ..
+                    " -> " .. n_end .. "). Propose the next stage to the operator as one plain ask with these numbers (carried_obligations.governance).")
+            end
+        end
+    end
+    verdict.ok("carried-burndown", "backlogs=" .. #backlogs .. " fired=" .. fired)
+end
 
 local function line_count(path)
     local ok_r, c = pcall(fs.read, path)
@@ -260,7 +367,7 @@ for _, b in ipairs(backlogs) do
         -- is already the change's own, and a trunk that landed other ports
         -- since this change branched would otherwise read as this change
         -- paying nothing (measured on this guard's own change, 2026-10-10).
-        local base_pop, head_pop = counter(MERGE_BASE), counter(HEAD)
+        local base_pop, head_pop = counter(MERGE_BASE, b), counter(HEAD, b)
         local head_set = {}
         for _, f in ipairs(head_pop) do head_set[f] = true end
         local removed = nil
@@ -303,4 +410,12 @@ if LANDING and #silent > 0 then
         "  a due change landed with neither a ported item nor a `Carried-Waiver: " .. silent[1] ..
         " <reason>` trailer (methodology/convergence.yaml carried_obligations, stage gentle).")
 end
-verdict.ok("carried-obligations", "backlogs=" .. #backlogs .. " due=" .. n_due .. " silent=" .. #silent)
+-- The counter of every backlog this guard can count, at HEAD, on every run:
+-- the one integer the convergence counter clause asks to see on each --check.
+local counts = {}
+for _, b in ipairs(backlogs) do
+    local c = COUNTERS[tostring(b.name)]
+    if c then counts[#counts + 1] = tostring(b.name) .. ":" .. #c(HEAD, b) end
+end
+verdict.ok("carried-obligations", "backlogs=" .. #backlogs .. " due=" .. n_due .. " silent=" .. #silent ..
+    (#counts > 0 and (" counter=" .. table.concat(counts, ",")) or ""))
