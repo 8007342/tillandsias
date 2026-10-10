@@ -4520,6 +4520,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Bash dialect gate passed"
 
+    # The cheatsheet-reference checker's own fixture (1570-k4fx), a Lua fixture
+    # on the one runner: both reference shapes, See-also scoping, a dangling
+    # reference refused by name and its negative control, a PATH that resolves
+    # nothing, no cheatsheets/ refused. The checker itself is gate step 165.
+    _step "Checking the cheatsheet-reference checker's fixture (1570-k4fx)..."
+    if ! _run_lua_decider "scripts/lua/test-cheatsheet-refs.lua" 2>&1; then
+        _error "the cheatsheet-reference checker's fixture failed — see the FAIL lines above (1570-k4fx)"
+        exit 1
+    fi
+    _info "Cheatsheet-reference fixture passed"
+
     # ORDER 1384-bxhk — the shell ratchet: prints the Lua migration's counts on
     # every --check, refuses a NEW .sh decider (check-/test-/verify-/guard-), a
     # new pipe site beyond a file's floor and (once steps: exists) a new piped
@@ -4548,6 +4559,30 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Litmus step-model fixture passed"
+
+    # ORDER 1577-g96z — what THIS change owes each carried obligation
+    # (methodology/convergence.yaml carried_obligations; shell-to-lua is at
+    # stage gentle). One carried:<backlog>:<not-due|paid|waived|due> line per
+    # backlog; in --check it never refuses a due change (silence is refused
+    # only at landing, by the land queue running it with --landing). It does
+    # refuse a tree whose backlog table does not parse.
+    _step "Checking what this change owes each carried obligation (1577-g96z)..."
+    if ! _run_lua_decider "scripts/lua/check-carried-obligations.lua" 2>&1; then
+        _error "the carried-obligation guard could not read methodology/convergence.yaml carried_obligations — see the line above (1577-g96z)"
+        exit 1
+    fi
+    _info "Carried obligations reported"
+
+    # Its fixture, the tree's first Lua gate fixture (1577-g96z): the guard's
+    # verdicts on constructed diffs in a scratch repo. A Lua fixture runs here
+    # directly through the one runner (no .step file, so no second-regime
+    # record is needed to enter --check).
+    _step "Checking the carried-obligation guard's fixture (1577-g96z)..."
+    if ! _run_lua_decider "scripts/lua/test-carried-obligations.lua" 2>&1; then
+        _error "the carried-obligation guard no longer prints due/paid/waived/not-due correctly on its constructed diffs — see the FAIL lines above (1577-g96z)"
+        exit 1
+    fi
+    _info "Carried-obligation fixture passed"
 
     _step "Checking every litmus definition parses (933-4gm8)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-yaml-parses.sh" 2>&1; then

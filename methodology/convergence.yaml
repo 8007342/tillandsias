@@ -617,7 +617,11 @@ carried_obligations:
     landing records it, and the stall trigger reads the counts. A PR-body line
     is not the record: the land queue reads only number, headRefName and
     isDraft, and a forge cannot see a PR body at all; a trailer travels with
-    the merge commit's second parent into every clone.
+    the merge commit's second parent into every clone. The trailer goes in the
+    message's LAST paragraph, beside Co-Authored-By: git reads trailers only
+    from there, so a Carried-Waiver line written higher up is not a waiver at
+    all; the guard names it ("waiver present but not a trailer") and refuses
+    it at landing as waiver-not-a-trailer (measured on 1570-25iq, 2026-10-10).
   discovery: >
     An agent learns what it owes from a guard's output, never from this
     prose. The guard runs the backlog table below against the change's diff

@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# 1574-mrst on work/1574-mrst (coordinator queue, after #281).
+status:
+  - packet_id: the-macos-hard-reset-reset-guest-has-no-per-run-approval-and-does-not-clear-the-vault-keychain-items-so-it-lacks-parity-with-the-windows-hard-reset
+    field: status
+    value: in_progress
+    ts: "2026-10-10T17:00:38Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-macos-hard-reset-reset-guest-has-no-per-run-approval-and-does-not-clear-the-vault-keychain-items-so-it-lacks-parity-with-the-windows-hard-reset
+    event:
+      type: note
+      ts: "2026-10-10T17:00:38Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Fix on work/1574-mrst. macOS --reset-guest (diagnose::reset_guest_main) now runs reset_state::run_hard_reset_in, at parity with the Windows HARD reset (1437-3iux S2/S3):
+        (1) a per-run, non-interactive approval through the shared core helpers: hard_reset_approval, --approve-hard-reset, or TILLANDSIAS_HARD_RESET_APPROVED=1, nothing else; otherwise HARD_REFUSED_NO_APPROVAL and exit 1 with nothing touched;
+        (2) an unreachable Keychain (an Err reading the share) gives HARD_REFUSED_KEYRING_UNREACHABLE;
+        (3) "reset: HARD (approved by ...)" and the shared announce_reset_plan name every destroyed and preserved item BEFORE the wipe;
+        (4) after the wipe it clears vault-shamir-share-v1, vault-root-token-v1, their fallback_* files and vault-data, and READS BACK each item: the delete is Ok-on-timeout, so "cleared" is claimed only on a read. Not clearing is a named WARNING, non-fatal as on Windows.
+        The installation anchor tillandsias-vm-uuid and the caches are kept. A failed wipe clears nothing. The installer cannot reach it (source scan). Help text updated.
+        MEASURED, darwin rustc 1.99.0, against a scratch Keychain service (tillandsias-scratch-test-*) and scratch dirs ONLY:
+        - hard_reset_without_approval_refuses_and_touches_nothing (env unset, "", "0", "yes", "true") and approved_hard_reset_clears_the_vault_credentials_and_keeps_the_anchor (by argument and by variable) both FAIL under a pre-fix emulation (the old body: wipe straight away, no gates, no clearing; tests unchanged) and pass after.
+        - a_failed_wipe_clears_no_credentials, an_unreachable_keychain_refuses_hard (pure gate) and the_installer_cannot_reach_the_hard_reset (with a SOFT negative control) all pass.
+        - The crate is 174 passed, 0 failed; clippy and fmt are clean; check-rust-source-pin-added is ok.
+        - After the runs: 0 scratch services left in the login keychain, and the production tillandsias items (tillandsias-vm-uuid, vault-shamir-share-v1, vault-root-token-v1) are still present.
+        NOT MEASURED: a live --reset-guest on a Mac (it would destroy the operator's guest).
+        Out of scope: action_host::reset_guest_async, a dead-code stop/wipe/reboot worker with no callers, is not gated. A future runtime wiring must route through run_hard_reset_in.

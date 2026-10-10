@@ -15,7 +15,6 @@ scripts/check-ca-path-literals.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
 scripts/check-cheatsheet-frontmatter.sh
-scripts/check-cheatsheet-refs.sh
 scripts/check-cheatsheet-source-anchors.sh
 scripts/check-cheatsheet-sources.sh
 scripts/check-cheatsheet-tiers.sh
@@ -42,7 +41,6 @@ scripts/check-enclave-network-internal.sh
 scripts/check-enclave-service-health.sh
 scripts/check-engine-cpu-dispatch.sh
 scripts/check-exact-version-literal-added.sh
-scripts/check-exec-argv-vector-workarounds.sh
 scripts/check-fleet-membership.sh
 scripts/check-forge-expert-base.sh
 scripts/check-forge-findings-persisted.sh
@@ -134,7 +132,6 @@ scripts/check-tracked-files-unwritten.sh
 scripts/check-tray-import-surface.sh
 scripts/check-tray-string-corpus-drift.sh
 scripts/check-unrunnable-platform-arms.sh
-scripts/check-vault-cli-gate-coverage.sh
 scripts/check-version-bump-isolation.sh
 scripts/check-windows-only-sources-verified.sh
 scripts/check-windows-tray-clippy.sh

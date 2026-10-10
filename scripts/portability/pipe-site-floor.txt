@@ -380,7 +380,6 @@ scripts scripts/check-enclave-network-internal.sh 5
 scripts scripts/check-enclave-service-health.sh 16
 scripts scripts/check-engine-cpu-dispatch.sh 6
 scripts scripts/check-exact-version-literal-added.sh 5
-scripts scripts/check-exec-argv-vector-workarounds.sh 1
 scripts scripts/check-fleet-membership.sh 8
 scripts scripts/check-forge-findings-persisted.sh 3
 scripts scripts/check-forge-service-health.sh 6
