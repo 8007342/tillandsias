@@ -110,6 +110,10 @@ set -uo pipefail
 # directory for any relative invocation — the exact defect landed tonight as
 # 1337-3tk6's follow-up, arriving here from the opposite direction.
 _SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The freeze predicate and marker read, shared with the hook, release-freeze.sh
+# and release-preflight (1255-s4im).
+# shellcheck source=lib-freeze-paths.sh
+. "$_SELF_DIR/lib-freeze-paths.sh"
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
     echo "fail:land-queue:not-a-git-repo — run this from the checkout you are landing into" >&2
@@ -314,6 +318,28 @@ Rebase or merge \`$TRUNK\` into \`$head\` and the queue will pick it up again. T
     rm -f "$_mlog"
     merge_sha="$(git rev-parse HEAD)"
 
+    # ── A FROZEN TARGET HOLDS CODE (1255-s4im) ───────────────────────────────
+    # Asked BEFORE the gate, so no gate is spent on a landing the freeze would
+    # refuse, and asked of ORIGIN by the tool itself: the pre-push hook refuses
+    # this only on a host whose hook is armed. A candidate that carries only
+    # paths the freeze exempts (ledger, docs, skills, cheatsheets) still lands —
+    # that is how coordination keeps moving during a cut. HOLD is not EVICT: the
+    # candidate is fine, the branch is closed; it lands after the freeze clears.
+    _held="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
+    if [ -n "$_held" ]; then
+        _frc=0; _fm="$(freeze_markers "$REMOTE" "$TRUNK")" || _frc=$?
+        if [ "$_frc" -ne 0 ]; then
+            say "hold:land-queue:$num:freeze-unknown — git ls-remote $REMOTE failed, and this candidate carries held code ($_held); not gating into a branch whose freeze state is unknown"
+            skipped=$((skipped + 1))
+            continue
+        fi
+        if [ -n "$_fm" ]; then
+            say "hold:land-queue:$num:frozen:$(printf '%s\n' "$_fm" | head -n 1 | cut -f2) — carries held code ($_held); it lands after the freeze clears"
+            skipped=$((skipped + 1))
+            continue
+        fi
+    fi
+
     # ── GATE THE MERGE RESULT ────────────────────────────────────────────────
     if [ "$DRY_RUN" -eq 1 ]; then
         say "dry-run: would gate ${merge_sha:0:9} then push to $TRUNK"
@@ -398,6 +424,21 @@ The queue continued with the next candidate. Fix and the queue will pick it up a
         else
             say "requeue:land-queue:$num:target-moved:gated-on=${base_sha:0:9} now=${base_now:0:9} classes=$(printf '%s' "${_delta_classes:-unreadable}" | tr '\n' ',' | sed 's/,$//')"
             pr_comment "$num" "Re-queued, not landed: \`$TRUNK\` moved from \`${base_sha:0:9}\` to \`${base_now:0:9}\` while this candidate was gating, and the move touched classes \`$(printf '%s' "${_delta_classes:-unreadable}" | tr '\n' ',' | sed 's/,$//')\` — not ledger fragments alone, so the green verdict no longer describes the tree being pushed. Nothing was pushed. The queue will re-gate against the new target."
+            requeued=$((requeued + 1))
+            continue
+        fi
+    fi
+
+    # ── A FREEZE SET WHILE THIS GATED IS NOT PUSHED THROUGH (1255-s4im) ──────
+    # The gate takes 40 minutes and a cut can freeze the branch inside that
+    # window. The hook re-asks at push on a hooked host; the tool re-asks here
+    # so the answer does not depend on which host runs the queue. Recomputed
+    # from the CURRENT base, because an adopt above may have moved it.
+    _held="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
+    if [ -n "$_held" ]; then
+        _frc=0; _fm="$(freeze_markers "$REMOTE" "$TRUNK")" || _frc=$?
+        if [ "$_frc" -ne 0 ] || [ -n "$_fm" ]; then
+            say "requeue:land-queue:$num:frozen-mid-gate:$( [ "$_frc" -ne 0 ] && echo "freeze-unknown" || printf '%s\n' "$_fm" | head -n 1 | cut -f2) — the gate was green but $TRUNK froze while it ran and this carries held code ($_held); nothing was pushed"
             requeued=$((requeued + 1))
             continue
         fi

@@ -9,3 +9,6 @@ description = "Pure no-I/O fleet score and affinity core (native now, wasm32 lat
 [dependencies]
 serde = { workspace = true }
 serde_yaml = { workspace = true }
+
+[lints]
+workspace = true

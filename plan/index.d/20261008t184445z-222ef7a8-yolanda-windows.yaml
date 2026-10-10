@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-vault-store-and-download-cache-are-host-persistent-across-reset
+    field: progress_summary
+    value: |-
+      S1 (SOFT --reset-state) LIVE ARM, yolanda-windows 2026-10-08, on the real tillandsias distro. OPERATOR APPROVAL, given directly in the yolanda-windows session on 2026-10-08: "If you need to run a destructive curl install, and reprovision the vm, that's allowed and expected. I provide approval" and "If you can do soft reset that's fine, but hard reset is approved if needed." Only SOFT was run; no HARD reset and no Credential Manager write.
+      RESULT: --reset-state rc=0 in 19 s (announces "reset: SOFT", disposition=Verified:KEEP). After the tray delivered the share: Vault initialized:true sealed:false, storage_type file, "vault is unsealed and serving (provisioning persisted from a prior boot)".
+      SAME STORE: vault-data/core/_keyring sha256 4b280b71c09e2118 before and after, 98 files both times.
+      NO RE-IMPORT: ext4.vhdx CreationTimeUtc 2026-09-26T02:05:31.3283586Z before and after.
+      DOWNLOADS: %LOCALAPPDATA%\tillandsias\cache listing sha256 5E2FA5C95EE14673 before and after (2 files).
+      CREDENTIAL MANAGER: vault-shamir-share-v1, vault-root-token-v1, tillandsias-vm-uuid present before and after.
+      THREE DEFECTS FOUND BY THE LIVE ARM, all fixed on work/1437-3iux: (1) the reconcile skips a version-equal guest, so SOFT now injects the tray's headless unconditionally (19877d824); (2) a start-limited daemon unit made the injection fail, so the wipe runs systemctl reset-failed (19877d824); (3) the enclave resolver drop-in made the destroyed network's DNS 10.0.42.1 the guest's only upstream, so no DNS and no image pull; the SOFT wipe removes it (4db3fbfd8), and the general fix is filed as 1558-8swa.
+      INSTRUMENT LESSON: a hand-built guest asset without --features listen-vsock bricked the daemon (FATAL status=78/CONFIG) on the first attempt; the staging must apply build-guest-binaries.sh's no-vsock marker check (1308-9ej7).
+    ts: "2026-10-08T18:44:45Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: windows-vault-store-and-download-cache-are-host-persistent-across-reset
+    event:
+      type: note
+      ts: "2026-10-08T18:44:45Z"
+      host: yolanda-windows
+      summary: |-
+        S1 live SOFT arm evidence and the operator's dated approval (coordinator request 2026-10-08)

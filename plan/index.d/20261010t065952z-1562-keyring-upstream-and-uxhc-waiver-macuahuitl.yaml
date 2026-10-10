@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator rulings 2026-10-09 on 1562-kr7c (keyring) and 1562-uxhc (yolanda leaked test creds).
+events:
+  - packet_id: gnome-keyring-daemon-aborts-when-a-preflight-guard-is-killed-mid-secret-service-read-locking-gh-and-pushes-on-the-coordinator
+    event:
+      type: note
+      ts: "2026-10-10T06:59:52Z"
+      host: macuahuitl
+      summary: |-
+        Operator 2026-10-09: "take a quick look at the keyring crash but we don't care much for fixing it, it should get fixed upstream." Priority is now the operator's call; the defect stays open as a record.
+        Quick look, read from coredumpctl and the journal (gnome-keyring 50.0-1.fc44, glib2 2.88.3-1.fc44). Three SIGABRTs: 2026-10-08 15:53:36, 2026-10-09 01:55:54 and 13:25:00 PDT. All three fell during gate or preflight runs.
+        The signature is the same each time:
+        - gkd_secret_service_get_pkcs11_session: assertion 'client' failed
+        - then GLib-GIO:ERROR:gdbusconnection.c:4765:invoke_get_property_in_idle_cb: assertion failed: (error != NULL)
+        The daemon's D-Bus property getter runs for a caller it no longer tracks. It returns failure without setting a GError, and GIO aborts the daemon on that contract violation. That is an upstream gnome-keyring defect: a getter must set an error. Our share is only the trigger, a Secret Service client that disconnects while a property Get is still queued. The exit criteria still name the private-bus reproduction if anyone picks this up. NOT DONE: identifying which guard is the client.
+  - packet_id: windows-tray-tests-write-scratch-targets-into-the-operators-real-credential-manager-and-a-killed-test-process-leaks-them
+    event:
+      type: note
+      ts: "2026-10-10T06:59:52Z"
+      host: macuahuitl
+      summary: |-
+        Operator 2026-10-09: "I'm the only user of Yolanda, it's ok to clear, also ok to leave behind. Consider that obbligation fulfilled." The three leaked -test- targets on yolanda need no further action: yolanda may delete them or leave them. This waives the cleanup only. The defect is unchanged: tests must use scratch Credential Manager targets and never write the real store. The exit criteria stand.

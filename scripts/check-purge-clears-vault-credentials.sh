@@ -82,6 +82,26 @@ while IFS= read -r f; do
     grep -qF -- "$LINUX_CLEARER" "$f" || violations+=("$f")
 done < <(git ls-files '*.sh')
 
+# @trace spec:host-state-lifecycle, order:1559-2uw3
+# ORDER 1559-2uw3 (1437-3iux S4). THE NEGATIVE ARM: the Windows SOFT reset
+# calls NO clearer. The arm above is "destroys the guest, so clears"; SOFT keeps
+# the distro and the Vault store (host-state-lifecycle "Windows SOFT reset keeps
+# the distro, the store and the downloads"), and clearing the share there would
+# strand a live store. The SOFT body is Rust, so the scan above never sees it.
+# It is cut from `pub fn reset_state_once` to the next `pub fn reset_guest_once`
+# with // comments stripped, so a comment quoting the call neither passes nor
+# fails it. A body that cannot be found is a violation by name, never a pass.
+# TILLANDSIAS_PURGE_GUARD_SOFT_SRC is the fixture seam
+# (scripts/test-purge-guard-soft-arm.sh).
+SOFT_SRC="${TILLANDSIAS_PURGE_GUARD_SOFT_SRC:-crates/tillandsias-windows-tray/src/notify_icon.rs}"
+soft_body="$(awk '/^pub fn reset_state_once\(\) -> i32 \{/ { f = 1 } f && /^pub fn reset_guest_once\(/ { exit } f' "$SOFT_SRC" 2>/dev/null | sed 's|//.*||')"
+scanned=$((scanned + 1))
+if [ -z "$soft_body" ]; then
+    violations+=("$SOFT_SRC:soft-body-not-found")
+elif grep -qE 'clear_guest_vault_credentials\(|Clear-TillandsiasVaultHostCredentials|\.wipe_guest\(' <<<"$soft_body"; then # sigpipe-ok: herestring, no upstream writer
+    violations+=("$SOFT_SRC:soft-reset-calls-a-clearer")
+fi
+
 if [ ${#violations[@]} -gt 0 ]; then
     echo "violation:purge-without-credential-clear:$(
         IFS=,

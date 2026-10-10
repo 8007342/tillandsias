@@ -1,0 +1,131 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# 1437-3iux decomposed into slices (coordinator ruling 2026-10-08): S1 (SOFT
+# reset) is carried by 1437-3iux itself on work/1437-3iux (PR #243); S2-S4 are
+# these rows, each its own ref and PR, stacked in order. 1437-3iux closes only
+# when every split_into child is completed.
+packets:
+  - packet_id: 1437-3iux-s2-the-windows-hard-reset-asks-every-run-refuses-an-unreachable-keyring-and-announces-before-destroying
+    order: 1559-9uvb
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, tray, reset, vault, credential-manager, consent]
+    estimated_hours: 3
+    depends_on:
+      - windows-vault-store-and-download-cache-are-host-persistent-across-reset
+    owned_files:
+      - crates/tillandsias-core/src/reset_state.rs
+      - crates/tillandsias-windows-tray/src/notify_icon.rs
+      - crates/tillandsias-windows-tray/src/main.rs
+    title: |
+      1437-3iux S2: the HARD approval gate. --reset-guest requires a per-run approval (the exact word HARD at a TTY, or --approve-hard-reset / TILLANDSIAS_HARD_RESET_APPROVED=1 on that invocation), refuses by name when Credential Manager is unreachable (spec open question), announces `reset: HARD` naming the store loss before destroying, and keeps the download cache
+    context: |
+      Slice of 1437-3iux (host-state-lifecycle "SOFT reset is pre-authorised
+      everywhere, HARD asks every time" and "Windows HARD reset destroys the
+      distro and says the store goes with it"; operator ruling 1443-bs9z). These
+      exit criteria are MOVED here from 1437-3iux's HARD arm.
+      FORGE STRIP (1443-bs9z item 3), measured by source scan on yolanda
+      2026-10-08: the Windows tray forwards NO host environment into the guest
+      (no std::env::vars, no WSLENV, no forwarding helper in
+      crates/tillandsias-windows-tray/src); a forge's argv is built by the guest
+      headless from control-wire requests. So the variable cannot reach a
+      Windows forge through the tray. The container /proc/1/environ fixture arm
+      belongs to the headless forge-launch builder (linux lane), not this slice.
+    exit_criteria:
+      - 'without a TTY and without the approval, --reset-guest prints HARD_REFUSED_NO_APPROVAL and exits 1 having touched nothing, including with TILLANDSIAS_INSTALL_RESET=hard set and with TILLANDSIAS_HARD_RESET_APPROVED set to anything but 1 (pre-fix: FAILS — destroys with no approval)'
+      - 'at a TTY only the exact word HARD approves; with --approve-hard-reset or TILLANDSIAS_HARD_RESET_APPROVED=1 it proceeds'
+      - 'Credential Manager unreachable refuses with HARD_REFUSED_KEYRING_UNREACHABLE before anything is destroyed, behind that one named constant'
+      - 'an approved HARD announces `reset: HARD` and the store/sign-in loss BEFORE the wipe, unregisters and re-imports the distro, clears vault-shamir-share-v1 and vault-root-token-v1, and keeps tillandsias-vm-uuid and the download cache byte-identical (pre-fix: no announcement; the cache was removed)'
+    verifiable_closure: |
+      windows-tray pins reset_guest_asks_refuses_and_announces_before_destroying
+      (red pre-fix) and core hard_reset_needs_an_explicit_per_run_approval; plus
+      the live arms recorded on this row.
+      unscoreable: crate-unit-tests-plus-live-arms — the pins are crate tests and
+      the destructive arms are live, operator-approved runs.
+    events:
+      - type: filed
+        ts: "2026-10-08T19:09:00Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Slice S2 of 1437-3iux, filed at the coordinator's request (2026-10-08).
+  - packet_id: 1437-3iux-s3-install-windows-ps1-runs-the-soft-reset-by-default-and-hard-only-on-request-with-the-approval-passed-through
+    order: 1559-sqzp
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, installer, powershell, reset, consent]
+    estimated_hours: 2
+    depends_on:
+      - 1437-3iux-s2-the-windows-hard-reset-asks-every-run-refuses-an-unreachable-keyring-and-announces-before-destroying
+    owned_files:
+      - scripts/install-windows.ps1
+    title: |
+      1437-3iux S3: install-windows.ps1 runs --reset-state (SOFT) by default with no prompt and a first line naming it; TILLANDSIAS_INSTALL_RESET=hard or -HardReset runs --reset-guest and passes the per-run approval question through without setting the approval itself; -Purge stays HARD + uninstall
+    context: |
+      Slice of 1437-3iux (host-state-lifecycle "The installer runs SOFT for an
+      update and HARD only when asked"). Exit criteria MOVED here from
+      1437-3iux's installer arm.
+    exit_criteria:
+      - 'an install over an existing install prints `install: SOFT reset (stores and sign-ins kept); TILLANDSIAS_INSTALL_RESET=hard for a full guest wipe` first and runs --reset-state (pre-fix: FAILS — no kind named)'
+      - 'with TILLANDSIAS_INSTALL_RESET=hard (or -HardReset) it runs --reset-guest; without a TTY it refuses unless TILLANDSIAS_HARD_RESET_APPROVED=1 is on that invocation, and it never sets that variable itself'
+    verifiable_closure: |
+      A PowerShell fixture over install-windows.ps1's reset decision (SOFT
+      default, hard selection, approval pass-through), plus one destructive
+      curl-install run recorded on this row.
+      unscoreable: unpinnable-until-the-guard-exists — the fixture is the deliverable.
+    events:
+      - type: filed
+        ts: "2026-10-08T19:09:00Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Slice S3 of 1437-3iux, filed at the coordinator's request (2026-10-08).
+  - packet_id: 1437-3iux-s4-check-purge-clears-vault-credentials-gains-a-negative-arm-proving-the-soft-body-calls-no-clearer
+    order: 1559-2uw3
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: windows
+    capability_tags: [windows, guard, vault, credential-manager]
+    estimated_hours: 1
+    depends_on:
+      - 1437-3iux-s3-install-windows-ps1-runs-the-soft-reset-by-default-and-hard-only-on-request-with-the-approval-passed-through
+    owned_files:
+      - scripts/check-purge-clears-vault-credentials.sh
+    title: |
+      1437-3iux S4: scripts/check-purge-clears-vault-credentials.sh keeps its population "paths that unregister the distro" (= HARD, which must still call the clearer) and gains a negative arm asserting the SOFT body calls no clearer
+    context: |
+      Slice of 1437-3iux (its re-scope item 4, 1438-pk9j). Exit criterion MOVED
+      here. S1 already passes the guard as written (ok:purge-clears-vault-credentials:8
+      scanned, yolanda 2026-10-08), because the SOFT body does not unregister.
+    exit_criteria:
+      - 'the guard exits 0 and its negative arm reds a sabotaged SOFT body that calls clear_guest_vault_credentials (pre-fix: FAILS — there is no SOFT arm)'
+    verifiable_closure: |
+      bash scripts/check-purge-clears-vault-credentials.sh exits 0, and its
+      fixture's SOFT sabotage arm is red.
+      unscoreable: unpinnable-until-the-guard-exists — the arm is the deliverable.
+    events:
+      - type: filed
+        ts: "2026-10-08T19:09:00Z"
+        agent_id: windows-yolanda-claude-20261008t155217z
+        host: yolanda-windows
+        summary: |-
+          Slice S4 of 1437-3iux, filed at the coordinator's request (2026-10-08).
+status:
+  - packet_id: windows-vault-store-and-download-cache-are-host-persistent-across-reset
+    field: split_into
+    value:
+      - 1437-3iux-s2-the-windows-hard-reset-asks-every-run-refuses-an-unreachable-keyring-and-announces-before-destroying
+      - 1437-3iux-s3-install-windows-ps1-runs-the-soft-reset-by-default-and-hard-only-on-request-with-the-approval-passed-through
+      - 1437-3iux-s4-check-purge-clears-vault-credentials-gains-a-negative-arm-proving-the-soft-body-calls-no-clearer
+    ts: "2026-10-08T19:09:00Z"
+    host: yolanda-windows

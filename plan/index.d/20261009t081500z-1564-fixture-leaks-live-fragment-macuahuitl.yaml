@@ -1,0 +1,32 @@
+# Found 2026-10-09 on macuahuitl: the v56.10.9.1 release gate left a fixture fragment in the real checkout.
+packets:
+  - packet_id: append-event-archived-refusal-fixture-leaks-its-live-accept-probe-fragment-into-the-real-plan-index-d
+    order: 1564-lk9f
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixture-hygiene, plan-ledger, release-gate]
+    estimated_hours: 2
+    title: |
+      scripts/test-append-event-archived-refusal.sh's live-accept arm writes a real fragment into $ROOT/plan/index.d and relies on an EXIT trap to reap it; on macuahuitl during the 2026-10-09 ./build.sh --ci-full one survived (plan/index.d/20261009t080546z-12a361a8-fixture.yaml, host: fixture, 08:05:46Z) and dirtied the tree, so scripts/land-queue.sh refused to start (fail:land-queue:dirty-tree)
+    context: |
+      The surviving file carries the fixture's own FIXTURE_MARK text, so the
+      trap's matcher would have removed it had the trap run; most likely the
+      process was killed (a trap does not run on SIGKILL). The arm writes into
+      the LIVE ledger by design (699-usxc wants a fragment-only packet), which
+      is the root problem: any kill, OOM or tool cap leaks a fragment that a
+      later plan push could carry to trunk. The gate log ci-full-rc3.log
+      does not name the step, so which caller ran it is not yet established.
+    exit_criteria:
+      - 'the live-accept arm writes into a scratch copy of plan/ (or a --root it is pointed at), never into the checkout it runs from; pre-fix: running the fixture and SIGKILLing it after the arm leaves a host: fixture fragment in the checkout'
+      - 'post-fix: the same SIGKILL run leaves git status --porcelain of the checkout empty'
+      - 'the 699-usxc property (a fragment-only ready packet still accepts events) is still asserted, against the scratch copy'
+    unscoreable: "unpinnable-until-the-guard-exists: future arm in scripts/test-append-event-archived-refusal-is-hermetic.sh, written with the fix: run the fixture, SIGKILL it after the live-accept arm, assert the checkout's plan/index.d is unchanged (pre-fix result: one host: fixture fragment left behind, as on macuahuitl 2026-10-09 08:05Z); NEGATIVE CONTROL: the live-accept arm still fails when append-event refuses a fragment-only packet."
+    depends_on: []
+    next_action: >
+      Point the live-accept arm at a scratch copy of plan/ (cp -r into
+      mktemp under target/, never /tmp) and drop the EXIT-trap reaping of the
+      real index.d; then write the SIGKILL arm and show it red on the pre-fix
+      script.

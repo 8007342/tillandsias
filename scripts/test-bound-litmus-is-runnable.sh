@@ -134,9 +134,22 @@ fi
 
 # 6. THE GATE ITSELF refuses a newly-bound unrunnable file. Built as a throwaway
 #    git repo so the diff-scoping is exercised for real rather than assumed.
+#    ORDER 1570-qutp: the gate is scripts/lua/check-litmus-bindings.lua, run on
+#    the checkout's own plan binary against the throwaway repo.
+_gate_plan() {
+    local p
+    p="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || return 1
+    case "$p" in
+        /*) printf '%s\n' "$p" ;;
+        *)  printf '%s/%s\n' "$ROOT" "${p#./}" ;;
+    esac
+}
+GATE_PLAN="$(_gate_plan)" || GATE_PLAN=""
+if [ -z "$GATE_PLAN" ]; then
+    fail="${fail}no-plan-binary-to-run-the-gate "
+fi
 g="$D/repo"
 mkdir -p "$g/openspec/litmus-tests" "$g/scripts"
-cp scripts/check-litmus-bindings.sh "$g/scripts/"
 cp scripts/run-litmus-test.sh "$g/scripts/" 2>/dev/null || true
 cp -r scripts/lib "$g/scripts/lib" 2>/dev/null || true
 printf 'version: "1.0"\nspecs:\n- spec_id: ci-release\n  status: active\n  litmus_tests: []\n' > "$g/openspec/litmus-bindings.yaml"
@@ -164,7 +177,7 @@ sed "s|name: $GOOD_NAME|name: $BAD_NAME|" "$g/openspec/litmus-tests/litmus-fixtu
 # `\n` in an s/// replacement, and the fixture failed here with
 # `sed: invalid command code` (851-gpb5).
 printf 'version: "1.0"\nspecs:\n- spec_id: ci-release\n  status: active\n  litmus_tests:\n  - %s\n' "$BAD_NAME" > "$g/openspec/litmus-bindings.yaml"
-out="$(cd "$g" && LITMUS_BINDINGS_ROOT="$g" TILLANDSIAS_LITMUS_BIND_BASE=base-ref bash scripts/check-litmus-bindings.sh 2>&1)"; rc=$?
+out="$(cd "$g" && LITMUS_BINDINGS_ROOT="$g" TILLANDSIAS_LITMUS_BIND_BASE=base-ref "$GATE_PLAN" script run "$ROOT/scripts/lua/check-litmus-bindings.lua" 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'violation:bound-but-unrunnable'; then
     pass=$((pass + 1))
 else
@@ -176,7 +189,7 @@ fi
 #    newly-bound file, which would block all future litmus work.
 cp "$good" "$g/openspec/litmus-tests/litmus-fixture-bad.yaml"
 sed "s|name: $GOOD_NAME|name: $BAD_NAME|" "$g/openspec/litmus-tests/litmus-fixture-bad.yaml" > "$g/openspec/litmus-tests/litmus-fixture-bad.yaml.tmp" && mv "$g/openspec/litmus-tests/litmus-fixture-bad.yaml.tmp" "$g/openspec/litmus-tests/litmus-fixture-bad.yaml"
-out="$(cd "$g" && LITMUS_BINDINGS_ROOT="$g" TILLANDSIAS_LITMUS_BIND_BASE=base-ref bash scripts/check-litmus-bindings.sh 2>&1)"; rc=$?
+out="$(cd "$g" && LITMUS_BINDINGS_ROOT="$g" TILLANDSIAS_LITMUS_BIND_BASE=base-ref "$GATE_PLAN" script run "$ROOT/scripts/lua/check-litmus-bindings.lua" 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ]; then
     pass=$((pass + 1))
 else

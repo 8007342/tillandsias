@@ -1,0 +1,31 @@
+# @trace spec:host-state-lifecycle
+# @trace order:1437-evzi
+#
+# Operator ruling 2026-10-08, verbatim: "a destructive approval on uninstall,
+# particularly since the vault getting destroyed means even on reinstall a user
+# would need to re-login, so on uninstall a big detailed prompt is acceptable.
+# Make sure it has big shiny red signs to make sure that this is a destructive
+# step and cannot be undone, although it is intended during uninstall."
+# Hermetic: scratch HOME under target/, stubs on PATH, answer fed through the
+# TILLANDSIAS_UNINSTALL_TTY seam; no real keyring, podman store or install.
+name: litmus:uninstall-confirms-before-destroying
+spec: host-state-lifecycle
+phase: pre-build
+description: >
+  scripts/uninstall.sh asks once, behind a bold-red warning that says the removal cannot be undone and that a reinstall needs a fresh sign-in, BEFORE anything is removed: Enter or any answer but "delete" removes nothing and exits non-zero; no terminal and no --yes refuses with nothing removed; --yes (with --wipe, either order) proceeds; piped output carries no escape bytes.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/test-uninstall-confirms-before-destroying.sh
+
+critical_path:
+  - step: "the fixture parses and carries its exec bit"
+    command: "bash -n scripts/test-uninstall-confirms-before-destroying.sh && test -x scripts/test-uninstall-confirms-before-destroying.sh && echo 'ok: uninstall-confirms-fixture-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: uninstall-confirms-fixture-parses"
+
+  - step: "cancel and no-terminal remove nothing; delete and --yes proceed; the warning is red on a terminal and plain in a pipe"
+    command: "bash scripts/test-uninstall-confirms-before-destroying.sh >/dev/null && echo 'PASS: uninstall-confirms-before-destroying'"
+    timeout_ms: 60000
+    expected_behavior: "PASS: uninstall-confirms-before-destroying"
