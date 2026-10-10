@@ -3850,8 +3850,11 @@ fn dispatch_rebuild(
 mod tests {
 
     /// ORDER 1498-fn96. Quit's no-reply timeout must name the stage that
-    /// stalled. Pre-fix it printed only "got no reply within 10s". Scanned in
-    /// the SOURCE so this arm compiles, and fails, against the pre-fix tree.
+    /// stalled. Pre-fix it printed only "got no reply within 10s". The WORDING
+    /// is asserted on the line `shutdown_no_reply_line` builds (shutdown_stages
+    /// below); this arm pins only the drain's WIRING to it, by source, because
+    /// the drain cannot run without AppKit and a signed VM (the same reason as
+    /// the three-quit-routes test below). It compiles, and fails, pre-fix.
     #[test]
     fn the_quit_no_reply_timeout_names_the_stalled_stage() {
         let host = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/action_host.rs"));
@@ -3865,12 +3868,9 @@ mod tests {
             .expect("drain fn");
         let drain = &drain[..drain.find("\n}\n").expect("end of drain fn")];
         assert!(
-            drain.contains("progress.get()"),
-            "the Quit drain's timeout arm must read the stage marker (1498-fn96)"
-        );
-        assert!(
-            production.contains(concat!("stalled ", "at")),
-            "the no-reply line must say which stage stalled (1498-fn96)"
+            // source-pin-ok: the drain is AppKit+VM-only, so its wiring to the stage marker is the contract and cannot be driven in a unit test
+            drain.contains("shutdown_no_reply_line(budget, progress.get())"),
+            "the Quit drain's timeout arm must report the stage marker (1498-fn96)"
         );
     }
 
