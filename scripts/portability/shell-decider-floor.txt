@@ -67,7 +67,6 @@ scripts/check-landed-but-open.sh
 scripts/check-landing-provenance.sh
 scripts/check-launch-artifacts-untracked.sh
 scripts/check-ledger-distillation.sh
-scripts/check-litmus-bindings.sh
 scripts/check-litmus-dead-inputs.sh
 scripts/check-litmus-expression-pinning-added.sh
 scripts/check-litmus-grep-escapes.sh

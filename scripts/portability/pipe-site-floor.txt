@@ -403,7 +403,6 @@ scripts scripts/check-landed-but-open.sh 9
 scripts scripts/check-landing-provenance.sh 4
 scripts scripts/check-launch-artifacts-untracked.sh 2
 scripts scripts/check-ledger-distillation.sh 2
-scripts scripts/check-litmus-bindings.sh 7
 scripts scripts/check-litmus-expression-pinning-added.sh 5
 scripts scripts/check-litmus-grep-escapes.sh 1
 scripts scripts/check-litmus-line-windows.sh 8
