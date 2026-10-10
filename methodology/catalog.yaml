@@ -42,7 +42,7 @@ methodology_catalog:
       provides: "Knowledge cache operations and provenance requirements."
     convergence:
       file: methodology/convergence.yaml
-      provides: "Objective, metrics, drift control, convergence signals."
+      provides: "Objective, metrics, drift control, convergence signals, bar raises, carried obligations (advisory -> gentle -> enforced backlogs)."
     proximity:
       file: methodology/proximity.yaml
       provides: "CentiColon residual obligation model."
