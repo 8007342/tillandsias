@@ -1,0 +1,130 @@
+   Compiling smallvec v1.15.1
+   Compiling libc v0.2.186
+   Compiling thiserror v2.0.18
+   Compiling syn v2.0.117
+   Compiling once_cell v1.21.4
+   Compiling slab v0.4.12
+   Compiling futures-util v0.3.32
+   Compiling errno v0.3.14
+   Compiling parking_lot_core v0.9.12
+   Compiling socket2 v0.6.3
+   Compiling mio v1.2.0
+   Compiling getrandom v0.4.2
+   Compiling signal-hook-registry v1.4.8
+   Compiling rustix v1.1.4
+   Compiling parking_lot v0.12.5
+   Compiling tempfile v3.27.0
+   Compiling thiserror-impl v2.0.18
+   Compiling serde_derive v1.0.228
+   Compiling tokio-macros v2.7.0
+   Compiling async-trait v0.1.89
+   Compiling tokio v1.52.2
+   Compiling cobs v0.3.0
+   Compiling serde v1.0.228
+   Compiling heapless v0.7.17
+   Compiling postcard v1.1.3
+   Compiling tokio-util v0.7.18
+   Compiling tillandsias-control-wire v0.1.170 (/Users/tlatoani/claudia/wt-kf4d/crates/tillandsias-control-wire)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.84s
+     Running unittests src/lib.rs (target/debug/deps/tillandsias_control_wire-b4cfe48912f71e3e)
+
+running 90 tests
+test auth_flow::tests::test_full_happy_path_reaches_token_verified ... ok
+test auth_flow::tests::test_is_possible_persist_returns_blocked_ca_bundle_when_ca_unsatisfied ... ok
+test auth_flow::tests::test_collected_not_persisted_incident_lands_in_blocked_persist_not_idle ... ok
+test crashloop::tests::auto_reset_backoff_doubles_between_attempts ... ok
+test crashloop::tests::auto_reset_budget_clears_on_healthy_not_on_starting ... ok
+test crashloop::tests::grammar_validator_rejects_malformed ... ok
+test crashloop::tests::auto_reset_is_bounded_and_defers_after_cap ... ok
+test crashloop::tests::auto_reset_never_fires_without_a_tripped_verdict ... ok
+test crashloop::tests::last_event_classification ... ok
+test crashloop::tests::events_age_out_of_window ... ok
+test crashloop::tests::driven_restart_series_trips_crash_loop ... ok
+test crashloop::tests::phase_regression_truth_table ... ok
+test crashloop::tests::load_missing_file_is_fresh_starting ... ok
+test crashloop::tests::repeated_handshake_timeouts_trip_handshake_subsystem ... ok
+test crashloop::tests::sealed_vault_loop_trips_vault_unseal_subsystem ... ok
+test crashloop::tests::single_relaunch_does_not_trip ... ok
+test crashloop::tests::slow_but_progressing_provision_never_trips ... ok
+test crashloop::tests::verdicts_render_to_pinned_grammar ... ok
+test deliver_credentials_outcome_tests::every_variant_describes_itself ... ok
+test deliver_credentials_outcome_tests::only_accepted_is_accepted ... ok
+test deliver_credentials_outcome_tests::the_default_is_not_an_acceptance ... ok
+test crashloop::tests::state_file_round_trip_preserves_verdict ... ok
+test guest_transport::tests::endpoint_port_accessor ... ok
+test deliver_credentials_outcome_tests::a_rejection_survives_the_wire_with_its_reason ... ok
+test guest_transport::tests::exec_output_helpers ... ok
+test guest_transport::tests::exec_request_builders ... ok
+test progress::tests::fraction_is_defined_only_where_it_is_honest ... ok
+test progress::tests::merge_is_grow_only_under_reordering ... ok
+test progress::tests::progress_kind_and_unit_indices_are_pinned ... ok
+test progress::tests::progress_event_roundtrip_every_kind ... ok
+test progress::tests::summary_line_is_plain_text ... ok
+test secure_wire_mode::tests::absent_means_secure_now_that_every_reader_is_converted ... ok
+test flow_event::tests::bounded_capacity_lag_skip_contract ... ok
+test secure_wire_mode::tests::empty_is_a_hard_error_not_a_silent_off ... ok
+test flow_event::tests::dependency_node_state_transitions ... ok
+test secure_wire_mode::tests::every_refusal_names_the_accepted_values ... ok
+test flow_event::tests::incident_observable_collected_but_not_persisted ... ok
+test secure_wire_mode::tests::only_an_explicit_off_disables_it ... ok
+test secure_wire_mode::tests::on_is_accepted_case_insensitively ... ok
+test secure_wire_mode::tests::the_divergent_values_are_all_loud_errors ... ok
+test tests::an_old_guest_refuses_a_subscribe_naming_progress ... ok
+test tests::cap_pty_attach_v1_constant_is_stable ... ok
+test tests::cloud_projects_push_empty_roundtrip ... ok
+test tests::an_old_reader_refuses_progress_push_without_misdecoding ... ok
+test crashloop::tests::save_then_load_via_tempfile ... ok
+test tests::cloud_projects_push_with_entries_roundtrip ... ok
+test tests::control_message_kind_names_every_declared_variant ... ok
+test tests::error_roundtrip ... ok
+test tests::error_without_seq_in_reply_roundtrip ... ok
+test tests::evict_project_roundtrip ... ok
+test tests::every_variant_discriminant_is_pinned_against_literals ... ok
+test tests::flow_state_push_roundtrip ... ok
+test tests::github_login_status_kinds ... ok
+test tests::github_login_status_reply_roundtrip ... ok
+test tests::github_login_status_request_roundtrip ... ok
+test tests::hello_ack_roundtrip ... ok
+test tests::hello_roundtrip ... ok
+test tests::issue_ack_roundtrip ... ok
+test tests::issue_web_session_roundtrip ... ok
+test tests::login_state_push_logged_out_roundtrip ... ok
+test tests::login_state_push_roundtrip ... ok
+test tests::max_message_bytes_is_64_kib ... ok
+test tests::max_pty_frame_fits_under_max_message ... ok
+test tests::mcp_frame_empty_roundtrip ... ok
+test tests::mcp_frame_small_roundtrip ... ok
+test tests::metrics_snapshot_kinds ... ok
+test tests::metrics_snapshot_reply_empty_roundtrip ... ok
+test tests::metrics_snapshot_request_roundtrip ... ok
+test tests::metrics_snapshot_reply_with_entries_roundtrip ... ok
+test tests::no_json_braces_in_postcard_payload ... ok
+test tests::postcard_field_skew_is_asymmetric_and_the_old_reader_fails_silently ... ok
+test tests::progress_event_roundtrip ... ok
+test tests::pty_close_killed_by_signal_roundtrip ... ok
+test tests::pty_close_normal_exit_roundtrip ... ok
+test tests::pty_data_empty_roundtrip ... ok
+test tests::pty_open_roundtrip ... ok
+test tests::pty_resize_roundtrip ... ok
+test tests::subscribe_ack_roundtrip ... ok
+test tests::subscribe_roundtrip ... ok
+test tests::subscription_topics_adds_progress_only_on_the_capability ... ok
+test tests::unknown_future_variant_is_a_decode_error_not_a_silent_skip ... ok
+test tests::vm_status_push_roundtrip ... ok
+test tests::wire_version_constant_is_four ... ok
+test transport::tests::codec_framing_is_byte_identical_to_hand_rolled ... ok
+test transport::tests::codec_refuses_u32_max_length_prefix_without_allocating ... ok
+test transport::tests::codec_bound_is_max_message_bytes_inclusive_both_directions ... ok
+test transport::tests::vsock_listener_unsupported_on_non_linux ... ok
+test transport::tests::unix_roundtrip_via_transport_module ... ok
+test tests::pty_data_full_chunk_roundtrip ... ok
+test tests::mcp_frame_large_roundtrip ... ok
+
+test result: ok. 90 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+   Doc-tests tillandsias_control_wire
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

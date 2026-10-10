@@ -1610,7 +1610,8 @@ async fn serve_ready_stream(
                 // `vsock_forward_target()` — not cached at process start, which
                 // would sample before the tray had spoken and pin a `None` for
                 // the life of the process.
-                let dir = std::path::Path::new("/run/tillandsias");
+                let dir = crate::vsock_forward_dir();
+                let dir = dir.as_path();
                 let outcome = std::fs::create_dir_all(dir)
                     .and_then(|()| std::fs::write(dir.join("vsock-forward"), format!("{cid}:{port}\n")));
                 match outcome {
@@ -1619,6 +1620,22 @@ async fn serve_ready_stream(
                             "[tillandsias] host-native inference target set: cid {cid} port {port} \
                              — the next inference start will forward inference:11434 to the host"
                         );
+                        // ORDER 1509-kf4d. ONE FRAME PER REQUEST, as HostClockSync
+                        // does. Silent on success, the tray's request() waited
+                        // for the next frame and took the reply owed to the
+                        // request after it (VmStatusRequest, or Subscribe on a
+                        // reconnect). IssueAck is an existing variant: no wire bump.
+                        let ack = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: env.seq,
+                            body: ControlMessage::IssueAck { seq_acked: env.seq },
+                        };
+                        if write_envelope_with_shutdown(&mut write_half, &ack, &mut shutdown)
+                            .await
+                            .is_err()
+                        {
+                            break 'connection;
+                        }
                     }
                     Err(err) => {
                         // LOUD, and answered on the wire. A silent failure here
@@ -2588,6 +2605,95 @@ mod tests {
             matches!(env.body, ControlMessage::HelloAck { .. }),
             "a matching peer must receive HelloAck; got {:?}",
             env.body
+        );
+    }
+
+    /// ORDER 1509-kf4d. ONE FRAME PER REQUEST, OR THE NEXT CALLER GETS IT.
+    /// The tray sends SetVsockForwardTarget with `client.request()`, which is
+    /// send-then-read-the-next-frame with no seq filter, and only then sends
+    /// VmStatusRequest (or Subscribe, on the reconnect path). A guest silent on
+    /// success leaves the first request waiting, so either it times out or it
+    /// takes the status reply that belongs to the next caller.
+    ///
+    /// This drives the tray's exact order against the real handler: request,
+    /// read one frame, request, read one frame. Each frame must answer its own
+    /// request, and the target must actually be recorded.
+    #[tokio::test]
+    async fn set_vsock_forward_target_answers_one_frame_so_the_status_reply_reaches_its_caller() {
+        let state = VmStateHandle::new();
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let _server_task = tokio::spawn(handle_connection_with_mode(
+            Ok(SecureControlWireMode::Off),
+            Box::new(server),
+            state,
+            shutdown_rx,
+        ));
+        let _ = std::fs::remove_file(crate::vsock_forward_dir().join("vsock-forward"));
+
+        // `client.request()`: write one envelope, read the next one.
+        async fn request(
+            client: &mut tokio::io::DuplexStream,
+            env: &ControlEnvelope,
+        ) -> Result<ControlEnvelope, String> {
+            write_envelope(client, env)
+                .await
+                .map_err(|e| format!("write: {e}"))?;
+            tokio::time::timeout(Duration::from_secs(2), read_envelope(client))
+                .await
+                .map_err(|_| "no frame within 2s".to_string())?
+                .map_err(|e| format!("read: {e}"))
+        }
+
+        let hello = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::Hello {
+                from: "a-tray".to_string(),
+                capabilities: Vec::new(),
+                build_version: None,
+            },
+        };
+        let ack = request(&mut client, &hello).await.expect("HelloAck");
+        assert!(
+            matches!(ack.body, ControlMessage::HelloAck { .. }),
+            "got {:?}",
+            ack.body
+        );
+
+        let set = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 2,
+            body: ControlMessage::SetVsockForwardTarget { cid: 2, port: 5555 },
+        };
+        let set_reply = request(&mut client, &set).await;
+        assert!(
+            matches!(
+                set_reply.as_ref().map(|e| &e.body),
+                Ok(ControlMessage::IssueAck { seq_acked: 2 })
+            ),
+            "SetVsockForwardTarget must be answered with exactly one frame, IssueAck {{ seq_acked: 2 }}; got {set_reply:?}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(crate::vsock_forward_dir().join("vsock-forward"))
+                .ok()
+                .as_deref(),
+            Some("2:5555\n"),
+            "the acked target must actually be recorded"
+        );
+
+        let status = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 3,
+            body: ControlMessage::VmStatusRequest { seq: 4 },
+        };
+        let status_reply = request(&mut client, &status).await;
+        assert!(
+            matches!(
+                status_reply.as_ref().map(|e| &e.body),
+                Ok(ControlMessage::VmStatusReply { .. })
+            ),
+            "the status caller must receive the VmStatusReply, not a frame owed to an earlier request; got {status_reply:?}"
         );
     }
 
