@@ -131,7 +131,6 @@ scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
 scripts/check-tray-import-surface.sh
 scripts/check-tray-string-corpus-drift.sh
-scripts/check-unique-bin-names.sh
 scripts/check-unrunnable-platform-arms.sh
 scripts/check-version-bump-isolation.sh
 scripts/check-windows-only-sources-verified.sh

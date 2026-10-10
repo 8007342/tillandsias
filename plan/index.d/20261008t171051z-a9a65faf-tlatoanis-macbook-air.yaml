@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: deadline-killed-preflight-steps-skip-their-cleanup-traps-and-leak-mutants-and-registered-worktrees
+    field: priority
+    value: p2
+    ts: "2026-10-08T17:10:51Z"
+    host: tlatoanis-macbook-air
+
+packets:
+  - packet_id: scorable-obligation-checker-blames-itself-when-a-fragment-duplicates-a-packet-id
+    order: 1553-avgr
+    title: check-scorable-obligation-added reports its own parse failure when the real cause is a duplicated packet_id in the fragment
+    status: ready
+    kind: bug
+    priority: p3
+    pickup_role: any
+    capability_tags: [bash, ci-gate, plan]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-scorable-obligation-added.sh
+    context: >
+      On 2026-10-08 a macbookair-macos fragment for 1545-qdb5 accidentally
+      carried a second "- packet_id: <xs63>" under packets: (a stray events
+      entry copied in by a sed address range that re-opened). Pass 1 emitted
+      two records for the id; the second had no obligation. The independent
+      witness (_row_obligation_line) found the unscoreable field in the FIRST
+      row, so the checker reported violation:scorable-obligation-parse-failure
+      and told the author "This is a defect in check-scorable-obligation-added.sh,
+      not in the fragment: do not edit the fragment to satisfy it (1331-884p)".
+      The real fix was to delete the duplicated row from the fragment. The
+      message sends the author away from the actual defect.
+    depends_on: []
+    exit_criteria:
+      - A fragment that declares the same packet_id twice under packets is refused as a duplicate row, naming both line numbers, and not as a checker parse failure.
+      - A genuine parse failure (field present, parser misses it, single row) is still reported as the checker's own defect.
+    unscoreable: |
+      unpinnable-until-the-guard-exists. Future litmus filename:
+      scorable-obligation-duplicate-row-is-named. It should plant a fragment
+      with one packet that has an unscoreable field, and a second
+      "- packet_id:" for the same id with no fields under packets. Assert that
+      the refusal names a duplicate row. PRE-FIX RESULT: it reports
+      scorable-obligation-parse-failure and blames the checker, as observed on
+      plan/index.d/20261008t164452z-ca6bfa54-tlatoanis-macbook-air.yaml before
+      its fix.
+    next_action: Unassigned; coordinator to schedule.
+
+events:
+  - packet_id: deadline-killed-preflight-steps-skip-their-cleanup-traps-and-leak-mutants-and-registered-worktrees
+    event:
+      type: note
+      ts: "2026-10-08T17:10:51Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Raised to p2 by the coordinator. A second harm: the leaked UNTRACKED .mutant-lcnum-*.sh files count as "added" in diff-scoped deciders, and poison later verdicts. Measured on darwin: check-sigpipe-verdict-pipelines-added reported violation:sigpipe-verdict-added:12, every hit inside scripts/.mutant-lcnum-freshness-inventory.sh, which turned litmus:sigpipe-verdict-pipeline-shape red 3/3. After removing the three mutants: ok:sigpipe-verdict-added:3 checked.
+  - packet_id: scorable-obligation-checker-blames-itself-when-a-fragment-duplicates-a-packet-id
+    event:
+      type: note
+      ts: "2026-10-08T17:10:51Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        filed by macbookair-macos on coordinator instruction (p3); file only.
