@@ -15,7 +15,6 @@ scripts/check-ca-path-literals.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
 scripts/check-cheatsheet-frontmatter.sh
-scripts/check-cheatsheet-refs.sh
 scripts/check-cheatsheet-source-anchors.sh
 scripts/check-cheatsheet-sources.sh
 scripts/check-cheatsheet-tiers.sh
@@ -51,7 +50,6 @@ scripts/check-fragment-backlog.sh
 scripts/check-fragment-closure-evidence-added.sh
 scripts/check-fragment-events-land.sh
 scripts/check-fragment-keys-are-read.sh
-scripts/check-fragment-status-loss.sh
 scripts/check-fragment-ts-skew.sh
 scripts/check-gate-memory-floor.sh
 scripts/check-gate-step-prefix-across-refs.sh
@@ -67,7 +65,6 @@ scripts/check-landed-but-open.sh
 scripts/check-landing-provenance.sh
 scripts/check-launch-artifacts-untracked.sh
 scripts/check-ledger-distillation.sh
-scripts/check-litmus-bindings.sh
 scripts/check-litmus-dead-inputs.sh
 scripts/check-litmus-expression-pinning-added.sh
 scripts/check-litmus-grep-escapes.sh
@@ -91,7 +88,6 @@ scripts/check-nix-builder-e2e.sh
 scripts/check-nix-deps-stability.sh
 scripts/check-no-base64-script-injection.sh
 scripts/check-no-competing-gate.sh
-scripts/check-no-end-user-brew-instruction.sh
 scripts/check-no-fixture-writes-live-ledger.sh
 scripts/check-no-python-scripts.sh
 scripts/check-no-spawn-in-if-not.sh
@@ -105,7 +101,6 @@ scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
 scripts/check-plan-ledger-readers.sh
 scripts/check-plan-schema-divergence.sh
-scripts/check-portability-idioms.sh
 scripts/check-proxy-permissive-port-routing.sh
 scripts/check-purge-clears-vault-credentials.sh
 scripts/check-readme-discipline.sh
@@ -139,7 +134,6 @@ scripts/check-tray-import-surface.sh
 scripts/check-tray-string-corpus-drift.sh
 scripts/check-unique-bin-names.sh
 scripts/check-unrunnable-platform-arms.sh
-scripts/check-vault-cli-gate-coverage.sh
 scripts/check-version-bump-isolation.sh
 scripts/check-windows-only-sources-verified.sh
 scripts/check-windows-tray-clippy.sh

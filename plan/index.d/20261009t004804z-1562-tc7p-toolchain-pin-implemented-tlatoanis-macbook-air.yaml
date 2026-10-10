@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: release-builds-float-on-toolchain-stable-so-a-rustc-release-can-break-a-cut-every-local-gate-passed
+    field: status
+    value: in_progress
+    ts: "2026-10-09T00:48:04Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: release-builds-float-on-toolchain-stable-so-a-rustc-release-can-break-a-cut-every-local-gate-passed
+    event:
+      type: note
+      ts: "2026-10-09T00:48:04Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Implemented on work/1562-tc7p at the coordinator's direction. It lands AFTER #256, because the macOS tray does not compile on 1.99.0 without it.
+        MEASURED BEFORE CODE: three compilers. The darwin host is 1.96.1. The Nix Linux release is 1.98.0, the newest manifest in the locked rust-overlay 494680f9 (2026-08-26). The macOS/Windows release runners are 1.99.0 via `toolchain: stable`.
+        COMMIT 1 (lock only, gate separately): rust-overlay is bumped 494680f9 -> f91010a5 (2026-10-08), whose manifests include 1.99.0; its inputs are unchanged. narHash was computed without nix by a NAR serialiser that first reproduced the OLD entry's hash exactly.
+        COMMIT 2: rust-toolchain.toml (channel 1.99.0) is the single source. flake.nix reads it (rust-bin.stable.${channel}). release.yml reads it for both dtolnay steps and refuses a non-X.Y.Z channel. build-macos-tray.sh and build-windows-tray.ps1 refuse any other rustc. scripts/lua/check-toolchain-pinned.lua is wired into build.sh: RED on origin/linux-next 1cf038621 with 7 sites, green on the branch. Fixture test-check-toolchain-pinned.sh is 8/8 (six mutations refused, each naming its line, plus a comment negative control).
+        NOT VERIFIED HERE: the Nix build and the Linux workspace on 1.99.0 (no nix on this host; the coordinator verifies on Linux), and the Windows ps1 assertion (it needs a Windows host).

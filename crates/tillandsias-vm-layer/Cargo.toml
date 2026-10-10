@@ -144,3 +144,6 @@ recipe = ["dep:toml"]
 # per-OS converters (§3.7.1 macOS .img, §3.7.2 WSL --import) are sibling
 # claims and live in their own submodules.
 materialize = ["recipe", "dep:serde_json", "dep:tar", "dep:flate2", "dep:xz2"]
+
+[lints]
+workspace = true

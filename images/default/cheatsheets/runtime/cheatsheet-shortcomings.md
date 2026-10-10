@@ -39,7 +39,7 @@ You're prioritising work on the cheatsheet system itself. Each item below was no
 
 I wrote `@cheatsheet patterns/gof-observer.md` from inside `architecture/reactive-streams-spec.md` — and pointed it at a file I just created. If the path is wrong, nothing fails. Same for `## See also` links — they're plain text references, not tested.
 
-**Fix:** A `scripts/check-cheatsheet-refs.sh` that walks every `@cheatsheet`, `## See also` link, and `cheatsheet=` log field, asserting each resolves. Should fail CI (or at least emit warnings into a tracked file). Effort: 1 day. Should ship as part of `cheatsheet-tooling`.
+**Fix:** A `scripts/lua/check-cheatsheet-refs.lua` (a .sh until 1570-k4fx) that walks every `@cheatsheet`, `## See also` link, and `cheatsheet=` log field, asserting each resolves. Should fail CI (or at least emit warnings into a tracked file). Effort: 1 day. Should ship as part of `cheatsheet-tooling`.
 
 ### 2. INDEX.md drifts the moment you add a new file
 
