@@ -1066,8 +1066,18 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "spec-cheatsheet-binding" "fail" /tmp/binding-check.log
         fi
     else
-        log_fail_missing_guard "spec-cheatsheet-binding" "scripts/check-cheatsheet-refs.sh"
+        log_fail_missing_guard "spec-cheatsheet-binding" "scripts/validate-spec-cheatsheet-binding-fast.sh"
         archive_check_log "spec-cheatsheet-binding" "skipped"
+    fi
+    # ORDER 1570-k4fx: the cheatsheet-reference checker's own fixture (both
+    # reference shapes, a dangling reference refused by name, an empty PATH,
+    # no cheatsheets/ dir). The checker itself runs in --check as step 165.
+    if bash scripts/test-cheatsheet-refs.sh > /tmp/cheatsheet-refs-fixture.log 2>&1; then
+        log_pass "Cheatsheet references checker fixture passed"
+        archive_check_log "cheatsheet-refs-fixture" "pass" /tmp/cheatsheet-refs-fixture.log
+    else
+        log_fail_tracked "cheatsheet-refs-fixture" "The cheatsheet references checker's fixture failed (see /tmp/cheatsheet-refs-fixture.log)"
+        archive_check_log "cheatsheet-refs-fixture" "fail" /tmp/cheatsheet-refs-fixture.log
     fi
 
     # ============================================================================

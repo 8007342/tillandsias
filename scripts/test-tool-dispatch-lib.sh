@@ -151,11 +151,12 @@ else
 fi
 
 # ── 4d. rg and openssl callers take the same dispatch. ─────────────────────
-for f in scripts/check-cheatsheet-refs.sh scripts/test-forge-config-trust-cross-platform-parity.sh; do
-    grep -q 'resolve_tool rg' "$ROOT/$f" || bad "$f does not resolve rg through the dispatch"
-    grep -nE '(^|[^$])\brg ' "$ROOT/$f" | grep -vE ':[[:space:]]*#' | grep -vE 'resolve_tool|RG=|ripgrep' | grep -q . \
-        && bad "$f still calls rg bare"
-done
+# (check-cheatsheet-refs left this list in 1570-k4fx: it is Lua now and
+# resolves no tool, so it has no rg call to take the dispatch.)
+f=scripts/test-forge-config-trust-cross-platform-parity.sh
+grep -q 'resolve_tool rg' "$ROOT/$f" || bad "$f does not resolve rg through the dispatch"
+grep -nE '(^|[^$])\brg ' "$ROOT/$f" | grep -vE ':[[:space:]]*#' | grep -vE 'resolve_tool|RG=|ripgrep' | grep -q . \
+    && bad "$f still calls rg bare"
 ok "the rg callers take the dispatch"
 
 for f in scripts/diagnose-proxy.sh scripts/run-forge-project.sh scripts/orchestrate-enclave.sh; do
