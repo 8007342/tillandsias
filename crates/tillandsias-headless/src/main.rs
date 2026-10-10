@@ -10565,6 +10565,111 @@ fn reset_state_plan(
     (destroyed, preserved)
 }
 
+/// The nonce of a macOS SOFT reset request this guest has not acted on yet,
+/// or `None` (order 1437-8c6p / 1437-av8u). Pure, so the once-per-request rule
+/// is tested without a guest: an absent or empty request is no request, and a
+/// request whose nonce equals the last handled one was already applied.
+#[cfg(any(target_os = "linux", test))]
+fn pending_soft_reset_nonce(request: Option<&str>, handled: Option<&str>) -> Option<String> {
+    let nonce = request.map(str::trim).filter(|n| !n.is_empty())?;
+    if handled.map(str::trim) == Some(nonce) {
+        return None;
+    }
+    Some(nonce.to_string())
+}
+
+/// The guest half of the macOS SOFT reset (order 1437-8c6p / 1437-av8u,
+/// host-state-lifecycle "macOS SOFT reset keeps the guest, the store and the
+/// downloads"). The host tray cannot run a command in the guest (order 272),
+/// so its `--reset-state` leaves a request with a nonce in the read-only
+/// guest-bin share, and the daemon applies it HERE, once per nonce, before it
+/// binds the control wire.
+///
+/// DERIVED state only, the Linux SOFT reset's destroyed set without its
+/// trailing init: `podman system reset --force`, the build markers, and the
+/// enclave resolver drop-in (derived from the network the reset destroys;
+/// left behind it points every lookup at an address that answers nothing —
+/// measured on yolanda's Windows guest 2026-10-08). The Vault store is a
+/// directory under the cache dir that the podman reset cannot reach.
+///
+/// NO INIT HERE, for the reason Windows' `soft_wipe_guest` gives: an init
+/// before the tray has delivered the Keychain share meets the "store without
+/// its share is rebuilt" guard and destroys the very store SOFT keeps. Running
+/// before the bind means the tray connects to a daemon that has already wiped,
+/// delivers the share, and only then does the vault bootstrap.
+///
+/// A failed wipe is reported and the nonce is NOT recorded, so the next start
+/// retries; the daemon still starts, because a guest that cannot serve the wire
+/// cannot be reached by the tray at all.
+#[cfg(target_os = "linux")]
+fn apply_pending_soft_reset(request: &Path, handled: &Path, debug: bool) {
+    let read = |p: &Path| fs::read_to_string(p).ok();
+    let Some(nonce) = pending_soft_reset_nonce(read(request).as_deref(), read(handled).as_deref())
+    else {
+        return;
+    };
+    eprintln!("[tillandsias] soft-reset request {nonce}: podman system reset --force ...");
+    let mut reset_cmd = podman_command();
+    reset_cmd.args(["system", "reset", "--force"]);
+    if let Err(e) = run_podman_command(reset_cmd, debug) {
+        eprintln!(
+            "[tillandsias] soft-reset request {nonce}: podman system reset failed ({e}); \
+             will retry at the next start"
+        );
+        return;
+    }
+    if let Err(e) = run_cache_clear(debug) {
+        eprintln!("[tillandsias] soft-reset request {nonce}: build markers: {e}");
+    }
+    if fs::remove_file(ENCLAVE_RESOLVED_CONF).is_ok() {
+        let mut restart = Command::new("systemctl");
+        restart.args(["try-restart", "systemd-resolved"]);
+        let _ = run_command(restart, debug);
+    }
+    if let Some(parent) = handled.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    match fs::write(handled, format!("{nonce}\n")) {
+        Ok(()) => eprintln!(
+            "[tillandsias] soft-reset request {nonce}: derived state wiped \u{2713} — Vault store kept"
+        ),
+        Err(e) => eprintln!(
+            "[tillandsias] soft-reset request {nonce}: wiped, but recording {} failed: {e}",
+            handled.display()
+        ),
+    }
+}
+
+#[cfg(test)]
+mod soft_reset_request_tests {
+    use super::pending_soft_reset_nonce as pending;
+
+    /// Once per request: a new nonce is pending, the same nonce after it was
+    /// handled is not, and no request (or an empty one) never wipes anything.
+    /// Pre-fix: no guest half existed, so a macOS SOFT reset could not wipe the
+    /// guest's derived state at all.
+    #[test]
+    fn a_request_is_applied_once_per_nonce() {
+        assert_eq!(pending(Some("n1\n"), None), Some("n1".to_string()));
+        assert_eq!(pending(Some("n2\n"), Some("n1\n")), Some("n2".to_string()));
+        assert_eq!(pending(Some("n1\n"), Some("n1\n")), None);
+        assert_eq!(pending(None, Some("n1\n")), None);
+        assert_eq!(pending(Some("  \n"), None), None);
+    }
+
+    /// The guest reads the request where the host writes it: the guest-bin
+    /// share, under the core constant both sides use.
+    #[test]
+    fn the_guest_reads_the_request_from_the_guest_bin_share() {
+        use tillandsias_core::guest_bin_path as g;
+        assert_eq!(
+            g::GUEST_SOFT_RESET_REQUEST,
+            format!("{}/{}", g::GUEST_BIN_MOUNT, g::SOFT_RESET_REQUEST_FILE)
+        );
+        assert!(!g::GUEST_SOFT_RESET_HANDLED.starts_with(g::GUEST_BIN_MOUNT));
+    }
+}
+
 fn run_reset_guest(debug: bool) -> Result<(), String> {
     if !destructive_reset_allowed() {
         return Err(
@@ -19681,6 +19786,19 @@ async fn run_headless_async(
             "[tillandsias] preflight vsock_loopback {}",
             probe_vsock_loopback()
         );
+        // 1437-8c6p: a host SOFT reset's guest half runs BEFORE the bind (see
+        // apply_pending_soft_reset for why the order matters).
+        #[cfg(target_os = "linux")]
+        {
+            let _ = tokio::task::spawn_blocking(|| {
+                apply_pending_soft_reset(
+                    Path::new(tillandsias_core::guest_bin_path::GUEST_SOFT_RESET_REQUEST),
+                    Path::new(tillandsias_core::guest_bin_path::GUEST_SOFT_RESET_HANDLED),
+                    false,
+                )
+            })
+            .await;
+        }
     }
     // @trace spec:vsock-transport — when `--listen-vsock <PORT>` was supplied,
     // bind the control wire on virtio-vsock instead of the Linux Unix socket.
