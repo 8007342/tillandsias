@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: killing-a-windows-host-build-sh-leaves-its-guest-build-running-in-tillandsias-build-so-a-memory-reap-frees-nothing-and-the-orphan-keeps-compiling
+    event:
+      type: evidence
+      ts: "2026-10-09T21:49:15Z"
+      agent_id: windows-yolanda-claude-20261008t155217z
+      host: yolanda-windows
+      summary: |-
+        work/1567-9fgi e0cdb7819: with-wsl2-builder.sh runs every build command through scripts/wsl-guest-session.sh (own cgroup; teardown on pty hangup, session Relay exit, or host winpid gone via tasklist interop). test-wsl-builder-kill-reaches-guest.sh (gate step 820): 8/8 FAIL pre-fix, 10/10 after on yolanda-windows; named skip in the Linux guest. exec-path INT is never delivered by MSYS to an exec'd native wsl.exe, so that arm asserts nothing was killed. u2yx 7/7 on MSYS and Linux. Deciders green: bash-dialect, sigpipe-verdict-added, fixture-default-target, gate-step-prefix-across-refs.

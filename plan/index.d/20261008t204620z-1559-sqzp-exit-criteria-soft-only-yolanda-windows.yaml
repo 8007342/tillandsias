@@ -1,0 +1,14 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Operator ruling 2026-10-08: installers are SOFT only, never prompt and print
+# no power-user text. These exit criteria supersede 1559-sqzp's earlier ones
+# (a HARD kind behind TILLANDSIAS_INSTALL_RESET=hard / -HardReset).
+status:
+  - packet_id: 1437-3iux-s3-install-windows-ps1-runs-the-soft-reset-by-default-and-hard-only-on-request-with-the-approval-passed-through
+    field: exit_criteria
+    value:
+      - 'the installer code carries no HARD path: no --reset-guest, --approve-hard-reset, -HardReset, TILLANDSIAS_INSTALL_RESET, TILLANDSIAS_HARD_RESET_APPROVED or reset-kind chooser (pre-fix at 0d1c6a852: FAILS — all present)'
+      - 'the reset is exactly one `--reset-state < NUL`, and the reset path has no Read-Host'
+      - 'no output statement on the reset path names a flag, a variable, SOFT, HARD, a reset or a probe, and the tray reset log is not echoed into the install output (shown by path only on failure)'
+      - 'scripts/test-installer-reset-kind.sh passes (gate step 770-1559-sqzp); test-installer-reset-probe and test-unstable-installer-defaults-to-unstable unchanged'
+    ts: "2026-10-08T20:46:20Z"
+    host: yolanda-windows

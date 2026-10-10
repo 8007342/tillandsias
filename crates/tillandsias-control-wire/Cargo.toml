@@ -25,3 +25,6 @@ tempfile = "3"
 default = []
 # @trace spec:vsock-transport — Linux-only async vsock binding for the in-VM headless.
 vsock = ["tokio-vsock"]
+
+[lints]
+workspace = true

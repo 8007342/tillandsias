@@ -1,0 +1,33 @@
+# Found 2026-10-09 by tlatoanis-macbook-air during the v56.10.9.1 macOS smoke; confirmed in source on macuahuitl.
+packets:
+  - packet_id: macos-github-login-remedy-tells-users-to-pipe-the-token-first-which-the-device-flow-reads-as-the-git-author-name
+    order: 1566-tkan
+    status: ready
+    kind: defect
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [credentials, github-login, macos-tray, secret-leak]
+    estimated_hours: 2
+    title: |
+      tillandsias-tray --github-login (macOS) prints a piped-stdin remedy ordered "token, author name, author email", but since 1383-dkxi the credential step is a device flow with no expect for it, so the FIRST piped line answers "git author name": a user who follows the printed remedy writes their GitHub token into git config as user.name and stamps it into every commit they push
+    context: |
+      github_login_main (crates/tillandsias-macos-tray/src/diagnose.rs): the
+      expects list starts at needle "author name"; prompt_line's piped-timeout
+      message still prints `printf '%s\n%s\n%s\n' "$TOKEN" "$NAME" "$EMAIL" |
+      tillandsias-tray --github-login`. Measured on tlatoanis-macbook-air
+      2026-10-09: a piped run waited at the device flow and would have fed
+      line 1 (the token) to the author-name prompt; the run was SIGTERMed at
+      ~600 s before that prompt, so nothing leaked. A token in user.name is
+      public the moment a commit is pushed and is not revocable from history.
+    exit_criteria:
+      - 'the piped-stdin remedy lists ONLY the lines the host actually reads (author name, author email) and never mentions a token; pre-fix: the remedy text contains "$TOKEN"'
+      - 'an author name or email that looks like a GitHub credential (ghp_, gho_, ghu_, ghs_, ghr_, github_pat_ prefixes) is REFUSED with exit non-zero and nothing is sent to the guest; pre-fix: such a line is accepted and forwarded'
+      - 'NEGATIVE CONTROL: an ordinary name and a noreply email are still accepted'
+    unscoreable: "unpinnable-until-the-guard-exists: future fixture scripts/test-github-login-refuses-token-as-identity.sh (or a #[test] in the macos-tray crate), written with the fix; pre-fix result: the remedy string contains $TOKEN and prompt_line forwards a ghp_-prefixed line as the author name; NEGATIVE CONTROL: a plain name passes."
+    depends_on: []
+    next_action: >
+      In github_login_main, drop the token from the piped remedy, and refuse
+      credential-shaped answers in the author name/email closures before they
+      are sent. Do this BEFORE 1437-8c6p: it is a secret-leak path on a
+      published prerelease.

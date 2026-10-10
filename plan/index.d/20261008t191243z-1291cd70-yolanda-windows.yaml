@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: 1437-3iux-s2-the-windows-hard-reset-asks-every-run-refuses-an-unreachable-keyring-and-announces-before-destroying
+    field: progress_summary
+    value: |-
+      S2 LIVE ARMS, yolanda-windows 2026-10-08, real tillandsias distro, release build of work/1559-9uvb. OPERATOR APPROVAL, given directly in the yolanda-windows session on 2026-10-08: "hard reset is approved if needed" (and "destructive curl install, and reprovision the vm ... allowed and expected"). The HARD arm was announced to the coordinator before it ran.
+      REFUSAL ARMS (no TTY, stdin /dev/null), zero side effects (host evidence byte-identical before and after; distro still registered):
+      - no approval -> "reset: HARD requires per-run approval (TILLANDSIAS_HARD_RESET_APPROVED=1 or --approve-hard-reset)", rc=1
+      - TILLANDSIAS_INSTALL_RESET=hard -> same refusal, rc=1 (selects the kind, does not approve it)
+      - TILLANDSIAS_HARD_RESET_APPROVED=true -> same refusal, rc=1 (only the literal 1)
+      APPROVED HARD (TILLANDSIAS_HARD_RESET_APPROVED=1): rc=0 in 77 s. Printed "reset: HARD (approved by Environment)" and a plan destroying "the WSL2 distro and its disk (wsl --unregister)", "the Vault store inside the distro, and every sign-in it holds", vault-shamir-share-v1, vault-root-token-v1, and preserving tillandsias-vm-uuid and the download cache, all BEFORE the wipe. Then: "cleared host-side vault credentials: vault-shamir-share-v1, vault-root-token-v1 (tillandsias-vm-uuid preserved)"; the rootfs was re-downloaded (100%); "VM Ready".
+      BEFORE/AFTER: Credential Manager {share, root token, vm-uuid} -> {vm-uuid}; download cache listing 5E2FA5C95EE14673 -> 5E2FA5C95EE14673 (kept); Vault store core/_keyring 4b280b71c09e2118 (98 files) -> b1681743dc0779fb (74 files, a NEW store: the re-import is real); new Lxss GUID {897bf250-1847-41ce-999c-ad3eefa0907d}.
+      WITNESS CAUTION: ext4.vhdx CreationTimeUtc read 2026-09-26T02:05:31Z before AND after this unregister + re-import, which is NTFS file-name tunneling. CreationTime is not a re-import witness; the store hash and the GUID are.
+      NOT RUN LIVE: the TTY prompt arm (the tray is a GUI-subsystem binary, and an MSYS pty is not a console TTY), covered by core's hard_reset_needs_an_explicit_per_run_approval; and the keyring-unreachable arm (Credential Manager cannot be made unreachable without touching the operator's store), covered by the pin.
+    ts: "2026-10-08T19:12:43Z"
+    host: yolanda-windows
+
+events:
+  - packet_id: 1437-3iux-s2-the-windows-hard-reset-asks-every-run-refuses-an-unreachable-keyring-and-announces-before-destroying
+    event:
+      type: note
+      ts: "2026-10-08T19:12:43Z"
+      host: yolanda-windows
+      summary: |-
+        S2 live arms with the operator's dated approval

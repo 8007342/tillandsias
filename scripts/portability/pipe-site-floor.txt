@@ -326,7 +326,6 @@ scripts scripts/allocate-gate-step-prefix.sh 6
 scripts scripts/archive-plan-packets.sh 13
 scripts scripts/archiver-check-memo.sh 2
 scripts scripts/attest-native-lint.sh 2
-scripts scripts/audit-guard-activation.sh 3
 scripts scripts/bench-accel-lane.sh 13
 scripts scripts/bench-hot-path-placement.sh 3
 scripts scripts/bench-inference-floor.sh 21
@@ -388,7 +387,6 @@ scripts scripts/check-forge-service-health.sh 6
 scripts scripts/check-fragment-closure-evidence-added.sh 5
 scripts scripts/check-fragment-events-land.sh 1
 scripts scripts/check-fragment-keys-are-read.sh 1
-scripts scripts/check-fragment-status-loss.sh 22
 scripts scripts/check-fragment-ts-skew.sh 4
 scripts scripts/check-gate-memory-floor.sh 3
 scripts scripts/check-gate-step-prefix-across-refs.sh 4
@@ -403,7 +401,6 @@ scripts scripts/check-landed-but-open.sh 9
 scripts scripts/check-landing-provenance.sh 4
 scripts scripts/check-launch-artifacts-untracked.sh 2
 scripts scripts/check-ledger-distillation.sh 2
-scripts scripts/check-litmus-bindings.sh 7
 scripts scripts/check-litmus-expression-pinning-added.sh 5
 scripts scripts/check-litmus-grep-escapes.sh 1
 scripts scripts/check-litmus-line-windows.sh 8
@@ -423,7 +420,6 @@ scripts scripts/check-must-ship-rows.sh 5
 scripts scripts/check-nix-builder-e2e.sh 7
 scripts scripts/check-nix-deps-stability.sh 6
 scripts scripts/check-no-competing-gate.sh 6
-scripts scripts/check-no-end-user-brew-instruction.sh 2
 scripts scripts/check-no-fixture-writes-live-ledger.sh 16
 scripts scripts/check-no-spawn-in-if-not.sh 6
 scripts scripts/check-no-tracked-binaries.sh 7
@@ -435,7 +431,6 @@ scripts scripts/check-pickup-role-grammar.sh 3
 scripts scripts/check-plan-binary-current.sh 5
 scripts scripts/check-plan-binary-probe-usage.sh 8
 scripts scripts/check-plan-schema-divergence.sh 2
-scripts scripts/check-portability-idioms.sh 41
 scripts scripts/check-proxy-permissive-port-routing.sh 2
 scripts scripts/check-purge-clears-vault-credentials.sh 1
 scripts scripts/check-readme-discipline.sh 3
@@ -701,7 +696,6 @@ scripts scripts/test-forge-standard-gitconfig-path.sh 2
 scripts scripts/test-forge-swap-service.sh 6
 scripts scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts scripts/test-fragment-events-land-callsite.sh 8
-scripts scripts/test-fragment-status-loss-row-boundary.sh 5
 scripts scripts/test-fragment-status-loss.sh 7
 scripts scripts/test-fragment-ts-skew.sh 1
 scripts scripts/test-freshness-regime-budget.sh 22

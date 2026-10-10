@@ -1,0 +1,106 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed 2026-10-10 by tlatoanis-macbook-air on the coordinator's rulings (3kdu re-scope + three new rows).
+status:
+  - packet_id: the-podman-preflight-diagnosis-fixture-requires-python3-which-on-a-stock-mac-is-the-xcode-clt-shim
+    field: next_action
+    value: "RE-SCOPED (coordinator 2026-10-10) to the AF_UNIX path-length repair: test-gate-podman-mode-configuration.sh builds its sandbox under $TMPDIR, which on macOS is /var/folders/.../T/ (49 chars), so $SANDBOX/run/podman/podman.sock exceeds sun_path's 104 bytes. Use a short root (mktemp -d /tmp/<short>.XXXXXX) with trap cleanup, plus a darwin arm that FAILS on the pre-fix path length. Stays shell (a repair, not a new gate)."
+    ts: "2026-10-10T08:05:38Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: the-podman-preflight-diagnosis-fixture-requires-python3-which-on-a-stock-mac-is-the-xcode-clt-shim
+    event:
+      type: note
+      ts: "2026-10-10T08:05:38Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        MEASURED 2026-10-10 on tlatoanis-macbook-air (trunk 33db38d97+):
+        - The CLT-SHIM case the row was filed for is ALREADY HANDLED by 1462-ruq9. With a stub python3 that behaves exactly like the shim (prints the xcode-select "No developer tools were found" note and exits 1, never running the script), scripts/test-gate-podman-mode-configuration.sh prints `skip:gate-podman-mode:no-fixture-runtime (no interpreter on PATH builds the AF_UNIX fixture socket; nothing was asserted)`.
+        - The REAL darwin defect: with a working python3 (/opt/homebrew/bin/python3) the same fixture prints "OSError: AF_UNIX path too long" and then "FAIL: could not create the AF_UNIX fixture socket (python3 required)". The cause is SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/tillandsias-gate-podman-mode.XXXXXX") under a 49-char macOS TMPDIR.
+        - The fixture the row names, scripts/test-litmus-podman-preflight-diagnosis.sh, also FAILs on this Mac, for a different reason now filed as 1576-yqmc: fixtures A/B "did not reach the podman preflight at all" because the runner degrades with warn:litmus-degraded-no-yq.
+        Re-scoped per the coordinator to the path-length repair (above).
+
+packets:
+  - packet_id: on-a-mac-without-yq-the-litmus-runner-degrades-so-the-podman-preflight-fixtures-never-reach-the-code-they-test
+    order: 1576-yqmc
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [litmus, fixtures, macos, darwin-regime, yq]
+    estimated_hours: 2
+    title: |
+      On a Mac with no yq the litmus runner degrades (warn:litmus-degraded-no-yq), so scripts/test-litmus-podman-preflight-diagnosis.sh's fixtures A and B never reach the podman preflight they exist to test, and the fixture FAILs for the wrong reason
+    context: |
+      MEASURED 2026-10-10 on tlatoanis-macbook-air: `bash scripts/test-litmus-podman-preflight-diagnosis.sh` prints "FAIL: fixture A did not reach the podman preflight at all ... Output: warn:litmus-degraded-no-yq — yq is not on PATH and could not be provisioned from the tillandsias-builder toolbox", the same for fixture B, then "FAIL: the podman preflight cannot tell a timeout from a failed exec". Fixture C (scope control) is green. Same class as 1040-eniv (Windows without yq): a missing yq hides the code under test, and the verdict blames that code.
+    exit_criteria:
+      - 'on a Mac with no yq, the fixture either reaches the preflight (A and B assert on its output) or emits a NAMED skip naming the missing yq; never a FAIL that blames the preflight (pre-fix: FAIL "fixture A did not reach the podman preflight at all")'
+    unscoreable: "unpinnable-until-the-guard-exists: the darwin arm is written with the fix (pre-fix result: FAIL, fixtures A/B never reach the preflight)"
+    depends_on: []
+    next_action: >
+      Find which runner step needs yq before the podman preflight runs. Route that read through the compiled tillandsias-plan reader (746-htj9), or skip by name. Cite 1040-eniv's resolution.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's ruling, 2026-10-10, from the 1428-3kdu re-measure.
+    events:
+      - type: filed
+        ts: "2026-10-10T08:05:38Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          No yq on a Mac degrades the litmus runner, so the podman preflight fixtures never reach the code they test.
+
+  - packet_id: the-lua-runtime-has-no-af-unix-socket-api-so-no-fixture-that-needs-a-real-listening-socket-can-be-ported-to-lua
+    order: 1576-luas
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua-runtime, capability-gap, fixtures, tillandsias-plan]
+    estimated_hours: 4
+    title: |
+      The tillandsias-plan Lua runtime has no AF_UNIX socket API, which blocks porting any fixture that needs a real listening unix socket (e.g. test-gate-podman-mode-configuration.sh) to Lua
+    context: |
+      Found 2026-10-10 by tlatoanis-macbook-air while re-measuring 1428-3kdu. The fixture's whole discrimination is a GENUINE listening socket at $XDG_RUNTIME_DIR/podman/podman.sock (it refuses a non-socket as vacuous). Today it builds that socket with python3, the one grandfathered interpreter call. crates/tillandsias-plan/src/lua_{runtime,std,process,predicate}.rs expose no socket primitive. Under the operator's rule that new gate fixtures are Lua, this class cannot comply.
+    exit_criteria:
+      - 'a Lua script under `tillandsias-plan script run` can create, bind and listen on an AF_UNIX stream socket at a given path, and remove it on exit; a fixture asserts `test -S` on it on Linux and macOS (pre-fix: no such API)'
+    unscoreable: "unpinnable-until-the-guard-exists: the API and its fixture are written together (pre-fix result: no socket primitive in the Lua std)"
+    depends_on: []
+    next_action: >
+      Add a minimal unix-socket listener primitive (bind and listen only, closed on drop) to the Lua std, with the sun_path length limit surfaced as a named error.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's ruling, 2026-10-10.
+    events:
+      - type: filed
+        ts: "2026-10-10T08:05:38Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          Lua runtime capability gap: no AF_UNIX socket API.
+
+  - packet_id: after-a-successful-forge-launch-the-tray-label-sticks-on-the-last-build-status-because-the-guest-cannot-see-the-clis-rootless-containers
+    order: 1576-lbst
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [tray, status, podman-events, rootless, macos, ux]
+    estimated_hours: 3
+    title: |
+      After a successful forge launch the tray's status label can stick on the last build status (e.g. "Building Forge"), because the guest daemon's podman events stream cannot see the CLI's rootless login/forge containers
+    context: |
+      Found 2026-10-10 while fixing 1571-lgex (#283). The tray's label comes only from the CLI's own status pushes. The guest daemon watches `podman events`, but the CLI's login and forge containers are rootless, so the daemon never sees them start or stop. On 2026-10-09 this left "Building Forge" up for 170 s after the login container died. #283 fixes the FAILED-sign-in path by pushing "Sign-in did not finish". The SUCCESS path still has no push that moves the label off the last build status.
+    exit_criteria:
+      - 'after a successful attach, the tray label moves off the last build status within 10 s of the forge session starting (pre-fix: it can stay on the last build label for the session)'
+    unscoreable: "unpinnable-until-the-guard-exists: written with the fix (pre-fix result: label stays on the last build status)"
+    depends_on: []
+    next_action: >
+      Push a status event from the CLI when the forge session is attached (mirroring #283's failure push), or give the daemon visibility of the rootless containers' events.
+    provenance: |
+      Filed by tlatoanis-macbook-air on macuahuitl's ruling, 2026-10-10.
+    events:
+      - type: filed
+        ts: "2026-10-10T08:05:38Z"
+        host: tlatoanis-macbook-air
+        summary: |-
+          The tray label sticks after a successful launch: rootless containers are invisible to the guest's podman events.

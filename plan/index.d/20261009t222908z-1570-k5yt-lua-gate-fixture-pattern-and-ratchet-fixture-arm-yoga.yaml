@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed 2026-10-09 on yoga from the Lua-runtime audit (operator direction:
+# reduce bash; the ratchet still says fixtures stay shell "while scripts/lua
+# cannot spawn (1384-aixy)", which is no longer true on Linux).
+packets:
+  - packet_id: the-first-lua-gate-fixture-runs-as-step-lua-against-a-lua-decider-and-the-shell-ratchets-fixture-arm-stops-citing-an-unlanded-proc-spawn
+    order: 1570-k5yt
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, ci-gate, gate-steps, portability, ratchet, tests]
+    estimated_hours: 4
+    owned_files:
+      - scripts/lua/check-shell-ratchet.lua
+      - scripts/gate-steps.d
+      - openspec/specs/ci-release/spec.md
+    title: |
+      The shell ratchet still warns "counted, not refused while scripts/lua cannot spawn (1384-aixy)" for every new test-*.sh, but proc.run / proc.spawn / proc.select / proc.all / proc.chain are live in `tillandsias-plan script run` (1534-puyz, 1538-pwdr, 1551-* all completed); no Lua gate FIXTURE exists (gate-steps: sh=156, lua=1, and the one STEP_LUA is a decider), so the 27 shell fixtures whose subject is a Lua decider have no pattern to follow. Write the first STEP_LUA fixture, record the pattern, and make the ratchet's fixture arm say what is true
+    context: |
+      Measured on yoga 2026-10-09T22:00Z, linux-next 4b76eb15f, installed
+      tillandsias-plan (build-id 0.1.0 line, `capabilities` lists script):
+        - `tillandsias-plan script run` of a probe: proc keys are
+          all,chain,run,select,spawn; proc.run{argv={"sh","-c",...}} returns
+          status=policy_denied rule_id=no-shell-strings AS DATA (argv-only,
+          `bash path/to/script.sh` allowed); proc.spawn pcall ok=true.
+        - `script run scripts/lua/check-shell-ratchet.lua`: 956 ms,
+          ok:shell-ratchet:sh=668:floor:664 pipes=3922:floor:3914
+          litmus-form:command=3093:steps=0:rust_queries=1
+          gate-steps:sh=156:lua=1 shell-strings=0, with 13
+          warn:shell-ratchet:new-shell-fixture lines (test-*.sh above the
+          floor since the floor was seeded) and 12 warn:new-pipes lines.
+        - scripts/lua/ holds 28 files, none a fixture (no test-*.lua); 27
+          scripts/test-*.sh reference scripts/lua/ (they test a Lua decider
+          by spawning the runner from bash). scripts/gate-steps.d has 158
+          steps; the one STEP_LUA (120-1087-h2z9) is a decider, not a fixture.
+        - The fixture regime already exists in the policy engine
+          (1443-fpck, command_policy.rs REGIMES includes "fixture"; the
+          Observing class has fs.read/write/mkdir/list/exists under a
+          repo-rooted scratch), so a Lua fixture needs NO runtime work.
+      What is stale: check-shell-ratchet.lua lines 160-175 (scope note of
+      2026-10-01) say fixtures are warn-only "while the runtime still runs
+      one process at a time (1384-aixy's proc.spawn is unlanded)". 1534-puyz
+      and 1538-pwdr are completed on linux-next; what remains open is NATIVE
+      macOS/Windows conformance (1543-ffhg, 1544-cnae, 1543-f44v), which is
+      the honest reason to keep the arm advisory, and the warn text should
+      name it. 1384-aixy itself still folds `blocked`.
+      Not re-filed: 1533-ew3n (three fixture-backed DECIDER ports), 1519-6rcp
+      (gate step 760 for the script-run-verb fixture, needs a darwin run),
+      1520-z95v (preflight door port). This row is the FIXTURE pattern.
+    exit_criteria:
+      - 'one gate step under scripts/gate-steps.d names STEP_LUA="scripts/lua/test-<name>.lua" whose subject is an existing Lua decider (candidates: check-no-base64-script-injection.lua or check-bash-dialect.lua, whose shell fixture test-check-bash-dialect.sh runs 33 scenarios in 313 ms), the fixture builds its scratch tree with fs.* under the fixture regime and runs the decider through proc.run with argv only; `script run scripts/lua/check-shell-ratchet.lua` prints gate-steps:lua=2 or more; pre-fix: gate-steps:sh=156:lua=1 and 0 test-*.lua files'
+      - 'the ratchet''s new-shell-fixture warn names the live reason (native macOS/Windows proc conformance 1543-ffhg / 1544-cnae open) and points at the Lua fixture pattern; it no longer says "cannot spawn (1384-aixy)"; pre-fix: 13 warn lines carry the stale text on 4b76eb15f'
+      - 'the shell fixture the Lua fixture replaces is deleted in the same commit and scripts/portability/shell-decider-floor.txt and pipe-site-floor.txt are lowered by `--dump-floors`, never hand-edited; pre-fix: sh=668:floor:664'
+      - 'NEGATIVE CONTROL: a scratch tree with a new scripts/test-x.sh still produces exactly one warn:shell-ratchet:new-shell-fixture line and exit 0 (the arm stays advisory until the native rows close)'
+    unscoreable: "unpinnable-until-the-guard-exists: future scripts/lua/test-<name>.lua run as a STEP_LUA gate step; pre-fix result: no such file, gate-steps:lua=1. NEGATIVE CONTROL: the ratchet's fixture arm remains warn-only, so a new test-*.sh is counted and never refused."
+    depends_on: []
+    next_action: >
+      Pick check-no-base64-script-injection.lua (already a STEP_LUA decider,
+      so its fixture completes the first all-Lua step pair); port its
+      shell fixture arm by arm through proc.run{argv={plan,"script","run",
+      ...}} and verdict.classify; then edit the ratchet's warn text and the
+      scope comment, lower the floors with --dump-floors, and record the
+      pattern in the ci-release spec's new requirement (filed with this row
+      on work/1570-k5yt).
+    events:
+      - type: filed
+        ts: "2026-10-09T22:29:08Z"
+        agent_id: forge-forge-tillandsias-claude-20261009t193211z
+        host: yoga
+        summary: |-
+          Filed from the Lua-runtime audit on yoga (operator: reduce bash). Measured: proc.run/spawn/select/all/chain live in script run; ratchet gate-steps:sh=156:lua=1; 27 shell fixtures test Lua deciders; 13 new-shell-fixture warns cite an unlanded proc.spawn that landed (1534-puyz, 1538-pwdr).
