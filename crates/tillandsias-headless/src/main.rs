@@ -17070,6 +17070,23 @@ impl ForgeAgentMode {
         }
     }
 
+    /// ORDER 1576-lbst. The tray's status label is the last event the CLI
+    /// pushed, and the last push before a session was the image build's start
+    /// ("Building Forge"). The guest daemon's `podman events` cannot see the
+    /// CLI's rootless containers, so nothing moved the label for the whole
+    /// session. These are pushed around the attached session: (open, ended).
+    fn session_status_events(self) -> (&'static str, &'static str) {
+        match self {
+            ForgeAgentMode::Claude => ("Claude session open", "Claude session ended"),
+            ForgeAgentMode::Codex => ("Codex session open", "Codex session ended"),
+            ForgeAgentMode::OpenCode => ("OpenCode session open", "OpenCode session ended"),
+            ForgeAgentMode::Antigravity => {
+                ("Antigravity session open", "Antigravity session ended")
+            }
+            ForgeAgentMode::Maintenance => ("Terminal open", "Terminal closed"),
+        }
+    }
+
     /// Stable in-container harness identity. Keep this distinct from `slug`:
     /// the maintenance lane's historical container name is `maintenance`,
     /// while the runtime environment contract calls that lane `terminal`.
@@ -18961,6 +18978,9 @@ fn run_forge_agent_cli_mode(
         let _diag_logs_handle: Option<tillandsias_podman::DiagnosticsHandle> = None;
 
         let run_container_name = forge_container_name_for_mode(project_name, mode);
+        // 1576-lbst: move the tray's label off the last build status.
+        let (session_open, session_ended) = mode.session_status_events();
+        push_udp_event(session_open);
         let result = run_agent_container_attached(
             &client,
             mode.slug(),
@@ -18970,6 +18990,7 @@ fn run_forge_agent_cli_mode(
             delegated.as_ref(),
         )
         .await;
+        push_udp_event(session_ended);
         cleanup_forge_ram_workspace(project_name, debug)?;
         cleanup_shared_stack_if_no_running_forge(
             &client,
@@ -25338,6 +25359,69 @@ mod tests {
             "an unfinished sign-in must push a status event so the tray leaves the last \
              build label (1571-lgex)"
         );
+    }
+
+    /// ORDER 1576-lbst. The forge session's attach must be bracketed by status
+    /// pushes, or the tray's label stays on the last build event ("Building
+    /// Forge") for the whole session. The attach needs podman and a TTY, so the
+    /// bracketing is pinned by source; it compiles, and fails, pre-fix.
+    #[test]
+    fn the_forge_session_attach_is_bracketed_by_status_pushes() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn run_forge_agent_cli_mode(");
+        let attach = window
+            .find("run_agent_container_attached(")
+            .expect("the CLI lane attaches the agent");
+        // source-pin-ok: the attached session needs podman and a TTY, so the push ORDER around it is the contract a unit test can reach
+        let open = window.find("push_udp_event(session_open)");
+        // source-pin-ok: same reason as above, the closing half of the bracket
+        let ended = window.find("push_udp_event(session_ended)");
+        assert!(
+            open.is_some_and(|o| o < attach),
+            "a status push must precede the forge attach so the tray leaves the last \
+             build label (1576-lbst)"
+        );
+        assert!(
+            ended.is_some_and(|e| e > attach),
+            "a status push must follow the forge session so the tray does not keep \
+             saying the session is open (1576-lbst)"
+        );
+    }
+
+    /// ORDER 1576-lbst. The session events are distinct per mode, plain, and
+    /// never a build label (which is exactly what they must replace).
+    #[test]
+    fn forge_session_events_are_plain_and_never_a_build_label() {
+        let build_labels = [
+            "Building Forge",
+            "Polishing Chromium",
+            "Thinkering Chromium Dev",
+            "Loading Inference",
+            "Routing Proxy",
+            "Setting up Git",
+            "Routing Traffic",
+            "Serving Web",
+            "Securing Vault",
+            "Setting up containers",
+        ];
+        let mut seen = std::collections::HashSet::new();
+        for mode in [
+            ForgeAgentMode::Claude,
+            ForgeAgentMode::Codex,
+            ForgeAgentMode::OpenCode,
+            ForgeAgentMode::Antigravity,
+            ForgeAgentMode::Maintenance,
+        ] {
+            let (open, ended) = mode.session_status_events();
+            for e in [open, ended] {
+                assert!(!e.is_empty() && !e.contains('\n'), "{e:?}");
+                assert!(!build_labels.contains(&e), "{e:?} is a build label");
+                for banned in ["--", "TILLANDSIAS_", "podman"] {
+                    assert!(!e.contains(banned), "{e:?} carries {banned}");
+                }
+                assert!(seen.insert(e), "{e:?} is not unique");
+            }
+        }
     }
 
     /// ORDER 1571-lgex. The end-user line: one line, names the provider, says
