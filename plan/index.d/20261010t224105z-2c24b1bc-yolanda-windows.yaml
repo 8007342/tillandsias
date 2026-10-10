@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: darwin-strict-clippy-dead-code-on-linux-only-two-routers-test-const
+    event:
+      type: completed
+      ts: "2026-10-10T22:41:05Z"
+      agent_id: windows-yolanda-claude-20261008t155217z
+      host: yolanda-windows
+      summary: |-
+        Superseded by #297 (958-w4kq), landed at eade33054: crates/tillandsias-headless/src/main.rs gates TWO_ROUTERS with #[cfg(target_os = "linux")] like its linux-only readers, byte-for-byte the fix this row's PR #224 carried. #297's cross-target clippy (x86_64-pc-windows-gnu, --all-targets -D warnings) is what found it from the Windows side, the same dead-code the darwin strict clippy reported here. PR #224 closed as superseded; this fragment (the row's only definition, from work/1553-a9n6) is pushed through the plan lane so the row is not lost.

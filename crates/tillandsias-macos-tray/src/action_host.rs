@@ -694,14 +694,119 @@ async fn poll_vm_status_once(
 /// @trace spec:vsock-transport,
 ///        plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2),
 ///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 20)
-async fn request_vm_shutdown(vz: &VzRuntime, drain_timeout: Duration) -> Result<(), String> {
+async fn request_vm_shutdown(
+    vz: &VzRuntime,
+    drain_timeout: Duration,
+    progress: &ShutdownProgress,
+) -> Result<(), String> {
+    use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+
+    const RTT_BUDGET: Duration = Duration::from_secs(3);
+
+    shutdown_over(
+        open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, RTT_BUDGET),
+        drain_timeout,
+        progress,
+        SHUTDOWN_HANDSHAKE_BUDGET,
+    )
+    .await
+}
+
+/// ORDER 1498-fn96. The step of the in-VM shutdown request in flight. Quit
+/// bounds the whole request at 10 s, and before this a timeout said only "no
+/// reply within 10s": every Quit during a forge build force-stopped the VM with
+/// no named cause. The marker lets the timeout line say WHICH step stalled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ShutdownStage {
+    Connect = 0,
+    Handshake = 1,
+    Request = 2,
+    Reply = 3,
+}
+
+impl ShutdownStage {
+    fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Self::Handshake,
+            2 => Self::Request,
+            3 => Self::Reply,
+            _ => Self::Connect,
+        }
+    }
+
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Connect => "connect",
+            Self::Handshake => "handshake",
+            Self::Request => "request",
+            Self::Reply => "reply",
+        }
+    }
+
+    fn meaning(self) -> &'static str {
+        match self {
+            Self::Connect => "the vsock connect to the guest's control wire did not complete",
+            Self::Handshake => "connected, but the guest sent no HelloAck",
+            Self::Request => "the guest is not reading the shutdown request",
+            Self::Reply => "the guest took the shutdown request and sent no reply",
+        }
+    }
+}
+
+/// Shared between the bounded request and the caller that reports its timeout.
+#[derive(Clone, Default)]
+pub(crate) struct ShutdownProgress(Arc<std::sync::atomic::AtomicU8>);
+
+impl ShutdownProgress {
+    fn set(&self, stage: ShutdownStage) {
+        self.0
+            .store(stage as u8, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub(crate) fn get(&self) -> ShutdownStage {
+        ShutdownStage::from_u8(self.0.load(std::sync::atomic::Ordering::SeqCst))
+    }
+}
+
+/// The plain Hello/HelloAck is bounded on its own: it was unbounded, so a guest
+/// that accepted the connection and stayed silent ate the whole 10 s Quit budget.
+const SHUTDOWN_HANDSHAKE_BUDGET: Duration = Duration::from_secs(3);
+
+/// What the Quit drain logs when the whole request outruns its budget.
+pub(crate) fn shutdown_no_reply_line(budget: Duration, stage: ShutdownStage) -> String {
+    format!(
+        "[tillandsias-tray] Quit: in-VM shutdown request got no reply within {}s — stalled at \
+         stage {}: {} (proceeding to VZ.requestStop)",
+        budget.as_secs(),
+        stage.name(),
+        stage.meaning()
+    )
+}
+
+/// The guest's VmShutdownRequest arm closes the connection without replying
+/// (headless vsock_server.rs: "closing connection (drain happens via signal
+/// path)"). That is an ack in all but name, so it is named, not reported as a
+/// failed read.
+pub(crate) const SHUTDOWN_CLOSED_WITHOUT_ACK: &str = "the guest closed the control wire without an \
+     ack after taking the shutdown request (its VmShutdownRequest arm drains via the signal path)";
+
+/// The staged request over any opener, so a fake guest can drive every stage.
+async fn shutdown_over<F, S>(
+    open: F,
+    drain_timeout: Duration,
+    progress: &ShutdownProgress,
+    handshake_budget: Duration,
+) -> Result<(), String>
+where
+    F: std::future::Future<Output = Result<S, String>>,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
     use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
     use tillandsias_host_shell::vsock_client::Client;
 
-    const RTT_BUDGET: Duration = Duration::from_secs(3);
-
-    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, RTT_BUDGET).await?;
+    progress.set(ShutdownStage::Connect);
+    let stream = open.await.map_err(|e| format!("stage connect: {e}"))?;
 
     let mut client = Client::from_stream(
         Box::new(stream),
@@ -710,10 +815,17 @@ async fn request_vm_shutdown(vz: &VzRuntime, drain_timeout: Duration) -> Result<
             port: CONTROL_WIRE_VSOCK_PORT,
         },
     );
-    client
-        .handshake()
-        .await
-        .map_err(|e| format!("control-wire handshake: {e}"))?;
+    progress.set(ShutdownStage::Handshake);
+    match tokio::time::timeout(handshake_budget, client.handshake()).await {
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => return Err(format!("stage handshake: control-wire handshake: {e}")),
+        Err(_) => {
+            return Err(format!(
+                "stage handshake: the guest sent no HelloAck within {}s",
+                handshake_budget.as_secs()
+            ));
+        }
+    }
 
     let seq = client.allocate_seq();
     let envelope = ControlEnvelope {
@@ -724,10 +836,19 @@ async fn request_vm_shutdown(vz: &VzRuntime, drain_timeout: Duration) -> Result<
             drain_timeout_ms: drain_timeout.as_millis().min(u32::MAX as u128) as u32,
         },
     };
-    let reply = client
-        .request(&envelope)
+    progress.set(ShutdownStage::Request);
+    client
+        .send_envelope(&envelope)
         .await
-        .map_err(|e| format!("VmShutdownRequest: {e}"))?;
+        .map_err(|e| format!("stage request: VmShutdownRequest: {e}"))?;
+    progress.set(ShutdownStage::Reply);
+    let reply = match client.next_envelope().await {
+        Ok(reply) => reply,
+        Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+            return Err(SHUTDOWN_CLOSED_WITHOUT_ACK.to_string());
+        }
+        Err(e) => return Err(format!("stage reply: VmShutdownRequest: {e}")),
+    };
 
     match reply.body {
         // Per the wire convention (other handlers' shape): an Ok
@@ -1079,16 +1200,14 @@ pub(crate) fn request_graceful_quit(source: &str) -> bool {
             // A short bound keeps Quit well inside it; VZ.requestStop below still
             // gives the guest VM_STOP_DRAIN to shut down.
             let budget = Duration::from_secs(10);
-            match tokio::time::timeout(budget, request_vm_shutdown(&vm, VM_STOP_DRAIN)).await {
+            // 1498-fn96: the stage marker names WHICH step a timeout stalled at.
+            let progress = ShutdownProgress::default();
+            match tokio::time::timeout(budget, request_vm_shutdown(&vm, VM_STOP_DRAIN, &progress)).await {
                 Ok(Ok(())) => eprintln!("[tillandsias-tray] Quit: in-VM headless acked shutdown request"),
                 Ok(Err(e)) => eprintln!(
                     "[tillandsias-tray] Quit: in-VM shutdown request: {e} (proceeding to VZ.requestStop)"
                 ),
-                Err(_) => eprintln!(
-                    "[tillandsias-tray] Quit: in-VM shutdown request got no reply within {}s \
-                     (proceeding to VZ.requestStop)",
-                    budget.as_secs()
-                ),
+                Err(_) => eprintln!("{}", shutdown_no_reply_line(budget, progress.get())),
             }
             // VZ.requestStop ON THE MAIN THREAD. The VM lives on the main
             // dispatch queue, and VzRuntime::stop calls requestStopWithError and
@@ -3751,6 +3870,206 @@ fn dispatch_rebuild(
 
 #[cfg(test)]
 mod tests {
+
+    /// ORDER 1498-fn96. Quit's no-reply timeout must name the stage that
+    /// stalled. Pre-fix it printed only "got no reply within 10s". The WORDING
+    /// is asserted on the line `shutdown_no_reply_line` builds (shutdown_stages
+    /// below); this arm pins only the drain's WIRING to it, by source, because
+    /// the drain cannot run without AppKit and a signed VM (the same reason as
+    /// the three-quit-routes test below). It compiles, and fails, pre-fix.
+    #[test]
+    fn the_quit_no_reply_timeout_names_the_stalled_stage() {
+        let host = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/action_host.rs"));
+        let production = host
+            .split("\n#[cfg(test)]\nmod tests {")
+            .next()
+            .expect("production half");
+        let drain = production
+            .split("pub(crate) fn request_graceful_quit(")
+            .nth(1)
+            .expect("drain fn");
+        let drain = &drain[..drain.find("\n}\n").expect("end of drain fn")];
+        assert!(
+            // source-pin-ok: the drain is AppKit+VM-only, so its wiring to the stage marker is the contract and cannot be driven in a unit test
+            drain.contains("shutdown_no_reply_line(budget, progress.get())"),
+            "the Quit drain's timeout arm must report the stage marker (1498-fn96)"
+        );
+    }
+
+    /// ORDER 1498-fn96: a fake guest that stalls at each stage in turn.
+    mod shutdown_stages {
+        use super::super::{
+            SHUTDOWN_CLOSED_WITHOUT_ACK, ShutdownProgress, ShutdownStage, shutdown_no_reply_line,
+            shutdown_over,
+        };
+        use futures_util::{SinkExt, StreamExt};
+        use std::time::Duration;
+        use tillandsias_control_wire::{
+            ControlEnvelope, ControlMessage, WIRE_VERSION, decode, encode,
+        };
+        use tokio::io::DuplexStream;
+
+        type Io = tokio_util::codec::Framed<DuplexStream, tokio_util::codec::LengthDelimitedCodec>;
+
+        #[derive(Clone, Copy)]
+        enum Guest {
+            /// Reads the Hello and never answers it.
+            SilentAfterHello,
+            /// Acks the Hello, then never reads again.
+            DeafAfterAck,
+            /// Acks, reads the request, never replies.
+            MuteAfterRequest,
+            /// Acks, reads the request, closes (the real guest's arm).
+            CloseAfterRequest,
+            /// Acks and replies (any non-Error reply is an ack).
+            Acks,
+        }
+
+        async fn recv(io: &mut Io) -> ControlEnvelope {
+            let frame = io.next().await.expect("frame").expect("read");
+            decode(&frame).expect("decode")
+        }
+
+        async fn reply(io: &mut Io, body: ControlMessage) {
+            let env = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body,
+            };
+            io.send(encode(&env).expect("encode").into())
+                .await
+                .expect("send");
+        }
+
+        /// Spawn the fake guest; returns the host end. The pipe holds 4 bytes,
+        /// less than any frame, so a guest that stops reading stalls the send.
+        fn guest(kind: Guest) -> DuplexStream {
+            let (host, guest) = tokio::io::duplex(4);
+            tokio::spawn(async move {
+                let mut io: Io = tokio_util::codec::Framed::new(
+                    guest,
+                    tillandsias_control_wire::transport::control_frame_codec(),
+                );
+                let _hello = recv(&mut io).await;
+                if matches!(kind, Guest::SilentAfterHello) {
+                    std::future::pending::<()>().await;
+                }
+                reply(
+                    &mut io,
+                    ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![],
+                        build_version: None,
+                    },
+                )
+                .await;
+                if matches!(kind, Guest::DeafAfterAck) {
+                    let _keep = io;
+                    std::future::pending::<()>().await;
+                    return;
+                }
+                let req = recv(&mut io).await;
+                assert!(matches!(req.body, ControlMessage::VmShutdownRequest { .. }));
+                match kind {
+                    Guest::MuteAfterRequest => {
+                        let _keep = io;
+                        std::future::pending::<()>().await;
+                    }
+                    Guest::CloseAfterRequest => drop(io),
+                    _ => reply(&mut io, ControlMessage::IssueAck { seq_acked: 2 }).await,
+                }
+            });
+            host
+        }
+
+        /// Run the request under a short outer bound, as Quit does with 10 s.
+        async fn stall_stage(
+            open: impl std::future::Future<Output = Result<DuplexStream, String>>,
+        ) -> ShutdownStage {
+            let progress = ShutdownProgress::default();
+            let outer = Duration::from_millis(400);
+            let r = tokio::time::timeout(
+                outer,
+                shutdown_over(
+                    open,
+                    Duration::from_secs(60),
+                    &progress,
+                    Duration::from_secs(30),
+                ),
+            )
+            .await;
+            assert!(r.is_err(), "the fake guest must stall the request: {r:?}");
+            let stage = progress.get();
+            let line = shutdown_no_reply_line(outer, stage);
+            assert!(line.contains(&format!("stage {}", stage.name())), "{line}");
+            stage
+        }
+
+        #[tokio::test]
+        async fn a_stall_at_each_stage_is_named() {
+            assert_eq!(
+                stall_stage(std::future::pending::<Result<DuplexStream, String>>()).await,
+                ShutdownStage::Connect
+            );
+            assert_eq!(
+                stall_stage(async { Ok(guest(Guest::SilentAfterHello)) }).await,
+                ShutdownStage::Handshake
+            );
+            assert_eq!(
+                stall_stage(async { Ok(guest(Guest::DeafAfterAck)) }).await,
+                ShutdownStage::Request
+            );
+            assert_eq!(
+                stall_stage(async { Ok(guest(Guest::MuteAfterRequest)) }).await,
+                ShutdownStage::Reply
+            );
+        }
+
+        /// The handshake has its own bound now, inside Quit's 10 s.
+        #[tokio::test]
+        async fn a_silent_handshake_is_bounded_on_its_own() {
+            let progress = ShutdownProgress::default();
+            let err = shutdown_over(
+                async { Ok(guest(Guest::SilentAfterHello)) },
+                Duration::from_secs(60),
+                &progress,
+                Duration::from_millis(200),
+            )
+            .await
+            .expect_err("a silent handshake must fail at its own bound");
+            assert!(err.starts_with("stage handshake:"), "{err}");
+        }
+
+        /// The real guest's arm closes without a reply; that is named, not a read error.
+        #[tokio::test]
+        async fn a_close_without_ack_is_named() {
+            let progress = ShutdownProgress::default();
+            let err = shutdown_over(
+                async { Ok(guest(Guest::CloseAfterRequest)) },
+                Duration::from_secs(60),
+                &progress,
+                Duration::from_secs(2),
+            )
+            .await
+            .expect_err("a close is not an ack");
+            assert_eq!(err, SHUTDOWN_CLOSED_WITHOUT_ACK);
+        }
+
+        /// NEGATIVE CONTROL: a guest that answers is an ack.
+        #[tokio::test]
+        async fn a_guest_that_answers_is_an_ack() {
+            let progress = ShutdownProgress::default();
+            shutdown_over(
+                async { Ok(guest(Guest::Acks)) },
+                Duration::from_secs(60),
+                &progress,
+                Duration::from_secs(2),
+            )
+            .await
+            .expect("an answered request is an ack");
+            assert_eq!(progress.get(), ShutdownStage::Reply);
+        }
+    }
 
     /// ORDER 1571-lgex. An event change INSIDE one phase reaches the tray log.
     /// Measured 2026-10-09: the chip moved nowhere and the log said nothing for

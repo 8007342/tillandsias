@@ -309,7 +309,7 @@ if ! _toolbox_initialized; then
     # _toolbox_initialized probe above requires it so pre-existing toolboxes
     # re-run this init and pick it up.
     # mingw64-gcc + the x86_64-pc-windows-gnu rustup target: what
-    # scripts/check-cross-target-build.sh (656-spux) needs to build the
+    # scripts/lua/check-cross-target-build.lua (656-spux, 958-w4kq) needs to lint the
     # workspace for a NON-HOST target. Without them that gate prints
     # `skip:cross-target:...` and every host keeps compiling only for itself,
     # which is the blind spot the packet exists to close — a cfg-gated defect is

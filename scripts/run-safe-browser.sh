@@ -40,7 +40,7 @@ fi
 # 406-file checkpoint ba5de86f4 with no rationale, and setting the variable
 # makes common.sh pin TILLANDSIAS_PODMAN_BIN ahead of PATH. A caller that wants
 # remote mode exports TILLANDSIAS_PODMAN_REMOTE_URL itself, as the systemd
-# unit does. Pinned by scripts/test-gate-podman-mode-configuration.sh.
+# unit does. Pinned by scripts/lua/test-gate-podman-mode-configuration.lua.
 # (This one also hardcoded /run/user/1000, so on any other uid it silently did
 # nothing while reading as if it did something.)
 
